@@ -94,7 +94,7 @@ class TurnRunner {
   private preparingCount = 0;
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
-  private readonly grantInstalls = new Map<string, number>();
+  private readonly grantInstalls = new Map<string, { pending: number; terminal: boolean }>();
   private readonly driver: TurnDriver;
   private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'>
     & Partial<Pick<ReturnType<typeof approvalHolds>, 'stop' | 'size'>> | undefined;
@@ -338,7 +338,9 @@ class TurnRunner {
     if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
       throw new Error('Turn ended');
     }
-    this.grantInstalls.set(turn.id, (this.grantInstalls.get(turn.id) ?? 0) + 1);
+    const installation = this.grantInstalls.get(turn.id) ?? { pending: 0, terminal: false };
+    installation.pending++;
+    this.grantInstalls.set(turn.id, installation);
     try {
       await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
     } finally {
@@ -358,12 +360,12 @@ class TurnRunner {
   }
 
   private finishGrantInstall(turnId: string) {
-    const remaining = (this.grantInstalls.get(turnId) ?? 1) - 1;
-    if (remaining) this.grantInstalls.set(turnId, remaining);
-    else {
-      this.grantInstalls.delete(turnId);
-      if (this.isFinished(turnId)) this.releaseTurn(turnId);
-    }
+    const installation = this.grantInstalls.get(turnId);
+    if (!installation) return;
+    installation.pending--;
+    if (installation.pending) return;
+    this.grantInstalls.delete(turnId);
+    if (installation.terminal) this.releaseTurn(turnId);
   }
 
   private async dropAccess(threadId: string, input: Turn) {
@@ -431,7 +433,9 @@ class TurnRunner {
   }
 
   private keepInstallingTurn(turnId: string) {
-    if (!this.grantInstalls.has(turnId)) return false;
+    const installation = this.grantInstalls.get(turnId);
+    if (!installation) return false;
+    installation.terminal = true;
     // Keep an old installation from replacing or revoking the next turn's pass.
     this.state.cancelled.add(turnId);
     const threadId = this.findRunningThread(turnId);
@@ -702,7 +706,7 @@ class TurnRunner {
   }
 
   private isUnfinishedTurn(input: Turn | undefined): input is Turn {
-    return input !== undefined && !this.isFinished(input.id);
+    return input !== undefined && this.grantInstalls.get(input.id)?.terminal !== true;
   }
 
   private refuseTool(input: Turn, threadId: string) {
