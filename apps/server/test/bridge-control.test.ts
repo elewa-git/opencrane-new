@@ -15,6 +15,7 @@ import { assistantSnapshot, processConversation, type AgentSession }
   from '../src/chat/bridge-conversation.ts';
 import { listOpenConversations } from '@opencrane/projections';
 import { viewFixture } from './support/view-fixture.ts';
+import { suspendComputer } from '../../ops/src/lifecycle.ts';
 
 type Fixture = Awaited<ReturnType<typeof bridgeFixture>>;
 let fixture: Fixture | undefined;
@@ -166,6 +167,168 @@ it('keeps a closed agent session in the watcher list after projection catches up
   const candidates = await listOpenConversations(test.db, 'test');
   expect(candidates.map(candidateId)).toContain('chat');
 });
+
+async function startFixtureTurn(test: Fixture) {
+  const turn = {
+    conversationId: 'chat', assistantId: 'assistant', turnId: test.message.id,
+    threadId: 'thread',
+  };
+  await test.append('conversation-chat', 'agent.turn_started', turn);
+  await test.append('computer-assistant', 'computer.turn_started', {
+    ...turn, requesterId: 'alice', computerId: 'desktop', task: 'chat_turn',
+    payingGroupId: 'personal',
+  });
+  return turn;
+}
+
+it('recovers a missing computer close once after an agent terminal and restart', async () => {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const turn = await startFixtureTurn(test);
+  await test.append('conversation-chat', 'agent.turn_failed', {
+    conversationId: 'chat', turnId: turn.turnId, reason: 'bridge_interrupted',
+  });
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+
+  await test.process();
+  await test.process();
+
+  const rows = [];
+  for await (const row of test.store.readStream('computer-assistant')) rows.push(row);
+  expect(rows.filter(isComputerTurnClosed)).toHaveLength(1);
+  expect(test.frames.filter(isTurnOrFile)).toEqual([]);
+});
+
+it('recovers a missing agent terminal from a saved computer close once', async () => {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const turn = await startFixtureTurn(test);
+  await test.append('computer-assistant', 'computer.turn_closed', {
+    ...turn, requesterId: 'alice', computerId: 'desktop', task: 'chat_turn',
+    payingGroupId: 'personal', status: 'completed',
+  });
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+
+  await test.process();
+  await test.process();
+
+  const rows = await chatHistory(test.store, 'test', 'chat');
+  expect(rows.filter(isAgentCompleted).map(turnIdOf)).toEqual([turn.turnId]);
+  expect(test.frames.filter(isStop)).toEqual([]);
+});
+
+it('retries a closed turn Stop without sending its input again', async () => {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const turn = await startFixtureTurn(test);
+  await test.append('computer-assistant', 'computer.turn_started', {
+    conversationId: 'other', assistantId: 'assistant', turnId: 'other-input',
+    threadId: 'bob-thread', requesterId: 'bob', computerId: 'desktop',
+    task: 'chat_turn', payingGroupId: 'personal',
+  });
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+
+  await test.process();
+  test.link.sentStops.set(`close:${turn.turnId}`, -Infinity);
+  await test.process();
+  await test.flushFrames();
+
+  const stops = test.frames.filter(isStop);
+  expect(stops).toEqual([expect.objectContaining({ turnId: turn.turnId }),
+    expect.objectContaining({ turnId: turn.turnId })]);
+  expect(stops.every(isChatStop)).toBe(true);
+  expect(test.frames.filter(isTurnOrFile)).toEqual([]);
+});
+
+it('keeps the computer ready until the closed chat turn has a computer ending', async () => {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const turn = await startFixtureTurn(test);
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+  await test.append('conversation-chat', 'agent.turn_failed', {
+    conversationId: 'chat', turnId: turn.turnId, reason: 'bridge_interrupted',
+  });
+  const computerRows = [];
+  for await (const row of test.store.readStream('computer-assistant')) computerRows.push(row);
+  const ready = computerRows.find(isComputerReady)?.event;
+  if (!ready) throw new Error('Ready computer fixture missing');
+  const state = { assistantId: 'assistant', computerId: 'desktop', latest: ready, ready };
+
+  expect((await suspendComputer(test.store, state)).type).toBe('computer.ready');
+  await test.process();
+  expect((await suspendComputer(test.store, state)).type).toBe('computer.suspended');
+});
+
+it('keeps a late admitted start pending after a queued cancellation', async () => {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+  await test.process();
+  const turn = {
+    conversationId: 'chat', assistantId: 'assistant', turnId: test.message.id,
+    threadId: 'thread', requesterId: 'alice', computerId: 'desktop',
+    task: 'chat_turn', payingGroupId: 'personal',
+  };
+  await test.append('computer-assistant', 'computer.turn_started', turn);
+
+  expect(await test.process()).toBe(true);
+  await test.flushFrames();
+  expect(test.frames.filter(isStop)).toHaveLength(1);
+  expect(test.frames.filter(isTurnOrFile)).toEqual([]);
+  const rows = await chatHistory(test.store, 'test', 'chat');
+  expect(rows.filter(isClosedFailure)).toHaveLength(1);
+});
+
+it('settles a lost generation without opening another computer connection', async () => {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const turn = await startFixtureTurn(test);
+  await test.append('computer-assistant', 'computer.lost', {
+    assistantId: 'assistant', computerId: 'desktop',
+  });
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+
+  await test.process();
+  await test.process();
+  const rows = await chatHistory(test.store, 'test', 'chat');
+  expect(rows.filter(isClosedFailure).map(turnIdOf)).toEqual([turn.turnId]);
+  const computerRows = [];
+  for await (const row of test.store.readStream('computer-assistant')) computerRows.push(row);
+  expect(computerRows.filter(isComputerTurnClosed)).toHaveLength(1);
+  expect(test.frames.filter(isStop)).toEqual([]);
+});
+
+function isComputerTurnClosed(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
+  return row.event.type === 'computer.turn_closed';
+}
+
+function isAgentCompleted(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
+  return row.event.type === 'agent.turn_completed';
+}
+
+function isStop(frame: Record<string, unknown>) {
+  return frame['type'] === 'stop';
+}
+
+function isChatStop(frame: Record<string, unknown>) {
+  return frame['conversationId'] === 'chat';
+}
+
+function isComputerReady(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
+  return row.event.type === 'computer.ready';
+}
 
 function isClosedFailure(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
   return row.event.type === 'agent.turn_failed' &&

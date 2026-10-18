@@ -12,13 +12,14 @@ import { history as modelHistory } from '@opencrane/models';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
-import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
-import { turnCommand, requiredExecutionMode, TurnAdmissionRejected, type ExecutionMode } from './turns.ts';
+import { resumeComputer } from '../../../ops/src/lifecycle.ts';
+import { requiredExecutionMode, TurnAdmissionRejected, type ExecutionMode } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { agentSession } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
 import { buildTurnTools, mayOfferTurnTools, toolsForMessage, type TurnDelivery }
   from './turn-tools.ts';
+import { cleanClosedConversation, recoverTerminalTurns } from './close-cleanup.ts';
 
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
@@ -141,6 +142,10 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
   let current: ChatRows[number]['event'] | undefined;
   const closed = new Set<string>();
   const started = new Set<string>();
+  const lostTurns = new Set<string>();
+  const turnComputers = new Map<string, string>();
+  const closedStatuses = new Map<string, 'completed' | 'failed'>();
+  const running = new Set<string>();
   let controlPending = false;
   for (const row of lifecycle) {
     if (row.event.silo !== silo) throw new Error('Computer silo mismatch');
@@ -150,13 +155,27 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
       controlPending = true;
     }
     if (row.event.type === 'computer.turn_closed') {
-      closed.add(turnIdData.parse(row.event.data).turnId);
+      const turnId = turnIdData.parse(row.event.data).turnId;
+      closed.add(turnId);
+      const status = z.object({ status: z.enum(['completed', 'failed', 'cancelled']) })
+        .parse(row.event.data).status;
+      if (status !== 'cancelled') closedStatuses.set(turnId, status);
+      running.delete(turnId);
     }
     if (row.event.type === 'computer.turn_started') {
-      started.add(turnIdData.parse(row.event.data).turnId);
+      const turnId = turnIdData.parse(row.event.data).turnId;
+      started.add(turnId);
+      running.add(turnId);
+      turnComputers.set(turnId, computerData.parse(row.event.data).computerId);
+    }
+    if (row.event.type === 'computer.lost' || row.event.type === 'computer.claimed') {
+      for (const turnId of running) lostTurns.add(turnId);
+      running.clear();
     }
   }
-  return { current, kind, closed, started, controlPending };
+  const computerHead = lifecycle.at(-1)?.sequence ?? 0;
+  return { current, kind, closed, started, lostTurns, turnComputers, closedStatuses,
+    computerHead, controlPending };
 }
 
 export async function processConversation(options: WatchOptions, tokens: Tokens,
@@ -182,14 +201,17 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     return control;
   }
   const created = agentSession(rows);
+  function isConversationClosed(row: ChatRows[number]) {
+    return row.event.type === 'conversation.closed';
+  }
+  if (rows.some(isConversationClosed)) {
+    return cleanClosedConversation(options, conversation.conversationId,
+      conversation.assistantId, rows, assistant, refused, connection);
+  }
   if (await childRequestHeld(options, created)) {
     return { pending: true, retry: true };
   }
   const { message, stops, waitingWork } = pendingConversationWork(rows, assistant.closed);
-  function isConversationClosed(row: ChatRows[number]) {
-    return row.event.type === 'conversation.closed';
-  }
-  if (rows.some(isConversationClosed)) return { pending: false, retry: false };
   const current = assistant.current;
   if (!current) {
     const pending = computerHistoryUnavailable && waitingWork;
@@ -450,29 +472,4 @@ async function promotedBytes(objects: Client, file: z.infer<typeof fileUploadedD
     parts.push(bytes);
   }
   return Buffer.concat(parts);
-}
-
-async function recoverTerminalTurns(options: Pick<ChatOptions, 'silo' | 'store'>,
-  computerId: string, assistantId: string, conversationId: string, rows: ChatRows,
-  closed: Set<string>) {
-  // Recover a server crash between a terminal report and its separate lifecycle command.
-  let refreshed = false;
-  for (const row of rows) {
-    if (!['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) continue;
-    const terminal = turnIdData.parse(row.event.data);
-    if (closed.has(terminal.turnId)) continue;
-    if (!refreshed) {
-      // Check for a close saved after this pass read the computer's history.
-      const lifecycle = await history(options.store, `computer-${assistantId}`);
-      const latest = assistantSnapshot(lifecycle, undefined, options.silo);
-      for (const turnId of latest.closed) closed.add(turnId);
-      refreshed = true;
-    }
-    if (closed.has(terminal.turnId)) continue;
-    const context = { silo: options.silo, computerId, assistantId };
-    const status = row.event.type === 'agent.turn_completed' ? 'completed' : 'failed';
-    const closeTurn = { ...terminal, conversationId, status } as const;
-    await turnCommand(options.store, context, closeTurn);
-    closed.add(terminal.turnId);
-  }
 }

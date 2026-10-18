@@ -2,6 +2,25 @@
 
 For people, read [README.md](README.md) first.
 
+## Closed chat cleanup
+
+The bridge polls closed agent sessions as well as open ones. It reads the saved
+conversation and computer events on every needed pass, including after a restart.
+`chat/close-cleanup.ts` gives each waiting input a stable system
+`agent.turn_failed` with reason `conversation_closed`. An admitted turn gets a
+conversation-bound Stop while its original computer is ready. The Stop retries
+after an uncertain send; it does not send the input again or wake a suspended
+computer. A saved loss or replacement of the computer generation allows the
+server to record failure. Terminal agent reports and `computer.turn_closed` are
+repaired independently, using conditional appends. The existing computer turn
+check prevents idle suspension before its ending is saved. No close route is
+available yet. Confirmed Codex thread unload remains for a later change.
+
+`test/bridge-control.test.ts` uses NATS, PostgreSQL and OpenFGA to check waiting
+inputs, repeat passes, terminal repair, Stop retry and a lost computer. Spend
+reservations still follow their existing call reports; cleanup writes no budget
+event. Fresh-install qualification: NOT RUN.
+
 ## Child origin GET
 
 `chat/origin.ts` handles `GET /api/conversations/:conversationId/origin`, registered

@@ -18,6 +18,7 @@ type Snapshot = ReturnType<typeof assistantSnapshot>;
 type Progress = ConversationProgress & {
   head: number;
   computerEventId: string | undefined;
+  computerHead: number;
   kind: string | undefined;
 };
 type ConversationLink = Awaited<ReturnType<Parameters<typeof processConversation>[5]>>;
@@ -102,7 +103,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       const linkClosed = previous?.connectionId !== undefined &&
         previous.connectionId !== connectionId(conversation.assistantId);
       const computerEventId = assistant.current?.id;
-      const sameComputer = previous?.computerEventId === computerEventId;
+      const sameComputer = previous?.computerEventId === computerEventId &&
+        previous.computerHead === assistant.computerHead;
       const sameKind = previous?.kind === assistant.kind;
       if (!computerHistoryUnavailable && previous?.head === head && sameComputer && sameKind &&
         !previous.retry && !linkClosed) {
@@ -110,7 +112,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       }
       const result = await processConversation(options, tokens, conversation,
         assistant, refused, connection, computerHistoryUnavailable, checkControl);
-      const progress = { ...result, head, computerEventId, kind: assistant.kind };
+      const progress = { ...result, head, computerEventId,
+        computerHead: assistant.computerHead, kind: assistant.kind };
       seen.set(conversationId, progress);
       return result.pending;
     } catch {
