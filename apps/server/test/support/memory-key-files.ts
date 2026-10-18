@@ -8,6 +8,7 @@ const original = await vi.importActual<typeof fs>('node:fs');
 // Keep every key for this fact in memory, including the interrupted temporary file.
 export function memoryKeyFiles(directory: string, identity: MemoryIdentity) {
   const paths = new Set<string>();
+  const keyPaths = new Set<string>();
   const files = new Map<string, Buffer>();
   const descriptors = new Map<number, string>();
   let nextDescriptor = -1;
@@ -19,17 +20,25 @@ export function memoryKeyFiles(directory: string, identity: MemoryIdentity) {
     const hash = createHash('sha256');
     hash.update(JSON.stringify(fields));
     const path = `${directory}/${hash.digest('hex')}`;
+    keyPaths.add(path);
     paths.add(path);
     paths.add(`${path}-pending`);
     if (revision === 4) pendingPath = `${path}-pending`;
   }
+  function isKeyPath(path: string) {
+    if (paths.has(path)) return true;
+    for (const keyPath of keyPaths) {
+      if (path.startsWith(`${keyPath}-deleting-`)) return true;
+    }
+    return false;
+  }
   function exists(path: fs.PathLike) {
-    if (paths.has(String(path))) return files.has(String(path));
+    if (isKeyPath(String(path))) return files.has(String(path));
     return original.existsSync(path);
   }
   function open(path: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode | null) {
     const name = String(path);
-    if (!paths.has(name)) return original.openSync(path, flags, mode);
+    if (!isKeyPath(name)) return original.openSync(path, flags, mode);
     if (flags === 'wx') {
       if (files.has(name)) throw Object.assign(new Error('File exists'), { code: 'EEXIST' });
       files.set(name, Buffer.alloc(0));
@@ -52,7 +61,7 @@ export function memoryKeyFiles(directory: string, identity: MemoryIdentity) {
     original.writeFileSync(...args);
   }
   function read(path: fs.PathOrFileDescriptor, ...args: unknown[]) {
-    if (paths.has(String(path))) {
+    if (isKeyPath(String(path))) {
       const bytes = files.get(String(path));
       if (!bytes) throw Object.assign(new Error('File missing'), { code: 'ENOENT' });
       return bytes;
@@ -60,15 +69,22 @@ export function memoryKeyFiles(directory: string, identity: MemoryIdentity) {
     return Reflect.apply(original.readFileSync, original, [path, ...args]) as Buffer | string;
   }
   function link(source: fs.PathLike, destination: fs.PathLike) {
-    if (!paths.has(String(source))) return original.linkSync(source, destination);
+    if (!isKeyPath(String(source))) return original.linkSync(source, destination);
     if (files.has(String(destination))) {
       throw Object.assign(new Error('File exists'), { code: 'EEXIST' });
     }
     files.set(String(destination), files.get(String(source))!);
   }
+  function rename(source: fs.PathLike, destination: fs.PathLike) {
+    if (!isKeyPath(String(source))) return original.renameSync(source, destination);
+    const bytes = files.get(String(source));
+    if (!bytes) throw Object.assign(new Error('File missing'), { code: 'ENOENT' });
+    files.set(String(destination), bytes);
+    files.delete(String(source));
+  }
   function remove(...args: Parameters<typeof fs.rmSync>) {
     const path = String(args[0]);
-    if (paths.has(path)) {
+    if (isKeyPath(path)) {
       files.delete(path);
       return;
     }
@@ -86,6 +102,7 @@ export function memoryKeyFiles(directory: string, identity: MemoryIdentity) {
     vi.spyOn(fs, 'writeFileSync').mockImplementation(write),
     vi.spyOn(fs, 'readFileSync').mockImplementation(read as typeof fs.readFileSync),
     vi.spyOn(fs, 'linkSync').mockImplementation(link),
+    vi.spyOn(fs, 'renameSync').mockImplementation(rename),
     vi.spyOn(fs, 'rmSync').mockImplementation(remove),
     vi.spyOn(fs, 'fsyncSync').mockImplementation(sync),
     vi.spyOn(fs, 'closeSync').mockImplementation(close),
