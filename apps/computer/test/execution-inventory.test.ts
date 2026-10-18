@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import * as fs from 'node:fs';
+import fs from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { hasLiveExecutionTasks } from '../src/execution-inventory.ts';
@@ -15,7 +15,10 @@ afterEach(cleanup);
 
 function stat(pid: string, start: string, state = 'S') {
   // Include spaces and a closing bracket in the name, as Linux permits both.
-  return `${pid} (worker ) name) ${state} ${Array(18).fill('0').join(' ')} ${start} 0`;
+  const fields = Array<string>(18);
+  fields.fill('0');
+  const statistics = fields.join(' ');
+  return `${pid} (worker ) name) ${state} ${statistics} ${start} 0`;
 }
 
 function task(pid: string, tid: string, uid = 1001, state = 'S', start = '123') {
@@ -26,6 +29,10 @@ function task(pid: string, tid: string, uid = 1001, state = 'S', start = '123') 
     `Name:\tworker\nState:\t${state} (fixture)\nUid:\t${uid}\t${uid}\t${uid}\t${uid}\n`);
   fs.writeFileSync(join(processRoot, pid, 'stat'), stat(pid, start, state));
   return directory;
+}
+
+function inspectInventory() {
+  return hasLiveExecutionTasks(processRoot);
 }
 
 function findsExecutor(uid: number) {
@@ -52,7 +59,7 @@ it('excludes exited tasks and leaves the desktop outside executor termination', 
 function rejectsIncompleteIdentity(value: string) {
   const directory = task('42', '42');
   fs.writeFileSync(join(directory, 'status'), value);
-  expect(() => hasLiveExecutionTasks(processRoot)).toThrow('Task identity unavailable');
+  expect(inspectInventory).toThrow('Task identity unavailable');
 }
 it.each([
   'State:\tS\n',
@@ -70,7 +77,7 @@ it('checks effective, saved and filesystem identities as well as the real user',
 function rejectsInvalidStat(value: string) {
   task('42', '42', 1002);
   fs.writeFileSync(join(processRoot, '42', 'stat'), value);
-  expect(() => hasLiveExecutionTasks(processRoot)).toThrow('Task identity unavailable');
+  expect(inspectInventory).toThrow('Task identity unavailable');
 }
 it.each(['', '42 (worker) S', stat('43', '123'), stat('42', 'invalid')])(
   'refuses an unreadable process identity: %s', rejectsInvalidStat);
@@ -85,10 +92,10 @@ function rejectsReusedIdentity(target: 'process' | 'thread') {
       reads++;
       if (reads === 2) return stat('42', '124');
     }
-    return Reflect.apply(readFile, fs, args) as ReturnType<typeof fs.readFileSync>;
+    return readFile(...args);
   }
   vi.spyOn(fs, 'readFileSync').mockImplementation(inspect);
-  expect(() => hasLiveExecutionTasks(processRoot)).toThrow('Task identity changed');
+  expect(inspectInventory).toThrow('Task identity changed');
 }
 it.each(['process', 'thread'] as const)(
   'refuses a reused %s number during observation', rejectsReusedIdentity);
@@ -99,7 +106,7 @@ function acceptsAnObservedExit() {
     if (args[0] === join(directory, 'status')) {
       fs.rmSync(join(processRoot, '42'), { recursive: true });
     }
-    return Reflect.apply(readFile, fs, args) as ReturnType<typeof fs.readFileSync>;
+    return readFile(...args);
   }
   vi.spyOn(fs, 'readFileSync').mockImplementation(exitBeforeStatus);
   expect(hasLiveExecutionTasks(processRoot)).toBe(false);
@@ -110,12 +117,13 @@ function refusesAnUnreadableTask() {
   const directory = task('42', '42');
   function refuseStatus(...args: Parameters<typeof fs.readFileSync>) {
     if (args[0] === join(directory, 'status')) {
-      const error = Object.assign(new Error('Fixture refusal'), { code: 'EACCES' });
+      const details = { code: 'EACCES' };
+      const error = Object.assign(new Error('Fixture refusal'), details);
       throw error;
     }
-    return Reflect.apply(readFile, fs, args) as ReturnType<typeof fs.readFileSync>;
+    return readFile(...args);
   }
   vi.spyOn(fs, 'readFileSync').mockImplementation(refuseStatus);
-  expect(() => hasLiveExecutionTasks(processRoot)).toThrow('Fixture refusal');
+  expect(inspectInventory).toThrow('Fixture refusal');
 }
 it('never treats a permission error as an exited task', refusesAnUnreadableTask);

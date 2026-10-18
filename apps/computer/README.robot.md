@@ -86,9 +86,15 @@ The [Linux signal code](https://github.com/torvalds/linux/blob/master/kernel/sig
 and [fork code](https://github.com/torvalds/linux/blob/master/kernel/fork.c)
 describe this ordering.
 
-After both helpers exit, the supervisor scans `/proc/<pid>/task/*/status` for live
-tasks owned by either executor user. A zombie main thread can still have live
-workers, so the check includes every thread. Only individual zombie or dead tasks
+After both helpers exit, `execution-inventory.ts` scans `/proc/<pid>/task/*/status`
+for live tasks owned by either executor user. It checks all four Linux user IDs:
+real, effective, saved and filesystem. Each record must contain all four IDs.
+Before and after reading a task, it reads the PID and start time from `stat`. It
+also checks the process leader before and after scanning its threads. A changed
+start time means the kernel reused that number, so the observation is refused.
+Missing or malformed identity data is refused too. Only ENOENT means an observed
+task exited; permission errors never count as exit proof. A zombie main thread
+can still have live workers, so the check includes every thread. Only individual zombie or dead tasks
 are excluded. A successful empty scan visits every thread of every listed process.
 If tasks remain, both helpers run again before another scan. Missing permissions,
 invalid task data, helper failure or the ten-second deadline prevents an exit
@@ -919,3 +925,20 @@ Deploy the server before the computer image: older servers do not recognise
 The stop and refusal tests use real issuer keys and bridge sockets. Invalid gates
 are sent first before and after resume while memory-free and restricted turns run.
 They must leave work unchanged and return no gate receipt.
+
+## Process identity checks — P3-17 PR 2f, first split
+
+The root stop receipt still reports `quietProof: unavailable`. This split strengthens
+executor exit proof only. It adds no event, field, writer route or permission.
+The next part still needs complete browser/requester-connection proof, the strict
+server quiet receipt, `takeover.paused` and deadline-driven `takeover.failed`.
+Saved approval cancellation and zero-cost release of unadmitted reservations also
+remain unbuilt. The existing pausing event and server checks are unchanged.
+
+`execution-inventory.test.ts` covers reused process and thread numbers, malformed
+identity data, effective-user execution, zombie leaders with live workers, observed
+exits and read errors. `supervisor-identity.test.ts` injects identity faults while
+calling the real root socket in disposable Docker computers. It also starts real
+Chromium automation under the executor and desktop users. Executor automation exits;
+desktop automation and Xvnc stay running and full quiet proof stays unavailable.
+These are source checks with Docker/runc, not pinned gVisor or fresh-install qualification.
