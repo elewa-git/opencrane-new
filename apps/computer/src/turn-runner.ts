@@ -348,7 +348,7 @@ class TurnRunner {
       if (this.state.cancelled.has(turn.id)) {
         // Keep the signed gate's outcome when the proxy refuses a cancelled installation.
         if (this.gate.closed) return;
-        throw new Error('Turn ended');
+        throw new Error('Turn ended', { cause: error });
       }
       throw error;
     } finally {

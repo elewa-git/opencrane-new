@@ -66,16 +66,8 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
       }
       else if (req.url === '/grant') {
         if (cancelledTurns.has(input['turnId'])) throw new Error('Turn ended');
-        if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
-            typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires']) ||
-            input['expires'] <= Date.now() ||
-            input['expires'] > Date.now() + MAX_TURN_GRANT_LIFETIME_MS) {
-          throw new Error('Bad grant');
-        }
+        const grant = readGrant(input, input['turnId']);
         deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
-        const grant: ProxyGrant = { turnId: input['turnId'], computer: input['computer'],
-          token: input['token'], expires: input['expires'] };
-        if (typeof input['conversation'] === 'string') grant.conversation = input['conversation'];
         turns.set(input['thread'], grant);
         mcp.extendThread(input['thread'], grant.expires);
       } else { json(res, { error: 'path' }, 404); return; }
@@ -135,4 +127,17 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
     server.closeAllConnections(); control.closeAllConnections();
     await Promise.all([server, control].map(listener => new Promise<void>((resolve, reject) => listener.close(error => error ? reject(error) : resolve()))));
   } };
+}
+
+function readGrant(input: Record<string, unknown>, turnId: string): ProxyGrant {
+  if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string'
+    || typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires'])
+    || input['expires'] <= Date.now()
+    || input['expires'] > Date.now() + MAX_TURN_GRANT_LIFETIME_MS) {
+    throw new Error('Bad grant');
+  }
+  const grant: ProxyGrant = { turnId, computer: input['computer'],
+    token: input['token'], expires: input['expires'] };
+  if (typeof input['conversation'] === 'string') grant.conversation = input['conversation'];
+  return grant;
 }

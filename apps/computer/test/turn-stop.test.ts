@@ -360,11 +360,12 @@ async function refusesRenewalBeforeItsReplyReturns(signedGate: boolean) {
     if (!input[2]) return grant(...input);
     entered.resolve();
     await apply.promise;
-    let failure: unknown;
+    let failure: Error | undefined;
     try {
       await grant(...input);
     } catch (error) {
-      failure = error;
+      if (error instanceof Error) failure = error;
+      else failure = new Error('Control request failed', { cause: error });
     }
     applied.resolve();
     await reply.promise;
