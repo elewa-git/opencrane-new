@@ -1,0 +1,1 @@
+People can correct their own memory facts over HTTP, see when correction is available, and recover a lost reply without sending the change again. Corrections keep saved sources and links, hide older dependent facts, and request old-key cleanup.

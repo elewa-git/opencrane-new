@@ -120,7 +120,8 @@ async function readContent(request: FastifyRequest, options: MemoryOptions, requ
   }
   if (request.routeOptions.url?.endsWith('/:memoryId')) {
     const detail = await readDetail(request, options, requester, scope);
-    return { ...detail, canForget: access.canForget };
+    return { ...detail, canForget: access.canForget,
+      canCorrect: access.canCorrect && !('status' in detail) };
   }
   const query = readInput.parse(request.query);
   return await listFacts(options, requester, scope, query, secret);

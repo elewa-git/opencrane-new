@@ -644,7 +644,7 @@ Correction cleanup deletes superseded keys and all revisions of dependent facts.
 It retains the current replacement and its reusable next-revision candidate.
 Completion requires caught-up rows beyond the superseded revision and no hidden search
 text. Recovery and exhaustion use the original correction id, like forget.
-The nightly selector reads the corrected revision. No HTTP correction, `canCorrect`,
-command reservation or MCP operation is added in this split. Those remain row 4 work;
-the command must preserve sources/dependencies and reserve fresh revision custody.
+The nightly selector reads the corrected revision. Personal HTTP corrections now use this
+same cleanup worker. The server preserves sources/dependencies and reserves revision keys.
+Group, notes and MCP correction remain unavailable.
 Fresh-install HTTP correction qualification: NOT RUN.

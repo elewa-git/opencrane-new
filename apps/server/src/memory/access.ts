@@ -111,7 +111,7 @@ export async function scopeAccess(options: MemoryOptions, requester: string, sco
       throw new MemoryRefused();
     }
     return { ...scope, audience: { kind: 'person', ownerId: requester },
-      canRead: true, canWrite: true, canForget: true };
+      canRead: true, canWrite: true, canForget: true, canCorrect: true };
   }
   if (scope.scopeKind === 'group') {
     await checks.group(scope.ownerId);
@@ -122,7 +122,7 @@ export async function scopeAccess(options: MemoryOptions, requester: string, sco
       canForget = canRead && canWrite;
     }
     return { ...scope, audience: { kind: 'group', ownerId: scope.ownerId },
-      canRead: true, canWrite: true, canForget };
+      canRead: true, canWrite: true, canForget, canCorrect: false };
   }
   return notesAccess(options, requester, scope, describeRights, checks, writeOnly);
 }
@@ -169,7 +169,7 @@ async function notesAccess(options: MemoryOptions, requester: string, scope: Sco
     audienceKind = 'group';
   }
   return { ...scope, audience: { kind: audienceKind, ownerId: assistant.ownerId },
-    canRead, canWrite, canForget: canRead && canWrite };
+    canRead, canWrite, canForget: canRead && canWrite, canCorrect: false };
 }
 
 export async function readAssistant(options: MemoryOptions, assistantId: string) {

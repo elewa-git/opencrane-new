@@ -3237,3 +3237,23 @@ registration or moved sequence; membership changes are checked again before appe
 Storage, short-lived leases and authorised hash-checked evidence GET remain for 4d.
 No fetch, scan, image execution, discovery or dispatch is enabled. Fresh-install
 qualification: NOT RUN.
+
+## Personal memory correction HTTP
+
+`POST /api/memory/:scopeId/facts/:memoryId/correct` takes `commandId`, `expectedRevision`,
+`text`, `kind`, `pinned` and `expiresAt`. All fields are required. Only the active person's
+own person-scope facts can be corrected. Saved sources and dependencies stay unchanged.
+Group and notes correction, screens and MCP correction remain unavailable.
+Scopes expose `canCorrect`; detail also requires available content. Each accepted correction
+records one `memory.corrected` event and requests the existing old-key and dependent cleanup.
+The changes GET returns the accepted revision, audience and time, current `contentStatus`,
+plus `cleanupStatus`: pending, unavailable or completed. Completion adds `completedAt`.
+Receipts have no text, ciphertext or key reference. Every HTTP reply uses no-store.
+Full history loads before the two-second authority check. The command lock and a short
+fact lock protect revision preparation. Text-free command and fact reservations survive
+restart. An uncertain reservation blocks a new candidate until history disproves its append;
+recovery never resends. A refused candidate key stays reusable by a new checked command.
+Failed command records prevent the original command from being sent again.
+`test/memory.test.ts` covers HTTP, competing changes, restart and candidate custody with real
+NATS, PostgreSQL and OpenFGA. Existing ops tests cover cleanup and replay.
+Fresh-install qualification: NOT RUN.
