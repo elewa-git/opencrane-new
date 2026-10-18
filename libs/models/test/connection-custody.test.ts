@@ -1,3 +1,4 @@
+import { connectionCleanupHandler } from '../src/connection-cleanup.ts';
 import { createHash } from 'node:crypto';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -1123,3 +1124,66 @@ async function refusesMismatchedSavedStage() {
 }
 it('requires the saved activation to match the private stage before rebuilding records',
   refusesMismatchedSavedStage);
+
+async function cleanupFixture() {
+  const test = await candidateFixture();
+  await test.activate();
+  const rows = await history(events.store, test.subject, 'test');
+  const previous = foldConnection(rows).data!;
+  async function revoke() {
+    const data = { userId: test.input.userId, serverId: test.input.serverId,
+      profile: test.input.profileId, revokedBy: test.input.userId,
+      expectedSequence: rows[0]!.sequence, reason: 'owner_requested' };
+    const event = envelope('test', test.subject, 'connection.revoked', data);
+    event.principal = { kind: 'human', id: test.input.userId };
+    await events.seed([event]);
+    return event;
+  }
+  async function rotate() {
+    const replacement = { ...test.input, generation: 2, operationId: 'rotation',
+      expectedSequence: rows[0]!.sequence };
+    const saved = await test.store.custody.stage(replacement, material);
+    const activation = { ...previous.activation, generation: 2, operationId: 'rotation',
+      expectedSequence: rows[0]!.sequence, reason: 'bearer_rotation' };
+    const data = { ...previous, secretRef: `secret:${saved.identity!.reference}`, activation };
+    const event = envelope('test', test.subject, 'connection.refreshed', data, 'rotation');
+    event.principal = { kind: 'human', id: test.input.userId };
+    await events.seed([event]);
+    return { event, replacement };
+  }
+  function handler() {
+    return connectionCleanupHandler(events.store, test.db, test.store.restart(), 'test');
+  }
+  return { ...test, revoke, rotate, handler };
+}
+
+async function reactsToRevocation() {
+  const test = await cleanupFixture();
+  const unrelated = { ...test.input, profileId: 'unrelated', operationId: 'unrelated' };
+  await test.store.custody.stage(unrelated, material);
+  const event = await test.revoke();
+  expect(test.store.deletes).toBe(0);
+  await events.stop();
+  await events.restart();
+  await forgetJournal(test);
+  const first = test.handler();
+  const second = test.handler();
+  expect(first.eventTypes).toEqual(['connection.revoked', 'connection.refreshed']);
+  await Promise.all([first.handle(event, test.db), second.handle(event, test.db)]);
+  await test.handler().handle(event, test.db);
+  expect(test.store.deletes).toBe(1);
+  expect(test.store.secrets.size).toBe(1);
+  expect(test.store.preconditions).toEqual({ uid: 'uid-original', resourceVersion: '1' });
+}
+it('cleans only saved revoked generations after restart and duplicate workers', reactsToRevocation);
+
+async function reactsToRotation() {
+  const test = await cleanupFixture();
+  const rotated = await test.rotate();
+  await test.handler().handle(rotated.event, test.db);
+  expect(test.store.deletes).toBe(1);
+  expect(await test.store.restart().recover(rotated.replacement)).toMatchObject({ status: 'recovered' });
+  const rows = await history(events.store, test.subject, 'test');
+  expect(foldConnection(rows).data?.activation.generation).toBe(2);
+}
+it('cleans the superseded generation after a saved bearer rotation', reactsToRotation);
