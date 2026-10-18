@@ -247,7 +247,9 @@ describe('personal HTTP correction', function correctionCases() {
         const raw = await readFile(journalPath, 'utf8');
         expect(raw).not.toMatch(/Correct replacement|ciphertext|keyId/);
         const entry = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
-        await writeFile(journalPath, JSON.stringify({ ...entry, appendUntil: 0 }));
+        const expiredAttempt = JSON.stringify({ ...entry, appendUntil: 0 });
+        await writeFile(journalPath, expiredAttempt);
+        await writeFile(reservationPath, expiredAttempt);
         await app.close();
         app = buildServer(config, { memory });
         await app.ready();
@@ -417,76 +419,75 @@ describe('personal HTTP correction', function correctionCases() {
       finally { spy.mockRestore(); }
     });
 
+  async function correctionAvailability(mode: 'expired' | 'destroyed') {
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const parentId = `availability-parent-${mode}`;
+    await write('bob', 'person', parentId, 'Supporting fact', false, 'acme', [], expiresAt);
+    const scopeId = memoryScopeId('acme', 'person', 'bob');
+    const dependency = { scopeId, memoryId: parentId, revision: 1 };
+    const child = await remember('bob', 'person', `availability-child-${mode}`, 'bob',
+      { dependsOn: [dependency] });
+    expect(child.statusCode).toBe(200);
+    const childId = child.json<{ memoryId: string }>().memoryId;
+    const plain = await correctionTarget(`availability-plain-${mode}`);
+    await runner.run(projection);
+    expect((await get(`${path('bob')}/facts/${childId}`)).json()).toHaveProperty('canCorrect', true);
+    const identity = { silo: 'acme', scopeKind: 'person' as const, ownerId: 'bob', ...dependency };
+    let clock;
+    if (mode === 'expired') {
+      clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse(expiresAt) + 1);
+    } else {
+      keys.delete(identity);
+    }
+    try {
+      const detail = await get(`${path('bob')}/facts/${childId}`);
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json()).toHaveProperty('canCorrect', false);
+      expect((await correct(childId, `unavailable-${mode}`, 1)).statusCode).toBe(409);
+      expect((await get(`${path('bob')}/facts/${plain.memoryId}`)).json())
+        .toHaveProperty('canCorrect', true);
+      expect((await correct(plain.memoryId, `available-${mode}`)).statusCode).toBe(200);
+    } finally {
+      clock?.mockRestore();
+    }
+  }
   it.each(['expired', 'destroyed'] as const)(
     'advertises correction only while the target and its dependencies are available: %s',
-    async function correctionAvailability(mode) {
-      const expiresAt = new Date(Date.now() + 60_000).toISOString();
-      const parentId = `availability-parent-${mode}`;
-      await write('bob', 'person', parentId, 'Supporting fact', false, 'acme', [], expiresAt);
-      const scopeId = memoryScopeId('acme', 'person', 'bob');
-      const dependency = { scopeId, memoryId: parentId, revision: 1 };
-      const child = await remember('bob', 'person', `availability-child-${mode}`, 'bob',
-        { dependsOn: [dependency] });
-      expect(child.statusCode).toBe(200);
-      const childId = child.json<{ memoryId: string }>().memoryId;
-      const plain = await correctionTarget(`availability-plain-${mode}`);
-      await runner.run(projection);
-      expect((await get(`${path('bob')}/facts/${childId}`)).json()).toHaveProperty('canCorrect', true);
-      const identity = { silo: 'acme', scopeKind: 'person' as const, ownerId: 'bob', ...dependency };
-      let clock;
-      if (mode === 'expired') {
-        clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse(expiresAt) + 1);
-      } else {
-        keys.delete(identity);
-      }
-      try {
-        const detail = await get(`${path('bob')}/facts/${childId}`);
-        expect(detail.statusCode).toBe(200);
-        expect(detail.json()).toHaveProperty('canCorrect', false);
-        expect((await correct(childId, `unavailable-${mode}`, 1)).statusCode).toBe(409);
-        expect((await get(`${path('bob')}/facts/${plain.memoryId}`)).json())
-          .toHaveProperty('canCorrect', true);
-        expect((await correct(plain.memoryId, `available-${mode}`)).statusCode).toBe(200);
-      } finally {
-        clock?.mockRestore();
-      }
-    });
+    correctionAvailability);
 
+  async function interruptedProvision(mode: 'recovery' | 'later-command') {
+    const label = `interrupted-${mode}`;
+    const identity: MemoryIdentity = { silo: 'acme', scopeId: memoryScopeId('acme', 'person', 'bob'),
+      scopeKind: 'person', ownerId: 'bob', memoryId: `correct-${label}`, revision: 3 };
+    const filesystem = memoryKeyFiles(directory, identity);
+    try {
+      await correctionTarget(label);
+      filesystem.interrupt();
+      const interrupted = await correct(identity.memoryId, `${label}-first`);
+      expect(interrupted.statusCode).toBe(503);
+      expect(filesystem.pending()).toBe(true);
+      expect(keys.status({ ...identity, revision: 4 })).toBe('missing');
+      expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json())
+        .toMatchObject({ fact: { revision: 3, text: 'Old revision 3' } });
+      if (mode === 'recovery') {
+        await reconcileCommands(memory);
+        expect(filesystem.pending()).toBe(false);
+        expect(keys.status({ ...identity, revision: 4 })).toBe('missing');
+      }
+      const corrected = await correct(identity.memoryId, `${label}-checked`);
+      expect(corrected.statusCode).toBe(200);
+      expect(filesystem.pending()).toBe(false);
+      expect(keys.status({ ...identity, revision: 4 })).toBe('available');
+      await runner.run(projection);
+      expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json())
+        .toMatchObject({ fact: { revision: 4, text: 'Correct replacement' } });
+    } finally {
+      filesystem.restore();
+    }
+  }
   it.each(['recovery', 'later-command'] as const)(
     'repairs interrupted key provisioning through %s without destroying the revision slot',
-    async function interruptedProvision(mode) {
-      const label = `interrupted-${mode}`;
-      const identity: MemoryIdentity = { silo: 'acme', scopeId: memoryScopeId('acme', 'person', 'bob'),
-        scopeKind: 'person', ownerId: 'bob', memoryId: `correct-${label}`, revision: 3 };
-      const filesystem = memoryKeyFiles(directory, identity);
-      try {
-        await correctionTarget(label);
-        filesystem.interrupt();
-        const interrupted = await correct(identity.memoryId, `${label}-first`);
-        expect(interrupted.statusCode).toBe(503);
-        expect(filesystem.pending()).toBe(true);
-        expect(keys.status({ ...identity, revision: 4 })).toBe('missing');
-        expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json())
-          .toMatchObject({ fact: { revision: 3, text: 'Old revision 3' } });
-        if (mode === 'recovery') {
-          await reconcileCommands(memory);
-          expect(filesystem.pending()).toBe(false);
-          expect(keys.status({ ...identity, revision: 4 })).toBe('missing');
-        }
-        const corrected = await correct(identity.memoryId, `${label}-checked`);
-        expect(corrected.statusCode).toBe(200);
-        expect(filesystem.pending()).toBe(false);
-        expect(keys.status({ ...identity, revision: 4 })).toBe('available');
-        await runner.run(projection);
-        expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json())
-          .toMatchObject({ fact: { revision: 4, text: 'Correct replacement' } });
-      } finally {
-        filesystem.restore();
-      }
-    });
-
-
-
+    interruptedProvision);
 });
 
 async function acceptedSharedCleanup(kind: SharedForgetKind, mode: string) {

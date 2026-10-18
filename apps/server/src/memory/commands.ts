@@ -412,9 +412,10 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
     journal.remove();
     return Promise.resolve();
   }
+  const { identity, operation } = entry;
   async function lockRecovery() {
-    if (entry.operation === 'correct') {
-      const { silo, scopeId, memoryId } = entry.identity;
+    if (operation === 'correct') {
+      const { silo, scopeId, memoryId } = identity;
       return options.db.lock!(`memory-fact:${silo}:${scopeId}:${memoryId}`,
         finishRecovery, { timeoutMs: 100 });
     }

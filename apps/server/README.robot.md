@@ -3244,7 +3244,9 @@ qualification: NOT RUN.
 `text`, `kind`, `pinned` and `expiresAt`. All fields are required. Only the active person's
 own person-scope facts can be corrected. Saved sources and dependencies stay unchanged.
 Group and notes correction, screens and MCP correction remain unavailable.
-Scopes expose `canCorrect`; detail also requires available content. Each accepted correction
+Scopes expose `canCorrect`; detail checks the current revision, expiry, saved dependencies
+and their keys through `memoryReferences.current`, as POST does. These content reads have
+their own ten-second deadline and run outside the write authority check. Each accepted correction
 records one `memory.corrected` event and requests the existing old-key and dependent cleanup.
 The changes GET returns the accepted revision, audience and time, current `contentStatus`,
 plus `cleanupStatus`: pending, unavailable or completed. Completion adds `completedAt`.
@@ -3254,6 +3256,13 @@ fact lock protect revision preparation. Text-free command and fact reservations 
 restart. An uncertain reservation blocks a new candidate until history disproves its append;
 recovery never resends. A refused candidate key stays reusable by a new checked command.
 Failed command records prevent the original command from being sent again.
+Recovery and a later checked correction remove an unpublished temporary key only for
+that revision, under the fact lock. They leave published keys and destruction markers alone.
+Recovery scans fact reservations even if their command record is gone. Saved commands
+and proven failures release the reservation; uncertain appends keep it. An accepted or
+recovered forget removes its fact reservation under the same fact lock.
+The interrupted-provisioning tests use a filesystem stub for every key of the tested fact.
+They cover recovery and a later command, and require the corrected fact to remain readable.
 `test/memory.test.ts` covers HTTP, competing changes, restart and candidate custody with real
 NATS, PostgreSQL and OpenFGA. Existing ops tests cover cleanup and replay.
 Fresh-install qualification: NOT RUN.
