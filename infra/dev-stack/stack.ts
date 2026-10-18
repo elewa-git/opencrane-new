@@ -3,7 +3,7 @@ import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { chmod, mkdir, open, readFile, realpath, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, open, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { setPriority } from 'node:os';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -334,8 +334,12 @@ async function up(fresh: boolean) {
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
   // Create custody before Docker can create this mount as root.
-  await mkdir(`${directory}/provider-secrets`, { recursive: true, mode: 0o700 });
-  await chmod(`${directory}/provider-secrets`, 0o700);
+  try {
+    await mkdir(`${directory}/provider-secrets`, { recursive: true, mode: 0o700 });
+    await chmod(`${directory}/provider-secrets`, 0o700);
+  } catch {
+    throw new Error('Provider directory unavailable');
+  }
   await checkPorts(settings, await Promise.all(names.map(processId)), project);
   if (settings['ORIGIN'] !== origin) throw new Error('Tailnet name changed; use --fresh');
   await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio', 'clamav');
@@ -409,8 +413,11 @@ async function up(fresh: boolean) {
   try {
     managed = await managedProviderCallsEnabled(modeReader.store,
       settings['SILO_ID']!, performance.now() + 10_000);
-  } catch { throw new Error('Provider mode unavailable'); }
-  finally { await modeReader.close(); }
+  } catch {
+    throw new Error('Provider mode unavailable');
+  } finally {
+    await modeReader.close();
+  }
   const approvalRoute = { serverId: 'approval-journey', connectionId: 'installed',
     upstream: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, generation: randomUUID(),
     revisionHeader: 'x-opencrane-mcp-revision' };
@@ -425,6 +432,12 @@ async function up(fresh: boolean) {
       stubEnvironment);
   }
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-tools-${process.getuid!()}.lock`, 'bash', 'spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
+  let gatewayBinary = `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`;
+  if (secondary) {
+    // Copy the checked binary because a host tool symlink may point outside the container mounts.
+    await copyFile(gatewayBinary, `${directory}/agentgateway`);
+    gatewayBinary = `${directory}/agentgateway`;
+  }
   const modelSettings = {
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
@@ -435,7 +448,7 @@ async function up(fresh: boolean) {
     MODEL_STUB_MCP_REVISION: approvalRevision,
     MODEL_STUB_MANAGED_FILE: `${directory}/model-managed-stub`,
     MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`,
-    AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
+    AGENTGATEWAY_BINARY: gatewayBinary,
     MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
   };
   async function startModels() {

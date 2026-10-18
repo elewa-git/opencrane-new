@@ -656,7 +656,8 @@ needs diagnosis and another fresh start; it does not retry writes or undo produc
 Token-bootstrap qualification (`DEV_OWNER_BOOTSTRAP=0`) skips this setup and the journey.
 
 The server and models share `PROVIDER_SECRETS_DIR`. Startup creates it as the host
-user with mode 0700 before either process starts. Secondary models mounts it read-only.
+user with mode 0700 before either process starts. Secondary models mounts it read-only. Startup copies the pinned gateway binary into
+the mounted stack directory, so a host tool symlink can point outside the worktree.
 The stub reads a separate mode-0600 file and exposes only credential-match counts at
 `/provider-counts`: `managed` and `other`. `/journey-counts` keeps its existing response.
 The stub supports model-list and non-streaming verification as well as streamed chat.
