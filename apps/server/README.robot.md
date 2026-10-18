@@ -3117,14 +3117,16 @@ describes incremental scope checks and event-only revision validation.
 turn pass, including repeated `agent.turn_started` reports. It loads chat, computer
 and scope history before starting one two-second authority check. Later confirmations
 read only new rows and reject memory additions or ended context during signing.
-Only access streams enter the authority fence. Missing IAM configuration refuses
+Only access streams enter the authority fence. It always watches the requester and
+assistant, including on turns without memory. Missing IAM configuration refuses
 loaded references; turns without references still read no scope stream.
 A memory refusal returns only `memory_context_unavailable`, with no token or context.
 It appends no memory evidence and does not close the computer turn or stop its process.
 
 `test/memory-dispatch.test.ts` covers renewal after correction, forgetting, requester
 and assistant read/MCP revocation, changes during signing, expiry at release, valid
-renewal, no-reference renewal and cold replay with a forgotten dependency.
+renewal, no-reference renewal, access removal during the final activity check and
+cold replay with a forgotten dependency.
 Remaining row 2 work: correction target proofs and agent correct/forget contracts.
 Output invalidation and process interruption belong to row 3. Native memory admission
 remains disabled. Fresh-install qualification: NOT RUN.

@@ -112,7 +112,8 @@ async function turnMemoryCheck(options: BridgeOptions,
       conversation: turn.conversationId, turn: turn.turnId, thread: turn.threadId };
     const memory = await prepareLoadedMemory(options.store, options.binding, claims,
       activity.conversation, deadline);
-    const authority = await decisionAuthorityFence(options.store, performance.now(), [],
+    const subjects = [`member-${turn.requesterId}`, `assistant-${context.assistantId}`];
+    const authority = await decisionAuthorityFence(options.store, performance.now(), subjects,
       turn.requesterId, context.assistantId);
     async function confirmAccess() {
       await confirmDecisionAccess(activity, authority, false, true);
