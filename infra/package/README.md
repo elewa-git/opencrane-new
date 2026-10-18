@@ -41,8 +41,9 @@ flowchart LR
 3. **A developer checks the website.** A loopback-only port forward makes the
    private website available to a browser on this machine.
 4. **A developer stops the package.** Cleanup checks the saved namespace and Helm
-   release before removing them. A stopped launcher can be recovered after Helm
-   creates the release.
+   release before removing them. A random ID saved before installation must match
+   the release label. This allows cleanup after a stopped launcher and refuses
+   another worktree’s release.
 
 ## How to run or test it
 

@@ -5,3 +5,5 @@ Package preparation now refuses a running Compose stack in the same slot. Cleanu
 can recover this worktree's Helm install when its launcher stops before saving the
 release identity, and secondary teardown stops Compose during a Kubernetes outage
 while keeping the package record for a retry.
+Cleanup now matches a saved random install ID with the Helm release label, so a
+later foreign release cannot be mistaken for this worktree's interrupted install.

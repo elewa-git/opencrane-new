@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { directory, root } from './config.ts';
@@ -9,6 +10,7 @@ const context = 'k3d-ocn';
 const namespace = `opencrane-package-${stackId}`;
 const release = `opencrane-package-${stackId}`;
 const recordFile = `${directory}/package-owner.json`;
+const installIdLabel = 'opencrane.dev/install-id';
 const secretKeys: Record<string, string[]> = {
   runtime: ['NATS_URL', 'DATABASE_URL', 'SILO_ID', 'OIDC_ISSUER_URL',
     'OIDC_CLIENT_ID', 'OIDC_REDIRECT_URI', 'OIDC_COOKIE_SECRET',
@@ -40,7 +42,7 @@ type PackageOwner = {
   release: string;
   heartbeatAt: string;
   releaseSecretUid?: string;
-  installStartedAt?: string;
+  installId?: string;
 };
 type PackageValues = { secrets: Record<string, string> };
 type PackageReview = {
@@ -49,6 +51,7 @@ type PackageReview = {
   images: Record<string, string>;
 };
 type SecretData = { data?: Record<string, string> };
+type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
 
 async function command(program: string, args: string[], timeoutMs = 120_000) {
   const result = await execute(program, args, { cwd: root, timeout: timeoutMs });
@@ -224,12 +227,21 @@ async function releaseSecret() {
   const secret = await kubectl(['-n', namespace, 'get', 'secret',
     `sh.helm.release.v1.${release}.v1`, '--ignore-not-found', '-o', 'json']);
   if (!secret) return undefined;
-  return JSON.parse(secret) as { metadata: { uid: string; creationTimestamp?: string } };
+  return JSON.parse(secret) as ReleaseSecret;
 }
 
-async function releaseSecretUid() {
+function requireOwnedRelease(secret: ReleaseSecret | undefined, owner: PackageOwner) {
+  if (!secret?.metadata.uid || !owner.installId ||
+      secret.metadata.labels?.[installIdLabel] !== owner.installId) {
+    throw new Error('Helm release ownership was not recorded');
+  }
+}
+
+async function ownedReleaseSecretUid(owner: PackageOwner) {
   const secret = await releaseSecret();
-  return secret?.metadata.uid;
+  if (!secret) return undefined;
+  requireOwnedRelease(secret, owner);
+  return secret.metadata.uid;
 }
 
 export async function installPackage(valuesFile: string) {
@@ -237,21 +249,21 @@ export async function installPackage(valuesFile: string) {
   const owner = await verifyPackageOwner();
   await checkNamedSecrets(values, review);
   await checkRenderedPackage(valuesFile, review);
-  if (await releaseSecretUid()) throw new Error('A Helm release already uses this namespace');
-  // Save the install attempt before Helm can create its release Secret.
-  owner.installStartedAt = new Date().toISOString();
+  if (await releaseSecret()) throw new Error('A Helm release already uses this namespace');
+  // Save the identity before Helm runs so interrupted cleanup can recognise this install.
+  owner.installId = randomUUID();
   await saveOwner(owner);
   try {
     await command('helm', ['install', release, 'infra/package/chart',
       '--kube-context', context, '--namespace', namespace, '--values', valuesFile,
+      '--labels', `${installIdLabel}=${owner.installId}`,
       '--wait', '--timeout', '5m'], 360_000);
   } catch (error) {
-    owner.releaseSecretUid = await releaseSecretUid();
-    if (!owner.releaseSecretUid) delete owner.installStartedAt;
+    owner.releaseSecretUid = await ownedReleaseSecretUid(owner);
     await saveOwner(owner);
     throw error;
   }
-  owner.releaseSecretUid = await releaseSecretUid();
+  owner.releaseSecretUid = await ownedReleaseSecretUid(owner);
   if (!owner.releaseSecretUid) throw new Error('Helm did not record its release');
   await saveOwner(owner);
   await checkLiveExposure();
@@ -279,17 +291,13 @@ export async function removePackage(checkUnrecordedNamespace = true) {
     if (installed.name !== release) throw new Error('Another Helm release uses this namespace');
   }
   const secret = await releaseSecret();
-  if ((releases.length > 0 || secret) && !owner.releaseSecretUid) {
-    const secretCreatedAt = Date.parse(secret?.metadata.creationTimestamp ?? '');
-    const installStartedAt = Date.parse(owner.installStartedAt ?? '');
-    if (!secret?.metadata.uid || !Number.isFinite(installStartedAt) ||
-        !Number.isFinite(secretCreatedAt) ||
-        Math.floor(secretCreatedAt / 1000) < Math.floor(installStartedAt / 1000)) {
-      throw new Error('Helm release ownership was not recorded');
+  if (releases.length > 0 || secret) {
+    requireOwnedRelease(secret, owner);
+    if (!owner.releaseSecretUid) {
+      // Keep the recovered UID so a later retry checks the same release.
+      owner.releaseSecretUid = secret!.metadata.uid;
+      await saveOwner(owner);
     }
-    // Keep the recovered UID so a later retry checks the same release.
-    owner.releaseSecretUid = secret.metadata.uid;
-    await saveOwner(owner);
   }
   if (owner.releaseSecretUid) {
     if (secret?.metadata.uid !== owner.releaseSecretUid) {

@@ -62,11 +62,12 @@ package namespace remains. The package owner record keeps the worktree, slot,
 cluster, namespace UID, Helm release and heartbeat. Kubernetes errors count as
 busy. `package-down` checks those identities before removal; ordinary secondary
 `down` does the same first. Package preparation checks for running Compose host
-processes and containers in that slot. The installer records the start of its Helm
-attempt before Helm runs. If Helm creates its release Secret and the launcher stops
-before recording its UID, cleanup checks the owned namespace and the Secret's
-creation time, then saves the UID before removal. An unrecorded release without an
-install attempt is refused. If Kubernetes is unavailable, secondary `down` still
+processes and containers in that slot. The installer saves a random `installId`
+before Helm runs and passes it as the `opencrane.dev/install-id` release label.
+Cleanup requires that label to match the saved ID. If the launcher stops before
+saving the release Secret's UID, cleanup recovers the UID from the matching Secret.
+A later foreign or unlabelled release is refused, even in the owned namespace.
+Older records without an install ID cannot authorise release removal. If Kubernetes is unavailable, secondary `down` still
 stops Compose, keeps the package record and reports that the package remains.
 See [package operator notes](../package/README.robot.md).
 Old owner files containing only a worktree path count as claims started long ago.

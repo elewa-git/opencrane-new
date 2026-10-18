@@ -45,11 +45,12 @@ Kubernetes errors also keep the slot busy. Cleanup checks the recorded worktree,
 namespace UID, annotations and first Helm release secret UID before uninstalling.
 It deletes only the package namespace in that slot. A failed Helm install can be
 cleaned through `package-down` before releasing the slot. The installer saves an
-install start time before calling Helm. If Helm creates its release Secret and the
-launcher stops before saving its UID, cleanup accepts the Secret only in the saved
-namespace and only when its creation time is no earlier than that install attempt.
-Cleanup saves the recovered UID before uninstalling. An unrecorded release with no
-saved install attempt is refused. If Kubernetes is unavailable during secondary
+ID from `randomUUID()` before calling Helm with
+`--labels opencrane.dev/install-id=<id>`. Helm stores that label on its release
+Secret. Cleanup requires the saved ID to match the label, including when the
+Secret UID was already saved. If the launcher stops before saving the UID, cleanup
+recovers it only from the matching Secret. A later foreign or unlabelled release
+is refused. Older records without an install ID cannot authorise release removal. If Kubernetes is unavailable during secondary
 `down`, Compose stops while the package record stays in place for a retry.
 
 The current chart does not yet provide all workers, object storage, scanner,
