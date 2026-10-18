@@ -16,6 +16,7 @@ import { groupMembership } from './paying-group.ts';
 import { sharedAdmissionAccess } from './shared-admission-access.ts';
 import { history } from './actor.ts';
 import { data } from './state.ts';
+import { requireDescendantAllowance } from './budget-turn.ts';
 
 type Start = z.infer<typeof computerTurnStartedDataSchema>;
 type Descendant = Extract<Start, { task: 'native_descendant' }>;
@@ -150,6 +151,8 @@ export async function admitDescendant(store: EventStore, access: Binding,
 /** Recheck access to the saved model and payer before admission or a native call. */
 export async function descendantAccess(store: EventStore, access: Binding, binding: Descendant,
   activity: Awaited<ReturnType<typeof decisionActivity>>, deadline: number, started?: number) {
+  // Load spending history before the short access check, then read only later events.
+  await requireDescendantAllowance(store, access.silo, binding, deadline);
   let confirmSharedAccess: Awaited<ReturnType<typeof sharedAdmissionAccess>> | undefined;
   if (binding.dataClass === 'shared') {
     confirmSharedAccess = await sharedAdmissionAccess(store, access.silo,
@@ -163,6 +166,7 @@ export async function descendantAccess(store: EventStore, access: Binding, bindi
     while (true) {
       const activityChanged = await activity.confirm(authority.deadline, false);
       const sharedAccessChanged = await confirmSharedAccess?.(authority.deadline);
+      await requireDescendantAllowance(store, access.silo, binding, authority.deadline);
       const authorityChanged = await authority();
       if (!activityChanged && !sharedAccessChanged && !authorityChanged) {
         return;

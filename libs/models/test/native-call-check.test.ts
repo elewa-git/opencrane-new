@@ -7,6 +7,7 @@ import { tokenVerifier } from '@opencrane/auth';
 import { createEventStore, type EventStore } from '@opencrane/event-store';
 import { admitDescendant, descendantId, history } from '../src/index.ts';
 import { fixture } from './fixture.ts';
+import { saveNativeAllowance } from './native-allowance.ts';
 
 type Context = Awaited<ReturnType<typeof fixture>>;
 const disabled = 'Native delegation is disabled';
@@ -38,6 +39,7 @@ async function admit(context: Context, binding: ReturnType<typeof child>) {
 async function setup() {
   const context = await fixture(2000, 20000, false, root.model);
   await context.append('computer-assistant', 'computer.turn_started', root);
+  await saveNativeAllowance(context, root);
   return context;
 }
 function claims(context: Context, binding: ReturnType<typeof child>) {

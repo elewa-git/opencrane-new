@@ -147,7 +147,8 @@ export class BudgetActor {
     return this.serial(save);
   }
   reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>, admittedAt?: number,
-    rootId?: string, retry?: CallRetry) {
+    rootId?: string, retry?: CallRetry,
+    rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>) {
     return this.serial(async () => {
       const saved = await retryReservation(this.state, call, amountCents, rootId, retry,
         this.hasDispatchEvidence.bind(this), fresh);
@@ -160,7 +161,7 @@ export class BudgetActor {
       if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
       if (!call.payingGroupId) throw new Error('Paying group unavailable');
       const root = await checkRootReservation(this.state, call, rootId, amountCents,
-        this.append.bind(this));
+        this.append.bind(this), rootTurn, fresh);
       if (root) admittedAt = root.position;
       const stopId = budgetStopId(this.state, call, this.now(), admittedAt);
       if (stopId !== undefined) {

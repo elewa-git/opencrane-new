@@ -8,6 +8,7 @@ import { createEventStore, type EventStore, type StoredEvent } from '@opencrane/
 import { grantStream } from '@opencrane/authz';
 import { admitDescendant, descendantId, history, readDescendantAgreement } from '../src/index.ts';
 import { fixture } from './fixture.ts';
+import { saveNativeAllowance } from './native-allowance.ts';
 
 type Context = Awaited<ReturnType<typeof fixture>>;
 const scopes = { models: ['gpt-6.1-sol'], tools: [], resources: [], operations: [],
@@ -48,6 +49,9 @@ async function setup() {
     turnId: 'bound-root', threadId: 'bound-thread', requesterId: 'alice', task: 'chat_turn',
     payingGroupId: 'personal-default', executionMode: 'memory_free',
     model: 'gpt-6.1-sol', providerId: 'provider', bindingSequence: 1 });
+  const binding = child('allowance');
+  const root = { ...binding, turnId: binding.rootTurnId, threadId: binding.rootThreadId };
+  await saveNativeAllowance(context, root);
   return context;
 }
 async function assertNoEffects(context: Context) {

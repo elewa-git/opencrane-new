@@ -151,9 +151,20 @@ function bindDispatchRoot(state: BudgetState,
   return { ...input, rootId };
 }
 export async function checkRootReservation(state: BudgetState, call: ModelCall,
-  rootId: string | undefined, amountCents: number, append: Append) {
+  rootId: string | undefined, amountCents: number, append: Append,
+  rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>, fresh?: () => Promise<void>) {
+  // Use only the checked native root here; keep the child's own identifiers on the hold.
+  if (rootTurn !== undefined) {
+    if (!fresh) {
+      throw new Error('Descendant access check required');
+    }
+    // Recheck access before a capacity refusal can stop the root.
+    await fresh();
+  }
+  const rootCall = rootTurn === undefined ? call :
+    { ...call, turnId: rootTurn.turnId, threadId: rootTurn.threadId };
   function matchesTurn(root: Root) {
-    return root.conversationId === call.conversationId && root.turnId === call.turnId;
+    return root.conversationId === rootCall.conversationId && root.turnId === rootCall.turnId;
   }
   const root = state.roots.find(matchesTurn);
   if (!root && rootId === undefined) return undefined;
@@ -161,7 +172,7 @@ export async function checkRootReservation(state: BudgetState, call: ModelCall,
   const fields = ['requesterId', 'threadId', 'assistantId', 'computerId', 'generation',
     'payingGroupId'] as const;
   for (const field of fields) {
-    if (root[field] !== call[field]) throw new Error('Root binding conflict');
+    if (root[field] !== rootCall[field]) throw new Error('Root binding conflict');
   }
   const availableCents = rootTotals(state, root.rootId).availableCents;
   if (root.stop) throw new RootBudgetRefused(root.stop.reason, availableCents);

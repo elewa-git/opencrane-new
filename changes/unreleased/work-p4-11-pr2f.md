@@ -1,0 +1,1 @@
+- Native child admission now requires its root’s saved spending allowance and paying group. Internal child holds share that allowance, refuse overspending and retain uncertain money through replay. Native calls remain disabled; token, bridge and dispatch work is still pending.

@@ -158,8 +158,8 @@ pass. A private turn cannot claim the class, and a shared child cannot omit it.
 `admitDescendant` saves `computer.turn_started` and then a version 1
 `delegation.started` for a signed internal decision. Each stage makes its own conditional
 append to one stream. It returns `{ admission, start }`, both original stored events.
-No route or production signer calls it. Native calls remain disabled; root allowance
-checks remain for #90 PR 4.
+No route or production signer calls it. Native calls remain disabled. Admission requires
+a matching saved root allowance and paying group; it cannot create or resize one.
 The native bridge, thread grants and Stop work remain in later design rows.
 
 The decision uses ES256, the configured issuer, audience `delegation-admission`,
@@ -218,6 +218,35 @@ competing starts, changed bindings and references, missing/legacy/closed records
 unavailable reads and projection replay. These records grant no call authority and
 create no budget event, hold, token or upstream call. Live native qualification: NOT RUN.
 
+## Native child spending checks (P4-11 PR 2f; Part of #93)
+
+`requireDescendantAllowance` reuses the budget event summary. Admission and native
+calls must match the saved root id, root turn/thread, requester, conversation,
+assistant, computer generation and paying group. A saved root stop refuses them.
+Spending history loads before the short access check; later confirmations read
+only new events. No conversation stream is added to the authority check.
+
+`reserveNativeCall` is an internal operation with no HTTP route or production caller.
+Its inputs are already verified computer/turn claims and a server-computed call bound
+in integer cents. It repeats the saved-record and current-access checks used by the
+HTTP refusal path, then uses the budget actor's existing queue. The actor accepts the
+checked root turn/thread separately and retains the child's identity on the hold.
+It checks access before capacity, so stale access cannot create an exhaustion stop.
+The same hold counts towards root, group and global totals. No child allowance is made.
+
+The real fixtures run two decision services and separate event-store clients against
+one budget writer, NATS, PostgreSQL and OpenFGA. Both HTTP services still refuse all
+native calls before reading their bodies. Internal concurrent holds test 240 settled
+plus 110 held, competing 400/300 bounds, permanent root refusal and an unaffected root.
+Settlement tests cover 300/200 holds settling at 180/120, duplicate settlement,
+release of an unsent 90, retention of an unknown 110 and fresh-actor replay.
+
+Scope is PARTIAL: this is the saved allowance and internal capacity part of row 2.
+Native request-cost calculation, trusted call/body binding, dispatch, token minting,
+authenticated bridge evidence and the remaining restart/Stop races are deferred.
+The current dispatch gate cannot send these native holds. Both multi_agent settings
+and native credential issuance remain off. Fresh-install qualification: NOT RUN.
+
 ## Budget writes
 
 Native calls pass through `native-call-check.ts` before conversation activity for an
@@ -244,11 +273,12 @@ uses a team payer saved only on the turn records, so another team cannot substit
 model, MCP and memory routes, then refuse stale revocations and lost participation or
 payer membership. Invalid JSON and observed reads prove these checks precede body,
 policy and approval handling. Budget positions, holds and dispatches stay unchanged.
-Root allowance integration, minting, bridge work and Stop execution remain separate.
+Native admission and calls now require the saved allowance described above.
+Minting, bridge work and Stop execution remain separate.
 `test/native-call-check.test.ts` uses admissions made by `admitDescendant`, real fixtures,
 individual changed claims, unavailable reads and exact final refusals on model, MCP
 and memory decision routes. Native credentials remain disabled. Live qualification: NOT RUN.
-No root allowance or child reservation path is introduced by the delegation contracts.
+The delegation records themselves grant no spending authority.
 `test/delegation.test.ts` checks legacy and native refusals through the real gateway,
 with zero upstream calls and zero reservations.
 
