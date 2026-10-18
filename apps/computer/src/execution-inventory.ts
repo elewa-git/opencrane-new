@@ -2,12 +2,6 @@ import fs from 'node:fs';
 
 export const EXECUTION_UIDS: readonly number[] = [1001, 1003];
 
-function ignoreExitedTask(error: unknown) {
-  // Ignore only an exit during observation. Missing permissions are not exit proof.
-  if (!error || typeof error !== 'object' || !('code' in error)
-    || error.code !== 'ENOENT') throw error;
-}
-
 function startTime(path: string, pid: string) {
   const contents = fs.readFileSync(`${path}/stat`, 'utf8');
   const nameStart = contents.indexOf('(');
@@ -42,34 +36,50 @@ function isLiveExecutionTask(status: string) {
   return false;
 }
 
+function isTaskNumber(name: string) {
+  return /^\d+$/u.test(name);
+}
+
+function taskNumbers(directory: string) {
+  const names = fs.readdirSync(directory);
+  return names.filter(isTaskNumber);
+}
+
+function requireSameMembers(directory: string, before: readonly string[]) {
+  const after = taskNumbers(directory);
+  const members = new Set(after);
+  if (before.length !== after.length) throw new Error('Task membership changed');
+  for (const name of before) {
+    if (!members.has(name)) throw new Error('Task membership changed');
+  }
+}
+
 function hasLiveExecutionThread(directory: string, pid: string) {
   const processStarted = startTime(directory, pid);
+  const taskDirectory = `${directory}/task`;
+  const threads = taskNumbers(taskDirectory);
   let liveTask = false;
-  for (const thread of fs.readdirSync(`${directory}/task`)) {
-    const path = `${directory}/task/${thread}`;
-    try {
-      const threadStarted = startTime(path, thread);
-      const status = fs.readFileSync(`${path}/status`, 'utf8');
-      const executing = isLiveExecutionTask(status);
-      // Bind the status to one task even if its number is reused while we read it.
-      requireSameTask(path, thread, threadStarted);
-      if (executing) liveTask = true;
-    } catch (error) {
-      ignoreExitedTask(error);
-    }
+  for (const thread of threads) {
+    const path = `${taskDirectory}/${thread}`;
+    const threadStarted = startTime(path, thread);
+    const status = fs.readFileSync(`${path}/status`, 'utf8');
+    const executing = isLiveExecutionTask(status);
+    // Bind the status to one task even if its number is reused while we read it.
+    requireSameTask(path, thread, threadStarted);
+    if (executing) liveTask = true;
   }
+  // Refuse a vanished leader too: it may have handed work to a child outside this scan.
   requireSameTask(directory, pid, processStarted);
+  requireSameMembers(taskDirectory, threads);
   return liveTask;
 }
 
 export function hasLiveExecutionTasks(processRoot = '/proc') {
-  for (const pid of fs.readdirSync(processRoot)) {
-    if (!/^\d+$/u.test(pid)) continue;
-    try {
-      if (hasLiveExecutionThread(`${processRoot}/${pid}`, pid)) return true;
-    } catch (error) {
-      ignoreExitedTask(error);
-    }
+  const processes = taskNumbers(processRoot);
+  for (const pid of processes) {
+    // Let every observation error refuse proof, including exits after seeing live work.
+    if (hasLiveExecutionThread(`${processRoot}/${pid}`, pid)) return true;
   }
+  requireSameMembers(processRoot, processes);
   return false;
 }

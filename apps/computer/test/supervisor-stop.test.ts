@@ -227,7 +227,8 @@ child.unref();
     expect(childStatus).not.toMatch(/State:\s+[ZX]/u);
     expect(result).toBe('400\n{"error":"Stop proof unavailable","controlEnabled":false}');
     expect(await inventory(computer)).not.toBe('[]');
-    await expectAdmissionClosed(computer);
+    const saved = await computer.read('/home/agent/supervisor/stopped.json');
+    expect(JSON.parse(saved)).toMatchObject(attempt);
   } finally {
     await computer.close();
   }

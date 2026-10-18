@@ -92,10 +92,13 @@ real, effective, saved and filesystem. Each record must contain all four IDs.
 Before and after reading a task, it reads the PID and start time from `stat`. It
 also checks the process leader before and after scanning its threads. A changed
 start time means the kernel reused that number, so the observation is refused.
-Missing or malformed identity data is refused too. Only ENOENT means an observed
-task exited; permission errors never count as exit proof. A zombie main thread
-can still have live workers, so the check includes every thread. Only individual zombie or dead tasks
-are excluded. A successful empty scan visits every thread of every listed process.
+Missing or malformed identity data is refused too. A task disappearing during the
+scan also refuses proof: it may have passed work to a child missing from the original
+list. The supervisor compares process and thread lists before and after scanning
+them. Added or removed members refuse proof. An observed live task can never become
+an empty result because its leader disappeared. A zombie main thread can still have
+live workers, so the check includes every thread. Only individual zombie or dead
+tasks are excluded. A successful empty scan visits every thread of every listed process.
 If tasks remain, both helpers run again before another scan. Missing permissions,
 invalid task data, helper failure or the ten-second deadline prevents an exit
 receipt. Admission remains closed and control stays disabled.
@@ -127,9 +130,12 @@ the native code-mode host, restricted Codex, helper failure, socket access from
 all four non-root UIDs, conflicting requests, restart and damaged saved denial.
 They also cover a live worker under a zombie main thread, an endless worker with
 a helper that does nothing, and a detached process repeatedly handing work to a
-fresh child. A test observer running as root forces a real fork after reading the PID
-directory and before reading status. The endless-worker check uses a no-op helper
-to simulate failed termination; a real task stuck in kernel I/O is NOT RUN.
+fresh child. A test observer running as root forces a real fork either after reading
+the process list or after observing the live worker, before the final leader check.
+The parent is reaped before the scan continues. Each barrier asserts that the fork
+happened, the child is live and the root socket refuses a receipt. These checks and
+the endless-worker check use a no-op helper to simulate failed termination; a real
+task stuck in kernel I/O is NOT RUN.
 Run with `nice -n 10 npx vitest run apps/computer/test/supervisor-stop.test.ts
 --maxWorkers=1`. Docker/runc source checks do not qualify gVisor or a fresh silo.
 Pinned gVisor/Kasm full quietness and live takeover: **NOT RUN**.
@@ -936,8 +942,10 @@ Saved approval cancellation and zero-cost release of unadmitted reservations als
 remain unbuilt. The existing pausing event and server checks are unchanged.
 
 `execution-inventory.test.ts` covers reused process and thread numbers, malformed
-identity data, effective-user execution, zombie leaders with live workers, observed
-exits and read errors. `supervisor-identity.test.ts` injects identity faults while
+identity data, each of the four user ID slots independently for both executor users,
+zombie leaders with live workers, changed process and thread lists, observed exits
+and read errors. Two, three or extra user ID columns and missing or malformed task
+state refuse proof. `supervisor-identity.test.ts` injects identity faults while
 calling the real root socket in disposable Docker computers. It also starts real
 Chromium automation under the executor and desktop users. Executor automation exits;
 desktop automation and Xvnc stay running and full quiet proof stays unavailable.

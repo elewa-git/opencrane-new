@@ -25,7 +25,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes and public keys| computer
   server["apps/server<br/>the back end"] <-->|turns, files, shared history, stops, signed gates, immediate gate replies, root stop receipts and reports| computer
   events["libs/events<br/>report text check"] -.-> computer
-  computer --> supervisor["Root supervisor<br/>protected launch and checked process exit"]
+  computer --> supervisor["Root supervisor<br/>protected launch and stable process checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
   computer -->|checks each turn before model and reviewed tool calls| gateway["agentgateway<br/>AI gateway"]
@@ -90,8 +90,9 @@ server whether it can wait for approval. Older computers receive Allow tools onl
    and stops tools and private Codex processes. It checks every worker thread, including
    workers whose main thread has exited, and detached children. It checks each process
    number and start time before and after reading its details. Reused numbers, unreadable
-   details or work that keeps running prevent an exit receipt. Its receipt cannot
-   grant desktop control.
+   details, changed process or thread lists, or work that keeps running prevent an
+   exit receipt. A task disappearing during the check also refuses the receipt,
+   because it may have passed work to a new child. The receipt cannot grant desktop control.
 
 The bridge accepts a short-lived signed stop request only for this computer, Pod and
 generation. A missing key or an old or foreign request leaves work running. A valid

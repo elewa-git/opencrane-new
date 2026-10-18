@@ -55,7 +55,8 @@ function readDirectoryThenFork(target: typeof fs.readdirSync,
   return names;
 }
 
-function readFileThenFork(...args: Parameters<typeof fs.readFileSync>) {
+function readFileThenFork(target: typeof fs.readFileSync,
+  receiver: unknown, args: unknown[]): unknown {
   const pid = originalReadFile('/workspace/handoff-pid', 'utf8');
   if (stage === 'observed-worker' && !injected) {
     if (observedWorker && args[0] === `/proc/${pid}/stat`) {
@@ -64,12 +65,13 @@ function readFileThenFork(...args: Parameters<typeof fs.readFileSync>) {
     }
     if (args[0] === `/proc/${pid}/task/${pid}/status`) observedWorker = true;
   }
-  return originalReadFile(...args);
+  return Reflect.apply(target, receiver, args);
 }
 
 const directoryObserver = { apply: readDirectoryThenFork };
 fs.readdirSync = new Proxy(originalReadDirectory, directoryObserver);
-fs.readFileSync = readFileThenFork;
+const fileObserver = { apply: readFileThenFork };
+fs.readFileSync = new Proxy(originalReadFile, fileObserver);
 syncBuiltinESMExports();
 const supervisorModule = new URL('file:///app/src/supervisor-stop.ts');
 const stopModule: unknown = await import(supervisorModule.href);
