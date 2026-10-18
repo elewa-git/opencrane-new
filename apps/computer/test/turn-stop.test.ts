@@ -51,7 +51,7 @@ async function stopFixture() {
   const lists = new Map<string, string>();
   const started = new Map<string, ReturnType<typeof Promise.withResolvers<void>>>();
   const revoked = Promise.withResolvers<void>();
-  const rpc = computer.driver.rpc;
+  const rpc = computer.driver.rpc.bind(computer.driver);
   function recordRpc(method: string, params: Record<string, unknown>) {
     const result = rpc(method, params);
     if (method === 'turn/start') started.get(String(params['threadId']))?.resolve();
@@ -95,7 +95,10 @@ async function stopFixture() {
     function receive(response: IncomingMessage) {
       const chunks: Buffer[] = [];
       function chunk(bytes: Buffer) { chunks.push(bytes); }
-      function end() { result.resolve(`${response.statusCode}:${Buffer.concat(chunks)}`); }
+      function end() {
+        const bytes = Buffer.concat(chunks);
+        result.resolve(`${response.statusCode}:${bytes.toString()}`);
+      }
       response.on('data', chunk);
       response.on('end', end);
       response.on('error', failed);
@@ -184,7 +187,7 @@ async function removesAnInstallationAlreadyInFlight() {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const removed = Promise.withResolvers<void>();
-  const grant = test.driver.grant;
+  const grant = test.driver.grant.bind(test.driver);
   let drops = 0;
   async function heldGrant(thread: string, conversation: string, token: string, expires: number) {
     if (token) {
@@ -214,3 +217,40 @@ async function removesAnInstallationAlreadyInFlight() {
 }
 it('removes a grant installation that was already pending when Stop arrived',
   removesAnInstallationAlreadyInFlight);
+
+async function stopsDuringToolPreparation() {
+  const test = await stopFixture();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const dropped = Promise.withResolvers<void>();
+  const catalogue = test.driver.catalogue!.bind(test.driver);
+  const drop = test.driver.dropCatalogue!.bind(test.driver);
+  async function heldCatalogue(...input: Parameters<typeof catalogue>) {
+    await catalogue(...input);
+    entered.resolve();
+    await release.promise;
+  }
+  async function recordDrop(loadKey: string) {
+    await drop(loadKey);
+    dropped.resolve();
+  }
+  test.driver.catalogue = heldCatalogue;
+  test.driver.dropCatalogue = recordDrop;
+  try {
+    test.send({ type: 'turn', id: 'first', conversationId: 'first',
+      assistantId: 'assistant', text: 'Hello', token: 'initial', expiresAt: Date.now() + 60_000 });
+    await entered.promise;
+    test.stop();
+    await withinStopDeadline(dropped.promise);
+    expect(await test.call('thread-1', 'first')).toContain('Unknown tool list');
+    const terminal = once(test.socket, 'message');
+    release.resolve();
+    await terminal;
+    expect(test.calls).toEqual([]);
+    expect(test.received).toEqual([]);
+  } finally {
+    release.resolve();
+    await test.close();
+  }
+}
+it('removes the tool list while thread preparation is still waiting', stopsDuringToolPreparation);
