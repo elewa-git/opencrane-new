@@ -300,7 +300,7 @@ function startClient() {
       return loads.load(input, params.threadId, startParams);
     }
     if (method === 'turn/start') {
-      const input = { thread: params.threadId, conversation: wireConversations.get(params.threadId),
+      const input = { thread: params.threadId, turnId: params.threadId, conversation: wireConversations.get(params.threadId),
         token: 'local-turn', computer: 'local-computer', expires: Date.now() + 60_000 };
       await control('/grant', input);
     }
@@ -566,7 +566,7 @@ try {
       return true;
     }
     async function renew(thread) {
-      await control('/grant', { thread, conversation: wireConversations.get(thread),
+      await control('/grant', { thread, turnId: thread, conversation: wireConversations.get(thread),
         token: 'local-renewed', computer: 'local-computer', expires: Date.now() + 60_000 });
     }
     const approvalDriver = { waiting, renew };
@@ -871,8 +871,8 @@ async function checkHeldCalls(threadA, threadB, config) {
     return activeClient.rpc(method, params);
   }
   function credential() { return { value: 'local-computer', expiresAt: Date.now() + 60_000 }; }
-  async function grant(thread, conversation, token, expiresAt) {
-    const input = { thread, conversation: wireConversations.get(thread),
+  async function grant(thread, conversation, token, expiresAt, turnId) {
+    const input = { thread, turnId, conversation: wireConversations.get(thread),
       computer: 'local-computer', token, expires: expiresAt };
     await control(token ? '/grant' : '/drop', input);
   }

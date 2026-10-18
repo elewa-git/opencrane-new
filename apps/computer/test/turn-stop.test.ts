@@ -66,9 +66,10 @@ async function stopFixture() {
     return result;
   }
   computer.driver.rpc = recordRpc;
-  async function grant(thread: string, conversation: string, token: string, expires: number) {
+  async function grant(thread: string, conversation: string, token: string, expires: number,
+    turnId: string) {
     const path = token ? '/grant' : '/drop';
-    const input = { thread, conversation, computer: 'fixture', token, expires };
+    const input = { thread, turnId, conversation, computer: 'fixture', token, expires };
     await proxyControl(path, input, socketPath);
     if (!token && thread === 'thread-1') revoked.resolve();
   }
@@ -200,12 +201,13 @@ async function removesAnInstallationAlreadyInFlight() {
   const removed = Promise.withResolvers<void>();
   const grant = test.driver.grant.bind(test.driver);
   let drops = 0;
-  async function heldGrant(thread: string, conversation: string, token: string, expires: number) {
+  async function heldGrant(thread: string, conversation: string, token: string, expires: number,
+    turnId: string) {
     if (token) {
       entered.resolve();
       await release.promise;
     }
-    await grant(thread, conversation, token, expires);
+    await grant(thread, conversation, token, expires, turnId);
     if (!token && ++drops === 2) removed.resolve();
   }
   test.driver.grant = heldGrant;
@@ -301,12 +303,13 @@ async function finishesOldInstallationBeforeReusingThread() {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const grant = test.driver.grant.bind(test.driver);
-  async function heldGrant(thread: string, conversation: string, token: string, expires: number) {
+  async function heldGrant(thread: string, conversation: string, token: string, expires: number,
+    turnId: string) {
     if (token) {
       entered.resolve();
       await release.promise;
     }
-    await grant(thread, conversation, token, expires);
+    await grant(thread, conversation, token, expires, turnId);
   }
   function refused(error: unknown) { return error; }
   try {

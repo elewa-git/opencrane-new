@@ -91,7 +91,7 @@ async function fixture(approvalSupport = false) {
     expect(await control('/catalogue', { loadKey, conversation, thread, tools: listedTools })).toBe(200);
   }
   async function grant(thread = 'thread-A', conversation = 'chat-A') {
-    const input = { thread, conversation, computer: 'computer', token: `token-${thread}`,
+    const input = { thread, turnId: thread, conversation, computer: 'computer', token: `token-${thread}`,
       expires: Date.now() + 60_000 };
     expect(await control('/grant', input)).toBe(200);
   }
@@ -170,7 +170,7 @@ async function refusesOutsideList(kind: string) {
       _meta: { ...metadata, threadId: 'thread-B' } } };
     if (kind === 'tool') body = { ...call, params: { ...call.params, name: 'unlisted' } };
     if (kind === 'conversation') await test.grant('thread-A', 'chat-B');
-    if (kind === 'ended') await test.control('/drop', { thread: 'thread-A' });
+    if (kind === 'ended') await test.control('/drop', { thread: 'thread-A', turnId: 'thread-A' });
     if (kind === 'expired') {
       const clock = Date.now() + 61_000;
       vi.spyOn(Date, 'now').mockReturnValue(clock);
@@ -356,7 +356,7 @@ async function heldCall(state: string) {
     const sentAlready = state === 'stop-sent' || state === 'rollback-sent';
     const releasing = state === 'drop' || state === 'rollback';
     const decision = state === 'retry403' || sentAlready || releasing ? 'approved' : state;
-    if (state === 'drop') await test.control('/drop', { thread: 'thread-A' });
+    if (state === 'drop') await test.control('/drop', { thread: 'thread-A', turnId: 'thread-A' });
     if (state === 'rollback') test.approvals.resume(false);
     const settled = test.approvals.settle(approvalId, decision);
     if (sentAlready) {

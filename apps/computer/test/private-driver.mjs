@@ -68,7 +68,7 @@ async function open() {
 }
 async function grant(threadId) {
   const options = { socketPath: '/run/codex/control.sock', path: '/grant', method: 'POST' };
-  const value = { thread: threadId, computer: 'probe-computer', token: 'probe-turn',
+  const value = { thread: threadId, turnId: threadId, computer: 'probe-computer', token: 'probe-turn',
     expires: Date.now() + 120_000 };
   function send(resolve, reject) {
     function receive(response) {

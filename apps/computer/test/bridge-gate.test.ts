@@ -104,12 +104,13 @@ async function refusesLateGrant(renewal: boolean, installing: boolean) {
   let delayed = !renewal && installing;
   let entered = false;
   const grant = test.driver.grant.bind(test.driver);
-  async function install(thread: string, conversation: string, token: string, expires: number) {
+  async function install(thread: string, conversation: string, token: string, expires: number,
+    turnId: string) {
     if (delayed && token) {
       entered = true;
       await pending.promise;
     }
-    await grant(thread, conversation, token, expires);
+    await grant(thread, conversation, token, expires, turnId);
   }
   test.driver.grant = install;
   try {

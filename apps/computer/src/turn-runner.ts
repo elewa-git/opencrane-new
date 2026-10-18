@@ -26,7 +26,8 @@ export interface PrivateSession {
 export interface TurnDriver extends ThreadLoadDriver {
   privateSession?(): Promise<PrivateSession>;
   file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
-  grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
+  grant(thread: string, conversation: string, token: string, expiresAt: number,
+    turnId: string): Promise<void>;
   credential(): { expiresAt: number; gateIdentity?: GateIdentity | undefined } &
     ({ value: string } | { digest: string });
   authenticated?(value: string): void;
@@ -342,7 +343,12 @@ class TurnRunner {
     installation.pending++;
     this.grantInstalls.set(turn.id, installation);
     try {
-      await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
+      await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt, turn.id);
+    } catch (error) {
+      if (!this.gate.closed && this.state.cancelled.has(turn.id)) {
+        throw new Error('Turn ended');
+      }
+      throw error;
     } finally {
       try {
         // Remove a late installation before another turn can reuse this thread.
@@ -371,7 +377,7 @@ class TurnRunner {
   }
 
   private async dropAccess(threadId: string, input: Turn) {
-    await releaseLoad(this.loads, this.driver, threadId, input.conversationId);
+    await releaseLoad(this.loads, this.driver, threadId, input.conversationId, input.id);
   }
 
   private async unloadPrivate(session: PrivateSession, threadId: string) {
@@ -533,7 +539,7 @@ class TurnRunner {
     if (!this.isActiveTurn(input.id)) return;
     if (this.gate.closed || this.state.cancelled.has(input.id)) {
       this.failTurn(input);
-      await this.driver.grant(threadId, input.conversationId, '', 0);
+      await this.driver.grant(threadId, input.conversationId, '', 0, input.id);
       return;
     }
 
@@ -661,7 +667,7 @@ class TurnRunner {
 
   private releaseClosedThread(threadId: string, input: Turn | undefined) {
     if (input) this.failTurn(input);
-    else void this.gate.track(releaseLoad(this.loads, this.driver, threadId, ''));
+    else void this.gate.track(releaseLoad(this.loads, this.driver, threadId, '', ''));
   }
 
   complete(value: unknown) {
@@ -743,8 +749,8 @@ class TurnRunner {
 }
 
 async function releaseLoad(loads: ReturnType<typeof threadLoads>, driver: TurnDriver,
-  threadId: string, conversationId: string) {
-  const revoking = driver.grant(threadId, conversationId, '', 0);
+  threadId: string, conversationId: string, turnId: string) {
+  const revoking = driver.grant(threadId, conversationId, '', 0, turnId);
   const dropping = loads.forget(threadId);
   await Promise.all([revoking, dropping]);
 }

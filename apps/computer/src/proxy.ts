@@ -27,6 +27,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   approvalDriver: Parameters<typeof approvalHolds>[0] = UNAVAILABLE_APPROVALS) {
   let deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
   const turns = new Map<string, ProxyGrant>();
+  const cancelledTurns = new Set<string>();
   const requests = proxyRequests();
   const approvals = approvalHolds(approvalDriver);
   const mcp = mcpProxy(gateway, turns, approvals);
@@ -51,13 +52,18 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
         json(res, { ok: true });
         return;
       }
-      if (typeof input['thread'] !== 'string') throw new Error('Bad request');
+      if (typeof input['thread'] !== 'string' || typeof input['turnId'] !== 'string') {
+        throw new Error('Bad request');
+      }
       if (req.url === '/drop') {
+        // Remember cancelled turns before acknowledging Stop or accepting another pass.
+        cancelledTurns.add(input['turnId']);
         turns.delete(input['thread']);
         mcp.dropThread(input['thread']);
         requests.drop(input['thread']);
       }
       else if (req.url === '/grant') {
+        if (cancelledTurns.has(input['turnId'])) throw new Error('Turn ended');
         if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
             typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires']) ||
             input['expires'] <= Date.now() ||

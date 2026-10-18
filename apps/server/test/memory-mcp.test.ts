@@ -910,7 +910,7 @@ it('recalls through the thread proxy, real gateway and backend with replaced cre
         modes: { recall: 'allow' }, definitions: [definition] };
       const catalogue = { loadKey, conversation: 'conversation', thread: 'thread', tools: [tool] };
       await controlProxy(controlSocket, '/catalogue', catalogue);
-      const grant = { thread: 'thread', conversation: 'conversation',
+      const grant = { thread: 'thread', turnId: 'turn', conversation: 'conversation',
         computer: setup.headers.authorization.slice('Bearer '.length),
         token: setup.headers['x-turn-token'], expires: Date.now() + 60_000 };
       await controlProxy(controlSocket, '/grant', grant);
