@@ -17,7 +17,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, reviews, saved fact references, recall progress, access through memory saving and child joins, owners, providers and original spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
-  models -->|rechecks loaded memory; checks revision, reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
+  models -->|rechecks loaded memory; checks corrected memory revisions, reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -260,6 +260,9 @@ Later confirmed usage can still settle their cost.
 Spending-limit changes keep their original receipt after a restart or later edits.
 The library loads history before checking write access. A reservation can also
 change the budget revision, so a refused save does not identify another editor.
+
+Saved memory corrections make older references unusable. The new revision remains
+usable when its sources are still current. These checks read no private text.
 
 Saved spending stops explain the limits that applied to one turn. The server
 uses the same payer choice as admission and the stop handler.

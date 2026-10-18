@@ -1,4 +1,4 @@
-import { memoryWrittenDataSchema, memoryWrittenEventSchema, parseEventByType,
+import { memoryWrittenDataSchema, memoryValueEventSchema, parseEventByType,
   type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryIdentity, shouldReplaceMemoryRevision } from '@opencrane/projections';
@@ -8,7 +8,7 @@ const changeFields = changeIdentity.strip();
 
 type Reference = Pick<MemoryIdentity, 'scopeId' | 'memoryId' | 'revision'>;
 type Status = 'current' | 'erased' | 'superseded' | 'invalid';
-type Write = ReturnType<typeof memoryWrittenEventSchema.parse>;
+type Write = ReturnType<typeof memoryValueEventSchema.parse>;
 type Custody = 'event-only' | {
   status: (identity: MemoryIdentity) => 'available' | 'destroyed' | 'missing';
 };
@@ -33,6 +33,17 @@ function recordChange(event: EventEnvelope, scopeId: string, hidden: Map<string,
   }
 }
 
+function versionedReplacement(event: EventEnvelope) {
+  if (event.type !== 'memory.corrected') {
+    return undefined;
+  }
+  const saved = memoryValueEventSchema.parse(event);
+  if ('schemaVersion' in saved.data) {
+    return saved;
+  }
+  return undefined;
+}
+
 function memoryHistory(rows: StoredEvent[], silo: string, scopeId: string) {
   const latest = new Map<string, Write>();
   const historical = new Map<string, Reference[]>();
@@ -46,8 +57,9 @@ function memoryHistory(rows: StoredEvent[], silo: string, scopeId: string) {
     if (!checked.success || event.silo !== silo || event.subject !== `scope-${scopeId}`) {
       throw new Error('Invalid memory history');
     }
-    if (event.type === 'memory.written') {
-      const saved = memoryWrittenEventSchema.parse(event);
+    const replacement = versionedReplacement(event);
+    if (event.type === 'memory.written' || replacement) {
+      const saved = replacement ?? memoryValueEventSchema.parse(event);
       if (saved.data.scopeId !== scopeId) {
         throw new Error('Invalid memory scope');
       }

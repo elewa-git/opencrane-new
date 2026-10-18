@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { setImmediate } from 'node:timers/promises';
-import { memoryForgottenEventSchema, memoryForgottenDataSchema,
+import { memoryForgottenEventSchema, memoryCorrectedEventSchema,
   memoryCleanupRecordedEventSchema, memoryCleanupRecordedDataSchema,
   type EventEnvelope, type MemoryIdentity } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -10,9 +10,17 @@ import { memoryIdentity, memoryErasureHistory, type memoryKeys,
 import type { Handler, HandlerRuntime } from '@opencrane/handlers';
 
 type Keys = ReturnType<typeof memoryKeys>;
-type Tombstone = ReturnType<typeof memoryForgottenEventSchema.parse>;
+type MemoryChange = ReturnType<typeof memoryForgottenEventSchema.parse> |
+  ReturnType<typeof memoryCorrectedEventSchema.parse>;
 
-function recordedFor(event: EventEnvelope, saved: Tombstone,
+function parseChange(event: EventEnvelope) {
+  if (event.type === 'memory.corrected') {
+    return memoryCorrectedEventSchema.parse(event);
+  }
+  return memoryForgottenEventSchema.parse(event);
+}
+
+function recordedFor(event: EventEnvelope, saved: MemoryChange,
   outcome: 'completed' | 'unavailable') {
   if (event.type !== 'memory.cleanup_recorded' || !('schemaVersion' in saved.data)) return false;
   const record = memoryCleanupRecordedEventSchema.parse(event);
@@ -22,36 +30,38 @@ function recordedFor(event: EventEnvelope, saved: Tombstone,
 }
 
 async function cleanupHistory(store: EventStore, trigger: EventEnvelope) {
-  const saved = memoryForgottenEventSchema.parse(trigger);
+  const saved = parseChange(trigger);
   if (!('schemaVersion' in saved.data)) {
-    throw new Error('Memory cleanup requires a version-1 tombstone');
+    throw new Error('Memory cleanup requires a version-1 change');
   }
   const rows: StoredEvent[] = [];
-  let original: Tombstone | undefined;
+  let original: MemoryChange | undefined;
   let completed = false;
   let unavailable = false;
   const deadline = performance.now() + 10_000;
   for await (const row of store.readStream(saved.subject, 1, deadline)) {
-    if (row.event.silo !== saved.silo || row.event.subject !== saved.subject ||
-        row.event.type === 'memory.corrected') {
+    if (row.event.silo !== saved.silo || row.event.subject !== saved.subject) {
       throw new Error('Unsupported memory cleanup history');
     }
     rows.push(row);
-    if (row.event.id === saved.id && row.event.type === 'memory.forgotten') {
-      original = memoryForgottenEventSchema.parse(row.event);
+    if (row.event.id === saved.id && row.event.type === saved.type) {
+      original = parseChange(row.event);
     }
     if (recordedFor(row.event, saved, 'completed')) completed = true;
     if (recordedFor(row.event, saved, 'unavailable')) unavailable = true;
   }
   // Require the saved deletion target. A queue message cannot choose another fact.
   if (!original || JSON.stringify(original) !== JSON.stringify(saved)) {
-    throw new Error('Memory tombstone was not saved');
+    throw new Error('Memory change was not saved');
   }
   return { saved, data: saved.data, rows, completed, unavailable };
 }
 
-function cleanupRecord(saved: Tombstone, outcome: 'completed' | 'unavailable') {
-  const target = memoryForgottenDataSchema.parse(saved.data);
+function cleanupRecord(saved: MemoryChange, outcome: 'completed' | 'unavailable') {
+  const target = saved.data;
+  if (!('schemaVersion' in target)) {
+    throw new Error('Memory change needs recorded ownership');
+  }
   const reference = [saved.silo, saved.id, 'memory.cleanup_recorded'];
   if (outcome === 'unavailable') reference.push('unavailable');
   const hash = createHash('sha256');
@@ -73,7 +83,7 @@ function cleanupRecord(saved: Tombstone, outcome: 'completed' | 'unavailable') {
 
 async function appendRecord(
   store: EventStore,
-  saved: Tombstone,
+  saved: MemoryChange,
   outcome: 'completed' | 'unavailable',
   sequence: number,
 ) {
@@ -84,15 +94,20 @@ async function appendRecord(
   if (result.status !== 'appended') throw new Error('Memory cleanup result was not saved');
 }
 
-function cleanupIdentities(rows: StoredEvent[], hidden: Set<string>) {
+function cleanupIdentities(rows: StoredEvent[], hidden: Set<string>, superseded: Map<string, number>) {
   const identities: MemoryIdentity[] = [];
   const latest = new Map<string, MemoryIdentity>();
   for (const row of rows) {
-    if (row.event.type !== 'memory.written') continue;
+    if (row.event.type !== 'memory.written' && row.event.type !== 'memory.corrected') {
+      continue;
+    }
     const identity = memoryIdentity(row.event);
     if (!identity) throw new Error('Memory cleanup requires recorded ownership');
+    if (hidden.has(identity.memoryId) ||
+        identity.revision <= (superseded.get(identity.memoryId) ?? 0)) {
+      identities.push(identity);
+    }
     if (!hidden.has(identity.memoryId)) continue;
-    identities.push(identity);
     const previous = latest.get(identity.memoryId);
     if (!previous || previous.revision < identity.revision) {
       latest.set(identity.memoryId, identity);
@@ -122,23 +137,32 @@ async function destroyKeys(keys: Keys, identities: MemoryIdentity[], committed: 
 }
 
 async function verifySearchRemoval(db: Query, silo: string, scopeId: string,
-  hidden: Set<string>, sequence: number) {
+  hidden: Set<string>, superseded: Map<string, number>, sequence: number) {
   const checkpoint = await db.query<{ sequence: string }>(
     "SELECT sequence FROM projection_checkpoints WHERE name='memory'",
   );
   if (Number(checkpoint.rows[0]?.sequence ?? -1) < sequence) {
     throw new Error('Memory projection is behind cleanup');
   }
-  const result = await db.query<{ content_status: string; search_text: string | null;
+  const affected = new Set([...hidden, ...superseded.keys()]);
+  const result = await db.query<{ memory_id: string; revision: string;
+    content_status: string; search_text: string | null;
     search_vector: string | null; ciphertext: string; key_id: string }>(
-    `SELECT content_status, search_text, search_vector, ciphertext, key_id FROM memory_facts
+    `SELECT memory_id, revision, content_status, search_text, search_vector, ciphertext, key_id
+      FROM memory_facts
       WHERE silo=$1 AND scope_id=$2 AND memory_id=ANY($3::text[])`,
-    [silo, scopeId, [...hidden]],
+    [silo, scopeId, [...affected]],
   );
-  if (result.rows.length !== hidden.size) {
+  if (result.rows.length !== affected.size) {
     throw new Error('Memory removal has not been projected');
   }
   for (const row of result.rows) {
+    if (!hidden.has(row.memory_id)) {
+      if (Number(row.revision) <= (superseded.get(row.memory_id) ?? 0)) {
+        throw new Error('Superseded memory remains projected');
+      }
+      continue;
+    }
     if (row.content_status !== 'erased' || row.search_text !== null || row.search_vector !== null ||
         row.ciphertext !== '' || row.key_id !== '') {
       throw new Error('Memory search removal was not verified');
@@ -152,12 +176,13 @@ export function memoryCleanupHandler(store: EventStore, keys: Keys) {
     if (state.completed) return;
     const erasure = await memoryErasureHistory(state.rows);
     const hidden = erasure.hidden(state.saved.silo, state.data.scopeId);
-    const targets = cleanupIdentities(state.rows, hidden);
+    const superseded = erasure.superseded(state.saved.silo, state.data.scopeId);
+    const targets = cleanupIdentities(state.rows, hidden, superseded);
     await destroyKeys(keys, targets.identities, true);
     await destroyKeys(keys, targets.candidates, false);
     const sequence = state.rows.at(-1)?.sequence ?? 0;
     const data = state.data;
-    await verifySearchRemoval(db, state.saved.silo, data.scopeId, hidden, sequence);
+    await verifySearchRemoval(db, state.saved.silo, data.scopeId, hidden, superseded, sequence);
     // Refuse completion if content moved after the checked history. Retry from events.
     await appendRecord(store, state.saved, 'completed', sequence);
   }
@@ -172,8 +197,8 @@ export function memoryCleanupHandler(store: EventStore, keys: Keys) {
 }
 
 async function restoreCleanupBatch(runtime: HandlerRuntime, handler: Handler,
-  batch: Tombstone[]): Promise<number> {
-  const failedOriginals: { event: Tombstone; id: string }[] = [];
+  batch: MemoryChange[]): Promise<number> {
+  const failedOriginals: { event: MemoryChange; id: string }[] = [];
   let queued = 0;
   async function enqueuePending(tx: Query) {
     for (const event of batch) {
@@ -213,7 +238,7 @@ export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: Even
   const handler = runtime.options.handlers.find(isCleanup);
   if (!handler) return 0;
   const cleanupHandler = handler;
-  const pending = new Map<string, Tombstone>();
+  const pending = new Map<string, MemoryChange>();
   const head = await source.head();
   if (head < checkpoint) throw new Error('Cleanup recovery checkpoint exceeds history');
   for (let start = 1; start <= head; start += 256) {
@@ -221,11 +246,11 @@ export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: Even
     for await (const row of readEvents(source, start, end)) {
       const event = row.event;
       if (event.silo !== runtime.options.silo) throw new Error('Cleanup recovery silo mismatch');
-      if (event.type === 'memory.forgotten') {
-        const result = memoryForgottenEventSchema.safeParse(event);
-        if (!result.success || !('schemaVersion' in result.data.data)) continue;
+      if (event.type === 'memory.forgotten' || event.type === 'memory.corrected') {
+        const saved = parseChange(event);
+        if (!('schemaVersion' in saved.data)) continue;
         if (row.sequence <= checkpoint) {
-          pending.set(event.id, result.data);
+          pending.set(event.id, saved);
         }
       }
       if (event.type === 'memory.cleanup_recorded') {

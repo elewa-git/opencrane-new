@@ -7,7 +7,7 @@ import {
   chatIdSchema,
   groupConversationCommandSchema,
   memoryWrittenIdentity,
-  memoryWrittenEventSchema,
+  memoryValueEventSchema,
   parseEventByType,
   type EventEnvelope,
 } from "@opencrane/events";
@@ -155,12 +155,13 @@ function validExpectedSubject(command: AppendCommand, event: EventEnvelope): boo
 }
 
 function validCurrentMemoryWrite(event: EventEnvelope): boolean {
-  if (event.type !== 'memory.written') {
+  if (event.type !== 'memory.written' && event.type !== 'memory.corrected') {
     return true;
   }
   const identity = memoryWrittenIdentity(event);
   if (identity === null) {
-    return false;
+    // Preserve legacy corrections; apply ownership checks to versioned values.
+    return event.type === 'memory.corrected';
   }
   // Refuse an ownership mismatch before it can stop a later replay.
   const scopeFields = [identity.silo, identity.scopeKind, identity.ownerId];
@@ -174,8 +175,8 @@ function validCurrentMemoryWrite(event: EventEnvelope): boolean {
   const keyHash = createHash('sha256');
   keyHash.update(JSON.stringify(binding));
   const expectedKeyId = `key:${keyHash.digest('hex')}`;
-  const written = memoryWrittenEventSchema.parse(event);
-  return written.data.keyId === expectedKeyId;
+  const value = memoryValueEventSchema.parse(event);
+  return value.data.keyId === expectedKeyId;
 }
 
 function validHistoryCheck(command: AppendCommand): boolean {

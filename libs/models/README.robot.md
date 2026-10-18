@@ -1343,7 +1343,8 @@ join for other chats. Authority still uses the current join. Neither helper read
 
 `memoryReferences(rows, silo, scopeId, custody, checkedAt?)` checks metadata and key status without
 reading fact text. It keeps the first metadata for an equal revision, as the projection does.
-It walks all historical dependencies, refuses cycles and keeps legacy corrections or
+It reads version-1 corrections as replacements, retaining all historical dependencies.
+It refuses cycles and keeps legacy corrections or
 tombstones unusable. Missing or damaged custody raises an error. Private turn previews omit
 references that cannot be checked. Discovery offers recall only until trusted records cover
 every loaded memory reference.

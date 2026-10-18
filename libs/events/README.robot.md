@@ -643,3 +643,11 @@ only unknown/error outcomes. Parse checks bind its id and commandId to the SHA-2
 of JSON `[silo, permitId, "tunnel-close"]`, its exact egress stream and system/models.
 New fields pass the unchanged risky-name check. Existing legacy observations remain
 readable. No new event type or handler subscription is added.
+
+## Versioned memory corrections
+
+`memory.corrected` version 1 replaces the full encrypted value, with `expectedRevision`,
+next `revision`, matching `supersedes` memory/revision and a fixed `reason` enum.
+It shares written-value bounds and refuses self-dependencies and shared preferences.
+The registry retains the explicit legacy alternative and example; full event parsing
+checks version-1 encryption bounds and identity. No correction command is exposed yet.

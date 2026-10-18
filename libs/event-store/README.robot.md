@@ -39,13 +39,16 @@ appends, including an explicit system principal for system commands.
 For `mcp.image_checked`, `validateCommand` requires principal kind `system` and id
 `models`. Other principals return `rejected/invalid_event` before publishing.
 This checks the event contract; separate process credentials remain issue #432.
-New `memory.written` appends require version 1 and a scope id equal to SHA-256
+New `memory.written` appends require version 1. These writes and version-1
+`memory.corrected` appends share the same scope and key checks. The scope id must equal SHA-256
 of JSON `[silo, scopeKind, ownerId]`. A mismatched owner, kind or silo is rejected
 before writing. The key reference must equal `key:` followed by the SHA-256 hash
 of JSON `[silo, scopeId, scopeKind, ownerId, memoryId, revision]`. Repeated
 dependency memory-id/revision pairs are refused by the event parser before append.
 Reads still parse unversioned
 memory events so their unknown ownership can stay quarantined during replay.
+`apps/ops/test/memory-correction.test.ts` checks real append refusals for wrong
+owners and key references, unchanged history after refusal, and a valid correction.
 
 `append` returns `appended` with the global sequence, `conflict` for a stale
 expected subject sequence, `rejected` for invalid input or an unrelated

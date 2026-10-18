@@ -6,7 +6,7 @@ import type { MaintenanceFact } from '@opencrane/projections';
 import {
   memoryMaintenanceBoundDataSchema,
   memoryMaintenanceRecordedDataSchema,
-  memoryWrittenDataSchema,
+  memoryValueEventSchema,
   memoryForgottenDataSchema,
 } from '@opencrane/events';
 import type { EventEnvelope } from '@opencrane/events';
@@ -53,7 +53,7 @@ async function scopeFacts(rows: StoredEvent[], silo: string, scopeId: string,
   let lastForgetPosition = 0;
   for (const row of rows) {
     const type = row.event.type;
-    if (type !== 'memory.written' && type !== 'memory.forgotten') {
+    if (type !== 'memory.written' && type !== 'memory.corrected' && type !== 'memory.forgotten') {
       continue;
     }
     lastChangePosition = row.sequence;
@@ -62,11 +62,11 @@ async function scopeFacts(rows: StoredEvent[], silo: string, scopeId: string,
       lastForgetPosition = row.sequence;
       continue;
     }
-    const parsed = memoryWrittenDataSchema.safeParse(row.event.data);
-    if (!parsed.success) {
+    const parsed = memoryValueEventSchema.safeParse(row.event);
+    if (!parsed.success || !('schemaVersion' in parsed.data.data)) {
       continue;
     }
-    const data = parsed.data;
+    const data = parsed.data.data;
     const previous = facts.get(data.memoryId);
     if (!shouldReplaceMemoryRevision(previous?.revision, data.revision)) {
       continue;

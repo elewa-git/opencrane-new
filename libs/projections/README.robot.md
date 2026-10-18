@@ -265,7 +265,7 @@ previously discarded links.
 older links remain. The scanner and reference checker share this TypeScript rule.
 A stale or repeated write keeps the current row and still records the saved event.
 `memory_changes` stores only command, principal, fact, revision, outcome, position
-and time. Its outcome is `written`, `quarantined` or `forgotten`, independent of key availability.
+and time. Its outcome is `written`, `corrected`, `quarantined` or `forgotten`, independent of key availability.
 It never stores plaintext, ciphertext, keys or source payloads.
 
 Only a destroyed key yields `unavailable`, with null search text/vector. Missing
@@ -278,7 +278,7 @@ and the full replay schema, plus `memoryIdentity` / `memoryWrittenIdentity`.
 Version-1 tombstones set `content_status=erased` and clear text, vectors, sources,
 ciphertext and key references for the root and all dependent facts in one transaction.
 The root keeps its tombstone revision. Later writes cannot replace an erased row.
-Correction, consolidation and legacy tombstones still stop replay. The server now
+Legacy corrections, consolidation and legacy tombstones still stop replay. The server now
 exposes authorised scopes and paged list/search reads.
 `readMemoryFactIds(db, silo, scopeId, search?)` returns available ids in saved-event order.
 Its optional search uses PostgreSQL `to_tsquery` syntax. Both paths restrict silo and
@@ -739,3 +739,11 @@ hidden rows, with a ten-second loading limit. Human posts retain their positions
 The existing `position` reply is the captured boundary, not a read acknowledgement.
 A full page continues from its last returned row. A shorter page has scanned the
 boundary completely. Raw reports and first-close metadata remain replayable.
+
+## Memory corrections
+
+Version-1 corrections share the current-value projection. `memoryErasureHistory`
+returns superseded revision bounds separately from permanently hidden fact ids.
+Historical links to replaced revisions hide dependent facts transitively. Replay skips
+superseded decryption and keeps outgoing links from every revision. Rebuild offline
+before serving existing corrected histories; replay itself changes no keys.

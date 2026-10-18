@@ -1,9 +1,11 @@
-import { memoryForgottenEventSchema, memoryWrittenEventSchema, parseEventByType,
+import { memoryForgottenEventSchema, memoryValueEventSchema, parseEventByType,
   type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryIdentity, memoryScopeId } from './memory-keys.ts';
 
-type ScopeHistory = { hidden: Set<string>; children: Map<string, Set<string>> };
+type ScopeHistory = { hidden: Set<string>; children: Map<string, Set<string>>;
+  superseded: Map<string, number>;
+  dependencies: { memoryId: string; revision: number; child: string }[] };
 function scopeReference(silo: string, scopeId: string) {
   return JSON.stringify([silo, scopeId]);
 }
@@ -12,14 +14,15 @@ function scopeHistory(histories: Map<string, ScopeHistory>, silo: string, scopeI
   const reference = scopeReference(silo, scopeId);
   let scope = histories.get(reference);
   if (!scope) {
-    scope = { hidden: new Set(), children: new Map() };
+    scope = { hidden: new Set(), children: new Map(), superseded: new Map(), dependencies: [] };
     histories.set(reference, scope);
   }
   return scope;
 }
 
 function recordMetadata(histories: Map<string, ScopeHistory>, event: EventEnvelope) {
-  if (event.type !== 'memory.written' && event.type !== 'memory.forgotten') {
+  if (event.type !== 'memory.written' && event.type !== 'memory.corrected' &&
+      event.type !== 'memory.forgotten') {
     return;
   }
   if (!parseEventByType(event).success) {
@@ -39,13 +42,19 @@ function recordMetadata(histories: Map<string, ScopeHistory>, event: EventEnvelo
     scope.hidden.add(data.memoryId);
     return;
   }
-  const saved = memoryWrittenEventSchema.parse(event);
+  const saved = memoryValueEventSchema.parse(event);
   const identity = memoryIdentity(saved);
   if (identity === null || !('schemaVersion' in saved.data)) {
     return;
   }
   const scope = scopeHistory(histories, event.silo, identity.scopeId);
+  if ('expectedRevision' in saved.data) {
+    const previous = scope.superseded.get(identity.memoryId) ?? 0;
+    scope.superseded.set(identity.memoryId, Math.max(previous, saved.data.expectedRevision));
+  }
   for (const dependency of saved.data.dependsOn) {
+    scope.dependencies.push({ memoryId: dependency.memoryId,
+      revision: dependency.revision, child: identity.memoryId });
     let children = scope.children.get(dependency.memoryId);
     if (!children) {
       children = new Set();
@@ -62,6 +71,12 @@ export async function memoryErasureHistory(events: AsyncIterable<StoredEvent> | 
     recordMetadata(histories, stored.event);
   }
   for (const scope of histories.values()) {
+    for (const dependency of scope.dependencies) {
+      const replaced = scope.superseded.get(dependency.memoryId) ?? 0;
+      if (dependency.revision <= replaced) {
+        scope.hidden.add(dependency.child);
+      }
+    }
     const pending = [...scope.hidden];
     while (pending.length > 0) {
       const memoryId = pending.pop()!;
@@ -78,5 +93,9 @@ export async function memoryErasureHistory(events: AsyncIterable<StoredEvent> | 
     const scope = histories.get(scopeReference(silo, scopeId));
     return scope?.hidden ?? new Set<string>();
   }
-  return { hidden };
+  function superseded(silo: string, scopeId: string) {
+    const scope = histories.get(scopeReference(silo, scopeId));
+    return scope?.superseded ?? new Map<string, number>();
+  }
+  return { hidden, superseded };
 }

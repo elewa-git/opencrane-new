@@ -109,3 +109,5 @@ export { childResultPublishedDataSchema } from './child-publication.ts';
 
 export { egressCloseSchema, egressObservationSchema, egressObservationId }
   from './egress-observation.ts';
+
+export { memoryCorrectedEventSchema, memoryValueEventSchema } from './memory.ts';
