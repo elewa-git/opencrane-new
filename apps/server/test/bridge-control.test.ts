@@ -13,6 +13,7 @@ import { chatHistory } from '../src/chat/commands.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantSnapshot, processConversation, type AgentSession }
   from '../src/chat/bridge-conversation.ts';
+import { listOpenConversations } from '@opencrane/projections';
 import { viewFixture } from './support/view-fixture.ts';
 
 type Fixture = Awaited<ReturnType<typeof bridgeFixture>>;
@@ -128,7 +129,59 @@ async function bridgeFixture(cachedControl = false) {
     await view.close();
   }
   return { ...options, objects, bytes, message, link, frames, process,
+    append: view.append, runner: view.runner, db: view.db,
     intendControl, upload, flushFrames, close };
+}
+
+it('fails each queued input once after close and keeps the original messages', async () => {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const second = await test.append('conversation-chat', 'message.posted', {
+    conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
+    ...test.keys.encrypt('test', 'chat', 'Another request'),
+  });
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+
+  await test.process();
+  await test.process();
+  await test.flushFrames();
+
+  const rows = await chatHistory(test.store, 'test', 'chat');
+  const failures = rows.filter(isClosedFailure);
+  expect(failures.map(turnIdOf)).toEqual([test.message.id, second.id]);
+  expect(rows.filter(isPosted)).toHaveLength(2);
+  expect(test.frames.filter(isTurnOrFile)).toEqual([]);
+});
+
+it('keeps a closed agent session in the watcher list after projection catches up', async () => {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+  await test.runner.run((await import('@opencrane/projections')).conversations);
+
+  const candidates = await listOpenConversations(test.db, 'test');
+  expect(candidates.map(candidateId)).toContain('chat');
+});
+
+function isClosedFailure(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
+  return row.event.type === 'agent.turn_failed' &&
+    (row.event.data as { reason?: string }).reason === 'conversation_closed';
+}
+
+function turnIdOf(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
+  return (row.event.data as { turnId: string }).turnId;
+}
+
+function isPosted(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
+  return row.event.type === 'message.posted';
+}
+
+function candidateId(row: { conversationId: string }) {
+  return row.conversationId;
 }
 
 async function deliversStopAfterIntent(cachedControl: boolean) {
