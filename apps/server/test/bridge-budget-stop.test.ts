@@ -60,9 +60,20 @@ async function budgetBridge(realChannel = false) {
   const frames: Frame[] = [];
   const interrupts: unknown[] = [];
   const grants: unknown[] = [];
+  const revocations: string[] = [];
+  const catalogues = new Set<string>();
   let threadCount = 0;
-  function grant(value: unknown) {
-    grants.push(value);
+  function grant(thread: string, _conversation: string, token: string) {
+    if (token) grants.push(thread);
+    else revocations.push(thread);
+    return Promise.resolve();
+  }
+  function catalogue(loadKey: string) {
+    catalogues.add(loadKey);
+    return Promise.resolve();
+  }
+  function dropCatalogue(loadKey: string) {
+    catalogues.delete(loadKey);
     return Promise.resolve();
   }
   function credential() {
@@ -76,7 +87,8 @@ async function budgetBridge(realChannel = false) {
     if (method === 'turn/interrupt') interrupts.push(input);
     return Promise.resolve({ turn: { id: `codex-${String(input['threadId'])}` } });
   }
-  const driver = { rpc, grant, credential, journal: `${directory}/reports` };
+  const driver = { rpc, grant, catalogue, dropCatalogue, credential,
+    journal: `${directory}/reports` };
   const channel = realChannel ? bridgeChannel(server, driver) : undefined;
   const socketOptions = { server };
   const computers = realChannel ? undefined : new WebSocketServer(socketOptions);
@@ -199,7 +211,8 @@ async function budgetBridge(realChannel = false) {
     await view.close();
     await rm(directory, { recursive: true, force: true });
   }
-  return { ...options, actor, assistantId, frames, interrupts, grants, channel, objects, bytes,
+  return { ...options, actor, assistantId, frames, interrupts, grants, revocations, catalogues,
+    channel, objects, bytes,
     message, start, stop, process, reconnect, pauseConnection, upload, close };
 }
 
@@ -336,6 +349,8 @@ async function isolatesRealTurns() {
     return test.interrupts.length > 0;
   }
   await until(interrupted);
+  expect(test.revocations).toEqual(['thread-1']);
+  expect(test.catalogues.size).toBe(1);
   expect(test.interrupts).toEqual([{ threadId: 'thread-1', turnId: 'codex-thread-1' }]);
   expect(test.frames.filter(isStop)).toEqual([
     { type: 'stop', ...first, reason: 'budget', stopId: 'first-stop' },

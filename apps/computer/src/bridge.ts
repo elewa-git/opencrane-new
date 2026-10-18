@@ -179,8 +179,8 @@ const channel = bridgeChannel(server, {
   },
   rpc: persistent.rpc,
   privateSession,
-  catalogue(loadKey, conversation, tools, thread) {
-    return proxyControl('/catalogue', { loadKey, conversation, tools, thread });
+  catalogue(loadKey, conversation, tools, thread, turnId) {
+    return proxyControl('/catalogue', { loadKey, conversation, tools, thread, turnId });
   },
   discovered(loadKey) {
     return proxyControl('/catalogue/ready', { loadKey });
@@ -188,9 +188,10 @@ const channel = bridgeChannel(server, {
   dropCatalogue(loadKey) {
     return proxyControl('/catalogue/drop', { loadKey });
   },
-  grant(thread, conversation, token, expiresAt) {
+  grant(thread, conversation, token, expiresAt, turnId) {
     const path = token ? '/grant' : '/drop';
-    const input = { thread, conversation, computer: computerCredential, token, expires: expiresAt };
+    const input = { thread, turnId, conversation, computer: computerCredential,
+      token, expires: expiresAt };
     return proxyControl(path, input);
   },
 }, runtimeProxy.approvals);

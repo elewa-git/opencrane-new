@@ -88,10 +88,10 @@ async function fixture(approvalSupport = false) {
   }
   async function catalogue(loadKey = loadA, conversation = 'chat-A', thread = 'thread-A',
     listedTools = tools) {
-    expect(await control('/catalogue', { loadKey, conversation, thread, tools: listedTools })).toBe(200);
+    expect(await control('/catalogue', { loadKey, turnId: thread, conversation, thread, tools: listedTools })).toBe(200);
   }
   async function grant(thread = 'thread-A', conversation = 'chat-A') {
-    const input = { thread, conversation, computer: 'computer', token: `token-${thread}`,
+    const input = { thread, turnId: thread, conversation, computer: 'computer', token: `token-${thread}`,
       expires: Date.now() + 60_000 };
     expect(await control('/grant', input)).toBe(200);
   }
@@ -170,7 +170,7 @@ async function refusesOutsideList(kind: string) {
       _meta: { ...metadata, threadId: 'thread-B' } } };
     if (kind === 'tool') body = { ...call, params: { ...call.params, name: 'unlisted' } };
     if (kind === 'conversation') await test.grant('thread-A', 'chat-B');
-    if (kind === 'ended') await test.control('/drop', { thread: 'thread-A' });
+    if (kind === 'ended') await test.control('/drop', { thread: 'thread-A', turnId: 'thread-A' });
     if (kind === 'expired') {
       const clock = Date.now() + 61_000;
       vi.spyOn(Date, 'now').mockReturnValue(clock);
@@ -326,7 +326,7 @@ it('settles an oversized tool reply at once without retrying', settlesOversizedR
 async function remembersFirstList() {
   const test = await fixture();
   try {
-    const input = { loadKey: loadA, conversation: 'chat-A', tools };
+    const input = { loadKey: loadA, turnId: 'thread-A', conversation: 'chat-A', tools };
     expect(await test.control('/catalogue', input)).toBe(200);
     const list = { ...call, method: 'tools/list' };
     expect((await test.send(list)).text).toContain('"name":"read"');
@@ -356,7 +356,7 @@ async function heldCall(state: string) {
     const sentAlready = state === 'stop-sent' || state === 'rollback-sent';
     const releasing = state === 'drop' || state === 'rollback';
     const decision = state === 'retry403' || sentAlready || releasing ? 'approved' : state;
-    if (state === 'drop') await test.control('/drop', { thread: 'thread-A' });
+    if (state === 'drop') await test.control('/drop', { thread: 'thread-A', turnId: 'thread-A' });
     if (state === 'rollback') test.approvals.resume(false);
     const settled = test.approvals.settle(approvalId, decision);
     if (sentAlready) {

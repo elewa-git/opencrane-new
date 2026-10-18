@@ -17,14 +17,15 @@ function fixture() {
   let failBinding = false;
   let failDrop = false;
   let wrongThread = false;
-  function catalogue(loadKey: string, chat: string, list: ToolServer[], thread?: string) {
+  function catalogue(loadKey: string, chat: string, list: ToolServer[],
+    thread: string | undefined, turnId: string) {
     conversation = chat;
     const lastOperation = operations.at(-1);
     if (thread && failBinding
       && (lastOperation === 'thread/start' || lastOperation === 'thread/resume')) {
       return Promise.reject(new Error('Binding failed'));
     }
-    proxy.catalogue({ loadKey, conversation: chat, tools: list, thread });
+    proxy.catalogue({ loadKey, turnId, conversation: chat, tools: list, thread });
     return Promise.resolve();
   }
   function dropCatalogue(loadKey: string) {
@@ -181,13 +182,13 @@ async function keepsSiblingHolds() {
     const holds = approvalHolds({ waiting, renew });
     const local = mcpProxy('http://unused', new Map(), holds);
     const loadKey = 'a'.repeat(32);
-    local.catalogue({ loadKey, conversation: 'chat', thread: 'thread', tools });
+    local.catalogue({ loadKey, turnId: 'turn', conversation: 'chat', thread: 'thread', tools });
     holds.resume(true);
     holds.add({ approvalId: 'a'.repeat(64), thread: 'thread', send: renew, answer });
     local.extendThread('thread', Date.now() + 120_000);
     await vi.advanceTimersByTimeAsync(120_001);
     expect(local.size).toBe(1);
-    local.dropThread('thread');
+    local.dropThread('thread', 'turn');
     expect(local.size).toBe(0);
   } finally { vi.useRealTimers(); }
 }

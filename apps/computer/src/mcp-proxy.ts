@@ -3,14 +3,17 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { approvalHolds } from './approval-holds.ts';
 import { json, record } from './http.ts';
 import { parseTools, type ToolServer } from './turn-frame.ts';
+import { proxyRequests } from './proxy-requests.ts';
 
 export interface ProxyGrant {
+  turnId: string;
   computer: string;
   token: string;
   expires: number;
   conversation?: string;
 }
 interface Catalogue {
+  turnId: string;
   conversation: string;
   thread?: string;
   servers: Map<string, ToolServer>;
@@ -28,9 +31,10 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
   approvals: ReturnType<typeof approvalHolds>) {
   const catalogues = new Map<string, Catalogue>();
   const current = new Map<string, string>();
+  const requests = proxyRequests();
 
   function catalogue(input: Record<string, unknown>) {
-    const { key, conversation, thread } = catalogueBinding(input);
+    const { key, conversation, thread, turnId } = catalogueBinding(input);
     const tools = parseTools(input['tools']);
     const servers = new Map<string, ToolServer>();
     for (const server of tools) {
@@ -46,7 +50,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     }
     const previous = catalogues.get(key);
     if (previous) {
-      if (previous.conversation !== conversation
+      if (previous.turnId !== turnId || previous.conversation !== conversation
         || JSON.stringify([...previous.servers]) !== JSON.stringify([...servers])) {
         throw new Error('Tool list address was reused');
       }
@@ -61,7 +65,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     // Remove abandoned registrations even if the bridge cannot reach its control socket.
     const expiry = setTimeout(expired, 120_000);
     expiry.unref();
-    const entry: Catalogue = { conversation, servers, listed: new Set(), expiry };
+    const entry: Catalogue = { turnId, conversation, servers, listed: new Set(), expiry };
     if (typeof thread === 'string') entry.thread = thread;
     catalogues.set(key, entry);
     current.set(conversation, key);
@@ -71,6 +75,10 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     if (typeof input['loadKey'] !== 'string') throw new Error('Missing tool list address');
     const loadKey = input['loadKey'];
     const load = catalogues.get(loadKey);
+    if (load?.thread) {
+      endTurnHolds(load.thread, load.turnId);
+      requests.drop(load.turnId);
+    }
     if (load) clearTimeout(load.expiry);
     catalogues.delete(loadKey);
     if (load && current.get(load.conversation) === loadKey) current.delete(load.conversation);
@@ -100,10 +108,16 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     throw new Error('Tools were not discovered');
   }
 
-  function dropThread(thread: string) {
-    approvals.endThread(thread);
+  function endTurnHolds(thread: string, turnId: string) {
+    const grant = grants.get(thread);
+    if (!grant || grant.turnId === turnId) approvals.endThread(thread);
+  }
+
+  function dropThread(thread: string, turnId: string) {
+    endTurnHolds(thread, turnId);
+    requests.drop(turnId);
     for (const [loadKey, load] of catalogues) {
-      if (load.thread === thread) drop({ loadKey });
+      if (load.thread === thread && load.turnId === turnId) drop({ loadKey });
     }
   }
 
@@ -151,7 +165,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
         const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'], grants);
         if (!renewed) { answer(UNAVAILABLE); return; }
         await forward(incoming, response, gateway, boundServer, renewed, String(thread),
-          id, raw, undefined, approvalId);
+          id, raw, requests, undefined, approvalId);
       }
       function disconnected() {
         if (!response.writableEnded) approvals.endThread(String(thread));
@@ -162,7 +176,8 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
       // Keep the list until this hold ends, even if its turn pass expires first.
       extendThread(String(thread), boundGrant.expires);
     }
-    await forward(incoming, response, gateway, server, grant, String(thread), id, raw, hold);
+    await forward(incoming, response, gateway, server, grant, String(thread), id, raw,
+      requests, hold);
   }
   return { catalogue, drop, dropThread, extendThread, discovered, handle,
     get size() { return catalogues.size; },
@@ -175,12 +190,14 @@ function catalogueBinding(input: Record<string, unknown>) {
     throw new Error('Invalid tool list address');
   }
   const conversation = input['conversation'];
+  const turnId = input['turnId'];
   const thread = input['thread'];
-  if (typeof conversation !== 'string' || !conversation || conversation.length > 200
+  if (typeof turnId !== 'string' || !turnId || turnId.length > 200
+    || typeof conversation !== 'string' || !conversation || conversation.length > 200
     || (thread !== undefined && (typeof thread !== 'string' || !thread || thread.length > 200))) {
     throw new Error('Invalid tool list binding');
   }
-  return { key, conversation, thread };
+  return { key, conversation, thread, turnId };
 }
 
 function requireStateless(incoming: IncomingMessage, method: unknown,
@@ -261,6 +278,7 @@ function refusalText(raw: Buffer) {
 
 function forward(incoming: IncomingMessage, response: ServerResponse, gateway: string,
   server: ToolServer, grant: ProxyGrant, thread: string, id: unknown, raw: Buffer,
+  requests: ReturnType<typeof proxyRequests>,
   hold?: (approvalId: string) => void, approvalId?: string) {
   function send(resolve: () => void) {
     let settled = false;
@@ -313,9 +331,8 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
       'x-opencrane-tool-mode': server.modes[String(incoming.headers['mcp-name'])] };
     const path = `/mcp/${server.serverId}/${server.connectionId}`;
     const outgoing = request(`${gateway}${path}`, { method: 'POST', headers }, receive);
-    function disconnected() { if (!response.writableEnded) outgoing.destroy(); }
     function timedOut() { outgoing.destroy(); }
-    response.on('close', disconnected);
+    requests.track(grant.turnId, outgoing, response);
     outgoing.setTimeout(120_000, timedOut);
     outgoing.on('error', failed);
     // Preserve number text and every metadata field reviewed by the decision service.

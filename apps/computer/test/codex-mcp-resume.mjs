@@ -31,6 +31,7 @@ let productionThreadLoads;
 let control;
 const wireLoads = new Map();
 const wireConversations = new Map();
+const wireTurns = new Map();
 const plans = new Map();
 
 async function readBody(request) {
@@ -257,13 +258,14 @@ function startClient() {
 
   let loads;
   if (wireMode) {
-    async function catalogue(loadKey, conversation, tools, thread) {
-      const input = { loadKey, conversation, tools, thread };
+    async function catalogue(loadKey, conversation, tools, thread, turnId) {
+      const input = { loadKey, turnId, conversation, tools, thread };
       capture.rpc.push({ stage, atMs: Date.now() - startedAt, method: 'catalogue', params: input });
       await control('/catalogue', input);
       if (thread) {
         wireLoads.set(thread, loadKey);
         wireConversations.set(thread, conversation);
+        wireTurns.set(thread, turnId);
       }
     }
     async function dropCatalogue(loadKey) {
@@ -294,13 +296,15 @@ function startClient() {
           definitions: [JSON.stringify(definition)], modes });
       }
       const conversationId = wireConversations.get(params.threadId) ?? `chat-${nextRpc}`;
-      const input = { tools, conversationId };
+      const turnId = stopRunner ? 'stop-turn' : conversationId;
+      const input = { id: turnId, tools, conversationId };
       const startParams = { ...params, approvalPolicy: 'never' };
       delete startParams.config;
       return loads.load(input, params.threadId, startParams);
     }
     if (method === 'turn/start') {
-      const input = { thread: params.threadId, conversation: wireConversations.get(params.threadId),
+      const input = { thread: params.threadId, turnId: wireTurns.get(params.threadId),
+        conversation: wireConversations.get(params.threadId),
         token: 'local-turn', computer: 'local-computer', expires: Date.now() + 60_000 };
       await control('/grant', input);
     }
@@ -566,8 +570,10 @@ try {
       return true;
     }
     async function renew(thread) {
-      await control('/grant', { thread, conversation: wireConversations.get(thread),
-        token: 'local-renewed', computer: 'local-computer', expires: Date.now() + 60_000 });
+      const input = { thread, turnId: wireTurns.get(thread),
+        conversation: wireConversations.get(thread),
+        token: 'local-renewed', computer: 'local-computer', expires: Date.now() + 60_000 };
+      await control('/grant', input);
     }
     const approvalDriver = { waiting, renew };
     runtimeProxy = await proxyModule.proxy(`http://127.0.0.1:${modelPort}`, options,
@@ -871,8 +877,8 @@ async function checkHeldCalls(threadA, threadB, config) {
     return activeClient.rpc(method, params);
   }
   function credential() { return { value: 'local-computer', expiresAt: Date.now() + 60_000 }; }
-  async function grant(thread, conversation, token, expiresAt) {
-    const input = { thread, conversation: wireConversations.get(thread),
+  async function grant(thread, conversation, token, expiresAt, turnId) {
+    const input = { thread, turnId, conversation: wireConversations.get(thread),
       computer: 'local-computer', token, expires: expiresAt };
     await control(token ? '/grant' : '/drop', input);
   }

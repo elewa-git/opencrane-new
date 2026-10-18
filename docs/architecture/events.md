@@ -289,7 +289,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `message.posted` | person, or the system for routines | messages | browser delivery (WebSocket) in every mode; only `agent_session` dispatches to its assistant's computer and wakes it if suspended |
 | `agent.memory_context_recorded` | server (trusted) | private turn identity, generations, reference additions, scope positions and bounded byte counts; no text; excluded from the public conversation feed | server turn summary; replay creates no dispatch permission |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity (`executionMode` on starts; `restricted_tool_refused` on failures) | browser (WebSocket); notify on failure |
-| `agent.turn_stop_requested` | member command or stop-budget-turns | activity; freeze partial text at this position | bridge interrupts an active turn; queued turns do not start; browser keeps partial text on replay |
+| `agent.turn_stop_requested` | member command or stop-budget-turns | activity; freeze partial text at this position | bridge removes the turn's grants and tool lists, cancels waits and aborts local requests before interrupting; queued turns do not start; browser keeps partial text on replay |
 | `agent.message_delta` | bridge (reported) | messages | encrypted text deltas; browser replay with positions and generations |
 | `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
 | `agent.output_lost` | bridge (reported) | activity | browser (WebSocket); never replayed into context |

@@ -12,6 +12,7 @@ export type { Turn } from './turn-frame.ts';
 import { itemReport } from './item-reports.ts';
 import { turnInput, privateTurnInput } from './turn-input.ts';
 import { threadLoads, unload, ThreadLoadFailed, type ThreadLoadDriver } from './thread-loads.ts';
+import { revokeTurnAccess } from './turn-stop.ts';
 
 const MAX_PRIVATE_TURNS = 2;
 const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 'contextCompaction']);
@@ -25,7 +26,8 @@ export interface PrivateSession {
 export interface TurnDriver extends ThreadLoadDriver {
   privateSession?(): Promise<PrivateSession>;
   file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
-  grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
+  grant(thread: string, conversation: string, token: string, expiresAt: number,
+    turnId: string): Promise<void>;
   credential(): { expiresAt: number; gateIdentity?: GateIdentity | undefined } &
     ({ value: string } | { digest: string });
   authenticated?(value: string): void;
@@ -93,6 +95,7 @@ class TurnRunner {
   private preparingCount = 0;
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
+  private readonly grantInstalls = new Map<string, { pending: number; terminal: boolean }>();
   private readonly driver: TurnDriver;
   private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'>
     & Partial<Pick<ReturnType<typeof approvalHolds>, 'stop' | 'size'>> | undefined;
@@ -123,7 +126,7 @@ class TurnRunner {
     this.driver = driver;
     this.approvals = approvals;
     this.signal = signal;
-    this.loads = threadLoads(driver);
+    this.loads = threadLoads(driver, this.state.cancelled);
     this.journal = journal;
     this.send = send;
     this.closeCurrentSocket = closeCurrentSocket;
@@ -297,7 +300,8 @@ class TurnRunner {
     try {
       await this.prepareAndRun(input);
     } catch (error) {
-      if (error instanceof ThreadLoadFailed && !this.gate.closed) {
+      if (error instanceof ThreadLoadFailed && !this.gate.closed
+        && !this.state.cancelled.has(input.id)) {
         const text = 'The tools for this conversation could not be reloaded. '
           + 'Send your message again.';
         this.appendReport(input, 'agent.message_completed', { messageId: input.id, text });
@@ -332,16 +336,50 @@ class TurnRunner {
   }
 
   private async installGrant(thread: string, turn: Turn, grant: Grant) {
+    if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
+      throw new Error('Turn ended');
+    }
+    const installation = this.grantInstalls.get(turn.id) ?? { pending: 0, terminal: false };
+    installation.pending++;
+    this.grantInstalls.set(turn.id, installation);
     try {
-      await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
+      await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt, turn.id);
+    } catch (error) {
+      if (this.state.cancelled.has(turn.id)) {
+        // Keep the signed gate's outcome when the proxy refuses a cancelled installation.
+        if (this.gate.closed) return;
+        throw new Error('Turn ended', { cause: error });
+      }
+      throw error;
     } finally {
-      // Remove a late installation even if thread closure already released the turn.
-      if (this.gate.closed) await this.gate.track(this.dropAccess(thread, turn));
+      try {
+        // Remove a late installation before another turn can reuse this thread.
+        if (this.gate.closed) await this.gate.track(this.dropAccess(thread, turn));
+        else if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
+          await this.dropAccess(thread, turn);
+        }
+      } finally {
+        this.finishGrantInstall(turn.id);
+      }
+    }
+    // Keep the signed gate's renewal outcome after its own revocation finishes.
+    if (this.gate.closed) return;
+    if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
+      throw new Error('Turn ended');
     }
   }
 
+  private finishGrantInstall(turnId: string) {
+    const installation = this.grantInstalls.get(turnId);
+    if (!installation) return;
+    installation.pending--;
+    if (installation.pending) return;
+    this.grantInstalls.delete(turnId);
+    if (installation.terminal) this.releaseTurn(turnId);
+  }
+
   private async dropAccess(threadId: string, input: Turn) {
-    await releaseLoad(this.loads, this.driver, threadId, input.conversationId);
+    await releaseLoad(this.loads, this.driver, threadId, input.conversationId, input.id);
   }
 
   private async unloadPrivate(session: PrivateSession, threadId: string) {
@@ -379,6 +417,7 @@ class TurnRunner {
   }
 
   private releaseTurn(turnId: string) {
+    if (this.keepInstallingTurn(turnId)) return;
     const threadId = this.findRunningThread(turnId);
     const turn = threadId && this.state.running.get(threadId);
     if (threadId) this.approvals?.endThread(threadId);
@@ -401,6 +440,21 @@ class TurnRunner {
     if (threadId && turn) {
       void this.gate.track(this.dropAccess(threadId, turn));
     }
+  }
+
+  private keepInstallingTurn(turnId: string) {
+    const installation = this.grantInstalls.get(turnId);
+    if (!installation) return false;
+    installation.terminal = true;
+    // Keep an old installation from replacing or revoking the next turn's pass.
+    this.state.cancelled.add(turnId);
+    const threadId = this.findRunningThread(turnId);
+    const turn = threadId && this.state.running.get(threadId);
+    if (threadId && turn) {
+      this.approvals?.endThread(threadId);
+      void this.gate.track(this.dropAccess(threadId, turn));
+    }
+    return true;
   }
 
   private failTurn(input: Turn) {
@@ -452,7 +506,7 @@ class TurnRunner {
     }
     this.state.preparing.delete(input.conversationId);
     this.state.running.set(threadValue, input);
-    if (this.gate.closed) {
+    if (this.gate.closed || this.state.cancelled.has(input.id)) {
       this.failTurn(input);
       return;
     }
@@ -478,7 +532,8 @@ class TurnRunner {
     }
 
     const grant = await this.waitForGrant(sequence, previousStart);
-    if (!this.isActiveTurn(input.id) || this.gate.closed) throw new Error('Turn ended');
+    if (!this.isActiveTurn(input.id) || this.gate.closed
+      || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
     // Keep the server's admitted model for every call and renewal in this turn.
     const model = grant.model ?? modelForTask(input.taskKind);
     this.turnModels.set(input.id, model);
@@ -486,13 +541,13 @@ class TurnRunner {
     if (!this.isActiveTurn(input.id)) return;
     if (this.gate.closed || this.state.cancelled.has(input.id)) {
       this.failTurn(input);
-      await this.driver.grant(threadId, input.conversationId, '', 0);
+      await this.driver.grant(threadId, input.conversationId, '', 0, input.id);
       return;
     }
 
     const inputText = await this.inputFor(input, grant.context);
     if (!this.isActiveTurn(input.id)) return;
-    if (this.gate.closed) throw new Error('Turn ended');
+    if (this.gate.closed || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
     // Mark execution after validating the input. Memory-free prepared turns can still retry.
     this.journal.recordExecution(input.id);
     this.gate.awaitingTerminal.add(input.id);
@@ -570,7 +625,12 @@ class TurnRunner {
 
     this.state.cancelled.add(turnId);
     const heldThread = this.findRunningThread(turnId);
-    if (heldThread) this.approvals?.endThread(heldThread);
+    const endHolds = this.endTurnHolds.bind(this, heldThread);
+    if (!this.gate.closed) {
+      const revoke = this.dropStoppedAccess.bind(this, input, heldThread);
+      await revokeTurnAccess(turnId, this.state.waiting,
+        this.journal.reports, revoke, endHolds);
+    } else endHolds();
     const codexTurnId = this.state.codexTurns.get(turnId);
     if (!codexTurnId) {
       return;
@@ -589,6 +649,15 @@ class TurnRunner {
     }
   }
 
+  private endTurnHolds(threadId: string | undefined) {
+    if (threadId) this.approvals?.endThread(threadId);
+  }
+
+  private async dropStoppedAccess(input: Turn, threadId: string | undefined) {
+    if (threadId) await this.dropAccess(threadId, input);
+    else await this.loads.cancel(input.id);
+  }
+
   private findRunningThread(turnId: string) {
     for (const [threadId, turn] of this.state.running) {
       if (turn.id === turnId) {
@@ -600,7 +669,7 @@ class TurnRunner {
 
   private releaseClosedThread(threadId: string, input: Turn | undefined) {
     if (input) this.failTurn(input);
-    else void this.gate.track(releaseLoad(this.loads, this.driver, threadId, ''));
+    else void this.gate.track(releaseLoad(this.loads, this.driver, threadId, '', ''));
   }
 
   complete(value: unknown) {
@@ -615,7 +684,7 @@ class TurnRunner {
       this.releaseClosedThread(threadId, input);
       return;
     }
-    if (!input) {
+    if (!this.isUnfinishedTurn(input)) {
       return;
     }
 
@@ -644,6 +713,10 @@ class TurnRunner {
       return;
     }
     this.completeTurn(input, threadId, params);
+  }
+
+  private isUnfinishedTurn(input: Turn | undefined): input is Turn {
+    return input !== undefined && this.grantInstalls.get(input.id)?.terminal !== true;
   }
 
   private refuseTool(input: Turn, threadId: string) {
@@ -678,8 +751,8 @@ class TurnRunner {
 }
 
 async function releaseLoad(loads: ReturnType<typeof threadLoads>, driver: TurnDriver,
-  threadId: string, conversationId: string) {
-  const revoking = driver.grant(threadId, conversationId, '', 0);
+  threadId: string, conversationId: string, turnId: string) {
+  const revoking = driver.grant(threadId, conversationId, '', 0, turnId);
   const dropping = loads.forget(threadId);
   await Promise.all([revoking, dropping]);
 }

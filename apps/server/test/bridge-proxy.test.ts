@@ -81,6 +81,7 @@ function destroyResponseSocket(response: import('node:http').ServerResponse) {
 async function installProxyGrant(controlSocket: string) {
   const grant = {
     thread: 'thread',
+    turnId: 'turn',
     computer: 'computer-token',
     token: 'turn-token',
     expires: Date.now() + 60_000,
@@ -153,7 +154,10 @@ it('passes the actual proxy thread to admission even when a grant is installed w
     const turn = await computerCredentials(nats.store, tokens, 'test').turn({ assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', model: 'gpt-6.1-sol' });
     const install = (thread: string, conversation: string) => new Promise<void>((resolve, reject) => {
       const req = request({ socketPath: options.controlSocket, path: '/grant', method: 'POST' }, res => { res.resume(); res.on('end', () => res.statusCode === 200 ? resolve() : reject(new Error('Grant installation refused'))); });
-      req.on('error', reject); req.end(JSON.stringify({ thread, conversation, computer: computer.value, token: turn.value, expires: turn.expiresAt }));
+      req.on('error', reject);
+      const input = { thread, turnId: 'turn', conversation, computer: computer.value,
+        token: turn.value, expires: turn.expiresAt };
+      req.end(JSON.stringify(input));
     });
     const call = (thread: string) => fetch(`${local.url}/v1/responses`, { method: 'POST', headers: { authorization: `Bearer ${local.caller}`, 'session-id': thread }, body: JSON.stringify({ model: 'gpt-6.1-sol', stream: true, input: 'Hello', max_output_tokens: 128 }) });
     await install('other-thread', 'thread');
