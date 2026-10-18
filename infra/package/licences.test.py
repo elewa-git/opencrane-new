@@ -40,23 +40,56 @@ class LicenceTests(unittest.TestCase):
         self.assertIn("Debian main", result.stderr)
 
     def test_real_debian_main_package_passes(self):
-        result = self.run_with_debian_package("adduser", "3.134")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        entry = ["deb", "adduser", "3.134", "Debian-main", "Signed Debian main index"]
+        bookworm_main = checker.parse_debian_main_packages(checker.BOOKWORM_MAIN)
+        self.assertEqual(checker.check_entry(entry, {"MIT"}, bookworm_main),
+                         ("deb", "adduser", "3.134"))
+
+    def test_different_debian_main_version_exits_one(self):
+        result = self.run_with_debian_package("adduser", "0.0")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("adduser 0.0", result.stderr)
+
+    def test_new_image_needs_a_new_debian_main_review(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory)
+            for filename in ("check-licences.py", "licence-inventory.json",
+                             "reviewed-images.json", "osi-licences.json", "Dockerfile"):
+                shutil.copy2(source.with_name(filename), package / filename)
+
+            inventory_path = package / "licence-inventory.json"
+            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+            reviewed_path = package / "reviewed-images.json"
+            reviewed = json.loads(reviewed_path.read_text(encoding="utf-8"))
+            changed_pin = "example.test/new-base@sha256:" + "0" * 64
+            for role in ("server", "web"):
+                inventory["images"][role]["pin"] = changed_pin
+                reviewed["images"][role] = changed_pin
+            inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+            reviewed_path.write_text(json.dumps(reviewed), encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, str(package / "check-licences.py")],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Debian main index was reviewed for a different server image",
+                          result.stderr)
 
     def test_unknown_application_licence_is_refused(self):
         entry = ["npm", "new-library", "1.0.0", "UNKNOWN", "package metadata"]
         with self.assertRaisesRegex(ValueError, "Unknown or non-OSI"):
-            checker.check_entry(entry, {"MIT"})
+            checker.check_entry(entry, {"MIT"}, set())
 
     def test_non_osi_application_licence_is_refused(self):
         entry = ["npm", "new-library", "1.0.0", "BUSL-1.1", "package metadata"]
         with self.assertRaisesRegex(ValueError, "Unknown or non-OSI"):
-            checker.check_entry(entry, {"MIT"})
+            checker.check_entry(entry, {"MIT"}, set())
 
     def test_operating_system_package_needs_debian_main(self):
         entry = ["deb", "new-package", "1.0.0", "Debian-non-free", "package index"]
         with self.assertRaisesRegex(ValueError, "Debian main"):
-            checker.check_entry(entry, {"MIT"})
+            checker.check_entry(entry, {"MIT"}, set())
 
     def test_new_scanned_licence_is_refused(self):
         item = {"type": "npm", "name": "new-library",
