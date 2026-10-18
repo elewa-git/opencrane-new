@@ -2365,6 +2365,19 @@ before that deadline. After the final scope read it confirms access again, even 
 no scope position changed. This catches revocations saved during that read without
 adding scope or conversation streams to the authority fence or extending the deadline.
 It then checks every revision and dependency at the current time.
+
+Each stream has its own boundary for a released pass: its last exact position read.
+Memory scope positions are read before the final small access check. A correction or
+forget visible at that scope read refuses this renewal. If it is saved later, even
+while the final access read is still running, this renewal may release a pass. The
+next renewal or decision confirmation must refuse with `memory_context_unavailable`.
+No extra reads chase later memory changes. The access check still uses only the
+small access streams and keeps its original two-second deadline.
+Bridge tests save both correction and forget during the final access read, allow
+that renewal, then require the next repeated `agent.turn_started` to return the fixed
+refusal with no token or context. Both changes visible at the last scope-position
+read refuse the current renewal too.
+
 `memoryReferences` has an explicit `event-only` mode for processes without revision keys.
 Server reads and writes retain their custody checks. No scope or conversation stream is
 added to the authority fence. A turn with no loaded references reads no scope stream.

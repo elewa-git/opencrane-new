@@ -38,7 +38,8 @@ A change to the tools or their rules ends that approval. Saving a replacement pu
 also ends waiting and unused approvals for that server. Reloading another server keeps
 them valid. A gateway acknowledgement cannot revive an ended approval.
 Every model, tool and recall call checks all memory facts already loaded by its turn.
-The server uses the same check before releasing a renewed turn pass.
+The server uses the same check before releasing a renewed turn pass. A memory change
+saved after the last memory read is checked at the next renewal or call.
 A corrected, forgotten or expired fact, an invalid dependency, or removed memory access
 refuses the next call. Other facts, messages and uploads do not refuse it.
 Memory writes keep their original access check. Removing and restoring a grant while
