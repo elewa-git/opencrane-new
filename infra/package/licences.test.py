@@ -15,6 +15,48 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def run_with_postgres_package(self, source_label, name, version, licence):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory)
+            for filename in ("check-licences.py", "licence-inventory.json",
+                             "reviewed-images.json", "osi-licences.json", "Dockerfile"):
+                shutil.copy2(source.with_name(filename), package / filename)
+
+            inventory_path = package / "licence-inventory.json"
+            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+            entries = inventory["images"]["postgres"]["artifacts"]
+            for entry in entries:
+                if entry[1] == "libpq5":
+                    entry[1] = name
+                    entry[2] = version
+                    entry[3] = licence
+                    entry[4] = "Signed PostgreSQL apt package index"
+                    if source_label == "PGDG":
+                        entry.append(source_label)
+                    break
+            inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(package / "check-licences.py")],
+                capture_output=True, text=True, check=False,
+            )
+
+    def test_package_absent_from_pgdg_exits_one(self):
+        result = self.run_with_postgres_package(
+            "PGDG", "libpq5", "0.0.pgdg13+1", "PostgreSQL")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("PGDG", result.stderr)
+
+    def test_pgdg_package_labelled_debian_main_exits_one(self):
+        result = self.run_with_postgres_package(
+            "Debian-main", "libpq5", "18.6-1.pgdg13+2", "Debian-main")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Debian main", result.stderr)
+
+    def test_real_inventory_passes(self):
+        result = subprocess.run(
+            [sys.executable, str(source)], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def run_with_debian_package(self, name, version):
         with tempfile.TemporaryDirectory() as temporary_directory:
             package = Path(temporary_directory)
