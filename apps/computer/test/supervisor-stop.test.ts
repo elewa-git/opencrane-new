@@ -153,13 +153,28 @@ it.each([false, true])(
   'stops a live worker under a zombie leader or refuses proof if it never exits: %s',
   stopsZombieWorker, 60_000);
 
-async function stopsForkDuringScan() {
+async function refusesForkDuringScan(stage: string) {
   const computer = await uploadComputer();
   try {
     const source = `
+import ctypes
 import os
 import pathlib
 import time
+
+# Reap each departed parent so its process directory really disappears.
+if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
+    raise RuntimeError('Could not become the child reaper')
+if os.fork():
+    while True:
+        try:
+            os.wait()
+        except ChildProcessError:
+            break
+    os._exit(0)
+os.setgroups([])
+os.setgid(1001)
+os.setuid(1001)
 
 pid_file = pathlib.Path('/workspace/handoff-pid')
 trigger = pathlib.Path('/workspace/handoff-now')
@@ -176,8 +191,9 @@ while True:
         done.write_text('child running')
     time.sleep(0.005)
 `;
-    const firstPid = await launchTool(computer, source);
+    await launchTool(computer, source, 0);
     await waitForFile(computer, '/workspace/handoff-writes');
+    const firstPid = await computer.read('/workspace/handoff-pid');
     // Confirm repeated detached handoffs before placing one inside the scan.
     for (let index = 0; index < 2; index++) {
       await computer.exec('rm', '-f', '/workspace/handoff-done');
@@ -186,29 +202,40 @@ while True:
     }
     expect(await computer.read('/workspace/handoff-pid')).not.toBe(firstPid);
     expect(await inventory(computer)).not.toBe('[]');
+    // Keep the worker alive until the observer forces the handoff inside the scan.
+    await computer.exec('ln', '-sf', '/bin/true', '/usr/bin/setpriv');
     const fixturePath = new URL('./fixtures/supervisor-fork-race.ts', import.meta.url);
     const observer = await readFile(fixturePath, 'utf8');
     await computer.write('/workspace/fork-observer.ts', observer);
     const startObserver = `
 import { spawn } from 'node:child_process';
-const child = spawn('node', ['--experimental-strip-types', '/workspace/fork-observer.ts'], {
+const args = ['--experimental-strip-types', '/workspace/fork-observer.ts', process.argv[1]];
+const child = spawn('node', args, {
   detached: true, stdio: 'ignore',
 });
 child.unref();
 `;
-    await computer.exec('node', '--input-type=module', '-e', startObserver);
+    await computer.exec('node', '--input-type=module', '-e', startObserver, stage);
     await waitForFile(computer, '/workspace/fork-observer-ready');
+    const parentPid = await computer.read('/workspace/handoff-pid');
     const result = await control(computer);
-    expect(result).toContain('200\n');
-    expect(result).toContain('"executionQuiet":true');
-    expect(result).toContain('"controlEnabled":false');
-    expect(await inventory(computer)).toBe('[]');
+    expect(await computer.read('/workspace/fork-injected')).toBe(stage);
+    expect(await computer.read('/workspace/handoff-done')).toBe('child running');
+    const childPid = await computer.read('/workspace/handoff-pid');
+    expect(childPid).not.toBe(parentPid);
+    const childStatus = await computer.read(`/proc/${childPid}/status`);
+    expect(childStatus).not.toMatch(/State:\s+[ZX]/u);
+    expect(result).toBe('400\n{"error":"Stop proof unavailable","controlEnabled":false}');
+    expect(await inventory(computer)).not.toBe('[]');
+    const saved = await computer.read('/home/agent/supervisor/stopped.json');
+    expect(JSON.parse(saved)).toMatchObject(attempt);
   } finally {
     await computer.close();
   }
 }
-it('stops a detached process handing work to fresh children, including a fork during scan',
-  stopsForkDuringScan, 60_000);
+it.each(['directory', 'observed-worker'])(
+  'refuses a detached process handing work to a late child at the %s barrier',
+  refusesForkDuringScan, 60_000);
 
 async function refusesRootHelper() {
   const computer = await uploadComputer();

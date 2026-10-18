@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
-  closeSync, existsSync, fsyncSync, openSync, readFileSync, readdirSync, writeFileSync,
+  closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync,
 } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
@@ -9,12 +9,12 @@ import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { body, json, record } from './http.ts';
+import { EXECUTION_UIDS, hasLiveExecutionTasks } from './execution-inventory.ts';
 
 const execute = promisify(execFile);
 const GATE_FILE = '/home/agent/supervisor/stopped.json';
 const CONTROL_SOCKET = '/run/executor/supervisor/control.sock';
 const EXIT_LIMIT_MS = 10_000;
-const EXECUTION_UIDS = [1001, 1003];
 interface StopRequest {
   generation: number;
   podUid: string;
@@ -48,42 +48,6 @@ function readStopRequest(value: unknown): StopRequest {
     throw new Error('Repeated affected turn');
   }
   return { generation, podUid, takeoverId, affectedTurnIds };
-}
-
-function ignoreExitedTask(error: unknown) {
-  // Ignore only an exit during observation. Missing permissions are not quiet proof.
-  if (!error || typeof error !== 'object' || !('code' in error)
-    || error.code !== 'ENOENT') throw error;
-}
-
-function hasLiveExecutionThread(pid: string) {
-  for (const thread of readdirSync(`/proc/${pid}/task`)) {
-    try {
-      const status = readFileSync(`/proc/${pid}/task/${thread}/status`, 'utf8');
-      const uid = Number(/^Uid:\s+(\d+)/mu.exec(status)?.[1]);
-      if (!Number.isSafeInteger(uid)) throw new Error('Task identity unavailable');
-      if (!EXECUTION_UIDS.includes(uid)) continue;
-      const state = /^State:\s+(\S)/mu.exec(status)?.[1];
-      if (!state) throw new Error('Task state unavailable');
-      // Check workers even when their main thread is a zombie.
-      if (state !== 'Z' && state !== 'X') return true;
-    } catch (error) {
-      ignoreExitedTask(error);
-    }
-  }
-  return false;
-}
-
-function hasLiveExecutionTasks() {
-  for (const name of readdirSync('/proc')) {
-    if (!/^\d+$/u.test(name)) continue;
-    try {
-      if (hasLiveExecutionThread(name)) return true;
-    } catch (error) {
-      ignoreExitedTask(error);
-    }
-  }
-  return false;
 }
 
 async function stopProcesses(deadline: number) {
