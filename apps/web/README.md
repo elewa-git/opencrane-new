@@ -14,7 +14,7 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
-  web -->|shows full tool definitions and checks publication| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
+  web -->|shows full tool definitions and checks the saved publication| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
   web -->|reviews invitations and removals; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
 ```
@@ -98,7 +98,9 @@ assistant check open rather than guessing an answer.
   tool list when the saved comparison is complete, then save its publication. Calls stay
   paused while publication is applying. A lost reply can be checked by its original
   reference after reopening the page. A later tool change can be reviewed after an older
-  publication. Publishing cannot restore old approvals.
+  publication, including when its reference was saved in the browser. An uncertain
+  publication for the current tool list still needs a status check. Publishing cannot
+  restore old approvals.
 - Accepts an exact package image digest and shows dated admission checks. Continue
   stays disabled while tool discovery is unavailable. The form checks encoded host
   names before sending a package. It shows when a signature or licence is refused,

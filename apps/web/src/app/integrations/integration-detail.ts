@@ -198,9 +198,18 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       this.changeState.set('unknown-publication');
       return;
     }
+    const policy = this.policy();
+    const oldPublication = isOlderPublication(policy) &&
+      policy?.publication?.commandId === originalId;
     if (raw['status'] === 'ready') {
       this.clearPublicationReference();
-      this.changeState.set('confirmed');
+      this.changeState.set(oldPublication ? 'disabled' : 'confirmed');
+      return;
+    }
+    if (oldPublication && (raw['status'] === 'applying' || raw['status'] === 'unknown')) {
+      // Release only the checked command when the policy has moved past its review.
+      this.clearPublicationReference();
+      this.changeState.set('disabled');
       return;
     }
     if (raw['status'] === 'applying') {
@@ -382,8 +391,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   private setCurrentPublicationState(status: Record<string, unknown>): void {
     const policy = this.policy();
     // Let a newer drifted policy be reviewed when its saved publication belongs to the old one.
-    if (policy?.driftHeld && policy.publication &&
-        policy.publication.reviewRevision !== policy.policyRevision) {
+    if (isOlderPublication(policy)) {
       this.changeState.set('disabled');
       return;
     }
@@ -488,6 +496,11 @@ function removeStoredPublication(serverId: string): void {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isOlderPublication(policy: ToolPolicy | undefined): boolean {
+  if (!policy?.driftHeld || !policy.publication) return false;
+  return policy.publication.reviewRevision < policy.policyRevision;
 }
 
 function savedSequence(value: unknown): number | null {

@@ -126,8 +126,13 @@ is saved in session storage before the POST, keyed by server, so reopening check
 original change before offering another decision. An unknown or deadline publication
 reply with a change reference keeps Check status available. A 409 needs a fresh read.
 `GET /:id/publication` supplies current progress. An older intent whose review revision
-is behind a drifted policy does not block the new review. Only a matching change reply
-can confirm a pending publication. Publishing never restores old approvals.
+is behind a drifted policy does not block the new review. A saved command reference is
+checked against its original change first. A matching reply releases it if the command
+is confirmed or its publication belongs to an older policy revision. An uncertain
+command for the current revision keeps Check status. Invalid saved references are
+removed before any request, and access refusal removes a saved reference. Only a
+matching change reply can confirm a pending publication. Publishing never restores
+old approvals.
 The check-start API and dated restored view are unavailable here. Run
 `npm run visual:screen-p3-7-drift` and `npm run visual:screen-p3-7-drift2` for
 intercepted desktop and phone captures.
