@@ -88,7 +88,7 @@ async function fixture(approvalSupport = false) {
   }
   async function catalogue(loadKey = loadA, conversation = 'chat-A', thread = 'thread-A',
     listedTools = tools) {
-    expect(await control('/catalogue', { loadKey, conversation, thread, tools: listedTools })).toBe(200);
+    expect(await control('/catalogue', { loadKey, turnId: thread, conversation, thread, tools: listedTools })).toBe(200);
   }
   async function grant(thread = 'thread-A', conversation = 'chat-A') {
     const input = { thread, turnId: thread, conversation, computer: 'computer', token: `token-${thread}`,
@@ -326,7 +326,7 @@ it('settles an oversized tool reply at once without retrying', settlesOversizedR
 async function remembersFirstList() {
   const test = await fixture();
   try {
-    const input = { loadKey: loadA, conversation: 'chat-A', tools };
+    const input = { loadKey: loadA, turnId: 'thread-A', conversation: 'chat-A', tools };
     expect(await test.control('/catalogue', input)).toBe(200);
     const list = { ...call, method: 'tools/list' };
     expect((await test.send(list)).text).toContain('"name":"read"');

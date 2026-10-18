@@ -6,7 +6,7 @@ import type { Turn } from './turn-frame.ts';
 export interface ThreadLoadDriver {
   rpc(method: string, params: Record<string, unknown>): Promise<unknown>;
   catalogue?(loadKey: string, conversation: string, tools: NonNullable<Turn['tools']>,
-    thread?: string): Promise<void>;
+    thread: string | undefined, turnId: string): Promise<void>;
   dropCatalogue?(loadKey: string): Promise<void>;
   discovered?(loadKey: string): Promise<void>;
 }
@@ -34,7 +34,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
     if (stopped || cancelled.has(input.id)) throw new Error('Thread loading stopped');
     keys.add(loadKey);
     if (driver.catalogue) {
-      await driver.catalogue(loadKey, input.conversationId, input.tools ?? [], thread);
+      await driver.catalogue(loadKey, input.conversationId, input.tools ?? [], thread, input.id);
     } else if (input.tools?.length) throw new Error('Tool catalogue unavailable');
     if (stopped || cancelled.has(input.id)) {
       await drop(loadKey);

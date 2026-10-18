@@ -257,8 +257,8 @@ function startClient() {
 
   let loads;
   if (wireMode) {
-    async function catalogue(loadKey, conversation, tools, thread) {
-      const input = { loadKey, conversation, tools, thread };
+    async function catalogue(loadKey, conversation, tools, thread, turnId) {
+      const input = { loadKey, turnId, conversation, tools, thread };
       capture.rpc.push({ stage, atMs: Date.now() - startedAt, method: 'catalogue', params: input });
       await control('/catalogue', input);
       if (thread) {
@@ -294,7 +294,7 @@ function startClient() {
           definitions: [JSON.stringify(definition)], modes });
       }
       const conversationId = wireConversations.get(params.threadId) ?? `chat-${nextRpc}`;
-      const input = { tools, conversationId };
+      const input = { id: params.threadId ?? conversationId, tools, conversationId };
       const startParams = { ...params, approvalPolicy: 'never' };
       delete startParams.config;
       return loads.load(input, params.threadId, startParams);

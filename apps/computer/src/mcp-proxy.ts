@@ -6,12 +6,14 @@ import { parseTools, type ToolServer } from './turn-frame.ts';
 import { proxyRequests } from './proxy-requests.ts';
 
 export interface ProxyGrant {
+  turnId: string;
   computer: string;
   token: string;
   expires: number;
   conversation?: string;
 }
 interface Catalogue {
+  turnId: string;
   conversation: string;
   thread?: string;
   servers: Map<string, ToolServer>;
@@ -32,7 +34,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
   const requests = proxyRequests();
 
   function catalogue(input: Record<string, unknown>) {
-    const { key, conversation, thread } = catalogueBinding(input);
+    const { key, conversation, thread, turnId } = catalogueBinding(input);
     const tools = parseTools(input['tools']);
     const servers = new Map<string, ToolServer>();
     for (const server of tools) {
@@ -48,7 +50,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     }
     const previous = catalogues.get(key);
     if (previous) {
-      if (previous.conversation !== conversation
+      if (previous.turnId !== turnId || previous.conversation !== conversation
         || JSON.stringify([...previous.servers]) !== JSON.stringify([...servers])) {
         throw new Error('Tool list address was reused');
       }
@@ -63,7 +65,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     // Remove abandoned registrations even if the bridge cannot reach its control socket.
     const expiry = setTimeout(expired, 120_000);
     expiry.unref();
-    const entry: Catalogue = { conversation, servers, listed: new Set(), expiry };
+    const entry: Catalogue = { turnId, conversation, servers, listed: new Set(), expiry };
     if (typeof thread === 'string') entry.thread = thread;
     catalogues.set(key, entry);
     current.set(conversation, key);
@@ -106,11 +108,11 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     throw new Error('Tools were not discovered');
   }
 
-  function dropThread(thread: string) {
+  function dropThread(thread: string, turnId: string) {
     approvals.endThread(thread);
     requests.drop(thread);
     for (const [loadKey, load] of catalogues) {
-      if (load.thread === thread) drop({ loadKey });
+      if (load.thread === thread && load.turnId === turnId) drop({ loadKey });
     }
   }
 
@@ -183,12 +185,14 @@ function catalogueBinding(input: Record<string, unknown>) {
     throw new Error('Invalid tool list address');
   }
   const conversation = input['conversation'];
+  const turnId = input['turnId'];
   const thread = input['thread'];
-  if (typeof conversation !== 'string' || !conversation || conversation.length > 200
+  if (typeof turnId !== 'string' || !turnId || turnId.length > 200
+    || typeof conversation !== 'string' || !conversation || conversation.length > 200
     || (thread !== undefined && (typeof thread !== 'string' || !thread || thread.length > 200))) {
     throw new Error('Invalid tool list binding');
   }
-  return { key, conversation, thread };
+  return { key, conversation, thread, turnId };
 }
 
 function requireStateless(incoming: IncomingMessage, method: unknown,

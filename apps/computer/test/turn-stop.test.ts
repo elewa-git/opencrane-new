@@ -74,9 +74,10 @@ async function stopFixture() {
     if (!token && thread === 'thread-1') revoked.resolve();
   }
   computer.driver.grant = grant;
-  async function catalogue(loadKey: string, conversation: string, _tools: unknown, thread?: string) {
+  async function catalogue(loadKey: string, conversation: string, _tools: unknown,
+    thread: string | undefined, turnId: string) {
     lists.set(conversation, loadKey);
-    const input = { loadKey, conversation, thread, tools };
+    const input = { loadKey, turnId, conversation, thread, tools };
     await proxyControl('/catalogue', input, socketPath);
   }
   async function dropCatalogue(loadKey: string) {

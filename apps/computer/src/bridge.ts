@@ -179,8 +179,8 @@ const channel = bridgeChannel(server, {
   },
   rpc: persistent.rpc,
   privateSession,
-  catalogue(loadKey, conversation, tools, thread) {
-    return proxyControl('/catalogue', { loadKey, conversation, tools, thread });
+  catalogue(loadKey, conversation, tools, thread, turnId) {
+    return proxyControl('/catalogue', { loadKey, conversation, tools, thread, turnId });
   },
   discovered(loadKey) {
     return proxyControl('/catalogue/ready', { loadKey });

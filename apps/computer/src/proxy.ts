@@ -58,9 +58,13 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
       if (req.url === '/drop') {
         // Remember cancelled turns before acknowledging Stop or accepting another pass.
         cancelledTurns.add(input['turnId']);
-        turns.delete(input['thread']);
-        mcp.dropThread(input['thread']);
-        requests.drop(input['thread']);
+        const grant = turns.get(input['thread']);
+        // Leave a newer turn's pass, tools and connections alone.
+        if (!grant || grant.turnId === input['turnId']) {
+          turns.delete(input['thread']);
+          mcp.dropThread(input['thread'], input['turnId']);
+          requests.drop(input['thread']);
+        }
       }
       else if (req.url === '/grant') {
         if (cancelledTurns.has(input['turnId'])) throw new Error('Turn ended');
@@ -71,7 +75,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
           throw new Error('Bad grant');
         }
         deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
-        const grant: ProxyGrant = { computer: input['computer'], token: input['token'],
+        const grant: ProxyGrant = { turnId: input['turnId'], computer: input['computer'], token: input['token'],
           expires: input['expires'] };
         if (typeof input['conversation'] === 'string') grant.conversation = input['conversation'];
         turns.set(input['thread'], grant);
