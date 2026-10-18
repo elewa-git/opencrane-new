@@ -1,3 +1,7 @@
+import { once } from 'node:events';
+import { WebSocketServer } from 'ws';
+import { connectBridge } from '../src/chat/bridge.ts';
+import { envelope } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createEventStore } from '@opencrane/event-store';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -1206,3 +1210,185 @@ async function refusesUnsettledMemoryAtDeadline() {
 }
 it('refuses repeated memory changes at the original access deadline',
   refusesUnsettledMemoryAtDeadline);
+
+async function renewalBridge(store = setup.nats.store) {
+  const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', 'Continue') };
+  const event = envelope('test', 'conversation-conversation', 'message.posted', message, 'turn');
+  await setup.nats.seed([event]);
+  const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  await once(server, 'listening');
+  const address = server.address();
+  if (typeof address === 'string' || !address) throw new Error('Bridge address unavailable');
+  const connected = once(server, 'connection');
+  const messages: unknown[] = [];
+  function receive(raw: import('ws').RawData) {
+    messages.push(JSON.parse(String(raw)) as unknown);
+  }
+  function capture(peer: import('ws').WebSocket) {
+    peer.on('message', receive);
+  }
+  server.on('connection', capture);
+  const options = { silo: 'test', store, keys: setup.keys, binding: setup.binding };
+  const input = { computerId: 'computer', assistantId: 'assistant', bearer: 'fixture',
+    url: `ws://127.0.0.1:${address.port}` };
+  const link = await connectBridge(options, input, setup.tokens);
+  const [peer] = await connected as [import('ws').WebSocket];
+  function resumed() {
+    return messages.length > 0;
+  }
+  await until(resumed);
+  async function exchange(sequence: number) {
+    const count = messages.length;
+    const report = { sequence, previousSequence: sequence - 1, conversationId: 'conversation',
+      turnId: 'turn', assistantId: 'assistant', type: 'agent.turn_started',
+      threadId: 'thread', executionMode: 'restricted' };
+    peer.send(JSON.stringify(report));
+    function replied() {
+      return messages.length > count || link.socket.readyState === 3;
+    }
+    await until(replied, 5000);
+    expect(link.socket.readyState).toBe(link.socket.OPEN);
+    return messages.at(-1);
+  }
+  async function closeBridge() {
+    link.socket.terminate();
+    await link.settled();
+    for (const socket of server.clients) socket.terminate();
+    server.close();
+    await once(server, 'close');
+  }
+  return { exchange, close: closeBridge };
+}
+
+async function refusesMemoryRenewal(change: LoadedChange) {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  try {
+    expect(await bridge.exchange(1)).toHaveProperty('token');
+    await changeLoadedMemory(change);
+    issuance.mockClear();
+    const refused = { type: 'ack', sequence: 2, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(2)).toEqual(refused);
+    expect(issuance).not.toHaveBeenCalled();
+    expect(await bridge.exchange(2)).toEqual(refused);
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each(loadedChanges)('refuses turn renewal after loaded memory %s', refusesMemoryRenewal);
+
+async function refusesMemoryDuringSigning(change: LoadedChange) {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const issue = setup.tokens.turn;
+  async function changeDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    await changeLoadedMemory(change);
+    return result;
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(changeDuringSigning);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).toHaveBeenCalledOnce();
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each(['correct', 'forget', 'assistant_read', 'member_mcp'] as const)(
+  'refuses turn renewal when %s arrives during signing', refusesMemoryDuringSigning);
+
+async function allowsMemoryRenewal(loaded: boolean) {
+  if (loaded) {
+    await seedRecallFact();
+    expect((await directRecall('load')).statusCode).toBe(200);
+    await changeLoadedMemory('forget', 'unloaded');
+  } else {
+    await changeLoadedMemory('assistant_read');
+  }
+  const bridge = await renewalBridge();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  let scopeReads = 0;
+  async function* countScopes(...args: Parameters<typeof read>) {
+    if (args[0].startsWith('scope-')) scopeReads += 1;
+    yield* read(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(countScopes);
+  try {
+    for (const sequence of [1, 2]) {
+      const reply = await bridge.exchange(sequence);
+      expect(reply).toHaveProperty('token');
+      expect(reply).not.toHaveProperty('refused');
+    }
+    if (!loaded) expect(scopeReads).toBe(0);
+  } finally {
+    reads.mockRestore();
+    await bridge.close();
+  }
+}
+it.each([true, false])('allows turn renewal with loaded memory %s', allowsMemoryRenewal);
+
+async function checksRenewalExpiry(offset: number) {
+  const expires = Date.now() + 60_000;
+  await seedRecallFact('private-fact', new Date(expires).toISOString());
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const issue = setup.tokens.turn;
+  const clock = vi.spyOn(Date, 'now');
+  async function advanceDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    clock.mockReturnValue(expires + offset);
+    return result;
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(advanceDuringSigning);
+  try {
+    const reply = await bridge.exchange(1);
+    if (offset === -1) {
+      expect(reply).toHaveProperty('token');
+    } else {
+      const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+      expect(reply).toEqual(refused);
+    }
+  } finally {
+    clock.mockRestore();
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each([-1, 0])('checks turn renewal expiry at release, offset %s ms', checksRenewalExpiry);
+
+async function refusesColdRenewal() {
+  await seedRecallFact('dependency');
+  const dependency = { scopeId, memoryId: 'dependency', revision: 1 };
+  await seedRecallFact('a-derived', null, [dependency]);
+  expect((await directRecall('load', 1)).statusCode).toBe(200);
+  await changeLoadedMemory('forget', 'dependency');
+  const coldStore = await createEventStore(setup.nats.connection);
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  const facts = await readChatFacts(coldStore, 'test', 'conversation', 'turn');
+  expect(facts.memoryContext?.executionAvailable).toBe(false);
+  expect(issuance).not.toHaveBeenCalled();
+  const bridge = await renewalBridge(coldStore);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).not.toHaveBeenCalled();
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it('refuses turn renewal after cold replay with a forgotten dependency', refusesColdRenewal);
