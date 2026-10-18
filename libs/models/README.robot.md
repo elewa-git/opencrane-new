@@ -2486,8 +2486,8 @@ It is test tooling only, licensed under LGPL-2.1-or-later, with no runtime image
 File-error regressions replace each scratch file with a directory before real Cosign
 reads it. They require exit code 1 to report unavailable, while a wrong key still fails.
 
-Remaining row 5 work: Syft 1.54.0, image-specific reviewed notices and licence rules,
-complete SBOM coverage, private evidence storage and worker wiring. Malware,
+The private licence checker below adds Syft and image-specific notice review.
+Private evidence storage and worker wiring remain later work. Malware,
 vulnerability checks and deployment remain later rows. Fresh-install qualification:
 NOT RUN. No computer-image licence exceptions were copied.
 
@@ -2726,3 +2726,45 @@ Choice refusals return HTTP 422 with exactly
 Caller membership and OpenFGA permissions are checked before this reply. Lost
 Owner/Admin access still returns 403. The reply mapping lives in `budget-scope.ts`;
 `decision.ts` only forwards its status and fixed body.
+
+## Hosted image licence checks — P3-6 PR 5b, Part of #47
+
+`hosted-licences.ts` remains private, with no production caller, event writer or deployment.
+It retains copies of registry bytes, passes those copies through `verifyHostedImage`, and
+stages them as an OCI directory only after verification passes. It never fetches them again.
+Syft 1.54.0 scans that local directory with `all-layers`; no candidate process runs.
+The scanner binary and SPDX 3.28 data use the existing computer build's checksum pins.
+The test downloader adds neither to a runtime image. Syft's [Apache-2.0 licence](https://github.com/anchore/syft/blob/v1.54.0/LICENSE)
+allows this tooling use; runtime packaging and its bundled dependency review remain unqualified.
+
+The operator supplies a separate JSON review file, never an installer or image declaration.
+Its `imageDigest` binds the exact manifest. `inventory` maps each compressed layer digest to
+all regular file paths and hashes, including files later deleted. `packages` names every
+expected `type:name@version`; scanner omissions or extra packages fail. Reviewers must include
+unrecognised binaries in `evidence.artifacts`. `noticeHashes` pins all collected metadata and
+notice files. `applications`, `texts`, `aliases`, `debianLabels` and `evidence.apt` use the
+existing computer licence policy's formats, with no computer review entries imported.
+The operator must verify apt evidence against signed Debian archive indexes; image-supplied
+apt claims do not establish trust. `osLayers` explicitly lists the reviewed OS layer digests.
+Every Debian package location must belong to those layers, with exact archive identity and
+main-component evidence. Application packages still require OSI licences in those layers.
+Bundled free notices require their own component, source, licence and reason.
+
+The Python checker imports `apps/computer/check-licences.py` for the shared policy and reads
+archive members without extracting them. It checks expanded layer hashes before scanning.
+Current limits: the verifier's 128 MiB fetched bytes, 512 MiB expanded bytes across all layers,
+50,000 entries and 16 MiB per regular file. Links, special files, zstd layers, duplicate paths
+within a layer and differing notices at the same path across layers refuse this initial gate.
+Later bounded extraction work can extend that supported set. Each subprocess has a 60-second
+deadline and 16 MiB output limit. Temporary data is private and removed after the attempt.
+No inherited credentials enter the scanner environment. Results contain only fixed codes,
+image/trust evidence, SBOM and review digests. Trust is checked again after scanning.
+Raw SBOM retention in authorised evidence storage remains later work.
+
+Tests use generated signed OCI bytes, a fake registry, real Cosign and real pinned Syft.
+They cover complete application/OS reviews, missing or changed notices, unknown and forbidden
+licences, incomplete inventories, OS misclassification and scanner/registry outages.
+Existing verifier tests retain both architectures, wrong signer, substitution and hash checks;
+the admission schema still refuses signature/licence passes with the other checks pending.
+Fresh-install qualification, production scanning, malware/vulnerability checks and startup:
+NOT RUN. No browser, authority, event or API contract is changed.
