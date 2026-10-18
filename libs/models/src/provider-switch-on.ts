@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
-import { computerTurnStartedDataSchema, computerTurnClosedDataSchema,
+import { budgetCallDispatchAdmittedDataSchema, computerTurnStartedDataSchema, computerTurnClosedDataSchema,
   providerBindingSchema, providerDrainSchema, providerIdSchema, parseEventByType,
   type EventEnvelope } from '@opencrane/events';
 import { readEventAt, readStreamSummary, type EventStore, type StoredEvent,
@@ -111,9 +111,13 @@ function addBudget(summary: Budget, row: StoredEvent) {
     summary.reservations.add(z.string().parse(payload['reservationId']));
   }
   if (event.type === 'budget.call_dispatch_admitted') {
-    const reservationId = z.string().optional().parse(payload['reservationId']);
-    const callId = z.string().parse(payload['callId']);
-    summary.dispatches.add(reservationId ?? callId);
+    const dispatch = budgetCallDispatchAdmittedDataSchema.parse(event.data);
+    // Keep free reachability admissions for access and single-use checks, not spending.
+    if (dispatch.reservationId === undefined &&
+        dispatch.modelCall.model === 'provider-reachability') {
+      return;
+    }
+    summary.dispatches.add(dispatch.reservationId ?? dispatch.callId);
   }
   // Keep expired holds and unknown outcomes open even after their computer or turn ends.
   if (event.type === 'budget.settled') {

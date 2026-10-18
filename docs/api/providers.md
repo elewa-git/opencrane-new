@@ -247,8 +247,12 @@ and a saved key, successful reachability evidence and an enabled supported model
 every active binding. Automatic defaults need an explicit administrator choice first.
 Legacy chat turns must have closed or have a later computer loss, retirement or claim.
 Existing holds and send permissions also need confirmed settlement or release.
-Expired or unknown holds still block the command. Sends without reservations have
-no completion writer yet, so they remain refused.
+Expired or unknown holds still block the command. The only exception is a validated
+`provider-reachability` dispatch without a reservation: this check is free and needs
+no spending settlement. Its admission still records the access, stop and single-use
+checks. Existing reachability history works without adding a paid settlement.
+Every reserved dispatch and every other unreserved send still needs confirmed settlement.
+Other unreserved sends have no completion writer yet, so they remain refused.
 Success saves one `provider.managed_calls_enabled` event on `budget-<silo>` and ends draining.
 
 The existing changes GET returns its original receipt. A missing receipt remains

@@ -1921,9 +1921,19 @@ The budget summary also keeps unresolved reservation and dispatch identities.
 Computer loss, turn closure and reservation expiry do not clear them.
 Only a confirmed settlement or zero-cost release clears a hold or send; an unknown
 outcome keeps switch-on refused, including a retry after a lost switch-on reply.
-A send without a reservation also needs saved settlement evidence. There is no
-completion writer for those sends yet, so they remain refused. These history reads
-precede the short access check.
+A validated dispatch with no reservation and exactly `model: provider-reachability`
+is free, so it does not count as outstanding spending. Its admission record remains
+for access, stop and single-use checks. No settlement is invented for old history.
+Every reserved dispatch and every other unreserved send still needs saved settlement
+evidence. Other unreserved sends have no completion writer yet and remain refused.
+These history reads precede the short access check.
+
+`apps/server/test/providers.test.ts` follows real reachability, a consented model test,
+model selection, an explicit default, drain and switch-on, then replays projections
+and retries with a new event-store reader. Unresolved paid tests and ordinary
+unreserved sends refuse until confirmed settlement. The original switch-on fixture
+seeded reachability evidence directly, so it never created the dispatch that blocked
+fresh installs. A separate test keeps reserved reachability dispatches blocked.
 The event schema is unchanged. The saved provider position also identifies the drain
 used for a retry: no drain change can save after switch-on.
 
