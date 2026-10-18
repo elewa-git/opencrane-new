@@ -1,0 +1,1 @@
+Admins can review complete changed tool definitions and save their publication. The changes page recovers uncertain publication after reopening, lets later drift reach a new review, and keeps review unavailable when a complete comparison is missing.

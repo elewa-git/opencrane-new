@@ -13,8 +13,11 @@ import { IntegrationFacts } from './integration-facts';
 import { buildIntegrationFacts, type ToolsReadState } from './integration-facts-map';
 import { needsReview } from './integration-status';
 import { compareToolCatalogues } from './tool-changes';
+import { reviewCommand } from './review-command';
 
 type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
+type ChangeState = 'loading' | 'disabled' | 'reviewing' | 'publishing' | 'applying'
+  | 'unknown-review' | 'unknown-publication' | 'conflict' | 'failed' | 'confirmed';
 
 @Component({
   selector: 'oc-integration-detail',
@@ -36,13 +39,20 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   protected readonly hasRenderedProtectedContent = signal(false);
   protected readonly facts = computed(this.integrationFacts.bind(this));
   protected readonly comparison = computed(this.toolComparison.bind(this));
+  protected readonly changeState = signal<ChangeState>('loading');
+  protected readonly changeRef = signal('');
   protected readonly needsReview = needsReview;
   protected readonly skeletonWidths = ['78%', '52%', '66%', '44%'];
 
   private readonly request = new AbortController();
   private accessLost = false;
+  private publicationCommandId = '';
 
   ngOnInit(): void {
+    if (this.view() === 'changes') {
+      this.publicationCommandId = readStoredPublication(this.serverId());
+      this.changeRef.set(this.publicationCommandId);
+    }
     void this.load();
   }
 
@@ -53,9 +63,166 @@ export class IntegrationDetail implements OnInit, OnDestroy {
 
   protected refresh(): void {
     if (this.refreshing() || this.state() === 'loading' || this.accessLost) return;
+    if (this.changeState() === 'reviewing') return;
+    if (this.publicationCommandId) {
+      void this.checkPublicationChange();
+      return;
+    }
     this.refreshing.set(true);
     this.toolsReadState.set('loading');
+    this.changeState.set('loading');
     void this.load();
+  }
+
+  protected canReviewChanges(): boolean {
+    const policy = this.policy();
+    return this.view() === 'changes' && this.toolsReadState() === 'loaded' &&
+      this.changeState() === 'disabled' && policy?.driftHeld === true &&
+      policy.connectionId !== null && policy.accountMode !== null &&
+      policy.catalogue?.tools !== undefined && this.comparison()?.reviewable === true &&
+      !this.checkExpired();
+  }
+
+  protected changeMessage(): string {
+    const state = this.changeState();
+    if (state === 'reviewing') return 'Saving the exact tool review…';
+    if (state === 'publishing' || state === 'applying') {
+      return 'Publishing the reviewed tool list. Calls stay paused until this finishes.';
+    }
+    if (state === 'unknown-publication') {
+      return 'Publication is uncertain. Calls stay paused. Check the original change status.';
+    }
+    if (state === 'unknown-review') {
+      return 'The review outcome is unknown. Read the tool details again before another review.';
+    }
+    if (state === 'conflict') return 'The tool list changed. Review again after a fresh read.';
+    if (state === 'failed') return "Couldn't check publication progress. Calls stay paused.";
+    if (state === 'confirmed') return 'The current publication is confirmed.';
+    return '';
+  }
+
+  protected async reviewAndPublish(): Promise<void> {
+    const policy = this.policy();
+    if (!policy || !this.canReviewChanges()) return;
+    this.changeState.set('reviewing');
+    const reviewId = globalThis.crypto.randomUUID();
+    try {
+      const body = await reviewCommand(policy, reviewId);
+      if (this.shouldIgnoreResult()) return;
+      const response = await this.sendChange('review', body);
+      if (!response || this.shouldIgnoreResult()) return;
+      if (response.status === 409) {
+        this.changeState.set('conflict');
+        return;
+      }
+      if (!response.ok) {
+        this.changeState.set('unknown-review');
+        return;
+      }
+      const receipt: unknown = await response.json();
+      if (this.shouldIgnoreResult()) return;
+      const sequence = savedSequence(receipt);
+      if (sequence === null) {
+        this.changeState.set('unknown-review');
+        return;
+      }
+      await this.publish(sequence);
+    } catch {
+      if (!this.shouldIgnoreResult()) this.changeState.set('unknown-review');
+    }
+  }
+
+  private async publish(reviewRevision: number): Promise<void> {
+    const commandId = globalThis.crypto.randomUUID();
+    this.publicationCommandId = commandId;
+    storePublication(this.serverId(), commandId);
+    this.changeRef.set(commandId);
+    this.changeState.set('publishing');
+    const body = { commandId, expectedSequence: reviewRevision, reviewRevision };
+    try {
+      const response = await this.sendChange('publication', body);
+      if (!response || this.shouldIgnoreResult()) return;
+      if (response.status === 409) {
+        this.clearPublicationReference();
+        this.changeState.set('conflict');
+        return;
+      }
+      if (!response.ok) {
+        this.changeState.set('unknown-publication');
+        return;
+      }
+      const receipt: unknown = await response.json();
+      if (this.shouldIgnoreResult()) return;
+      if (savedSequence(receipt) === null) {
+        this.changeState.set('unknown-publication');
+        return;
+      }
+      await this.checkPublicationChange();
+    } catch {
+      if (!this.shouldIgnoreResult()) this.changeState.set('unknown-publication');
+    }
+  }
+
+  private async sendChange(path: string, body: unknown): Promise<Response | undefined> {
+    const url = `/api/org/integrations/${encodeURIComponent(this.serverId())}/${path}`;
+    const response = await fetch(url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      signal: this.request.signal });
+    if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) return undefined;
+    return response;
+  }
+
+  protected async checkPublicationChange(): Promise<void> {
+    if (!this.publicationCommandId || this.accessLost) return;
+    const originalId = this.publicationCommandId;
+    const url = `/api/org/integrations/changes/${encodeURIComponent(originalId)}`;
+    try {
+      const response = await fetch(url, { headers: { accept: 'application/json' },
+        signal: this.request.signal });
+      if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) return;
+      if (!response.ok) throw new Error('Change status unavailable');
+      const status: unknown = await response.json();
+      if (this.shouldIgnoreResult() || this.publicationCommandId !== originalId) return;
+      this.setPublicationState(status, originalId);
+    } catch {
+      if (!this.shouldIgnoreResult()) this.changeState.set('unknown-publication');
+    }
+  }
+
+  private setPublicationState(raw: unknown, originalId: string): void {
+    if (!isRecord(raw)) {
+      this.changeState.set('unknown-publication');
+      return;
+    }
+    if (raw['changeRef'] !== originalId) {
+      this.changeState.set('unknown-publication');
+      return;
+    }
+    const policy = this.policy();
+    const oldPublication = isOlderPublication(policy) &&
+      policy?.publication?.commandId === originalId;
+    if (raw['status'] === 'ready') {
+      this.clearPublicationReference();
+      this.changeState.set(oldPublication ? 'disabled' : 'confirmed');
+      return;
+    }
+    if (oldPublication && (raw['status'] === 'applying' || raw['status'] === 'unknown')) {
+      // Release only the checked command when the policy has moved past its review.
+      this.clearPublicationReference();
+      this.changeState.set('disabled');
+      return;
+    }
+    if (raw['status'] === 'applying') {
+      this.changeState.set('applying');
+      return;
+    }
+    this.changeState.set('unknown-publication');
+  }
+
+  private clearPublicationReference(): void {
+    this.publicationCommandId = '';
+    this.changeRef.set('');
+    removeStoredPublication(this.serverId());
   }
 
   protected announcementText(): string {
@@ -108,7 +275,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
 
   protected driftSummary(): string {
     const counts = this.comparison()?.counts;
-    if (!counts) return "The earlier list isn't saved, so review every tool.";
+    if (!counts) return 'A complete comparison is unavailable. Review is paused.';
     return `Found ${counts.added} added, ${counts.removed} removed and ${counts.changed} changed`;
   }
 
@@ -160,28 +327,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       this.state.set('ready');
       this.hasRenderedProtectedContent.set(true);
       this.focusHeaderRefreshAfterMessageRetry();
-      try {
-        const toolsResponse = await fetch(this.toolsUrl(), {
-          headers: { accept: 'application/json' }, signal: this.request.signal,
-        });
-        if (this.shouldIgnoreResult()) return;
-        if (this.isAccessRefusal(toolsResponse)) return;
-        if (!toolsResponse.ok) {
-          this.markToolsReadFailed();
-          return;
-        }
-        const toolsRaw: unknown = await toolsResponse.json();
-        if (this.shouldIgnoreResult()) return;
-        const policy = toolPolicySchema.parse(toolsRaw);
-        this.policy.set(policy);
-        this.toolsReadState.set('loaded');
-        this.state.set('ready');
-        this.refreshing.set(false);
-        this.hasRenderedProtectedContent.set(true);
-      } catch {
-        if (this.shouldIgnoreResult()) return;
-        this.markToolsReadFailed();
-      }
+      await this.loadToolPolicy();
     } catch {
       if (this.shouldIgnoreResult()) return;
       this.state.set('failed');
@@ -191,12 +337,89 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     }
   }
 
+  private async loadToolPolicy(): Promise<void> {
+    try {
+      const toolsResponse = await fetch(this.toolsUrl(), {
+        headers: { accept: 'application/json' }, signal: this.request.signal,
+      });
+      if (this.shouldIgnoreResult() || this.isAccessRefusal(toolsResponse)) return;
+      if (!toolsResponse.ok) {
+        this.markToolsReadFailed();
+        return;
+      }
+      const toolsRaw: unknown = await toolsResponse.json();
+      if (this.shouldIgnoreResult()) return;
+      const policy = toolPolicySchema.parse(toolsRaw);
+      this.policy.set(policy);
+      this.toolsReadState.set('loaded');
+      this.state.set('ready');
+      this.refreshing.set(false);
+      this.hasRenderedProtectedContent.set(true);
+      if (this.view() === 'changes') {
+        if (this.publicationCommandId) await this.checkPublicationChange();
+        else await this.readPublicationStatus();
+      }
+    } catch {
+      if (!this.shouldIgnoreResult()) this.markToolsReadFailed();
+    }
+  }
+
   private markToolsReadFailed(): void {
     this.toolsReadState.set('failed');
     this.state.set('ready');
     this.refreshing.set(false);
     this.showRefresh.set(true);
     this.hasRenderedProtectedContent.set(true);
+  }
+
+  private async readPublicationStatus(): Promise<void> {
+    const url = `/api/org/integrations/${encodeURIComponent(this.serverId())}/publication`;
+    try {
+      const response = await fetch(url, { headers: { accept: 'application/json' },
+        signal: this.request.signal });
+      if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) return;
+      if (!response.ok) throw new Error('Publication status unavailable');
+      const status: unknown = await response.json();
+      if (this.shouldIgnoreResult()) return;
+      if (!isRecord(status)) throw new Error('Invalid publication status');
+      this.setCurrentPublicationState(status);
+    } catch {
+      if (!this.shouldIgnoreResult()) this.changeState.set('failed');
+    }
+  }
+
+  private setCurrentPublicationState(status: Record<string, unknown>): void {
+    const policy = this.policy();
+    // Let a newer drifted policy be reviewed when its saved publication belongs to the old one.
+    if (isOlderPublication(policy)) {
+      this.changeState.set('disabled');
+      return;
+    }
+    if (status['status'] === 'disabled') {
+      this.changeState.set('disabled');
+      return;
+    }
+    if (status['status'] === 'ready') {
+      this.changeState.set('confirmed');
+      return;
+    }
+    const reference = status['changeRef'];
+    if (typeof reference !== 'string' || !publicationIdentifier.test(reference)) {
+      this.changeState.set('failed');
+      return;
+    }
+    if (status['status'] === 'applying' || status['status'] === 'unknown') {
+      this.publicationCommandId = reference;
+      this.changeRef.set(reference);
+      storePublication(this.serverId(), reference);
+      if (status['status'] === 'unknown') {
+        this.changeState.set('unknown-publication');
+      } else {
+        this.changeState.set('applying');
+      }
+      return;
+    }
+    this.changeState.set('failed');
   }
 
   private toolsUrl(): string {
@@ -214,6 +437,10 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     this.request.abort();
     this.row.set(undefined);
     this.policy.set(undefined);
+    this.changeState.set('loading');
+    this.changeRef.set('');
+    this.publicationCommandId = '';
+    removeStoredPublication(this.serverId());
     this.loadedAt.set('');
     this.toolsReadState.set('loading');
     this.refreshing.set(false);
@@ -231,6 +458,56 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     if (!this.refreshing()) return;
     requestAnimationFrame(focusHeaderRefresh);
   }
+}
+
+const publicationStoragePrefix = 'integration-publication:';
+const publicationIdentifier = /^[\w-]{1,200}$/u;
+
+function publicationStorageKey(serverId: string): string {
+  return publicationStoragePrefix + serverId;
+}
+
+function readStoredPublication(serverId: string): string {
+  try {
+    const stored = sessionStorage.getItem(publicationStorageKey(serverId));
+    if (stored && publicationIdentifier.test(stored)) return stored;
+    if (stored !== null) removeStoredPublication(serverId);
+  } catch {
+    // Keep the page usable when browser storage is blocked.
+  }
+  return '';
+}
+
+function storePublication(serverId: string, commandId: string): void {
+  try {
+    sessionStorage.setItem(publicationStorageKey(serverId), commandId);
+  } catch {
+    // Keep the reference in memory while this page is open.
+  }
+}
+
+function removeStoredPublication(serverId: string): void {
+  try {
+    sessionStorage.removeItem(publicationStorageKey(serverId));
+  } catch {
+    // The page still clears its in-memory reference.
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isOlderPublication(policy: ToolPolicy | undefined): boolean {
+  if (!policy?.driftHeld || !policy.publication) return false;
+  return policy.publication.reviewRevision < policy.policyRevision;
+}
+
+function savedSequence(value: unknown): number | null {
+  if (!isRecord(value) || value['status'] !== 'appended') return null;
+  const sequence = value['sequence'];
+  return typeof sequence === 'number' && Number.isSafeInteger(sequence) && sequence > 0
+    ? sequence : null;
 }
 
 function focusAccessHeading(): void {
