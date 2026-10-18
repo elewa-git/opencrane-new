@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, model grants, live updates and spending stop notices; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests, model grants, live updates, spending stop notices and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks gateway settings, public tool addresses, startup, member and child invitations, indexed departures, final tool and memory sends, spending stops for queued messages, renewals and switch-on retries, memory setup and loaded fact links, shared reference folds, later access changes through saving, tool reviews, hosted images, publication requests and status, turn previews, saved references and closes| libs["libs/*<br/>shared code"]
   server -->|records reviewed child requests, final answers and interim updates, child creation and first inputs, authenticated instance observations and stops, owner and admin stops, control intent, personal and shared memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
@@ -85,7 +85,9 @@ admins read and change grants for people, groups and assistants.
 
 The chat connection notifies authorised readers when a spending Stop is saved for
 an original request they can see. A status read supplies the saved reason and work
-state, including after reconnect. The notice carries no spending amounts.
+state, including after reconnect. The notice carries no spending amounts. If loading
+an update takes more than ten seconds, the connection closes so the client can
+reconnect and read the saved status.
 
 The bridge sends a saved spending Stop before files, new work or approval replies
 for that turn. It checks for new Stops after waiting for a connection or preparing

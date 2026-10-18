@@ -3124,14 +3124,20 @@ It checks the original human message's visibility before sending either frame.
 The notification contains only the conversation and original turn references,
 position and projection generation. GET remains the authoritative stop reader.
 The existing access poll checks membership during slow row loading and again
-before delivery. New message-position reads run before that final access check.
+before delivery. Each page's content reads share a ten-second limit, including
+the initial position read and the original human message lookup. Expiry closes
+the socket with code 1013 so the client can recover through GET. Late query
+results send no frames. These reads finish before the final access check starts.
 No bridge delivery, authority helper or business event changes here.
 
 `test/budget-stop-socket.test.ts` uses real NATS, PostgreSQL, OpenFGA, sockets and
 a recording gateway upstream. It checks requester/participant delivery, hidden
 history, removal during loading, slow reads, unrelated activity, reconnect,
-duplicate handler delivery, projection rebuild and unavailable data. GET and
-replay leave the event log unchanged and send no upstream requests.
+duplicate handler delivery, projection rebuild and unavailable data. It also holds
+the original-turn lookup past ten seconds and checks that no late frames arrive.
+Further tests check non-human authors, missing turn ids, unnecessary lookups
+and invalid outbound frames. GET and replay leave the event log unchanged and
+send no upstream requests.
 The protocol contract is in [the shared library](../../libs/protocol/README.robot.md#saved-budget-stop-notifications).
 Browser handling, call-status references and fresh-install qualification are NOT RUN
 in this part. In particular, late browser callbacks after revocation still need

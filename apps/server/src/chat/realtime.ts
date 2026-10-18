@@ -119,30 +119,55 @@ async function drain(state: Subscription) {
   const mode = await pollAccess(state);
   if (!mode || state.running || state.socket.readyState !== state.socket.OPEN) return;
   state.running = true;
+  let position: Awaited<ReturnType<typeof conversationPosition>> | undefined;
   try {
-    const position = await conversationPosition(state.options, state.conversationId, mode);
-    if (state.ready && state.mode === mode && state.position === position.position &&
-        state.generation === position.generation &&
-        state.computerPosition === position.computerPosition) {
-      return;
-    }
     while (state.socket.readyState === state.socket.OPEN) {
       const version = state.accessVersion;
-      const result = await chatRows(state.options, state.conversationId, mode, state.position,
-        state.joinPosition);
-      const stops = await visibleBudgetStops(state, result.rows);
+      const content = await loadContent(state, mode, position);
+      if (!content) return;
+      position = content.position;
       const confirmed = await pollAccess(state);
       if (!confirmed || version !== state.accessVersion) return;
       if (state.socket.readyState !== state.socket.OPEN) return;
       state.mode = mode;
-      state.computerPosition = position.computerPosition;
-      sendRows(state, result, stops);
-      if (result.rows.length < 100) return;
+      state.computerPosition = content.position.computerPosition;
+      sendRows(state, content.result, content.stops);
+      if (content.result.rows.length < 100) return;
     }
   } catch {
     state.socket.close(1013);
   } finally {
     state.running = false;
+  }
+}
+
+async function loadContent(state: Subscription, mode: Mode,
+  previousPosition: Awaited<ReturnType<typeof conversationPosition>> | undefined) {
+  const expired = Promise.withResolvers<never>();
+  function expire() {
+    expired.reject(new Error('Chat history unavailable'));
+  }
+  // Bound all content reads together, separately from the short access checks.
+  const timer = setTimeout(expire, 10_000);
+  try {
+    return await Promise.race([readContent(), expired.promise]);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  async function readContent() {
+    const position = previousPosition ??
+      await conversationPosition(state.options, state.conversationId, mode);
+    if (!previousPosition && state.ready && state.mode === mode &&
+        state.position === position.position &&
+        state.generation === position.generation &&
+        state.computerPosition === position.computerPosition) {
+      return;
+    }
+    const result = await chatRows(state.options, state.conversationId, mode, state.position,
+      state.joinPosition);
+    const stops = await visibleBudgetStops(state, result.rows);
+    return { position, result, stops };
   }
 }
 
