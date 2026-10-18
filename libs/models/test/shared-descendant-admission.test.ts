@@ -4,6 +4,7 @@ import { tokenVerifier } from '@opencrane/auth';
 import { createEventStore } from '@opencrane/event-store';
 import { admitDescendant, descendantId, history, readDescendantAgreement } from '../src/index.ts';
 import { fixture } from './fixture.ts';
+import { saveNativeAllowance } from './native-allowance.ts';
 
 type Context = Awaited<ReturnType<typeof setup>>;
 const scopes = { models: ['gpt-6.1-sol'], tools: [], resources: [], operations: [],
@@ -33,6 +34,7 @@ async function setup(rootPatch: Record<string, unknown> = {},
   await context.append('conversation-child', 'conversation.created', chat);
   const start = { ...root, ...rootPatch };
   await context.append('computer-assistant', 'computer.turn_started', start);
+  await saveNativeAllowance(context, start);
   return context;
 }
 function child(name: string, parent?: ReturnType<typeof childBinding>) {

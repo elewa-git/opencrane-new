@@ -5,9 +5,9 @@ import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
 import { budgetCallDispatchAdmittedDataSchema,
   effectResolvedDataSchema, effectUncertainDataSchema,
-  effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
+  effectObservedDataSchema, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
-import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budgetStopMessage,
+import { costCents, data, emptyBudget, models, budgetStopId,
   exceededReasons, observedPayload, checkedManagedReservation,
   type BudgetState, type ModelCall, type ModelUsage } from './state.ts';
 
@@ -16,32 +16,15 @@ import { hasCallEvidence, retryReservation, type CallRetry, wasAdmitted, checkDi
   checkRootDispatch, checkRootGrant, checkRootReservation, setRootAllowance,
   stopRootAtCeiling, stopRootOnOverrun } from './root-budget.ts';
 import { readRootStopEvidence, saveRootStop, type RootStopReason } from './root-stop-evidence.ts';
+import { checkBudget as checkBudgetRefusal, recordRefusedWork, requireBudget } from './budget-refusal.ts';
+import { envelope, migrateBudgetDefault } from './budget-migration.ts';
+export { BudgetRefused } from './budget-refusal.ts';
+export { envelope, migrateBudgetDefault } from './budget-migration.ts';
 export { history } from './event-history.ts';
 
 // Keep a hold for three minutes so usage reports have time to arrive.
 const SETTLE_TIMEOUT_MS = 180_000;
 
-export function envelope(silo: string, subject: string, type: string, payload: unknown, id: string = randomUUID(), now = new Date()): EventEnvelope {
-  const parsed = parseEventByType({ id, commandId: id, type, subject, silo, data: payload,
-    source: 'models', time: now.toISOString(), principal: { kind: 'system', id: 'models' } });
-  if (!parsed.success) throw new Error('Invalid model event');
-  return parsed.event;
-}
-export class BudgetRefused extends Error {}
-/** Run with budget writers stopped or under the leadership lease; each migration appends once. */
-export async function migrateBudgetDefault(store: EventStore, silo: string, defaultPayingGroupId: string) {
-  z.string().min(1).parse(defaultPayingGroupId);
-  const rows = await history(store, `budget-${silo}`, silo);
-  if (!rows.length) return; // Fresh installations are seeded by the actor.
-  const state = emptyBudget();
-  for (const row of rows) applyBudget(state, row.event, row.sequence);
-  if (state.defaultPayingGroupId) return;
-  const event = envelope(silo, `budget-${silo}`, 'budget.ceiling_set', { scope: 'global',
-    dailyCeilingCents: state.dailyCeilingCents, ceilingCents: state.ceilingCents,
-    defaultPayingGroupId, setBy: 'installation' });
-  const result = await store.append({ event, expectedSequence: rows.at(-1)!.sequence });
-  if (result.status !== 'appended') throw new Error('Budget default migration append failed; retry with writers stopped');
-}
 export class BudgetActor {
   readonly state = emptyBudget();
   private sequence = 0;
@@ -147,7 +130,8 @@ export class BudgetActor {
     return this.serial(save);
   }
   reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>, admittedAt?: number,
-    rootId?: string, retry?: CallRetry) {
+    rootId?: string, retry?: CallRetry,
+    rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>) {
     return this.serial(async () => {
       const saved = await retryReservation(this.state, call, amountCents, rootId, retry,
         this.hasDispatchEvidence.bind(this), fresh);
@@ -160,13 +144,13 @@ export class BudgetActor {
       if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
       if (!call.payingGroupId) throw new Error('Paying group unavailable');
       const root = await checkRootReservation(this.state, call, rootId, amountCents,
-        this.append.bind(this));
+        this.append.bind(this), rootTurn, fresh);
       if (root) admittedAt = root.position;
       const stopId = budgetStopId(this.state, call, this.now(), admittedAt);
       if (stopId !== undefined) {
-        await this.recordRefusedWork(call, stopId, fresh);
+        await recordRefusedWork(this.state, call, stopId, fresh, this.append.bind(this));
         await stopRootAtCeiling(this.state, root, stopId, this.append.bind(this));
-        this.requireBudget(call, admittedAt);
+        requireBudget(this.state, call, this.now(), admittedAt);
       }
       const reasons = exceededReasons(this.state, call, this.now(), amountCents);
       if (reasons.length) {
@@ -176,7 +160,7 @@ export class BudgetActor {
         await this.append('budget.exhausted', exhaustion);
         const stopId = budgetStopId(this.state, call, this.now(), admittedAt)!;
         await stopRootAtCeiling(this.state, root, stopId, this.append.bind(this));
-        this.requireBudget(call);
+        requireBudget(this.state, call, this.now());
       }
       await fresh?.();
       const id = randomUUID();
@@ -186,36 +170,9 @@ export class BudgetActor {
       return id;
     });
   }
-  private async recordRefusedWork(call: ModelCall, stopId: string, fresh?: () => Promise<void>) {
-    function matchesWork(work: BudgetState['stoppedWork'][number]) {
-      return work.conversationId === call.conversationId && work.turnId === call.turnId;
-    }
-    if (this.state.stoppedWork.some(matchesWork)) {
-      return;
-    }
-    const work = { conversationId: call.conversationId, turnId: call.turnId };
-    const refusal = { stopId, work };
-    // Save the refused turn before replying so a later limit change cannot reopen it.
-    await fresh?.();
-    await this.append('budget.exhausted', refusal);
-  }
-  private requireBudget(call: ModelCall, admittedAt?: number) {
-    const stopId = budgetStopId(this.state, call, this.now(), admittedAt);
-    if (stopId !== undefined) {
-      const message = budgetStopMessage(this.state, call, stopId);
-      throw new BudgetRefused(message);
-    }
-  }
   checkBudget(call: ModelCall, fresh: () => Promise<void>, admittedAt: number, rootId?: string) {
-    const check = async () => {
-      const position = await checkRootGrant(this.state, call, rootId, this.now(), fresh,
-        this.append.bind(this), admittedAt);
-      const stopId = budgetStopId(this.state, call, this.now(), position);
-      if (stopId !== undefined) {
-        await this.recordRefusedWork(call, stopId, fresh);
-        this.requireBudget(call, position);
-      }
-    };
+    const check = () => checkBudgetRefusal(this.state, call, fresh, admittedAt,
+      rootId, this.now, this.append.bind(this));
     return this.serial(check);
   }
   admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number) {
@@ -224,14 +181,14 @@ export class BudgetActor {
       const input = checkDispatchBinding(this.state, parsed);
       admittedAt = await checkRootDispatch(this.state, input, this.now(), fresh,
         this.append.bind(this), this.appendNotDispatched.bind(this), admittedAt);
-      this.requireBudget(input.modelCall, admittedAt);
+      requireBudget(this.state, input.modelCall, this.now(), admittedAt);
       const reasons = exceededReasons(this.state, input.modelCall, this.now(), 0);
       if (reasons.length) {
         const work = { conversationId: input.modelCall.conversationId,
           turnId: input.modelCall.turnId };
         await fresh();
         await this.append('budget.exhausted', { reasons, work });
-        this.requireBudget(input.modelCall, admittedAt);
+        requireBudget(this.state, input.modelCall, this.now(), admittedAt);
       }
       // Recheck access after waiting in the queue, within the original time limit.
       try {

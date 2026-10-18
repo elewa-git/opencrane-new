@@ -7,6 +7,8 @@ import { admissions, descendantAccess, readDescendantAgreement, requireParent, r
 import { decisionActivity } from './decision-activity.ts';
 import { requireCurrentComputer, requireTurnDelegation } from './turn-binding-check.ts';
 import type { parseTurnToken } from './decision-turn-token.ts';
+import type { BudgetActor } from './actor.ts';
+import { priceTableId } from './state.ts';
 
 type Computer = { assistant: string; computer: string; generation: number };
 type SignedTurn = ReturnType<typeof parseTurnToken>;
@@ -44,9 +46,19 @@ function requireClaims(computer: Computer, turn: SignedTurn, binding: Descendant
 /** Check saved identity, root activity and current access before refusing native calls. */
 export async function checkNativeCall(store: EventStore, access: Binding, computer: Computer,
   turn: SignedTurn, computerSequence: number, started: number, deadline: number): Promise<void> {
-  const silo = access.silo;
   requireTurnDelegation(turn);
   if (turn.task !== 'native_descendant') return;
+  await prepareNativeCall(store, access, computer, turn, computerSequence, started, deadline);
+  throw new NativeDelegationDisabled();
+}
+
+async function prepareNativeCall(store: EventStore, access: Binding, computer: Computer,
+  turn: SignedTurn, computerSequence: number, started: number, deadline: number) {
+  requireTurnDelegation(turn);
+  if (turn.task !== 'native_descendant') {
+    throw new Error('Descendant claim refused');
+  }
+  const silo = access.silo;
   const delegationId = turn.delegation.at(-1)!;
   const agreement = await readDescendantAgreement(store, silo, computer.assistant,
     delegationId, deadline);
@@ -80,6 +92,25 @@ export async function checkNativeCall(store: EventStore, access: Binding, comput
     binding.conversationId, binding.rootTurnId, deadline);
   requireCurrentComputer(activity.computer.lifecycle, computerSequence);
   requireRootActivity(activity, binding, summary.computer.lifecycle);
-  await descendantAccess(store, access, binding, activity, deadline, started);
-  throw new NativeDelegationDisabled();
+  const fresh = await descendantAccess(store, access, binding, activity, deadline, started);
+  return { binding, fresh };
+}
+
+/** Hold a server-computed call bound without issuing a token or permission to send. */
+export async function reserveNativeCall(actor: BudgetActor, store: EventStore, access: Binding,
+  computer: Computer, turn: SignedTurn, computerSequence: number, started: number,
+  deadline: number, amountCents: number) {
+  if (actor.silo !== access.silo) {
+    throw new Error('Descendant claim refused');
+  }
+  const { binding, fresh } = await prepareNativeCall(store, access, computer, turn,
+    computerSequence, started, deadline);
+  const call = { model: binding.model!, priceTableId, providerId: binding.providerId,
+    bindingSequence: binding.bindingSequence, computerId: binding.computerId,
+    generation: binding.generation, assistantId: binding.assistantId,
+    requesterId: binding.requesterId, conversationId: binding.conversationId,
+    turnId: binding.turnId, threadId: binding.threadId, payingGroupId: binding.payingGroupId,
+    contextDigest: binding.delegationId };
+  const rootTurn = { turnId: binding.rootTurnId, threadId: binding.rootThreadId };
+  return actor.reserve(call, amountCents, fresh, undefined, binding.rootId, undefined, rootTurn);
 }

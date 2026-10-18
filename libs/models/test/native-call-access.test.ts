@@ -6,6 +6,7 @@ import { admitDescendant, descendantId, history } from '../src/index.ts';
 import { checkNativeCall } from '../src/native-call-check.ts';
 import { parseTurnToken } from '../src/decision-turn-token.ts';
 import { fixture } from './fixture.ts';
+import { saveNativeAllowance } from './native-allowance.ts';
 
 type Context = Awaited<ReturnType<typeof fixture>>;
 const disabled = 'Native delegation is disabled';
@@ -37,6 +38,7 @@ async function admit(context: Context, binding: ReturnType<typeof child>) {
 }
 async function admitPair(context: Context, start: typeof root) {
   await context.append('computer-assistant', 'computer.turn_started', start);
+  await saveNativeAllowance(context, start);
   const first = child(start, 'first');
   const second = child(start, 'second', first);
   await admit(context, first);
