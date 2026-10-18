@@ -508,6 +508,14 @@ stays with its permit while another hold is open. Access loss clears budgets, ef
 references and the open drawer. The browser check captures 1280px and 390px screens and
 checks layout at 320px.
 
+A spending POST returning 422 with exactly `status: refused` and
+`reason: spending_choice_unavailable` keeps the editor enabled and its typed values.
+It shows a fixed correction message beside the editor. The refusal does not refresh
+the budget or replace the draft. Other unconfirmed responses keep the existing Unknown state.
+A 401 or 403 still clears budget and effect data. The spending component tests
+cover correction and access loss; the server Chromium test uses the real HTTP
+route and models process for refusal and a corrected save.
+
 The chat restores approval cards from the authenticated approval endpoint above
 the composer. Cards with a turn id lose both decision actions when that turn has a
 budget stop. A card cancelled by that stop still shows its review and why it cannot

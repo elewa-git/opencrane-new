@@ -2712,4 +2712,17 @@ The existing server budget tests now use real groups and a shared assistant.
 PARTIAL: the bounded scope-choices GET, its strict protocol schemas, named choices,
 paging and optional-cap read states remain the next part of row 3. No earlier
 review defers that work. Personal choices remain unavailable. Fresh-install
-qualification: NOT RUN. No dependency, API field or event type was added.
+qualification: NOT RUN. No dependency or event type was added.
+
+Spending saves also read saved budget history within the separate ten-second limit.
+Only a current saved default of exactly `installation-default` can be reused without
+a team stream. Startup and `migrateBudgetDefault` already record that payer.
+Every other default, including an unknown id already saved in older history, needs
+a real team in this silo. It creates no team and never changes the payer without
+the admin choosing it.
+
+Choice refusals return HTTP 422 with exactly
+`{"status":"refused","reason":"spending_choice_unavailable"}`.
+Caller membership and OpenFGA permissions are checked before this reply. Lost
+Owner/Admin access still returns 403. The reply mapping lives in `budget-scope.ts`;
+`decision.ts` only forwards its status and fixed body.

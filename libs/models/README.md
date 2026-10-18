@@ -25,7 +25,7 @@ flowchart LR
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
+  models -->|checks spending choices, the saved installation payer, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -82,10 +82,14 @@ person and assistant must each allow the same host and port. It saves the decisi
 and checks spending stops before registering a single-use relay. Ordinary startup
 keeps this route off, and command workers still have no network access.
 
-The spending setup checks each chosen group, shared assistant and new default payer
-before saving a spending limit. It refuses personal, inactive or retired assistants.
-A refused choice leaves the saved limit and default payer unchanged. Retrying a saved
-change returns its original receipt.
+The saved installation payer lets an admin change the global spending limit, including
+setting it to zero. It needs no group record. Every other payer needs a group in this
+installation. An unavailable choice returns a correction message; lost admin access
+still refuses access.
+
+Each spending-limit save checks the chosen group, shared assistant and new default payer.
+It refuses personal, inactive or retired assistants. A refused choice leaves the saved limit
+and default payer unchanged. Retrying an already saved change returns its original receipt.
 
 A private relay receipt writer saves safe connection details after both sockets close.
 It keeps a pending record when storage is unavailable and can retry the same record.

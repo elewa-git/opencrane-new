@@ -4,7 +4,7 @@ import {
 } from '@opencrane/protocol';
 import { z } from 'zod';
 
-export const budgetResponseSchema = z.object({ budget: budgetSummarySchema });
+const budgetResponseSchema = z.object({ budget: budgetSummarySchema });
 
 export type ReadResult<T> =
   | { state: 'ready'; value: T }
@@ -64,4 +64,23 @@ function extractEffects(
 ): ReadResult<EffectStatus[]> {
   if (result.state !== 'ready') return result;
   return { state: 'ready', value: result.value.effects };
+}
+
+const spendingChoiceRefusalSchema = z.object({
+  status: z.literal('refused'),
+  reason: z.literal('spending_choice_unavailable'),
+}).strict();
+
+export async function readBudgetSave(response: Response) {
+  if (!response.ok && response.status !== 422) {
+    throw new Error('Budget save was not confirmed');
+  }
+  const raw: unknown = await response.json();
+  if (response.status === 422) {
+    const refusal = spendingChoiceRefusalSchema.safeParse(raw);
+    if (refusal.success) return { state: 'choice_unavailable' as const };
+  }
+  if (!response.ok) throw new Error('Budget save was not confirmed');
+  const result = budgetResponseSchema.parse(raw);
+  return { state: 'confirmed' as const, budget: result.budget };
 }

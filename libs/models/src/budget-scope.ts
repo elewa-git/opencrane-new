@@ -1,9 +1,34 @@
+import type { ServerResponse } from 'node:http';
+import { z } from 'zod';
 import { wireSubject, type EventStore } from '@opencrane/event-store';
 import { assistantCreatedDataSchema, assistantSettingsChangedDataSchema,
   budgetCeilingSetDataSchema, teamCreatedDataSchema } from '@opencrane/events';
 import { budgetCommandSchema } from '@opencrane/protocol';
 import { history } from './event-history.ts';
 import { MemberAccessRefused } from './member-authority.ts';
+
+export class BudgetAccessRefused extends Error {}
+export class BudgetChoiceRefused extends Error {}
+
+function budgetRefusal(error: unknown) {
+  if (error instanceof BudgetChoiceRefused) {
+    return { statusCode: 422,
+      body: { status: 'refused', reason: 'spending_choice_unavailable' } };
+  }
+  let statusCode = 503;
+  if (error instanceof BudgetAccessRefused) {
+    statusCode = 403;
+  } else if (error instanceof z.ZodError) {
+    statusCode = 400;
+  }
+  return { statusCode, body: { status: 'refused' } };
+}
+
+export function respondBudgetRefusal(response: ServerResponse, error: unknown) {
+  const refusal = budgetRefusal(error);
+  response.writeHead(refusal.statusCode);
+  response.end(JSON.stringify(refusal.body));
+}
 
 export async function budgetScope(store: EventStore, silo: string, raw: unknown) {
   const command = budgetCommandSchema.parse(raw);

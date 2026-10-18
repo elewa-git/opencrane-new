@@ -10,8 +10,9 @@ import { admitProviderVerification, runProviderVerification, verifyProviderCapab
   type ProviderVerificationOptions } from './provider-verification.ts';
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
 import { groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
-import { configureBudget, BudgetAccessRefused } from './budget-config.ts';
-import { approvalDecision, type ReviewKeys } from './approvals.ts';
+import { configureBudget } from './budget-config.ts';
+import { respondBudgetRefusal } from './budget-scope.ts';
+import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
@@ -433,7 +434,7 @@ async function internalRoutes(
       const result = await configureBudget(actor, binding, identity, JSON.parse(await readBody(req)), req.headers.authorization);
       res.writeHead(result.status === 'appended' ? 200 : 409); res.end(JSON.stringify(result));
     } catch (error) {
-      res.writeHead(error instanceof BudgetAccessRefused ? 403 : error instanceof z.ZodError ? 400 : 503); res.end('{"status":"refused"}');
+      respondBudgetRefusal(res, error);
     }
     return true;
   }

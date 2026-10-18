@@ -19,7 +19,7 @@ import {
 } from './effect-rules';
 import type { PendingResolution, ResolutionCommand } from './effect-rules';
 import {
-  budgetResponseSchema, readBudget, readEffect, readEffects,
+  readBudgetSave, readBudget, readEffect, readEffects,
 } from './spending-reads';
 import type { ReadResult, SpendingReadState } from './spending-reads';
 import {
@@ -314,10 +314,12 @@ export class SpendingScreen implements OnInit, OnDestroy {
       });
       if (this.accessChanged(response, generation)) return;
       if (this.isStale(generation, controller)) return;
-      if (!response.ok) throw new Error('Budget save was not confirmed');
-      const raw: unknown = await response.json();
+      const result = await readBudgetSave(response);
       if (this.isStale(generation, controller)) return;
-      const result = budgetResponseSchema.parse(raw);
+      if (result.state === 'choice_unavailable') {
+        this.budgetSaveState.set('choice_unavailable');
+        return;
+      }
       this.acceptBudget(result.budget);
       this.budgetLoadedAt.set(new Date().toISOString());
       this.budgetState.set('ready');

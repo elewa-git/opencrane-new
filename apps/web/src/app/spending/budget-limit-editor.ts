@@ -8,7 +8,8 @@ import type { SpendingReadState } from './spending-reads';
 const scopeSchema = z.enum(['global', 'paying_group', 'assistant']);
 
 export type BudgetEditorLoadState = SpendingReadState;
-export type BudgetEditorSaveState = 'idle' | 'applying' | 'confirmed' | 'unknown' | 'needs_input';
+export type BudgetEditorSaveState = 'idle' | 'applying' | 'confirmed' | 'unknown' | 'needs_input'
+  | 'choice_unavailable';
 
 @Component({
   selector: 'oc-budget-limit-editor',

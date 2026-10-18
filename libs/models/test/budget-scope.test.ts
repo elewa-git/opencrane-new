@@ -99,7 +99,7 @@ async function retire() {
   await nats.seed([event]);
 }
 const invalidChoices = ['foreign', 'personal', 'inactive', 'retired', 'unknown-assistant',
-  'unknown-default'] as const;
+  'unknown-default', 'saved-unknown-default'] as const;
 async function refusesInvalidChoice(problem: typeof invalidChoices[number]) {
   if (problem === 'foreign') await seedGroup('shared', 'other');
   if (problem === 'personal') await seedAssistant('personal');
@@ -111,6 +111,9 @@ async function refusesInvalidChoice(problem: typeof invalidChoices[number]) {
   if (problem === 'foreign') choice = { scope: 'paying_group', scopeId: 'shared' };
   if (problem === 'unknown-default') {
     choice = { scope: 'global', defaultPayingGroupId: 'missing' };
+  }
+  if (problem === 'saved-unknown-default') {
+    choice = { scope: 'global', defaultPayingGroupId: 'original' };
   }
   const command = { ...choice, commandId: 'invalid', expectedSequence: before, ceilingCents: 10 };
   await expect(save(command)).rejects.toThrow('Spending choice unavailable');

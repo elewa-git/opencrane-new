@@ -10,6 +10,10 @@
       <oc-shared-state kind="unknown"
       message="Could not confirm the change. Check status before editing again."
       [changeReference]="changeReference()" (action)="checkStatus.emit()" />
+  } @else if (saveState() === 'choice_unavailable') {
+    <oc-shared-state kind="needs_input"
+      message="This spending choice is unavailable. Choose another group or active shared assistant."
+      [showAction]="false" />
   } @else if (saveState() === 'needs_input') {
     <oc-shared-state kind="needs_input"
       message="Enter a valid id and non-negative whole euro cents in the safe integer range."

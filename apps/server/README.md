@@ -14,8 +14,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, dated approvals, model grants, live updates, spending stop notices and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks access, invitations, key recovery, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records child requests, answers, instance and stop reports, control intent, personal and shared memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tool catalogues, spending stops and turn decisions| nats["NATS<br/>event log"]
+  server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
+  server -->|records child requests, answers, instance and stop reports, control intent, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops and turn decisions| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -62,8 +62,10 @@ the same computer continue. This also works for older closes saved with chat
 participation. If a shared computer reports a start after cleanup ended the
 request, the server records a refusal tied to that turn and accepts its failure.
 
-Send spending changes to the models process. It checks that each chosen group and
-shared assistant is still valid. Personal assistants cannot receive a new cap.
+The server sends spending changes to the models process. It checks each chosen
+group and shared assistant before saving. Personal assistants cannot receive a new
+cap. The saved installation payer needs no group record. An unavailable choice
+asks the admin to correct the editor; lost admin access still clears the page.
 
 Closed chats keep displayed output as it stood when the chat closed. Later assistant
 reports, decisions, tool dispatches, child publications and agent or system posts
