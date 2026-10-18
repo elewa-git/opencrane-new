@@ -276,7 +276,9 @@ upstream, including after a configuration reload. They do not qualify a fresh in
 Dev stacks read the recorded mode at startup and omit `MODEL_KEY_FILE` after
 switch-on. Fresh setup restarts models and waits for readiness before its journey.
 The [dev-stack receipt](../process/p4-22-managed-dev-stack/receipt.md) records the
-single fresh attempt. Twice-fresh qualification: NOT RUN (PR 5e).
+single-slot fresh attempt: PARTIAL. The provider reached ready, but switch-on returned
+403 because the reachability send without a reservation remains unresolved. No chat
+ran. Twice-fresh qualification: NOT RUN (PR 5e).
 Managed history reads have a ten-second limit before a fresh two-second access check.
 The gateway still waits only two seconds for a decision, so slow cold history may
 refuse a call. Expired history returns a fixed refusal with no money held.

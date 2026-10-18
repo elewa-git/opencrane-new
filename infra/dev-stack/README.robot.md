@@ -647,7 +647,7 @@ It cannot report PASS through the former seeded startup route.
 
 Fresh starts with the dev Owner bootstrap run `provider-setup.ts` after server health
 and before `journey.ts`. A five-minute dev-only session represents the bootstrapped
-Owner, jente@elewa.ke. Setup uses product HTTP routes with the configured Origin:
+Owner, `jente@elewa.ke`. Setup uses product HTTP routes with the configured Origin:
 create OpenAI connection, save random stub credential, check reachability, accept the
 quoted model test, enable `modelForTask('chat_turn')` and `gpt-6-luna`, explicitly
 select the silo default, drain, then switch on. Every write waits for its receipt.
@@ -668,4 +668,6 @@ switch-on it supplies the local stub file; afterwards it supplies only shared cu
 The stack restarts models after setup and waits for readiness. Repeat starts read
 `managedProviderCallsEnabled` before choosing the environment. No paid calls are made.
 The [qualification receipt](../../docs/process/p4-22-managed-dev-stack/receipt.md)
-records the single fresh attempt. Twice-fresh qualification remains NOT RUN for PR 5e.
+records the single-slot qualification attempt: PARTIAL at switch-on (403), with the
+provider ready. The reachability send has no reservation and remains unresolved.
+No chat ran. Twice-fresh qualification remains NOT RUN for PR 5e.

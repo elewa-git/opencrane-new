@@ -47,8 +47,10 @@ flowchart LR
 
 A fresh stack with the development Owner connects the local model provider through the
 product APIs. It saves a private credential, checks the provider, selects the chat models
-and default, then records switch-on. Models restarts with that saved credential before
-any chat check. Later starts read the recorded mode again.
+and default, then asks to switch on. When accepted, models restarts with that saved
+credential before any chat check. A refusal stops startup. The current fresh-install
+check stops at switch-on; the saved reachability send still needs completion.
+Later starts read the recorded mode again.
 
 The models process gets a separate control port for checking loaded configuration.
 The stack never forwards it. The approval journey is skipped while publication
