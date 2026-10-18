@@ -379,3 +379,46 @@ this receipt or the captures.
 | Knip | PASS | The command exited 0 with two configuration hints. |
 | Changelog check | PASS | The branch fragment passed. |
 | Full lint | PASS | The command completed, including package licences. ESLint reported 20 existing warnings and no errors. |
+
+## 18 October 2026: rebase onto main
+
+This check rebased the eight package chat commits onto `origin/main` at
+`e3467aa2c`. Git skipped five older licence and package commits because their
+changes were already on main through the earlier package merge. The completed
+rebase has no unresolved files. The diff from main contains the chat runtime,
+key files, private computer network, package checks, documentation and captures.
+The server and dev-stack README diagrams keep the newer main text and the chat
+key and gateway details. Both diagrams still have at most eight nodes.
+
+| Source check | Result | Observation |
+| --- | --- | --- |
+| Full lint | PASS | `nice -n 10 npm run lint` completed, including the exact image licence checks. |
+| Typecheck | PASS | Every workspace and the package TypeScript project completed. |
+| Event catalogue | PASS | All 145 event types agree. |
+| Knip and changelog | PASS | Both separate commands exited 0. |
+| Package and dev-stack Node tests | PASS | Two runs passed all 47 cases each, including the preflight checks. |
+| Package licence tests | PASS | Two runs passed all 14 cases each. |
+| Wrapping-key tests | PASS | Two runs passed both cases each with `PG_TEST_URL` set. |
+| Full root suite | PARTIAL | A two-worker run reported two gateway test failures, then was stopped after 45 minutes without a full summary. It had a throwaway PostgreSQL database through `PG_TEST_URL`; the container and volume were removed. |
+| Isolated gateway cases | PASS | The two reported failures passed alone: five matching cases passed in 21 seconds. |
+
+The partial root log is `/tmp/p5-1c-root-suite.log`. It reports a current-claim
+readiness timeout and an Astra daily-cap case. Neither is counted as a passing
+full-suite run. That root run used main before its later chat cleanup commit.
+The focused Node, licence and wrapping-key tests passed twice again after the
+final rebase. The passing focused logs are under `/tmp/p5-1c-final-`.
+
+### Fresh package attempt
+
+I claimed secondary slot 1 and created its package namespace. The secret setup
+stopped before creating runtime Secrets because the configured Zitadel management
+token file was absent. No Helm release or application Pod was started. The
+namespace and slot were then removed through the package cleanup commands.
+
+| Live check | Result | Observation |
+| --- | --- | --- |
+| Slot ownership | PASS | `claim.sh` selected slot 1, and package preparation created only its owned namespace. |
+| Private secret preparation | FAIL | Development sign-in setup could not find its configured management token file. No runtime Secret was created. |
+| Fresh Helm install | NOT RUN | Secret preparation stopped before `package-up`. |
+| Browser chat at 1280px and 390px | NOT RUN | No package was installed, so the existing captures were not replaced. |
+| Cleanup and owner isolation | PASS | Slot 1 reported free, its package namespace was absent, and the owner namespace UID and existing owner container IDs matched the earlier snapshot. |
