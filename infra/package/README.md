@@ -34,11 +34,15 @@ flowchart LR
 ## Processes it handles
 
 1. **A worktree claims a spare slot.** The claim records its owner. Preparing the
-   package creates a separate namespace in the local cluster.
+   package creates a separate namespace in the local cluster. Preparation refuses
+   while that slot's Compose stack is running.
 2. **The package starts.** The website and server run in separate Pods. NATS,
    PostgreSQL and OpenFGA run in the same private namespace.
 3. **A developer checks the website.** A loopback-only port forward makes the
    private website available to a browser on this machine.
+4. **A developer stops the package.** Cleanup checks the saved namespace and Helm
+   release before removing them. A stopped launcher can be recovered after Helm
+   creates the release.
 
 ## How to run or test it
 

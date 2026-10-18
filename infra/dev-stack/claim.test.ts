@@ -346,15 +346,11 @@ async function composeDownSurvivesUnavailableKubernetes() {
     const owner = `worktree=${process.cwd()}\nstartedAt=${new Date().toISOString()}\n`;
     await writeFile(`${fixture.slotDirectory}/stack-owner`, owner);
     await writeFile(`${fixture.slotDirectory}/settings.env`, '');
-    const dockerScript = `#!/bin/sh
-case " $* " in
-  *" compose "*" down "*) printf '%s\\n' down >> "$TEST_ACTIONS" ;;
-esac
-`;
+    const actions = `${fixture.home}/actions`;
+    const dockerScript = `#!/bin/sh\nprintf '%s\\n' "$*" >> '${actions}'\n`;
     await writeFile(`${fixture.home}/bin/docker`, dockerScript, { mode: 0o755 });
     await writeFile(`${fixture.home}/bin/kubectl`, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-    const actions = `${fixture.home}/actions`;
-    const env = { ...fixture.env, TEST_ACTIONS: actions };
+    const env = fixture.env;
     await assert.rejects(exec('infra/dev-stack/run.sh', ['down', '--id', '1'], { env }));
     assert.match(await readFile(actions, 'utf8'), /down/u);
   } finally {
@@ -363,6 +359,36 @@ esac
 }
 test('secondary down stops Compose when Kubernetes is unavailable',
   composeDownSurvivesUnavailableKubernetes);
+
+async function packageRecordSurvivesUnavailableKubernetes() {
+  const fixture = await createClaimFixture();
+  try {
+    const owner = `worktree=${process.cwd()}\nstartedAt=${new Date().toISOString()}\n`;
+    await writeFile(`${fixture.slotDirectory}/stack-owner`, owner);
+    await writeFile(`${fixture.slotDirectory}/settings.env`, '');
+    const packageOwner = {
+      worktree: process.cwd(), slot: '1', context: 'k3d-ocn',
+      namespace: 'opencrane-package-1', namespaceUid: 'owned-package',
+      release: 'opencrane-package-1', heartbeatAt: new Date().toISOString(),
+    };
+    const record = `${fixture.slotDirectory}/package-owner.json`;
+    await writeFile(record, JSON.stringify(packageOwner));
+    const actions = `${fixture.home}/actions`;
+    const dockerScript = `#!/bin/sh\nprintf '%s\\n' "$*" >> '${actions}'\n`;
+    await writeFile(`${fixture.home}/bin/docker`, dockerScript, { mode: 0o755 });
+    await writeFile(`${fixture.home}/bin/kubectl`, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    await assert.rejects(
+      exec('infra/dev-stack/run.sh', ['down', '--id', '1'], { env: fixture.env }),
+      { stderr: /package was not removed/u },
+    );
+    assert.match(await readFile(actions, 'utf8'), /down/u);
+    assert.ok((await stat(record)).isFile());
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+test('secondary down keeps the package record when Kubernetes is unavailable',
+  packageRecordSurvivesUnavailableKubernetes);
 
 async function ownedPackageCleanupLeavesOtherSlot() {
   const fixture = await createClaimFixture();

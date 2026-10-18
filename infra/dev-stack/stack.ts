@@ -564,17 +564,27 @@ try {
     process.exit(0);
   }
   if (action?.startsWith('package-')) {
-    if (action === 'package-prepare') await preparePackage();
+    if (action === 'package-prepare') {
+      if (await stackProcessIsRunning()) {
+        throw new Error('A Compose stack already uses this secondary slot');
+      }
+      await preparePackage();
+    }
     else if (action === 'package-up' && flag) await installPackage(flag);
     else if (action === 'package-down') await removePackage();
     else if (action === 'package-check') await verifyPackageOwner();
     else throw new Error('Unknown package action');
     process.exit(0);
   }
+  let packageRemovalFailed = false;
   if (action === 'down' && secondary && directoryPresent) {
     const owner = await readStackOwner();
     if (owner?.worktree !== root) throw new Error('This worktree does not own the slot');
-    await removePackage();
+    try {
+      await removePackage(false);
+    } catch {
+      packageRemovalFailed = true;
+    }
   }
   if (action === 'up') {
     if (secondary && await packagedSlotIsBusy()) {
@@ -599,7 +609,13 @@ try {
       await stop();
       if (secondary) {
         if (await exists(`${directory}/settings.env`)) await compose('down', '--volumes', '--remove-orphans');
+        if (packageRemovalFailed) {
+          throw new Error('Compose stopped, but the package was not removed; check ownership and Kubernetes access');
+        }
         await removeComputers();
+        if (await packagedSlotIsBusy()) {
+          throw new Error('Package namespace still uses this secondary slot');
+        }
         await rm(directory, { recursive: true });
       }
       break;
@@ -618,7 +634,15 @@ try {
     }
     console.error(message);
   } else {
-    console.error(prepared ? `Dev stack failed; inspect private logs in ${directory}` : 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree');
+    let message: string;
+    if (error instanceof Error && error.message.startsWith('Compose stopped, but')) {
+      message = error.message;
+    } else if (prepared) {
+      message = `Dev stack failed; inspect private logs in ${directory}`;
+    } else {
+      message = 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree';
+    }
+    console.error(message);
   }
   process.exitCode = 1;
 }

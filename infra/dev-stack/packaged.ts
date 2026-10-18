@@ -40,6 +40,7 @@ type PackageOwner = {
   release: string;
   heartbeatAt: string;
   releaseSecretUid?: string;
+  installStartedAt?: string;
 };
 type PackageValues = { secrets: Record<string, string> };
 type PackageReview = {
@@ -219,11 +220,16 @@ async function checkLiveExposure() {
   }
 }
 
-async function releaseSecretUid() {
+async function releaseSecret() {
   const secret = await kubectl(['-n', namespace, 'get', 'secret',
     `sh.helm.release.v1.${release}.v1`, '--ignore-not-found', '-o', 'json']);
   if (!secret) return undefined;
-  return JSON.parse(secret).metadata.uid as string;
+  return JSON.parse(secret) as { metadata: { uid: string; creationTimestamp?: string } };
+}
+
+async function releaseSecretUid() {
+  const secret = await releaseSecret();
+  return secret?.metadata.uid;
 }
 
 export async function installPackage(valuesFile: string) {
@@ -232,12 +238,16 @@ export async function installPackage(valuesFile: string) {
   await checkNamedSecrets(values, review);
   await checkRenderedPackage(valuesFile, review);
   if (await releaseSecretUid()) throw new Error('A Helm release already uses this namespace');
+  // Save the install attempt before Helm can create its release Secret.
+  owner.installStartedAt = new Date().toISOString();
+  await saveOwner(owner);
   try {
     await command('helm', ['install', release, 'infra/package/chart',
       '--kube-context', context, '--namespace', namespace, '--values', valuesFile,
       '--wait', '--timeout', '5m'], 360_000);
   } catch (error) {
     owner.releaseSecretUid = await releaseSecretUid();
+    if (!owner.releaseSecretUid) delete owner.installStartedAt;
     await saveOwner(owner);
     throw error;
   }
@@ -247,15 +257,18 @@ export async function installPackage(valuesFile: string) {
   await checkLiveExposure();
 }
 
-export async function removePackage() {
+export async function removePackage(checkUnrecordedNamespace = true) {
   const owner = await readOwner();
-  if (owner) await requireOwner();
-  if (owner && !await getNamespace()) {
-    await rm(recordFile, { force: true });
+  if (!owner) {
+    // Ordinary Compose teardown must not depend on an unrelated Kubernetes check.
+    if (checkUnrecordedNamespace && await getNamespace()) {
+      throw new Error('Unrecorded package namespace is busy');
+    }
     return;
   }
-  if (!owner) {
-    if (await getNamespace()) throw new Error('Unrecorded package namespace is busy');
+  await requireOwner();
+  if (!await getNamespace()) {
+    await rm(recordFile, { force: true });
     return;
   }
   await verifyPackageOwner();
@@ -265,11 +278,21 @@ export async function removePackage() {
   for (const installed of releases) {
     if (installed.name !== release) throw new Error('Another Helm release uses this namespace');
   }
-  if (releases.length > 0 && !owner.releaseSecretUid) {
-    throw new Error('Helm release ownership was not recorded');
+  const secret = await releaseSecret();
+  if ((releases.length > 0 || secret) && !owner.releaseSecretUid) {
+    const secretCreatedAt = Date.parse(secret?.metadata.creationTimestamp ?? '');
+    const installStartedAt = Date.parse(owner.installStartedAt ?? '');
+    if (!secret?.metadata.uid || !Number.isFinite(installStartedAt) ||
+        !Number.isFinite(secretCreatedAt) ||
+        Math.floor(secretCreatedAt / 1000) < Math.floor(installStartedAt / 1000)) {
+      throw new Error('Helm release ownership was not recorded');
+    }
+    // Keep the recovered UID so a later retry checks the same release.
+    owner.releaseSecretUid = secret.metadata.uid;
+    await saveOwner(owner);
   }
   if (owner.releaseSecretUid) {
-    if (await releaseSecretUid() !== owner.releaseSecretUid) {
+    if (secret?.metadata.uid !== owner.releaseSecretUid) {
       throw new Error('Helm release belongs to another install');
     }
   }

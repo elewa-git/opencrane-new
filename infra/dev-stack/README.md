@@ -74,6 +74,9 @@ has ended and no stack processes, containers or package namespace are running.
 Kubernetes errors keep a package slot busy. `status.sh` reports `free`
 for an unused slot and does not create its owner file. `down.sh` also leaves an unused
 slot alone.
+The spare slot runs either the Compose stack or the local Helm package. Package
+preparation refuses a running Compose stack. If Kubernetes is unavailable during
+cleanup, `down.sh` stops Compose and keeps any package owner record for a later retry.
 
 ## How to run or test it
 

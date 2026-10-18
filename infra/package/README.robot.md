@@ -13,6 +13,8 @@ Claim a secondary slot with `infra/dev-stack/claim.sh`. Set `DEV_STACK_ID` to th
 returned id. `infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"` creates
 only `opencrane-package-$DEV_STACK_ID` and records its Kubernetes UID, cluster,
 release name, worktree and heartbeat in the slot's private directory. An operator
+cannot prepare a package while that slot's Compose processes or containers run. The
+slot lock keeps these checks and the following operation together. An operator
 then creates the four named Kubernetes secrets in that namespace from existing
 secret files. Never put values in Helm values, command arguments or receipts.
 
@@ -42,7 +44,13 @@ the PostgreSQL and NATS volumes request 1Gi each.
 Kubernetes errors also keep the slot busy. Cleanup checks the recorded worktree,
 namespace UID, annotations and first Helm release secret UID before uninstalling.
 It deletes only the package namespace in that slot. A failed Helm install can be
-cleaned through `package-down` before releasing the slot.
+cleaned through `package-down` before releasing the slot. The installer saves an
+install start time before calling Helm. If Helm creates its release Secret and the
+launcher stops before saving its UID, cleanup accepts the Secret only in the saved
+namespace and only when its creation time is no earlier than that install attempt.
+Cleanup saves the recovered UID before uninstalling. An unrecorded release with no
+saved install attempt is refused. If Kubernetes is unavailable during secondary
+`down`, Compose stops while the package record stays in place for a retry.
 
 The current chart does not yet provide all workers, object storage, scanner,
 model gateway, computer controller integration or the event-backed owner
