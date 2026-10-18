@@ -4,7 +4,7 @@ import { envelope, history, type BudgetActor } from './actor.ts';
 
 export const toolObservationSchema = z.object({
   id: z.uuid(), toolOutcome: z.enum(['not_dispatched', 'responded', 'outcome_unknown']),
-  evidence: z.enum(['connection_refused', 'response_received', 'transport_uncertain']),
+  evidence: toolDispatchRecordedDataSchema.shape.evidence,
   observedAt: z.iso.datetime(), durationMs: z.int().nonnegative(),
 }).strict();
 

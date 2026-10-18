@@ -1,3 +1,4 @@
+import { recordToolObservation } from './tool-dispatch.ts';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -158,6 +159,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse, body: string) {
+    const startedAt = performance.now();
     const permit = consume(req, body);
     const expectedPath = `/dispatch/mcp/${permit.route.serverId}/${permit.route.connectionId}`;
     if (req.url !== expectedPath) throw new Error('MCP dispatch route refused');
@@ -193,13 +195,26 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireFreshDispatch(req, res, permit);
     }
     await recordStarted(permit, deadline);
-    if (permit.gatewayBinding) {
-      await permit.confirmAccess();
+    try {
+      if (permit.gatewayBinding) {
+        await permit.confirmAccess();
+      }
+      await requirePublishedPositions(permit, admittedPosition, deadline);
+      // Allow this acknowledged generation if a replacement was saved after the last
+      // gateway-position read: that replacement is not live yet. Refuse changes visible
+      // at that read, then check local state and send without another read or a lock.
+      requireCurrentRoute(permit);
+      requireFreshDispatch(req, res, permit);
+    } catch (error) {
+      if (permit.gatewayBinding) {
+        // Close the saved start before replying. No upstream connection has been opened.
+        const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
+          evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
+          durationMs: Math.ceil(performance.now() - startedAt) };
+        await recordToolObservation(actor, observation);
+      }
+      throw error;
     }
-    await requirePublishedPositions(permit, admittedPosition, deadline);
-    // Recheck local state after the last awaited read, then open the connection immediately.
-    requireCurrentRoute(permit);
-    requireFreshDispatch(req, res, permit);
     forward(route, permit, body, res, memoryContext);
   }
 

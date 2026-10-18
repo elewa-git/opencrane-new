@@ -367,7 +367,9 @@ export const toolDispatchRecordedDataSchema = z.object({
   ...toolCallFields, requestId: z.uuid(), logicalRequestId: digestSchema,
   approvalId: id.optional(), startedAt: z.iso.datetime(), durationMs: z.int().nonnegative(),
   outcome: z.enum(['not_dispatched', 'responded', 'outcome_unknown']),
-  evidence: z.enum(['connection_refused', 'response_received', 'transport_uncertain']),
+  evidence: z.enum([
+    'connection_refused', 'dispatch_refused', 'response_received', 'transport_uncertain',
+  ]),
 }).strict();
 
 export const agentToolCallStartedDataSchema = z.object(toolCallFields).strict();
