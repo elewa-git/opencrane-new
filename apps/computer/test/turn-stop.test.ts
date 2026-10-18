@@ -538,3 +538,52 @@ async function cancelsOnlyStoppedTurnWaiters() {
 }
 it('leaves another turn renewal waiting when Stop cancels its own waiter',
   cancelsOnlyStoppedTurnWaiters);
+
+async function closesOldStreamAfterThreadReuse() {
+  const test = await stopFixture();
+  const entered = Promise.withResolvers<void>();
+  const terminalDrop = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const applied = Promise.withResolvers<void>();
+  const grant = test.driver.grant.bind(test.driver);
+  let drops = 0;
+  let finishedDrops = 0;
+  async function heldDrop(...input: Parameters<typeof grant>) {
+    if (input[2] || input[4] !== 'first') return grant(...input);
+    drops++;
+    entered.resolve();
+    if (drops === 2) terminalDrop.resolve();
+    await release.promise;
+    await grant(...input);
+    if (++finishedDrops === 2) applied.resolve();
+  }
+  try {
+    await test.start('first', 'thread-1');
+    const oldModel = test.call('thread-1', 'first', true);
+    const oldUpstream = await test.firstRequest;
+    test.driver.grant = heldDrop;
+    test.stop();
+    await entered.promise;
+    test.finish('thread-1');
+    await terminalDrop.promise;
+    await test.start('next', 'thread-1', 'first');
+    const nextModel = test.call('thread-1', 'first', true);
+    function nextArrived() {
+      const response = test.open.get('thread-1:/v1/responses');
+      if (!response || response === oldUpstream) throw new Error('New request has not arrived');
+      return response;
+    }
+    const nextUpstream = await vi.waitFor(nextArrived);
+    release.resolve();
+    await applied.promise;
+    await expect(withinStopDeadline(oldModel)).resolves.toBe('aborted');
+    expect(nextUpstream.destroyed).toBe(false);
+    nextUpstream.end('{}');
+    expect(await nextModel).toBe('200: {}');
+  } finally {
+    release.resolve();
+    await test.close();
+  }
+}
+it('closes an old turn model stream after the next turn has reused its thread',
+  closesOldStreamAfterThreadReuse);
