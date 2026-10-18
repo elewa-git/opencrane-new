@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { proxy } from '../src/proxy.ts';
 import { proxyControl } from '../src/proxy-control.ts';
 import { fixture } from './bridge-gate-fixture.ts';
@@ -400,3 +400,65 @@ async function refusesRenewalBeforeItsReplyReturns() {
 }
 it('never makes a stopped renewal usable while its control reply is held',
   refusesRenewalBeforeItsReplyReturns);
+
+async function keepsNextTurnAccessWhenOldDropArrives() {
+  const test = await stopFixture();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const applied = Promise.withResolvers<void>();
+  const grant = test.driver.grant.bind(test.driver);
+  let holdFirstDrop = true;
+  async function heldDrop(...input: Parameters<typeof grant>) {
+    if (!input[2] && holdFirstDrop) {
+      holdFirstDrop = false;
+      entered.resolve();
+      await release.promise;
+      await grant(...input);
+      applied.resolve();
+      return;
+    }
+    await grant(...input);
+  }
+  try {
+    await test.start('first', 'thread-1');
+    test.driver.grant = heldDrop;
+    test.stop();
+    await entered.promise;
+    test.finish('thread-1');
+    await withinStopDeadline(test.revoked);
+    expect(await test.call('thread-1', 'first', true)).toContain('403:');
+    expect(await test.call('thread-1', 'first')).toContain('Unknown tool list');
+    expect(test.received).toEqual([]);
+    await test.start('next', 'thread-1', 'first');
+    const model = test.call('thread-1', 'first', true);
+    const upstream = await test.firstRequest;
+    const tool = test.call('thread-1', 'first');
+    function toolArrived() {
+      const response = test.open.get('thread-1:/mcp/server/installed');
+      if (!response) throw new Error('Tool request has not arrived');
+      return response;
+    }
+    const toolUpstream = await vi.waitFor(toolArrived);
+    expect(toolUpstream).toBeDefined();
+    release.resolve();
+    await applied.promise;
+    upstream.end('{}');
+    toolUpstream!.end('{}');
+    expect(await model).toBe('200: {}');
+    expect(await tool).toBe('200: {}');
+    function finishRequest() {
+      const response = test.open.get('thread-1:/v1/responses');
+      if (test.received.length < 3 || !response) throw new Error('Request has not arrived');
+      response.end('{}');
+    }
+    const nextModel = test.call('thread-1', 'first', true);
+    await vi.waitFor(finishRequest);
+    expect(await nextModel).toBe('200: {}');
+    test.finish('thread-1');
+  } finally {
+    release.resolve();
+    await test.close();
+  }
+}
+it('keeps the next turn streams and pass when an old Stop drop arrives',
+  keepsNextTurnAccessWhenOldDropArrives);
