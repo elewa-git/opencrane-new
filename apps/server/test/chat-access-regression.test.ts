@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { getEventDefinition, toolApprovalRequestedDataSchema } from '@opencrane/events';
 // Regression probes for turn activity during reads and long agent sessions.
@@ -19,7 +20,7 @@ import {
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { envelope } from '@opencrane/models';
-import { chatMessageSchema, chatParticipantsSchema } from '@opencrane/protocol';
+import { chatMessageSchema, chatParticipantsSchema, chatFeedSchema } from '@opencrane/protocol';
 import type { ChatOptions } from '../src/chat/routes.ts';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
@@ -209,9 +210,14 @@ async function openChatSocket(context: Fixture, conversationId: string, waitRead
   }
   socket.on('message', receive);
   let code: number | undefined;
-  function rememberClose(value: number) { code = value; }
+  let reason: string | undefined;
+  function rememberClose(value: number, closeReason: Buffer) {
+    code = value;
+    reason = closeReason.toString();
+  }
   socket.on('close', rememberClose);
   function closeCode() { return code; }
+  function closeReason() { return reason; }
   await once(socket, 'open');
   const subscription = { type: 'subscribe', topic: 'conversation', conversationId, since: 0 };
   socket.send(JSON.stringify(subscription));
@@ -226,7 +232,7 @@ async function openChatSocket(context: Fixture, conversationId: string, waitRead
     }
     await new Promise<void>(closeServer);
   }
-  return { socket, received, close, closeCode };
+  return { socket, received, close, closeCode, closeReason };
 }
 
 async function readsApprovalsDuringToolProgress(type: string) {
@@ -882,16 +888,16 @@ async function readDuringActivity(event: AccessEvent) {
 }
 
 const changedAccessEvents = [
-  { subject: 'conversation-agent', type: 'participant.added',
+  { subject: 'participation-agent', type: 'participant.added',
     data: { conversationId: 'agent', participantId: 'bob', addedBy: 'alice' } },
-  { subject: 'conversation-agent', type: 'participant.removed',
+  { subject: 'participation-agent', type: 'participant.removed',
     data: { conversationId: 'agent', participantId: 'alice', removedBy: 'bob' } },
   { subject: 'member-alice', type: 'member.removed',
     data: { memberId: 'alice', removedBy: 'bob' } },
   { subject: 'member-alice', type: 'member.role_changed',
     data: { memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob' } },
 ];
-it.each(changedAccessEvents)('returns history authorised before $type was recorded',
+it.each(changedAccessEvents)('checks current history access after $type was recorded',
   readDuringAccessChange, 120_000);
 
 async function readDuringAccessChange(event: AccessEvent) {
@@ -906,13 +912,38 @@ async function readDuringAccessChange(event: AccessEvent) {
     await context.append(event.subject, event.type, event.data, false);
     pause.release();
     const response = await reading;
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toContain('Hello');
+    const removed = event.type.endsWith('.removed');
+    expect(response.statusCode).toBe(removed ? 403 : 200);
+    if (removed) expect(response.body).not.toContain('Hello');
+    else expect(response.body).toContain('Hello');
   } finally {
     pause?.release();
     await context.close();
   }
 }
+
+async function deniedMemberSkipsHistoryLoad() {
+  const context = await fixture();
+  try {
+    await context.agentSession('agent');
+    const history = vi.spyOn(context.nats.store, 'readStream');
+    function isConversationRead(call: typeof history.mock.calls[number]) {
+      return call[0] === 'conversation-agent';
+    }
+    const response = await context.app.inject({
+      url: '/api/conversations/agent/messages', headers: context.headers('stranger'),
+    });
+    expect(response.statusCode).toBe(403);
+    const conversationReads = history.mock.calls.filter(isConversationRead);
+    expect(conversationReads).toHaveLength(0);
+    history.mockRestore();
+  } finally {
+    await context.close();
+  }
+}
+
+it('refuses a non-member before loading conversation history',
+  deniedMemberSkipsHistoryLoad, 120_000);
 
 it('returns history when its content read takes more than two seconds', slowHistoryRead, 120_000);
 
@@ -1481,7 +1512,9 @@ async function participationVolume(sharedChild = false) {
           headers: context.headers('bob'),
         });
         expect(status.statusCode, status.body).toBe(200);
-        expect(client?.socket.readyState).toBe(WebSocket.OPEN);
+        const socketStatus = { code: client?.closeCode(), reason: client?.closeReason(),
+          lastType: client?.received.at(-1)?.type };
+        expect(client?.socket.readyState, JSON.stringify(socketStatus)).toBe(WebSocket.OPEN);
       }
     }
   } finally {
@@ -2443,3 +2476,239 @@ async function hidesOtherRequesterReview() {
 }
 it('hides another requester’s child approval review before decryption',
   hidesOtherRequesterReview, 120_000);
+
+async function appendCloseOutput(context: Fixture, type: string, text = 'Late answer') {
+  const encrypted = context.keys.encrypt('test', 'child', text);
+  const data = { conversationId: 'child', turnId: 'close-turn', messageId: 'close-answer',
+    contentType: 'text', ...encrypted };
+  return context.append('conversation-child', type, data, false);
+}
+
+async function readClosedHistory(context: Fixture, memberId: string) {
+  const rows: ReturnType<typeof chatFeedSchema.parse>['rows'] = [];
+  let since = 0;
+  for (let page = 0; page < 5; page++) {
+    const response = await childRead(context, `messages?since=${since}`, memberId);
+    expect(response.statusCode).toBe(200);
+    const result = chatFeedSchema.parse(response.json());
+    rows.push(...result.rows);
+    if (result.rows.length < 100) return rows;
+    const next = result.rows.at(-1)!.position;
+    expect(next).toBeGreaterThan(since);
+    since = next;
+  }
+  throw new Error('History paging did not finish');
+}
+
+function chatRowId(row: ReturnType<typeof chatFeedSchema.parse>['rows'][number]) {
+  return row.id;
+}
+
+async function frozenChildOutput(memberId: string) {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    const creation = await childSession(context);
+    const humanText = context.keys.encrypt('test', 'child', 'Earlier human post');
+    for (let index = 0; index < 101; index++) {
+      const data = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...humanText };
+      await context.append('conversation-child', 'message.posted', data, false);
+    }
+    const before = await appendCloseOutput(context, 'agent.message_delta', 'Partial answer');
+    await context.runner.run(conversations);
+    client = await openChatSocket(context, 'child', true, memberId);
+    const initial = await readClosedHistory(context, memberId);
+    let closeSubject = 'conversation-child';
+    if (memberId === 'bob') closeSubject = 'participation-child';
+    const closed = await context.append(closeSubject, 'conversation.closed',
+      { conversationId: 'child', closedBy: 'alice' }, false);
+    const closePosition = await context.nats.store.head(closeSubject);
+    for (let index = 0; index < 105; index++) {
+      await appendCloseOutput(context, 'agent.message_delta');
+    }
+    const late = await appendCloseOutput(context, 'agent.message_completed');
+    const latePosition = await context.nats.store.head('conversation-child');
+    const decisionExample = getEventDefinition('decision.recorded')!.example;
+    const decisionData = { ...z.record(z.string(), z.unknown()).parse(decisionExample),
+      conversationId: 'child', turnId: 'close-turn', route: 'model', outcome: 'deny',
+      reason: 'budget_exhausted' };
+    const decision = await context.append('decision-late-budget',
+      'decision.recorded', decisionData, false);
+    const dispatchExample = getEventDefinition('tool.dispatch_recorded')!.example;
+    const dispatchData = { ...z.record(z.string(), z.unknown()).parse(dispatchExample),
+      conversationId: 'child', turnId: 'close-turn' };
+    const dispatch = await context.append('decision-late-dispatch',
+      'tool.dispatch_recorded', dispatchData, false);
+    const publicationExample = getEventDefinition('conversation.child_result_published')!.example;
+    const publicationData = { ...z.record(z.string(), z.unknown()).parse(publicationExample),
+      conversationId: 'child', childConversationId: 'grandchild',
+      ...context.keys.encrypt('test', 'child', 'Late child publication') };
+    const publication = await context.append('conversation-child',
+      'conversation.child_result_published', publicationData, false);
+    const publicationPosition = await context.nats.store.head('conversation-child');
+    for (const type of ['agent.turn_failed', 'agent.output_lost', 'agent.turn_completed']) {
+      const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(type)!.example);
+      const data = { ...example, conversationId: 'child', turnId: 'close-turn' };
+      await context.append('conversation-child', type, data, false);
+    }
+    const latePosts: Array<{ id: string; position: number }> = [];
+    for (const authorKind of ['system', 'agent'] as const) {
+      const encryptedPost = context.keys.encrypt('test', 'child', `Late ${authorKind} post`);
+      const postData = { conversationId: 'child', authorId: authorKind,
+        authorKind, contentType: 'text', ...encryptedPost };
+      const post = await context.append('conversation-child', 'message.posted', postData, false);
+      const position = await context.nats.store.head('conversation-child');
+      latePosts.push({ id: post.id, position });
+    }
+    function latePostId(post: { id: string; position: number }) {
+      return post.id;
+    }
+    const latePostIds = latePosts.map(latePostId);
+    // Retain saved human posts that raced close admission.
+    const encrypted = context.keys.encrypt('test', 'child', 'Retained human post');
+    const humanData = { conversationId: 'child', authorId: 'bob', authorKind: 'human',
+      contentType: 'text', ...encrypted };
+    const human = await context.append('conversation-child', 'message.posted', humanData, false);
+    const humanPosition = await context.nats.store.head('conversation-child');
+    const duplicateClose = await context.append('conversation-child', 'conversation.closed',
+      { conversationId: 'child', closedBy: 'bob' }, false);
+    const duplicatePosition = await context.nats.store.head('conversation-child');
+    const socketReads = vi.spyOn(context.db, 'query');
+    await context.runner.run(conversations);
+    function receivedHuman() {
+      return client!.received.some(isHuman);
+    }
+    function isHuman(message: ReturnType<typeof chatMessageSchema.parse>) {
+      return message.row?.id === human.id;
+    }
+    await until(receivedHuman);
+    function isPositionCheck(call: typeof socketReads.mock.calls[number]) {
+      return call[0].includes('AS computer_position');
+    }
+    const initialPositionChecks = socketReads.mock.calls.filter(isPositionCheck).length;
+    function hasPolledThreeMoreTimes() {
+      const positionChecks = socketReads.mock.calls.filter(isPositionCheck);
+      return positionChecks.length >= initialPositionChecks + 3;
+    }
+    await until(hasPolledThreeMoreTimes, 5000);
+    const trailingReads = socketReads.mock.calls.filter(isTrailingRead);
+    function isTrailingRead(call: typeof socketReads.mock.calls[number]) {
+      return call[0].startsWith('SELECT * FROM conversation_feed') &&
+        call[1]?.[2] === humanPosition;
+    }
+    expect(trailingReads.length).toBeLessThanOrEqual(1);
+    socketReads.mockRestore();
+    const expected = [...initial.map(chatRowId), closed.id, human.id];
+    const query = vi.spyOn(context.db, 'query');
+    const rows = await readClosedHistory(context, memberId);
+    const scans = [];
+    for (const [sql, parameters] of query.mock.calls) {
+      if (sql.startsWith('SELECT * FROM conversation_feed')) scans.push(parameters?.[2]);
+    }
+    query.mockRestore();
+    expect(scans.length).toBeGreaterThan(2);
+    expect(new Set(scans).size).toBe(scans.length);
+    expect(rows.map(chatRowId)).toEqual(expected);
+    for (const hiddenId of [decision.id, dispatch.id, publication.id, ...latePostIds]) {
+      expect(rows.map(chatRowId)).not.toContain(hiddenId);
+    }
+    expect(rows.find(isBefore)?.data.text).toBe('Partial answer');
+    function isBefore(row: typeof rows[number]) {
+      return row.id === before.id;
+    }
+    const delivered = [];
+    for (const message of client.received) {
+      if (message.row) delivered.push(message.row.id);
+    }
+    expect(delivered).toEqual(expected);
+    for (const hiddenId of [decision.id, dispatch.id, publication.id, ...latePostIds]) {
+      expect(delivered).not.toContain(hiddenId);
+    }
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    const list = await context.app.inject({ url: '/api/conversations?limit=1',
+      headers: context.headers(memberId) });
+    expect(list.statusCode).toBe(200);
+    const listed = list.json<{ rows: { conversationId: string; status: string }[];
+      nextCursor: string | null }>();
+    expect(listed.rows).toEqual([expect.objectContaining({ conversationId: 'child',
+      status: 'closed' })]);
+    expect(listed.nextCursor).not.toBeNull();
+    const next = await context.app.inject({
+      url: `/api/conversations?limit=1&cursor=${encodeURIComponent(listed.nextCursor!)}`,
+      headers: context.headers(memberId) });
+    expect(next.json()).toMatchObject({ rows: [{ conversationId: 'parent', status: 'open' }],
+      nextCursor: null });
+    const read = { id: `closed-read-${memberId}`, action: 'read', joinEventId: creation.id,
+      throughPosition: humanPosition, throughEventId: human.id };
+    const acknowledgement = await context.app.inject({ method: 'POST',
+      url: '/api/conversations/child/state', headers: context.headers(memberId), payload: read });
+    expect(acknowledgement.statusCode).toBe(200);
+    for (const post of latePosts) {
+      const hiddenPostRead = { ...read, id: `hidden-post-read-${memberId}-${post.id}`,
+        throughPosition: post.position, throughEventId: post.id };
+      const hiddenPostAcknowledgement = await context.app.inject({ method: 'POST',
+        url: '/api/conversations/child/state', headers: context.headers(memberId),
+        payload: hiddenPostRead });
+      expect(hiddenPostAcknowledgement.statusCode).toBe(409);
+    }
+    const hiddenRead = { ...read, id: `hidden-read-${memberId}`,
+      throughPosition: latePosition, throughEventId: late.id };
+    const hiddenAcknowledgement = await context.app.inject({ method: 'POST',
+      url: '/api/conversations/child/state', headers: context.headers(memberId),
+      payload: hiddenRead });
+    expect(hiddenAcknowledgement.statusCode).toBe(409);
+    const publicationRead = { ...read, id: `publication-read-${memberId}`,
+      throughPosition: publicationPosition, throughEventId: publication.id };
+    const publicationAcknowledgement = await context.app.inject({ method: 'POST',
+      url: '/api/conversations/child/state', headers: context.headers(memberId),
+      payload: publicationRead });
+    expect(publicationAcknowledgement.statusCode).toBe(409);
+    const repeatedCloseRead = { ...read, id: `repeated-close-read-${memberId}`,
+      throughPosition: duplicatePosition, throughEventId: duplicateClose.id };
+    const repeatedCloseAcknowledgement = await context.app.inject({ method: 'POST',
+      url: '/api/conversations/child/state', headers: context.headers(memberId),
+      payload: repeatedCloseRead });
+    expect(repeatedCloseAcknowledgement.statusCode).toBe(409);
+    await context.runner.run(conversations);
+    await client.close();
+    client = undefined;
+    const restarted = new ProjectionRunner(context.db, context.nats.store,
+      createLogger('closed-restart', { level: 'silent' }));
+    await restarted.initialise(conversations);
+    await restarted.run(conversations);
+    await restarted.rebuild(conversations);
+    expect((await readClosedHistory(context, memberId)).map(chatRowId)).toEqual(expected);
+    const rebuilt = await context.app.inject({ url: '/api/conversations?limit=1',
+      headers: context.headers(memberId) });
+    expect(rebuilt.json()).toMatchObject({ rows: [{ status: 'closed',
+      throughPosition: humanPosition, throughEventId: human.id }] });
+    const evidence = await context.db.query<{ event_id: string }>(
+      'SELECT event_id FROM conversation_feed WHERE event_id=$1', [late.id]);
+    expect(evidence.rows).toHaveLength(1);
+    const metadata = await context.db.query<{ closed_position: string }>(
+      "SELECT closed_position FROM conversations WHERE conversation_id='child'");
+    expect(Number(metadata.rows[0]!.closed_position)).toBe(closePosition);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+it.each(['alice', 'bob'])('freezes closed output for %s through paging, sockets and replay',
+  frozenChildOutput, 120_000);
+
+async function closedParentKeepsChildOutput() {
+  const context = await fixture();
+  try {
+    await childSession(context);
+    await context.append('conversation-parent', 'conversation.closed',
+      { conversationId: 'parent', closedBy: 'alice' }, false);
+    const output = await appendCloseOutput(context, 'agent.message_completed', 'Child continues');
+    await context.runner.run(conversations);
+    const rows = await readClosedHistory(context, 'bob');
+    expect(rows.map(chatRowId)).toContain(output.id);
+  } finally {
+    await context.close();
+  }
+}
+it('keeps child output visible after its parent closes', closedParentKeepsChildOutput, 120_000);

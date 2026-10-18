@@ -5,7 +5,7 @@ import { envelope } from '@opencrane/models';
 import { createStore, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { conversations, members } from '@opencrane/projections';
 import { Client } from 'minio/dist/esm/minio.mjs';
-import { beforeAll, afterAll, expect, it } from 'vitest';
+import { beforeAll, afterAll, expect, it, vi } from 'vitest';
 import { buildServer } from '../src/server.ts';
 import { sameOrigin } from '../src/members/guard.ts';
 
@@ -192,3 +192,33 @@ it('refuses cross-origin POST participants with an otherwise-valid addition',
       await app.close();
     }
   });
+
+
+async function hidesHistoryFailureDetails() {
+  const lines: string[] = [];
+  function write(line: string) {
+    lines.push(line);
+  }
+  function failedLookup(): Promise<string> {
+    return Promise.reject(new Error('protected-history-detail'));
+  }
+  vi.stubEnv('LOG_LEVEL', 'info');
+  const config = testAuthConfig({ expectedOrgId: 'org-test' });
+  const chat = { silo: 'test', store: services.nats.store, db: services.db,
+    binding: services.binding, keys: services.keys, feed: { memberId: failedLookup } };
+  const logDestination = { write };
+  const app = buildServer(config, { chat, logDestination });
+  try {
+    const request = { url: '/api/conversations/conversation/messages', headers: headers(config) };
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain('protected-history-detail');
+    const logged = lines.join('\n');
+    expect(logged).toContain('Chat request unavailable');
+    expect(logged).not.toContain('protected-history-detail');
+  } finally {
+    await app.close();
+    vi.unstubAllEnvs();
+  }
+}
+it('keeps unexpected history failure details out of replies and logs', hidesHistoryFailureDetails);

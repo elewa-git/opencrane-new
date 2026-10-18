@@ -2,7 +2,8 @@ import type { WebSocket } from 'ws';
 import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
 import { AuthorityApplying } from '@opencrane/models';
 import { chatSubscriptionAccess, isChatRefused } from './access.ts';
-import { chatRows, type ChatOptions } from './routes.ts';
+import { chatRows } from './history.ts';
+import type { ChatOptions } from './access.ts';
 
 type Mode = 'agent_session' | 'direct' | 'group';
 interface Subscription {
@@ -185,6 +186,8 @@ function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRow
     send(state, 'event', extra);
   }
   if (result.rows.length === 100) return;
+  // All rows through this boundary were scanned, including hidden late reports.
+  state.position = result.position;
   if (!state.ready || state.computerState !== result.computerState ||
       state.computerRecovered !== result.computerRecovered ||
       state.computerLostAt !== result.computerLostAt) {

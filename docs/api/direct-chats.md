@@ -139,3 +139,14 @@ A scan that reaches 100 candidates returns 503 `list_incomplete` without rows or
 Ordinary late joiners receive their join time, including in personal sessions.
 Group list rows also show current participants and omit the original creator and group
 snapshot details. Personal-session rows keep the assistant and creator identifiers.
+
+### Closed history
+
+History and sockets hide execution, approval and publication rows after the first saved
+close. They retain human posts and their original positions. A page scans past hidden
+rows until it
+has 100 visible rows or reaches its captured boundary. Continue from the last returned
+row while a page is full. A shorter page is complete through its `position`.
+Later closes do not replace the first close. Late terminal reports cannot change the
+list's Closed status. HTTP checks current access after loading and before decrypting.
+The public close action remains unavailable pending execution cleanup.

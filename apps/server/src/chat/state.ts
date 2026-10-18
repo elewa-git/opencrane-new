@@ -1,3 +1,4 @@
+import { inheritedChildSubjects } from './child-access.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -6,6 +7,7 @@ import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema,
 import { readStreamSummary, type StoredEvent, type SummaryKind } from '@opencrane/event-store';
 import { conversationAccessFence } from '@opencrane/models';
 import { chatStateCommandSchema } from '@opencrane/protocol';
+import { isHiddenConversationRow } from '@opencrane/projections';
 import { activeChatMember, conversationParticipation, type ChatOptions } from './access.ts';
 import { privateSessionCreation, requirePrivateReader } from './private-session.ts';
 import { ChatConflict } from './commands.ts';
@@ -106,11 +108,18 @@ async function verifyRead(options: ChatOptions, conversationId: string,
   input: Extract<Input, { action: 'read' }>, historyPosition: number, deadline: number) {
   if (input.throughPosition < historyPosition) throw new ChatConflict('Read precedes this join');
   // Accept only a row that the history reader can already return to this device.
-  const visible = await options.db.query<{ event_id: string }>(
-    `SELECT event_id FROM conversation_feed
-      WHERE silo=$1 AND conversation_id=$2 AND position=$3 AND event_id=$4`,
+  const visible = await options.db.query<{ event_id: string; type: string; data: unknown;
+    closed_position: string | null }>(
+    `SELECT f.event_id, f.type, f.data, c.closed_position FROM conversation_feed f
+      JOIN conversations c ON c.silo=f.silo AND c.conversation_id=f.conversation_id
+      WHERE f.silo=$1 AND f.conversation_id=$2 AND f.position=$3 AND f.event_id=$4`,
     [options.silo, conversationId, input.throughPosition, input.throughEventId]);
-  if (!visible.rows[0]) throw new ChatConflict('Read row is not available');
+  const target = visible.rows[0];
+  if (!target) throw new ChatConflict('Read row is not available');
+  const closedPosition = Number(target.closed_position ?? 0);
+  if (isHiddenConversationRow(target.type, target.data, input.throughPosition, closedPosition)) {
+    throw new ChatConflict('Read row is not available');
+  }
   const row = await options.store.readEvent(input.throughPosition, deadline);
   const data = z.object({ conversationId: z.string() }).safeParse(row.event.data);
   const subjects = [`conversation-${conversationId}`, `participation-${conversationId}`];
@@ -123,8 +132,9 @@ async function verifyRead(options: ChatOptions, conversationId: string,
 
 async function preferenceWriteAccess(options: ChatOptions, memberId: string,
   conversationId: string, input: Input,
-  session: Awaited<ReturnType<typeof privateSessionCreation>> | undefined, deadline: number) {
-  const subjects = [`member-${memberId}`, `participation-${conversationId}`];
+  session: Awaited<ReturnType<typeof privateSessionCreation>> | undefined,
+  inheritedSubjects: string[], deadline: number) {
+  const subjects = [`member-${memberId}`, `participation-${conversationId}`, ...inheritedSubjects];
   if (session) {
     subjects.push(`assistant-${session.created.assistantId}`);
     if (session.assistant.kind === 'team') subjects.push(`team-${session.assistant.ownerId}`);
@@ -145,13 +155,14 @@ export async function stateCommand(options: ChatOptions, memberId: string,
   const access = await conversationParticipation(options, memberId, conversationId, deadline);
   if (access.joinEventId !== input.joinEventId) throw new ChatConflict('Conversation join changed');
   let session: Awaited<ReturnType<typeof privateSessionCreation>> | undefined;
-  if (access.created.mode === 'agent_session') {
+  if (access.created.mode === 'agent_session' && !('contextKind' in access.created)) {
     session = await privateSessionCreation(options, conversationId, access.creation.event);
     await requirePrivateReader(options, memberId, session);
   }
   if (input.action === 'read') {
     await verifyRead(options, conversationId, input, access.historyPosition, deadline);
   }
+  const inheritedSubjects = inheritedChildSubjects(access);
   const event = preferenceEvent(options, memberId, conversationId, input);
   for (let attempt = 0; attempt < 3; attempt++) {
     const facts = await stateFacts(options, memberId, conversationId,
@@ -167,7 +178,7 @@ export async function stateCommand(options: ChatOptions, memberId: string,
       throw new ChatConflict('Archive choice changed');
     }
     const fresh = await preferenceWriteAccess(options, memberId, conversationId, input,
-      session, deadline);
+      session, inheritedSubjects, deadline);
     if (previous) return { status: 'appended' as const, sequence: previous.sequence };
     const command = { event, expectedSequence: facts.sequence, historyChecked: true as const,
       deadline: fresh.deadline };

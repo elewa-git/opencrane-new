@@ -381,6 +381,8 @@ The first `conversation.closed` sets `closed_event_id`, `closed_position`, `clos
 and `closed_at` from its event id, global position, data and envelope time. These columns
 are null while open. Later closes never replace them. TypeScript applies both rules;
 SQL only stores the results. Live updates and offline rebuild use the same functions.
+`readConversation` keeps a late `message.posted` only when its saved `authorKind` is
+`human`. It skips late agent and system posts while advancing the scan position.
 Startup refuses older metadata tables without all four closing columns and names the existing
 offline replay command. Rebuild restores activity and closing details, and increases generation.
 
@@ -726,3 +728,14 @@ that a stage can run. It does not write a conversation feed row or contain sourc
 Stop server workers before `ProjectionRunner.rebuild(childRequests)`. Replay performs
 only database writes. A new installation or upgrade builds this separate index from
 position one; it does not require rebuilding other conversation tables.
+
+## Closed conversation display reads
+
+`readConversation` reads the feed boundary, first close position and generation in
+one query, then scans only through that boundary. It returns up to 100 visible rows.
+TypeScript hides `agent.*` rows and duplicate closes after the first close; SQL
+only selects rows. Each scan resumes after its last examined position, including
+hidden rows, with a ten-second loading limit. Human posts retain their positions.
+The existing `position` reply is the captured boundary, not a read acknowledgement.
+A full page continues from its last returned row. A shorter page has scanned the
+boundary completely. Raw reports and first-close metadata remain replayable.

@@ -24,7 +24,8 @@ export {
   rebuildComputersProjection,
 } from "./rebuild.ts";
 export {
-  conversations, rebuildConversationsProjection, readConversation, listConversations, listOpenConversations,
+  conversations, rebuildConversationsProjection, readConversation, listConversations,
+  listOpenConversations, isHiddenConversationRow,
 } from './conversations.ts';
 
 export { emptyToolPolicy, applyToolPolicy, isToolPolicyAvailable, isToolReviewCurrent, reviewedToolChoices } from './tool-policy.ts';

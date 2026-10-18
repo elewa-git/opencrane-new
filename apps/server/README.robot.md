@@ -15,6 +15,34 @@ Errors carry no parent details. `test/child-origin.test.ts` uses real NATS, Post
 and OpenFGA, including permission outages, delayed reads, removal and unchanged state.
 Fresh-install qualification is NOT RUN.
 
+## Closed chat display (P4-6 PR 4b; Part of #88)
+
+`chat/history.ts` handles HTTP history and supplies socket display rows. HTTP loads
+join facts and encrypted rows before checking current access once with `requireMember`.
+It decrypts only after that check. Join changes refuse the loaded page. No conversation
+stream enters an authority fence. Socket access polling remains independent of loading.
+The conversations reader returns up to 100 visible rows, scanning past late execution,
+approval and publication rows and later duplicate closes. Socket delivery advances
+through a completely scanned page, including hidden rows, so an idle closed chat
+does not keep rereading its last page.
+Human row positions and current history bounds stay unchanged. The list reads the stored
+`conversations.closed` flag, which late terminal reports cannot reverse.
+Shared-child read acknowledgements use participant access, including inherited parent
+access streams for the write check, rather than private-session ownership.
+
+`test/chat-access-regression.test.ts` covers both members, current and legacy closes,
+more than 100 hidden reports, human posts, read acknowledgements, saved first-close
+position, list status, socket delivery, restart/rebuild and independent parent/child close.
+It also checks removal during HTTP loading and unrelated turn/file activity.
+`test/member-guard-http.test.ts` keeps missing organisation setup at HTTP 503 and
+checks that unexpected read failure details stay out of replies and logs.
+Raw late rows remain in the event log and read table. There is no unread-count API
+in this backend; hidden completed messages are absent from the displayed history.
+
+PARTIAL: conversation-list paging beyond its existing 100-candidate limit remains
+for the next part. Public close, cleanup and screens are not included.
+Fresh-install qualification: NOT RUN.
+
 ## Close-safe turn acknowledgements (P4-6 PR 4, first part; Part of #88)
 
 A stored `conversation.closed` on either `conversation-<id>` or legacy
@@ -44,10 +72,11 @@ The chat summary keeps its content append position separate from a later legacy
 close. Late reports retain their digest, duplicate and sequence checks. The approval
 watcher checks both conversation and participation positions before leaving a pending
 approval unchanged. Closure cancels that approval through the existing reader.
+History and read acknowledgements use the same close-position and message-author check.
+After close, only human `message.posted` rows remain visible and can be marked read.
 
-Left out to keep this change small: frozen history/socket output, paging past hidden
-rows, permanent list status, public close and execution cleanup. This is server
-admission support only. Fresh-install qualification: NOT RUN.
+Public close and execution cleanup remain later work. Display reads are covered
+below. Fresh-install qualification: NOT RUN.
 
 Member directory GETs return `permissions.invite: true` after current Owner/Admin
 checks. Detail GETs return `changeRole` and `remove: true` for active non-owner
