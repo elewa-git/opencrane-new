@@ -92,7 +92,77 @@ function click(fixture: ComponentFixture<IntegrationDetail>, label: string): voi
 
 describe('reviewed changed tools', () => {
   beforeEach(() => TestBed.configureTestingModule({ imports: [IntegrationDetail] }));
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    sessionStorage.clear();
+  });
+
+  it('offers review after an earlier publication has drifted', async () => {
+    const drifted = policy();
+    drifted.reviewRevision = 6;
+    drifted.publication = { serverId: 'fixture-server', publishedBy: 'owner',
+      commandId: 'earlier-publication', expectedSequence: 6, reviewRevision: 6,
+      fragmentDigest: 'f'.repeat(64) };
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(drifted))
+      .mockResolvedValueOnce(reply({ status: 'applying', changeRef: 'earlier-publication',
+        stage: 'preparation', reason: 'not_current' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('Review and publish'));
+    fixture.destroy();
+  });
+
+  it.each(['missing', 'equal'])('withholds review when the earlier list is %s', async (kind) => {
+    const incomplete = policy();
+    if (kind === 'missing') incomplete.previousCatalogue = null;
+    else incomplete.previousCatalogue = incomplete.catalogue;
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(incomplete))
+      .mockResolvedValueOnce(reply({ status: 'disabled' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('earlier list'));
+    expect(content(fixture).textContent).not.toContain('Review and publish');
+    fixture.destroy();
+  });
+
+  it('shows the complete schema when a field and a schema setting change', async () => {
+    const changed = policy();
+    const declaration = changed.catalogue?.tools?.[0];
+    if (!declaration) throw new Error('Expected tool');
+    declaration.definition = JSON.stringify({ name: 'update_note', inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: { note: { type: 'string', maxLength: 2000 } },
+    } });
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(changed))
+      .mockResolvedValueOnce(reply({ status: 'disabled' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).querySelector('details')).not.toBeNull());
+    expect(content(fixture).querySelector('details')?.textContent)
+      .toContain('"additionalProperties": false');
+    expect(content(fixture).querySelector('details')?.textContent).toContain('"maxLength": 2000');
+    fixture.destroy();
+  });
+
+  it('checks the original uncertain publication after reopening without another POST', async () => {
+    sessionStorage.setItem('integration-publication:fixture-server', 'original-publication');
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()))
+      .mockResolvedValueOnce(reply({ status: 'unknown', changeRef: 'original-publication',
+        stage: 'observation', reason: 'deadline' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(requestUrl(fetchMock.mock.calls[2]?.[0]))
+      .toBe('/api/org/integrations/changes/original-publication');
+    expect(content(fixture).textContent).toContain('Check status');
+    expect(content(fixture).textContent).not.toContain('Review and publish');
+    expect(fetchMock.mock.calls.filter((call) => call[1]?.method === 'POST')).toHaveLength(0);
+    fixture.destroy();
+  });
 
   it('shows schema values as text, keeps Ask and gives the new tool Block', async () => {
     expect(toolPolicySchema.safeParse(policy())).toMatchObject({ success: true });
