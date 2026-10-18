@@ -2561,7 +2561,7 @@ async function frozenChildOutput(memberId: string) {
       const position = await context.nats.store.head('conversation-child');
       latePosts.push({ id: post.id, position });
     }
-    function latePostId(post: typeof latePosts[number]) {
+    function latePostId(post: { id: string; position: number }) {
       return post.id;
     }
     const latePostIds = latePosts.map(latePostId);
