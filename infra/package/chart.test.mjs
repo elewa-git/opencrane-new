@@ -129,4 +129,21 @@ test('a binary key stays in a mounted Secret and outside every environment impor
   assert.ok(workerSpec.containers[0].volumeMounts.some(privateFileMount));
   const workerFiles = workerSpec.volumes.find(privateFileVolume);
   assert.deepEqual(workerFiles.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
+
+  for (const role of ['members', 'dispatcher']) {
+    const deployment = namedResource('Deployment', `worker-${role}`);
+    const settings = deployment.spec.template.spec.containers[0].env;
+    const identity = role === 'dispatcher' ? 'dispatcher' : 'projection';
+    for (const [name, suffix] of [
+      ['NATS_CERT_FILE', 'crt'],
+      ['NATS_KEY_FILE', 'key'],
+      ['NATS_NKEY_SEED_FILE', 'seed'],
+    ]) {
+      let path;
+      for (const setting of settings) {
+        if (setting.name === name) path = setting.value;
+      }
+      assert.equal(path, `/run/opencrane/files/${identity}.${suffix}`);
+    }
+  }
 });
