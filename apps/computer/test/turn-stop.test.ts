@@ -254,3 +254,33 @@ async function stopsDuringToolPreparation() {
   }
 }
 it('removes the tool list while thread preparation is still waiting', stopsDuringToolPreparation);
+
+async function refusesModelBodyArrivingAfterStop() {
+  const test = await stopFixture();
+  const result = Promise.withResolvers<number | undefined>();
+  function receive(response: IncomingMessage) {
+    response.resume();
+    result.resolve(response.statusCode);
+  }
+  const headers = { authorization: `Bearer ${test.local.caller}`, 'session-id': 'thread-1',
+    expect: '100-continue' };
+  let outgoing: ReturnType<typeof request> | undefined;
+  try {
+    await test.start('first', 'thread-1');
+    outgoing = request(`${test.local.url}/v1/responses`, { method: 'POST', headers }, receive);
+    outgoing.on('error', result.reject);
+    const reading = once(outgoing, 'continue');
+    outgoing.flushHeaders();
+    await reading;
+    test.stop();
+    await withinStopDeadline(test.revoked);
+    outgoing.end('{}');
+    expect(await result.promise).toBe(403);
+    expect(test.received).toEqual([]);
+  } finally {
+    outgoing?.destroy();
+    await test.close();
+  }
+}
+it('refuses a model request whose body finishes arriving after Stop',
+  refusesModelBodyArrivingAfterStop);
