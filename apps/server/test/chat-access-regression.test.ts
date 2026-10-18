@@ -2552,6 +2552,15 @@ async function frozenChildOutput(memberId: string) {
       const data = { ...example, conversationId: 'child', turnId: 'close-turn' };
       await context.append('conversation-child', type, data, false);
     }
+    const latePosts = [];
+    for (const authorKind of ['system', 'agent'] as const) {
+      const encryptedPost = context.keys.encrypt('test', 'child', `Late ${authorKind} post`);
+      const postData = { conversationId: 'child', authorId: authorKind,
+        authorKind, contentType: 'text', ...encryptedPost };
+      const post = await context.append('conversation-child', 'message.posted', postData, false);
+      const position = await context.nats.store.head('conversation-child');
+      latePosts.push({ id: post.id, position });
+    }
     // Retain saved human posts that raced close admission.
     const encrypted = context.keys.encrypt('test', 'child', 'Retained human post');
     const humanData = { conversationId: 'child', authorId: 'bob', authorKind: 'human',
@@ -2597,7 +2606,8 @@ async function frozenChildOutput(memberId: string) {
     expect(scans.length).toBeGreaterThan(2);
     expect(new Set(scans).size).toBe(scans.length);
     expect(rows.map(chatRowId)).toEqual(expected);
-    for (const hiddenId of [decision.id, dispatch.id, publication.id]) {
+    for (const hiddenId of [decision.id, dispatch.id, publication.id,
+      ...latePosts.map(post => post.id)]) {
       expect(rows.map(chatRowId)).not.toContain(hiddenId);
     }
     expect(rows.find(isBefore)?.data.text).toBe('Partial answer');
@@ -2609,7 +2619,8 @@ async function frozenChildOutput(memberId: string) {
       if (message.row) delivered.push(message.row.id);
     }
     expect(delivered).toEqual(expected);
-    for (const hiddenId of [decision.id, dispatch.id, publication.id]) {
+    for (const hiddenId of [decision.id, dispatch.id, publication.id,
+      ...latePosts.map(post => post.id)]) {
       expect(delivered).not.toContain(hiddenId);
     }
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
@@ -2631,6 +2642,14 @@ async function frozenChildOutput(memberId: string) {
     const acknowledgement = await context.app.inject({ method: 'POST',
       url: '/api/conversations/child/state', headers: context.headers(memberId), payload: read });
     expect(acknowledgement.statusCode).toBe(200);
+    for (const post of latePosts) {
+      const hiddenPostRead = { ...read, id: `hidden-post-read-${memberId}-${post.id}`,
+        throughPosition: post.position, throughEventId: post.id };
+      const hiddenPostAcknowledgement = await context.app.inject({ method: 'POST',
+        url: '/api/conversations/child/state', headers: context.headers(memberId),
+        payload: hiddenPostRead });
+      expect(hiddenPostAcknowledgement.statusCode).toBe(409);
+    }
     const hiddenRead = { ...read, id: `hidden-read-${memberId}`,
       throughPosition: latePosition, throughEventId: late.id };
     const hiddenAcknowledgement = await context.app.inject({ method: 'POST',
