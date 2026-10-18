@@ -1,7 +1,11 @@
+import { once } from 'node:events';
+import { WebSocketServer, type WebSocket, type RawData } from 'ws';
+import { connectBridge } from '../src/chat/bridge.ts';
+import { envelope } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createEventStore } from '@opencrane/event-store';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
@@ -1206,3 +1210,540 @@ async function refusesUnsettledMemoryAtDeadline() {
 }
 it('refuses repeated memory changes at the original access deadline',
   refusesUnsettledMemoryAtDeadline);
+
+async function renewalBridge(store = setup.nats.store, withBinding = true) {
+  const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', 'Continue') };
+  const event = envelope('test', 'conversation-conversation', 'message.posted', message, 'turn');
+  await setup.nats.seed([event]);
+  const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  await once(server, 'listening');
+  const address = server.address();
+  if (typeof address === 'string' || !address) throw new Error('Bridge address unavailable');
+  const connected = Promise.withResolvers<WebSocket>();
+  const messages: unknown[] = [];
+  function receive(raw: RawData) {
+    if (!Buffer.isBuffer(raw)) throw new Error('Unexpected bridge message');
+    messages.push(JSON.parse(raw.toString()) as unknown);
+  }
+  function capture(peer: WebSocket) {
+    peer.on('message', receive);
+    connected.resolve(peer);
+  }
+  server.on('connection', capture);
+  const options: Parameters<typeof connectBridge>[0] = { silo: 'test', store, keys: setup.keys };
+  if (withBinding) options.binding = setup.binding;
+  const input = { computerId: 'computer', assistantId: 'assistant', bearer: 'fixture',
+    url: `ws://127.0.0.1:${address.port}` };
+  const link = await connectBridge(options, input, setup.tokens);
+  const peer = await connected.promise;
+  function resumed() {
+    return messages.length > 0;
+  }
+  await until(resumed);
+  async function exchange(sequence: number) {
+    const count = messages.length;
+    const report = { sequence, previousSequence: sequence - 1, conversationId: 'conversation',
+      turnId: 'turn', assistantId: 'assistant', type: 'agent.turn_started',
+      threadId: 'thread', executionMode: 'restricted' };
+    peer.send(JSON.stringify(report));
+    function replied() {
+      return messages.length > count || link.socket.readyState === 3;
+    }
+    await until(replied, 5000);
+    expect(link.socket.readyState).toBe(link.socket.OPEN);
+    return messages.at(-1);
+  }
+  async function closeBridge() {
+    link.socket.terminate();
+    await link.settled();
+    for (const socket of server.clients) socket.terminate();
+    server.close();
+    await once(server, 'close');
+  }
+  return { exchange, close: closeBridge };
+}
+
+async function refusesMemoryRenewal(change: LoadedChange) {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  try {
+    expect(await bridge.exchange(1)).toHaveProperty('token');
+    await changeLoadedMemory(change);
+    issuance.mockClear();
+    const refused = { type: 'ack', sequence: 2, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(2)).toEqual(refused);
+    expect(issuance).not.toHaveBeenCalled();
+    expect(await bridge.exchange(2)).toEqual(refused);
+    const facts = await savedContext();
+    expect(facts.memoryContext?.status).toBe('loaded');
+    expect(facts.turnEnded).toBe(false);
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each(loadedChanges)('refuses turn renewal after loaded memory %s', refusesMemoryRenewal);
+
+async function refusesMemoryDuringSigning(change: LoadedChange) {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function changeDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    await changeLoadedMemory(change);
+    return result;
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(changeDuringSigning);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).toHaveBeenCalledOnce();
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each(['correct', 'forget', 'assistant_read', 'member_mcp'] as const)(
+  'refuses turn renewal when %s arrives during signing', refusesMemoryDuringSigning);
+
+async function allowsMemoryRenewal(loaded: boolean) {
+  if (loaded) {
+    await seedRecallFact();
+    expect((await directRecall('load')).statusCode).toBe(200);
+    await changeLoadedMemory('forget', 'unloaded');
+  } else {
+    await changeLoadedMemory('assistant_read');
+  }
+  const bridge = await renewalBridge();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  let scopeReads = 0;
+  const starts: number[] = [];
+  async function* countScopes(...args: Parameters<typeof read>) {
+    if (args[0].startsWith('scope-')) {
+      scopeReads += 1;
+      starts.push(args[1] ?? 1);
+      if (args[1] === 1) await delay(2100);
+    }
+    yield* read(...args);
+  }
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function unrelatedDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    if (loaded) await changeLoadedMemory('forget', 'unloaded-during-signing');
+    return result;
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementation(unrelatedDuringSigning);
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(countScopes);
+  try {
+    for (const sequence of [1, 2]) {
+      const position = await setup.nats.store.head(`scope-${scopeId}`);
+      starts.length = 0;
+      const reply = await bridge.exchange(sequence);
+      expect(reply).toHaveProperty('token');
+      expect(reply).not.toHaveProperty('refused');
+      if (loaded) expect(starts).toEqual([1, position + 1]);
+    }
+    if (!loaded) expect(scopeReads).toBe(0);
+  } finally {
+    issuance.mockRestore();
+    reads.mockRestore();
+    await bridge.close();
+  }
+}
+it.each([true, false])('allows turn renewal with loaded memory %s', allowsMemoryRenewal);
+
+async function checksRenewalExpiry(offset: number) {
+  const expires = Date.now() + 60_000;
+  await seedRecallFact('private-fact', new Date(expires).toISOString());
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  const clock = vi.spyOn(Date, 'now');
+  async function advanceDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    clock.mockReturnValue(expires + offset);
+    return result;
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(advanceDuringSigning);
+  try {
+    const reply = await bridge.exchange(1);
+    if (offset === -1) {
+      expect(reply).toHaveProperty('token');
+    } else {
+      const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+      expect(reply).toEqual(refused);
+    }
+  } finally {
+    clock.mockRestore();
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each([-1, 0])('checks turn renewal expiry at release, offset %s ms', checksRenewalExpiry);
+
+async function refusesColdRenewal() {
+  await seedRecallFact('dependency');
+  const dependency = { scopeId, memoryId: 'dependency', revision: 1 };
+  await seedRecallFact('a-derived', null, [dependency]);
+  expect((await directRecall('load', 1)).statusCode).toBe(200);
+  await changeLoadedMemory('forget', 'dependency');
+  const coldStore = await createEventStore(setup.nats.connection);
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  const facts = await readChatFacts(coldStore, 'test', 'conversation', 'turn');
+  expect(facts.memoryContext?.executionAvailable).toBe(false);
+  expect(issuance).not.toHaveBeenCalled();
+  const bridge = await renewalBridge(coldStore);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).not.toHaveBeenCalled();
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it('refuses turn renewal after cold replay with a forgotten dependency', refusesColdRenewal);
+
+async function refusesNewRecallDuringRenewal() {
+  const bridge = await renewalBridge();
+  await seedRecallFact();
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function recallDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    expect((await directRecall('during-signing')).statusCode).toBe(200);
+    return result;
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(recallDuringSigning);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it('refuses turn renewal when a recall adds references during signing',
+  refusesNewRecallDuringRenewal);
+
+async function refusesMissingRenewalBinding() {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge(setup.nats.store, false);
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).not.toHaveBeenCalled();
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it('refuses turn renewal with loaded references but no permissions binding',
+  refusesMissingRenewalBinding);
+
+const renewalAccessChanges = [
+  { subject: 'member-alice', type: 'member.removed',
+    data: { memberId: 'alice', removedBy: 'alice' } },
+  { subject: 'assistant-assistant', type: 'assistant.settings_changed',
+    data: { assistantId: 'assistant', active: false } },
+];
+async function refusesIdentityDuringRenewal(change: typeof renewalAccessChanges[number]) {
+  const bridge = await renewalBridge();
+  let signed = false;
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function markSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    signed = true;
+    return result;
+  }
+  const confirm = decisionAccess.confirmDecisionAccess;
+  async function removeBeforeFinalCheck(...args: Parameters<typeof confirm>) {
+    if (signed) {
+      signed = false;
+      await setup.append(change.subject, change.type, change.data);
+    }
+    return confirm(...args);
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(markSigning);
+  const access = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+  access.mockImplementation(removeBeforeFinalCheck);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).toHaveBeenCalledOnce();
+  } finally {
+    access.mockRestore();
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each(renewalAccessChanges)(
+  'refuses turn renewal when $type arrives during the final activity check',
+  refusesIdentityDuringRenewal);
+
+async function refusesRevocationDuringFinalScopeRead(change: LoadedChange) {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  try {
+    expect(await bridge.exchange(1)).toHaveProperty('token');
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let signed = false;
+    let finalAccessChecked = false;
+    let paused = false;
+    const issue = setup.tokens.turn.bind(setup.tokens);
+    async function markSigning(input: Parameters<typeof issue>[0]) {
+      const result = await issue(input);
+      signed = true;
+      return result;
+    }
+    const confirm = decisionAccess.confirmDecisionAccess;
+    async function observeAccess(...args: Parameters<typeof confirm>) {
+      await confirm(...args);
+      if (signed) finalAccessChecked = true;
+    }
+    const head = setup.nats.store.head.bind(setup.nats.store);
+    async function pauseScopeRead(...args: Parameters<typeof head>) {
+      const position = await head(...args);
+      if (finalAccessChecked && !paused && args[0] === `scope-${scopeId}`) {
+        paused = true;
+        entered.resolve();
+        await release.promise;
+      }
+      return position;
+    }
+    const issuance = vi.spyOn(setup.tokens, 'turn');
+    issuance.mockImplementationOnce(markSigning);
+    const access = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+    access.mockImplementation(observeAccess);
+    const heads = vi.spyOn(setup.nats.store, 'head');
+    heads.mockImplementation(pauseScopeRead);
+    const pending = bridge.exchange(2);
+    try {
+      await entered.promise;
+      await changeLoadedMemory(change);
+      release.resolve();
+      const reply = await pending;
+      const refused = { type: 'ack', sequence: 2, refused: 'memory_context_unavailable' };
+      expect(reply).toEqual(refused);
+      expect(reply).not.toHaveProperty('token');
+      expect(reply).not.toHaveProperty('context');
+      expect(issuance).toHaveBeenCalledOnce();
+    } finally {
+      release.resolve();
+      await pending;
+      heads.mockRestore();
+      access.mockRestore();
+      issuance.mockRestore();
+    }
+  } finally {
+    await bridge.close();
+  }
+}
+it.each(['assistant_read', 'member_mcp'] as const)(
+  'refuses turn renewal when %s is revoked during the final scope read',
+  refusesRevocationDuringFinalScopeRead);
+
+type MemoryBoundaryTiming = 'last_scope_read' | 'final_access_read';
+async function checkRenewalMemoryBoundary(change: 'correct' | 'forget',
+  timing: MemoryBoundaryTiming) {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  try {
+    expect(await bridge.exchange(1)).toHaveProperty('token');
+    const issue = setup.tokens.turn.bind(setup.tokens);
+    let signed = false;
+    let scopeReads = 0;
+    let changed = false;
+    async function markSigning(input: Parameters<typeof issue>[0]) {
+      const result = await issue(input);
+      signed = true;
+      return result;
+    }
+    const head = setup.nats.store.head.bind(setup.nats.store);
+    async function changeAtBoundary(...args: Parameters<typeof head>) {
+      if (signed && args[0] === `scope-${scopeId}`) {
+        scopeReads += 1;
+        // Save before the second read so its exact position includes the change.
+        if (scopeReads === 2 && timing === 'last_scope_read') {
+          changed = true;
+          await changeLoadedMemory(change);
+        }
+      }
+      const position = await head(...args);
+      if (signed && scopeReads === 2 && !changed && args[0] === 'member-alice'
+        && timing === 'final_access_read') {
+        // Finish saving while the final access read is still waiting to return.
+        changed = true;
+        await changeLoadedMemory(change);
+      }
+      return position;
+    }
+    const issuance = vi.spyOn(setup.tokens, 'turn');
+    issuance.mockImplementationOnce(markSigning);
+    const heads = vi.spyOn(setup.nats.store, 'head');
+    heads.mockImplementation(changeAtBoundary);
+    try {
+      const reply = await bridge.exchange(2);
+      expect(changed).toBe(true);
+      expect(issuance).toHaveBeenCalledOnce();
+      let refusedSequence = 2;
+      if (timing === 'final_access_read') {
+        expect(scopeReads).toBe(2);
+        expect(reply).toHaveProperty('token', expect.any(String));
+        expect(reply).not.toHaveProperty('context');
+        expect(reply).not.toHaveProperty('refused');
+        refusedSequence = 3;
+      } else {
+        expect(reply).toEqual({ type: 'ack', sequence: 2,
+          refused: 'memory_context_unavailable' });
+        expect(reply).not.toHaveProperty('token');
+        expect(reply).not.toHaveProperty('context');
+      }
+      heads.mockRestore();
+      issuance.mockClear();
+      const refused = { type: 'ack', sequence: refusedSequence,
+        refused: 'memory_context_unavailable' };
+      const next = await bridge.exchange(refusedSequence);
+      expect(next).toEqual(refused);
+      expect(next).not.toHaveProperty('token');
+      expect(next).not.toHaveProperty('context');
+      expect(issuance).not.toHaveBeenCalled();
+      expect(await bridge.exchange(refusedSequence)).toEqual(refused);
+    } finally {
+      heads.mockRestore();
+      issuance.mockRestore();
+    }
+  } finally {
+    await bridge.close();
+  }
+}
+async function allowsMemoryChangeAfterScopeBoundary(change: 'correct' | 'forget') {
+  await checkRenewalMemoryBoundary(change, 'final_access_read');
+}
+it.each(['correct', 'forget'] as const)(
+  'allows %s during the final access read but refuses the next turn renewal',
+  allowsMemoryChangeAfterScopeBoundary);
+
+async function refusesMemoryChangeAtScopeBoundary(change: 'correct' | 'forget') {
+  await checkRenewalMemoryBoundary(change, 'last_scope_read');
+}
+it.each(['correct', 'forget'] as const)(
+  'refuses turn renewal when %s is visible at the last scope-position read',
+  refusesMemoryChangeAtScopeBoundary);
+
+async function refusesTerminalMemoryDuringSigning(action: 'invalidated' | 'ended') {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const rows = await history(setup.nats.store, 'conversation-conversation', 'test');
+  let prepared: z.infer<typeof memoryContextRecordedEventSchema> | undefined;
+  for (const row of rows) {
+    if (row.event.type !== 'agent.memory_context_recorded') continue;
+    const recorded = memoryContextRecordedEventSchema.parse(row.event);
+    if (recorded.data.action === 'prepared') prepared = recorded;
+  }
+  if (!prepared) throw new Error('Memory preparation missing from fixture');
+  const reason = action === 'ended' ? 'ended' : 'access_changed';
+  const terminal = { ...prepared.data, action, reason };
+  const id = randomUUID();
+  // Keep the server writer required by memory evidence.
+  const terminalEvent = { ...prepared, id, commandId: id, data: terminal };
+  memoryContextRecordedEventSchema.parse(terminalEvent);
+  const bridge = await renewalBridge();
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function endDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    await setup.nats.seed([terminalEvent]);
+    return result;
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(endDuringSigning);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).toHaveBeenCalledOnce();
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each(['invalidated', 'ended'] as const)(
+  'refuses turn renewal when memory becomes %s during signing',
+  refusesTerminalMemoryDuringSigning);
+
+async function refusesRenewalAtOriginalDeadline() {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const confirm = decisionAccess.confirmDecisionAccess;
+  let originalDeadline: number | undefined;
+  async function captureDeadline(...args: Parameters<typeof confirm>) {
+    originalDeadline ??= args[1].deadline;
+    return confirm(...args);
+  }
+  const clock = vi.spyOn(performance, 'now');
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function expireDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    if (originalDeadline === undefined) throw new Error('Access check did not run');
+    clock.mockReturnValue(originalDeadline);
+    return result;
+  }
+  const access = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+  access.mockImplementation(captureDeadline);
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(expireDuringSigning);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).toHaveBeenCalledOnce();
+  } finally {
+    clock.mockRestore();
+    access.mockRestore();
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it('refuses turn renewal when signing reaches the original access deadline',
+  refusesRenewalAtOriginalDeadline);
+
+async function sanitisesMemoryPreparationError() {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  async function* unavailableScope(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) throw new Error('Private canary in storage error');
+    yield* read(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(unavailableScope);
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).not.toHaveBeenCalled();
+  } finally {
+    reads.mockRestore();
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it('returns only the fixed refusal when memory preparation fails', sanitisesMemoryPreparationError);

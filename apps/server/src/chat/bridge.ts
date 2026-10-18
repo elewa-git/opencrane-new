@@ -1,3 +1,4 @@
+import { releaseTurnCredentials } from './turn-credentials.ts';
 import { executorStop } from '../computers/stop-executor.ts';
 import { childRequestHeld } from './child-hold.ts';
 import { createHash } from 'node:crypto';
@@ -7,8 +8,7 @@ import { ownConversation, fileCommand } from '../files/commands.ts';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, type RawData } from 'ws';
-import { computerCredentials, readComputerControl, type tokenIssuer } from '@opencrane/auth';
-import { modelForTask } from '@opencrane/models/routing';
+import { readComputerControl, type tokenIssuer } from '@opencrane/auth';
 import type { WatchOptions, AgentSession } from './bridge-conversation.ts';
 import type { TurnDelivery } from './turn-tools.ts';
 import { assistantProcessor } from './bridge-poll.ts';
@@ -17,15 +17,12 @@ import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { bridgeControl, readyBridgePass } from './bridge-control.ts';
-import { turnCommand, requireTurnMember, TurnAdmissionRejected,
+import { turnCommand, TurnAdmissionRejected,
   BudgetAdmissionRejected } from './turns.ts';
 import { recordBudgetRefusal } from './budget-refusal.ts';
 import { readChatFacts } from './chat-summary.ts';
-import { privateContext } from './private-context.ts';
-import { sharedContext } from './shared-context.ts';
-import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
-import { recordReport, ReportRejected, agentSessionData } from './reports.ts';
+import { recordReport, ReportRejected } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
 import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
@@ -96,83 +93,6 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
     }
   }
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(acknowledgement));
-}
-
-async function releaseTurnCredentials(options: BridgeOptions,
-  context: Parameters<typeof turnCommand>[1],
-  tokens: Tokens | undefined, report: z.infer<typeof reportDetails>,
-  binding: NonNullable<Awaited<ReturnType<typeof turnCommand>>>,
-  acknowledgement: { token?: string; expiresAt?: number; model?: string;
-    refused?: string; context?: unknown }) {
-  try {
-    const history = await turnContextFor(options, report, binding);
-    await requireOpenConversation(options, report);
-    if (!tokens) throw new Error('Turn issuer unavailable');
-    await requireTurnMember(options.store, options.silo, binding.requesterId);
-    const credentials = computerCredentials(options.store, tokens, options.silo);
-    const turn = { ...binding, assistantId: context.assistantId,
-      model: binding.model ?? modelForTask(binding.task) };
-    const grant = await credentials.turn(turn);
-    // Read chat facts before the final short membership check, even if its cache was lost.
-    await requireOpenConversation(options, report);
-    await requireTurnMember(options.store, options.silo, binding.requesterId);
-    acknowledgement.model = turn.model;
-    acknowledgement.token = grant.value;
-    acknowledgement.expiresAt = grant.expiresAt;
-    if (history !== undefined) acknowledgement.context = history;
-  } catch (error) {
-    if (error instanceof TurnAdmissionRejected) {
-      acknowledgement.refused = error.message;
-      return;
-    }
-    if (!(error instanceof TurnContextUnavailable)) throw error;
-    await turnCommand(options.store, context, { ...report, status: 'failed' });
-    acknowledgement.refused = error.message;
-  }
-}
-
-async function requireOpenConversation(options: BridgeOptions,
-  report: z.infer<typeof reportDetails>) {
-  const facts = await readChatFacts(options.store, options.silo,
-    report.conversationId, report.turnId);
-  if (facts.conversationClosed) throw new TurnAdmissionRejected('Conversation is closed');
-}
-
-class TurnContextUnavailable extends Error {}
-
-async function turnContextFor(options: BridgeOptions,
-  report: z.infer<typeof reportDetails>,
-  binding: NonNullable<Awaited<ReturnType<typeof turnCommand>>>) {
-  function isMessage(row: ChatRows[number]) {
-    return row.event.type === 'message.posted' && row.event.id === report.turnId;
-  }
-  function decrypt(data: unknown) {
-    return options.keys.decrypt(options.silo, report.conversationId, data);
-  }
-  try {
-    await requireOpenConversation(options, report);
-    // Check the saved creation before choosing either reader, including on retries.
-    const event = await creationEvent(options.store, options.silo,
-      `conversation-${report.conversationId}`, 'conversation.created');
-    const created = agentSessionData(event.data);
-    const shared = 'contextKind' in created && created.contextKind === 'shared_child';
-    if (shared !== (binding.sharingClass === 'shared_only')
-      || (shared && binding.executionMode !== 'restricted')) {
-      throw new TurnContextUnavailable('Turn context mismatch');
-    }
-    if (binding.executionMode !== 'restricted') return undefined;
-    // Read history after admission, outside the two-second access check.
-    const rows = await chatHistory(options.store, options.silo, report.conversationId);
-    const message = rows.find(isMessage);
-    if (!message) throw new Error('Requested message unavailable');
-    if (shared) return sharedContext(rows, message, decrypt);
-    return privateContext(rows, message, binding.requesterId, decrypt);
-  } catch (error) {
-    if (error instanceof TurnContextUnavailable || error instanceof TurnAdmissionRejected) throw error;
-    const reason = binding.sharingClass === 'shared_only'
-      ? 'Shared context unavailable' : 'Private context unavailable';
-    throw new TurnContextUnavailable(reason, { cause: error });
-  }
 }
 
 async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: WebSocket,

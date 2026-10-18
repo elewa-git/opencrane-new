@@ -2361,7 +2361,23 @@ checking saved grant changes without repeating IAM reads. Each confirm reads onl
 rows after its checked position, confirms access, then reads scope changes again.
 If new rows arrived during access checking, it repeats both checks under the original
 two-second deadline. It refuses with `memory_context_unavailable` if they cannot settle
-before that deadline. It then checks every revision and dependency at the current time.
+before that deadline. After the final scope read it confirms access again, even when
+no scope position changed. This catches revocations saved during that read without
+adding scope or conversation streams to the authority fence or extending the deadline.
+It then checks every revision and dependency at the current time.
+
+Each stream has its own boundary for a released pass: its last exact position read.
+Memory scope positions are read before the final small access check. A correction or
+forget visible at that scope read refuses this renewal. If it is saved later, even
+while the final access read is still running, this renewal may release a pass. The
+next renewal or decision confirmation must refuse with `memory_context_unavailable`.
+No extra reads chase later memory changes. The access check still uses only the
+small access streams and keeps its original two-second deadline.
+Bridge tests save both correction and forget during the final access read, allow
+that renewal, then require the next repeated `agent.turn_started` to return the fixed
+refusal with no token or context. Both changes visible at the last scope-position
+read refuse the current renewal too.
+
 `memoryReferences` has an explicit `event-only` mode for processes without revision keys.
 Server reads and writes retain their custody checks. No scope or conversation stream is
 added to the authority fence. A turn with no loaded references reads no scope stream.
@@ -2379,7 +2395,12 @@ backwards scope position, incomplete history, expiry advancing during confirmati
 and repeated unrelated changes reaching the original deadline.
 Native memory admission remains disabled.
 
-Remaining row 2 work: turn-pass renewal in PR 2e and correction target proofs.
+The server also uses `prepareLoadedMemory` at turn-pass renewal, before signing and
+before returning the token. Both confirmations retain one authority snapshot and
+reject new loaded evidence during signing. A caller without an IAM binding can check
+a turn without references; loaded references always require the binding.
+
+Remaining row 2 work: correction target proofs and agent correct/forget contracts.
 Output release and process interruption remain row 3. Initial injection and native
 forwarding remain later rows. Fresh-install qualification and real model calls: NOT RUN.
 

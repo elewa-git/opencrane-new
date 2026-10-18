@@ -61,7 +61,7 @@ async function readScopeChanges(store: EventStore, scopes: Iterable<Scope>, dead
 }
 
 /** Read scope history before starting the short access check. */
-export async function prepareLoadedMemory(store: EventStore, binding: Binding,
+export async function prepareLoadedMemory(store: EventStore, binding: Binding | undefined,
   claims: Identity, conversation: StoredEvent[], deadline: number) {
   try {
     const state = loadedContext(conversation, claims);
@@ -84,6 +84,7 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding,
         return;
       }
       try {
+        if (!binding) throw new LoadedMemoryRefused();
         if (!rightsChecked) {
           for (const scope of scopes.values()) {
             await loadedMemoryRights(store, binding, claims, scope.scopeId, fresh, conversation);
@@ -99,6 +100,10 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding,
           // after new scope rows, keeping the original deadline for every attempt.
           changed = await readScopeChanges(store, scopes.values(), fresh.deadline);
         } while (changed);
+        // Use each stream's last exact position read as this pass's boundary.
+        // Catch access revoked during the last scope read, within the original deadline.
+        // Leave memory saved during this final access read for the next confirmation.
+        await fresh();
         if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
         confirmReferences(scopes.values(), references, claims.silo);
       } catch {

@@ -107,7 +107,8 @@ async function terminal(action: string, reason: string) {
   const events = [event('prepared', prepared), event('loaded', loaded), event('stop', stopped)];
   expect(await fixture(events).read()).toMatchObject({ memoryContext: {
     status: action, references: [personal], recallCalls: 1 } });
-  events.push(event('late', { ...loaded, callDigest: 'e'.repeat(64) }));
+  events.push(event('late', { ...loaded, callDigest: 'e'.repeat(64),
+    dispatchDigest: 'f'.repeat(64) }));
   await expect(fixture(events).read()).rejects.toThrow();
 }
 it.each([['invalidated', 'expired'], ['invalidated', 'access_changed'], ['ended', 'ended']])(
@@ -138,7 +139,8 @@ async function referenceLimit() {
   const repeated = { ...loaded, additions: [additions[0]!] };
   events.push(event('repeated', repeated));
   expect(await fixture(events).read()).toMatchObject({ memoryContext: { recallCalls: 1 } });
-  events.push(event('overflow', { ...loaded, callDigest: 'e'.repeat(64) }));
+  events.push(event('overflow', { ...loaded, callDigest: 'e'.repeat(64),
+    dispatchDigest: 'f'.repeat(64) }));
   await expect(fixture(events).read()).rejects.toThrow();
 }
 it('counts unique references across initial input and recall, with no eviction', referenceLimit);
@@ -208,7 +210,8 @@ async function turnClosed() {
   const events = [event('prepared', prepared), event('loaded', loaded), closed];
   expect(await fixture(events).read()).toMatchObject({ turnEnded: true, memoryContext: {
     status: 'ended', references: [personal], executionAvailable: false } });
-  events.push(event('late', { ...loaded, callDigest: 'e'.repeat(64) }));
+  events.push(event('late', { ...loaded, callDigest: 'e'.repeat(64),
+    dispatchDigest: 'f'.repeat(64) }));
   await expect(fixture(events).read()).rejects.toThrow();
 }
 it('keeps references when the turn closes and refuses later load records', turnClosed);
@@ -291,3 +294,82 @@ async function savedAppendRace() {
   }
 }
 it('keeps one durable load when conditional appends race and the reply is lost', savedAppendRace);
+
+async function rejectsDuplicateAdditions() {
+  const duplicate = { ...loaded, additions: [personal, personal] };
+  const events = [event('prepared', prepared), event('loaded', duplicate)];
+  await expect(fixture(events).read()).rejects.toThrow('Memory reference changed or repeated');
+}
+it('refuses two additions of the same fact in one reply', rejectsDuplicateAdditions);
+
+async function keepsEqualIdsInDifferentScopes() {
+  const sameId = { ...shared, memoryId: personal.memoryId };
+  const additions = [personal, sameId];
+  const scopePositions = [
+    { scopeId: personal.scopeId, position: 1 }, { scopeId: shared.scopeId, position: 2 },
+  ];
+  const next = { ...loaded, additions, scopePositions };
+  const events = [event('prepared', prepared), event('loaded', next)];
+  const facts = await fixture(events).read();
+  expect(facts.memoryContext?.references).toEqual(additions);
+}
+it('keeps equal memory ids in different scopes as separate references',
+  keepsEqualIdsInDifferentScopes);
+
+const invalidPositions = [
+  { name: 'duplicate', positions: [
+    { scopeId: personal.scopeId, position: 1 }, { scopeId: personal.scopeId, position: 1 },
+  ] },
+  { name: 'backwards', positions: [{ scopeId: personal.scopeId, position: 0 }] },
+  { name: 'missing', positions: [] },
+];
+async function refusesInvalidPositions(change: typeof invalidPositions[number]) {
+  const next = { ...loaded, callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64),
+    scopePositions: change.positions };
+  const events = [event('prepared', prepared), event('loaded', loaded), event('next', next)];
+  await expect(fixture(events).read()).rejects.toThrow(/Memory scope position/u);
+}
+it.each(invalidPositions)('refuses $name positions in a later recall', refusesInvalidPositions);
+
+async function refusesFourthScope() {
+  const third = { scopeId: 'e'.repeat(64), memoryId: 'third', revision: 1 };
+  const additions = [personal, shared, third];
+  const scopePositions = [];
+  for (const reference of additions) {
+    scopePositions.push({ scopeId: reference.scopeId, position: 1 });
+  }
+  const first = { ...loaded, additions, scopePositions };
+  const fourth = { scopeId: 'f'.repeat(64), memoryId: 'fourth', revision: 1 };
+  const next = { ...loaded, callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64),
+    additions: [fourth], scopePositions: [{ scopeId: fourth.scopeId, position: 2 }] };
+  const events = [event('prepared', prepared), event('loaded', first), event('next', next)];
+  await expect(fixture(events).read()).rejects.toThrow('Memory scope limit exceeded');
+}
+it('refuses a fourth scope accumulated across replies', refusesFourthScope);
+
+async function refusesLateInitialLoad(firstDelivery: 'initial' | 'recall') {
+  const initial = { ...loaded, delivery: 'initial', callDigest: null, dispatchDigest: null };
+  const first = firstDelivery === 'initial' ? initial : loaded;
+  const events = [event('prepared', prepared), event('first', first), event('late', initial)];
+  await expect(fixture(events).read()).rejects.toThrow('Initial memory already loaded');
+}
+it.each(['initial', 'recall'] as const)(
+  'refuses initial input after an earlier %s reply', refusesLateInitialLoad);
+
+async function refusesReusedDispatch() {
+  const next = { ...loaded, callDigest: 'e'.repeat(64) };
+  const events = [event('prepared', prepared), event('loaded', loaded), event('next', next)];
+  await expect(fixture(events).read()).rejects.toThrow('Memory call already recorded');
+}
+it('refuses a reused dispatch with a different call digest', refusesReusedDispatch);
+
+async function keepsReturnedMemorySeparate() {
+  const saved = fixture([event('prepared', prepared), event('loaded', loaded)]);
+  const first = await saved.read();
+  first.memoryContext!.references[0]!.revision = 99;
+  first.memoryContext!.scopePositions[0]!.position = 99;
+  const second = await saved.read();
+  expect(second.memoryContext?.references).toEqual([personal]);
+  expect(second.memoryContext?.scopePositions).toEqual([{ scopeId: personal.scopeId, position: 1 }]);
+}
+it('keeps changes to returned memory separate from saved accounting', keepsReturnedMemorySeparate);

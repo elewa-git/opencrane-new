@@ -3113,8 +3113,30 @@ Chat summaries and recall delivery import `foldMemoryContext` from `@opencrane/m
 The models decision service uses that same fold before model, tool and recall dispatch.
 The [dispatch contract](../../libs/models/README.robot.md#loaded-memory-before-dispatch-p4-15-pr-2d-part-of-97)
 describes incremental scope checks and event-only revision validation.
-Turn credential renewal still needs this check in P4-15 PR 2e. Output invalidation,
-process interruption and correction target proofs remain separate work.
+`chat/turn-credentials.ts` calls the same check before signing and before releasing a
+turn pass, including repeated `agent.turn_started` reports. It loads chat, computer
+and scope history before starting one two-second authority check. Later confirmations
+read only new rows and reject memory additions or ended context during signing.
+Only access streams enter the authority fence. It always watches the requester and
+assistant, including on turns without memory. Missing IAM configuration refuses
+loaded references; turns without references still read no scope stream.
+A memory refusal returns only `memory_context_unavailable`, with no token or context.
+It appends no memory evidence and does not close the computer turn or stop its process.
+
+`test/memory-dispatch.test.ts` covers renewal after correction, forgetting, requester
+and assistant read/MCP revocation, changes during signing, expiry at release, valid
+renewal, no-reference renewal, access removal during the final activity check and
+cold replay with a forgotten dependency. Barriers also revoke assistant memory-read
+access and requester MCP access during the last scope-position read of a repeated
+turn-start report, even when that position stays unchanged. Both return only the fixed refusal, with no token or context.
+Further tests cover terminal evidence during signing, the original deadline across
+signing and errors during memory preparation. Accounting tests cover duplicate
+references, equal ids in different scopes, scope positions and limits, initial input
+arriving twice or after recall, reused dispatches, late loads and reference limits.
+Changing a returned value must also leave the saved accounting unchanged.
+Remaining row 2 work: correction target proofs and agent correct/forget contracts.
+Output invalidation and process interruption belong to row 3. Native memory admission
+remains disabled. Fresh-install qualification: NOT RUN.
 
 ## Saved budget stop socket notifications (P3-14 PR 7b, first part; Part of #55)
 

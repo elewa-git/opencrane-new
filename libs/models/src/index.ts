@@ -15,7 +15,7 @@ export { initialiseBudgetProjection, rebuildBudgetProjection } from './rebuild.t
 
 export { approvalCards, readApproval, decideApproval } from './approvals.ts';
 export {
-  authorityFence, ownershipWriteAccess,
+  authorityFence, decisionAuthorityFence, ownershipWriteAccess,
   conversationAccessFence,
   currentAuthority,
   isAuthorityChanged,
@@ -47,7 +47,7 @@ export { providerTurnAdmission, managedProviderCallsEnabled } from './provider-t
 
 export { providerDrainCommand, providerDrainStatus } from './provider-drain.ts';
 
-export { approvalActivity } from './decision-activity.ts';
+export { approvalActivity, confirmDecisionAccess } from './decision-activity.ts';
 export { mcpInstanceCommand, mcpInstanceStatus, mcpInstanceChange, McpInstanceRefused }
   from './mcp-instance.ts';
 export { mcpAdminInstanceStop, mcpAdminInstanceChange } from './mcp-instance.ts';
@@ -78,3 +78,4 @@ export { readHostedAdmission, foldHostedAdmission, requestHostedCheck }
 export { gatewayConfigurationWorker } from './gateway-configuration-worker.ts';
 
 export { foldMemoryContext, type MemoryContextState } from './memory-context-fold.ts';
+export { LoadedMemoryRefused, prepareLoadedMemory } from './loaded-memory.ts';
