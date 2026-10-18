@@ -5,6 +5,10 @@ For people, read [README.md](README.md) first.
 This package is the typed event catalogue used by server validation and the event
 core. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
+The existing `agent.turn_failed` schema accepts the fixed
+`conversation_closed` reason from the server's waiting-input cleanup. It adds
+no event type or field. The registry and `docs/architecture/events.md` describe
+the same writer.
 
 ## Dated MCP catalogue evidence
 

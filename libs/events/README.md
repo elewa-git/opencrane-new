@@ -26,7 +26,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests, hosted image check requests and results, registration, startup, saved turn, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch, not-sent outcomes and cancellation reasons| events["libs/events<br/>checks records and previews dates"]
+  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests, hosted image check requests and results, registration, startup, saved turns and closed chat failures, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch, not-sent outcomes and cancellation reasons| events["libs/events<br/>checks records and previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication subscriptions, nightly memory reviews and records, and cleanup results| events
@@ -43,6 +43,10 @@ The back end checks tool hashes against their saved definitions. A hash is a fix
 value calculated from those definitions. Older records remain readable for replay.
 
 ## What it is responsible for
+
+Check the same failed-turn record for a computer report and for a waiting
+request ended by a closed chat. The latter carries the fixed reason
+`conversation_closed` and no message text.
 
 Check relay closure receipts for safe fields, a stable identity and the models writer.
 Older destination observations remain readable. New socket receipts never claim that

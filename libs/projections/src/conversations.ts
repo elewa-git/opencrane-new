@@ -242,8 +242,9 @@ export async function listOpenConversations(db: Query, silo: string) {
   }
   const sessions = [];
   for (const [conversationId, row] of created) {
-    if (closed.has(conversationId)) continue;
     const data = conversationCreatedDataSchema.parse(row.data);
+    // Keep closed agent chats available to the bridge until their saved work is settled.
+    if (closed.has(conversationId) && data.mode !== 'agent_session') continue;
     sessions.push({ ...data, conversationId, createdAt: row.time });
   }
   return sessions;

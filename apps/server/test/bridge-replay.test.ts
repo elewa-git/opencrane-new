@@ -268,13 +268,13 @@ it('wakes another conversation without rereading the archive of an already close
   await suspendComputer(fixture.store, { ...fixture.context, latest: ready, ready });
   let release!: () => void;
   const archiveBlocked = new Promise<void>(resolve => { release = resolve; });
-  let archiveRead = false;
+  let archiveReads = 0;
   const read = fixture.store.readStream.bind(fixture.store);
   // The first snapshot is available; later archive reads are stalled at the NATS boundary.
   const reading = vi.spyOn(fixture.store, 'readStream').mockImplementation(async function* (...args) {
     if (args[0] === 'conversation-alice') {
-      if (archiveRead) await archiveBlocked;
-      archiveRead = true;
+      archiveReads++;
+      if (archiveReads > 1) await archiveBlocked;
     }
     yield* read(...args);
   });
@@ -287,6 +287,7 @@ it('wakes another conversation without rereading the archive of an already close
       event: { ...ready, id: 'new-ready', commandId: 'new-ready', data: { computerId: 'computer', assistantId: 'assistant', generation: 1, podUid: 'new-pod' } } });
     expect(result.status).toBe('appended');
     await until(() => fixture.messages.some(message => typeof message === 'object' && message !== null && Reflect.get(message, 'id') === 'message-bob'), 3000);
+    expect(archiveReads).toBe(1);
     expect((await history(fixture.store, 'computer-assistant')).filter(row => row.event.type === 'computer.turn_closed')).toHaveLength(1);
   } finally {
     release(); stop.abort(); await work; reading.mockRestore(); vi.restoreAllMocks(); await fixture.close(); await dbs.close();
@@ -982,7 +983,14 @@ async function sendsPromptlyWithFinishedChats() {
   credentials.mockResolvedValue();
   const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
   const heads = vi.spyOn(fixture.store, 'head');
-  const reads = vi.spyOn(fixture.store, 'readStream');
+  const savedRead = fixture.store.readStream.bind(fixture.store);
+  const finishedOldHistories = new Set<string>();
+  async function* trackFinishedHistory(...args: Parameters<typeof fixture.store.readStream>) {
+    yield* savedRead(...args);
+    const subject = args[0];
+    if (subject.startsWith('participation-old-')) finishedOldHistories.add(subject);
+  }
+  const reads = vi.spyOn(fixture.store, 'readStream').mockImplementation(trackFinishedHistory);
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   function freshTurnArrived() {
     return fixture.messages.some(isFreshTurn);
@@ -1007,6 +1015,11 @@ async function sendsPromptlyWithFinishedChats() {
     const closeTurn = { ...terminal, status: 'failed' as const };
     await turnCommand(fixture.store, fixture.context, closeTurn);
     await runner.run(conversations);
+    function allOldHistoriesFinished() {
+      return finishedOldHistories.size === 90;
+    }
+    // Let the first pass finish before checking whether later passes reread old chats.
+    await until(allOldHistoriesFinished, 60_000);
     const previousPolls = heads.mock.calls.filter(isGlobalHead).length;
     function finishedTurnProcessed() {
       return heads.mock.calls.filter(isGlobalHead).length >= previousPolls + 3;

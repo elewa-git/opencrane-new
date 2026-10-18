@@ -12,6 +12,9 @@ The conversation table has an index on `silo` and event `type`. The server uses
 it to read created and closed chats in one query when it polls for work. Two partial
 indexes support source-message lookups by message id within one silo and conversation.
 Callers check chat permission first and confirm the matched position in the event log.
+`listOpenConversations` also returns closed agent sessions, so the bridge can
+check their saved work after a restart. It still omits closed human chats. The
+projection only selects candidates; the bridge checks events before cleanup.
 
 `Db.lock` accepts an optional `{timeoutMs}`. PostgreSQL resets this lock timeout before
 returning the client to the pool. Memory commands use 100 ms; projection workers keep

@@ -159,7 +159,9 @@ function recordActivity(snapshot: ComputerWatchState, event: EventEnvelope) {
   const assistantId = snapshot.conversations.get(event.subject);
   if (!assistantId) return;
   const activity = snapshot.activity.get(assistantId) ?? { time: 0, openTurns: new Set<string>() };
-  if (event.type === 'message.posted') activity.openTurns.add(event.id);
+  if (event.type === 'message.posted' && field(event.data, 'authorKind') === 'human') {
+    activity.openTurns.add(event.id);
+  }
   if (['agent.turn_completed', 'agent.turn_failed'].includes(event.type)) {
     activity.openTurns.delete(field(event.data, 'turnId'));
   }

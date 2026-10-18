@@ -1,0 +1,1 @@
+Closed assistant chats now end waiting requests once and retry stopping admitted turns. The server repairs missing turn endings after a restart, so the computer can become idle when the work has ended.

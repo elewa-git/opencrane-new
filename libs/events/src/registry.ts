@@ -246,7 +246,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   event(
     'agent.turn_failed',
     'conversation',
-    'The bridge reported that a turn failed.',
+    'The bridge reported a failed turn, or close cleanup ended waiting work.',
     data.agentTurnFailedDataSchema,
     { conversationId: 'conv_1', turnId: 'turn_1', reason: 'model_error' },
   ),

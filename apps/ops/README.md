@@ -11,7 +11,7 @@ This is the background workers layer. `apps/server` records events, and these wo
 ```mermaid
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
-  nats -->|new events, departures, owner appointments and memory facts| ops["apps/ops<br/>workers and memory replay"]
+  nats -->|new events, human chat requests, departures, owner appointments and memory facts| ops["apps/ops<br/>workers and memory replay"]
   ops -->|records gateway preparations, departure changes and spending stops| nats
   ops -.->|checks memory history and revisions| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten and superseded memory keys| keys["Server files<br/>private memory keys"]
@@ -35,6 +35,8 @@ flowchart LR
 - Starts computers, gives them short-lived access keys through authenticated
   Kubernetes access as root, and pauses idle ones. Deliver the signing public key
   with each pass so the computer can check it and save its identity.
+- Counts human requests as waiting computer work. Routine posts do not keep a
+  computer busy after its turns have ended.
 - Settles model spending after a model request.
 - Rebuilds tables and permissions for operator recovery.
 - Checks all saved memory keys before rebuilding current memory and search text.

@@ -236,7 +236,10 @@ function checkStart(facts: ComputerFacts, conversation: ChatFacts, computerId: s
       computer.parse(current.event.data).computerId !== computerId) {
     throw new Error('Computer is not ready');
   }
-  if (conversation.turnEnded) throw new ReportRejected('Turn is closed');
+  // Save a bound refusal when close cleanup ended a queued turn before its start arrived.
+  if (conversation.turnEnded && !conversation.cleanupEnded) {
+    throw new ReportRejected('Turn is closed');
+  }
 }
 function isRefusedAdmission(turn: TurnSummary | undefined,
   conversation: ChatFacts, input: TurnInput) {
@@ -252,7 +255,8 @@ function refuseClosedConversation(turn: TurnSummary | undefined,
   conversation: ChatFacts, input: TurnInput) {
   if (input.status !== 'started' || !conversation.conversationClosed) return;
   // Keep admitted work until termination is confirmed; refusing a pass is not termination.
-  if (turn?.firstStart || turn?.firstClose || conversation.turnEnded) {
+  if (turn?.firstStart || turn?.firstClose ||
+      (conversation.turnEnded && !conversation.cleanupEnded)) {
     throw new TurnAdmissionRejected('Conversation is closed');
   }
 }

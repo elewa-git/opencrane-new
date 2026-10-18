@@ -18,6 +18,7 @@ type Snapshot = ReturnType<typeof assistantSnapshot>;
 type Progress = ConversationProgress & {
   head: number;
   computerEventId: string | undefined;
+  computerStartHead: number;
   kind: string | undefined;
 };
 type ConversationLink = Awaited<ReturnType<Parameters<typeof processConversation>[5]>>;
@@ -25,6 +26,20 @@ type Connection = (computerId: string, assistantId: string) =>
   Promise<ConversationLink & { control: ReturnType<typeof bridgeControl> }>;
 const computerData = z.object({ computerId: z.string() });
 const assistantKindData = z.object({ kind: z.enum(['personal', 'team']) });
+
+function canReuseProgress(previous: Progress, head: number, assistant: Snapshot,
+  currentConnectionId: number | undefined, computerHistoryUnavailable: boolean) {
+  if (computerHistoryUnavailable || previous.retry) return false;
+  const linkClosed = previous.connectionId !== undefined &&
+    previous.connectionId !== currentConnectionId;
+  if (previous.head !== head || previous.computerStartHead !== assistant.computerStartHead ||
+      previous.kind !== assistant.kind) {
+    return false;
+  }
+  // Reuse settled chats when a computer changes; a new computer turn start still gets a pass.
+  if (!previous.pending) return true;
+  return previous.computerEventId === assistant.current?.id && !linkClosed;
+}
 
 export function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
   connection: Connection,
@@ -97,20 +112,19 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     computerHistoryUnavailable = false, checkControl?: () => Promise<boolean>) {
     try {
       const conversationId = conversation.conversationId;
-      const head = await options.store.head(`conversation-${conversationId}`);
+      // Include older closes saved on participation streams in this one position read.
+      const head = await options.store.head(`conversation-${conversationId}`, Infinity, true);
       const previous = seen.get(conversationId);
-      const linkClosed = previous?.connectionId !== undefined &&
-        previous.connectionId !== connectionId(conversation.assistantId);
       const computerEventId = assistant.current?.id;
-      const sameComputer = previous?.computerEventId === computerEventId;
-      const sameKind = previous?.kind === assistant.kind;
-      if (!computerHistoryUnavailable && previous?.head === head && sameComputer && sameKind &&
-        !previous.retry && !linkClosed) {
+      const currentConnectionId = connectionId(conversation.assistantId);
+      if (previous && canReuseProgress(previous, head, assistant, currentConnectionId,
+        computerHistoryUnavailable)) {
         return previous.pending;
       }
       const result = await processConversation(options, tokens, conversation,
         assistant, refused, connection, computerHistoryUnavailable, checkControl);
-      const progress = { ...result, head, computerEventId, kind: assistant.kind };
+      const progress = { ...result, head, computerEventId,
+        computerStartHead: assistant.computerStartHead, kind: assistant.kind };
       seen.set(conversationId, progress);
       return result.pending;
     } catch {
@@ -168,7 +182,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       if (!assistant.kind || assistant.current?.type !== 'computer.ready') return;
       const computer = computerData.parse(assistant.current.data);
       if (refused.has(computer.computerId)) return;
-      const head = await options.store.head(`conversation-${conversation.conversationId}`);
+      const head = await options.store.head(
+        `conversation-${conversation.conversationId}`, Infinity, true);
       const previous = seen.get(conversation.conversationId);
       if (previous?.head === head && !previous.retry) return;
       const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
