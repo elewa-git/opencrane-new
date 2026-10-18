@@ -329,4 +329,5 @@ pages were also captured at [1280px](p5-1-live/signed-in-1280.png) and
 | Full claim test file after live cleanup | PARTIAL | Several fixture cases expected slot 2 to be free. Another worktree had started that slot, so these failed at setup. The full file passed twice before the wrapping-key change, which did not alter claim behaviour. |
 | Event catalogue, Knip and changelog | PASS | `check:events` checked 143 events; `lint:unused` and `lint:changelog` exited 0. |
 | Typecheck | PASS | `npm run typecheck` completed for all workspaces and the package TypeScript project. |
+| Lint | PASS | `npm run lint` completed with no errors. ESLint reported 20 existing function-length warnings outside this change. |
 | Full root suite | NOT RUN | This follow-up was instructed not to run it. |
