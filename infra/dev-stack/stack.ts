@@ -237,9 +237,6 @@ function prefixed(values: Record<string, string>, prefix: string) {
   return Object.fromEntries(Object.entries(values).map(([name, value]) => [`${prefix}${name}`, value]));
 }
 async function provisionComputers(settings: Record<string, string>) {
-  if (!(await run('kubectl', ['get', 'namespace', namespace, '--ignore-not-found', '-o', 'name'])).trim()) {
-    await run('kubectl', ['create', 'namespace', namespace]);
-  }
   if (secondary) {
     // Keep one extra disk so a repeat can retain saved data and start a new shared assistant.
     const quota = {
@@ -255,7 +252,13 @@ async function provisionComputers(settings: Record<string, string>) {
         },
       },
     };
+    // Record the planned computer resources before creating anything in Kubernetes.
     await save('quota.json', JSON.stringify(quota));
+  }
+  if (!(await run('kubectl', ['get', 'namespace', namespace, '--ignore-not-found', '-o', 'name'])).trim()) {
+    await run('kubectl', ['create', 'namespace', namespace]);
+  }
+  if (secondary) {
     await run('kubectl', ['apply', '-f', `${directory}/quota.json`]);
   }
   await run('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
@@ -612,9 +615,8 @@ try {
         if (packageRemovalFailed) {
           throw new Error('Compose stopped, but the package was not removed; check ownership and Kubernetes access');
         }
-        await removeComputers();
-        if (await packagedSlotIsBusy()) {
-          throw new Error('Package namespace still uses this secondary slot');
+        if (await exists(`${directory}/quota.json`)) {
+          await removeComputers();
         }
         await rm(directory, { recursive: true });
       }

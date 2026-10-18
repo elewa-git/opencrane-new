@@ -77,6 +77,8 @@ slot alone.
 The spare slot runs either the Compose stack or the local Helm package. Package
 preparation refuses a running Compose stack. If Kubernetes is unavailable during
 cleanup, `down.sh` stops Compose and keeps any package owner record for a later retry.
+Without a package or computer setup record, teardown needs no Kubernetes connection.
+A started Compose stack still removes its recorded computer resources.
 
 ## How to run or test it
 

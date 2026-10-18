@@ -7,3 +7,5 @@ release identity, and secondary teardown stops Compose during a Kubernetes outag
 while keeping the package record for a retry.
 Cleanup now matches a saved random install ID with the Helm release label, so a
 later foreign release cannot be mistaken for this worktree's interrupted install.
+Secondary teardown skips Kubernetes when there are no package or computer setup
+records, while retaining failed package records for a retry.

@@ -69,6 +69,10 @@ saving the release Secret's UID, cleanup recovers the UID from the matching Secr
 A later foreign or unlabelled release is refused, even in the owned namespace.
 Older records without an install ID cannot authorise release removal. If Kubernetes is unavailable, secondary `down` still
 stops Compose, keeps the package record and reports that the package remains.
+Without a package record, `down` skips Helm namespace checks. It removes computer
+resources only when `quota.json` exists; that file is saved before the first
+Kubernetes call during computer setup. With neither record, teardown makes no
+Kubernetes calls.
 See [package operator notes](../package/README.robot.md).
 Old owner files containing only a worktree path count as claims started long ago.
 The next claim reports the reclaim on stderr and records the new owner. `status`
