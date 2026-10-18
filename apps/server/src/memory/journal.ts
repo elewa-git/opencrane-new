@@ -5,7 +5,7 @@ import { memoryRevisionIdentitySchema } from '@opencrane/events';
 
 const entrySchema = z.strictObject({ identity: memoryRevisionIdentitySchema,
   principalKind: z.enum(['human', 'agent']).default('human'),
-  operation: z.literal('forget').optional(),
+  operation: z.enum(['forget', 'correct']).optional(),
   requester: z.string(), commandId: z.string(), inputDigest: z.string(),
   appendUntil: z.number().optional(),
   expectedSequence: z.number().int().nonnegative().optional(),

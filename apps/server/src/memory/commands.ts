@@ -16,7 +16,7 @@ import { MemoryConflict, memorySnapshot } from './reads.ts';
 import { checkSources } from './sources.ts';
 import { commandJournal } from './journal.ts';
 import { commandReference, commandHistory } from './command-history.ts';
-import { forgottenReceipt } from './forget.ts';
+import { changeReceipt } from './forget.ts';
 import { acquireMemoryWrite } from './admission.ts';
 
 const fields = memoryWrittenDataSchema.pick({ kind: true, pinned: true, expiresAt: true,
@@ -288,14 +288,19 @@ function pendingForgetReceipt(stage: string) {
   return { outcome: 'unknown' };
 }
 
+function isMemoryChange(row: StoredEvent | undefined):
+  row is StoredEvent & { event: { type: 'memory.forgotten' | 'memory.corrected' } } {
+  return row?.event.type === 'memory.forgotten' || row?.event.type === 'memory.corrected';
+}
+
 export async function readCommand(options: MemoryOptions, requester: string, scope: Scope,
   commandId: string, access: Pick<Awaited<ReturnType<typeof scopeAccess>>,
     'audience' | 'canForget'>) {
   const { audience } = access;
   const state = await commandHistory(options, scope.scopeId, requester, commandId);
-  if (state.original?.event.type === 'memory.forgotten') {
+  if (isMemoryChange(state.original)) {
     requireForgetAccess(access);
-    return forgottenReceipt(state.original, state.rows, audience);
+    return changeReceipt(state.original, state.rows, audience, options.keyDirectory);
   }
   await memorySnapshot(options, scope);
   if (state.original?.event.type === 'memory.maintenance_bound') {
@@ -309,7 +314,7 @@ export async function readCommand(options: MemoryOptions, requester: string, sco
   const journal = commandJournal(options.keyDirectory, memoryId);
   if (!state.original) {
     const entry = journal.read();
-    if (entry?.operation === 'forget') {
+    if (entry?.operation) {
       requireForgetAccess(access);
       return pendingForgetReceipt(entry.stage);
     }
@@ -350,8 +355,11 @@ function definiteFailure(entry: JournalEntry, rows: StoredEvent[]) {
 
 async function reconcileCommand(options: MemoryOptions, reference: string) {
   const journal = commandJournal(options.keyDirectory!, reference);
+  const factReservation = reference.startsWith('fact-');
   const entry = journal.read();
   if (!entry) {
+    // Keep incomplete fact records when their owner cannot be checked under the fact lock.
+    if (factReservation) return;
     function removeOrphan() {
       if (journal.read() === null) {
         rmSync(`${options.keyDirectory!}/command-${reference}.json-pending`, { force: true });
@@ -366,10 +374,16 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
   }
   const expected = commandReference(options.silo, entry.identity.scopeId,
     entry.requester, entry.commandId, entry.principalKind);
-  if (reference !== expected || entry.identity.memoryId !== reference) {
+  let expectedRecord = expected;
+  if (factReservation && entry.operation === 'correct') {
+    const factReference = commandReference(options.silo, entry.identity.scopeId,
+      entry.requester, entry.identity.memoryId);
+    expectedRecord = `fact-${factReference}`;
+  }
+  if (reference !== expectedRecord || (!entry.operation && entry.identity.memoryId !== reference)) {
     throw new Error('Invalid memory command record');
   }
-  if (entry.stage === 'unknown' && Date.now() <= entry.appendUntil) {
+  if (!factReservation && entry.stage === 'unknown' && Date.now() <= entry.appendUntil) {
     return;
   }
   const state = await commandHistory(options, entry.identity.scopeId,
@@ -384,12 +398,30 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
       if (!definiteFailure(current, state.rows)) {
         return Promise.resolve();
       }
+      if (current.operation === 'correct') {
+        memoryKeys(options.keyDirectory!).discardUnpublished(current.identity);
+        if (factReservation) {
+          journal.remove();
+        } else {
+          journal.save({ ...current, stage: 'failed' });
+        }
+        return Promise.resolve();
+      }
       memoryKeys(options.keyDirectory!).delete(current.identity);
     }
     journal.remove();
     return Promise.resolve();
   }
-  await options.db.lock!(`memory-command:${reference}`, finishRecovery, { timeoutMs: 100 });
+  const { identity, operation } = entry;
+  async function lockRecovery() {
+    if (operation === 'correct') {
+      const { silo, scopeId, memoryId } = identity;
+      return options.db.lock!(`memory-fact:${silo}:${scopeId}:${memoryId}`,
+        finishRecovery, { timeoutMs: 100 });
+    }
+    return finishRecovery();
+  }
+  await options.db.lock!(`memory-command:${expected}`, lockRecovery, { timeoutMs: 100 });
 }
 
 export async function reconcileCommands(options: MemoryOptions) {
@@ -399,7 +431,7 @@ export async function reconcileCommands(options: MemoryOptions) {
   const directory = await opendir(options.keyDirectory);
   let processed = 0;
   for await (const file of directory) {
-    const match = /^command-([a-f0-9]{64})\.json(?:-pending)?$/u.exec(file.name);
+    const match = /^command-((?:fact-)?[a-f0-9]{64})\.json(?:-pending)?$/u.exec(file.name);
     if (!match) {
       continue;
     }

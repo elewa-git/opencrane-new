@@ -224,7 +224,10 @@ overwritten by provision. Delete also removes temporary hard links left by an
 interrupted provision. Provision uses one known `-pending` filename per revision;
 delete removes that file directly, without reading the directory. An unfinished
 provision with no published key refuses further provisioning until the command
-has been reconciled. Concurrent provisioning may report a store error; it cannot
+has been reconciled. `discardUnpublished(identity)` removes only that revision's temporary
+file when no final key or deletion marker exists. The caller must hold the fact lock and
+rule out a delayed append before calling it. It never marks the revision destroyed.
+Concurrent provisioning may report a store error; it cannot
 overwrite an existing key or deletion marker.
 
 Only an empty deletion marker decrypts to null. A missing key file is a store

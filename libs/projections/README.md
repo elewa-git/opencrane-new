@@ -28,7 +28,7 @@ flowchart LR
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and indexes unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
-  projections -->|stores and reads keys| keys["Server files<br/>existing private key store"]
+  projections -->|stores and reads keys; repairs unfinished correction keys| keys["Server files<br/>existing private key store"]
 ```
 
 ## What it is responsible for
@@ -133,6 +133,7 @@ stays inside the projection.
   Keep newer revisions when an older or repeated write arrives.
 - Read memory ids and search matches within one silo and scope. Callers check permission first.
 - Keep each memory revision key separately, with a permanent marker when it is deleted.
+  Remove unfinished correction key files so a later correction can proceed.
   Refuse a missing store or key, so a storage failure cannot look like deliberate deletion.
 - Send member-change notices after the table update commits.
 - Keep private conversation content out of the event-history table.

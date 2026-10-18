@@ -51,7 +51,7 @@ flowchart LR
 
 A saved memory correction keeps the new revision and removes old revision keys and
 facts derived from them. Cleanup retries and restart recovery use the saved change.
-Correction requests through HTTP and tools are still planned.
+People can correct their own facts through HTTP. Correction through tools is still planned.
 
 The dispatcher prepares one complete gateway configuration for each current reviewed
 publication request. Jobs for the same silo run in saved order. Old or withdrawn
