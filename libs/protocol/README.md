@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, history and tool holds"]
   server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies, live stop notices and dated approvals| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -37,6 +37,7 @@ A saved receipt alone cannot prove that a gateway is still running.
 
 - Define the messages exchanged over the live browser connection.
 - Define the data returned for chat, computers, integrations, budgets, held spend and the history of changes.
+- Check change history dates, safe actors, search filters and small evidence pages.
 - Check tool call names and completion status in chat rows. Check access outcomes
   on decision rows, so delivered uploads keep their own outcome values.
 - Reject messages with missing or wrongly typed fields. Live-connection messages also reject fields they do not know; some page data allows extra fields so that newer data still loads.

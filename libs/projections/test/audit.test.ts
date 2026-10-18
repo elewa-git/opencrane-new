@@ -170,6 +170,12 @@ it('records only verified actors and digests, with no private text after replay'
         principal: { kind: 'system' as const, id: 'worker' } },
       { ...fixture('takeover.started', 'requested', { requestedBy: 'alice' }, false),
         principal: { kind: 'human' as const, id: 'mallory' } },
+      { ...fixture('member.invited', 'invited', {
+        invitedBy: 'alice', email: `private-email-${canary}@example.test`,
+      }, false), principal: { kind: 'human' as const, id: 'alice' } },
+      { ...fixture('team.created', 'team-canary', {
+        createdBy: 'alice', name: `private-name-${canary}`,
+      }, false), principal: { kind: 'human' as const, id: 'alice' } },
     ];
     for (let index = 0; index < events.length; index++) {
       const event = { ...events[index]!, commandId: `private-command-${canary}-${index}` };
@@ -179,12 +185,18 @@ it('records only verified actors and digests, with no private text after replay'
     const before = await readAudit(db.db, 'test', { limit: 50 });
     const byId = new Map(before.rows.map(row => [row.id, row.records[0]]));
     expect(byId.get('verified')).toMatchObject({ actor: { kind: 'person', id: 'alice' } });
-    expect(byId.get('spoofed')?.actor.kind).not.toBe('person');
-    expect(byId.get('system')?.actor.kind).toBe('system');
-    expect(byId.get('requested')?.actor.kind).not.toBe('person');
+    expect(byId.get('spoofed')?.actor?.kind).not.toBe('person');
+    expect(byId.get('system')?.actor?.kind).toBe('system');
+    expect(byId.get('requested')?.actor?.kind).not.toBe('person');
+    expect(byId.get('invited')?.actor).toEqual({ kind: 'person', id: 'alice' });
+    expect(byId.get('team-canary')?.actor).toEqual({ kind: 'person', id: 'alice' });
     expect(byId.get('verified')?.recordedAt).toBe('2026-10-03T00:00:00Z');
     expect(byId.get('verified')?.commandRef).toMatch(/^[a-f0-9]{64}$/u);
+    expect((await readAudit(db.db, 'test', { actorId: 'alice' })).rows.map(row => row.id))
+      .toEqual(['team-canary', 'invited', 'verified']);
     expect(JSON.stringify(before)).not.toContain(canary);
+    expect((await rebuildAuditProjection(db.db, nats.store, logger, { verify: true })).changed)
+      .toBe(false);
     expect((await rebuildAuditProjection(db.db, nats.store, logger, { verify: true })).changed)
       .toBe(false);
     expect(await readAudit(db.db, 'test', { limit: 50 })).toEqual(before);
@@ -198,7 +210,7 @@ it('filters indexed anchors and pages evidence without repeating records', async
     for (let position = 1; position <= 120; position++) {
       const outcome = position % 2 ? 'allow' : 'deny';
       const event = fixture('decision.recorded', `anchor-${position}`,
-        { requestId: `request-${position}`, outcome }, false);
+        { requestId: `request-${position}`, permitId: `permit-${position}`, outcome }, false);
       await auditTrail.apply(db.db, event, position);
     }
     const first = await readAudit(db.db, 'test', { limit: 50 });
@@ -208,20 +220,34 @@ it('filters indexed anchors and pages evidence without repeating records', async
     const third = await readAudit(db.db, 'test', { before: second.nextBefore, limit: 50 });
     expect([...first.rows, ...second.rows, ...third.rows].map(row => row.id))
       .toEqual(Array.from({ length: 120 }, (_, index) => `anchor-${120 - index}`));
-    expect((await readAudit(db.db, 'test', { outcome: 'deny', limit: 50 })).rows)
+    expect((await readAudit(db.db, 'test', { outcome: 'not_dispatched', limit: 50 })).rows)
       .toHaveLength(50);
     expect((await readAudit(db.db, 'test', { type: 'decision', limit: 50 })).rows)
       .toHaveLength(50);
     expect((await readAudit(db.db, 'test', { actorId: 'missing' })).rows).toEqual([]);
     expect((await readAudit(db.db, 'test', { from: '2026-10-04T00:00:00Z' })).rows)
       .toEqual([]);
+    expect((await readAudit(db.db, 'test', { to: '2026-10-02T23:59:59Z' })).rows)
+      .toEqual([]);
+    expect((await readAudit(db.db, 'test', { reference: 'anchor-120' })).rows)
+      .toHaveLength(1);
+    expect((await readAudit(db.db, 'test', { reference: 'request-120' })).rows)
+      .toHaveLength(1);
+    expect((await readAudit(db.db, 'test', { reference: 'permit-120' })).rows)
+      .toHaveLength(1);
+    const indexes = (await db.db.query<{ indexname: string; indexdef: string }>(
+      "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'audit_entries'", [])).rows;
+    for (const column of ['recorded_at', 'event_type', 'actor_id', 'outcome']) {
+      const index = indexes.find(candidate => candidate.indexname === `audit_${column}`);
+      expect(index?.indexdef).toContain(`(silo, ${column}, "position" DESC)`);
+    }
     for (let position = 122; position < 622; position++) {
       const event = fixture('effect.uncertain', `related-${position}`,
-        { requestId: 'request-120' }, false);
+        { permitId: 'permit-120' }, false);
       await auditTrail.apply(db.db, event, position);
     }
     const summary = await readAudit(db.db, 'test', { requestId: 'request-120' });
-    expect(summary.rows[0]?.records).toHaveLength(20);
+    expect(summary.rows[0]?.records).toHaveLength(21);
     expect(summary.rows[0]?.hasMoreEvidence).toBe(true);
     const seen: string[] = [];
     let before: number | undefined;
@@ -231,7 +257,8 @@ it('filters indexed anchors and pages evidence without repeating records', async
       seen.push(...detail!.records.map(record => record.eventId));
       before = detail!.nextBefore;
     } while (before);
-    expect(seen).toHaveLength(501);
-    expect(new Set(seen).size).toBe(501);
+    const expected = Array.from({ length: 500 }, (_, index) => `related-${621 - index}`);
+    expected.push('anchor-120');
+    expect(seen).toEqual(expected);
   } finally { await db.close(); }
 }, 90_000);

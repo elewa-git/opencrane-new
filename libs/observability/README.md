@@ -10,7 +10,7 @@ This shared library is used by the server, background workers and event-processi
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.-> obs["libs/observability<br/>safe logs and traces"]
+  server["apps/server<br/>back end"] -.-> obs["libs/observability<br/>safe logs, history paths and traces"]
   ops["apps/ops<br/>background workers"] -.-> obs
   handlers["libs/handlers<br/>event work"] -.-> obs
   projections["libs/projections<br/>read tables"] -.-> obs
@@ -19,7 +19,7 @@ flowchart LR
 
 ## What it is responsible for
 
-- Write structured log lines, hide member and conversation ids in sensitive paths,
+- Write structured log lines, hide member, conversation and change history ids in sensitive paths,
   and remove sensitive fields and web address queries.
 - Carry request details, such as a request id, into later work, so that every log line for one request can be linked.
 - Record when an event handler starts, finishes or fails, and how long it takes.

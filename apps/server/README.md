@@ -19,8 +19,8 @@ flowchart LR
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|indexes unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
+  server -->|indexes unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
+  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates and root stops without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records refused turn decisions| nats
@@ -220,6 +220,7 @@ have not been checked. Unrelated read receipts do not require reading the event 
   Checks current membership before repeating a start and passes the saved model
   to the turn-token issuer and the computer that runs the turn.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
+- Loads change history and its detail before checking the person's current admin access.
   Checks saved participation changes before returning private content.
   Checks closing events even while read tables are catching up. Keeps the last
   checked position, so later checks read only new events.
