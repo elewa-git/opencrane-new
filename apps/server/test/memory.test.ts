@@ -128,6 +128,275 @@ async function cleanup() {
 beforeAll(setup, 120_000);
 afterAll(cleanup);
 
+function correct(memoryId: string, commandId: string, expectedRevision = 3,
+  extra: Record<string, unknown> = {}, prefix = path('bob'), member = 'bob') {
+  const session = { sub: `idp-${member}`, orgId: 'org-acme', roles: ['owner'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+    origin: new URL(config.redirectUri).origin };
+  const payload = { commandId, expectedRevision, text: 'Correct replacement', kind: 'fact',
+    pinned: true, expiresAt: null, ...extra };
+  return app.inject({ method: 'POST', url: `${prefix}/facts/${memoryId}/correct`, headers, payload });
+}
+async function correctionTarget(label: string) {
+  const memoryId = `correct-${label}`;
+  const sources = [{ memberId: 'bob', commandId: `source-${label}` }];
+  const written = await write('bob', 'person', memoryId, 'Old fact', false, 'acme', sources);
+  const saved = memoryWrittenEventSchema.parse(written);
+  if (!('schemaVersion' in saved.data)) throw new Error('Expected versioned fact');
+  const identity: MemoryIdentity = { silo: 'acme', scopeId: saved.data.scopeId,
+    scopeKind: 'person', ownerId: 'bob', memoryId, revision: 3 };
+  for (const revision of [2, 3]) {
+    const next = { ...identity, revision };
+    keys.provision(next);
+    const encrypted = keys.encrypt(next, `Old revision ${revision}`);
+    const data = { ...saved.data, revision, expectedRevision: revision - 1,
+      supersedes: { memoryId, revision: revision - 1 }, reason: 'human', ...encrypted };
+    await append(`scope-${identity.scopeId}`, 'memory.corrected', data);
+  }
+  await runner.run(projection);
+  return identity;
+}
+it('corrects revision three over HTTP, hides dependents and cleans up before safe replay',
+  async function correctAndReplay() {
+    const identity = await correctionTarget('receipt');
+    const { memoryId, scopeId } = identity;
+    const dependency = { scopeId, memoryId, revision: 3 };
+    const child = await remember('bob', 'person', 'correct-child', 'bob', { dependsOn: [dependency] });
+    const childId = child.json<{ memoryId: string }>().memoryId;
+    const grandchild = { scopeId, memoryId: childId, revision: 1 };
+    const derived = await remember('bob', 'person', 'correct-grandchild', 'bob', { dependsOn: [grandchild] });
+    const derivedId = derived.json<{ memoryId: string }>().memoryId;
+    await runner.run(projection);
+    const before = await get(`${path('bob')}/facts/${memoryId}`);
+    expect(before.json()).toHaveProperty('canCorrect', true);
+    const response = await correct(memoryId, 'correct-receipt');
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    const receipt = response.json<{ changeId: string }>();
+    expect(receipt).toMatchObject({ operation: 'correct', outcome: 'accepted', memoryId,
+      revision: 4, scopeId, contentStatus: 'current', cleanupStatus: 'pending' });
+    expect(JSON.stringify(receipt)).not.toMatch(/Correct replacement|ciphertext|keyId/);
+    await runner.run(projection);
+    expect((await get(`${path('bob')}/facts/${memoryId}`)).json()).toMatchObject({
+      fact: { revision: 4, text: 'Correct replacement', pinned: true }, canCorrect: true });
+    expect((await get(`${path('bob')}/facts/${childId}`)).json()).toMatchObject({
+      status: 'unavailable', canCorrect: false });
+    for await (const row of nats.store.readStream(`scope-${scopeId}`)) {
+      if (row.event.id === receipt.changeId) {
+        expect(row.event.data).toMatchObject({ sources: [{ memberId: 'bob', commandId: 'source-receipt' }] });
+        await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
+      }
+    }
+    expect(keys.status(identity)).toBe('destroyed');
+    expect(keys.status({ ...identity, revision: 4 })).toBe('available');
+    const position = await nats.store.head();
+    function currentOnly(target: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
+      if (target.memoryId === memoryId) expect(target.revision).toBe(4);
+      expect(target.memoryId).not.toBe(childId);
+      expect(target.memoryId).not.toBe(derivedId);
+      return keys.decrypt(target, value);
+    }
+    await runner.rebuild(memoryProjection({ decrypt: currentOnly }));
+    expect(await nats.store.head()).toBe(position);
+    expect((await get(`${path('bob')}/changes/correct-receipt`)).json()).toMatchObject({
+      ...receipt, cleanupStatus: 'completed' });
+  });
+
+it.each(['saved', 'delayed'] as const)('recovers a %s correction across restart without resending',
+  async function correctionRecovery(mode) {
+    const identity = await correctionTarget(`recovery-${mode}`);
+    const commandId = `recovery-${mode}`;
+    const original = nats.store.append.bind(nats.store);
+    let attempted: Parameters<typeof original>[0] | undefined;
+    async function lose(command: Parameters<typeof original>[0]) {
+      attempted = command;
+      if (mode === 'saved') await original(command);
+      return { status: 'unavailable' as const, cause: new Error('Lost reply') };
+    }
+    const spy = vi.spyOn(nats.store, 'append').mockImplementation(lose);
+    try {
+      expect((await correct(identity.memoryId, commandId)).json()).toEqual({ outcome: 'unknown' });
+      const attemptedEvent = memoryCorrectedEventSchema.parse(attempted!.event);
+      const journalPath = `${directory}/command-${attemptedEvent.id}.json`;
+      const raw = await readFile(journalPath, 'utf8');
+      expect(raw).not.toMatch(/Correct replacement|ciphertext|keyId/);
+      const entry = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
+      await writeFile(journalPath, JSON.stringify({ ...entry, appendUntil: 0 }));
+      await app.close();
+      app = buildServer(config, { memory });
+      await app.ready();
+      await reconcileCommands(memory);
+      const statusUrl = `${path('bob')}/changes/${commandId}`;
+      if (mode === 'delayed') {
+        expect((await get(statusUrl)).json()).toEqual({ outcome: 'unknown' });
+        expect((await correct(identity.memoryId, `${commandId}-other`)).statusCode).toBe(409);
+        expect(keys.status({ ...identity, revision: 4 })).toBe('available');
+        const { deadline: _deadline, ...delayed } = attempted!;
+        expect((await original(delayed)).status).toBe('appended');
+      }
+      const status = await get(statusUrl);
+      expect(status.json()).toMatchObject({ operation: 'correct', revision: 4,
+        contentStatus: 'current', cleanupStatus: 'pending' });
+      expect((await correct(identity.memoryId, commandId)).json()).toEqual(status.json());
+      expect((await correct(identity.memoryId, commandId, 3, { text: 'Changed input' })).statusCode)
+        .toBe(409);
+      expect((await forget(identity.memoryId, commandId, 4)).statusCode).toBe(409);
+      expect((await remember('bob', 'person', commandId)).statusCode).toBe(409);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally { spy.mockRestore(); }
+    keys.delete({ ...identity, revision: 4 });
+    expect((await get(`${path('bob')}/changes/${commandId}`)).json()).toMatchObject({
+      revision: 4, contentStatus: 'unavailable' });
+    expect((await forget(identity.memoryId, `${commandId}-forget`, 4)).statusCode).toBe(200);
+    expect((await get(`${path('bob')}/changes/${commandId}`)).json()).toMatchObject({
+      revision: 4, contentStatus: 'erased' });
+  });
+
+it.each(['correct', 'forget'] as const)('allows one change when correction races %s',
+  async function correctionRace(operation) {
+    const identity = await correctionTarget(`race-${operation}`);
+    const original = nats.store.append.bind(nats.store);
+    const read = nats.store.readStream.bind(nats.store);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let appends = 0;
+    async function held(command: Parameters<typeof original>[0]) {
+      appends++;
+      if (appends === 1) {
+        entered.resolve();
+        await release.promise;
+      }
+      return original(command);
+    }
+    async function* secondHistory(subject: string, from?: number, deadline?: number) {
+      yield* read(subject, from, deadline);
+      if (subject === `scope-${identity.scopeId}` && from === 1) release.resolve();
+    }
+    const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(held);
+    const first = correct(identity.memoryId, `race-${operation}-first`);
+    const firstResult = first.then();
+    await entered.promise;
+    const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(secondHistory);
+    try {
+      let second;
+      if (operation === 'forget') second = forget(identity.memoryId, 'race-forget-second', 3);
+      else second = correct(identity.memoryId, 'race-correct-second');
+      const replies = await Promise.all([firstResult, second]);
+      expect(replies[0].statusCode).toBe(200);
+      expect(replies[1].statusCode).toBe(409);
+      expect(keys.status({ ...identity, revision: 4 })).toBe('available');
+      expect(appends).toBe(1);
+    } finally { release.resolve(); readSpy.mockRestore(); appendSpy.mockRestore(); }
+    expect((await forget(identity.memoryId, `race-${operation}-final`, 4)).statusCode).toBe(200);
+    expect((await correct(identity.memoryId, `race-${operation}-restore`, 4)).statusCode).toBe(409);
+  });
+
+it('retains a refused correction candidate for a later checked command', async function candidate() {
+  const identity = await correctionTarget('candidate');
+  const original = nats.store.append.bind(nats.store);
+  async function competing(command: Parameters<typeof original>[0]) {
+    const saved = memoryCorrectedEventSchema.parse(command.event);
+    const unrelated = { ...saved, id: 'unrelated-change', commandId: 'unrelated-change',
+      type: 'memory.cleanup_recorded', source: 'opencrane-worker',
+      principal: { kind: 'system' as const, id: 'opencrane-worker' },
+      data: { schemaVersion: 1, scopeId: identity.scopeId, scopeKind: 'person', ownerId: 'bob',
+        changeId: 'older-change', outcome: 'completed' } };
+    const competingCommand = { event: unrelated, expectedSequence: command.expectedSequence };
+    expect((await original(competingCommand)).status).toBe('appended');
+    return original(command);
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(competing);
+  try { expect((await correct(identity.memoryId, 'candidate-refused')).statusCode).toBe(409); }
+  finally { spy.mockRestore(); }
+  const candidate = { ...identity, revision: 4 };
+  expect(keys.status(candidate)).toBe('available');
+  const reference = keys.provision(candidate);
+  const before = await readFile(`${directory}/${reference.slice(4)}`);
+  await reconcileCommands(memory);
+  expect((await correct(identity.memoryId, 'candidate-refused')).statusCode).toBe(409);
+  expect((await correct(identity.memoryId, 'candidate-checked')).statusCode).toBe(200);
+  expect(await readFile(`${directory}/${reference.slice(4)}`)).toEqual(before);
+  expect(keys.status(identity)).toBe('available');
+});
+
+it('checks correction rights, input and stale revisions without leaking unavailable targets',
+  async function correctionRefusals() {
+    const identity = await correctionTarget('refusals');
+    const scopes = await get('/api/memory/scopes?groupId=sales&assistantId=personal');
+    for (const scope of scopes.json<{ scopes: { scopeKind: string; canCorrect: boolean }[] }>().scopes) {
+      expect(scope.canCorrect).toBe(scope.scopeKind === 'person');
+    }
+    const cases: [string, string, string, Record<string, unknown>, number][] = [
+      ['unknown', path('bob'), 'bob', {}, 404],
+      ['foreign', path('bob'), 'bob', {}, 404],
+      ['private', path('owner'), 'bob', {}, 404],
+      [identity.memoryId, path('bob'), 'admin', {}, 404],
+      ['shared', path('sales', 'group'), 'bob', {}, 404],
+      ['note', path('personal', 'assistant_notes'), 'bob', {}, 404],
+      [identity.memoryId, path('bob'), 'bob', { text: '' }, 422],
+      [identity.memoryId, path('bob'), 'bob', { text: 'é'.repeat(2049) }, 422],
+      [identity.memoryId, path('bob'), 'bob', { sources: [] }, 422],
+      [identity.memoryId, path('bob'), 'bob', { expectedRevision: 2 }, 409],
+      [identity.memoryId, path('bob'), 'bob', { expiresAt: '2000-01-01T00:00:00Z' }, 422],
+    ];
+    for (const [memoryId, prefix, member, extra, status] of cases) {
+      const reply = await correct(memoryId, 'refused-correct', 3, extra, prefix, member);
+      expect(reply.statusCode).toBe(status);
+      expect(reply.headers['cache-control']).toBe('no-store');
+      expect(reply.json()).toEqual({ status: 'refused' });
+    }
+  });
+
+it('reads complete correction history before starting the short access check',
+  async function correctionHistory() {
+    const identity = await correctionTarget('history');
+    const original = nats.store.readStream.bind(nats.store);
+    async function* checked(subject: string, from?: number, deadline?: number) {
+      expect(subject.startsWith('conversation-')).toBe(false);
+      if (subject === `scope-${identity.scopeId}` && from === 1) {
+        expect(deadline! - performance.now()).toBeGreaterThan(2000);
+      }
+      yield* original(subject, from, deadline);
+    }
+    const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(checked);
+    try { expect((await correct(identity.memoryId, 'correct-history')).statusCode).toBe(200); }
+    finally { spy.mockRestore(); }
+  });
+
+it('forgets an uncertain correction without restoring its candidate after restart',
+  async function forgetUncertainCorrection() {
+    const identity = await correctionTarget('forget-unknown');
+    const original = nats.store.append.bind(nats.store);
+    let delayed: Parameters<typeof original>[0] | undefined;
+    function hold(command: Parameters<typeof original>[0]) {
+      delayed = command;
+      return Promise.resolve({ status: 'unavailable' as const, cause: new Error('Lost reply') });
+    }
+    const spy = vi.spyOn(nats.store, 'append').mockImplementation(hold);
+    try {
+      const response = await correct(identity.memoryId, 'forget-unknown');
+      expect(response.json()).toEqual({ outcome: 'unknown' });
+    } finally { spy.mockRestore(); }
+    const forgotten = await forget(identity.memoryId, 'forget-unknown-final', 3);
+    expect(forgotten.statusCode).toBe(200);
+    await runner.run(projection);
+    for await (const row of nats.store.readStream(`scope-${identity.scopeId}`)) {
+      if (row.event.id === forgotten.json<{ changeId: string }>().changeId) {
+        await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
+      }
+    }
+    const { deadline: _deadline, ...late } = delayed!;
+    expect((await original(late)).status).toBe('conflict');
+    await reconcileCommands(memory);
+    expect(keys.status({ ...identity, revision: 4 })).toBe('destroyed');
+    expect((await correct(identity.memoryId, 'forget-unknown-restore')).statusCode).toBe(409);
+    await runner.run(projection);
+    expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json()).toMatchObject({
+      reason: 'forgotten', canCorrect: false });
+  });
+
+
 async function acceptedSharedCleanup(kind: SharedForgetKind, mode: string) {
   const target = await sharedForgetTarget(kind, `worker-${mode}`);
   const identity: MemoryIdentity = { silo: 'acme', scopeId: target.scopeId,
@@ -3432,6 +3701,7 @@ async function erased() {
 }
 async function superseded() {
   const saved = await remember('bob', 'person', 'superseded-command');
+  await runner.run(projection);
   const receipt = z.object({ memoryId: z.string() }).parse(saved.json());
   const scopeId = memoryScopeId('acme', 'person', 'bob');
   const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const, ownerId: 'bob',
@@ -3444,6 +3714,7 @@ async function superseded() {
   expect(copy.statusCode).toBe(409);
   const repeat = await remember('bob', 'person', 'superseded-command');
   expect(repeat.json()).toMatchObject({ outcome: 'saved', contentStatus: 'superseded' });
+  expect((await forget(receipt.memoryId, 'legacy-correction-forget')).statusCode).toBe(409);
 }
 async function repeatedExpiry() {
   const record = await write('bob', 'person', 'expired-repeat', undefined,
@@ -3467,271 +3738,3 @@ async function repeatedExpiry() {
     vi.useRealTimers();
   }
 }
-
-function correct(memoryId: string, commandId: string, expectedRevision = 3,
-  extra: Record<string, unknown> = {}, prefix = path('bob'), member = 'bob') {
-  const session = { sub: `idp-${member}`, orgId: 'org-acme', roles: ['owner'],
-    authTime: 1790856000, exp: 2000000000 };
-  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
-    origin: new URL(config.redirectUri).origin };
-  const payload = { commandId, expectedRevision, text: 'Correct replacement', kind: 'fact',
-    pinned: true, expiresAt: null, ...extra };
-  return app.inject({ method: 'POST', url: `${prefix}/facts/${memoryId}/correct`, headers, payload });
-}
-async function correctionTarget(label: string) {
-  const memoryId = `correct-${label}`;
-  const sources = [{ memberId: 'bob', commandId: `source-${label}` }];
-  const written = await write('bob', 'person', memoryId, 'Old fact', false, 'acme', sources);
-  const saved = memoryWrittenEventSchema.parse(written);
-  if (!('schemaVersion' in saved.data)) throw new Error('Expected versioned fact');
-  const identity: MemoryIdentity = { silo: 'acme', scopeId: saved.data.scopeId,
-    scopeKind: 'person', ownerId: 'bob', memoryId, revision: 3 };
-  for (const revision of [2, 3]) {
-    const next = { ...identity, revision };
-    keys.provision(next);
-    const encrypted = keys.encrypt(next, `Old revision ${revision}`);
-    const data = { ...saved.data, revision, expectedRevision: revision - 1,
-      supersedes: { memoryId, revision: revision - 1 }, reason: 'human', ...encrypted };
-    await append(`scope-${identity.scopeId}`, 'memory.corrected', data);
-  }
-  await runner.run(projection);
-  return identity;
-}
-it('corrects revision three over HTTP, hides dependents and cleans up before safe replay',
-  async function correctAndReplay() {
-    const identity = await correctionTarget('receipt');
-    const { memoryId, scopeId } = identity;
-    const dependency = { scopeId, memoryId, revision: 3 };
-    const child = await remember('bob', 'person', 'correct-child', 'bob', { dependsOn: [dependency] });
-    const childId = child.json<{ memoryId: string }>().memoryId;
-    const grandchild = { scopeId, memoryId: childId, revision: 1 };
-    const derived = await remember('bob', 'person', 'correct-grandchild', 'bob', { dependsOn: [grandchild] });
-    const derivedId = derived.json<{ memoryId: string }>().memoryId;
-    await runner.run(projection);
-    const before = await get(`${path('bob')}/facts/${memoryId}`);
-    expect(before.json()).toHaveProperty('canCorrect', true);
-    const response = await correct(memoryId, 'correct-receipt');
-    expect(response.statusCode).toBe(200);
-    expect(response.headers['cache-control']).toBe('no-store');
-    const receipt = response.json<{ changeId: string }>();
-    expect(receipt).toMatchObject({ operation: 'correct', outcome: 'accepted', memoryId,
-      revision: 4, scopeId, contentStatus: 'current', cleanupStatus: 'pending' });
-    expect(JSON.stringify(receipt)).not.toMatch(/Correct replacement|ciphertext|keyId/);
-    await runner.run(projection);
-    expect((await get(`${path('bob')}/facts/${memoryId}`)).json()).toMatchObject({
-      fact: { revision: 4, text: 'Correct replacement', pinned: true }, canCorrect: true });
-    expect((await get(`${path('bob')}/facts/${childId}`)).json()).toMatchObject({
-      status: 'unavailable', canCorrect: false });
-    for await (const row of nats.store.readStream(`scope-${scopeId}`)) {
-      if (row.event.id === receipt.changeId) {
-        expect(row.event.data).toMatchObject({ sources: [{ memberId: 'bob', commandId: 'source-receipt' }] });
-        await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
-      }
-    }
-    expect(keys.status(identity)).toBe('destroyed');
-    expect(keys.status({ ...identity, revision: 4 })).toBe('available');
-    const position = await nats.store.head();
-    function currentOnly(target: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
-      if (target.memoryId === memoryId) expect(target.revision).toBe(4);
-      expect(target.memoryId).not.toBe(childId);
-      expect(target.memoryId).not.toBe(derivedId);
-      return keys.decrypt(target, value);
-    }
-    await runner.rebuild(memoryProjection({ decrypt: currentOnly }));
-    expect(await nats.store.head()).toBe(position);
-    expect((await get(`${path('bob')}/changes/correct-receipt`)).json()).toMatchObject({
-      ...receipt, cleanupStatus: 'completed' });
-  });
-
-it.each(['saved', 'delayed'] as const)('recovers a %s correction across restart without resending',
-  async function correctionRecovery(mode) {
-    const identity = await correctionTarget(`recovery-${mode}`);
-    const commandId = `recovery-${mode}`;
-    const original = nats.store.append.bind(nats.store);
-    let attempted: Parameters<typeof original>[0] | undefined;
-    async function lose(command: Parameters<typeof original>[0]) {
-      attempted = command;
-      if (mode === 'saved') await original(command);
-      return { status: 'unavailable' as const, cause: new Error('Lost reply') };
-    }
-    const spy = vi.spyOn(nats.store, 'append').mockImplementation(lose);
-    try {
-      expect((await correct(identity.memoryId, commandId)).json()).toEqual({ outcome: 'unknown' });
-      const attemptedEvent = memoryCorrectedEventSchema.parse(attempted!.event);
-      const journalPath = `${directory}/command-${attemptedEvent.id}.json`;
-      const raw = await readFile(journalPath, 'utf8');
-      expect(raw).not.toMatch(/Correct replacement|ciphertext|keyId/);
-      const entry = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
-      await writeFile(journalPath, JSON.stringify({ ...entry, appendUntil: 0 }));
-      await app.close();
-      app = buildServer(config, { memory });
-      await app.ready();
-      await reconcileCommands(memory);
-      const statusUrl = `${path('bob')}/changes/${commandId}`;
-      if (mode === 'delayed') {
-        expect((await get(statusUrl)).json()).toEqual({ outcome: 'unknown' });
-        expect((await correct(identity.memoryId, `${commandId}-other`)).statusCode).toBe(409);
-        expect(keys.status({ ...identity, revision: 4 })).toBe('available');
-        const { deadline: _deadline, ...delayed } = attempted!;
-        expect((await original(delayed)).status).toBe('appended');
-      }
-      const status = await get(statusUrl);
-      expect(status.json()).toMatchObject({ operation: 'correct', revision: 4,
-        contentStatus: 'current', cleanupStatus: 'pending' });
-      expect((await correct(identity.memoryId, commandId)).json()).toEqual(status.json());
-      expect((await correct(identity.memoryId, commandId, 3, { text: 'Changed input' })).statusCode)
-        .toBe(409);
-      expect((await forget(identity.memoryId, commandId, 4)).statusCode).toBe(409);
-      expect((await remember('bob', 'person', commandId)).statusCode).toBe(409);
-      expect(spy).toHaveBeenCalledTimes(1);
-    } finally { spy.mockRestore(); }
-    keys.delete({ ...identity, revision: 4 });
-    expect((await get(`${path('bob')}/changes/${commandId}`)).json()).toMatchObject({
-      revision: 4, contentStatus: 'unavailable' });
-    expect((await forget(identity.memoryId, `${commandId}-forget`, 4)).statusCode).toBe(200);
-    expect((await get(`${path('bob')}/changes/${commandId}`)).json()).toMatchObject({
-      revision: 4, contentStatus: 'erased' });
-  });
-
-it.each(['correct', 'forget'] as const)('allows one change when correction races %s',
-  async function correctionRace(operation) {
-    const identity = await correctionTarget(`race-${operation}`);
-    const original = nats.store.append.bind(nats.store);
-    const read = nats.store.readStream.bind(nats.store);
-    const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    let appends = 0;
-    async function held(command: Parameters<typeof original>[0]) {
-      appends++;
-      if (appends === 1) {
-        entered.resolve();
-        await release.promise;
-      }
-      return original(command);
-    }
-    async function* secondHistory(subject: string, from?: number, deadline?: number) {
-      yield* read(subject, from, deadline);
-      if (subject === `scope-${identity.scopeId}` && from === 1) release.resolve();
-    }
-    const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(held);
-    const first = correct(identity.memoryId, `race-${operation}-first`);
-    const firstResult = first.then();
-    await entered.promise;
-    const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(secondHistory);
-    try {
-      let second;
-      if (operation === 'forget') second = forget(identity.memoryId, 'race-forget-second', 3);
-      else second = correct(identity.memoryId, 'race-correct-second');
-      const replies = await Promise.all([firstResult, second]);
-      expect(replies[0].statusCode).toBe(200);
-      expect(replies[1].statusCode).toBe(409);
-      expect(keys.status({ ...identity, revision: 4 })).toBe('available');
-      expect(appends).toBe(1);
-    } finally { release.resolve(); readSpy.mockRestore(); appendSpy.mockRestore(); }
-    expect((await forget(identity.memoryId, `race-${operation}-final`, 4)).statusCode).toBe(200);
-    expect((await correct(identity.memoryId, `race-${operation}-restore`, 4)).statusCode).toBe(409);
-  });
-
-it('retains a refused correction candidate for a later checked command', async function candidate() {
-  const identity = await correctionTarget('candidate');
-  const original = nats.store.append.bind(nats.store);
-  async function competing(command: Parameters<typeof original>[0]) {
-    const saved = memoryCorrectedEventSchema.parse(command.event);
-    const unrelated = { ...saved, id: 'unrelated-change', commandId: 'unrelated-change',
-      type: 'memory.cleanup_recorded', source: 'opencrane-worker',
-      principal: { kind: 'system' as const, id: 'opencrane-worker' },
-      data: { schemaVersion: 1, scopeId: identity.scopeId, scopeKind: 'person', ownerId: 'bob',
-        changeId: 'older-change', outcome: 'completed' } };
-    const competingCommand = { event: unrelated, expectedSequence: command.expectedSequence };
-    expect((await original(competingCommand)).status).toBe('appended');
-    return original(command);
-  }
-  const spy = vi.spyOn(nats.store, 'append').mockImplementation(competing);
-  try { expect((await correct(identity.memoryId, 'candidate-refused')).statusCode).toBe(409); }
-  finally { spy.mockRestore(); }
-  const candidate = { ...identity, revision: 4 };
-  expect(keys.status(candidate)).toBe('available');
-  const reference = keys.provision(candidate);
-  const before = await readFile(`${directory}/${reference.slice(4)}`);
-  await reconcileCommands(memory);
-  expect((await correct(identity.memoryId, 'candidate-refused')).statusCode).toBe(409);
-  expect((await correct(identity.memoryId, 'candidate-checked')).statusCode).toBe(200);
-  expect(await readFile(`${directory}/${reference.slice(4)}`)).toEqual(before);
-  expect(keys.status(identity)).toBe('available');
-});
-
-it('checks correction rights, input and stale revisions without leaking unavailable targets',
-  async function correctionRefusals() {
-    const identity = await correctionTarget('refusals');
-    const scopes = await get('/api/memory/scopes?groupId=sales&assistantId=personal');
-    for (const scope of scopes.json<{ scopes: { scopeKind: string; canCorrect: boolean }[] }>().scopes) {
-      expect(scope.canCorrect).toBe(scope.scopeKind === 'person');
-    }
-    const cases: [string, string, string, Record<string, unknown>, number][] = [
-      ['unknown', path('bob'), 'bob', {}, 404],
-      ['foreign', path('bob'), 'bob', {}, 404],
-      ['private', path('owner'), 'bob', {}, 404],
-      [identity.memoryId, path('bob'), 'admin', {}, 404],
-      ['shared', path('sales', 'group'), 'bob', {}, 404],
-      ['note', path('personal', 'assistant_notes'), 'bob', {}, 404],
-      [identity.memoryId, path('bob'), 'bob', { text: '' }, 422],
-      [identity.memoryId, path('bob'), 'bob', { text: 'é'.repeat(2049) }, 422],
-      [identity.memoryId, path('bob'), 'bob', { sources: [] }, 422],
-      [identity.memoryId, path('bob'), 'bob', { expectedRevision: 2 }, 409],
-      [identity.memoryId, path('bob'), 'bob', { expiresAt: '2000-01-01T00:00:00Z' }, 422],
-    ];
-    for (const [memoryId, prefix, member, extra, status] of cases) {
-      const reply = await correct(memoryId, 'refused-correct', 3, extra, prefix, member);
-      expect(reply.statusCode).toBe(status);
-      expect(reply.headers['cache-control']).toBe('no-store');
-      expect(reply.json()).toEqual({ status: 'refused' });
-    }
-  });
-
-it('reads complete correction history before starting the short access check',
-  async function correctionHistory() {
-    const identity = await correctionTarget('history');
-    const original = nats.store.readStream.bind(nats.store);
-    async function* checked(subject: string, from?: number, deadline?: number) {
-      expect(subject.startsWith('conversation-')).toBe(false);
-      if (subject === `scope-${identity.scopeId}` && from === 1) {
-        expect(deadline! - performance.now()).toBeGreaterThan(2000);
-      }
-      yield* original(subject, from, deadline);
-    }
-    const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(checked);
-    try { expect((await correct(identity.memoryId, 'correct-history')).statusCode).toBe(200); }
-    finally { spy.mockRestore(); }
-  });
-
-it('forgets an uncertain correction without restoring its candidate after restart',
-  async function forgetUncertainCorrection() {
-    const identity = await correctionTarget('forget-unknown');
-    const original = nats.store.append.bind(nats.store);
-    let delayed: Parameters<typeof original>[0] | undefined;
-    function hold(command: Parameters<typeof original>[0]) {
-      delayed = command;
-      return Promise.resolve({ status: 'unavailable' as const, cause: new Error('Lost reply') });
-    }
-    const spy = vi.spyOn(nats.store, 'append').mockImplementation(hold);
-    try {
-      const response = await correct(identity.memoryId, 'forget-unknown');
-      expect(response.json()).toEqual({ outcome: 'unknown' });
-    } finally { spy.mockRestore(); }
-    const forgotten = await forget(identity.memoryId, 'forget-unknown-final', 3);
-    expect(forgotten.statusCode).toBe(200);
-    await runner.run(projection);
-    for await (const row of nats.store.readStream(`scope-${identity.scopeId}`)) {
-      if (row.event.id === forgotten.json<{ changeId: string }>().changeId) {
-        await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
-      }
-    }
-    const { deadline: _deadline, ...late } = delayed!;
-    expect((await original(late)).status).toBe('conflict');
-    await reconcileCommands(memory);
-    expect(keys.status({ ...identity, revision: 4 })).toBe('destroyed');
-    expect((await correct(identity.memoryId, 'forget-unknown-restore')).statusCode).toBe(409);
-    await runner.run(projection);
-    expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json()).toMatchObject({
-      reason: 'forgotten', canCorrect: false });
-  });
