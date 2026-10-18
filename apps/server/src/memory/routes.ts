@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { readActiveMember, MemberAccessRefused, PayingGroupRefused } from '@opencrane/models';
+import { history, memoryReferences, readActiveMember, MemberAccessRefused, PayingGroupRefused } from '@opencrane/models';
+import { memoryKeys } from '@opencrane/projections';
 import { sessionFor } from '../members/routes.ts';
 import { scopeAccess, scopeFor, resolveScope, memoryAccessChecks, MemoryRefused,
   type MemoryOptions } from './access.ts';
@@ -120,8 +121,18 @@ async function readContent(request: FastifyRequest, options: MemoryOptions, requ
   }
   if (request.routeOptions.url?.endsWith('/:memoryId')) {
     const detail = await readDetail(request, options, requester, scope);
-    return { ...detail, canForget: access.canForget,
-      canCorrect: access.canCorrect && !('status' in detail) };
+    let canCorrect = false;
+    if (access.canCorrect && !('status' in detail) && options.keyDirectory) {
+      // Load content with its own deadline. Reads do not hold a write authority check.
+      const rows = await history(options.store, `scope-${scope.scopeId}`, options.silo,
+        performance.now() + 10_000);
+      const keys = memoryKeys(options.keyDirectory);
+      const references = memoryReferences(rows, options.silo, scope.scopeId, keys);
+      const target = { scopeId: scope.scopeId, memoryId: detail.fact.memoryId,
+        revision: detail.fact.revision };
+      canCorrect = references.current(target) === 'current';
+    }
+    return { ...detail, canForget: access.canForget, canCorrect };
   }
   const query = readInput.parse(request.query);
   return await listFacts(options, requester, scope, query, secret);
