@@ -22,7 +22,10 @@ import type { MemoryOptions } from '../src/memory/access.ts';
 import { reconcileCommands } from '../src/memory/commands.ts';
 import * as memoryAdmission from '../src/memory/admission.ts';
 import { buildServer } from '../src/server.ts';
+import { memoryKeyFiles } from './support/memory-key-files.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+
+vi.mock('node:fs', { spy: true });
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -399,6 +402,40 @@ describe('personal HTTP correction', function correctionCases() {
       try { expect((await correct(identity.memoryId, 'correct-history')).statusCode).toBe(200); }
       finally { spy.mockRestore(); }
     });
+
+  it.each(['recovery', 'later-command'] as const)(
+    'repairs interrupted key provisioning through %s without destroying the revision slot',
+    async function interruptedProvision(mode) {
+      const label = `interrupted-${mode}`;
+      const identity: MemoryIdentity = { silo: 'acme', scopeId: memoryScopeId('acme', 'person', 'bob'),
+        scopeKind: 'person', ownerId: 'bob', memoryId: `correct-${label}`, revision: 3 };
+      const filesystem = memoryKeyFiles(directory, identity);
+      try {
+        await correctionTarget(label);
+        filesystem.interrupt();
+        const interrupted = await correct(identity.memoryId, `${label}-first`);
+        expect(interrupted.statusCode).toBe(503);
+        expect(filesystem.pending()).toBe(true);
+        expect(keys.status({ ...identity, revision: 4 })).toBe('missing');
+        expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json())
+          .toMatchObject({ fact: { revision: 3, text: 'Old revision 3' } });
+        if (mode === 'recovery') {
+          await reconcileCommands(memory);
+          expect(filesystem.pending()).toBe(false);
+          expect(keys.status({ ...identity, revision: 4 })).toBe('missing');
+        }
+        const corrected = await correct(identity.memoryId, `${label}-checked`);
+        expect(corrected.statusCode).toBe(200);
+        expect(filesystem.pending()).toBe(false);
+        expect(keys.status({ ...identity, revision: 4 })).toBe('available');
+        await runner.run(projection);
+        expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json())
+          .toMatchObject({ fact: { revision: 4, text: 'Correct replacement' } });
+      } finally {
+        filesystem.restore();
+      }
+    });
+
 
 
 });
