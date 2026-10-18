@@ -13,7 +13,7 @@ import { until } from '../../../libs/handlers/test/helpers.ts';
 import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
 import * as projections from '@opencrane/projections';
-import { memoryWrittenEventSchema, memoryForgottenEventSchema, type MemoryIdentity,
+import { memoryWrittenEventSchema, memoryForgottenEventSchema, memoryCorrectedEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
@@ -3480,7 +3480,8 @@ function correct(memoryId: string, commandId: string, expectedRevision = 3,
 }
 async function correctionTarget(label: string) {
   const memoryId = `correct-${label}`;
-  const written = await write('bob', 'person', memoryId);
+  const sources = [{ memberId: 'bob', commandId: `source-${label}` }];
+  const written = await write('bob', 'person', memoryId, 'Old fact', false, 'acme', sources);
   const saved = memoryWrittenEventSchema.parse(written);
   if (!('schemaVersion' in saved.data)) throw new Error('Expected versioned fact');
   const identity: MemoryIdentity = { silo: 'acme', scopeId: saved.data.scopeId,
@@ -3504,7 +3505,8 @@ it('corrects revision three over HTTP, hides dependents and cleans up before saf
     const child = await remember('bob', 'person', 'correct-child', 'bob', { dependsOn: [dependency] });
     const childId = child.json<{ memoryId: string }>().memoryId;
     const grandchild = { scopeId, memoryId: childId, revision: 1 };
-    await remember('bob', 'person', 'correct-grandchild', 'bob', { dependsOn: [grandchild] });
+    const derived = await remember('bob', 'person', 'correct-grandchild', 'bob', { dependsOn: [grandchild] });
+    const derivedId = derived.json<{ memoryId: string }>().memoryId;
     await runner.run(projection);
     const before = await get(`${path('bob')}/facts/${memoryId}`);
     expect(before.json()).toHaveProperty('canCorrect', true);
@@ -3522,6 +3524,7 @@ it('corrects revision three over HTTP, hides dependents and cleans up before saf
       status: 'unavailable', canCorrect: false });
     for await (const row of nats.store.readStream(`scope-${scopeId}`)) {
       if (row.event.id === receipt.changeId) {
+        expect(row.event.data).toMatchObject({ sources: [{ memberId: 'bob', commandId: 'source-receipt' }] });
         await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
       }
     }
@@ -3531,6 +3534,7 @@ it('corrects revision three over HTTP, hides dependents and cleans up before saf
     function currentOnly(target: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
       if (target.memoryId === memoryId) expect(target.revision).toBe(4);
       expect(target.memoryId).not.toBe(childId);
+      expect(target.memoryId).not.toBe(derivedId);
       return keys.decrypt(target, value);
     }
     await runner.rebuild(memoryProjection({ decrypt: currentOnly }));
@@ -3553,7 +3557,8 @@ it.each(['saved', 'delayed'] as const)('recovers a %s correction across restart 
     const spy = vi.spyOn(nats.store, 'append').mockImplementation(lose);
     try {
       expect((await correct(identity.memoryId, commandId)).json()).toEqual({ outcome: 'unknown' });
-      const journalPath = `${directory}/command-${attempted!.event.id}.json`;
+      const attemptedEvent = memoryCorrectedEventSchema.parse(attempted!.event);
+      const journalPath = `${directory}/command-${attemptedEvent.id}.json`;
       const raw = await readFile(journalPath, 'utf8');
       expect(raw).not.toMatch(/Correct replacement|ciphertext|keyId/);
       const entry = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
@@ -3580,6 +3585,9 @@ it.each(['saved', 'delayed'] as const)('recovers a %s correction across restart 
       expect((await remember('bob', 'person', commandId)).statusCode).toBe(409);
       expect(spy).toHaveBeenCalledTimes(1);
     } finally { spy.mockRestore(); }
+    keys.delete({ ...identity, revision: 4 });
+    expect((await get(`${path('bob')}/changes/${commandId}`)).json()).toMatchObject({
+      revision: 4, contentStatus: 'unavailable' });
     expect((await forget(identity.memoryId, `${commandId}-forget`, 4)).statusCode).toBe(200);
     expect((await get(`${path('bob')}/changes/${commandId}`)).json()).toMatchObject({
       revision: 4, contentStatus: 'erased' });
@@ -3615,8 +3623,8 @@ it.each(['correct', 'forget'] as const)('allows one change when correction races
       if (operation === 'forget') second = forget(identity.memoryId, 'race-forget-second', 3);
       else second = correct(identity.memoryId, 'race-correct-second');
       const replies = await Promise.all([firstResult, second]);
-      expect(replies[0]!.statusCode).toBe(200);
-      expect(replies[1]!.statusCode).toBe(409);
+      expect(replies[0].statusCode).toBe(200);
+      expect(replies[1].statusCode).toBe(409);
       expect(keys.status({ ...identity, revision: 4 })).toBe('available');
       expect(appends).toBe(1);
     } finally { release.resolve(); readSpy.mockRestore(); appendSpy.mockRestore(); }
@@ -3628,7 +3636,8 @@ it('retains a refused correction candidate for a later checked command', async f
   const identity = await correctionTarget('candidate');
   const original = nats.store.append.bind(nats.store);
   async function competing(command: Parameters<typeof original>[0]) {
-    const unrelated = { ...command.event, id: 'unrelated-change', commandId: 'unrelated-change',
+    const saved = memoryCorrectedEventSchema.parse(command.event);
+    const unrelated = { ...saved, id: 'unrelated-change', commandId: 'unrelated-change',
       type: 'memory.cleanup_recorded', source: 'opencrane-worker',
       principal: { kind: 'system' as const, id: 'opencrane-worker' },
       data: { schemaVersion: 1, scopeId: identity.scopeId, scopeKind: 'person', ownerId: 'bob',
@@ -3693,4 +3702,36 @@ it('reads complete correction history before starting the short access check',
     const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(checked);
     try { expect((await correct(identity.memoryId, 'correct-history')).statusCode).toBe(200); }
     finally { spy.mockRestore(); }
+  });
+
+it('forgets an uncertain correction without restoring its candidate after restart',
+  async function forgetUncertainCorrection() {
+    const identity = await correctionTarget('forget-unknown');
+    const original = nats.store.append.bind(nats.store);
+    let delayed: Parameters<typeof original>[0] | undefined;
+    function hold(command: Parameters<typeof original>[0]) {
+      delayed = command;
+      return Promise.resolve({ status: 'unavailable' as const, cause: new Error('Lost reply') });
+    }
+    const spy = vi.spyOn(nats.store, 'append').mockImplementation(hold);
+    try {
+      const response = await correct(identity.memoryId, 'forget-unknown');
+      expect(response.json()).toEqual({ outcome: 'unknown' });
+    } finally { spy.mockRestore(); }
+    const forgotten = await forget(identity.memoryId, 'forget-unknown-final', 3);
+    expect(forgotten.statusCode).toBe(200);
+    await runner.run(projection);
+    for await (const row of nats.store.readStream(`scope-${identity.scopeId}`)) {
+      if (row.event.id === forgotten.json<{ changeId: string }>().changeId) {
+        await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
+      }
+    }
+    const { deadline: _deadline, ...late } = delayed!;
+    expect((await original(late)).status).toBe('conflict');
+    await reconcileCommands(memory);
+    expect(keys.status({ ...identity, revision: 4 })).toBe('destroyed');
+    expect((await correct(identity.memoryId, 'forget-unknown-restore')).statusCode).toBe(409);
+    await runner.run(projection);
+    expect((await get(`${path('bob')}/facts/${identity.memoryId}`)).json()).toMatchObject({
+      reason: 'forgotten', canCorrect: false });
   });
