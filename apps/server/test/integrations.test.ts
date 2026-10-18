@@ -1782,6 +1782,40 @@ async function restrictsCeilingReceipt() {
 it('shows only the active original caller a minimal receipt after demotion',
   restrictsCeilingReceipt);
 
+async function refusesCeilingReceiptWithoutCurrentAdminPermission() {
+  await saveCeiling('admin-permission-ceiling', 31415);
+  const roleChange = fixture('member.role_changed', 'member-amina', {
+    memberId: 'amina', previousRole: 'admin', newRole: 'member', changedBy: 'alice',
+  });
+  await authorisation.handler.handle(roleChange, pgDb(dbs.queue));
+  expect(await authorisation.check('amina', 'member')).toMatchObject({ allowed: true });
+  expect(await authorisation.check('amina', 'admin')).toMatchObject({ allowed: false });
+
+  const refused = await ceilingChange('admin-permission-ceiling');
+  expect(refused.statusCode).toBe(403);
+  expect(refused.body).not.toContain('31415');
+}
+it('refuses a ceiling receipt when OpenFGA denies admin access',
+  refusesCeilingReceiptWithoutCurrentAdminPermission);
+
+async function refusesCeilingReceiptWhenAdminCheckIsUnavailable() {
+  await saveCeiling('unavailable-admin-ceiling', 27182);
+  const check = authorisation.check.bind(authorisation);
+  const unavailable = vi.spyOn(authorisation, 'check').mockImplementation(async (memberId, permission) => {
+    if (permission === 'admin') return { allowed: false, status: 'unavailable' };
+    return check(memberId, permission);
+  });
+  try {
+    const refused = await ceilingChange('unavailable-admin-ceiling');
+    expect(refused.statusCode).toBe(503);
+    expect(refused.body).not.toContain('27182');
+  } finally {
+    unavailable.mockRestore();
+  }
+}
+it('refuses a ceiling receipt when the OpenFGA admin check is unavailable',
+  refusesCeilingReceiptWhenAdminCheckIsUnavailable);
+
 async function readsCeilingAfterHistory(change: string) {
   await saveCeiling('read-ceiling', 30000);
   const read = nats.store.readStream.bind(nats.store);
