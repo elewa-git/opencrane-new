@@ -12,6 +12,7 @@ export type { Turn } from './turn-frame.ts';
 import { itemReport } from './item-reports.ts';
 import { turnInput, privateTurnInput } from './turn-input.ts';
 import { threadLoads, unload, ThreadLoadFailed, type ThreadLoadDriver } from './thread-loads.ts';
+import { revokeTurnAccess } from './turn-stop.ts';
 
 const MAX_PRIVATE_TURNS = 2;
 const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 'contextCompaction']);
@@ -123,7 +124,7 @@ class TurnRunner {
     this.driver = driver;
     this.approvals = approvals;
     this.signal = signal;
-    this.loads = threadLoads(driver);
+    this.loads = threadLoads(driver, this.state.cancelled);
     this.journal = journal;
     this.send = send;
     this.closeCurrentSocket = closeCurrentSocket;
@@ -297,7 +298,8 @@ class TurnRunner {
     try {
       await this.prepareAndRun(input);
     } catch (error) {
-      if (error instanceof ThreadLoadFailed && !this.gate.closed) {
+      if (error instanceof ThreadLoadFailed && !this.gate.closed
+        && !this.state.cancelled.has(input.id)) {
         const text = 'The tools for this conversation could not be reloaded. '
           + 'Send your message again.';
         this.appendReport(input, 'agent.message_completed', { messageId: input.id, text });
@@ -332,11 +334,17 @@ class TurnRunner {
   }
 
   private async installGrant(thread: string, turn: Turn, grant: Grant) {
+    if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
+      throw new Error('Turn ended');
+    }
     try {
       await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
     } finally {
       // Remove a late installation even if thread closure already released the turn.
       if (this.gate.closed) await this.gate.track(this.dropAccess(thread, turn));
+      else if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
+        await this.dropAccess(thread, turn);
+      }
     }
   }
 
@@ -452,7 +460,7 @@ class TurnRunner {
     }
     this.state.preparing.delete(input.conversationId);
     this.state.running.set(threadValue, input);
-    if (this.gate.closed) {
+    if (this.gate.closed || this.state.cancelled.has(input.id)) {
       this.failTurn(input);
       return;
     }
@@ -478,7 +486,8 @@ class TurnRunner {
     }
 
     const grant = await this.waitForGrant(sequence, previousStart);
-    if (!this.isActiveTurn(input.id) || this.gate.closed) throw new Error('Turn ended');
+    if (!this.isActiveTurn(input.id) || this.gate.closed
+      || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
     // Keep the server's admitted model for every call and renewal in this turn.
     const model = grant.model ?? modelForTask(input.taskKind);
     this.turnModels.set(input.id, model);
@@ -492,7 +501,7 @@ class TurnRunner {
 
     const inputText = await this.inputFor(input, grant.context);
     if (!this.isActiveTurn(input.id)) return;
-    if (this.gate.closed) throw new Error('Turn ended');
+    if (this.gate.closed || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
     // Mark execution after validating the input. Memory-free prepared turns can still retry.
     this.journal.recordExecution(input.id);
     this.gate.awaitingTerminal.add(input.id);
@@ -570,7 +579,12 @@ class TurnRunner {
 
     this.state.cancelled.add(turnId);
     const heldThread = this.findRunningThread(turnId);
-    if (heldThread) this.approvals?.endThread(heldThread);
+    const endHolds = this.endTurnHolds.bind(this, heldThread);
+    if (!this.gate.closed) {
+      const revoke = this.dropStoppedAccess.bind(this, input, heldThread);
+      await revokeTurnAccess(turnId, this.state.waiting,
+        this.journal.reports, revoke, endHolds);
+    } else endHolds();
     const codexTurnId = this.state.codexTurns.get(turnId);
     if (!codexTurnId) {
       return;
@@ -587,6 +601,15 @@ class TurnRunner {
       if (input.executionMode !== 'restricted') throw error;
       this.state.sessions.get(input.id)?.close();
     }
+  }
+
+  private endTurnHolds(threadId: string | undefined) {
+    if (threadId) this.approvals?.endThread(threadId);
+  }
+
+  private async dropStoppedAccess(input: Turn, threadId: string | undefined) {
+    if (threadId) await this.dropAccess(threadId, input);
+    else await this.loads.cancel(input.id);
   }
 
   private findRunningThread(turnId: string) {

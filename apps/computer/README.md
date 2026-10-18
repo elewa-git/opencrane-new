@@ -54,6 +54,8 @@ flowchart LR
   Skips invalid names and call ids so later reports can still reach the server.
 - Keeps files in the person's workspace when the computer pauses and starts again.
 - Lets Codex reach the AI gateway only while the current chat turn holds a valid short-lived pass.
+- Removes a stopped turn's passes and tool lists, ends its approval waits and closes
+  its local model and tool requests before asking Codex to interrupt it.
 - Separates the assistant, file tools and desktop into different Linux users.
   Protects temporary desktop files before those users start.
 - Stops executors through a root-only socket. Keeps executor admission closed after
@@ -80,6 +82,7 @@ server whether it can wait for approval. Older computers receive Allow tools onl
 2. **A person sends a message.** The server sends the turn to the bridge. The bridge loads its reviewed tools, runs it in Codex and sends progress reports back.
 3. **A person uploads a file.** The server passes the scanned file to the bridge. The bridge puts it in the workspace for Codex to read.
 4. **A computer resumes.** Its files remain on its disk. The bridge sends any reports that the server has not confirmed yet.
+   A stopped turn cannot regain access through a late acknowledgement or pass renewal.
 5. **A trusted root process stops executors.** The supervisor closes executor connections
    and stops tools and private Codex processes. It checks every worker thread, including
    workers whose main thread has exited, and detached children. If work keeps running,

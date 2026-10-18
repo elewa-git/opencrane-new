@@ -2,6 +2,33 @@
 
 For people, read [README.md](README.md) first.
 
+## Budget Stop access removal — P3-14 row 5, first part
+
+The runner marks the turn cancelled before removing its model and MCP passes,
+tool lists and approval waits. `turn-stop.ts` settles pending start and renewal
+waits with a fixed error. It reuses `dropAccess`; the signed takeover gate keeps
+its own removal path. Thread preparation checks cancellation before and after
+registering tools. A grant installation already in progress removes its result
+if the turn ended while it waited.
+
+Both local proxies track outgoing requests by thread. `/drop` destroys that
+thread's requests and client responses before acknowledging removal. Dropping
+a tool list also ends its approval waits and MCP calls. Reading a model request
+body does not retain permission to send after Stop. Other threads keep working.
+Aborting these local connections does not prove that a remote effect stopped.
+
+`turn-stop.test.ts` uses the real computer WebSocket channel and local recording
+upstream. Barriers hold start acknowledgements, renewals, tool preparation and
+grant installation. The stream test gives Stop two seconds to close both model
+and MCP connections while another thread renews and finishes its requests.
+`bridge-budget-stop.test.ts` also checks removal before interruption with real
+NATS, PostgreSQL and OpenFGA and a second payer on the same computer.
+
+This part changes no event schema, settlement or server delivery contract.
+Ten-second isolated cleanup, interrupt-failure cleanup, duplicate/reconnect
+cleanup proof and late-usage/frozen-result integration proof remain in the next
+part. Fresh-install qualification is NOT RUN. No root trees are implemented.
+
 ## Shared child turns
 
 The runner uses shared wording for a `shared_only` frame and the context returned

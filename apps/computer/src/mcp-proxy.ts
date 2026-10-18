@@ -3,6 +3,7 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { approvalHolds } from './approval-holds.ts';
 import { json, record } from './http.ts';
 import { parseTools, type ToolServer } from './turn-frame.ts';
+import { proxyRequests } from './proxy-requests.ts';
 
 export interface ProxyGrant {
   computer: string;
@@ -28,6 +29,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
   approvals: ReturnType<typeof approvalHolds>) {
   const catalogues = new Map<string, Catalogue>();
   const current = new Map<string, string>();
+  const requests = proxyRequests();
 
   function catalogue(input: Record<string, unknown>) {
     const { key, conversation, thread } = catalogueBinding(input);
@@ -71,6 +73,10 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     if (typeof input['loadKey'] !== 'string') throw new Error('Missing tool list address');
     const loadKey = input['loadKey'];
     const load = catalogues.get(loadKey);
+    if (load?.thread) {
+      approvals.endThread(load.thread);
+      requests.drop(load.thread);
+    }
     if (load) clearTimeout(load.expiry);
     catalogues.delete(loadKey);
     if (load && current.get(load.conversation) === loadKey) current.delete(load.conversation);
@@ -102,6 +108,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
 
   function dropThread(thread: string) {
     approvals.endThread(thread);
+    requests.drop(thread);
     for (const [loadKey, load] of catalogues) {
       if (load.thread === thread) drop({ loadKey });
     }
@@ -151,7 +158,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
         const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'], grants);
         if (!renewed) { answer(UNAVAILABLE); return; }
         await forward(incoming, response, gateway, boundServer, renewed, String(thread),
-          id, raw, undefined, approvalId);
+          id, raw, requests, undefined, approvalId);
       }
       function disconnected() {
         if (!response.writableEnded) approvals.endThread(String(thread));
@@ -162,7 +169,8 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
       // Keep the list until this hold ends, even if its turn pass expires first.
       extendThread(String(thread), boundGrant.expires);
     }
-    await forward(incoming, response, gateway, server, grant, String(thread), id, raw, hold);
+    await forward(incoming, response, gateway, server, grant, String(thread), id, raw,
+      requests, hold);
   }
   return { catalogue, drop, dropThread, extendThread, discovered, handle,
     get size() { return catalogues.size; },
@@ -261,6 +269,7 @@ function refusalText(raw: Buffer) {
 
 function forward(incoming: IncomingMessage, response: ServerResponse, gateway: string,
   server: ToolServer, grant: ProxyGrant, thread: string, id: unknown, raw: Buffer,
+  requests: ReturnType<typeof proxyRequests>,
   hold?: (approvalId: string) => void, approvalId?: string) {
   function send(resolve: () => void) {
     let settled = false;
@@ -313,9 +322,8 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
       'x-opencrane-tool-mode': server.modes[String(incoming.headers['mcp-name'])] };
     const path = `/mcp/${server.serverId}/${server.connectionId}`;
     const outgoing = request(`${gateway}${path}`, { method: 'POST', headers }, receive);
-    function disconnected() { if (!response.writableEnded) outgoing.destroy(); }
     function timedOut() { outgoing.destroy(); }
-    response.on('close', disconnected);
+    requests.track(thread, outgoing, response);
     outgoing.setTimeout(120_000, timedOut);
     outgoing.on('error', failed);
     // Preserve number text and every metadata field reviewed by the decision service.

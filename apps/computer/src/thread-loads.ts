@@ -24,18 +24,19 @@ function threadToolsConfig(turn: Turn, loadKey: string) {
   return { mcp_servers: servers };
 }
 
-export function threadLoads(driver: ThreadLoadDriver) {
+export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<string> = new Set()) {
   let stopped = false;
   const keys = new Set<string>();
   const loaded = new Map<string, { fingerprint?: string; loadKey: string }>();
+  const preparing = new Map<string, string>();
 
   async function register(input: Turn, loadKey: string, thread?: string) {
-    if (stopped) throw new Error('Thread loading stopped');
+    if (stopped || cancelled.has(input.id)) throw new Error('Thread loading stopped');
     keys.add(loadKey);
     if (driver.catalogue) {
       await driver.catalogue(loadKey, input.conversationId, input.tools ?? [], thread);
     } else if (input.tools?.length) throw new Error('Tool catalogue unavailable');
-    if (stopped) {
+    if (stopped || cancelled.has(input.id)) {
       await drop(loadKey);
       throw new Error('Thread loading stopped');
     }
@@ -56,6 +57,11 @@ export function threadLoads(driver: ThreadLoadDriver) {
     const previous = loaded.get(thread);
     loaded.delete(thread);
     if (previous) await drop(previous.loadKey);
+  }
+
+  async function cancel(turnId: string) {
+    const loadKey = preparing.get(turnId);
+    if (loadKey) await drop(loadKey);
   }
 
   async function requireDiscovery(input: Turn, loadKey: string) {
@@ -108,6 +114,7 @@ export function threadLoads(driver: ThreadLoadDriver) {
   async function startLoad(input: Turn, previousThread: string | undefined,
     startParams: Record<string, unknown>, fingerprint: string) {
     const loadKey = randomBytes(16).toString('hex');
+    preparing.set(input.id, loadKey);
     let newThread: string | undefined;
     try {
       await register(input, loadKey, previousThread);
@@ -135,6 +142,8 @@ export function threadLoads(driver: ThreadLoadDriver) {
       if (!previousThread) orphanThread = newThread;
       await abandon(loadKey, orphanThread);
       throw error;
+    } finally {
+      preparing.delete(input.id);
     }
   }
 
@@ -163,7 +172,7 @@ export function threadLoads(driver: ThreadLoadDriver) {
     }
     if (loaded.size || keys.size) throw new Error('Catalogues remain loaded');
   }
-  return { load, forget, quiet, stop, get size() { return loaded.size; } };
+  return { load, forget, cancel, quiet, stop, get size() { return loaded.size; } };
 }
 
 async function resumeLoadedThread(driver: ThreadLoadDriver, threadId: string) {

@@ -6,6 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { body, json, record } from './http.ts';
 import { approvalHolds } from './approval-holds.ts';
 import { mcpProxy, type ProxyGrant } from './mcp-proxy.ts';
+import { proxyRequests } from './proxy-requests.ts';
 
 // Let Codex use the computer for ten minutes before it needs a new turn grant.
 const CALLER_CREDENTIAL_LIFETIME_MS = 600_000;
@@ -26,6 +27,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   approvalDriver: Parameters<typeof approvalHolds>[0] = UNAVAILABLE_APPROVALS) {
   let deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
   const turns = new Map<string, ProxyGrant>();
+  const requests = proxyRequests();
   const approvals = approvalHolds(approvalDriver);
   const mcp = mcpProxy(gateway, turns, approvals);
   writeFileSync(options.callerPath, caller, { mode: 0o600 });
@@ -53,6 +55,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
       if (req.url === '/drop') {
         turns.delete(input['thread']);
         mcp.dropThread(input['thread']);
+        requests.drop(input['thread']);
       }
       else if (req.url === '/grant') {
         if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
@@ -91,6 +94,11 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
       if (!grant || Date.now() >= grant.expires) { json(res, { error: 'no live turn' }, 403); return; }
       if (req.url !== '/v1/responses' || req.method !== 'POST') { json(res, { error: 'route' }, 404); return; }
       const payload = record(await body(req));
+      // Recheck after reading the body: Stop may have removed this pass while it arrived.
+      if (turns.get(String(thread)) !== grant || Date.now() >= grant.expires) {
+        json(res, { error: 'no live turn' }, 403);
+        return;
+      }
       // Reasoning and tool-call syntax share this bound with the visible answer.
       payload['max_output_tokens'] = 2000;
       const raw = JSON.stringify(payload);
@@ -104,6 +112,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
       });
       outgoing.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => outgoing.destroy());
       outgoing.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+      requests.track(String(thread), outgoing, res);
       outgoing.end(raw);
     })().catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); });
   });
