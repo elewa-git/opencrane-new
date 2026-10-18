@@ -3467,3 +3467,74 @@ async function repeatedExpiry() {
     vi.useRealTimers();
   }
 }
+
+function correct(memoryId: string, commandId: string, expectedRevision = 3,
+  extra: Record<string, unknown> = {}, prefix = path('bob'), member = 'bob') {
+  const session = { sub: `idp-${member}`, orgId: 'org-acme', roles: ['owner'],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+    origin: new URL(config.redirectUri).origin };
+  const payload = { commandId, expectedRevision, text: 'Correct replacement', kind: 'fact',
+    pinned: true, expiresAt: null, ...extra };
+  return app.inject({ method: 'POST', url: `${prefix}/facts/${memoryId}/correct`, headers, payload });
+}
+async function correctionTarget(label: string) {
+  const memoryId = `correct-${label}`;
+  const written = await write('bob', 'person', memoryId);
+  const saved = memoryWrittenEventSchema.parse(written);
+  if (!('schemaVersion' in saved.data)) throw new Error('Expected versioned fact');
+  const identity: MemoryIdentity = { silo: 'acme', scopeId: saved.data.scopeId,
+    scopeKind: 'person', ownerId: 'bob', memoryId, revision: 3 };
+  for (const revision of [2, 3]) {
+    const next = { ...identity, revision };
+    keys.provision(next);
+    const encrypted = keys.encrypt(next, `Old revision ${revision}`);
+    const data = { ...saved.data, revision, expectedRevision: revision - 1,
+      supersedes: { memoryId, revision: revision - 1 }, reason: 'human', ...encrypted };
+    await append(`scope-${identity.scopeId}`, 'memory.corrected', data);
+  }
+  await runner.run(projection);
+  return identity;
+}
+it('corrects revision three over HTTP, hides dependents and cleans up before safe replay',
+  async function correctAndReplay() {
+    const identity = await correctionTarget('receipt');
+    const { memoryId, scopeId } = identity;
+    const dependency = { scopeId, memoryId, revision: 3 };
+    const child = await remember('bob', 'person', 'correct-child', 'bob', { dependsOn: [dependency] });
+    const childId = child.json<{ memoryId: string }>().memoryId;
+    const grandchild = { scopeId, memoryId: childId, revision: 1 };
+    await remember('bob', 'person', 'correct-grandchild', 'bob', { dependsOn: [grandchild] });
+    await runner.run(projection);
+    const before = await get(`${path('bob')}/facts/${memoryId}`);
+    expect(before.json()).toHaveProperty('canCorrect', true);
+    const response = await correct(memoryId, 'correct-receipt');
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    const receipt = response.json<{ changeId: string }>();
+    expect(receipt).toMatchObject({ operation: 'correct', outcome: 'accepted', memoryId,
+      revision: 4, scopeId, contentStatus: 'current', cleanupStatus: 'pending' });
+    expect(JSON.stringify(receipt)).not.toMatch(/Correct replacement|ciphertext|keyId/);
+    await runner.run(projection);
+    expect((await get(`${path('bob')}/facts/${memoryId}`)).json()).toMatchObject({
+      fact: { revision: 4, text: 'Correct replacement', pinned: true }, canCorrect: true });
+    expect((await get(`${path('bob')}/facts/${childId}`)).json()).toMatchObject({
+      status: 'unavailable', canCorrect: false });
+    for await (const row of nats.store.readStream(`scope-${scopeId}`)) {
+      if (row.event.id === receipt.changeId) {
+        await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
+      }
+    }
+    expect(keys.status(identity)).toBe('destroyed');
+    expect(keys.status({ ...identity, revision: 4 })).toBe('available');
+    const position = await nats.store.head();
+    function currentOnly(target: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
+      if (target.memoryId === memoryId) expect(target.revision).toBe(4);
+      expect(target.memoryId).not.toBe(childId);
+      return keys.decrypt(target, value);
+    }
+    await runner.rebuild(memoryProjection({ decrypt: currentOnly }));
+    expect(await nats.store.head()).toBe(position);
+    expect((await get(`${path('bob')}/changes/correct-receipt`)).json()).toMatchObject({
+      ...receipt, cleanupStatus: 'completed' });
+  });
