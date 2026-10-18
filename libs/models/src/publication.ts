@@ -1,12 +1,11 @@
 import { gatewayEntrySchema } from '@opencrane/events';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { isToolPolicyAvailable } from '@opencrane/projections';
+import { isToolPolicyAvailable, isToolReviewCurrent } from '@opencrane/projections';
 import type { ToolPolicy } from '@opencrane/protocol';
 
 export function publicationEntry(state: ToolPolicy) {
-  const reviewed = state.reviewRevision !== undefined &&
-    state.reviewRevision === state.policyRevision;
+  const reviewed = isToolReviewCurrent(state);
   // Prepare the reviewed replacement while calls remain held until its receipt arrives.
   const candidate = { ...state, published: true, driftHeld: false };
   const available = isToolPolicyAvailable(candidate);

@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, restoration and publication status, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
   server["apps/server<br/>back end"] -->|reads tables, bounded chat candidates, join times and old joins| pg["PostgreSQL<br/>database"]
   projections -->|omits child requests; saves public chat rows and activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image results, nightly records, tool holds and private instance stops and reports| projections
@@ -34,7 +34,8 @@ flowchart LR
 ## What it is responsible for
 
 Keep publication requests and gateway receipts separate from permission to call tools.
-Receipts advance the saved position without changing tool rules or waiting approvals.
+New publication requests end that server’s waiting and unused approvals. Requests for
+another server leave them unchanged. Receipts preserve the resulting approval revision.
 A receipt can release a changed server's hold only for its current review and fresh checks.
 It does not change the rules or revive an old approval. Publication status compares the
 saved request, gateway observation and server receipt in one database snapshot. A missing

@@ -1335,7 +1335,8 @@ async function savesPublicationIntent() {
   await runner.run(mcpCatalogue);
   const saved = await catalogue.tools('test', 'odoo');
   expect(saved.published).toBe(false);
-  expect(saved.policyRevision).toBe(request.payload.reviewRevision);
+  expect(saved.policyRevision).toBe(before + 1);
+  expect(saved.reviewRevision).toBe(request.payload.reviewRevision);
   const entry = publicationEntry(saved);
   expect(intent.fragmentDigest).toBe(losslessJson(JSON.stringify(entry)).digest);
   await runner.rebuild(mcpCatalogue);

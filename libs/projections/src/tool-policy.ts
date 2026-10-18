@@ -34,7 +34,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   }
   // Keep approval bindings stable when only the check date changes.
   let next: ToolPolicy = { ...state, ...identity, sequence, policyRevision: sequence,
-    configurationObservation: undefined };
+    configurationObservation: undefined, publicationRevision: undefined };
   if (event.type === 'mcp.server_registered') {
     const startupReviewRequired = requiresStartupReview(data);
     next = { ...emptyToolPolicy(), ...identity, sequence, policyRevision: sequence,
@@ -73,7 +73,14 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
 function applyPublication(state: ToolPolicy, next: ToolPolicy, data: Record<string, unknown>) {
   const intent = mcpPublicationIntentDataSchema.safeParse(data);
   if (intent.success) {
-    return { ...state, sequence: next.sequence, published: false, publication: intent.data,
+    const matchesReview = intent.data.expectedSequence === state.sequence &&
+      intent.data.reviewRevision === state.reviewRevision && isToolReviewCurrent(state);
+    const publicationRevision = matchesReview ? next.sequence : undefined;
+    // End old approvals at the saved request, before any gateway replacement can start.
+    // Keep the reviewed tool choices available for this exact publication only.
+    return { ...state, sequence: next.sequence, policyRevision: next.sequence,
+      publicationRevision, published: false, publication: intent.data,
+      driftHeld: state.driftHeld === true || state.published,
       configurationObservation: undefined };
   }
   // Keep drift held until publication can confirm the exact applied revision.
@@ -91,7 +98,7 @@ function applyConfigurationObservation(state: ToolPolicy, event: EventEnvelope,
       receipt.fragmentDigest !== intent.fragmentDigest ||
       receipt.reviewRevision !== intent.reviewRevision ||
       receipt.reviewRevision !== state.reviewRevision ||
-      receipt.reviewRevision !== state.policyRevision ||
+      !isToolReviewCurrent(state) ||
       receipt.sourceSequence <= intent.expectedSequence || receipt.sourceSequence > state.sequence) {
     return next;
   }
@@ -340,4 +347,15 @@ function matchesChoice(tool: ToolPolicy['tools'][number],
     return false;
   }
   return true;
+}
+
+export function isToolReviewCurrent(state: ToolPolicy): boolean {
+  if (state.reviewRevision === undefined) {
+    return false;
+  }
+  if (state.reviewRevision === state.policyRevision) {
+    return true;
+  }
+  return state.publicationRevision === state.policyRevision &&
+    state.publication?.reviewRevision === state.reviewRevision;
 }

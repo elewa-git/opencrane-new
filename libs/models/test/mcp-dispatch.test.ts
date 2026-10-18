@@ -2,6 +2,7 @@ import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { applyToolPolicy, mcpCatalogue } from '@opencrane/projections';
 import { mcpConfigurationObservationSchema } from '@opencrane/events';
@@ -1132,8 +1133,9 @@ async function budgetHandlerEndsApproval() {
 }
 it('ends a waiting approval through the saved budget turn stop', budgetHandlerEndsApproval);
 
-async function reviewRestoration(setup: Fixture, commandId: string, mode = 'allow') {
-  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+async function reviewRestoration(setup: Fixture, commandId: string, mode = 'allow',
+  serverId = 'fixture') {
+  const policy = await readToolPolicy(setup.nats.store, 'test', serverId);
   const catalogue = policy.catalogue!;
   function choice(declaration: NonNullable<typeof catalogue.tools>[number]) {
     return { name: declaration.name, revision: declaration.revision,
@@ -1144,18 +1146,18 @@ async function reviewRestoration(setup: Fixture, commandId: string, mode = 'allo
     connectionId: policy.connectionId, accountMode: policy.accountMode,
     tools: catalogue.tools!.map(choice) };
   const result = await reviewToolPolicy(setup.nats.store, setup.binding, 'alice',
-    'fixture', command);
+    serverId, command);
   expect(result.status).toBe('appended');
 }
 
-async function publishRestoration(setup: Fixture, commandId: string) {
-  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+async function publishRestoration(setup: Fixture, commandId: string, serverId = 'fixture') {
+  const policy = await readToolPolicy(setup.nats.store, 'test', serverId);
   const command = { commandId, expectedSequence: policy.sequence,
     reviewRevision: policy.reviewRevision };
   const result = await publishToolPolicy(setup.nats.store, setup.binding, 'alice',
-    'fixture', command);
+    serverId, command);
   expect(result.status).toBe('appended');
-  return prepareGatewayConfiguration(setup.nats.store, 'test', 'fixture', commandId);
+  return prepareGatewayConfiguration(setup.nats.store, 'test', serverId, commandId);
 }
 
 const restorationCases = ['exact', 'legacy', 'review only', 'intent only', 'new intent',
@@ -1203,9 +1205,13 @@ async function restorationFixture(expireApproval = false) {
   return Object.assign(context, { approvalId, changed });
 }
 
-async function restorationDelivery(setup: Fixture) {
-  const settings = { ...setup.options,
-    memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
+async function restorationDelivery(setup: Fixture, preserveMemory = true) {
+  let settings: typeof setup.options & { memoryRoute?: typeof setup.options.mcpRoutes[number] } =
+    setup.options;
+  if (preserveMemory) {
+    settings = { ...settings,
+      memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
+  }
   const options = { db: setup.db, mode: 'live' as const, store: setup.nats.store, silo: 'test',
     child: setup.gatewayChild()!, configFile: setup.options.configFile,
     controlPort: await freePort(), settings };
@@ -1413,7 +1419,7 @@ async function restoresReviewedDrift(change: RestorationCase) {
 it.each(restorationCases)('restores drift only through exact live publication: %s',
   restoresReviewedDrift, 60_000);
 
-async function verifyRestorationReplay(setup: Fixture) {
+async function verifyRestorationReplay(setup: Fixture, received = 1) {
   await setup.stopDispatch();
   await setup.runtime.stop();
   await setup.decisionDown();
@@ -1443,7 +1449,7 @@ async function verifyRestorationReplay(setup: Fixture) {
     { env, timeout: 10_000 });
   expect(audit.stdout).toContain('rebuilt state matched the live projection');
   expect(await setup.nats.store.head()).toBe(position);
-  expect(setup.received()).toBe(1);
+  expect(setup.received()).toBe(received);
 }
 
 async function refuseUnrelatedRestorationReceipts(setup: Fixture,
@@ -1787,3 +1793,246 @@ async function keepsApprovalAcrossCarriedGeneration() {
 }
 it('keeps a waiting approval bound to its review across a carried generation',
   keepsApprovalAcrossCarriedGeneration);
+async function approvalForReviewedTool(setup: Fixture, headers: Record<string, string>,
+  approve: boolean) {
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  const answer = z.object({ approvalId: z.string() }).parse(await response.json());
+  const waiting = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  if (approve) {
+    async function fresh() {}
+    const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
+      'alice', 'approved', true, fresh, waiting);
+    expect(result.status).toBe('appended');
+  }
+  return answer.approvalId;
+}
+
+const descriptionCanary = 'UNTRUSTED_DESCRIPTION_RELOAD_CANARY';
+
+async function reviewedReloadFixture(setup: Fixture) {
+  const headers = await prepare(setup);
+  const savedDefinition = z.string().parse(tool.definition);
+  const parsed: unknown = JSON.parse(savedDefinition);
+  const definition = z.record(z.string(), z.unknown()).parse(parsed);
+  definition['description'] = descriptionCanary;
+  const encoded = losslessJson(JSON.stringify(definition));
+  const declaration = { ...tool, definition: encoded.canonical, revision: encoded.digest };
+  const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+    ...catalogueEvidence([declaration]) };
+  await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
+  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  function captureCatalogue() {
+    return Promise.resolve(policy.catalogue!);
+  }
+  const options = { serverIds: ['fixture'], capture: captureCatalogue,
+    requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+  const watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+  onTestFinished(watch.close);
+  setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
+  await watch.check('fixture');
+  await reviewRestoration(setup, 'review-reload', 'ask');
+  // Start from a callable legacy publication; activation of new servers is separate work.
+  await setup.append('mcp-fixture', 'mcp.server_published',
+    { serverId: 'fixture', publishedBy: 'alice' });
+  await reviewRestoration(setup, 'review-initial-reload', 'ask');
+  const delivery = await restorationDelivery(setup);
+  const first = await publishRestoration(setup, 'initial-reload');
+  await acknowledgeReload(delivery, first);
+  Object.assign(headers, generationHeaders(first));
+  await watch.check('fixture');
+  watch.requireCurrent('fixture');
+  return { headers, watch, delivery, first };
+}
+
+async function acknowledgeReload(delivery: Awaited<ReturnType<typeof restorationDelivery>>,
+  record: Awaited<ReturnType<typeof publishRestoration>>) {
+  await delivery.deliver(record);
+  await delivery.waitForWitness(record);
+  async function acknowledged() {
+    expect(await delivery.observe()).not.toBeNull();
+  }
+  await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
+}
+
+async function cancelsApprovalOnSavedReload(approve: boolean, readPending: boolean) {
+  const setup = await fixture();
+  async function close() {
+    await setup.close();
+  }
+  onTestFinished(close);
+  const output: string[] = [];
+  function recordOutput(chunk: Buffer) {
+    output.push(chunk.toString());
+  }
+  const child = setup.gatewayChild()!;
+  child.stdout?.on('data', recordOutput);
+  child.stderr?.on('data', recordOutput);
+  const { headers, watch, delivery, first } = await reviewedReloadFixture(setup);
+  const approvalId = await approvalForReviewedTool(setup, headers, approve);
+  const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  const record = await publishRestoration(setup, 'reload');
+  expect(record.generation).toBe(first.generation + 1);
+  expect(await delivery.observe()).toBeNull();
+  await expect(delivery.deliver(first)).rejects.toThrow('Gateway delivery unavailable');
+  await setup.append('mcp-fixture', 'mcp.configuration_observed',
+    before.configurationObservation);
+  await watch.check('fixture');
+  function requireCurrent() {
+    watch.requireCurrent('fixture');
+  }
+  expect(requireCurrent).toThrow('watch unavailable');
+  const pending = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect.soft(pending.policyRevision).toBeGreaterThan(before.policyRevision);
+  if (readPending) {
+    const cancelled = await readApproval(setup.nats.store, 'test', approvalId);
+    expect(cancelled.state).toBe('cancelled');
+  }
+  await acknowledgeReload(delivery, record);
+  await watch.check('fixture');
+  watch.requireCurrent('fixture');
+  const restored = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  const observedPosition = await setup.nats.store.head();
+  await delivery.observe();
+  expect(await setup.nats.store.head()).toBe(observedPosition);
+  expect(restored.published).toBe(true);
+  expect(restored.policyRevision).toBe(pending.policyRevision);
+  const old = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(old.state).toBe('cancelled');
+  async function fresh() {}
+  for (const action of ['approved', 'retry'] as const) {
+    const result = await decideApproval(setup.nats.store, 'test', approvalId,
+      'alice', action, true, fresh, old);
+    expect(result.status).toBe('conflict');
+  }
+  Object.assign(headers, generationHeaders(record));
+  const refused = await approvalPermit(setup, headers, approvalId);
+  expect(refused.status).not.toBe(200);
+  expect(await refused.text()).not.toContain(descriptionCanary);
+  const approvalRows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+  expect(JSON.stringify(approvalRows)).not.toContain(descriptionCanary);
+  expect(setup.received()).toBe(0);
+  const position = await setup.nats.store.head();
+  await setup.restart();
+  expect(await readToolPolicy(setup.nats.store, 'test', 'fixture')).toEqual(restored);
+  expect(await readApproval(setup.nats.store, 'test', approvalId)).toEqual(old);
+  expect(await setup.nats.store.head()).toBe(position);
+  await verifyRestorationReplay(setup, 0);
+  expect(output.join('')).not.toContain(descriptionCanary);
+}
+it.each([[false, false], [true, false], [false, true], [true, true]])(
+  'cancels old approvals on saved reload (approved %s, read pending %s)',
+  cancelsApprovalOnSavedReload, 60_000);
+
+async function preservesApprovalForOtherReload(serverId: string) {
+  const setup = await fixture();
+  try {
+    const { headers, first } = await reviewedReloadFixture(setup);
+    const approvalId = await approvalForReviewedTool(setup, headers, true);
+    const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    const approved = await readApproval(setup.nats.store, 'test', approvalId);
+    const registration = { serverId, kind: 'remote',
+      locator: 'https://other.example.test/mcp', registeredBy: 'alice' };
+    await setup.append(`mcp-${serverId}`, 'mcp.server_registered', registration);
+    const discovery = { ...before.catalogue!, serverId };
+    await setup.append(`mcp-${serverId}`, 'mcp.server_discovered', discovery);
+    await reviewRestoration(setup, 'review-other', 'ask', serverId);
+    const record = await publishRestoration(setup, 'reload-other', serverId);
+    expect(record.generation).toBe(first.generation + 1);
+    expect(record.members[0]).toEqual(first.members[0]);
+    const delivery = await restorationDelivery(setup, false);
+    await delivery.deliver(record);
+    await delivery.waitForWitness(record);
+    async function acknowledged() {
+      expect(await delivery.observe()).not.toBeNull();
+    }
+    await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
+    await delivery.observe();
+    expect(await readToolPolicy(setup.nats.store, 'test', 'fixture')).toEqual(before);
+    expect(await readApproval(setup.nats.store, 'test', approvalId)).toEqual(approved);
+    Object.assign(headers, generationHeaders(record));
+    const response = await approvalPermit(setup, headers, approvalId);
+    expect(response.status).toBe(200);
+    const value = response.headers.get('x-opencrane-mcp-permit')!;
+    expect((await send(setup, value)).status).toBe(200);
+    expect((await send(setup, value)).status).toBe(403);
+    expect(setup.received()).toBe(1);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(['odoo', 'memory'])('keeps another server approval through %s reload',
+  preservesApprovalForOtherReload, 60_000);
+
+async function preservesConsumedApproval() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    await reviewRestoration(setup, 'review-consumed', 'ask');
+    const approvalId = await approvalForReviewedTool(setup, headers, true);
+    const response = await approvalPermit(setup, headers, approvalId);
+    const value = response.headers.get('x-opencrane-mcp-permit')!;
+    expect((await send(setup, value)).status).toBe(200);
+    const before = await readApproval(setup.nats.store, 'test', approvalId);
+    expect(before.state).toBe('outcome_unknown');
+    const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+    await publishRestoration(setup, 'reload-consumed');
+    expect(await readApproval(setup.nats.store, 'test', approvalId)).toEqual(before);
+    expect(await history(setup.nats.store, `approval-${approvalId}`, 'test')).toEqual(rows);
+    expect((await send(setup, value)).status).toBe(403);
+    expect(setup.received()).toBe(1);
+  } finally {
+    await setup.close();
+  }
+}
+it('keeps a consumed approval and its historical outcome through reload',
+  preservesConsumedApproval, 60_000);
+
+async function refusesReloadDuringFinalRead() {
+  const setup = await fixture();
+  try {
+    const { headers, watch } = await reviewedReloadFixture(setup);
+    const approvalId = await approvalForReviewedTool(setup, headers, true);
+    const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    let captureSaved = false;
+    let changed = false;
+    async function saveCapture(command: AppendCommand) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'mcp.catalogue_checked') captureSaved = true;
+      return result;
+    }
+    async function* reloadDuringRead(...parameters: Parameters<typeof readStream>) {
+      if (parameters[0] === 'mcp-fixture' && captureSaved && !changed) {
+        changed = true;
+        await publishRestoration(setup, 'reload-final-read');
+      }
+      yield* readStream(...parameters);
+    }
+    const writer = vi.spyOn(setup.nats.store, 'append');
+    const reader = vi.spyOn(setup.nats.store, 'readStream');
+    writer.mockImplementation(saveCapture);
+    reader.mockImplementation(reloadDuringRead);
+    try {
+      await watch.check('fixture');
+    } finally {
+      writer.mockRestore();
+      reader.mockRestore();
+    }
+    expect(changed).toBe(true);
+    function requireCurrent() {
+      watch.requireCurrent('fixture');
+    }
+    expect(requireCurrent).toThrow('watch unavailable');
+    const approval = await readApproval(setup.nats.store, 'test', approvalId);
+    expect(approval.state).toBe('cancelled');
+    expect((await approvalPermit(setup, headers, approvalId)).status).not.toBe(200);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses a saved reload during the final awaited watch read',
+  refusesReloadDuringFinalRead, 60_000);
