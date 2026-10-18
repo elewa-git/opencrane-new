@@ -49,6 +49,10 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   private publicationCommandId = '';
 
   ngOnInit(): void {
+    if (this.view() === 'changes') {
+      this.publicationCommandId = readStoredPublication(this.serverId());
+      this.changeRef.set(this.publicationCommandId);
+    }
     void this.load();
   }
 
@@ -75,7 +79,8 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     return this.view() === 'changes' && this.toolsReadState() === 'loaded' &&
       this.changeState() === 'disabled' && policy?.driftHeld === true &&
       policy.connectionId !== null && policy.accountMode !== null &&
-      policy.catalogue?.tools !== undefined && !this.checkExpired();
+      policy.catalogue?.tools !== undefined && this.comparison()?.reviewable === true &&
+      !this.checkExpired();
   }
 
   protected changeMessage(): string {
@@ -130,6 +135,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   private async publish(reviewRevision: number): Promise<void> {
     const commandId = globalThis.crypto.randomUUID();
     this.publicationCommandId = commandId;
+    storePublication(this.serverId(), commandId);
     this.changeRef.set(commandId);
     this.changeState.set('publishing');
     const body = { commandId, expectedSequence: reviewRevision, reviewRevision };
@@ -137,8 +143,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const response = await this.sendChange('publication', body);
       if (!response || this.shouldIgnoreResult()) return;
       if (response.status === 409) {
-        this.publicationCommandId = '';
-        this.changeRef.set('');
+        this.clearPublicationReference();
         this.changeState.set('conflict');
         return;
       }
@@ -194,6 +199,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       return;
     }
     if (raw['status'] === 'ready') {
+      this.clearPublicationReference();
       this.changeState.set('confirmed');
       return;
     }
@@ -202,6 +208,12 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       return;
     }
     this.changeState.set('unknown-publication');
+  }
+
+  private clearPublicationReference(): void {
+    this.publicationCommandId = '';
+    this.changeRef.set('');
+    removeStoredPublication(this.serverId());
   }
 
   protected announcementText(): string {
@@ -254,7 +266,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
 
   protected driftSummary(): string {
     const counts = this.comparison()?.counts;
-    if (!counts) return "The earlier list isn't saved, so review every tool.";
+    if (!counts) return 'A complete comparison is unavailable. Review is paused.';
     return `Found ${counts.added} added, ${counts.removed} removed and ${counts.changed} changed`;
   }
 
@@ -334,8 +346,9 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       this.state.set('ready');
       this.refreshing.set(false);
       this.hasRenderedProtectedContent.set(true);
-      if (this.view() === 'changes' && !this.publicationCommandId) {
-        await this.readPublicationStatus();
+      if (this.view() === 'changes') {
+        if (this.publicationCommandId) await this.checkPublicationChange();
+        else await this.readPublicationStatus();
       }
     } catch {
       if (!this.shouldIgnoreResult()) this.markToolsReadFailed();
@@ -360,20 +373,45 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const status: unknown = await response.json();
       if (this.shouldIgnoreResult()) return;
       if (!isRecord(status)) throw new Error('Invalid publication status');
-      if (status['status'] === 'disabled') {
-        this.changeState.set('disabled');
-      } else if (status['status'] === 'ready') {
-        this.changeState.set('confirmed');
-      } else if (status['status'] === 'applying' && typeof status['changeRef'] === 'string') {
-        this.publicationCommandId = status['changeRef'];
-        this.changeRef.set(status['changeRef']);
-        this.changeState.set('applying');
-      } else {
-        this.changeState.set('failed');
-      }
+      this.setCurrentPublicationState(status);
     } catch {
       if (!this.shouldIgnoreResult()) this.changeState.set('failed');
     }
+  }
+
+  private setCurrentPublicationState(status: Record<string, unknown>): void {
+    const policy = this.policy();
+    // Let a newer drifted policy be reviewed when its saved publication belongs to the old one.
+    if (policy?.driftHeld && policy.publication &&
+        policy.publication.reviewRevision !== policy.policyRevision) {
+      this.changeState.set('disabled');
+      return;
+    }
+    if (status['status'] === 'disabled') {
+      this.changeState.set('disabled');
+      return;
+    }
+    if (status['status'] === 'ready') {
+      this.changeState.set('confirmed');
+      return;
+    }
+    const reference = status['changeRef'];
+    if (typeof reference !== 'string' || !publicationIdentifier.test(reference)) {
+      this.changeState.set('failed');
+      return;
+    }
+    if (status['status'] === 'applying' || status['status'] === 'unknown') {
+      this.publicationCommandId = reference;
+      this.changeRef.set(reference);
+      storePublication(this.serverId(), reference);
+      if (status['status'] === 'unknown') {
+        this.changeState.set('unknown-publication');
+      } else {
+        this.changeState.set('applying');
+      }
+      return;
+    }
+    this.changeState.set('failed');
   }
 
   private toolsUrl(): string {
@@ -394,6 +432,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     this.changeState.set('loading');
     this.changeRef.set('');
     this.publicationCommandId = '';
+    removeStoredPublication(this.serverId());
     this.loadedAt.set('');
     this.toolsReadState.set('loading');
     this.refreshing.set(false);
@@ -410,6 +449,40 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   private focusHeaderRefreshAfterMessageRetry(): void {
     if (!this.refreshing()) return;
     requestAnimationFrame(focusHeaderRefresh);
+  }
+}
+
+const publicationStoragePrefix = 'integration-publication:';
+const publicationIdentifier = /^[\w-]{1,200}$/u;
+
+function publicationStorageKey(serverId: string): string {
+  return publicationStoragePrefix + serverId;
+}
+
+function readStoredPublication(serverId: string): string {
+  try {
+    const stored = sessionStorage.getItem(publicationStorageKey(serverId));
+    if (stored && publicationIdentifier.test(stored)) return stored;
+    if (stored !== null) removeStoredPublication(serverId);
+  } catch {
+    // Keep the page usable when browser storage is blocked.
+  }
+  return '';
+}
+
+function storePublication(serverId: string, commandId: string): void {
+  try {
+    sessionStorage.setItem(publicationStorageKey(serverId), commandId);
+  } catch {
+    // Keep the reference in memory while this page is open.
+  }
+}
+
+function removeStoredPublication(serverId: string): void {
+  try {
+    sessionStorage.removeItem(publicationStorageKey(serverId));
+  } catch {
+    // The page still clears its in-memory reference.
   }
 }
 

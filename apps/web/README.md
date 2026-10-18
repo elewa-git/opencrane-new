@@ -14,7 +14,7 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
-  web -->|reviews and publishes changed tools| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
+  web -->|shows full tool definitions and checks publication| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
   web -->|reviews invitations and removals; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
 ```
@@ -92,11 +92,13 @@ assistant check open rather than guessing an answer.
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
   modes for each tool, as well as models, spending and change history.
 - Shows when changed tools pause an integration. The changes page compares the saved
-  field types and limits, titles and other details. A failed policy read is visible;
+  field types and limits, titles and other details. Admins can open each full definition.
+  A failed policy read is visible;
   earlier rows keep their last successful check time. Admins can review the current
-  tool list and save its publication. Calls stay paused while publication is applying.
-  A lost reply can be checked by its original reference. Publishing cannot restore
-  old approvals.
+  tool list when the saved comparison is complete, then save its publication. Calls stay
+  paused while publication is applying. A lost reply can be checked by its original
+  reference after reopening the page. A later tool change can be reviewed after an older
+  publication. Publishing cannot restore old approvals.
 - Accepts an exact package image digest and shows dated admission checks. Continue
   stays disabled while tool discovery is unavailable. The form checks encoded host
   names before sending a package. It shows when a signature or licence is refused,

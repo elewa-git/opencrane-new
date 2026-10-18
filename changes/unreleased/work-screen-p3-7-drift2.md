@@ -1,1 +1,1 @@
-Admins can review the exact changed tool list and save its publication. The changes page keeps calls paused while the current publication is applying, shows saved choices and new blocked tools, and checks uncertain saves by their original reference.
+Admins can review complete changed tool definitions and save their publication. The changes page recovers uncertain publication after reopening, lets later drift reach a new review, and keeps review unavailable when a complete comparison is missing.

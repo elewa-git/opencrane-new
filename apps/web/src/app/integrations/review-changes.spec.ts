@@ -122,7 +122,7 @@ describe('reviewed changed tools', () => {
       .mockResolvedValueOnce(reply(incomplete))
       .mockResolvedValueOnce(reply({ status: 'disabled' }));
     const fixture = page();
-    await vi.waitFor(() => expect(content(fixture).textContent).toContain('earlier list'));
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('comparison is unavailable'));
     expect(content(fixture).textContent).not.toContain('Review and publish');
     fixture.destroy();
   });
@@ -131,7 +131,8 @@ describe('reviewed changed tools', () => {
     const changed = policy();
     const declaration = changed.catalogue?.tools?.[0];
     if (!declaration) throw new Error('Expected tool');
-    declaration.definition = JSON.stringify({ name: 'update_note', inputSchema: {
+    declaration.definition = JSON.stringify({ name: 'update_note',
+      description: '<img src=x onerror=alert(1)>', inputSchema: {
       type: 'object', additionalProperties: false,
       properties: { note: { type: 'string', maxLength: 2000 } },
     } });
@@ -141,26 +142,92 @@ describe('reviewed changed tools', () => {
       .mockResolvedValueOnce(reply({ status: 'disabled' }));
     const fixture = page();
     await vi.waitFor(() => expect(content(fixture).querySelector('details')).not.toBeNull());
-    expect(content(fixture).querySelector('details')?.textContent)
+    expect(content(fixture).querySelectorAll('details')[1]?.textContent)
       .toContain('"additionalProperties": false');
-    expect(content(fixture).querySelector('details')?.textContent).toContain('"maxLength": 2000');
+    expect(content(fixture).querySelectorAll('details')[1]?.textContent)
+      .toContain('"maxLength": 2000');
+    expect(content(fixture).querySelectorAll('details')[1]?.textContent)
+      .toContain('<img src=x onerror=alert(1)>');
+    expect(content(fixture).querySelector('details img')).toBeNull();
     fixture.destroy();
   });
 
   it('checks the original uncertain publication after reopening without another POST', async () => {
-    sessionStorage.setItem('integration-publication:fixture-server', 'original-publication');
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
       .mockResolvedValueOnce(reply(policy()))
-      .mockResolvedValueOnce(reply({ status: 'unknown', changeRef: 'original-publication',
+      .mockResolvedValueOnce(reply({ status: 'disabled' }))
+      .mockResolvedValueOnce(reply({ status: 'appended', sequence: 9 }))
+      .mockRejectedValueOnce(new Error('lost publication reply'))
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()));
+    const first = page();
+    await vi.waitFor(() => expect(content(first).textContent).toContain('Review and publish'));
+    click(first, 'Review and publish');
+    await vi.waitFor(() => expect(content(first).textContent).toContain('Check status'));
+    const originalId = postedCommand(fetchMock, 4).commandId;
+    expect(sessionStorage.getItem('integration-publication:fixture-server')).toBe(originalId);
+    first.destroy();
+    fetchMock.mockResolvedValueOnce(reply({ status: 'unknown', changeRef: originalId,
         stage: 'observation', reason: 'deadline' }));
     const fixture = page();
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(requestUrl(fetchMock.mock.calls[2]?.[0]))
-      .toBe('/api/org/integrations/changes/original-publication');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(8));
+    expect(requestUrl(fetchMock.mock.calls[7]?.[0]))
+      .toBe(`/api/org/integrations/changes/${originalId}`);
     expect(content(fixture).textContent).toContain('Check status');
     expect(content(fixture).textContent).not.toContain('Review and publish');
-    expect(fetchMock.mock.calls.filter((call) => call[1]?.method === 'POST')).toHaveLength(0);
+    expect(fetchMock.mock.calls.filter((call) => call[1]?.method === 'POST')).toHaveLength(2);
+    fixture.destroy();
+  });
+
+  it('keeps a deadline reply reference available for status checks', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()))
+      .mockResolvedValueOnce(reply({ status: 'unknown', changeRef: 'deadline-publication',
+        stage: 'receipt', reason: 'deadline' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('Check status'));
+    expect(content(fixture).textContent).toContain('deadline-publication');
+    expect(sessionStorage.getItem('integration-publication:fixture-server'))
+      .toBe('deadline-publication');
+    fixture.destroy();
+  });
+
+  it.each(['no drift hold', 'no connection', 'no account mode', 'expired'])(
+    'withholds review when the policy has %s', async (reason) => {
+    const unavailable = policy();
+    if (reason === 'no drift hold') unavailable.driftHeld = false;
+    if (reason === 'no connection') unavailable.connectionId = null;
+    if (reason === 'no account mode') unavailable.accountMode = null;
+    if (reason === 'expired') unavailable.expiresAt = new Date(Date.now() - 1000).toISOString();
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(unavailable))
+      .mockResolvedValueOnce(reply({ status: 'disabled' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(content(fixture).querySelectorAll('.change-row'))
+      .toHaveLength(2));
+    expect(content(fixture).textContent).not.toContain('Review and publish');
+    fixture.destroy();
+    },
+  );
+
+  it('blocks a second decision after publication returns 409', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()))
+      .mockResolvedValueOnce(reply({ status: 'disabled' }))
+      .mockResolvedValueOnce(reply({ status: 'appended', sequence: 9 }))
+      .mockResolvedValueOnce(reply({ status: 'conflict' }, 409));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('Review and publish'));
+    click(fixture, 'Review and publish');
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('Review again'));
+    expect(content(fixture).textContent).not.toContain('Review and publish');
+    expect(fetchMock.mock.calls.filter((call) => call[1]?.method === 'POST')).toHaveLength(2);
+    expect(sessionStorage.getItem('integration-publication:fixture-server')).toBeNull();
     fixture.destroy();
   });
 

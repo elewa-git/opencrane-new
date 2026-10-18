@@ -1,4 +1,5 @@
 import type { ToolPolicy } from '@opencrane/protocol';
+import { compareToolCatalogues } from './tool-changes';
 
 type Declaration = NonNullable<NonNullable<ToolPolicy['catalogue']>['tools']>[number];
 type Choice = { name: string; revision: string; reviewDigest: string;
@@ -41,8 +42,10 @@ async function reviewChoice(policy: ToolPolicy, declaration: Declaration): Promi
 }
 
 export async function reviewCommand(policy: ToolPolicy, commandId: string) {
+  const comparison = compareToolCatalogues(policy);
   if (!policy.catalogue?.tools || !policy.connectionId || !policy.accountMode ||
-      policy.expiresAt === null || Date.parse(policy.expiresAt) <= Date.now()) {
+      policy.expiresAt === null || Date.parse(policy.expiresAt) <= Date.now() ||
+      !comparison?.reviewable) {
     throw new Error('A fresh tool policy is needed');
   }
   const tools: Choice[] = [];

@@ -98,28 +98,45 @@
     }
     @if (changeMessage()) {
       <div class="draft-notice publication-notice" role="status">
-        <p>{{ changeMessage() }}</p>
+        <p><span class="status-glyph" aria-hidden="true">◷</span>{{ changeMessage() }}</p>
         @if (changeRef()) { <p>Change reference: {{ changeRef() }}</p> }
       </div>
     }
     @if (comparison(); as changes) {
       <section class="changes-list" aria-label="Changed tools">
+        <div class="changes-header" aria-hidden="true">
+          <span>Tool</span><span>Change</span><span>Before</span><span>After</span><span>Access</span>
+        </div>
         @for (change of changes.rows; track change.name) {
           <article class="change-row">
-            <div class="change-title"><h2>{{ change.name }}</h2><strong>{{ change.kind }}</strong></div>
-            @if (change.fields.length) {
-              <p class="field-list">{{ change.fields.join(' · ') }}</p>
-            }
-            <div class="change-columns">
-              <div><h3>Before</h3><p>{{ change.before }}</p></div>
-              <div><h3>After</h3><p>{{ change.after }}</p></div>
-              <div><h3>Access</h3><p>{{ change.access }}</p></div>
+            <div class="change-title">
+              <h2>{{ change.name }}</h2>
+              @if (change.fields.length) {
+                <p class="field-list">{{ change.fields.join(' · ') }}</p>
+              }
             </div>
+            <strong class="change-kind">{{ change.kind }}</strong>
+            <div class="change-cell">
+              <h3>Before</h3><p>{{ change.before }}</p>
+              @if (change.fullBefore) {
+                <details><summary>Full definition before</summary><pre>{{ change.fullBefore }}</pre></details>
+              }
+            </div>
+            <div class="change-cell">
+              <h3>After</h3><p>{{ change.after }}</p>
+              @if (change.fullAfter) {
+                <details><summary>Full definition after</summary><pre>{{ change.fullAfter }}</pre></details>
+              }
+            </div>
+            <div class="change-cell"><h3>Access</h3><p>{{ change.access }}</p></div>
           </article>
         }
       </section>
+      @if (!changes.reviewable) {
+        <p class="draft-notice">A complete saved definition is unavailable. Review is paused.</p>
+      }
     } @else if (policy()) {
-      <p class="draft-notice">The earlier list isn't saved, so review every tool.</p>
+      <p class="draft-notice">A complete comparison is unavailable. Review is paused.</p>
     }
     <p>Audience: the reviewed tool list for this connection. People and assistants still need
       their own grants. Old approvals stay ended and cannot be restored by publishing.</p>

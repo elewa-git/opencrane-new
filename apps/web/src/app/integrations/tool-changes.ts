@@ -10,11 +10,14 @@ interface ToolChangeRow {
   after: string;
   access: string;
   fields: string[];
+  fullBefore: string | null;
+  fullAfter: string | null;
 }
 
 export interface ToolComparison {
   rows: ToolChangeRow[];
   counts: { added: number; removed: number; changed: number };
+  reviewable: boolean;
 }
 
 interface Definition {
@@ -42,16 +45,26 @@ export function compareToolCatalogues(policy: ToolPolicy): ToolComparison | null
   const names = new Set([...oldTools.keys(), ...currentTools.keys()]);
   const rows: ToolChangeRow[] = [];
   const counts = { added: 0, removed: 0, changed: 0 };
+  let reviewable = true;
   for (const name of names) {
     const oldTool = oldTools.get(name);
     const currentTool = currentTools.get(name);
     const row = compareTool(name, oldTool, currentTool, policy);
     rows.push(row);
+    if (!hasCompleteDefinitions(row, oldTool, currentTool)) reviewable = false;
     if (row.kind === 'Added') counts.added += 1;
     if (row.kind === 'Removed') counts.removed += 1;
     if (row.kind === 'Schema changed' || row.kind === 'Details changed') counts.changed += 1;
   }
-  return { rows, counts };
+  return { rows, counts, reviewable: reviewable && rows.length > 0 };
+}
+
+function hasCompleteDefinitions(
+  row: ToolChangeRow, oldTool: SavedTool | undefined, currentTool: SavedTool | undefined,
+): boolean {
+  if (oldTool && row.fullBefore === null) return false;
+  if (currentTool && row.fullAfter === null) return false;
+  return true;
 }
 
 function compareTool(
@@ -79,7 +92,14 @@ function compareTool(
   return { name, kind,
     before: detailText(oldTool, beforeDefinition, afterDefinition),
     after: detailText(currentTool, afterDefinition, beforeDefinition),
-    access: accessText(name, kind, policy), fields };
+    access: accessText(name, kind, policy), fields,
+    fullBefore: fullDefinition(oldTool, beforeDefinition),
+    fullAfter: fullDefinition(currentTool, afterDefinition) };
+}
+
+function fullDefinition(tool: SavedTool | undefined, definition: Definition | null): string | null {
+  if (!tool?.definition || !definition) return null;
+  return JSON.stringify(definition, null, 2);
 }
 
 function detailChanges(before: Definition | null, after: Definition | null): string[] {
