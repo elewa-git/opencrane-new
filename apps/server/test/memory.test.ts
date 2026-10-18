@@ -403,6 +403,41 @@ describe('personal HTTP correction', function correctionCases() {
       finally { spy.mockRestore(); }
     });
 
+  it.each(['expired', 'destroyed'] as const)(
+    'advertises correction only while the target and its dependencies are available: %s',
+    async function correctionAvailability(mode) {
+      const expiresAt = new Date(Date.now() + 60_000).toISOString();
+      const parentId = `availability-parent-${mode}`;
+      await write('bob', 'person', parentId, 'Supporting fact', false, 'acme', [], expiresAt);
+      const scopeId = memoryScopeId('acme', 'person', 'bob');
+      const dependency = { scopeId, memoryId: parentId, revision: 1 };
+      const child = await remember('bob', 'person', `availability-child-${mode}`, 'bob',
+        { dependsOn: [dependency] });
+      expect(child.statusCode).toBe(200);
+      const childId = child.json<{ memoryId: string }>().memoryId;
+      const plain = await correctionTarget(`availability-plain-${mode}`);
+      await runner.run(projection);
+      expect((await get(`${path('bob')}/facts/${childId}`)).json()).toHaveProperty('canCorrect', true);
+      const identity = { silo: 'acme', scopeKind: 'person' as const, ownerId: 'bob', ...dependency };
+      let clock;
+      if (mode === 'expired') {
+        clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse(expiresAt) + 1);
+      } else {
+        keys.delete(identity);
+      }
+      try {
+        const detail = await get(`${path('bob')}/facts/${childId}`);
+        expect(detail.statusCode).toBe(200);
+        expect(detail.json()).toHaveProperty('canCorrect', false);
+        expect((await correct(childId, `unavailable-${mode}`, 1)).statusCode).toBe(409);
+        expect((await get(`${path('bob')}/facts/${plain.memoryId}`)).json())
+          .toHaveProperty('canCorrect', true);
+        expect((await correct(plain.memoryId, `available-${mode}`)).statusCode).toBe(200);
+      } finally {
+        clock?.mockRestore();
+      }
+    });
+
   it.each(['recovery', 'later-command'] as const)(
     'repairs interrupted key provisioning through %s without destroying the revision slot',
     async function interruptedProvision(mode) {
