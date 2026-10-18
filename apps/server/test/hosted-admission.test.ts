@@ -252,9 +252,9 @@ it.each(refusedPrincipals)(
   'refuses result principal %j without changing saved events or admission',
   refusesOtherResultWriters);
 
-async function appendCheckedFixture(payload: { serverId: string }) {
+async function appendCheckedFixture(payload: { serverId: string; attemptId?: number }) {
   const subject = `mcp-${payload.serverId}`;
-  const event = envelope('test', subject, 'mcp.image_checked', payload, 'result', now);
+  const event = envelope('test', subject, 'mcp.image_checked', payload, `result-${payload.attemptId ?? 1}`, now);
   const expectedSequence = await nats.store.head(subject);
   const outcome = await nats.store.append({ event, expectedSequence });
   expect(outcome.status).toBe('appended');
@@ -313,6 +313,17 @@ async function recoversRequestedCheck() {
   expect((await requestCheck(serverId, input, 'amina')).statusCode).toBe(409);
   await verifyRequestedReplay(serverId, saved[2]!.sequence, input.registrationRevision);
   expect(await registrations()).toEqual(saved);
+  const failed = { ...dated, verdict: 'fail', reasonCodes: ['unsigned'] };
+  const secondResult = { ...result(serverId), attemptId: 2,
+    checks: { ...result(serverId).checks, signature: failed } };
+  await appendCheckedFixture(secondResult);
+  expect((await requestCheck(serverId, input)).json()).toEqual(receipt);
+  const third = { ...next, expectedSequence: await nats.store.head(`mcp-${serverId}`) };
+  const thirdResponse = await requestCheck(serverId, third);
+  expect(thirdResponse.statusCode).toBe(202);
+  const thirdReceipt = thirdResponse.json<{ sequence: number }>();
+  await verifyRequestedReplay(serverId, thirdReceipt.sequence, input.registrationRevision);
+  expect((await status(serverId)).json()).toMatchObject({ status: 'checking', attemptId: 3 });
 }
 it('recovers one requested check after a lost append reply and rejects changed retries',
   recoversRequestedCheck);
@@ -320,8 +331,8 @@ it('recovers one requested check after a lost append reply and rejects changed r
 async function verifyRequestedReplay(serverId: string, sequence: number, revision: number) {
   const before = await readHostedAdmission(nats.store, 'test', serverId);
   const db = pgDb(dbs.queue);
-  const runner = new ProjectionRunner(db, nats.reader,
-    createLogger('check-request-test', { level: 'silent' }));
+  const logger = createLogger('check-request-test', { level: 'silent' });
+  const runner = new ProjectionRunner(db, nats.reader, logger);
   await runner.initialise(mcpCatalogue);
   await runner.run(mcpCatalogue);
   const rows = await db.query('SELECT * FROM mcp_catalogue');
@@ -344,7 +355,9 @@ async function verifyRequestedReplay(serverId: string, sequence: number, revisio
   }
 }
 
-async function refusesUnfinishedCheck(state: 'pending' | 'admitted' | 'unavailable' | 'mixed') {
+async function refusesUnfinishedCheck(
+  state: 'pending' | 'admitted' | 'unavailable' | 'mixed' | 'expired_unavailable',
+) {
   const serverId = await installed();
   if (state !== 'pending') {
     const valid = result(serverId);
@@ -352,24 +365,30 @@ async function refusesUnfinishedCheck(state: 'pending' | 'admitted' | 'unavailab
     if (state === 'unavailable' || state === 'mixed') {
       signature = { ...dated, verdict: 'unavailable' };
     }
+    if (state === 'expired_unavailable') {
+      signature = { ...dated, verdict: 'unavailable',
+        checkedAt: new Date(now.getTime() - 2_000).toISOString(),
+        expiresAt: new Date(now.getTime() - 1_000).toISOString() };
+    }
     let licence: Record<string, unknown> = dated;
     if (state === 'mixed') licence = { ...dated, verdict: 'fail', reasonCodes: ['licence'] };
-    await appendCheckedFixture({ ...valid, checks: { ...valid.checks, signature, licence } });
+    const payload = { ...valid, checks: { ...valid.checks, signature, licence } };
+    await appendCheckedFixture(payload);
   }
   const before = await registrations();
   const response = await requestCheck(serverId, await checkInput(serverId));
   expect(response.statusCode).toBe(409);
   expect(await registrations()).toEqual(before);
-  if (state === 'unavailable' || state === 'mixed') {
+  if (state === 'unavailable' || state === 'mixed' || state === 'expired_unavailable') {
     expect((await status(serverId)).json()).toMatchObject({ status: 'unavailable' });
   }
 }
-it.each(['pending', 'admitted', 'unavailable', 'mixed'] as const)(
+it.each(['pending', 'admitted', 'unavailable', 'mixed', 'expired_unavailable'] as const)(
   'does not bypass a %s attempt', refusesUnfinishedCheck);
 
 async function advancesExpiredCheck() {
   const serverId = await installed();
-  const old = new Date(Date.now() - 10_000);
+  const old = new Date(now.getTime() - 10_000);
   const receipt = { ...dated, checkedAt: old.toISOString(),
     expiresAt: new Date(old.getTime() + 1_000).toISOString() };
   const scannedReceipt = { ...receipt, databaseDigest: digest, databaseUpdatedAt: old.toISOString() };
@@ -394,6 +413,13 @@ async function rejectsInvalidRequest() {
   expect((await requestCheck(serverId, input, 'bob')).statusCode).toBe(403);
   expect((await requestCheck(serverId, input, 'alice', 'https://other.test')).statusCode).toBe(403);
   expect((await requestCheck('unknown', input)).statusCode).toBe(404);
+  const session = { sub: 'alice', orgId: 'other', roles: ['owner'],
+    authTime: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 };
+  const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
+  const foreignRequest = { method: 'POST' as const,
+    url: `/api/org/integrations/${serverId}/checks`, payload: input,
+    headers: { origin: new URL(config.redirectUri).origin, cookie } };
+  expect((await app.inject(foreignRequest)).statusCode).toBe(403);
   for (const [id, silo, kind] of [['foreign', 'other', 'hosted'], ['remote', 'test', 'remote']]) {
     const data = { serverId: id, registeredBy: 'alice', kind,
       locator: kind === 'hosted' ? command.locator : 'https://example.com' };
@@ -426,9 +452,11 @@ async function refusesPreparationChange(change: 'registration' | 'role') {
   const serverId = await failedInstallation();
   const input = await checkInput(serverId);
   const read = nats.store.readStream.bind(nats.store);
+  let changed = false;
   async function* changedHistory(...args: Parameters<typeof read>): ReturnType<typeof read> {
     yield* read(...args);
-    if (args[0] !== `mcp-${serverId}`) return;
+    if (changed || args[0] !== `mcp-${serverId}`) return;
+    changed = true;
     if (change === 'role') {
       const event = envelope('test', 'member-alice', 'member.role_changed',
         { memberId: 'alice', previousRole: 'admin', newRole: 'member', changedBy: 'amina' });
@@ -450,3 +478,35 @@ async function refusesPreparationChange(change: 'registration' | 'role') {
 }
 it.each(['registration', 'role'] as const)(
   'refuses a %s change during preparation', refusesPreparationChange);
+
+async function avoidsRepeatedHistoryAndRechecksAppend(revoke: boolean) {
+  const serverId = await failedInstallation();
+  const input = await checkInput(serverId);
+  const read = nats.store.readStream.bind(nats.store);
+  let fullReads = 0;
+  async function* boundedHistory(...args: Parameters<typeof read>): ReturnType<typeof read> {
+    if (args[0] === `mcp-${serverId}` && args[1] === 1) {
+      fullReads++;
+      if (fullReads > 1 && !revoke) throw new Error('History read repeated during access check');
+      if (fullReads === 1) await delay(2_100);
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(boundedHistory);
+  if (revoke) {
+    const append = nats.store.append.bind(nats.store);
+    async function revokeBeforeAppend(entry: Parameters<typeof append>[0]): ReturnType<typeof append> {
+      const event = envelope('test', 'member-alice', 'member.role_changed',
+        { memberId: 'alice', previousRole: 'admin', newRole: 'member', changedBy: 'amina' });
+      await append({ event, expectedSequence: await nats.store.head('member-alice') });
+      return append(entry);
+    }
+    vi.spyOn(nats.store, 'append').mockImplementationOnce(revokeBeforeAppend);
+  }
+  const response = await requestCheck(serverId, input);
+  expect(response.statusCode).toBe(revoke ? 503 : 202);
+  vi.restoreAllMocks();
+  expect(await registrations()).toHaveLength(revoke ? 2 : 3);
+}
+it.each([false, true])('reads history before access and checks access at append (revoke: %s)',
+  avoidsRepeatedHistoryAndRechecksAppend);

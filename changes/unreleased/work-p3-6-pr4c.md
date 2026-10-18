@@ -1,0 +1,1 @@
+Owners and admins can request another hosted image check after a failed or expired result and recover the original request after a lost reply. Pending or unavailable checks prevent another attempt. Images remain disabled; evidence storage and report reads are still planned.

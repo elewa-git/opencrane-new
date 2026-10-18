@@ -216,6 +216,7 @@ groups. Remove and leave shapes are unchanged. See the
 `hostedAdmissionSchema` carries serverId, attemptId, imageDigest, platform,
 queuedAt, status and optional checks. Status is checking, rejected, unavailable,
 admitted or expired. Each check reuses the strict event receipt shape.
+Attempt numbers are positive integers; queued requests contain no checks.
 
 ## Saved gateway receipt
 

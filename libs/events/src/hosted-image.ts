@@ -24,7 +24,7 @@ function verdicts<Fields extends z.ZodRawShape>(fields: Fields) {
   ]);
 }
 export const hostedImageCheckedSchema = z.strictObject({
-  serverId: z.string().regex(/^[\w-]{1,200}$/u), attemptId: z.literal(1), imageDigest: digest,
+  serverId: z.string().regex(/^[\w-]{1,200}$/u), attemptId: z.int().positive(), imageDigest: digest,
   platform: hostedImageInstallationSchema.shape.platform,
   checks: z.strictObject({ signature: verdicts({}), licence: verdicts({}),
     vulnerability: verdicts(database), malware: verdicts(database) }),
@@ -39,3 +39,10 @@ function permitsUnrunChecks(result: { checks: Record<string, { verdict: string }
   }
   return !skipped || failed;
 }
+
+export const hostedImageCheckRequestedSchema = z.strictObject({
+  serverId: hostedImageCheckedSchema.shape.serverId,
+  attemptId: z.int().min(2), imageDigest: digest,
+  platform: hostedImageInstallationSchema.shape.platform,
+  registrationRevision: z.int().positive(), expectedSequence: z.int().nonnegative(),
+});

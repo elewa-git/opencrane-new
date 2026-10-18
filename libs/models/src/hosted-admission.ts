@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { getEventDefinition, hostedImageCheckedSchema, type EventEnvelope } from '@opencrane/events';
+import { getEventDefinition, hostedImageCheckedSchema, hostedImageCheckRequestedSchema,
+  type EventEnvelope } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
 import { z } from 'zod';
 import { envelope } from './actor.ts';
+import type { Binding } from '@opencrane/authz';
+import { saveToolCommand } from './tool-policy.ts';
 
 type Result = z.infer<typeof hostedImageCheckedSchema>;
 type Admission = z.infer<typeof hostedAdmissionSchema>;
@@ -27,8 +30,9 @@ function validDates(result: Result, at: number) {
 function resultStatus(result: Result, now: number): Admission['status'] {
   let unavailable = false;
   let expired = false;
+  let failed = false;
   for (const check of Object.values(result.checks)) {
-    if (check.verdict === 'fail') return 'rejected';
+    if (check.verdict === 'fail') failed = true;
     if (check.verdict === 'not_run') continue;
     if (check.verdict === 'unavailable') unavailable = true;
     if (now >= Date.parse(check.expiresAt)) expired = true;
@@ -37,6 +41,7 @@ function resultStatus(result: Result, now: number): Admission['status'] {
     }
   }
   if (unavailable) return 'unavailable';
+  if (failed) return 'rejected';
   if (expired) return 'expired';
   return 'admitted';
 }
@@ -59,19 +64,57 @@ function queuedAdmission(rows: StoredEvent[], silo: string, serverId: string): A
 
 export function foldHostedAdmission(rows: StoredEvent[], silo: string, serverId: string,
   now = new Date()): Admission | undefined {
-  const queued = queuedAdmission(rows, silo, serverId);
-  if (!queued) return;
-  for (const row of rows.slice(1)) {
-    const event = row.event;
-    if (!modelsResult(event, silo, serverId)) continue;
+  let state = queuedAdmission(rows, silo, serverId);
+  if (!state) return;
+  for (let index = 1; index < rows.length; index++) {
+    const event = rows[index]!.event;
+    if (event.silo !== silo) {
+      continue;
+    }
+    // Refuse replaced registrations until their separate installation is supported.
+    if (event.type === 'mcp.server_registered') {
+      return;
+    }
+    if (event.type === 'mcp.image_check_requested') {
+      state = requestedAdmission(state, event, rows[0]!.sequence, rows[index - 1]!.sequence);
+      continue;
+    }
+    if (state.checks || !modelsResult(event, silo, serverId)) {
+      continue;
+    }
     const checked = hostedImageCheckedSchema.safeParse(event.data);
-    if (!checked.success || !matches(queued, checked.data)) continue;
+    if (!checked.success || !matches(state, checked.data)) continue;
     const recordedAt = Date.parse(event.time);
     if (recordedAt > now.getTime() || !validDates(checked.data, recordedAt)) continue;
-    return { ...queued, checks: checked.data.checks,
+    state = { ...state, checks: checked.data.checks,
       status: resultStatus(checked.data, now.getTime()) };
   }
-  return queued;
+  return state;
+}
+
+function requestedAdmission(state: Admission, event: EventEnvelope,
+  registrationRevision: number, previousSequence: number): Admission {
+  const request = hostedImageCheckRequestedSchema.safeParse(event.data);
+  if (!request.success || event.subject !== `mcp-${state.serverId}` ||
+      event.principal?.kind !== 'human' ||
+      request.data.registrationRevision !== registrationRevision ||
+      request.data.expectedSequence !== previousSequence ||
+      !eligibleRequest(state, request.data, Date.parse(event.time))) {
+    return state;
+  }
+  return { serverId: state.serverId, imageDigest: state.imageDigest, platform: state.platform,
+    attemptId: request.data.attemptId, queuedAt: event.time, status: 'checking' };
+}
+
+function eligibleRequest(state: Admission,
+  request: z.infer<typeof hostedImageCheckRequestedSchema>, at: number) {
+  if (!state.checks || state.serverId !== request.serverId ||
+      state.imageDigest !== request.imageDigest || state.platform !== request.platform ||
+      request.attemptId !== state.attemptId + 1) {
+    return false;
+  }
+  const status = resultStatus({ ...state, checks: state.checks }, at);
+  return status === 'rejected' || status === 'expired';
 }
 
 function modelsResult(event: EventEnvelope, silo: string, serverId: string) {
@@ -131,4 +174,40 @@ export async function writeHostedAdmission(store: EventStore, silo: string, raw:
     return conflict;
   }
   return { status: 'appended' as const };
+}
+
+const requestInput = hostedImageCheckRequestedSchema.omit({ serverId: true }).extend({
+  commandId: z.string().regex(/^[\w-]{1,200}$/u),
+});
+
+export async function requestHostedCheck(store: EventStore, binding: Binding, memberId: string,
+  serverId: string, raw: unknown) {
+  const command = requestInput.parse(raw);
+  const { commandId, ...fields } = command;
+  const payload = { serverId, ...fields };
+  // Read installation history before starting the short access check.
+  const rows = await rowsFor(store, serverId);
+  const state = foldHostedAdmission(rows, binding.silo, serverId);
+  if (!state) {
+    return { status: 'not_found' };
+  }
+  const valid = rows[0]!.sequence === command.registrationRevision &&
+    rows.at(-1)!.sequence === command.expectedSequence &&
+    eligibleRequest(state, payload, Date.now());
+  const result = await saveToolCommand(store, binding, memberId, serverId,
+    'mcp.image_check_requested', payload, command, rows, valid);
+  if (result.status !== 'appended' || !('sequence' in result)) {
+    return result;
+  }
+  // Check the saved event because simultaneous retries can reach store deduplication.
+  const saved = await store.readEvent(result.sequence);
+  const event = saved.event;
+  if (event.type !== 'mcp.image_check_requested' || event.silo !== binding.silo ||
+      event.subject !== `mcp-${serverId}` || event.commandId !== commandId ||
+      event.principal?.kind !== 'human' || event.principal.id !== memberId ||
+      !same(event.data, payload)) {
+    return { status: 'conflict' };
+  }
+  return { status: 'appended', serverId, changeRef: `chg_${commandId}`,
+    attemptId: command.attemptId, sequence: saved.sequence };
 }

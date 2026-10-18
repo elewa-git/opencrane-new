@@ -681,7 +681,7 @@ The live watch starts closed after restart; rebuilt tables alone cannot authoris
 
 ## Hosted image admission receipts
 
-`mcp.image_checked` advances tool-policy sequence only. It preserves policyRevision,
+`mcp.image_checked` and `mcp.image_check_requested` advance tool-policy sequence only. It preserves policyRevision,
 publication, catalogue dates and discovery state. Catalogue replay uses the same
 fold, starts no work and appends no event. Admission expiry is derived by models
 from the original event dates when read, without a timer or database business rule.

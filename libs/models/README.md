@@ -18,7 +18,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, reviews, saved fact references, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, saved fact references, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
   models -->|rechecks loaded memory; checks corrected revisions, reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
