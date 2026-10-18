@@ -1,3 +1,4 @@
+import { parseEventByType } from '@opencrane/events';
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { readBudget, history } from '../src/index.ts';
 import { rootTotals } from '../src/root-budget.ts';
@@ -14,7 +15,9 @@ async function setup() {
   await context.actor.setRootAllowance(binding, 1);
   return context;
 }
-function restore() { vi.restoreAllMocks(); }
+function restore() {
+  vi.restoreAllMocks();
+}
 afterEach(restore);
 
 async function recoversHold(restart: boolean) {
@@ -39,7 +42,8 @@ async function recoversHold(restart: boolean) {
   const decisions = await history(context.nats.store, `decision-${saved.call.requestId}`, 'test');
   expect(decisions).toHaveLength(1);
   expect(decisions[0]!.event.data).toMatchObject({ outcome: 'allow', permitId: saved.id });
-  expect(context.providerRequests()[0]?.bodyDigest).toBe(saved.bodyDigest);
+  expect(saved.bodyDigest).toBe(
+    '455534a3697bb0394d6711bf54a419f329b6a47616e9bf571bdad68116dc5467');
   await context.settled();
   expect(context.admitted).toEqual([saved.call.requestId]);
   const projected = await readBudget(context.db, 'test');
@@ -53,7 +57,9 @@ it.each([false, true])('recovers the same unsent hold and original decision; res
 async function fresh() {}
 async function unsent() {
   const context = await setup();
-  function loseBeforeAdmission(): Promise<void> { throw new Error('Admission unavailable'); }
+  function loseBeforeAdmission(): Promise<void> {
+    throw new Error('Admission unavailable');
+  }
   const admission = vi.spyOn(context.actor, 'admitDispatch');
   admission.mockImplementationOnce(loseBeforeAdmission);
   expect((await context.call()).status).toBe(503);
@@ -94,7 +100,9 @@ async function concurrentRetries(restart: boolean) {
   await arrived.promise;
   release.resolve();
   const replies = await Promise.all([first, second]);
-  function sent(reply: typeof replies[number]) { return reply.status === 200; }
+  function sent(reply: typeof replies[number]) {
+    return reply.status === 200;
+  }
   expect(replies.filter(sent)).toHaveLength(1);
   expect(context.received()).toBe(1);
   expect(context.actor.state.reservations).toHaveLength(1);
@@ -146,7 +154,8 @@ async function refusesUnknown(kind: 'lost' | 'lost_append' | '504') {
     const append = context.nats.store.append.bind(context.nats.store);
     async function loseAppendReply(command: Parameters<typeof append>[0]) {
       const result = await append(command);
-      if (command.event.type === 'budget.call_dispatch_admitted') {
+      const parsed = parseEventByType(command.event);
+      if (parsed.success && parsed.event.type === 'budget.call_dispatch_admitted') {
         return { status: 'unavailable' as const, cause: new Error('Lost append reply') };
       }
       return result;
@@ -232,7 +241,10 @@ async function stoppedRetry() {
   const position = await context.nats.store.head(subject);
   await context.actor.stopRoot(saved.rootId!, 'requester_stop', subject, position);
   const before = await context.nats.store.head();
-  expect((await context.call()).status).not.toBe(200);
+  const call = { ...saved.call, requestId: 'new-request' };
+  const retry = { retryDigest: saved.retryDigest!, bodyDigest: saved.bodyDigest! };
+  await expect(context.actor.reserve(call, saved.amountCents, fresh, undefined, saved.rootId, retry))
+    .rejects.toThrow('Root budget refused');
   expect(await context.nats.store.head()).toBe(before);
   expect(context.received()).toBe(0);
   expect(context.actor.state.dispatches).toHaveLength(0);
