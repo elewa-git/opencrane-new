@@ -7,7 +7,7 @@ import { bridgeChannel } from '../../computer/src/channel.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { WebSocket, WebSocketServer } from 'ws';
 import * as modelAuthority from '@opencrane/models';
-import { chatCommand } from '../src/chat/commands.ts';
+import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { recordReport } from '../src/chat/reports.ts';
 import { watchBridges } from '../src/chat/bridge.ts';
 import { SandboxClient } from '../../ops/src/kubernetes.ts';
@@ -33,6 +33,8 @@ import { buildServer } from '../src/server.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import * as privateHistory from '../src/chat/private-context.ts';
 import { turnMessage, type AgentSession } from '../src/chat/bridge-conversation.ts';
+import { assistantSnapshot } from '../src/chat/bridge-conversation.ts';
+import { cleanClosedConversation } from '../src/chat/close-cleanup.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -1483,6 +1485,47 @@ async function rejectsOutputForRefusedChild(testCase: typeof refusedChildReports
 it.each(refusedChildReports)(
   'rejects $type with invalid output or sequence after a shared child refusal',
   rejectsOutputForRefusedChild);
+
+async function acceptsLateSharedChildFailureAfterCleanup() {
+  const test = await childHistoryFixture('late-shared-close');
+  const turnId = 'late-shared-close-input';
+  try {
+    await test.message(turnId, 'alice', 'Queued question');
+    await append(`conversation-${test.conversationId}`, 'conversation.closed', {
+      conversationId: test.conversationId, closedBy: 'alice',
+    });
+    const rows = await chatHistory(nats.store, 'test', test.conversationId);
+    const computerRows = await history(nats.store, `computer-${test.context.assistantId}`, 'test');
+    const assistant = assistantSnapshot(computerRows, 'team', 'test');
+    async function connection() {
+      return { socket: test.link.socket, connectionId: 1, sentStops: new Map<string, number>() };
+    }
+    await cleanClosedConversation(chat!, test.conversationId, test.context.assistantId,
+      rows, assistant, new Set<string>(), connection);
+
+    const start = await test.childReport('alice', turnId, 'agent.turn_started');
+    expect(start).toEqual({ type: 'ack', sequence: 1, refused: 'Conversation is closed' });
+    const failure = await test.report('alice', turnId, 'agent.turn_failed', {
+      conversationId: test.conversationId, threadId: `${turnId}-thread`,
+      executionMode: 'restricted',
+    });
+    expect(failure).toEqual({ type: 'ack', sequence: 2 });
+    expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+
+    await test.post('bob', 'late-shared-close-bob-input');
+    const bobStart = await test.report('bob', 'late-shared-close-bob-input',
+      'agent.turn_started', { threadId: 'bob-thread', executionMode: 'restricted' });
+    expect(bobStart).toHaveProperty('token');
+    const bobEnd = await test.report('bob', 'late-shared-close-bob-input',
+      'agent.turn_completed');
+    expect(bobEnd).toEqual({ type: 'ack', sequence: 4 });
+    expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    await test.close();
+  }
+}
+it('keeps a shared bridge open when a late child start follows close cleanup',
+  acceptsLateSharedChildFailureAfterCleanup);
 
 it.each(['conversation', 'participation'])(
   'accepts a refused shared child failure and replay after %s closure on the real channel',

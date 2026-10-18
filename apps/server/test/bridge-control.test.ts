@@ -250,6 +250,23 @@ it('retries a closed turn Stop without sending its input again', async () => {
   expect(test.frames.filter(isTurnOrFile)).toEqual([]);
 });
 
+it('stops a running turn after a legacy close changes only participation history', async () => {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  const turn = await startFixtureTurn(test);
+
+  await test.process();
+  await test.append('participation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+
+  await test.process();
+  await test.flushFrames();
+  expect(test.frames.filter(isStop)).toEqual([
+    expect.objectContaining({ turnId: turn.turnId, conversationId: 'chat' }),
+  ]);
+});
+
 it('keeps the computer ready until the closed chat turn has a computer ending', async () => {
   fixture = await bridgeFixture();
   const test = fixture;
