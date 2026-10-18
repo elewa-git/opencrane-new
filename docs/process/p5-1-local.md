@@ -143,7 +143,7 @@ its Go modules but not the executable itself.
 | Check | Result | Observation |
 | --- | --- | --- |
 | Application licences | PASS | Every application dependency has an OSI-approved licence. The first-party packages use the root AGPL licence. The npm package with an MIT or CC0 choice uses MIT. |
-| Debian base packages | PASS | All 88 Node image and 142 PostgreSQL image package versions were found in signed Debian main package indexes. No version was missing. |
+| Debian base packages | FAIL | All 88 Node image packages were found in bookworm main. Only 137 of 142 PostgreSQL image packages were found in trixie main. Five PostgreSQL packages came from PGDG, so the pinned image does not meet the Debian main rule. |
 | Go modules without embedded licences | PASS | Their source licence files were checked and recorded by hash. The pinned Kubernetes and gosu sources were checked against their official Apache-2.0 notices. |
 | Unknown and forbidden licence refusal | PASS | Synthetic checks refused `UNKNOWN`, BUSL and a package outside Debian main. A fresh Syft scan matched every reviewed image inventory entry. |
 
@@ -155,6 +155,54 @@ NATS `sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3`
 and OpenFGA
 `sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796`.
 The chat journey remains incomplete.
+
+### Debian main check after review
+
+The checker now uses a small list of exact names and versions from the signed
+Debian main indexes. It checks each Debian package in every image inventory
+against the list for that image's base release. Lint does not download indexes.
+The checker also refuses a changed Debian-based image pin until the index list
+is reviewed for the new image.
+The list has 88 bookworm pairs and 137 trixie pairs. The remaining five packages
+in the PostgreSQL image are absent from trixie main:
+`libpq5 18.6-1.pgdg13+2`, `postgresql-17 17.11-1.pgdg13+2`,
+`postgresql-client-17 17.11-1.pgdg13+2`,
+`postgresql-client-common 293.pgdg13+1` and
+`postgresql-common 293.pgdg13+1`. The check refuses the current image.
+
+One HTTPS download batch used Debian's snapshot archive. The bookworm files
+came from `snapshot.debian.org/archive/debian/20260713T000000Z/dists/bookworm/`;
+the trixie files came from
+`snapshot.debian.org/archive/debian/20260918T000000Z/dists/trixie/`.
+The signed releases are dated 11 July and 12 September 2026 respectively.
+`gpgv` accepted both `InRelease` signatures with the Debian archive keyring
+copied from the pinned PostgreSQL image. That keyring's SHA-256 was
+`506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017`.
+The bookworm stable release signing key was
+`4D64FEC119C2029067D6E791F8D2585B8783D481`; the trixie key was
+`41587F7DB8C774BCCF131416762F67A0B2C39DE4`.
+
+| Release | Signed `InRelease` SHA-256 | Extracted `Release` SHA-256 | Main `Packages.xz` SHA-256 |
+| --- | --- | --- | --- |
+| bookworm | `77737fa4b34f2693e982cc9ee35736816c35a7778fc2d326cc1bbf5b301fe1aa` | `abcf5882746e0f68171f41adbb4ac01b74b49d62d203379befb9265804311a4f` | `9e0b5aabb2465b3d2e7a7fe27f9913846277833f7a2826e7767acccff5b588c5` |
+| trixie | `0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675` | `ed56aac47e7911e65ee63aae8d67e29f20e023f840e49f8ed037043a33de138a` | `7778d3e3f303b7ddb8ce0fe7c8d57473a076c6bf2e8f241f75421d2396352498` |
+
+Each `Packages.xz` SHA-256 matched the SHA-256 entry in its signed `InRelease`
+file. Only `main/binary-amd64/Packages.xz` supplied the reviewed list. A new
+package, a different version, or a package outside main is refused until a
+new signed index is checked and the list is reviewed.
+
+| Source check after the index change | Result | Observation |
+| --- | --- | --- |
+| Missing package test before the fix | FAIL | A made-up package labelled `Debian-main` exited 0; the test required exit 1. |
+| Changed image pin test before its fix | FAIL | A changed base image reached the PostgreSQL package failure; the test required an earlier refusal of the new pin. |
+| Changed licence tests after both fixes | PASS | Ten tests passed on each of two runs. |
+| Typecheck | PASS | All workspaces and the package TypeScript check completed. |
+| Event catalogue | PASS | All 143 event types agreed. |
+| Knip | PASS | It exited 0 with two configuration hints. |
+| Changelog check | PASS | The branch fragment passed. |
+| Full lint | FAIL | Earlier lint steps passed. The package licence step refused PGDG `libpq5 18.6-1.pgdg13+2` in the pinned PostgreSQL image. |
+| Full root suite | NOT RUN | This round was limited to changed tests. |
 
 ### Source checks in this follow-up
 
