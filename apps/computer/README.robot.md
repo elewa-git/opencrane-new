@@ -8,11 +8,16 @@ The runner marks the turn cancelled before removing its model and MCP passes,
 tool lists and approval waits. `turn-stop.ts` settles pending start and renewal
 waits with a fixed error. It reuses `dropAccess`; the signed takeover gate keeps
 its own removal path. Thread preparation checks cancellation before and after
-registering tools. A grant installation already in progress removes its result
-if the turn ended while it waited.
+registering tools. The runner sends the turn id with each `/grant`, `/drop` and tool list. The proxy
+remembers cancelled turn ids for its process lifetime and refuses their grants
+before installing them, including when an old control reply is still pending.
+A restarted proxy has no grants or pending control requests from the old process.
 The runner keeps that conversation occupied until pending grant installations
 finish their cleanup. A new turn can then retry without an old installation
 removing its access. Repeated terminal notifications keep the first result.
+A delayed `/drop` only removes that turn's grant, tool lists and requests. It leaves
+a newer turn on the same thread alone. This uses the turn identity already needed
+to refuse cancelled installations, without waiting for every old removal reply.
 
 Both local proxies track outgoing requests by thread. `/drop` destroys that
 thread's requests and client responses before acknowledging removal. Dropping
@@ -22,7 +27,11 @@ Aborting these local connections does not prove that a remote effect stopped.
 
 `turn-stop.test.ts` uses the real computer WebSocket channel and local recording
 upstream. Barriers hold start acknowledgements, renewals, tool preparation and
-grant installation. The stream test gives Stop two seconds to close both model
+grant installation. A second barrier delays an old Stop removal until the next
+turn has opened model and MCP streams on the reused thread. Both streams complete
+and the new pass remains usable. Temporarily removing the model-body expiry guard
+and the waiter turn check separately made each test fail.
+The stream test gives Stop two seconds to close both model
 and MCP connections while another thread renews and finishes its requests.
 `bridge-budget-stop.test.ts` also checks removal before interruption with real
 NATS, PostgreSQL and OpenFGA and a second payer on the same computer.
@@ -201,9 +210,11 @@ abandoned catalogues expire after two minutes; a live grant sets their expiry to
 own deadline. The proxy keeps at most 64 catalogues and refuses further registrations
 until space is available. It never evicts another thread's active list.
 
-The owner-only control socket accepts `POST /catalogue` with `{loadKey, conversation,
+The owner-only control socket accepts `POST /catalogue` with `{loadKey, turnId, conversation,
 thread?, tools}`, `POST /catalogue/drop` with `{loadKey}` and
 `POST /catalogue/ready` with `{loadKey}`. The last route waits for list discovery.
+`POST /grant` takes `{thread, turnId, conversation?, computer, token, expires}`.
+`POST /drop` takes `{thread, turnId}`. Both run only on that control socket.
 Registration resets the ten-minute caller deadline. Register before loading so early
 discovery can succeed; bind the returned thread id before granting access or starting
 a turn. The caller file and control socket are mode 0600. Shell tools run as UID 1001

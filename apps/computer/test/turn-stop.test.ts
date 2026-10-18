@@ -448,7 +448,7 @@ async function keepsNextTurnAccessWhenOldDropArrives() {
     release.resolve();
     await applied.promise;
     upstream.end('{}');
-    toolUpstream!.end('{}');
+    toolUpstream.end('{}');
     expect(await model).toBe('200: {}');
     expect(await tool).toBe('200: {}');
     function finishRequest() {

@@ -28,7 +28,7 @@ flowchart LR
   computer --> supervisor["Root supervisor<br/>protected launch, admission and exit checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
-  computer -->|sends model and reviewed tool calls| gateway["agentgateway<br/>AI gateway"]
+  computer -->|checks each turn before model and reviewed tool calls| gateway["agentgateway<br/>AI gateway"]
 ```
 
 ## What it is responsible for
@@ -73,6 +73,9 @@ message and the person can send it again. The proxy releases the list when the
 turn ends. A tool changed from Allow to Ask is refused. Reviewed Ask tools wait
 for the requester to approve. The same call then continues once, with a fresh pass.
 Denial, Stop and a wait longer than 15 minutes end the call without sending it.
+A spending Stop also blocks late passes for that turn before they become usable.
+A delayed removal for an old turn leaves the next turn's passes, tools and open
+requests alone, even when both use the same Codex thread.
 The server and computer can be updated in either order. The computer tells the
 server whether it can wait for approval. Older computers receive Allow tools only.
 

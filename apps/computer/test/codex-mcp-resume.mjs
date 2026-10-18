@@ -31,6 +31,7 @@ let productionThreadLoads;
 let control;
 const wireLoads = new Map();
 const wireConversations = new Map();
+const wireTurns = new Map();
 const plans = new Map();
 
 async function readBody(request) {
@@ -264,6 +265,7 @@ function startClient() {
       if (thread) {
         wireLoads.set(thread, loadKey);
         wireConversations.set(thread, conversation);
+        wireTurns.set(thread, turnId);
       }
     }
     async function dropCatalogue(loadKey) {
@@ -294,13 +296,15 @@ function startClient() {
           definitions: [JSON.stringify(definition)], modes });
       }
       const conversationId = wireConversations.get(params.threadId) ?? `chat-${nextRpc}`;
-      const input = { id: params.threadId ?? conversationId, tools, conversationId };
+      const turnId = stopRunner ? 'stop-turn' : conversationId;
+      const input = { id: turnId, tools, conversationId };
       const startParams = { ...params, approvalPolicy: 'never' };
       delete startParams.config;
       return loads.load(input, params.threadId, startParams);
     }
     if (method === 'turn/start') {
-      const input = { thread: params.threadId, turnId: params.threadId, conversation: wireConversations.get(params.threadId),
+      const input = { thread: params.threadId, turnId: wireTurns.get(params.threadId),
+        conversation: wireConversations.get(params.threadId),
         token: 'local-turn', computer: 'local-computer', expires: Date.now() + 60_000 };
       await control('/grant', input);
     }
@@ -566,7 +570,8 @@ try {
       return true;
     }
     async function renew(thread) {
-      await control('/grant', { thread, turnId: thread, conversation: wireConversations.get(thread),
+      await control('/grant', { thread, turnId: wireTurns.get(thread),
+        conversation: wireConversations.get(thread),
         token: 'local-renewed', computer: 'local-computer', expires: Date.now() + 60_000 });
     }
     const approvalDriver = { waiting, renew };
