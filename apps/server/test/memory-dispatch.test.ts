@@ -5,7 +5,7 @@ import { envelope } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createEventStore } from '@opencrane/event-store';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
@@ -1573,11 +1573,15 @@ async function refusesTerminalMemoryDuringSigning(action: 'invalidated' | 'ended
   if (!prepared) throw new Error('Memory preparation missing from fixture');
   const reason = action === 'ended' ? 'ended' : 'access_changed';
   const terminal = { ...prepared.data, action, reason };
+  const id = randomUUID();
+  // Keep the server writer required by memory evidence.
+  const terminalEvent = { ...prepared, id, commandId: id, data: terminal };
+  memoryContextRecordedEventSchema.parse(terminalEvent);
   const bridge = await renewalBridge();
   const issue = setup.tokens.turn.bind(setup.tokens);
   async function endDuringSigning(input: Parameters<typeof issue>[0]) {
     const result = await issue(input);
-    await setup.append('conversation-conversation', 'agent.memory_context_recorded', terminal);
+    await setup.nats.seed([terminalEvent]);
     return result;
   }
   const issuance = vi.spyOn(setup.tokens, 'turn');
