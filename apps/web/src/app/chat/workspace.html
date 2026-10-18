@@ -242,20 +242,46 @@
     </oc-hinge-drawer>
   }
   @if (toolDetails(); as details) {
-    <oc-hinge-drawer [open]="true" [title]="details.record.label"
-      [description]="toolKind(details.record)" backLabel="Back to conversation"
-      [returnFocusTo]="details.opener" (closed)="closeToolDetails()">
-      <dl class="tool-detail-ledger">
-          <dt>{{ toolResultLabel(details.record) }}</dt><dd>{{ toolResult(details.record) }}</dd>
-        <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
-        <dt>Reference</dt><dd class="tool-reference">{{ details.record.id }}</dd>
-      </dl>
-      <p>Where it ran, the account used and attempt history: Not available yet.</p>
-      <aside class="sanitised-note">
-        <strong>Sanitised</strong>
-        <span>Raw arguments, tokens and full tool output are not shown here.</span>
-      </aside>
-    </oc-hinge-drawer>
+    @if (!chat.denied()) {
+      <oc-hinge-drawer [open]="true" [title]="details.record.label"
+        [description]="toolKind(details.record)" backLabel="Back to conversation"
+        [returnFocusTo]="details.opener" (closed)="closeToolDetails()">
+        @if (details.record.nativeRequestId) {
+          @if (nativeDetailState() === 'loading') {
+            <p class="native-detail-status" role="status">Checking saved details…</p>
+          }
+          @if (nativeDetailState() === 'failed') {
+            <p class="native-detail-status" role="status">
+              Saved details could not be refreshed. The recorded summary is still shown.
+            </p>
+          }
+          <p class="native-consent-result" role="status">
+            Unsupported native consent. No gateway permission was granted.
+          </p>
+          <dl class="tool-detail-ledger">
+            <dt>Request kind</dt><dd>Native consent request</dd>
+            <dt>Request reference</dt>
+            <dd class="tool-reference">{{ details.record.nativeRequestId }}</dd>
+            <dt>Turn reference</dt><dd class="tool-reference">{{ details.record.turnId }}</dd>
+            @if (details.record.serverName) {
+              <dt>Server</dt><dd>{{ details.record.serverName }}</dd>
+            }
+            <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
+          </dl>
+        } @else {
+          <dl class="tool-detail-ledger">
+            <dt>{{ toolResultLabel(details.record) }}</dt><dd>{{ toolResult(details.record) }}</dd>
+            <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
+            <dt>Reference</dt><dd class="tool-reference">{{ details.record.id }}</dd>
+          </dl>
+          <p>Where it ran, the account used and attempt history: Not available yet.</p>
+          <aside class="sanitised-note">
+            <strong>Sanitised</strong>
+            <span>Raw arguments, tokens and full tool output are not shown here.</span>
+          </aside>
+        }
+      </oc-hinge-drawer>
+    }
   }
   <ng-template #sessionNavigation>
     <div class="rail-content" [attr.aria-busy]="chat.railLoading()">

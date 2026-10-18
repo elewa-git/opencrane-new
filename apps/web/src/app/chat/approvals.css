@@ -9,12 +9,17 @@
 h2 { margin: 10px 0 14px; font-size: 17px; line-height: 1.35; }
 .consequence, .step-up, .gap-note, .drawer-state { padding: 12px; border-radius: 8px; background: #f1f4f5; line-height: 1.55; overflow-wrap: anywhere; }
 .step-up { border: 1px solid #e7d5b2; background: #fffaf1; color: #72531e; }
+.missing-fields { padding: 12px; border-radius: 8px; background: #fffaf1;
+  color: #813f19; line-height: 1.5; overflow-wrap: anywhere; }
 .actions, .drawer-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 button, .sign-in { display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
   padding: 10px 18px; border: 1px solid #c5cdcf; border-radius: 8px; background: #fff; color: #202729;
   font: inherit; line-height: 1.3; cursor: pointer; text-align: center; text-decoration: none; }
 button:disabled, button[aria-disabled='true'] { opacity: .55; cursor: default; }
 .actions .approve, .drawer-actions .approve, .sign-in { border-color: #0db5cc; background: #0db5cc; color: #102326; font-weight: 600; }
+.actions .approve:disabled, .drawer-actions .approve:disabled {
+  border-color: #d9dfe0; background: #e8eced; color: #535c5e; opacity: 1;
+}
 .details { border-color: transparent; background: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid #0a8497; outline-offset: 2px; }
 .spinner { width: 13px; height: 13px; margin-right: 8px; border: 2px solid currentColor; border-right-color: transparent;

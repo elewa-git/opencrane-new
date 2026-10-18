@@ -63,6 +63,28 @@ it('names transcript tool records without adding fields to them', () => {
     time: '2026-10-09T10:00:00Z' })).toBe('Governed tool call');
 });
 
+it('shows recorded native refusal with its request reference and no tool call', () => {
+  const rows: ChatRow[] = [
+    { id: 'message', position: 1, type: 'message.posted', time: '2026-10-16T10:00:00Z',
+      data: { text: 'Help with this file', authorId: 'me' } },
+    { id: 'refusal', position: 2, type: 'agent.native_consent_refused',
+      time: '2026-10-16T10:00:01Z', data: { turnId: 'message', conversationId: 'chat',
+        nativeRequestId: 'native-request-92', serverName: 'Files server',
+        reason: 'unsupported_native_consent' } },
+  ];
+  const refusal = transcript(rows, 'me').find(isAgentTurn)?.tools[0];
+  expect(refusal).toMatchObject({
+    nativeRequestId: 'native-request-92', serverName: 'Files server',
+    turnId: 'message', failed: true,
+  });
+  expect(refusal?.callId).toBeUndefined();
+  expect(toolKind(refusal!)).toBe('Native consent request');
+  delete rows[1]!.data.serverName;
+  const withoutServer = transcript(rows, 'me').find(isAgentTurn)?.tools[0];
+  expect(withoutServer?.nativeRequestId).toBe('native-request-92');
+  expect(withoutServer?.serverName).toBeUndefined();
+});
+
 it('keeps a completed turn incomplete when the private reply output was lost', () => {
   const rows = [
     { id: 'message', position: 1, type: 'message.posted', time: '2026-10-06T10:00:00Z',

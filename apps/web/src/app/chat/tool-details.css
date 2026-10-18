@@ -33,6 +33,19 @@
   font-family: var(--oc-font-mono);
 }
 
+.native-consent-result {
+  padding: 12px;
+  border-radius: 8px;
+  background: #fffaf1;
+  color: #813f19;
+  overflow-wrap: anywhere;
+}
+
+.native-detail-status {
+  color: var(--oc-ink-muted);
+  overflow-wrap: anywhere;
+}
+
 .sanitised-note {
   display: flex;
   flex-direction: column;

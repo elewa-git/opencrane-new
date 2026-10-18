@@ -27,7 +27,8 @@ import { workspaceTitle } from './conversations-data';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
-  budgetStoppedTurnIds, rejectedScreenshotIds, toolActivityResult, toolActivityResultLabel,
+  budgetStoppedTurnIds, findToolRecord, hasHighlightedTool, rejectedScreenshotIds,
+  toolActivityResult, toolActivityResultLabel,
   toolKind as getToolKind, turnContent, turnOutcome, turnStatusIcon,
   type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
@@ -38,9 +39,9 @@ import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
 import {
   capturedByLine, displayTextParts, fileName, fileScreenshotCreator, fileType, fileUrl,
-  hasScreenshotFile,
+  hasScreenshotFile, hasTranscriptScreenshot,
   isOwnedAgentFile, isScreenshotAttachment, screenshotFacts, screenshotFactsForPath, screenshotIdFromFile,
-  screenshotWithId, shortTime, utcDateTime,
+  shortTime, utcDateTime,
   type ScreenshotFacts,
 } from './file-presentation';
 
@@ -90,13 +91,14 @@ export class Workspace implements OnInit {
     record: ToolActivityRecord;
     opener: HTMLElement;
   } | undefined>(undefined);
+  protected readonly nativeDetailState = signal<'ready' | 'loading' | 'failed'>('ready');
   protected readonly highlightedToolId = signal('');
   protected readonly panelOverlay = signal(false);
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
   protected readonly screenshots = computed(this.screenshotFiles.bind(this));
   protected readonly uploads = computed(() => this.chat.attachments().filter(file => !file.screenshot));
   protected readonly screenshotIds = computed(this.screenshotFileIds.bind(this));
-  protected readonly rejectedScreenshotIds = computed(this.rejectedScreenshotFileIds.bind(this));
+  protected readonly rejectedScreenshotIds = computed(() => rejectedScreenshotIds(this.chat.rows()));
   protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
   protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
@@ -116,6 +118,7 @@ export class Workspace implements OnInit {
   private previousCaptureDenied = this.chat.denied();
   private readonly accessNotice = viewChild<ElementRef<HTMLElement>>('accessNotice');
   private focusAccess = false;
+  private nativeDetailGeneration = 0;
   constructor() {
     effect(this.rememberRecoveryFocus.bind(this));
     effect(this.resetCaptureWhenSessionChanges.bind(this));
@@ -222,17 +225,27 @@ export class Workspace implements OnInit {
     this.highlightedToolId.set('');
   }
   protected isHighlighted(tools: ToolActivityRecord[]): boolean {
-    const highlightedToolId = this.highlightedToolId();
-    for (const tool of tools) {
-      if (tool.id === highlightedToolId) return true;
-    }
-    return false;
+    return hasHighlightedTool(tools, this.highlightedToolId());
   }
   protected openToolDetails(record: ToolActivityRecord, opener: HTMLElement): void {
+    const generation = ++this.nativeDetailGeneration;
     this.toolDetails.set({ record, opener });
+    if (!record.nativeRequestId) return;
+    this.nativeDetailState.set('loading');
+    void this.refreshNativeDetails(record.id, generation);
   }
   protected closeToolDetails(): void {
+    this.nativeDetailGeneration += 1;
     this.toolDetails.set(undefined);
+    this.nativeDetailState.set('ready');
+  }
+  private async refreshNativeDetails(recordId: string, generation: number): Promise<void> {
+    const conversationId = this.chat.selected();
+    const refreshed = await this.chat.refresh();
+    if (generation !== this.nativeDetailGeneration) return;
+    if (this.chat.denied() || this.chat.selected() !== conversationId) return;
+    if (this.toolDetails()?.record.id !== recordId) return;
+    this.nativeDetailState.set(refreshed ? 'ready' : 'failed');
   }
   protected toolTime(record: ToolActivityRecord): string {
     return utcDateTime(record.time);
@@ -240,7 +253,7 @@ export class Workspace implements OnInit {
   private followOpenToolDetails(): void {
     const details = this.toolDetails();
     if (!details) return;
-    const currentRecord = this.findToolRecord(details.record.id);
+    const currentRecord = findToolRecord(this.activity(), details.record.id);
     if (currentRecord === details.record) return;
     if (currentRecord) {
       this.toolDetails.set({ ...details, record: currentRecord });
@@ -248,12 +261,6 @@ export class Workspace implements OnInit {
     }
     this.toolDetails.set(undefined);
     requestAnimationFrame(this.focusTranscript.bind(this));
-  }
-  private findToolRecord(recordId: string): ToolActivityRecord | undefined {
-    for (const record of this.activity()) {
-      if (record.id === recordId) return record;
-    }
-    return undefined;
   }
   private focusTranscript(): void {
     this.transcriptElement()?.nativeElement.focus();
@@ -308,7 +315,8 @@ export class Workspace implements OnInit {
   }
   protected captureLineVisuallyHidden(): boolean {
     const state = this.capture.state();
-    return state.phase === 'saved' && this.hasTranscriptScreenshot(state.fileId);
+    return state.phase === 'saved'
+      && hasTranscriptScreenshot(state.fileId, this.screenshots(), this.chat.turns());
   }
   protected readonly hasScreenshotFile = hasScreenshotFile;
   protected captureAction(): void {
@@ -358,6 +366,7 @@ export class Workspace implements OnInit {
       this.draft.set('');
       this.search.set('');
       this.toolDetails.set(undefined);
+      this.nativeDetailState.set('ready');
       this.highlightedToolId.set('');
       this.approvalWaiting.set(false);
       this.panelOverlay.set(false);
@@ -468,20 +477,6 @@ export class Workspace implements OnInit {
   }
   private screenshotFileIds(): string[] {
     return this.screenshots().map(screenshotIdFromFile);
-  }
-  private pathForFile(fileId: string): string {
-    const file = this.screenshots().find(screenshotWithId.bind(undefined, fileId));
-    return file?.path ?? '';
-  }
-  private hasTranscriptScreenshot(fileId: string): boolean {
-    const screenshotPath = this.pathForFile(fileId);
-    for (const turn of this.chat.turns()) {
-      if (turn.files.includes(screenshotPath)) return true;
-    }
-    return false;
-  }
-  private rejectedScreenshotFileIds(): string[] {
-    return rejectedScreenshotIds(this.chat.rows());
   }
   private capturePresentation() {
     return captureView(this.capture.state(), this.chat.attachments());

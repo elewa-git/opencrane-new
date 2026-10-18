@@ -34,6 +34,12 @@ function response(cards: ApprovalCard[], status = 200): Response {
   return new Response(JSON.stringify({ cards, csrf: 'csrf-token' }), { status });
 }
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (input instanceof Request) return input.url;
+  if (input instanceof URL) return input.href;
+  return input;
+}
+
 function decisionBody(body: string): { approvalId: string; decision: string } {
   const parsed: unknown = JSON.parse(body);
   if (typeof parsed !== 'object' || parsed === null || !('approvalId' in parsed)
@@ -72,6 +78,37 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
+
+const changedApprovalCards: [string, ApprovalCard, 'approved' | 'rejected'][] = [
+  ['denied before approval', card('denied', false), 'approved'],
+  ['denied before denial', card('denied', false), 'rejected'],
+  ['cancelled before approval', card('cancelled', false), 'approved'],
+  ['cancelled before denial', card('cancelled', false), 'rejected'],
+  ['approval disabled', { ...card(), canApprove: false, canDeny: true }, 'approved'],
+  ['denial disabled', { ...card(), canApprove: true, canDeny: false }, 'rejected'],
+  ['missing review fields', { ...card(), missingFields: ['orderId'] }, 'approved'],
+  ['another requester', { ...card(), requesterId: 'someone-else' }, 'approved'],
+];
+
+it.each(changedApprovalCards)(
+  'rejects an old handler after a poll changes %s',
+  async (_, currentCard, decision) => {
+    const originalCard = card();
+    let latestCard: ApprovalCard = originalCard;
+    const posts: string[] = [];
+    function captureFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      if (init?.method === 'POST') posts.push(requestUrl(input));
+      return Promise.resolve(response([latestCard]));
+    }
+    const fetchImplementation = vi.fn(captureFetch);
+    const fixture = await mount(fetchImplementation);
+    latestCard = currentCard;
+    await fixture.componentInstance['read']('chat');
+    await fixture.componentInstance['decide'](originalCard, decision);
+    expect(posts).toEqual([]);
+    fixture.destroy();
+  },
+);
 
 it('keeps a requested card readable but removes decisions for a stopped turn', async () => {
   const stoppedCard = { ...card(), turnId: 'message' };
@@ -170,6 +207,54 @@ it('shows the WRK-12 waiting card without decision buttons', async () => {
   expect(root.querySelector('[aria-label^="Approve:"]')).toBeNull();
   expect(root.querySelector('[aria-label^="Deny:"]')).toBeNull();
   fixture.destroy();
+});
+
+it('names missing review fields and permits only the requester to deny', async () => {
+  const requested = card();
+  const incomplete = {
+    ...requested, review: { ...requested.review, target: '' },
+    missingFields: ['orderId'], canApprove: false, canDeny: true,
+  };
+  const fetchImplementation = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST') return Promise.resolve(response([], 200));
+    return Promise.resolve(response([incomplete]));
+  });
+  const fixture = await mount(fetchImplementation);
+  const root = rootOf(fixture);
+  expect(root.textContent).toContain('orderId');
+  expect(root.textContent).toContain('Not provided');
+  expect(root.textContent).toContain('Approve is unavailable');
+  const approve = requiredElement<HTMLButtonElement>(root, '.approval.pending .approve');
+  expect(approve.disabled).toBe(true);
+  approve.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(fetchImplementation.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+  const deny = requiredElement<HTMLButtonElement>(root, '.approval.pending [aria-label^="Deny:"]');
+  expect(deny.disabled).toBe(false);
+  deny.click();
+  await vi.waitFor(() => expect(fetchImplementation.mock.calls.filter(([, init]) =>
+    init?.method === 'POST')).toHaveLength(1));
+  fixture.destroy();
+});
+
+it('keeps complete requester controls and hides participant decisions for incomplete reviews', async () => {
+  const complete = { ...card(), missingFields: [], canApprove: true, canDeny: true };
+  const waiting = card('requested', false);
+  const participant = {
+    ...waiting, review: { ...waiting.review, target: '' }, missingFields: ['orderId'],
+    canApprove: false, canDeny: false,
+  };
+  const completeFixture = await mount(() => Promise.resolve(response([complete])));
+  const completeRoot = rootOf(completeFixture);
+  expect(requiredElement<HTMLButtonElement>(completeRoot, '.approve').disabled).toBe(false);
+  expect(requiredElement<HTMLButtonElement>(completeRoot, '[aria-label^="Deny:"]').disabled)
+    .toBe(false);
+  completeFixture.destroy();
+  const participantFixture = await mount(() => Promise.resolve(response([participant])));
+  const participantRoot = rootOf(participantFixture);
+  expect(participantRoot.textContent).toContain('orderId');
+  expect(participantRoot.querySelector('[aria-label^="Approve:"]')).toBeNull();
+  expect(participantRoot.querySelector('[aria-label^="Deny:"]')).toBeNull();
+  participantFixture.destroy();
 });
 
 it('keeps one pending decision with its own approval when another card is chosen', async () => {

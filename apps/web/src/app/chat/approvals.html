@@ -22,8 +22,11 @@
           <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
           @if (isStopped(card)) {
             <p class="only-requester">This work stopped at the limit. Approving now wouldn't restart it.</p>
-          } @else {
-          @if (card.canDecide) {
+          }
+          @if (card.missingFields?.length) {
+            <p class="missing-fields" role="status">{{ missingFieldReason(card) }}</p>
+          }
+          @if (!isStopped(card) && (canApprove(card) || canDeny(card))) {
             @if (card.stepUp) {
               <p class="step-up">This action needs a recent sign-in. If yours is too old, you’ll be asked to sign in again.</p>
             }
@@ -34,10 +37,11 @@
               [reference]="presentation.reference(card)"
               [busy]="checkBusy(card)" (checkRequested)="checkDecisionStatus(card)" />
             <div class="actions">
-              @if (localState(card)?.kind === 'step_up') {
+              @if (localState(card)?.kind === 'step_up' && canApprove(card)) {
                 <a class="approve sign-in" [href]="presentation.signIn(card)">Sign in again to approve</a>
               } @else {
-                <button class="approve" type="button" [attr.aria-disabled]="isBlocked(card)"
+                <button class="approve" type="button" [disabled]="approveBlocked(card)"
+                  [attr.aria-disabled]="approveBlocked(card)"
                   [attr.aria-label]="'Approve: ' + card.review.action"
                   (click)="decide(card, 'approved')">
                   @if (isSubmitting(card) && localState(card)?.decision === 'approved') {
@@ -45,19 +49,21 @@
                   } @else { Approve }
                 </button>
               }
-              <button type="button" [attr.aria-disabled]="isBlocked(card)"
-                [attr.aria-label]="'Deny: ' + card.review.action"
-                (click)="decide(card, 'rejected')">
-                @if (isSubmitting(card) && localState(card)?.decision === 'rejected') {
-                  <span class="spinner" aria-hidden="true"></span> Denying…
-                } @else { Deny }
-              </button>
+              @if (canDeny(card)) {
+                <button type="button" [disabled]="denyBlocked(card)"
+                  [attr.aria-disabled]="denyBlocked(card)"
+                  [attr.aria-label]="'Deny: ' + card.review.action"
+                  (click)="decide(card, 'rejected')">
+                  @if (isSubmitting(card) && localState(card)?.decision === 'rejected') {
+                    <span class="spinner" aria-hidden="true"></span> Denying…
+                  } @else { Deny }
+                </button>
+              }
               <button class="details" type="button" (click)="openDrawerFromEvent(card, $event)">Details</button>
             </div>
           } @else {
             <p class="only-requester"><strong>Waiting for the requester</strong><br>
               Only the requester can decide.</p>
-          }
           }
         </article>
       } @else {
@@ -90,12 +96,13 @@
       <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
       @if (card.state === 'requested') {
         <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
-      }
-      @if (isStopped(card)) {
-        <p class="only-requester">This work stopped at the limit. Approving now wouldn't restart it.</p>
-      } @else {
-      @if (card.state === 'requested') {
-        @if (card.canDecide) {
+        @if (isStopped(card)) {
+          <p class="only-requester">This work stopped at the limit. Approving now wouldn't restart it.</p>
+        }
+        @if (card.missingFields?.length) {
+          <p class="missing-fields" role="status">{{ missingFieldReason(card) }}</p>
+        }
+        @if (!isStopped(card) && (canApprove(card) || canDeny(card))) {
           <oc-approval-decision-status
             [message]="presentation.statusMessage(card)"
             [showCheck]="(localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict') && !readFailed()"
@@ -105,28 +112,32 @@
         }
       } @else {
         <p class="drawer-state">{{ presentation.stateWords(card) }} · {{ presentation.terminalDetail(card) }}</p>
-      }
-      @if (card.state === 'cancelled') {
-        <p class="gap-note">An approval is cancelled when its turn ends or stops, a new message or turn starts, the conversation closes, or the tool’s policy, publication or connection changes. Exact reason: Not available yet.</p>
-      }
-      @if (card.state === 'outcome_unknown') {
-        <p class="gap-note">Confirmation from the tool server is not available yet.</p>
+        @if (card.state === 'cancelled') {
+          <p class="gap-note">An approval is cancelled when its turn ends or stops, a new message or turn starts, the conversation closes, or the tool’s policy, publication or connection changes. Exact reason: Not available yet.</p>
+        }
+        @if (card.state === 'outcome_unknown') {
+          <p class="gap-note">Confirmation from the tool server is not available yet.</p>
+        }
       }
       <div class="reference-row"><span>Reference</span><code>{{ presentation.reference(card) }}</code></div>
-      @if (card.state === 'requested' && card.canDecide) {
+      @if (card.state === 'requested' && !isStopped(card)
+        && (canApprove(card) || canDeny(card))) {
         <div overlayFooter class="drawer-actions">
-          @if (localState(card)?.kind === 'step_up') {
+          @if (localState(card)?.kind === 'step_up' && canApprove(card)) {
             <a class="approve sign-in" [href]="presentation.signIn(card)">Sign in again to approve</a>
           } @else {
-            <button class="approve" type="button" [attr.aria-disabled]="isBlocked(card)"
+            <button class="approve" type="button" [disabled]="approveBlocked(card)"
+              [attr.aria-disabled]="approveBlocked(card)"
               [attr.aria-label]="'Approve: ' + card.review.action"
               (click)="decideFromDrawer(card, 'approved')">Approve</button>
           }
-          <button type="button" [attr.aria-disabled]="isBlocked(card)"
-            [attr.aria-label]="'Deny: ' + card.review.action"
-            (click)="decideFromDrawer(card, 'rejected')">Deny</button>
+          @if (canDeny(card)) {
+            <button type="button" [disabled]="denyBlocked(card)"
+              [attr.aria-disabled]="denyBlocked(card)"
+              [attr.aria-label]="'Deny: ' + card.review.action"
+              (click)="decideFromDrawer(card, 'rejected')">Deny</button>
+          }
         </div>
-      }
       }
     </oc-hinge-drawer>
   }

@@ -40,6 +40,17 @@ No survey answer is stored in the address, console or browser storage.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
+Chat approval cards use the server's `missingFields`, `canApprove` and `canDeny` values.
+Only the requester gets decision controls. Just before sending, the browser checks the
+current card by id and repeats the state, requester, field and decision checks. A native
+refusal appears from `agent.native_consent_refused`
+in the feed. Its details use `nativeRequestId`, the saved turn id, optional
+`serverName` and the saved time. It has no tool call id or permission action.
+A detail opening checks the feed again. Each opening has its own request number, so a
+reply from a closed or earlier opening cannot change the current drawer. A failed
+refresh keeps the last safe summary and says the check failed. A 401 or 403 clears the
+transcript and any open details. `npm run visual:screen-p3-5-facts` captures desktop and phone
+screens with example server replies.
 `/org/integrations/:serverId/access/explanation?requester=&assistant=&tool=` sends
 the strict API query names `requesterId`, `assistantId` and `toolName` after checking
 the address. It parses the server reply with `toolAccessExplanationSchema`. A missing
