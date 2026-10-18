@@ -2441,14 +2441,21 @@ publications only. Its fixed id is `<requestId>:tool-dispatch-started` on
 `decision-<requestId>`. One conditional append requires the decision to remain the
 latest event. An earlier outcome or any failed or uncertain save refuses the call.
 The permit is spent in memory before any await and cannot be retried or restored on restart.
-After saving, dispatch rechecks access, the gateway position and the exact MCP admission
-position. A changed position refuses, including another intervening admission. Local
+Before saving the start, dispatch checks the gateway position, the exact MCP admission
+position and then the gateway position again. This catches a newer saved generation
+while the MCP read waits, even when it carries the server unchanged. Such a refusal saves
+no start. After saving, dispatch rechecks access and repeats these position checks.
+A changed position refuses, including another intervening admission. Local
 acknowledgement, route and deadline checks follow the last await, immediately before send.
 `tool.dispatch_recorded` remains the last outcome row for approval retry verification.
 
 Tests hold the saved start reply while asserting zero upstream requests, lose that reply,
 withdraw publication or revoke access immediately after saving, and repeat a permit both
 in sequence and concurrently. They verify the saved gateway fields and later outcome order.
+Barriers save a carried generation during the MCP read both before and after the start.
+Both send nothing; the earlier refusal also saves no start. Other checks cover a real
+competing outcome before the decision read or conditional append, expiry during the last
+MCP read, and each generated constant on a legacy publication.
 Row 5 still supplies the guarded destination; production routes remain empty. Fresh-install journey: SKIP.
 
 ## Saved reload approval cancellation (Part of #48)

@@ -49,8 +49,10 @@ pass before sending the original request. Servers without this contract are refu
 Before sending, it obtains one budget permission without holding money for a free tool.
 It then saves one admission record on the server's tool-rule stream.
 Block saved first refuses admission. For a publication with a saved configuration request,
-it also saves one start record before sending any bytes. It then rechecks access,
-the gateway acknowledgement and the server's latest saved position. A withdrawal or
+it checks the saved gateway configuration and tool rules before saving one start record.
+After saving, it rechecks access, the gateway acknowledgement and both saved positions.
+A newer gateway configuration saved while a tool-rule read waits refuses the call,
+even when that server's rules stay the same. A withdrawal or
 an uncertain save reply refuses the call and spends its pass. The start record alone
 does not prove that any bytes left. Legacy publications keep their admission check.
 It checks the small access streams within two seconds.

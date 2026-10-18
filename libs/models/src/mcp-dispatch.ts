@@ -186,22 +186,37 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     }
     await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
     const admittedPosition = await admit(req, res, permit, route, position, deadline);
+    if (permit.gatewayBinding) {
+      // Refuse changes found after admission before recording a start.
+      await requirePublishedPositions(permit, admittedPosition, deadline);
+      requireCurrentRoute(permit);
+      requireFreshDispatch(req, res, permit);
+    }
     await recordStarted(permit, deadline);
     if (permit.gatewayBinding) {
       await permit.confirmAccess();
     }
-    await requireGatewayPosition(store, silo, permit.gatewayBinding,
-      acknowledged, deadline);
-    if (permit.gatewayBinding) {
-      const currentPosition = await store.head(`mcp-${route.serverId}`, deadline);
-      if (currentPosition !== admittedPosition) {
-        throw new Error('MCP policy changed');
-      }
-    }
+    await requirePublishedPositions(permit, admittedPosition, deadline);
     // Recheck local state after the last awaited read, then open the connection immediately.
     requireCurrentRoute(permit);
     requireFreshDispatch(req, res, permit);
     forward(route, permit, body, res, memoryContext);
+  }
+
+  async function requirePublishedPositions(permit: Permit, admittedPosition: number,
+    deadline: number) {
+    if (!permit.gatewayBinding) {
+      return;
+    }
+    await requireGatewayPosition(store, silo, permit.gatewayBinding,
+      acknowledged, deadline);
+    const currentPosition = await store.head(`mcp-${permit.route.serverId}`, deadline);
+    if (currentPosition !== admittedPosition) {
+      throw new Error('MCP policy changed');
+    }
+    // Catch a saved replacement while the MCP read waited, even with an unchanged member.
+    await requireGatewayPosition(store, silo, permit.gatewayBinding,
+      acknowledged, deadline);
   }
 
   async function recordStarted(permit: Permit, deadline: number) {
