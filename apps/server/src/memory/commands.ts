@@ -390,6 +390,7 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
         return Promise.resolve();
       }
       if (current.operation === 'correct') {
+        memoryKeys(options.keyDirectory!).discardUnpublished(current.identity);
         journal.save({ ...current, stage: 'failed' });
         return Promise.resolve();
       }
@@ -398,7 +399,15 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
     journal.remove();
     return Promise.resolve();
   }
-  await options.db.lock!(`memory-command:${reference}`, finishRecovery, { timeoutMs: 100 });
+  async function lockRecovery() {
+    if (entry.operation === 'correct') {
+      const { silo, scopeId, memoryId } = entry.identity;
+      return options.db.lock!(`memory-fact:${silo}:${scopeId}:${memoryId}`,
+        finishRecovery, { timeoutMs: 100 });
+    }
+    return finishRecovery();
+  }
+  await options.db.lock!(`memory-command:${reference}`, lockRecovery, { timeoutMs: 100 });
 }
 
 export async function reconcileCommands(options: MemoryOptions) {

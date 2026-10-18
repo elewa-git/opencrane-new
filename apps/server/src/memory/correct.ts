@@ -199,6 +199,7 @@ async function appendCorrection(options: MemoryOptions, input: Input,
   journal.save(entry);
   reservation.save(entry);
   // Keep this candidate after a refused attempt. Deleting it would also destroy a concurrent save.
+  keys.discardUnpublished(identity);
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, input.text);
   event.data = { ...event.data, ...encrypted };

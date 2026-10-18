@@ -128,6 +128,17 @@ export function memoryKeys(directory: string) {
     }
     return `key:${keyReference}`;
   }
+  function discardUnpublished(identity: MemoryIdentity): void {
+    requireDirectory(directory);
+    const destination = `${directory}/${reference(identity)}`;
+    // Require the caller to hold the fact lock and rule out a delayed append first.
+    // Leave published keys and permanent destruction markers untouched.
+    if (existsSync(destination)) {
+      return;
+    }
+    rmSync(`${destination}-pending`, { force: true });
+    syncPath(directory);
+  }
   function remove(identity: MemoryIdentity): void {
     publishKey(directory, identity, Buffer.alloc(0), true);
     // Remove copies left by a crash between publishing a hard link and removing its temporary name.
@@ -179,5 +190,5 @@ export function memoryKeys(directory: string) {
     }
     return 'available';
   }
-  return { provision, delete: remove, encrypt, decrypt, status };
+  return { provision, discardUnpublished, delete: remove, encrypt, decrypt, status };
 }
