@@ -3116,7 +3116,6 @@ describes incremental scope checks and event-only revision validation.
 Turn credential renewal still needs this check in P4-15 PR 2e. Output invalidation,
 process interruption and correction target proofs remain separate work.
 
-
 ## Saved budget stop socket notifications (P3-14 PR 7b, first part; Part of #55)
 
 After projecting a saved budget `agent.turn_stop_requested`, `/ws` sends the

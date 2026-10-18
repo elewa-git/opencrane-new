@@ -255,6 +255,7 @@ ToolPolicy optionally carries `publicationRevision`, the positive saved event po
 that invalidated approvals for a publication. It is distinct from the tool review position.
 Older policy replies still parse. This field contains no tool text and grants no authority
 without the matching saved publication and review.
+
 ## Saved budget stop notifications
 
 `chatMessageSchema` and `serverMessageSchema` accept this strict `/ws` frame:
