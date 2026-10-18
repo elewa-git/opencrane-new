@@ -1802,7 +1802,9 @@ async function refusesCeilingReceiptWhenAdminCheckIsUnavailable() {
   await saveCeiling('unavailable-admin-ceiling', 27182);
   const check = authorisation.check.bind(authorisation);
   const unavailable = vi.spyOn(authorisation, 'check').mockImplementation(async (memberId, permission) => {
-    if (permission === 'admin') return { allowed: false, status: 'unavailable' };
+    if (permission === 'admin') {
+      return { allowed: false, status: 'unavailable', error: new Error('OpenFGA unavailable') };
+    }
     return check(memberId, permission);
   });
   try {
