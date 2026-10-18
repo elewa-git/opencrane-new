@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { until } from '@opencrane/authz/testing';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@opencrane/models/testing';
-import { history, ingestUsage, parseMemoryRequest, readToolPolicy, startDecision, BudgetActor } from '@opencrane/models';
+import { history, ingestUsage, parseMemoryRequest, readToolPolicy, startDecision, BudgetActor, priceTableId } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -659,17 +659,25 @@ it.each(['conversation-conversation', 'participation-conversation'])(
   'refuses new model and memory calls after %s closes and settles dispatched usage once',
   refusesCallsAfterClose);
 
-async function refusesStoppedRootMemory() {
+async function refusesStoppedRootMemory(reason: 'requester_stop' | 'allowance_exhausted') {
   const binding = { requesterId: 'alice', conversationId: 'conversation', turnId: 'turn',
     threadId: 'thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
     payingGroupId: 'personal-default', allowanceCents: 1000 };
   const root = await setup.actor.setRootAllowance(binding, 1);
   const permit = await memoryPass(call, 'recall');
-  const subject = 'conversation-conversation';
-  const payload = { conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice' };
-  await setup.append(subject, 'agent.turn_stop_requested', payload);
-  const position = await setup.nats.store.head(subject);
-  await setup.actor.stopRoot(root.rootId, 'requester_stop', subject, position);
+  if (reason === 'requester_stop') {
+    const subject = 'conversation-conversation';
+    const payload = { conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice' };
+    await setup.append(subject, 'agent.turn_stop_requested', payload);
+    const position = await setup.nats.store.head(subject);
+    await setup.actor.stopRoot(root.rootId, 'requester_stop', subject, position);
+  } else {
+    // Stop only the root so a conversation Stop cannot hide a missing memory check.
+    const modelCall = { ...binding, model: 'gpt-6-luna', priceTableId,
+      contextDigest: '0'.repeat(64) };
+    await expect(setup.actor.reserve(modelCall, 1001, undefined, undefined, root.rootId))
+      .rejects.toMatchObject({ reason: 'allowance_exhausted' });
+  }
   const before = await setup.nats.store.head();
   const beforeRequests = backendRequests;
   expect((await dispatchMemory(permit, call)).status).toBe(403);
@@ -679,7 +687,8 @@ async function refusesStoppedRootMemory() {
   expect(response.status).toBe(403);
   expect(backendRequests).toBe(beforeRequests);
 }
-it('refuses an old memory permit and a new grant after its root stops', refusesStoppedRootMemory);
+it.each(['requester_stop', 'allowance_exhausted'] as const)(
+  'refuses an old memory permit and a new grant after root %s', refusesStoppedRootMemory);
 
 async function refusesForgottenLoadedFact() {
   await seedRecallFact();

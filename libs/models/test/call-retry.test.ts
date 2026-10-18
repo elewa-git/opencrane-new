@@ -4,6 +4,7 @@ import { readBudget, history } from '../src/index.ts';
 import { rootTotals } from '../src/root-budget.ts';
 import { fixture } from './fixture.ts';
 import { managedFixture } from './managed-fixture.ts';
+import { retryDiagnostics } from './retry-diagnostics.ts';
 
 const binding = { requesterId: 'alice', conversationId: 'conversation', turnId: 'turn',
   threadId: 'thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
@@ -222,8 +223,11 @@ async function managedRetry() {
   const writer = vi.spyOn(context.actor, 'reserve');
   writer.mockImplementationOnce(loseReply);
   expect((await context.call()).status).not.toBe(200);
-  const saved = context.actor.state.reservations[0]!;
-  expect((await context.call()).status).toBe(200);
+  const saved = requireSavedRetryHold(context.actor);
+  writer.mockRestore();
+  const diagnostic = retryDiagnostics(context.actor);
+  const reply = await context.call();
+  expect(reply.status, diagnostic(reply.text)).toBe(200);
   expect(context.received()).toBe(1);
   expect(context.actor.state.reservations).toHaveLength(1);
   expect(context.actor.state.dispatches[0]?.callId).toBe(saved.call.requestId);
@@ -250,3 +254,10 @@ async function stoppedRetry() {
   expect(context.actor.state.dispatches).toHaveLength(0);
 }
 it('checks Stop again before granting a recovered hold', stoppedRetry);
+
+function requireSavedRetryHold(actor: Awaited<ReturnType<typeof managedFixture>>['actor']) {
+  const reason = 'Refusal stage: initial reservation; fixed reason: Scripted hold missing';
+  expect(actor.state.reservations.length, reason).toBe(1);
+  expect(actor.state.dispatches.length).toBe(0);
+  return actor.state.reservations[0]!;
+}

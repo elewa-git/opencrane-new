@@ -2288,6 +2288,15 @@ and tariff and accepts late usage once. Roots stay out of `budgetSummary`; refus
 use fixed text. No source-evidence reader, stop caller, route, activation or running-turn
 interruption is added. `call-retry.test.ts` uses real NATS, PostgreSQL, OpenFGA,
 the pinned gateway and a recording upstream, with barriers for concurrent calls.
+The managed retry assertion reports only a refusal stage and a fixed reason. Its
+observers retain the original access and actor calls and never print request data.
+`call-retry-guards.test.ts` checks each retry digest input, saved-decision field,
+changed call binding and unsafe hold state before later admission checks can hide
+a missing guard. It also checks spending stops on recovery, Stop after a paused
+access check, and provider, effect and security evidence before a zero release.
+Refusal response tests require fixed text even when the internal error holds private
+values. The memory dispatch tests also stop only the root through allowance exhaustion;
+conversation Stop cannot hide that check.
 Fresh-install qualification and paid calls: NOT RUN.
 
 ## Reviewed drift restoration (#48 PR 3c, first part)
