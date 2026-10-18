@@ -372,15 +372,19 @@ async function composeDownSurvivesUnavailableKubernetes() {
     const actions = `${fixture.home}/actions`;
     const dockerScript = `#!/bin/sh\nprintf '%s\\n' "$*" >> '${actions}'\n`;
     await writeFile(`${fixture.home}/bin/docker`, dockerScript, { mode: 0o755 });
-    await writeFile(`${fixture.home}/bin/kubectl`, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-    const env = fixture.env;
-    await assert.rejects(exec('infra/dev-stack/run.sh', ['down', '--id', '1'], { env }));
+    const kubernetesCalls = `${fixture.home}/kubernetes-calls`;
+    const kubectlScript = '#!/bin/sh\ntouch "$TEST_KUBERNETES_CALLS"\nexit 1\n';
+    await writeFile(`${fixture.home}/bin/kubectl`, kubectlScript, { mode: 0o755 });
+    const env = { ...fixture.env, TEST_KUBERNETES_CALLS: kubernetesCalls };
+    await exec('infra/dev-stack/run.sh', ['down', '--id', '1'], { env });
+    await assert.rejects(stat(kubernetesCalls), { code: 'ENOENT' });
+    await assert.rejects(stat(fixture.slotDirectory), { code: 'ENOENT' });
     assert.match(await readFile(actions, 'utf8'), /down/u);
   } finally {
     await rm(fixture.home, { recursive: true, force: true });
   }
 }
-test('secondary down stops Compose when Kubernetes is unavailable',
+test('secondary down without package or computer records never calls Kubernetes',
   composeDownSurvivesUnavailableKubernetes);
 
 async function packageRecordSurvivesUnavailableKubernetes() {
