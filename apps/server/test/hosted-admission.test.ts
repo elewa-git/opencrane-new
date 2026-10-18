@@ -292,7 +292,7 @@ async function recoversRequestedCheck() {
   expect((await requestCheck(serverId, input)).statusCode).toBe(503);
   const response = await requestCheck(serverId, input);
   expect(response.statusCode).toBe(202);
-  const receipt = response.json();
+  const receipt = response.json<unknown>();
   expect(receipt).toMatchObject({ status: 'appended', serverId, attemptId: 2,
     changeRef: 'chg_recheck-image' });
   expect((await requestCheck(serverId, input)).json()).toEqual(receipt);
