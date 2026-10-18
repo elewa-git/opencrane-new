@@ -99,6 +99,10 @@ async function bridgeFixture(cachedControl = false) {
     return processConversation({ ...options, objects }, tokens, conversation,
       assistant, new Set(), connection);
   }
+  async function pollStops() {
+    processor.pollStops([conversation]);
+    await processor.settledStops();
+  }
   async function intendControl() {
     return view.append('computer-assistant', 'takeover.requested', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
@@ -129,7 +133,7 @@ async function bridgeFixture(cachedControl = false) {
     server.close();
     await view.close();
   }
-  return { ...options, objects, bytes, message, link, frames, process,
+  return { ...options, objects, bytes, message, link, frames, process, pollStops,
     append: view.append, runner: view.runner, db: view.db,
     intendControl, upload, flushFrames, close };
 }
@@ -265,6 +269,25 @@ it('stops a running turn after a legacy close changes only participation history
   expect(test.frames.filter(isStop)).toEqual([
     expect.objectContaining({ turnId: turn.turnId, conversationId: 'chat' }),
   ]);
+});
+
+it('does not reread an unchanged legacy closed chat during Stop polling', async () => {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  await test.append('conversation-chat', 'agent.turn_failed', {
+    conversationId: 'chat', turnId: test.message.id, reason: 'bridge_interrupted',
+  });
+  await test.append('participation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+  await test.process();
+
+  const reads = vi.spyOn(test.store, 'readStream');
+  await test.pollStops();
+  function isChatRead(call: typeof reads.mock.calls[number]) {
+    return call[0] === 'conversation-chat' || call[0] === 'participation-chat';
+  }
+  expect(reads.mock.calls.filter(isChatRead)).toEqual([]);
 });
 
 it('keeps the computer ready until the closed chat turn has a computer ending', async () => {
