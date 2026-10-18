@@ -351,3 +351,103 @@ async function foreignMember() {
   }
 }
 it('refuses a member registered only in another silo', foreignMember);
+
+const nonHumanAuthors = ['agent', 'system'] as const;
+async function nonHumanTurn(authorKind: typeof nonHumanAuthors[number]) {
+  const encrypted = setup.keys.encrypt('test', 'conversation', 'An automatic message');
+  const automatic = await setup.append('conversation-conversation', 'message.posted', {
+    conversationId: 'conversation', authorKind, authorId: 'assistant',
+    ...encrypted, contentType: 'text' });
+  const stopped = await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
+    conversationId: 'conversation', turnId: automatic.id, reason: 'budget', stopId: 'saved-stop' });
+  await setup.runner.run(conversations);
+  const client = await connect();
+  await ready(client);
+  function isStoppedRow(frame: Frame) {
+    return frame.row?.id === stopped.id;
+  }
+  function isOriginalRow(frame: Frame) {
+    return frame.row?.id === automatic.id;
+  }
+  expect(client.frames.some(isOriginalRow)).toBe(true);
+  expect(client.frames.some(isStoppedRow)).toBe(false);
+  expect(client.frames.filter(isNotice)).toEqual([]);
+}
+it.each(nonHumanAuthors)('withholds both stop frames for a message written by %s', nonHumanTurn);
+
+const lookupCases = ['no stop', 'missing turn id'] as const;
+async function unnecessaryLookup(kind: typeof lookupCases[number]) {
+  if (kind === 'missing turn id') await stop();
+  const original = setup.db.query.bind(setup.db);
+  let lookups = 0;
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    if (sql.startsWith('SELECT event_id, position')) {
+      lookups++;
+      throw new Error('Original-turn lookup unavailable');
+    }
+    const result = await original<Row>(sql, values);
+    if (sql.startsWith('SELECT * FROM conversation_feed')) {
+      for (const row of result.rows) {
+        if (row['type'] === 'agent.turn_stop_requested') {
+          // Model an incomplete read table without changing the saved event.
+          const data = { conversationId: 'conversation', reason: 'budget' };
+          Object.assign(row, { data });
+        }
+      }
+    }
+    return result;
+  }
+  vi.spyOn(setup.db, 'query').mockImplementation(query);
+  const client = await connect();
+  await ready(client);
+  function isStopRow(frame: Frame) {
+    return frame.row?.type === 'agent.turn_stop_requested';
+  }
+  function isRequest(frame: Frame) {
+    return frame.row?.id === turnId;
+  }
+  expect(lookups).toBe(0);
+  expect(client.frames.some(isRequest)).toBe(true);
+  expect(client.frames.some(isStopRow)).toBe(false);
+  expect(client.frames.filter(isNotice)).toEqual([]);
+  expect(client.socket.readyState).toBe(WebSocket.OPEN);
+}
+it.each(lookupCases)('delivers ordinary history without an original-turn lookup: %s',
+  unnecessaryLookup);
+
+async function invalidOutboundFrame() {
+  const client = await connect();
+  await ready(client);
+  const rawFrames: string[] = [];
+  function receive(raw: Buffer) {
+    rawFrames.push(raw.toString());
+  }
+  // Inspect the wire without client validation hiding a bad server frame.
+  client.socket.removeAllListeners('message');
+  client.socket.on('message', receive);
+  const original = setup.db.query.bind(setup.db);
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    const result = await original<Row>(sql, values);
+    if (sql.startsWith('SELECT * FROM conversation_feed')) {
+      for (const row of result.rows) {
+        if (row['type'] === 'agent.turn_stop_requested') {
+          Object.assign(row, { time: 42 });
+        }
+      }
+    }
+    return result;
+  }
+  vi.spyOn(setup.db, 'query').mockImplementation(query);
+  let closeCode: number | undefined;
+  function recordClose(code: number) {
+    closeCode = code;
+  }
+  client.socket.once('close', recordClose);
+  await stop();
+  function closedForRecovery() {
+    expect(closeCode).toBe(1013);
+  }
+  await vi.waitFor(closedForRecovery, { timeout: 2000 });
+  expect(rawFrames).toEqual([]);
+}
+it('validates outbound frames before sending any invalid row onto the socket', invalidOutboundFrame);
