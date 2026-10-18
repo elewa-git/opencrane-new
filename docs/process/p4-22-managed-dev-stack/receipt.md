@@ -1,29 +1,48 @@
 # Managed calls in the local development stack
 
-18 October 2026. Source: `0ab8165e57cd9f73c19986c011797d93edbc81e6`.
+18 October 2026. Product source: `12e2b17941cd4eebbd836e6aa556a4f158896fad`.
+The branch was fetched and rebased onto `287f957731b81f83f167d56bd440e89e4dc0e45d`.
+The rebase finished and that main commit is an ancestor of this branch.
 Secondary id 2 was obtained through `infra/dev-stack/claim.sh`. The owner stack was
 not used. No paid provider was called.
 
 ## Source checks
 
-PASS: test-first commit `404820f7` failed on the missing setup/environment modules
-and the stub's model-list 404; the four existing stub tests passed.
-PASS: all seven changed tests passed twice, including refusal at every HTTP step
-and an unsuccessful verification returned with HTTP 200.
-PASS: workspace typecheck, changed dev-stack file typecheck, event catalogue,
-knip, changelog, code/dependency/docs/link/fixture lint, and 438 event-security tests.
-All tests and checks ran under `nice -n 10`. No full root suite was run locally.
-The initial lint run found a bare email address in Markdown; the remaining lint
-stages passed after that was corrected.
+| Check | Result |
+| --- | --- |
+| Failing-first regression commit `26fb3a80` | PASS: all three real setup cases reached switch-on and got 403 instead of 200 before the fix |
+| Real provider setup, confirmed spending and replay tests | PASS: 62 provider tests passed twice |
+| Switch-on guard tests | PASS: 51 tests passed twice, including reserved reachability, other unreserved sends, expired holds and unknown settlement |
+| Dev-stack setup, stub and environment tests | PASS: all 9 tests passed twice |
+| Guard removal probes | PASS: removing redirect refusal, either error sanitiser or missing-file handling made the new tests fail; all probes restored |
+| Workspace typecheck | PASS |
+| Event catalogue | PASS: 143 event types agree |
+| Event-security tests | PASS: 438 tests; file unchanged |
+| Changelog validation | PASS |
+| Lint, including knip | PASS: all stages; code lint has 20 existing warnings and no errors |
+| Full root suite | NOT RUN, as requested |
 
-The optional whole dev-stack typecheck reports existing errors in `wake-latency.ts`
-and `zitadel-setup.test.ts`. Neither file changed. The focused typecheck passes.
+All tests and checks used `nice -n 10`. The integration tests used disposable NATS,
+OpenFGA and gateway fixtures plus a dedicated PostgreSQL 17.6 container, with
+`PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:47403/postgres`.
+The first focused run passed all 551 tests. A concurrent repeat passed the 51
+switch-on tests but timed out in the existing in-flight key-save test; the next test
+then failed through its leftover mock. A separate rerun passed all 62 provider tests
+with no assertion, timeout or product change. The throwaway database and its volume
+were removed after testing.
 
-## Fresh-install attempt
+The original switch-on tests seeded successful reachability evidence directly.
+They never created the real admission event, which concealed the fresh-install bug.
+The new tests keep that event, require exactly one switch-on marker and retry after
+projection replay with a new event-store reader. Paid model tests and ordinary
+unreserved sends remain refused until confirmed settlement. Unknown settlement
+still refuses. No paid settlement is invented for free reachability.
 
-The first startup, at `8395285d`, stopped before provider setup because the gateway
-symlink pointed outside the container mounts. Startup now copies the pinned binary
-into the mounted stack directory. A second `up --fresh` used the same claimed slot.
+## Fresh-install checks
+
+The first launch stopped before services started because this worktree had no local
+Zitadel credential file. The next launch supplied the existing `ZITADEL_KEY_FILE`
+setting. It used the same claimed slot and the normal `up.sh --id 2 --fresh` command.
 
 | Check | Result |
 | --- | --- |
@@ -32,19 +51,36 @@ into the mounted stack directory. A second `up --fresh` used the same claimed sl
 | Create provider, save credential, reachability, consented model test | PASS |
 | Provider status `ready`; non-streaming reply accepted by product verification | PASS |
 | Enable chat models, select explicit silo default, start drain | PASS |
-| Switch on and complete `up --fresh` | PARTIAL: switch-on returned 403 |
-| Managed requests before switch-on | PASS: 2 verification requests; 0 other credentials |
-| Credential value and file locations absent from reached provider replies, stack logs and all 49 saved events | PASS |
-| Restart models without `MODEL_KEY_FILE` after switch-on | NOT RUN |
-| Later-joining member chats through the default; only managed requests after switch-on | NOT RUN |
-| Twice-fresh qualification | NOT RUN; remains for PR 5e |
+| Switch-on accepted and exactly one marker saved | PASS |
+| Models restarted without `MODEL_KEY_FILE`, including its running container environment | PASS |
+| Member joins after the marker and chats through the explicit default | PASS: 11 default-provider turns; 9 completed replies checked |
+| Stub accepts only the managed value after switch-on | PASS: counters started at 0/0 after restart and ended at 12 managed / 0 other |
+| Credential value and private locations absent from replies, logs and events | PASS: 372 events, 15 file logs, model container logs, 4 computer logs and the completed member replies |
+| Complete `up --fresh` | PASS on the third service-start attempt; earlier results are recorded below |
+| Twice-fresh qualification | NOT RUN; one complete passing fresh run, with two failed attempts before it; remains for PR 5e |
 
-Saved evidence contains one `budget.call_dispatch_admitted` for
-`provider-reachability` without a reservation. The existing switch-on check keeps
-that send permission open. It has no completion writer, as described in
-[the provider contract](../../api/providers.md#switching-on-managed-calls).
-No product check was changed or bypassed. No switch-on event or chat turn was saved.
-The drain stayed active, and models correctly retained its pre-switch-on setting.
+The [third attempt's safe counts](attempt-3.json) retain the final checks. The
+[first attempt's counts](attempt-1.json) record 303 checked events and the same
+12 managed requests, with no other credential. Both desktop-view
+checks also passed. The later `typed integration rows` check timed out because the
+MCP catalogue worker had stopped with `EVENTS stream is incomplete`; the integration
+list returned no rows. Reading all 303 events afterwards succeeded. This attempt
+therefore does not claim a complete fresh startup. No access, money or memory check
+was weakened, and the journey assertion remains unchanged.
+
+The [second attempt](attempt-2.json), after source checks finished, stopped at
+`Provider setup create: 503`. Setup correctly made no later request.
+The third fresh attempt used the same source and the same slot, with this task's
+lint and tests stopped. It completed `up --fresh`: browser chat, uploads, desktop
+viewing, computer recovery, integration rows, audit, budget refusals, projection
+replay and loopback listeners all passed. The existing approval journey remains
+skipped by the runner; this receipt makes no approval-continuation claim.
+
+The final scan also read nested log files and every current computer Pod's logs.
+Only safe counts and booleans are retained here. It checked the provider directory's
+host-user ownership and 0700 mode, the stub file's 0600 mode, the read-only mount and
+the running models container's environment. The managed value and private locations
+were absent from all checked logs, events and replies.
 
 ## Images and gateway
 
@@ -59,5 +95,6 @@ The drain stayed active, and models correctly retained its pre-switch-on setting
 
 Gateway SHA-256: `daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b`.
 
-Teardown: PASS. `down.sh --id 2` removed this stack's containers, both namespaces,
-private directory and claim. The owner stack was not used.
+Teardown: PASS. `down.sh --id 2` removed the stack containers, both namespaces,
+private directory and claim. The throwaway test database was removed with its volume.
+The owner stack was not used.

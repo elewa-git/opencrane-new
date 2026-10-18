@@ -668,6 +668,8 @@ switch-on it supplies the local stub file; afterwards it supplies only shared cu
 The stack restarts models after setup and waits for readiness. Repeat starts read
 `managedProviderCallsEnabled` before choosing the environment. No paid calls are made.
 The [qualification receipt](../../docs/process/p4-22-managed-dev-stack/receipt.md)
-records the single-slot qualification attempt: PARTIAL at switch-on (403), with the
-provider ready. The reachability send has no reservation and remains unresolved.
-No chat ran. Twice-fresh qualification remains NOT RUN for PR 5e.
+records the single-slot qualification. The provider reached ready and switch-on
+was accepted. A later-joining member chatted through the explicit default, with no
+legacy key-file setting and only managed credentials counted by the restarted stub.
+Free reachability admissions do not count as spending; all other unresolved sends
+still block switch-on. Twice-fresh qualification remains NOT RUN for PR 5e.
