@@ -1495,3 +1495,67 @@ async function refusesIdentityDuringRenewal(change: typeof renewalAccessChanges[
 it.each(renewalAccessChanges)(
   'refuses turn renewal when $type arrives during the final activity check',
   refusesIdentityDuringRenewal);
+
+async function refusesRevocationDuringFinalScopeRead(change: LoadedChange) {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  try {
+    expect(await bridge.exchange(1)).toHaveProperty('token');
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let signed = false;
+    let finalAccessChecked = false;
+    let paused = false;
+    const issue = setup.tokens.turn.bind(setup.tokens);
+    async function markSigning(input: Parameters<typeof issue>[0]) {
+      const result = await issue(input);
+      signed = true;
+      return result;
+    }
+    const confirm = decisionAccess.confirmDecisionAccess;
+    async function observeAccess(...args: Parameters<typeof confirm>) {
+      await confirm(...args);
+      if (signed) finalAccessChecked = true;
+    }
+    const head = setup.nats.store.head.bind(setup.nats.store);
+    async function pauseScopeRead(...args: Parameters<typeof head>) {
+      const position = await head(...args);
+      if (finalAccessChecked && !paused && args[0] === `scope-${scopeId}`) {
+        paused = true;
+        entered.resolve();
+        await release.promise;
+      }
+      return position;
+    }
+    const issuance = vi.spyOn(setup.tokens, 'turn');
+    issuance.mockImplementationOnce(markSigning);
+    const access = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+    access.mockImplementation(observeAccess);
+    const heads = vi.spyOn(setup.nats.store, 'head');
+    heads.mockImplementation(pauseScopeRead);
+    const pending = bridge.exchange(2);
+    try {
+      await entered.promise;
+      await changeLoadedMemory(change);
+      release.resolve();
+      const reply = await pending;
+      const refused = { type: 'ack', sequence: 2, refused: 'memory_context_unavailable' };
+      expect(reply).toEqual(refused);
+      expect(reply).not.toHaveProperty('token');
+      expect(reply).not.toHaveProperty('context');
+      expect(issuance).toHaveBeenCalledOnce();
+    } finally {
+      release.resolve();
+      await pending;
+      heads.mockRestore();
+      access.mockRestore();
+      issuance.mockRestore();
+    }
+  } finally {
+    await bridge.close();
+  }
+}
+it.each(['assistant_read', 'member_mcp'] as const)(
+  'refuses turn renewal when %s is revoked during the final scope read',
+  refusesRevocationDuringFinalScopeRead);
