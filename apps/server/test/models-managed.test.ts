@@ -169,20 +169,24 @@ async function stopsLegacy() {
     expectedProviderSequence: 0 };
   await setup.append('budget-test', 'provider.managed_calls_enabled', enabled);
   const started = performance.now();
-  try {
-    const response = await process.call();
-    expect(response.status).toBe(403);
-    await response.text();
-  } catch (error) {
-    // Accept connection closure when the process has already stopped admission.
-    if (!(error instanceof TypeError && error.message === 'fetch failed')) throw error;
-  }
   await exited(process.child);
   expect(performance.now() - started).toBeLessThan(3000);
   expect(process.child.exitCode).toBe(1);
+
+  const managedProcess = await startModels(setup);
+  async function managedModeReady() {
+    await managedProcess.ready();
+    const config = await managedProcess.config();
+    expect(config).toContain('/authorize/models/managed');
+  }
+  // Wait for the new process to serve managed calls. The old gateway returns 503 while it drains.
+  await expect.poll(managedModeReady, { timeout: 15_000 }).toBeUndefined();
+  const response = await managedProcess.call();
+  expect(response.status).toBe(403);
+  await response.text();
   expect(setup.received()).toBe(0);
 }
-it('stops a legacy process after switch-on and refuses its next call', stopsLegacy, 60_000);
+it('stops a legacy process after switch-on and refuses its legacy call', stopsLegacy, 60_000);
 
 async function refusesUnreadableMode() {
   const setup = await managedFixture();
