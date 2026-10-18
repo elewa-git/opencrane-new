@@ -345,7 +345,9 @@ class TurnRunner {
     try {
       await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt, turn.id);
     } catch (error) {
-      if (!this.gate.closed && this.state.cancelled.has(turn.id)) {
+      if (this.state.cancelled.has(turn.id)) {
+        // Keep the signed gate's outcome when the proxy refuses a cancelled installation.
+        if (this.gate.closed) return;
         throw new Error('Turn ended');
       }
       throw error;
