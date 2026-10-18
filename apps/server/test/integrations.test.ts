@@ -145,7 +145,6 @@ beforeEach(async () => {
   await append(fixture('computer.ready', 'computer-personal-alice', { assistantId: 'personal-alice', computerId: 'computer-alice' }));
   await runner.run(computers);
 
-
   const connectionString = String(dbs.queue.options.connectionString);
   feed = await connectMemberFeed(connectionString);
   catalogue = connectMcpCatalogue(connectionString);
@@ -354,6 +353,26 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await spendingLink.click();
     await page.getByRole('heading', { name: 'Spending', exact: true }).waitFor();
     await page.getByLabel('Monthly ceiling (euro cents)').fill('30000');
+    await page.getByLabel('Default paying group for new personal work').fill('unknown-payer');
+    function isBudgetPost(response: Response) {
+      return response.request().method() === 'POST' &&
+        response.url().endsWith('/api/org/models');
+    }
+    const beforeRefusal = await nats.store.head('budget-test');
+    const budgetRefused = page.waitForResponse(isBudgetPost);
+    await page.getByRole('button', { name: 'Save budget' }).click();
+    const refusedResponse = await budgetRefused;
+    expect(refusedResponse.status()).toBe(422);
+    expect(await refusedResponse.json()).toEqual({
+      status: 'refused', reason: 'spending_choice_unavailable',
+    });
+    await page.getByText('This spending choice is unavailable. Choose another group or active shared assistant.').waitFor();
+    expect(await page.getByLabel('Monthly ceiling (euro cents)').inputValue()).toBe('30000');
+    expect(await page.getByLabel('Default paying group for new personal work').inputValue())
+      .toBe('unknown-payer');
+    expect(await page.getByRole('button', { name: 'Save budget' }).isEnabled()).toBe(true);
+    expect(await nats.store.head('budget-test')).toBe(beforeRefusal);
+    await page.getByLabel('Default paying group for new personal work').fill('installation-default');
     const budgetSaved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/org/models'));
     await page.getByRole('button', { name: 'Save budget' }).click();
     expect((await budgetSaved).status()).toBe(200);
@@ -2006,3 +2025,41 @@ async function editsInstallationDefault(ceilingCents: number) {
 }
 it.each([30000, 0])('saves a global ceiling of %s from actual installation startup',
   editsInstallationDefault);
+
+
+const invalidSpendingChoices = ['group', 'personal', 'inactive', 'payer'] as const;
+async function refusesSpendingChoice(choice: typeof invalidSpendingChoices[number]) {
+  if (choice === 'inactive') {
+    await append(fixture('assistant.created', 'assistant-inactive', {
+      assistantId: 'inactive', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
+    }));
+    await append(fixture('assistant.settings_changed', 'assistant-inactive', {
+      assistantId: 'inactive', changedBy: 'alice', active: false, changedFields: ['active'],
+    }));
+  }
+  let selection: Record<string, string> = { scope: 'paying_group', scopeId: 'unknown-group' };
+  if (choice === 'personal') selection = { scope: 'assistant', scopeId: 'personal-alice' };
+  if (choice === 'inactive') selection = { scope: 'assistant', scopeId: 'inactive' };
+  if (choice === 'payer') {
+    selection = { scope: 'global', defaultPayingGroupId: 'unknown-payer' };
+  }
+  const before = await nats.store.head('budget-test');
+  const payload = { ...selection, commandId: 'invalid-choice',
+    expectedSequence: actor.state.sequence, ceilingCents: 45000 };
+  const requestHeaders = { ...headers('oidc-amina'),
+    origin: new URL(config.redirectUri).origin };
+  const request = { method: 'POST' as const, url: '/api/org/models',
+    headers: requestHeaders, payload };
+  const response = await app.inject(request);
+  expect(response.statusCode).toBe(422);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'spending_choice_unavailable' });
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.defaultPayingGroupId).toBe('installation-default');
+  await append(fixture('member.role_changed', 'member-amina', {
+    memberId: 'amina', previousRole: 'admin', newRole: 'member', changedBy: 'alice',
+  }));
+  expect((await app.inject(request)).statusCode).toBe(403);
+  expect(await nats.store.head('budget-test')).toBe(before);
+}
+it.each(invalidSpendingChoices)('returns a fixed correctable refusal for an invalid %s',
+  refusesSpendingChoice);
