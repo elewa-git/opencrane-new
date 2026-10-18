@@ -1,4 +1,3 @@
-import { hasCallEvidence, retryReservation, type CallRetry } from './call-retry.ts';
 import { prepareCeilingChange } from './ceiling-command.ts';
 import { CeilingReceiptRecovery } from './ceiling-receipt-recovery.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -13,8 +12,9 @@ import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budget
   type BudgetState, type ModelCall, type ModelUsage } from './state.ts';
 
 import { history } from './event-history.ts';
-import { wasAdmitted, checkDispatchBinding, checkRootDispatch, checkRootGrant, checkRootReservation,
-  setRootAllowance, stopRootAtCeiling, stopRootOnOverrun } from './root-budget.ts';
+import { hasCallEvidence, retryReservation, type CallRetry, wasAdmitted, checkDispatchBinding,
+  checkRootDispatch, checkRootGrant, checkRootReservation, setRootAllowance,
+  stopRootAtCeiling, stopRootOnOverrun } from './root-budget.ts';
 import { readRootStopEvidence, saveRootStop, type RootStopReason } from './root-stop-evidence.ts';
 export { history } from './event-history.ts';
 
@@ -151,7 +151,11 @@ export class BudgetActor {
     return this.serial(async () => {
       const saved = await retryReservation(this.state, call, amountCents, rootId, retry,
         this.hasDispatchEvidence.bind(this), fresh);
-      if (saved !== undefined) return saved;
+      if (saved !== undefined) {
+        await checkRootGrant(this.state, call, rootId, this.now(), fresh,
+          this.append.bind(this), admittedAt);
+        return saved;
+      }
       z.int().positive().parse(amountCents);
       if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
       if (!call.payingGroupId) throw new Error('Paying group unavailable');

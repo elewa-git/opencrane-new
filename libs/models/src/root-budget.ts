@@ -1,3 +1,5 @@
+import type { EventStore } from '@opencrane/event-store';
+import { history } from './event-history.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -8,6 +10,7 @@ import { budgetStopId, exceededReasons, requireDispatchReservation,
 
 type Append = (type: string, payload: unknown) => Promise<void>;
 type Root = BudgetState['roots'][number];
+type Reservation = BudgetState['reservations'][number];
 const allowanceInput = budgetRootAllowanceSetDataSchema.omit({ rootId: true });
 type RefusalReason = z.infer<typeof budgetRootStoppedDataSchema>['reason'] |
   'allowance_unavailable';
@@ -188,13 +191,13 @@ export async function checkRootDispatch(state: BudgetState,
 }
 
 export async function checkRootGrant(state: BudgetState, call: ModelCall,
-  rootId: string | undefined, now: Date, fresh: () => Promise<void>, append: Append,
+  rootId: string | undefined, now: Date, fresh: (() => Promise<void>) | undefined, append: Append,
   admittedAt: number | undefined) {
   const turnRoot = turnRootId(state, call.conversationId, call.turnId);
   if (rootId === undefined && turnRoot === undefined) {
     return admittedAt;
   }
-  await fresh();
+  await fresh?.();
   const root = await checkRootReservation(state, call, rootId, 0, append);
   let stopId = budgetStopId(state, call, now, root?.position);
   if (stopId === undefined) {
@@ -231,4 +234,45 @@ export function wasAdmitted(state: BudgetState, reservationId: string) {
     return saved.reservationId === reservationId;
   }
   return state.dispatches.some(matchesDispatch);
+}
+
+export type CallRetry = { retryDigest: string; bodyDigest: string };
+export class CallRetryRefused extends Error {
+  constructor() {
+    super('Model call retry refused');
+  }
+}
+export async function retryReservation(state: BudgetState, call: ModelCall,
+  amountCents: number, rootId: string | undefined, retry: CallRetry | undefined,
+  hasEvidence: (reservation: Reservation) => Promise<boolean>, fresh?: () => Promise<void>) {
+  if (retry === undefined) {
+    return undefined;
+  }
+  if (rootId === undefined || call.requestId === undefined) {
+    throw new CallRetryRefused();
+  }
+  function matchesRetry(saved: Reservation) {
+    return saved.retryDigest === retry?.retryDigest;
+  }
+  const saved = state.reservations.find(matchesRetry);
+  if (!saved) {
+    return undefined;
+  }
+  const originalCall = { ...call, requestId: saved.call.requestId };
+  const bindingMatches = saved.rootId === rootId && saved.bodyDigest === retry.bodyDigest &&
+    saved.amountCents === amountCents && isDeepStrictEqual(saved.call, originalCall);
+  if (!bindingMatches || saved.settledCents !== undefined || saved.expired || saved.outcomeUnknown) {
+    throw new CallRetryRefused();
+  }
+  await fresh?.();
+  if (await hasEvidence(saved)) {
+    throw new CallRetryRefused();
+  }
+  return saved.id;
+}
+
+export async function hasCallEvidence(store: EventStore, silo: string, reservationId: string) {
+  const effects = await history(store, `effect-${reservationId}`, silo);
+  const security = await history(store, `security-${reservationId}`, silo);
+  return effects.length > 0 || security.length > 0;
 }

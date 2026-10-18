@@ -2269,9 +2269,11 @@ The new optional event field keeps older admission records readable.
 
 For rooted models, `retryDigest` hashes JSON `[silo, rootId, computerId, generation,
 conversationId, turnId, threadId, bodyDigest]` with SHA-256. `bodyDigest` hashes the
-exact forwarded request string. All identity fields come from verified credentials
+exact request body forwarded by the gateway to the decision service. The pinned
+gateway may re-encode JSON for the provider. All identity fields come from verified credentials
 and the saved turn. Headers and agent-chosen retry ids cannot select a hold.
 The actor checks retry state in its serial queue before applying a new spending bound.
+Recovery checks current root and spending stops again before returning the old hold.
 Only an open, unadmitted hold with no send, effect or security evidence is reusable.
 The amount and complete saved call must match, apart from the new random request id.
 A changed tariff, payer or context hash conflicts without appending or releasing.
