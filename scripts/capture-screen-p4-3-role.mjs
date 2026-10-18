@@ -10,7 +10,7 @@ const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://screen-p4-3-role.opencrane.test';
 // Show the sample page to an Owner signed in as jente@elewa.ke.
 const member = { memberId: 'alex-kim', displayName: 'Alex Kim', role: 'member',
-  permissions: { changeRole: true, remove: false, manageOwnership: true },
+  permissions: { changeRole: true, remove: true, manageOwnership: true },
   email: 'alex@example.test', status: 'joined', joinedAt: '2026-03-12T10:00:00Z',
   groups: [], memberSequence: 2, ownershipSequence: 1,
   personalAssistant: { status: 'unavailable' }, rejoinedAt: { status: 'unavailable' } };
@@ -109,6 +109,12 @@ async function capture(browser, width, frame) {
       const text = expectedOutcome(frame);
       await page.getByText(text).first().waitFor();
     }
+    if (frame === 'unknown') {
+      assert.equal(await page.locator('main .member-role-status').count(), 0,
+        'The open review contains the only unknown notice');
+      assert(await page.locator('main .member-actions button.destructive').isDisabled(),
+        'Removal stays blocked while the role outcome is unknown');
+    }
     if (frame === 'read-only') {
       await page.getByText('Changing roles needs the Admin role').waitFor();
     }
@@ -144,7 +150,14 @@ const note = '# Role screen captures\n\nPASS: Captured review, read-only, Owner 
   + 'confirmed, unknown and access-lost views at 1280px and 390px with intercepted API replies. '
   + 'Checked reduced motion, no horizontal overflow, 44px actions and focus return after Cancel.\n\n'
   + 'Adaptations: Owner choices link to the existing Owners page. A read-only member '
-  + 'gets the minimal server header, so email and access rows do not appear.\n\n'
+  + 'gets the minimal server header, so email and access rows do not appear. '
+  + 'The desktop modal is wider. The square radio choices have no selected card colour; '
+  + 'they include Current and short role details. The modal footer order and stacked phone '
+  + 'actions follow the shared sheet. Read-only views add Refresh and use the shared spacing '
+  + 'and a white notice without a lock icon. Owner targets show detail cards and an Owners '
+  + 'link in place of an ownership form. The shell does not have the account footer shown '
+  + 'in the reference. Applying and confirmed outcomes use blue status cards. '
+  + 'The unknown state keeps one notice in the open review.\n\n'
   + 'PARTIAL: These are sample screens. No live server or fresh-install journey was run.\n';
 await writeFile(resolve(output, 'receipt.md'), note);
 console.log(`Captured ${captures.length} role views`);

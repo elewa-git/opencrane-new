@@ -58,7 +58,7 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   private readonly accessHeading = viewChild<ElementRef<HTMLElement>>('accessHeading');
   private generation = 0;
   private drawerGeneration = 0;
-  private commandId: string | undefined;
+  protected commandId: string | undefined;
   protected roleCommandId: string | undefined;
   private roleGeneration = 0;
   protected roleOpener: HTMLButtonElement | undefined;
@@ -80,8 +80,9 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   protected openRole(opener: HTMLButtonElement): void {
     const detail = this.detail();
     if (!detail?.permissions.changeRole || detail.role === 'owner'
-      || this.roleCommandId || this.state() !== 'ready') return;
+      || this.roleCommandId || this.commandId || this.state() !== 'ready') return;
     this.roleOpener = opener;
+    this.roleState.set('idle');
     this.chosenRole.set(detail.role === 'admin' ? 'admin' : 'member');
     this.roleNotice.set('');
     this.roleOpen.set(true);
@@ -111,8 +112,7 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
 
   protected async changeRole(): Promise<void> {
     const detail = this.detail();
-    if (!detail || !this.roleOpen() || this.roleState() !== 'idle'
-      || this.chosenRole() === detail.role || !detail.permissions.changeRole) return;
+    if (!detail || !this.canSubmitRole(detail)) return;
     const generation = ++this.roleGeneration;
     const commandId = crypto.randomUUID();
     this.roleCommandId = commandId;
@@ -120,8 +120,8 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     const body = { commandId, expectedSequence: detail.memberSequence,
       newRole: this.chosenRole() };
     const result = await sendMemberRole(this.memberId(), body, this.request.signal);
-    if (generation !== this.roleGeneration || this.state() === 'access') return;
     if (result.kind === 'denied') { this.clearForAccessLoss(result.status); return; }
+    if (generation !== this.roleGeneration || this.state() === 'access') return;
     if (result.kind === 'ok') {
       this.closeRole();
       this.roleState.set('applying');
@@ -147,6 +147,12 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     this.roleNotice.set("We couldn't tell whether the role change was saved.");
   }
 
+  private canSubmitRole(detail: Detail): boolean {
+    return this.roleOpen() && this.roleState() === 'idle'
+      && this.chosenRole() !== detail.role && detail.permissions.changeRole
+      && !this.commandId;
+  }
+
   protected async checkRoleStatus(): Promise<void> {
     const commandId = this.roleCommandId;
     if (!commandId || this.roleChecking()) return;
@@ -154,8 +160,8 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     this.roleChecking.set(true);
     const result = await fetchMemberRoleStatus(this.memberId(), commandId, this.request.signal);
     this.roleChecking.set(false);
-    if (generation !== this.roleGeneration || this.state() === 'access') return;
     if (result.kind === 'denied') { this.clearForAccessLoss(result.status); return; }
+    if (generation !== this.roleGeneration || this.state() === 'access') return;
     if (result.kind === 'ok') { this.showRoleStatus(result.value); return; }
     this.roleState.set('unknown');
     if (result.kind === 'missing') {
@@ -170,6 +176,7 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     if (status.effect === 'none_target_became_owner') {
       this.roleState.set('unchanged');
       this.roleNotice.set('The role was not changed. This person became an Owner.');
+      this.roleCommandId = undefined;
       void this.refresh();
       return;
     }
@@ -209,7 +216,8 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   }
 
   protected openDeparture(opener: HTMLButtonElement): void {
-    if (!this.detail() || this.member()?.role === 'owner' || this.state() !== 'ready') return;
+    if (!this.detail() || this.member()?.role === 'owner' || this.state() !== 'ready'
+      || this.roleCommandId) return;
     this.reviewOpener = opener;
     this.drawerOpen.set(true);
     if (!this.commandId) {
@@ -251,7 +259,8 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     const review = this.departure();
     return this.drawerOpen() && this.removalState() === 'idle'
       && this.departureState() === 'ready' && !!review?.complete
-      && review.permissions.remove && review.ownedSharedWork.length === 0;
+      && review.permissions.remove && review.ownedSharedWork.length === 0
+      && !this.roleCommandId;
   }
 
   protected async removeMember(): Promise<void> {
@@ -366,6 +375,8 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     this.detail.set(result.value);
     this.memberLoadedAt.set(new Date().toISOString());
     this.state.set('ready');
+    if (!this.roleCommandId && (this.roleState() === 'confirmed'
+      || this.roleState() === 'unchanged')) this.roleState.set('idle');
     this.accessState.set('loading');
     await this.readAccess(generation);
   }

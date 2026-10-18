@@ -15,7 +15,7 @@ flowchart LR
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
   web -->|shows full tool definitions and checks the saved publication| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
-  web -->|reviews invitations, roles and removals; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
+  web -->|checks role and removal outcomes; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
 ```
 
@@ -116,7 +116,8 @@ assistant check open rather than guessing an answer.
   on phones. A missing member or lost access clears the page. A failed refresh keeps
   earlier details with separate times for member and grant data.
 - Lets Owners and Admins change a Member or Admin role. It checks the saved change
-  before showing the new role. An uncertain result keeps the original status check.
+  before showing the new role. An uncertain result keeps the original status check
+  and pauses removal. A pending removal pauses role changes.
   A person with a read-only view sees only the member's name and role.
 - Lets Owners and Admins review a member's departure before removal. The review names
   ending organisation and group membership, lost tools, a recorded personal computer,

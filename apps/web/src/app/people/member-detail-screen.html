@@ -54,10 +54,12 @@
           @if (detail() && person.role !== 'owner' && person.permissions.changeRole
             && !roleCommandId) {
             <button #roleButton type="button" class="button secondary"
+              [disabled]="!!commandId"
               (click)="openRole(roleButton)">Change role</button>
           }
           @if (detail() && person.role !== 'owner' && person.permissions.remove) {
             <button #removeOpener type="button" class="button destructive"
+              [disabled]="!!roleCommandId"
               (click)="openDeparture(removeOpener)">Remove from
               {{ organisationName() }}</button>
           }
@@ -72,8 +74,9 @@
           <p>{{ name() }} is a {{ person.role === 'admin' ? 'Admin' : 'Member' }}.</p>
         </section>
       }
-      @if (roleNotice()) {
-        <p class="refresh-notice" role="status">{{ roleNotice() }}
+      @if (roleNotice() && !roleOpen()) {
+        <section class="paper-card member-role-status" role="status">
+          <p>{{ roleNotice() }}</p>
           @if (roleState() === 'unknown' || roleState() === 'applying') {
             <button type="button" class="button secondary" [disabled]="roleChecking()"
               (click)="checkRoleStatus()">Check status</button>
@@ -81,7 +84,7 @@
           @if (roleState() === 'unchanged' || roleNotice().includes('Owners page')) {
             <a href="/org/people/owners">Owners page</a>
           }
-        </p>
+        </section>
       }
       @if (state() === 'failed' || accessState() === 'failed') {
         <p class="refresh-notice" role="status">

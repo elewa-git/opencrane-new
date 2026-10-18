@@ -247,7 +247,10 @@ The role modal starts from a detail reply with `permissions.changeRole`. It send
 `commandId`, `expectedSequence` and `newRole` to POST `/api/members/:memberId/role`.
 After a receipt, GET `/changes/:commandId` checks content and IAM progress. An unknown
 reply stays tied to that id and offers GET only. A current result refreshes the member;
-a minimal reply clears email, groups and access. A refused read clears the whole page.
+a minimal reply clears email, groups and access. A 401 or 403 from the role POST,
+status GET or member reread clears the whole page, even after Cancel. A final outcome
+allows another role choice on the same page. A pending role command blocks removal;
+a pending removal blocks a role command. The pending command keeps Check status.
 `npm run visual:screen-p4-3-role` captures the role states with intercepted replies.
 `/org/states` renders the shared state vocabulary for development and visual checks,
 but is not a navigation destination. [F3 source receipt](../../docs/process/f3-org-shell/README.md).

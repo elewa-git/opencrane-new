@@ -18,7 +18,10 @@ const member = { memberId: 'alex-kim', displayName: 'Alex Kim', role: 'member',
   memberSequence: 2, ownershipSequence: 1,
   personalAssistant: { status: 'unavailable' }, rejoinedAt: { status: 'unavailable' } };
 const access = { checkedAt: '2026-10-15T10:00:00Z', complete: true,
-  unavailableSections: [], rows: [] };
+  unavailableSections: [], rows: [{ resourceType: 'model', resourceId: 'model-a',
+    label: 'Model A', relation: 'use', sources: [{ kind: 'direct', eventId: 'grant-a',
+      sequence: 1 }], eligibility: { person: 'allowed', assistants: [],
+      availability: 'unavailable' } }] };
 const receipt = { status: 'recorded', commandId: 'role-command', changeId: 'change-1',
   type: 'member.role_changed', sequence: 3, recordedAt: '2026-10-18T10:00:00Z',
   memberId: 'alex-kim', newRole: 'admin' };
@@ -58,13 +61,19 @@ function page(fixture: ComponentFixture<MemberDetailScreen>): HTMLElement {
   return element;
 }
 
-function click(fixture: ComponentFixture<MemberDetailScreen>, label: string): void {
+function findButton(fixture: ComponentFixture<MemberDetailScreen>, label: string):
+  HTMLButtonElement | undefined {
   const buttons = [...page(fixture).querySelectorAll('button')];
-  const button = buttons.find(candidate => {
-    const dialog = candidate.closest('dialog');
+  for (const button of buttons) {
+    const dialog = button.closest('dialog');
     const visible = !dialog || dialog.hasAttribute('open');
-    return visible && candidate.textContent?.trim() === label;
-  });
+    if (visible && button.textContent?.trim() === label) return button;
+  }
+  return undefined;
+}
+
+function click(fixture: ComponentFixture<MemberDetailScreen>, label: string): void {
+  const button = findButton(fixture, label);
   if (!button) throw new Error(`Missing button: ${label}`);
   button.click();
 }
@@ -84,12 +93,24 @@ function pendingReply(): { promise: Promise<Response>; finish: (response: Respon
   return { promise, finish };
 }
 
+function postedRoleBody(init?: RequestInit): Record<string, unknown> {
+  const body = init?.body;
+  if (typeof body !== 'string') throw new Error('Expected a JSON request body');
+  const parsed: unknown = JSON.parse(body);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+    || !('commandId' in parsed) || !('expectedSequence' in parsed)
+    || !('newRole' in parsed)) throw new Error('Expected a role command');
+  return { commandId: parsed.commandId, expectedSequence: parsed.expectedSequence,
+    newRole: parsed.newRole };
+}
+
 function expectProtectedDetailsCleared(fixture: ComponentFixture<MemberDetailScreen>): void {
   const content = page(fixture).textContent ?? '';
   expect(content).toContain("You no longer have access to this person's details");
   expect(content).not.toContain('Alex Kim');
   expect(content).not.toContain('alex@example.test');
   expect(content).not.toContain('Sales team');
+  expect(content).not.toContain('Model A');
 }
 
 it.each([401, 403])('clears detail when a cancelled role POST returns %i', async (status) => {
@@ -137,7 +158,7 @@ it('promotes and then demotes the same member with a fresh id and sequence', asy
     const url = path(input);
     if (url.endsWith('/access')) return Promise.resolve(reply(access));
     if (init?.method === 'POST') {
-      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      const body = postedRoleBody(init);
       posts.push(body);
       return Promise.resolve(reply({ ...receipt, commandId: body['commandId'],
         newRole: body['newRole'], sequence: posts.length + 2 }));
@@ -189,8 +210,7 @@ it('blocks removal while a role outcome is unknown', async () => {
   await vi.waitFor(() => expect(page(fixture).textContent).toContain('Check status'));
   click(fixture, 'Cancel');
   expect(page(fixture).textContent).toContain('Check status');
-  const remove = [...page(fixture).querySelectorAll('button')]
-    .find(button => button.textContent?.includes('Remove from'));
+  const remove = findButton(fixture, 'Remove from the organisation');
   expect(remove?.disabled).toBe(true);
   expect(writes).toEqual(['/api/members/alex-kim/role']);
 });
@@ -215,11 +235,119 @@ it('blocks changing role while a removal outcome is unknown', async () => {
   click(fixture, 'Remove Alex Kim');
   await vi.waitFor(() => expect(page(fixture).textContent).toContain('Check status'));
   click(fixture, 'Cancel');
-  const changeRole = [...page(fixture).querySelectorAll('button')]
-    .find(button => button.textContent?.trim() === 'Change role');
+  const changeRole = findButton(fixture, 'Change role');
   expect(changeRole?.disabled).toBe(true);
+  click(fixture, 'Remove from the organisation');
+  expect(page(fixture).querySelector('dialog[open]')?.textContent).toContain('Check status');
   expect(writes).toEqual(['/api/members/alex-kim/remove']);
 });
+
+it.each([400, 409])('uses a fresh id and current sequence after %i', async (status) => {
+  const posts: Record<string, unknown>[] = [];
+  let memberReads = 0;
+  function fetcher(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = path(input);
+    if (url.endsWith('/access')) return Promise.resolve(reply(access));
+    if (init?.method === 'POST') {
+      posts.push(postedRoleBody(init));
+      if (posts.length === 1) return Promise.resolve(reply({ reason: 'concurrent_change' }, status));
+      return Promise.resolve(reply({ ...receipt, commandId: 'retry-id' }));
+    }
+    if (url.includes('/changes/')) return Promise.resolve(reply({ ...receipt,
+      commandId: 'retry-id', effect: 'role_changed',
+      projection: { content: 'applying', iam: 'current' } }));
+    memberReads += 1;
+    const memberSequence = memberReads > 1 && status === 409 ? 3 : 2;
+    return Promise.resolve(reply({ ...member, memberSequence }));
+  }
+  const fixture = mount(fetcher, ['first-id', 'retry-id']);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Sales team'));
+  click(fixture, 'Change role');
+  selectAdmin(fixture);
+  click(fixture, 'Make Alex Kim an Admin');
+  const notice = status === 400 ? 'The role change was not sent'
+    : 'Nothing was saved. Review the latest member role.';
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain(notice));
+  click(fixture, 'Change role');
+  selectAdmin(fixture);
+  click(fixture, 'Make Alex Kim an Admin');
+  await vi.waitFor(() => expect(posts).toHaveLength(2));
+  expect(posts).toEqual([
+    { commandId: 'first-id', expectedSequence: 2, newRole: 'admin' },
+    { commandId: 'retry-id', expectedSequence: status === 409 ? 3 : 2,
+      newRole: 'admin' },
+  ]);
+});
+
+it('keeps a rejected network POST on its original id for status only', async () => {
+  const writes: string[] = [];
+  const paths: string[] = [];
+  function fetcher(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = path(input);
+    paths.push(url);
+    if (url.endsWith('/access')) return Promise.resolve(reply(access));
+    if (init?.method === 'POST') {
+      writes.push(url);
+      return Promise.reject(new Error('network'));
+    }
+    if (url.includes('/changes/')) return Promise.resolve(reply({ ...receipt,
+      effect: 'role_changed', projection: { content: 'applying', iam: 'current' } }));
+    return Promise.resolve(reply(member));
+  }
+  const fixture = mount(fetcher);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Sales team'));
+  click(fixture, 'Change role');
+  selectAdmin(fixture);
+  click(fixture, 'Make Alex Kim an Admin');
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Check status'));
+  click(fixture, 'Check status');
+  await vi.waitFor(() => expect(paths).toContain('/api/members/alex-kim/changes/role-command'));
+  expect(writes).toEqual(['/api/members/alex-kim/role']);
+});
+
+it('shows an unchanged outcome and Owners link when the target became an Owner', async () => {
+  let memberReads = 0;
+  function fetcher(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = path(input);
+    if (url.endsWith('/access')) return Promise.resolve(reply(access));
+    if (init?.method === 'POST') return Promise.resolve(reply(receipt));
+    if (url.includes('/changes/')) return Promise.resolve(reply({ ...receipt,
+      effect: 'none_target_became_owner', projection: { content: 'current', iam: 'current' } }));
+    memberReads += 1;
+    if (memberReads > 1) return Promise.resolve(reply({ ...member, role: 'owner',
+      permissions: { ...member.permissions, changeRole: false } }));
+    return Promise.resolve(reply(member));
+  }
+  const fixture = mount(fetcher);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Sales team'));
+  click(fixture, 'Change role');
+  selectAdmin(fixture);
+  click(fixture, 'Make Alex Kim an Admin');
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('became an Owner'));
+  expect(page(fixture).querySelector('a[href="/org/people/owners"]')).not.toBeNull();
+  expect(page(fixture).textContent).not.toContain('is now an Admin');
+});
+
+it.each([401, 403])('clears protected detail when the final reread returns %i',
+  async (status) => {
+    let memberReads = 0;
+    function fetcher(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const url = path(input);
+      if (url.endsWith('/access')) return Promise.resolve(reply(access));
+      if (init?.method === 'POST') return Promise.resolve(reply(receipt));
+      if (url.includes('/changes/')) return Promise.resolve(reply({ ...receipt,
+        effect: 'role_changed', projection: { content: 'current', iam: 'current' } }));
+      memberReads += 1;
+      if (memberReads > 1) return Promise.resolve(new Response(null, { status }));
+      return Promise.resolve(reply(member));
+    }
+    const fixture = mount(fetcher);
+    await vi.waitFor(() => expect(page(fixture).textContent).toContain('Sales team'));
+    click(fixture, 'Change role');
+    selectAdmin(fixture);
+    click(fixture, 'Make Alex Kim an Admin');
+    await vi.waitFor(() => expectProtectedDetailsCleared(fixture));
+  });
 
 it('sends one exact role command on a double click, then reads status', async () => {
   const posts: unknown[] = [];
