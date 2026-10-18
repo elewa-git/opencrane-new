@@ -50,7 +50,8 @@ ID from `randomUUID()` before calling Helm with
 Secret. Cleanup requires the saved ID to match the label, including when the
 Secret UID was already saved. If the launcher stops before saving the UID, cleanup
 recovers it only from the matching Secret. A later foreign or unlabelled release
-is refused. Older records without an install ID cannot authorise release removal. If Kubernetes is unavailable during secondary
+is refused. Older records without an install ID cannot authorise release removal.
+If Kubernetes is unavailable during secondary
 `down`, Compose stops while the package record stays in place for a retry.
 
 The current chart does not yet provide all workers, object storage, scanner,

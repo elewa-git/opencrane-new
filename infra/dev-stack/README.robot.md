@@ -67,7 +67,8 @@ before Helm runs and passes it as the `opencrane.dev/install-id` release label.
 Cleanup requires that label to match the saved ID. If the launcher stops before
 saving the release Secret's UID, cleanup recovers the UID from the matching Secret.
 A later foreign or unlabelled release is refused, even in the owned namespace.
-Older records without an install ID cannot authorise release removal. If Kubernetes is unavailable, secondary `down` still
+Older records without an install ID cannot authorise release removal.
+If Kubernetes is unavailable, secondary `down` still
 stops Compose, keeps the package record and reports that the package remains.
 Without a package record, `down` skips Helm namespace checks. It removes computer
 resources only when `quota.json` exists; that file is saved before the first

@@ -60,3 +60,43 @@ fresh-install acceptance.
 | Package refusal tests | PASS | Nine Node tests passed. |
 | Angular tests | PASS | 61 files and 1,017 tests passed. |
 | Root suite | FAIL | It reported four failures in `memory-mcp.test.ts` under `nice -n 10` with a throwaway `PG_TEST_URL` database. The run was stopped after almost 50 minutes because the gate had failed. It did not finish all test files. The test database and volume were removed. |
+
+## Cleanup checks, 18 October 2026
+
+Source: `99686686`, rebased onto `origin/main` at `14d4dd7c`. The rebase
+completed and neither rebase state directory remained. These checks used fresh
+temporary home directories and command fixtures. No live stack was started or
+changed. The two stacked branches were left alone.
+
+The failing tests were committed before their fixes. Commit `88d65ff5` shows
+that a later foreign or unlabelled Helm release was accepted after a saved
+attempt. Both refusal tests failed as expected; the owned interrupted release
+still cleaned up. Commit `06db9453` adds successful record-free teardown with
+an assertion that Kubernetes was never called. Commit `32c40ca4` also checks
+that recorded computers are removed without probing a Helm namespace. Both
+teardown cases failed before the fix.
+
+Cleanup now requires the saved random install ID to match the Helm release
+label. It also checks any saved Secret UID. Secondary teardown skips Kubernetes
+when neither a package record nor the saved computer quota exists. Started
+Compose stacks still remove their computers. The quota file is saved before
+computer setup contacts Kubernetes, so interrupted setup still has a cleanup
+record. An unavailable recorded package keeps its record and reports failure
+after Compose stops.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Changed suites, first run | PASS | 20 claim tests and 9 preflight tests; no skips. |
+| Changed suites, second run | PASS | The same 29 tests passed again; no skips. |
+| Lint, including Knip and changelog | PASS | `nice -n 10 npm run lint`; zero errors, 20 existing function-length warnings. |
+| Workspace typecheck | PASS | `nice -n 10 npm run typecheck` completed. |
+| Event catalogue | PASS | `nice -n 10 npm run check:events`; 143 types agree. |
+| Full root suite | NOT RUN | Excluded from this fix round. The earlier result above is historical. |
+| Live Helm install and fresh-install journey | NOT RUN | Command fixtures prove local cleanup decisions, not a live installation. |
+
+Both test runs used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`
+and `nice -n 10 node --experimental-strip-types --test
+infra/dev-stack/claim.test.ts infra/package/preflight.test.mjs`. These suites do
+not use PostgreSQL. Logs are `/tmp/p5-1-final-tests-1.log` and
+`/tmp/p5-1-final-tests-2.log`; the typecheck log is
+`/tmp/p5-1-final-typecheck.log`. The lint log is `/tmp/p5-1-final-lint.log`.
