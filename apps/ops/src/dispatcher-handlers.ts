@@ -8,6 +8,9 @@ export function dispatcherHandlerNames(env: NodeJS.ProcessEnv): HandlerName[] {
   if (env["PERSONAL_KEY_DIRECTORY"]?.trim()) {
     names.push("prepare-personal-key");
   }
+  if (env["CONNECTION_CUSTODY_FILE"]?.trim()) {
+    names.push("cleanup-connection");
+  }
   if (env["MEMORY_KEY_DIRECTORY"]?.trim()) {
     names.push("cleanup-memory");
   }

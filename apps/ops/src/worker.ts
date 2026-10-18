@@ -1,4 +1,4 @@
-import { budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
+import { connectionCleanupHandler, connectionCustodyFromFile, budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
   providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
@@ -132,6 +132,11 @@ try {
     if (personalDirectory) {
       const keys = conversationKeys(personalDirectory);
       available.push(personalKeyHandler(commands.store, keys));
+    }
+    const custodyFile = process.env['CONNECTION_CUSTODY_FILE']?.trim();
+    if (custodyFile) {
+      const custody = await connectionCustodyFromFile(custodyFile);
+      available.push(connectionCleanupHandler(commands.store, db.db, custody, silo));
     }
     const memoryDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
     if (memoryDirectory) {

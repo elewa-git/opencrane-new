@@ -1,3 +1,8 @@
+import { connectionRevokedDataSchema } from '@opencrane/events';
+import { HandlerRuntime } from '@opencrane/handlers';
+import { createLogger } from '@opencrane/observability';
+import { connectionCustodyFromFile } from '../src/connection-custody-file.ts';
+import { createEventStore } from '@opencrane/event-store';
 import { connectionCleanupHandler } from '../src/connection-cleanup.ts';
 import { createHash } from 'node:crypto';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
@@ -8,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
-import { type Db, pgDb } from '@opencrane/projections';
+import { type Db, type Query, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
 import { reconcileConnectionPage, reconcileConnectionStage } from '../src/connection-reconciliation.ts';
@@ -167,7 +172,7 @@ async function fixture() {
     return connectionCustody(`http://127.0.0.1:${port}`, 'custody', keyring, directory);
   }
   const custody = restart();
-  return { custody, restart, directory, pages, secrets,
+  return { custody, restart, directory, pages, secrets, apiUrl: `http://127.0.0.1:${port}`,
     get secret() { return secret!; }, get creates() { return creates; },
     get deletes() { return deletes; }, get preconditions() { return preconditions; },
     loseCreate() { loseCreate = true; }, changeOnDelete() { changeOnDelete = true; },
@@ -1163,14 +1168,21 @@ async function reactsToRevocation() {
   await test.store.custody.stage(unrelated, material);
   const event = await test.revoke();
   expect(test.store.deletes).toBe(0);
-  await events.stop();
-  await events.restart();
+  const connection = await events.client('command');
+  const restarted = await createEventStore(connection);
   await forgetJournal(test);
-  const first = test.handler();
+  const first = connectionCleanupHandler(restarted, test.db, test.store.restart(), 'test');
   const second = test.handler();
   expect(first.eventTypes).toEqual(['connection.revoked', 'connection.refreshed']);
-  await Promise.all([first.handle(event, test.db), second.handle(event, test.db)]);
-  await test.handler().handle(event, test.db);
+  const outcomes = await Promise.allSettled([first.handle(event, test.db), second.handle(event, test.db)]);
+  for (const outcome of outcomes) {
+    if (outcome.status === 'rejected') {
+      expect(outcome.reason).toEqual(new Error('Connection cleanup unavailable'));
+    }
+  }
+  // Retry lock contention as the queue does, using a fresh history read each time.
+  await first.handle(event, test.db);
+  await second.handle(event, test.db);
   expect(test.store.deletes).toBe(1);
   expect(test.store.secrets.size).toBe(1);
   expect(test.store.preconditions).toEqual({ uid: 'uid-original', resourceVersion: '1' });
@@ -1187,3 +1199,244 @@ async function reactsToRotation() {
   expect(foldConnection(rows).data?.activation.generation).toBe(2);
 }
 it('cleans the superseded generation after a saved bearer rotation', reactsToRotation);
+
+async function retainsFailedReaction(failure: string) {
+  const test = await cleanupFixture();
+  const event = await test.revoke();
+  const faults = [];
+  function fail(): never {
+    throw new Error(material);
+  }
+  if (failure === 'uid' || failure === 'resourceVersion') {
+    test.store.secret.metadata[failure] = 'changed';
+  } else if (failure === 'custody') {
+    test.store.failReads();
+  } else {
+    const fault = failure === 'store'
+      ? vi.spyOn(events.store, 'readStream') : vi.spyOn(test.db, 'lock');
+    fault.mockImplementation(fail);
+    faults.push(fault);
+  }
+  try {
+    await expect(test.handler().handle(event, test.db)).rejects.toThrow(
+      'Connection cleanup unavailable');
+    expect(test.store.deletes).toBe(0);
+    expect(test.store.secrets.size).toBe(1);
+  } finally {
+    for (const fault of faults) fault.mockRestore();
+  }
+  const rows = await history(events.store, test.subject, 'test');
+  expect(foldConnection(rows).status).toBe('unavailable');
+}
+it.each(['uid', 'resourceVersion', 'custody', 'store', 'lock'])(
+  'retains invalidated material and retries after a reaction %s failure', retainsFailedReaction);
+
+async function ignoresUnsavedTrigger(change: string) {
+  const test = await cleanupFixture();
+  const event = await test.revoke();
+  const altered = structuredClone(event);
+  if (change === 'silo') altered.silo = 'other';
+  if (change === 'subject') altered.subject = 'connection-other';
+  if (change === 'id') altered.id = 'unsaved';
+  if (change === 'data') {
+    const data = connectionRevokedDataSchema.parse(event.data);
+    altered.data = { ...data, revokedBy: 'other' };
+  }
+  if (change === 'id' || change === 'data') {
+    await expect(test.handler().handle(altered, test.db))
+      .rejects.toThrow('Connection cleanup unavailable');
+  } else {
+    await test.handler().handle(altered, test.db);
+  }
+  expect(test.store.deletes).toBe(0);
+}
+it.each(['silo', 'subject', 'id', 'data'])(
+  'requires the exact saved trigger, including %s', ignoresUnsavedTrigger);
+
+async function holdsLockUntilDeletionFinishes() {
+  const test = await cleanupFixture();
+  const event = await test.revoke();
+  const custody = test.store.restart();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const remove = custody.remove.bind(custody);
+  async function paused(...args: Parameters<typeof remove>) {
+    entered.resolve();
+    await release.promise;
+    return remove(...args);
+  }
+  const removal = vi.spyOn(custody, 'remove');
+  removal.mockImplementation(paused);
+  const handler = connectionCleanupHandler(events.store, test.db, custody, 'test');
+  const cleaning = handler.handle(event, test.db);
+  const inject = vi.fn();
+  try {
+    await entered.promise;
+    await expect(withConnectionStage(test.db, test.input, inject))
+      .rejects.toThrow('Connection coordination unavailable');
+    expect(inject).not.toHaveBeenCalled();
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    release.resolve();
+    await cleaning;
+  }
+  expect(test.store.deletes).toBe(1);
+}
+it('holds the shared profile lock until the exact delete finishes', holdsLockUntilDeletionFinishes);
+
+async function refusesDifferentSavedBinding(field: keyof ConnectionStage) {
+  const test = await candidateFixture();
+  await test.activate();
+  await test.invalidate();
+  const custody = test.store.restart();
+  const recover = vi.spyOn(custody, 'recover');
+  const candidate = { ...test.input };
+  const value = candidate[field];
+  const mismatch = { [field]: typeof value === 'number' ? value + 1 : 'different' };
+  Object.assign(candidate, mismatch);
+  // Return valid saved events even for the wrong requested stream to test the recovery boundary.
+  const rows = await history(events.store, test.subject, 'test');
+  async function* wrongStream() {
+    yield* await Promise.resolve(rows);
+  }
+  const read = vi.spyOn(events.store, 'readStream');
+  read.mockImplementation(wrongStream);
+  try {
+    expect(await reconcileConnectionStage(events.store, test.db, custody, candidate))
+      .toEqual({ status: 'retained' });
+    if (field === 'siloId') {
+      expect(recover).not.toHaveBeenCalled();
+    } else {
+      expect(recover).toHaveBeenCalledOnce();
+      expect(recover.mock.calls[0]?.[1] === undefined).toBe(true);
+    }
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    read.mockRestore();
+  }
+}
+const savedBindings: (keyof ConnectionStage)[] = ['siloId', 'userId', 'serverId', 'profileId',
+  'connectionId', 'purpose', 'generation', 'endpointDigest', 'operationId',
+  'expectedSequence', 'appendUntil'];
+it.each(savedBindings)('refuses recovery evidence with a different %s', refusesDifferentSavedBinding);
+
+async function refusesUnlistedPage(throws: boolean) {
+  const test = await candidateFixture();
+  await test.invalidate();
+  const custody = test.store.restart();
+  function unavailable() {
+    if (throws) throw new Error(material);
+    const result = { status: 'unknown' as const };
+    const unexpected = { stages: [test.input], continuation: 'private' };
+    Object.assign(result, unexpected);
+    return Promise.resolve(result);
+  }
+  const listing = vi.spyOn(custody, 'candidates');
+  listing.mockImplementation(unavailable);
+  expect(await reconcileConnectionPage(events.store, test.db, custody)).toEqual({ status: 'unknown' });
+  expect(test.store.deletes).toBe(0);
+}
+it.each([false, true])('retains a failed candidate page (throws: %s)', refusesUnlistedPage);
+
+async function retriesWithTheHandlerRuntime() {
+  const test = await cleanupFixture();
+  const event = await test.revoke();
+  const custody = test.store.restart();
+  const recovery = vi.spyOn(custody, 'recover');
+  const unknown = { status: 'unknown' as const };
+  recovery.mockResolvedValueOnce(unknown);
+  const handler = connectionCleanupHandler(events.store, test.db, custody, 'test');
+  const completed = Promise.withResolvers<void>();
+  const transaction = test.db.transaction.bind(test.db);
+  let failures = 0;
+  async function observe<Result>(work: (tx: Query) => Promise<Result>): Promise<Result> {
+    try {
+      const result = await transaction(work);
+      const receipts = await test.db.query(
+        "SELECT 1 FROM handler_receipts WHERE handler='cleanup-connection' AND event_id=$1",
+        [event.id]);
+      if (receipts.rows.length) completed.resolve();
+      return result;
+    } catch (error) {
+      failures += 1;
+      throw error;
+    }
+  }
+  test.db.transaction = observe;
+  const logger = createLogger('connection-cleanup-test');
+  const logged = vi.spyOn(logger, 'info');
+  const options = { db: test.db, logger, silo: 'test',
+    handlers: [handler], retryLimit: 1, retryDelay: 0 };
+  const runtime = new HandlerRuntime(options);
+  async function enqueue(tx: Parameters<typeof handler.handle>[1]) {
+    await runtime.enqueue(handler, event, tx);
+  }
+  try {
+    await runtime.start();
+    await test.db.transaction(enqueue);
+    await runtime.work(2);
+    await completed.promise;
+    expect(failures).toBe(1);
+    expect(test.store.deletes).toBe(1);
+    expect(await runtime.deadLetters('cleanup-connection')).toEqual([]);
+    expect(logged).not.toHaveBeenCalled();
+  } finally {
+    await runtime.stop();
+  }
+}
+it('retries retained cleanup through the real queue without logging event identities',
+  retriesWithTheHandlerRuntime);
+
+async function rejectsRecoveryWithoutSavedActivation(closed: boolean) {
+  const test = await candidateFixture();
+  if (closed) await test.activate();
+  const rows = await history(events.store, test.subject, 'test');
+  const data = { userId: test.input.userId, serverId: test.input.serverId,
+    profile: test.input.profileId, operationId: 'closed-operation',
+    generation: closed ? 2 : 1, expectedSequence: rows.at(-1)?.sequence ?? 0,
+    appendUntil: test.input.appendUntil, reason: 'append_deadline_passed' };
+  const event = envelope('test', test.subject, 'connection.operation_closed', data);
+  await events.seed([event]);
+  const candidate = { ...test.input, operationId: event.id };
+  const custody = test.store.restart();
+  const recover = vi.spyOn(custody, 'recover');
+  expect(await reconcileConnectionStage(events.store, test.db, custody, candidate))
+    .toEqual({ status: 'retained' });
+  expect(recover).toHaveBeenCalledOnce();
+  expect(recover.mock.calls[0]?.[1] === undefined).toBe(true);
+  expect(test.store.deletes).toBe(0);
+}
+it.each([false, true])('requires a matching saved activation (previous activation: %s)',
+  rejectsRecoveryWithoutSavedActivation);
+
+async function loadsPrivateCustodyConfiguration() {
+  const test = await candidateFixture();
+  const config = { apiUrl: test.store.apiUrl, namespace: 'custody',
+    journalDirectory: test.store.directory, currentKeyId: keyring.currentKeyId,
+    keys: { fixture: keyring.keys.fixture.toString('base64') } };
+  const filename = `${test.store.directory}/configuration.json`;
+  await writeFile(filename, JSON.stringify(config));
+  const loaded = await connectionCustodyFromFile(filename);
+  expect(await loaded.recover(test.input)).toMatchObject({ status: 'recovered' });
+  await writeFile(filename, material);
+  await expect(connectionCustodyFromFile(filename)).rejects.toThrow(
+    'Connection custody configuration unavailable');
+}
+it('loads mounted private custody settings and hides malformed file contents',
+  loadsPrivateCustodyConfiguration);
+
+async function refusesIneffectiveSavedRevocation() {
+  const test = await cleanupFixture();
+  const data = { userId: test.input.userId, serverId: test.input.serverId,
+    profile: test.input.profileId, revokedBy: test.input.userId,
+    expectedSequence: 0, reason: 'owner_requested' };
+  const event = envelope('test', test.subject, 'connection.revoked', data);
+  event.principal = { kind: 'human', id: test.input.userId };
+  await events.seed([event]);
+  await expect(test.handler().handle(event, test.db))
+    .rejects.toThrow('Connection cleanup unavailable');
+  expect(test.store.deletes).toBe(0);
+  expect(await test.store.restart().recover(test.input)).toMatchObject({ status: 'recovered' });
+}
+it('retains material when a saved revoke did not target the current revision',
+  refusesIneffectiveSavedRevocation);

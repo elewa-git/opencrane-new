@@ -29,7 +29,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests, hosted image check requests and results, registration, startup, saved turns and closed chat failures, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch, not-sent outcomes and cancellation reasons| events["libs/events<br/>checks records and previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication subscriptions, nightly memory reviews and records, and cleanup results| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup subscriptions, nightly memory reviews and records, and cleanup results| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission and saved starts, personal connection references and blocks, expired saves, control intent and pausing, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
@@ -161,6 +161,9 @@ Define records that close expired connection saves without carrying credentials.
 These records let live cleanup prove a delayed save can no longer succeed.
 
 ## Processes it handles
+
+Saved personal connection revocations and replacements name the background cleanup
+reaction. Replaying those records never deletes stored credentials.
 
 Memory correction records name the replacement revision and the revision it replaces.
 The replacement stays encrypted. Older records still parse for recovery, but cannot

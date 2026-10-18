@@ -18,12 +18,16 @@ export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, '
     let rows = await history(store, subject, stage.siloId, performance.now() + 10_000);
     const original = savedIdentity(rows, stage);
     const recovered = await custody.recover(stage, original);
+    if (recovered.status === 'not_found' && original) {
+      return { status: 'absent' as const };
+    }
     if (recovered.status !== 'recovered' || !recovered.identity || stage.purpose !== 'personal') {
       return retained;
     }
     let state = foldConnection(rows);
     const reference = `secret:${recovered.identity.reference}`;
-    if (state.data?.secretRef === reference || Date.now() <= stage.appendUntil) {
+    // A saved activation already occupies its append position, even before the deadline.
+    if (currentOrPending(state, reference, stage, original !== undefined)) {
       return retained;
     }
     if (state.sequence === stage.expectedSequence) {
@@ -54,6 +58,14 @@ export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, '
     // Keep material and hide dependency errors, which can contain private response bytes.
     return retained;
   }
+}
+
+function currentOrPending(state: ReturnType<typeof foldConnection>, reference: string,
+  stage: ConnectionStage, confirmed: boolean) {
+  if (state.data?.secretRef === reference) {
+    return true;
+  }
+  return !confirmed && Date.now() <= stage.appendUntil;
 }
 
 async function closeOperation(store: EventStore, stage: ConnectionStage,

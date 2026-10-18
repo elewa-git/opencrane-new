@@ -648,3 +648,18 @@ The nightly selector reads the corrected revision. Personal HTTP corrections now
 same cleanup worker. The server preserves sources/dependencies and reserves revision keys.
 Group, notes and MCP correction remain unavailable.
 Fresh-install HTTP correction qualification: NOT RUN.
+
+## Personal connection cleanup
+
+The dispatcher enables `cleanup-connection` only when `CONNECTION_CUSTODY_FILE` names
+its private mounted JSON configuration. Invalid configuration stops startup with fixed text.
+The file contains `apiUrl` (loopback HTTP proxy), `namespace`, `journalDirectory`,
+`currentKeyId` and `keys` (a map of ids to base64 HMAC values, each 32–128 bytes).
+The file belongs in private secret-store mounts, never in events, logs or source control.
+The worker shares the namespace, keyring and journal directory with the staging host.
+Older key ids stay configured while their generations exist.
+
+The handler uses the normal five retries with exponential backoff, starting at one second.
+After exhaustion it keeps material and the failed job. Operators can retry the original job;
+bounded candidate maintenance can also find retained objects. Automatic startup maintenance
+is deferred. Replay does not register this handler. Live Kubernetes/provider checks: NOT RUN.

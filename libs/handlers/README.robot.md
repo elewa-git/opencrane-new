@@ -29,7 +29,7 @@ writes must share the supplied database. The role needs schema/table creation
 and DML rights. Run `npm run provision` with command credentials first (R3 by
 default; `NATS_REPLICAS=1` for local tests). Start
 telemetry in the host for real trace ids; every valid handler attempt uses
-observability's `runHandler` (name, event id, stream, attempt), except memory cleanup.
+observability's `runHandler` (name, event id, stream, attempt), except memory and connection cleanup.
 Its attempt errors may contain private custody details, so the runtime replaces them with
 a fixed error before pg-boss stores the failed attempt. It does not log the raw error.
 Queue errors
@@ -278,3 +278,7 @@ restart and the next nightly delivery both recover exhausted triggers.
 
 `prepare-gateway-configuration` jobs use `gateway-config-<silo>` as their queue key,
 including historical jobs created by the subscription upgrade. Server streams stay separate.
+
+Connection cleanup uses the normal retry queue and fixed error text, with no per-event
+logging. It has no exhaustion callback: failed originals and material remain available
+for retry or bounded maintenance. No cleanup result changes connection authority.

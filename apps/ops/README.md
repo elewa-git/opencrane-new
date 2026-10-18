@@ -11,13 +11,13 @@ This is the background workers layer. `apps/server` records events, and these wo
 ```mermaid
 flowchart LR
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
-  nats -->|new events, human chat requests, departures, owner appointments and memory facts| ops["apps/ops<br/>workers and memory replay"]
+  nats -->|new events, human chat requests, departures, owner appointments, connection changes and memory facts| ops["apps/ops<br/>workers and memory replay"]
   ops -->|records gateway preparations, departure changes and spending stops| nats
   ops -.->|checks memory history and revisions| libs["libs/*<br/>shared code"]
   ops -->|destroys forgotten and superseded memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables and jobs; locks gateway preparation; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|updates computers, delivers passes and keys, stops private tools| kube["Kubernetes<br/>computer manager"]
+  ops -->|updates computers, delivers passes and keys, stops private tools and cleans old connection copies| kube["Kubernetes<br/>computer manager"]
 ```
 
 ## What it is responsible for
@@ -48,6 +48,9 @@ flowchart LR
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
 ## Processes it handles
+
+When private connection custody is configured, the dispatcher cleans old personal
+connection copies after saved revocations or replacements. Failed cleanup is retried.
 
 A saved memory correction keeps the new revision and removes old revision keys and
 facts derived from them. Cleanup retries and restart recovery use the saved change.
