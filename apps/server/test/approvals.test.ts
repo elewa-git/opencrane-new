@@ -7,7 +7,7 @@ import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { approvalCardsSchema, chatFeedSchema } from '@opencrane/protocol';
 import { auditTrail, readAudit, conversations, readConversation } from '@opencrane/projections';
-import { history, readApproval, readToolPolicy, decideApproval,
+import { envelope, history, readApproval, readToolPolicy, decideApproval,
   ingestUsage } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
@@ -137,6 +137,8 @@ async function checksApprovalAfterRenewal(outcome: typeof checkOutcomes[number])
       expect(response.statusCode, response.body).toBe(409);
       const current = await readApproval(setup.nats.store, 'test', approvalId);
       expect(current.state).toBe('cancelled');
+      const cancelReason = outcome === 'drift' ? 'schema_changed' : 'policy_changed';
+      expect(current).toHaveProperty('cancelReason', cancelReason);
       const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
       expect(rows.at(-1)?.event.type).toBe('approval.cancelled');
       const headers = { 'x-opencrane-approval-id': approvalId };
@@ -305,6 +307,15 @@ it.each(['rejected', 'expired', 'cancelled', 'changed', 'profile', 'turn_changed
       expect(f.received()).toBe(0);
     } finally { fault.mockRestore(); }
     const state = (await f.read()).cards[0]?.state;
+    const recordedReasons: Record<string, string> = {
+      cancelled: 'turn_stopped', changed: 'policy_changed', profile: 'profile_changed',
+      turn_changed: 'new_turn', revoked: 'grant_revoked',
+    };
+    if (recordedReasons[reason]) {
+      const card = (await f.read()).cards[0];
+      expect(card).toHaveProperty('cancelReason', recordedReasons[reason]);
+      expect(card).toHaveProperty('endedAt');
+    }
     if (reason === 'rejected') expect(state).toBe('denied');
     if (reason === 'expired') expect(state).toBe('expired');
     if (['cancelled', 'changed', 'profile', 'turn_changed'].includes(reason)) expect(state).toBe('cancelled');
@@ -756,6 +767,8 @@ async function retriesOnlyVerifiedNonDispatch() {
     await ingestUsage(setup.actor, setup.options.usageFile);
     const { cards } = await setup.read();
     expect(cards[0]).toMatchObject({ state: 'outcome_unknown', canRetry: true });
+    expect(cards[0]).toHaveProperty('usedAt');
+    const firstUse = cards[0]!;
     const retries = await Promise.all([setup.decide('retry'), setup.decide('retry')]);
     function statusCode(response: typeof retries[number]) {
       return response.statusCode;
@@ -763,6 +776,9 @@ async function retriesOnlyVerifiedNonDispatch() {
     const statuses = retries.map(statusCode);
     statuses.sort();
     expect(statuses).toEqual([200, 409]);
+    const authorised = (await setup.read()).cards[0]!;
+    expect(authorised).toHaveProperty('usedAt', firstUse.usedAt);
+    expect(authorised).toHaveProperty('decidedAt', firstUse.decidedAt);
     const retriedBody = setup.body().replace('approval-call', 'approval-retry');
     expect((await setup.call(undefined, {}, retriedBody)).status).toBe(200);
     expect((await setup.call()).status).toBe(403);
@@ -770,6 +786,11 @@ async function retriesOnlyVerifiedNonDispatch() {
     await setup.restart();
     await ingestUsage(setup.actor, setup.options.usageFile);
     await ingestUsage(setup.actor, setup.options.usageFile);
+    const retried = (await setup.read()).cards[0]!;
+    expect(retried).toMatchObject({ state: 'outcome_unknown', usedAt: firstUse.usedAt,
+      decidedAt: firstUse.decidedAt });
+    expect(retried.uses).toHaveLength(2);
+    expect(retried.uses?.[0]).toEqual(firstUse.uses?.[0]);
     await setup.runner.run(conversations);
     const feed = await readConversation(setup.db, 'test', 'conversation');
     function isAttempt(row: typeof feed.rows[number]) {
@@ -988,7 +1009,12 @@ it('returns the same refusal for missing and inaccessible approvals to one autho
         foreignRequester);
       await setup.append('approval-' + conversationApprovalId, 'tool.approval_requested',
         foreignConversation);
-      const approvalIds = [requesterApprovalId, conversationApprovalId, 'a'.repeat(64)];
+      const siloApprovalId = 'd'.repeat(64);
+      const foreignSilo = envelope('foreign', `approval-${siloApprovalId}`,
+        'tool.approval_requested', { ...current.request, approvalId: siloApprovalId });
+      await setup.nats.seed([foreignSilo]);
+      const approvalIds = [requesterApprovalId, conversationApprovalId,
+        siloApprovalId, 'a'.repeat(64)];
       for (const approvalId of approvalIds) {
         const request = { method: 'POST' as const,
           url: '/api/conversations/conversation/approvals',
@@ -1002,3 +1028,42 @@ it('returns the same refusal for missing and inaccessible approvals to one autho
       await setup.close();
     }
   });
+
+const datedApprovalEnds = [
+  ['approval.decided', { decision: 'approved', decidedBy: 'alice' }, 'approved',
+    { decidedAt: '2026-10-12T10:01:00.000Z' }],
+  ['approval.decided', { decision: 'rejected', decidedBy: 'alice' }, 'denied',
+    { decidedAt: '2026-10-12T10:01:00.000Z', endedAt: '2026-10-12T10:01:00.000Z' }],
+  ['approval.expired', {}, 'expired', { endedAt: '2026-10-12T10:01:00.000Z' }],
+  ['approval.cancelled', {}, 'cancelled', { endedAt: '2026-10-12T10:01:00.000Z' }],
+  ['approval.used', { permitId: 'dated-permit' }, 'outcome_unknown',
+    { usedAt: '2026-10-12T10:01:00.000Z',
+      uses: [{ permitId: 'dated-permit', usedAt: '2026-10-12T10:01:00.000Z' }] }],
+] as const;
+
+async function preservesApprovalDates(type: string, details: object, state: string,
+  dates: object) {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const initial = (await setup.read()).cards[0]!;
+    const approvalId = initial.approvalId;
+    const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+    const saved = { ...rows[0]!.event, id: 'dated-approval-end', commandId: 'dated-end',
+      time: '2026-10-12T10:01:00.000Z', type, data: { approvalId, ...details } };
+    await setup.nats.seed([saved]);
+    const before = (await setup.read()).cards[0]!;
+    expect(before).toMatchObject({ state, requestedAt: rows[0]!.event.time, ...dates });
+    expect(before).not.toHaveProperty('cancelReason');
+    await setup.restart();
+    await setup.runner.rebuild(auditTrail);
+    expect((await setup.read()).cards[0]).toEqual(before);
+    const later = new Date(Date.now() + 60_000);
+    const delayed = await readApproval(setup.nats.store, 'test', approvalId, { now: later });
+    expect(delayed).toMatchObject({ state, requestedAt: rows[0]!.event.time, ...dates });
+  } finally {
+    await setup.close();
+  }
+}
+it.each(datedApprovalEnds)('keeps saved UTC dates for %s / %s after restart and replay',
+  preservesApprovalDates, 40_000);
