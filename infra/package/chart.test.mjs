@@ -39,3 +39,11 @@ test('the package includes the owner bootstrap command', () => {
   assert.match(manifest, /infra\/package\/bootstrap\.ts/u);
   assert.match(manifest, /enableServiceLinks: false/u);
 });
+
+test('a chat turn has private keys, a stub model and a computer runtime', () => {
+  const manifest = render();
+  assert.match(manifest, /name: conversation-keys/u);
+  assert.match(manifest, /infra\/dev-stack\/secondary-models\.ts/u);
+  assert.match(manifest, /"kind": "SandboxTemplate"/u);
+  assert.match(manifest, /name: computer-runtime/u);
+});

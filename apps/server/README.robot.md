@@ -615,6 +615,7 @@ one of its required settings is missing.
 | `OPENFGA_STORE_ID` | Both | Models yes; server with projections | None | OpenFGA store used by this silo. |
 | `OPENFGA_MODEL_ID` | Both | Models yes; server with projections | None | OpenFGA permission model used by this silo. |
 | `CONVERSATION_KEYS_DIR` | Both | No | Unset | Directory of keys for private conversation content. |
+| `CONVERSATION_WRAP_KEY_FILE` | Both | No | Unset | Optional 32-byte Kubernetes Secret used to encrypt conversation keys stored in that directory. The chat server and model process must use the same file. |
 | `MINIO_CREDENTIALS_FILE` | Server | No | Unset | Enables file storage with credentials read from this file. |
 | `MINIO_URL` | Server | Required with MinIO credentials | None | MinIO object-storage address. |
 | `CLAMD_HOST` | Server | No | `127.0.0.1` | Address of the file scanner. |

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
+import { tokenIssuer } from '@opencrane/auth';
 import { authEnv, directory, generate, readEnv, root, writeEnv } from '../dev-stack/config.ts';
 import { localOrigin, secondary, stackId } from '../dev-stack/identity.ts';
 import { verifyPackageOwner } from '../dev-stack/packaged.ts';
@@ -45,6 +47,15 @@ async function prepareSettings() {
   const passwords = JSON.parse(await readFile(`${directory}/passwords.json`, 'utf8')) as
     Record<string, string>;
   const auth = await authEnv();
+  const identitySettings = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8')) as {
+    users: { owner: { id: string } };
+  };
+  assert(identitySettings.users.owner.id, 'The separate test owner has no identity');
+  const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`,
+    issuer: `${localOrigin}/` });
+  await writeFile(`${directory}/model-jwks.json`, JSON.stringify(issuer.jwks), { mode: 0o600 });
+  await writeFile(`${directory}/model-stub-key`, 'dev-stack-stub-only', { mode: 0o600 });
+  await writeFile(`${directory}/conversation-wrap-key`, randomBytes(32), { mode: 0o600 });
   const commandSettings = {
     NATS_URL: 'tls://nats:4222', NATS_CA_FILE: '/run/opencrane/ca.crt',
     NATS_CERT_FILE: '/run/opencrane/command.crt',
@@ -68,6 +79,20 @@ async function prepareSettings() {
     OWNER_BOOTSTRAP_READY: 'pending',
     TOKEN_SIGNING_KEY_FILE: '/run/opencrane/token-signing-key.pem',
     TOKEN_ISSUER: `${localOrigin}/`,
+    PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id,
+    CONVERSATION_KEYS_DIR: '/var/lib/opencrane/conversation-keys',
+    CONVERSATION_WRAP_KEY_FILE: '/run/opencrane/conversation-wrap-key',
+    MODEL_DECISION_URL: 'http://server:43001',
+    MODEL_STATE_DIR: '/var/lib/opencrane/models',
+    MODEL_JWKS_FILE: '/run/opencrane/model-jwks.json',
+    MODEL_KEY_FILE: '/run/opencrane/model-stub-key',
+    MODEL_UPSTREAM: '127.0.0.1:43003',
+    AGENTGATEWAY_BINARY: '/usr/local/bin/agentgateway',
+    MODEL_GATEWAY_PORT: '43000', MODEL_DECISION_PORT: '43001',
+    MODEL_READINESS_PORT: '43002', MODEL_STUB_PORT: '43003',
+    MODEL_GATEWAY_CONTROL_PORT: '43004',
+    MODEL_STUB_MCP_GENERATION: 'local-package',
+    MODEL_STUB_MCP_REVISION: 'local-package',
   });
   await writeEnv('package-bootstrap', {
     POSTGRES_ADMIN_URL: databaseUrl('postgres', passwords['postgres']!, 'postgres'),
@@ -104,6 +129,9 @@ async function provisionSecrets(names: Record<string, string>) {
     'dispatcher.seed': `${directory}/dispatcher.seed`,
     'token-signing-key.pem': `${directory}/token-signing-key.pem`,
     'zitadel-client-secret': `${directory}/zitadel-client-secret`,
+    'model-jwks.json': `${directory}/model-jwks.json`,
+    'model-stub-key': `${directory}/model-stub-key`,
+    'conversation-wrap-key': `${directory}/conversation-wrap-key`,
   });
 }
 

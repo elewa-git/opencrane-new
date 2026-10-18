@@ -1,0 +1,200 @@
+{
+  "apiVersion": "extensions.agents.x-k8s.io/v1beta1",
+  "kind": "SandboxTemplate",
+  "metadata": {
+    "name": "computer"
+  },
+  "spec": {
+    "volumeClaimTemplatesPolicy": "Allowed",
+    "podTemplate": {
+      "metadata": {
+        "labels": {
+          "app": "computer"
+        }
+      },
+      "spec": {
+        "runtimeClassName": "gvisor",
+        "automountServiceAccountToken": false,
+        "terminationGracePeriodSeconds": 5,
+        "containers": [
+          {
+            "name": "computer",
+            "image": "{{ .Values.images.computer }}",
+            "env": [
+              {
+                "name": "GATEWAY",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "name": "computer-runtime",
+                    "key": "gateway"
+                  }
+                }
+              },
+              {
+                "name": "POD_UID",
+                "valueFrom": {
+                  "fieldRef": {
+                    "fieldPath": "metadata.uid"
+                  }
+                }
+              }
+            ],
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ],
+                "add": [
+                  "SETUID",
+                  "SETGID",
+                  "CHOWN",
+                  "DAC_OVERRIDE"
+                ]
+              },
+              "readOnlyRootFilesystem": true
+            },
+            "resources": {
+              "requests": {
+                "memory": "256Mi",
+                "cpu": "100m"
+              },
+              "limits": {
+                "memory": "512Mi"
+              }
+            },
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/health",
+                "port": 8081
+              },
+              "periodSeconds": 1,
+              "timeoutSeconds": 2
+            },
+            "volumeMounts": [
+              {
+                "name": "home",
+                "mountPath": "/home/agent"
+              },
+              {
+                "name": "codex",
+                "mountPath": "/home/codex"
+              },
+              {
+                "name": "control",
+                "mountPath": "/run/codex"
+              },
+              {
+                "name": "desktop",
+                "mountPath": "/home/desktop"
+              },
+              {
+                "name": "private",
+                "mountPath": "/home/private"
+              },
+              {
+                "name": "tmp",
+                "mountPath": "/tmp"
+              },
+              {
+                "name": "tool",
+                "mountPath": "/home/tool"
+              },
+              {
+                "name": "executor",
+                "mountPath": "/run/executor"
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "home",
+            "emptyDir": {}
+          },
+          {
+            "name": "codex",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "control",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "desktop",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "private",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "tmp",
+            "emptyDir": {}
+          },
+          {
+            "name": "tool",
+            "emptyDir": {}
+          },
+          {
+            "name": "executor",
+            "emptyDir": {}
+          }
+        ]
+      }
+    },
+    "networkPolicyManagement": "Unmanaged"
+  }
+}
+
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: computer
+spec:
+  replicas: 0
+  sandboxTemplateRef: { name: computer }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: computer-runtime
+data:
+  gateway: http://server:43000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: computer
+spec:
+  podSelector:
+    matchLabels: { app: computer }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: server }
+      ports: [{ protocol: TCP, port: 8081 }]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: server }
+      ports: [{ protocol: TCP, port: 43000 }]
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]

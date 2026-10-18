@@ -16,7 +16,9 @@ const oidc = JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, '
   extraIdentities: Array<{ issuer: string; subject: string }>;
 };
 assert(oidc.extraIdentities.length === 1, 'Dev owner identity is not configured');
-const identity = oidc.extraIdentities[0]!;
+// Link a packaged test owner to its own sign-in account. Keep the existing person untouched.
+const identity = { ...oidc.extraIdentities[0]!,
+  subject: process.env['PACKAGE_OWNER_SUBJECT'] ?? oidc.extraIdentities[0]!.subject };
 const binding = await readEnv('binding');
 const events = await connectEventStore(await readEnv('command'));
 const authz = memberAuthorisation({ silo: settings['SILO_ID']!, apiUrl: binding['OPENFGA_API_URL']!, storeId: binding['OPENFGA_STORE_ID']!, authorizationModelId: binding['OPENFGA_MODEL_ID']! });

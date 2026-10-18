@@ -286,3 +286,47 @@ Logs: `/tmp/p5-1b-changed-tests-final-1.log`,
 `/tmp/p5-1b-licence-tests-final-2.log`,
 `/tmp/p5-1b-typecheck-2.log`, `/tmp/p5-1b-events.log`,
 `/tmp/p5-1b-changelog.log` and `/tmp/p5-1b-lint-2.log`.
+## 18 October 2026: local chat turn
+
+This follow-up used branch `work/p5-1c` and claimed secondary slot 1. The final
+fresh namespace was `opencrane-package-1`, UID
+`146c87ae-4a0d-4873-8972-8e7100167327`. The final application image was
+published and installed at
+`sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a`.
+Its model gateway used only the local stub. A fresh wrapping key was generated in
+the claimed slot and passed to both chat processes through a Kubernetes Secret.
+The package's private volume held only wrapped conversation keys. Sign-in and
+model files also came from the claimed slot as Kubernetes secrets. No secret
+value was written to this receipt or to Helm values.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Failing-first chart check | FAIL | The previous chart had no chat key volume, model process or computer template. The new render test failed before these were added. |
+| First browser attempt | FAIL | Sign-in passed, but `/api/chat` returned HTTP 403 because the separate test owner's sign-in subject was not linked to the event-backed owner member. |
+| Final install | PASS | PostgreSQL, NATS, OpenFGA, web, server and eight workers reached Ready. The bootstrap Job created the joined owner and its OpenFGA grant. The model process and computer template ran in the same claimed namespace. |
+| Browser chat, 1280px | PASS | A signed-in owner sent “Say hello briefly.” The browser showed “Hello from your computer.” and Done. [Screenshot](p5-1-live/chat-1280.png). |
+| Browser chat, 390px | PASS | The same browser journey completed at mobile width. [Screenshot](p5-1-live/chat-390.png). |
+| Stub-only model calls | PASS | The local stub counted exactly two model requests after the two browser turns. The package checks that its upstream is the local stub before Helm applies resources. |
+| Chat key custody | PASS | The runtime Kubernetes Secret held a generated 32-byte wrapping key. Both chat processes used it. Two new key files on the private volume were 60-byte encrypted records. A wrong wrapping key failed the focused test. |
+| Private network | PASS | All five services were ClusterIP. There was no Ingress. A throwaway process on Docker's bridge could not reach the loopback-only forward on port 25106. |
+| Image licences | PASS | A fresh Syft scan matched all 454 reviewed application components. The added agentgateway binary has a checksum and Apache-2.0 review. The pinned computer image points to its existing 385-component licence review, checked by hash. The other image reviews still passed. |
+| Cleanup and isolation | PASS | Cleanup removed the computer claim before the warm pool, then removed the namespace and released slot 1. The owner namespace UIDs, every existing container name and ID, and loopback listener on 44200 matched the snapshots taken before installation. The package forward on 25106 was gone. Another worktree added slot 2 containers during this check; this install did not touch them. |
+| Existing person's own Zitadel login | NOT RUN | The available browser credential belongs to a separate Dev test owner linked to the `jente@elewa.ke` member. No credential path was available for the existing person's Zitadel account. That account was not changed. |
+
+The chart includes the same pinned computer image already reviewed in
+`apps/computer/licences.json`. The package's image inventory checks that file's
+digest and the computer image digest before installation. The final signed-in
+pages were also captured at [1280px](p5-1-live/signed-in-1280.png) and
+[390px](p5-1-live/signed-in-390.png).
+
+### Final local checks
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Key and chat tests | PASS | Two runs each passed 10 focused tests, including wrapped key storage, decryption with the same Secret, refusal with another Secret, and existing chat commands. |
+| Package chart and licence tests | PASS | Two runs each passed three chart tests and seven licence refusal tests. A fresh Syft scan of the final image matched all 454 reviewed application components. |
+| Package ownership and cleanup tests | PASS | Two runs each passed eight cases that check ownership, interrupted installs, safe cleanup and Kubernetes failures. |
+| Full claim test file after live cleanup | PARTIAL | Several fixture cases expected slot 2 to be free. Another worktree had started that slot, so these failed at setup. The full file passed twice before the wrapping-key change, which did not alter claim behaviour. |
+| Event catalogue, Knip and changelog | PASS | `check:events` checked 143 events; `lint:unused` and `lint:changelog` exited 0. |
+| Typecheck | PASS | `npm run typecheck` completed for all workspaces and the package TypeScript project. |
+| Full root suite | NOT RUN | This follow-up was instructed not to run it. |

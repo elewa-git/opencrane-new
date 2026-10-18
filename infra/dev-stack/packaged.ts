@@ -18,9 +18,13 @@ const secretKeys: Record<string, string[]> = {
     'OIDC_CLIENT_SECRET_ENV_VAR',
     'OIDC_EXPECTED_ORG_ID', 'OPENFGA_API_URL', 'OPENFGA_STORE_ID', 'OPENFGA_MODEL_ID',
     'PROJECTION_DATABASE_URL', 'HANDLER_DATABASE_URL', 'OWNER_BOOTSTRAP_READY',
+    'CONVERSATION_KEYS_DIR', 'CONVERSATION_WRAP_KEY_FILE',
+    'conversation-wrap-key', 'MODEL_UPSTREAM', 'MODEL_KEY_FILE',
+    'MODEL_JWKS_FILE', 'MODEL_DECISION_URL', 'PACKAGE_OWNER_SUBJECT',
     'ca.crt', 'command.crt', 'command.key', 'command.seed',
     'projection.crt', 'projection.key', 'projection.seed',
-    'dispatcher.crt', 'dispatcher.key', 'dispatcher.seed'],
+    'dispatcher.crt', 'dispatcher.key', 'dispatcher.seed',
+    'model-jwks.json', 'model-stub-key'],
   postgres: ['POSTGRES_PASSWORD'],
   nats: ['nats.conf', 'ca.crt', 'server.crt', 'server.key', 'NATS_LISTEN',
     'NATS_STORE_DIR', 'NATS_CA_FILE', 'NATS_CERT_FILE', 'NATS_KEY_FILE',
@@ -38,6 +42,7 @@ const privateHosts: Record<string, string> = {
   PROJECTION_DATABASE_URL: 'postgres',
   HANDLER_DATABASE_URL: 'postgres',
   POSTGRES_ADMIN_URL: 'postgres',
+  MODEL_DECISION_URL: 'server',
 };
 
 type Namespace = {
@@ -166,6 +171,10 @@ function checkSecretFields(name: string, stored: SecretData) {
     if (!/^[A-Z][A-Z0-9_]*$/u.test(secretName) || !stored.data?.[secretName]) {
       throw new Error('OIDC client secret reference is absent');
     }
+    const upstream = Buffer.from(stored.data!['MODEL_UPSTREAM']!, 'base64').toString('utf8');
+    if (upstream !== '127.0.0.1:43003') {
+      throw new Error('The package model must use its local stub');
+    }
   }
   // Read secret bytes only in memory; report field names, never endpoint credentials.
   for (const [key, expectedHost] of Object.entries(privateHosts)) {
@@ -198,7 +207,7 @@ async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
   const rendered = await command('helm', ['template', release, 'infra/package/chart',
     '--namespace', namespace, '--values', valuesFile]);
   const reviewedImages = new Set(Object.values(review.images));
-  const renderedImages = rendered.matchAll(/^\s*image:\s*"?([^"\n]+)"?\s*$/gmu);
+  const renderedImages = rendered.matchAll(/^\s*(?:image:|"image":)\s*"?([^",\n]+)"?,?\s*$/gmu);
   let imageCount = 0;
   for (const image of renderedImages) {
     imageCount++;
@@ -353,6 +362,9 @@ export async function removePackage(checkUnrecordedNamespace = true) {
       throw new Error('Helm release belongs to another install');
     }
   }
+  // Let the computer controller release its Pod and volumes while its warm pool still exists.
+  await kubectl(['-n', namespace, 'delete', 'sandboxclaims', '--all',
+    '--ignore-not-found', '--wait=true', '--timeout=120s'], 150_000);
   await command('helm', ['uninstall', release, '--kube-context', context,
     '--namespace', namespace, '--ignore-not-found']);
   await kubectl(['delete', 'namespace', namespace, '--wait=true']);

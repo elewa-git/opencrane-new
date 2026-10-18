@@ -157,6 +157,12 @@ class LicenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown or non-OSI"):
             checker.check_manual_component(component, {"MIT"})
 
+    def test_changed_computer_review_is_refused(self):
+        image = {"reviewedInventory": "apps/computer/licences.json",
+                 "reviewedInventorySha256": "0" * 64, "pin": "unused"}
+        with self.assertRaisesRegex(ValueError, "Computer licence review changed"):
+            checker.check_computer_review(image)
+
 
 if __name__ == "__main__":
     unittest.main()

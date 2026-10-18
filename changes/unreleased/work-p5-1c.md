@@ -1,0 +1,1 @@
+- A claimed local Helm install can run a chat turn with the stub model and a private computer.

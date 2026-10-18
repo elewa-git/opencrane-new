@@ -7,6 +7,7 @@ server and core services. It uses one of the two spare development slots.
 The application image is pinned in the local registry. The package also runs
 the workers that keep the database up to date and a job that creates the first
 owner through events.
+It also runs the local stub model and gives each chat turn a private computer.
 Helm applies these Kubernetes resources as one named release.
 
 ## Where it fits
@@ -20,10 +21,10 @@ flowchart LR
   infra -->|contains| stack["dev-stack<br/>slot claims"]
   infra -->|contains| devbox["devbox<br/>local cluster"]
   stack -->|checks the slot| package
-  package -->|starts| apps["apps<br/>website and server"]
+  package -->|starts with a private chat secret| apps["apps<br/>website and server"]
   package -->|starts| services["services<br/>NATS, PostgreSQL, OpenFGA"]
-  package -->|starts| workers["workers<br/>database updates"]
   package -->|runs| bootstrap["bootstrap<br/>first owner"]
+  package -->|starts| computer["computer<br/>chat turns"]
   package -->|runs in| devbox
 ```
 
@@ -42,8 +43,9 @@ flowchart LR
    package creates a separate namespace in the local cluster. Preparation refuses
    while that slot's Compose stack is running.
 2. **The package starts.** The website and server run in separate Pods. NATS,
-   PostgreSQL, OpenFGA and the background workers run in the same private
-   namespace. A short job prepares the databases and creates the first owner.
+   PostgreSQL, OpenFGA, the stub model and the background workers run in the same
+   private namespace. A short job prepares the databases and creates the first
+   owner. A computer starts when the owner sends a chat message.
 3. **A developer checks the website.** A loopback-only port forward makes the
    private website available to a browser on this machine.
 4. **A developer stops the package.** Cleanup checks the saved namespace and Helm

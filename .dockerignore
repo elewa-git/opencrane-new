@@ -14,6 +14,8 @@ infra/dev-stack/*
 !infra/dev-stack/config.ts
 !infra/dev-stack/identity.ts
 !infra/dev-stack/owner-bootstrap.ts
+!infra/dev-stack/model-stub.ts
+!infra/dev-stack/secondary-models.ts
 !infra/dev-stack/zitadel.json
 infra/odoo
 infra/clamav
@@ -23,6 +25,7 @@ infra/package/*
 !infra/package/web.mjs
 !infra/package/bootstrap.ts
 !infra/package/worker.mjs
+!infra/package/kubeconfig.mjs
 apps/ops/test
 apps/server/test
 apps/web/test

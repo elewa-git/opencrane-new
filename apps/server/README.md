@@ -2,7 +2,10 @@
 
 ## What this is
 
-The back end for OpenCrane sign-in, conversations and organisation settings. It is a Node service that accepts browser requests and sends live updates. A second process handles model access and spending.
+The back end for OpenCrane sign-in, conversations and organisation settings.
+It is a Node service that accepts browser requests and sends live updates.
+A second process handles model access and spending. Both processes use the
+same secret to protect conversation keys in a packaged install.
 
 ## Where it fits
 
@@ -11,8 +14,8 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, dated approvals, model grants, live updates, spending stop notices and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  server -.->|checks gateway settings, public tool addresses, startup, member and child invitations, indexed departures, final tool and memory sends, correction availability and interrupted key recovery, spending stops for queued messages, renewals and switch-on retries, memory setup and loaded fact links, shared reference folds, memory checks and access after memory reads at pass renewal, later access changes through saving, tool reviews, hosted image check requests, publication requests and status, turn previews, saved references and closes| libs["libs/*<br/>shared code"]
-  server -->|records reviewed child requests, final answers and interim updates, child creation and first inputs, authenticated instance observations and stops, owner and admin stops, control intent, personal corrections, shared memory facts and forget requests, recall references and choices, publication requests, grants, roles, participants, chats, computers, provider choices, drains, switch-on, tool catalogues, spending stops, refused turn decisions and managed call modes| nats["NATS<br/>event log"]
+  server -.->|checks access, invitations, memory, key recovery, spending, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
+  server -->|records child requests and answers, instance and stop reports, control intent, personal and shared memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tool catalogues, spending stops and turn decisions| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]

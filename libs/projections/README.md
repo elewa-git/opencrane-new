@@ -28,7 +28,7 @@ flowchart LR
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and indexes unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
-  projections -->|stores and reads keys; repairs unfinished correction keys| keys["Server files<br/>existing private key store"]
+  projections -->|stores and reads wrapped chat keys; repairs unfinished correction keys| keys["Server files<br/>private key store and package Secret"]
 ```
 
 ## What it is responsible for
@@ -127,8 +127,9 @@ stays inside the projection.
 - Rebuild tables from the event log. The replay command rebuilds members,
   groups, model grants, model providers, budgets, the tool catalogue, computers and the
   history table while the system runs.
-- Store the per-conversation encryption keys used on the dev stack, so chat text
-  is only saved in encrypted form.
+- Store a separate encryption key for each conversation, so chat text is saved
+  in encrypted form. A packaged install encrypts those keys with a Kubernetes
+  Secret before saving them on its private volume.
 - Build current memory rows and searchable text without copying text into change history.
   Keep newer revisions when an older or repeated write arrives.
 - Read memory ids and search matches within one silo and scope. Callers check permission first.

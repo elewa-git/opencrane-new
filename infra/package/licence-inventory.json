@@ -1,13 +1,19 @@
 {
   "images": {
+    "computer": {
+      "pin": "k3d-ocn-registry:5000/opencrane/computer@sha256:2a0fe2d8c956f0b03d4267c476aa514239697d18ca7473dea6674f22c0e78be6",
+      "reviewedInventory": "apps/computer/licences.json",
+      "reviewedInventorySha256": "0c58af26c94d1ef09ed9498baed4db0bc848df7316badd94112b7f10271bbed9"
+    },
     "server": {
-      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:9789e2934c50e5fb04830036a0a6a98a7f49eaee0001edab783183db77bc9afe",
+      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
       "bundled": [
         ["Node libraries", ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "Unicode-3.0", "ICU"], "/usr/local/LICENSE", "Named library sections keep their OSI notices; HdrHistogram offers BSD-2-Clause alongside CC0."],
         ["ICU time zone data", ["LicenseRef-Public-Domain"], "/usr/local/LICENSE", "The Node notice identifies this data as public domain and Debian accepts it as free."]
       ],
       "manual": [
         ["kubectl", "v1.37.1", "Apache-2.0", "Download sha256:65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8; https://github.com/kubernetes/kubernetes/blob/v1.37.1/LICENSE"],
+        ["agentgateway", "v1.5.0", "Apache-2.0", "Download sha256:daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b; https://github.com/agentgateway/agentgateway/blob/v1.5.0/LICENSE"],
         ["OpenCrane runtime scripts and website bundle", "source", "AGPL-3.0-or-later", "OpenCrane root LICENSE"]
       ],
       "artifacts": [
@@ -468,7 +474,7 @@
       ]
     },
     "web": {
-      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:9789e2934c50e5fb04830036a0a6a98a7f49eaee0001edab783183db77bc9afe",
+      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
       "sameAs": "server"
     },
     "postgres": {

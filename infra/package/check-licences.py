@@ -2,13 +2,14 @@
 """Check the reviewed contents of each pinned package image."""
 
 import json
+import hashlib
 import re
 import sys
 from collections import Counter
 from pathlib import Path
 
 PACKAGE = Path(__file__).parent
-ROLES = ("server", "web", "postgres", "nats", "openfga")
+ROLES = ("server", "web", "postgres", "nats", "openfga", "computer")
 APPLICATION_TYPES = {"npm", "go-module", "binary"}
 
 # Require a new index review when either Debian-based image changes.
@@ -335,6 +336,29 @@ def check_manual_component(component, osi_ids):
             raise ValueError("kubectl review differs from the downloaded binary")
         if f"/release/{component[1]}/bin/" not in dockerfile:
             raise ValueError("kubectl version differs from the downloaded binary")
+    if component[0] == "agentgateway":
+        dockerfile = (PACKAGE / "Dockerfile").read_text(encoding="utf-8")
+        checksum = component[3].split("sha256:")[-1][:64]
+        if not re.fullmatch(r"[a-f0-9]{64}", checksum):
+            raise ValueError("agentgateway review has no checksum")
+        if f"--checksum=sha256:{checksum}" not in dockerfile:
+            raise ValueError("agentgateway review differs from the downloaded binary")
+
+
+def check_computer_review(image):
+    if image["reviewedInventory"] != "apps/computer/licences.json":
+        raise ValueError("Computer licence review path changed")
+    source = PACKAGE.parent.parent / "apps/computer/licences.json"
+    checksum = hashlib.sha256(source.read_bytes()).hexdigest()
+    if checksum != image["reviewedInventorySha256"]:
+        raise ValueError("Computer licence review changed")
+    evidence = read_json(PACKAGE.parent.parent / "apps/computer/evidence.json")
+    if evidence["image"] != image["pin"]:
+        raise ValueError("Computer licence review covers another image")
+    entries = read_json(source)
+    if not entries or any(entry["result"] != "PASS" for entry in entries):
+        raise ValueError("Computer licence review contains a failed component")
+    return len(entries)
 
 
 def check_scan(role, entries, path, osi_ids):
@@ -378,6 +402,10 @@ def main(arguments):
             raise ValueError(f"{role} licence inventory does not match its image pin")
         if role in INDEX_IMAGE_PINS and image["pin"] != INDEX_IMAGE_PINS[role]:
             raise ValueError(f"Debian main index was reviewed for a different {role} image")
+        if role == "computer":
+            count = check_computer_review(image)
+            print(f"PASS computer: {count} reviewed components")
+            continue
         if "sameAs" in image:
             source = inventory["images"][image["sameAs"]]
             if source["pin"] != image["pin"]:
