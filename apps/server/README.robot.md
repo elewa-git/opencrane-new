@@ -2924,8 +2924,8 @@ Callers without access receive the same 403 refusal as for an unknown turn.
 Authorised readers receive 503 for missing stop details, unfinished handler work,
 and failed or timed-out reads.
 Tests use real dependencies and a fresh store connection. No read appends or sends work.
-Live qualification is NOT RUN. WebSocket status, call status and restart/leader
-reconciliation remain part b; root stops remain with #90.
+Live qualification is NOT RUN. Call references and their restart/leader
+reconciliation remain the next part of row 7; root stops remain with #90.
 
 ## Reviewed child answers
 
@@ -3115,3 +3115,25 @@ The [dispatch contract](../../libs/models/README.robot.md#loaded-memory-before-d
 describes incremental scope checks and event-only revision validation.
 Turn credential renewal still needs this check in P4-15 PR 2e. Output invalidation,
 process interruption and correction target proofs remain separate work.
+
+
+## Saved budget stop socket notifications (P3-14 PR 7b, first part; Part of #55)
+
+After projecting a saved budget `agent.turn_stop_requested`, `/ws` sends the
+ordinary event and a typed `budget_stop` notification at the same position.
+It checks the original human message's visibility before sending either frame.
+The notification contains only the conversation and original turn references,
+position and projection generation. GET remains the authoritative stop reader.
+The existing access poll checks membership during slow row loading and again
+before delivery. New message-position reads run before that final access check.
+No bridge delivery, authority helper or business event changes here.
+
+`test/budget-stop-socket.test.ts` uses real NATS, PostgreSQL, OpenFGA, sockets and
+a recording gateway upstream. It checks requester/participant delivery, hidden
+history, removal during loading, slow reads, unrelated activity, reconnect,
+duplicate handler delivery, projection rebuild and unavailable data. GET and
+replay leave the event log unchanged and send no upstream requests.
+The protocol contract is in [the shared library](../../libs/protocol/README.robot.md#saved-budget-stop-notifications).
+Browser handling, call-status references and fresh-install qualification are NOT RUN
+in this part. In particular, late browser callbacks after revocation still need
+screen-level proof; the server tests prove that a held read sends no late frame.

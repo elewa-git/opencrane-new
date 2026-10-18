@@ -11,7 +11,10 @@ it('accepts the typed stop notification in the shared server protocol', acceptsN
 const invalid = [
   { ...notice, turnId: undefined }, { ...notice, turnId: '' },
   { ...notice, stopId: 'private' }, { ...notice, limitCents: 10 },
-  { ...notice, row: {} }, { ...notice, computerState: 'ready' },
+  { ...notice, row: { id: 'row', position: 12, type: 'conversation.closed',
+    time: '2026-10-01T00:00:00Z', data: {} } },
+  { ...notice, computerState: 'ready' }, { ...notice, computerRecovered: true },
+  { ...notice, computerLostAt: '2026-10-01T00:00:00Z' },
   { ...notice, position: -1 }, { ...notice, generation: 0.5 },
 ];
 function rejectsNotification(value: unknown) {

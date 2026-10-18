@@ -70,13 +70,23 @@ export const chatRowSchema = z.object({
     contentType: z.string().optional(),
   }).passthrough(),
 }).superRefine(validateRowFields);
-export const chatMessageSchema = z.object({ version: z.literal(1), topic: z.literal('conversation'), conversationId: z.string(),
+const chatUpdateSchema = z.object({ version: z.literal(1), topic: z.literal('conversation'), conversationId: z.string(),
   type: z.enum(['event', 'ready', 'resync', 'refused']), position: z.int().nonnegative(), generation: z.int().nonnegative(),
   row: chatRowSchema.optional(),
   computerState: computerStateSchema.optional(),
   computerRecovered: z.boolean().optional(),
   computerLostAt: z.string().datetime().optional(),
 }).strict();
+
+const budgetStopNotificationSchema = chatUpdateSchema.extend({
+  type: z.literal('budget_stop'),
+  turnId: chatIdSchema,
+  row: z.never().optional(),
+  computerState: z.never().optional(),
+  computerRecovered: z.never().optional(),
+  computerLostAt: z.never().optional(),
+});
+export const chatMessageSchema = z.union([chatUpdateSchema, budgetStopNotificationSchema]);
 
 export const chatFeedSchema = z.object({
   rows: z.array(chatRowSchema), position: z.int().nonnegative(), generation: z.int().nonnegative(),

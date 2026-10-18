@@ -3,10 +3,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
+import { natsFixture } from '@opencrane/event-store/testing';
+import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { connectMemberFeed, conversations, computers } from '@opencrane/projections';
-import { budgetStopHandler, history } from '@opencrane/models';
-import { fixture } from '@opencrane/models/testing';
+import { budgetStopHandler, envelope, history } from '@opencrane/models';
+import { fixture, fga } from '@opencrane/models/testing';
 import { budgetStopStatusSchema, chatMessageSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
@@ -62,8 +64,8 @@ async function close() {
   await feed?.close();
   await setup?.close();
 }
-beforeEach(initialise);
-afterEach(close);
+beforeEach(initialise, 60_000);
+afterEach(close, 30_000);
 async function message() {
   const encrypted = setup.keys.encrypt('test', 'conversation', 'A saved request');
   const saved = await setup.append('conversation-conversation', 'message.posted', {
@@ -159,6 +161,8 @@ async function restrictedHistory() {
   const client = await connect('bob');
   await ready(client);
   expect(client.frames.filter(isNotice)).toEqual([]);
+  function revealsTurn(frame: Frame) { return frame.row?.data.turnId === turnId; }
+  expect(client.frames.some(revealsTurn)).toBe(false);
   expect((await read('bob')).statusCode).toBe(403);
 }
 it('does not notify a late participant about a turn before their visible history', restrictedHistory);
@@ -256,3 +260,51 @@ async function reconnectAndReplay() {
 }
 it('recovers the original stop through GET after disconnect and effect-free replay',
   reconnectAndReplay);
+
+async function unavailableData() {
+  const client = await connect();
+  await ready(client);
+  const original = setup.db.query.bind(setup.db);
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    if (sql.startsWith('SELECT event_id, position')) throw new Error('Data unavailable');
+    return original<Row>(sql, values);
+  }
+  vi.spyOn(setup.db, 'query').mockImplementation(query);
+  const closed = once(client.socket, 'close');
+  await stop();
+  const [code]: unknown[] = await closed;
+  expect(code).toBe(1013);
+  expect(client.frames.filter(isNotice)).toEqual([]);
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+  async function* unavailable(stream: string, from?: number, deadline?: number) {
+    if (stream === 'budget-test') throw new Error('Data unavailable');
+    yield* readStream(stream, from, deadline);
+  }
+  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(unavailable);
+  const response = await read();
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+}
+it('reports a data outage as unavailable without delivering protected status', unavailableData);
+
+async function foreignMember() {
+  const binding = await createStore(fga.apiUrl, 'foreign');
+  const auth = memberAuthorisation(binding);
+  const joined = envelope('foreign', 'member-foreign-reader', 'member.joined', {
+    memberId: 'foreign-reader', email: 'foreign@example.test',
+    displayName: 'Foreign reader', role: 'owner' });
+  const foreign = await natsFixture();
+  try {
+    await foreign.seed([joined]);
+    await auth.handler.handle(joined, setup.db);
+    await stop();
+    const client = await connect('foreign-reader');
+    const [code]: unknown[] = await once(client.socket, 'close');
+    expect(code).toBe(1008);
+    expect(client.frames.filter(isNotice)).toEqual([]);
+    expect((await read('foreign-reader')).statusCode).toBe(403);
+  } finally {
+    await foreign.close();
+  }
+}
+it('refuses a member registered only in another silo', foreignMember);

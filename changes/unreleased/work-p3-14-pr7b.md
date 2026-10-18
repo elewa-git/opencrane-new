@@ -1,0 +1,1 @@
+- Chat sockets notify authorised readers when a spending Stop is saved for a visible request. The original status remains readable after reconnect, without repeating work or exposing another person's limit.

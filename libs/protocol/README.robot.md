@@ -255,3 +255,31 @@ ToolPolicy optionally carries `publicationRevision`, the positive saved event po
 that invalidated approvals for a publication. It is distinct from the tool review position.
 Older policy replies still parse. This field contains no tool text and grants no authority
 without the matching saved publication and review.
+## Saved budget stop notifications
+
+`chatMessageSchema` and `serverMessageSchema` accept this strict `/ws` frame:
+
+```json
+{"version":1,"topic":"conversation","conversationId":"chat","type":"budget_stop","turnId":"original-turn","position":42,"generation":1}
+```
+
+It announces a saved stop for a visible human turn. It carries no stop id, amount,
+reason, execution claim or call reference. The ordinary event at the same position
+remains available to existing clients. The notification has no `row` or computer
+fields. `position` belongs to the saved chat stop event, not the budget stream.
+
+On notification or reconnect, the client GETs
+`/api/conversations/:conversationId/budget-stops?turnId=original-turn`.
+That read supplies the original stop id, reasons, execution status and positions.
+It can return unavailable while saved work is catching up. Unavailable never means
+no stop or no previous effect. It never authorises another command or retries work.
+A failed socket data read closes with code 1013. An authorised GET reports saved-history
+failures as HTTP 503, never `not_stopped`.
+The client replaces the status for that original turn; repeated delivery or GET
+must not create a second notice. It retains the socket cursor and generation for
+resubscription, and refreshes status even when no notification is replayed.
+
+After refusal, the client clears protected status and ignores late socket and GET
+callbacks from that subscription. A new selection or reconnect needs a new local
+subscription revision so an old reply cannot restore access. Angular integration
+and its delayed-callback tests remain with the screen work.
