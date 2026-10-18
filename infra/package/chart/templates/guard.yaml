@@ -1,0 +1,13 @@
+{{- if or .Values.exposure.ingress .Values.exposure.loadBalancer .Values.exposure.funnel -}}
+{{- fail "Public ingress, LoadBalancer and Funnel are refused" -}}
+{{- end -}}
+{{- range $name, $image := .Values.images -}}
+{{- if not (regexMatch "@sha256:[a-f0-9]{64}$" $image) -}}
+{{- fail (printf "Missing immutable image pin: %s" $name) -}}
+{{- end -}}
+{{- end -}}
+{{- range $name, $secret := .Values.secrets -}}
+{{- if empty $secret -}}
+{{- fail (printf "Missing secret reference: %s" $name) -}}
+{{- end -}}
+{{- end -}}

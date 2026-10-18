@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openfga
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: openfga }
+  template:
+    metadata:
+      labels: { app: openfga }
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ required "postgres pin" .Values.images.postgres | quote }}
+          command: [sh, -c, "until pg_isready -h postgres -U postgres; do sleep 2; done"]
+          resources:
+            limits: { cpu: 100m, memory: 64Mi }
+        - name: migrate
+          image: {{ required "OpenFGA pin" .Values.images.openfga | quote }}
+          args: [migrate]
+          envFrom:
+            - secretRef: { name: {{ .Values.secrets.openfga | quote }} }
+          resources:
+            limits: { cpu: 500m, memory: 256Mi }
+      containers:
+        - name: openfga
+          image: {{ required "OpenFGA pin" .Values.images.openfga | quote }}
+          args:
+            - run
+            - --http-addr
+            - "0.0.0.0:8080"
+            - --grpc-addr
+            - "127.0.0.1:8081"
+            - --playground-enabled=false
+            - --metrics-enabled=false
+          envFrom:
+            - secretRef: { name: {{ .Values.secrets.openfga | quote }} }
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 5
+          resources:
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: server }
+  template:
+    metadata:
+      labels: { app: server }
+    spec:
+      containers:
+        - name: server
+          image: {{ required "server pin" .Values.images.server | quote }}
+          command: [node, --experimental-strip-types, apps/server/src/main.ts]
+          env:
+            - { name: HOST, value: "0.0.0.0" }
+            - { name: PORT, value: "8080" }
+          envFrom:
+            - secretRef: { name: {{ .Values.secrets.runtime | quote }} }
+          volumeMounts:
+            - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 5
+          resources:
+            limits: { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: runtime
+          secret: { secretName: {{ .Values.secrets.runtime | quote }} }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      containers:
+        - name: web
+          image: {{ required "web pin" .Values.images.web | quote }}
+          command: [node, infra/package/web.mjs]
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            periodSeconds: 5
+          resources:
+            limits: { cpu: 500m, memory: 512Mi }

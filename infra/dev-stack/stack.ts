@@ -18,6 +18,8 @@ import { envelope } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
+import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
+  verifyPackageOwner } from './packaged.ts';
 
 const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
@@ -147,6 +149,7 @@ async function slotIsFree() {
     return false;
   }
   if (await ownerProcessIsRunning(owner)) return false;
+  if (await packagedSlotIsBusy()) return false;
   return !await stackProcessIsRunning();
 }
 async function start(name: string, args: string[], env: Record<string, string>) {
@@ -234,9 +237,6 @@ function prefixed(values: Record<string, string>, prefix: string) {
   return Object.fromEntries(Object.entries(values).map(([name, value]) => [`${prefix}${name}`, value]));
 }
 async function provisionComputers(settings: Record<string, string>) {
-  if (!(await run('kubectl', ['get', 'namespace', namespace, '--ignore-not-found', '-o', 'name'])).trim()) {
-    await run('kubectl', ['create', 'namespace', namespace]);
-  }
   if (secondary) {
     // Keep one extra disk so a repeat can retain saved data and start a new shared assistant.
     const quota = {
@@ -252,7 +252,13 @@ async function provisionComputers(settings: Record<string, string>) {
         },
       },
     };
+    // Record the planned computer resources before creating anything in Kubernetes.
     await save('quota.json', JSON.stringify(quota));
+  }
+  if (!(await run('kubectl', ['get', 'namespace', namespace, '--ignore-not-found', '-o', 'name'])).trim()) {
+    await run('kubectl', ['create', 'namespace', namespace]);
+  }
+  if (secondary) {
     await run('kubectl', ['apply', '-f', `${directory}/quota.json`]);
   }
   await run('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
@@ -529,7 +535,8 @@ async function status() {
 let prepared = false;
 try {
   const [action, flag, extra] = process.argv.slice(2);
-  if (extra || (flag && !(action === 'up' && flag === '--fresh'))) {
+  if (extra || (flag && !(action === 'up' && flag === '--fresh') &&
+      !(action === 'package-up' && flag))) {
     throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
   }
   const directoryPresent = await stat(directory).then(() => true, () => false);
@@ -559,7 +566,33 @@ try {
     console.log(stackId);
     process.exit(0);
   }
+  if (action?.startsWith('package-')) {
+    if (action === 'package-prepare') {
+      if (await stackProcessIsRunning()) {
+        throw new Error('A Compose stack already uses this secondary slot');
+      }
+      await preparePackage();
+    }
+    else if (action === 'package-up' && flag) await installPackage(flag);
+    else if (action === 'package-down') await removePackage();
+    else if (action === 'package-check') await verifyPackageOwner();
+    else throw new Error('Unknown package action');
+    process.exit(0);
+  }
+  let packageRemovalFailed = false;
+  if (action === 'down' && secondary && directoryPresent) {
+    const owner = await readStackOwner();
+    if (owner?.worktree !== root) throw new Error('This worktree does not own the slot');
+    try {
+      await removePackage(false);
+    } catch {
+      packageRemovalFailed = true;
+    }
+  }
   if (action === 'up') {
+    if (secondary && await packagedSlotIsBusy()) {
+      throw new Error('A Helm package already uses this secondary slot');
+    }
     const ownerRecord = secondary
       ? await stackOwnerRecord(Number(process.env['DEV_STACK_CLAIM_PID'] ?? process.pid))
       : undefined;
@@ -579,7 +612,12 @@ try {
       await stop();
       if (secondary) {
         if (await exists(`${directory}/settings.env`)) await compose('down', '--volumes', '--remove-orphans');
-        await removeComputers();
+        if (packageRemovalFailed) {
+          throw new Error('Compose stopped, but the package was not removed; check ownership and Kubernetes access');
+        }
+        if (await exists(`${directory}/quota.json`)) {
+          await removeComputers();
+        }
         await rm(directory, { recursive: true });
       }
       break;
@@ -590,6 +628,23 @@ try {
 } catch (error) {
   // Error causes may contain database passwords; never print raw dependency errors.
   if (prepared) await save('failure.log', String(error));
-  console.error(prepared ? `Dev stack failed; inspect private logs in ${directory}` : 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree');
+  if (process.argv[2]?.startsWith('package-')) {
+    let message = 'Package command refused; check pins, named secrets and slot ownership';
+    if (error instanceof Error &&
+        /^Required secret (is absent|field is absent): [a-z0-9.-]+$/u.test(error.message)) {
+      message = error.message;
+    }
+    console.error(message);
+  } else {
+    let message: string;
+    if (error instanceof Error && error.message.startsWith('Compose stopped, but')) {
+      message = error.message;
+    } else if (prepared) {
+      message = `Dev stack failed; inspect private logs in ${directory}`;
+    } else {
+      message = 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree';
+    }
+    console.error(message);
+  }
   process.exitCode = 1;
 }

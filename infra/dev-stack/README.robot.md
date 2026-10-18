@@ -57,7 +57,24 @@ The owner file records the worktree, claiming process id and claim start time. A
 worktree that claims again gets its existing id. A claim stays reserved for 15 minutes
 from its `startedAt` timestamp, even after the claiming process has ended. This gives
 `up --fresh` time to start the stack. After that, a slot is stale when its claiming
-process has ended and no recorded host process or running Compose container remains.
+process has ended and no recorded host process, running Compose container or
+package namespace remains. The package owner record keeps the worktree, slot,
+cluster, namespace UID, Helm release and heartbeat. Kubernetes errors count as
+busy. `package-down` checks those identities before removal; ordinary secondary
+`down` does the same first. Package preparation checks for running Compose host
+processes and containers in that slot. The installer saves a random `installId`
+before Helm runs and passes it as the `opencrane.dev/install-id` release label.
+Cleanup requires that label to match the saved ID. If the launcher stops before
+saving the release Secret's UID, cleanup recovers the UID from the matching Secret.
+A later foreign or unlabelled release is refused, even in the owned namespace.
+Older records without an install ID cannot authorise release removal.
+If Kubernetes is unavailable, secondary `down` still
+stops Compose, keeps the package record and reports that the package remains.
+Without a package record, `down` skips Helm namespace checks. It removes computer
+resources only when `quota.json` exists; that file is saved before the first
+Kubernetes call during computer setup. With neither record, teardown makes no
+Kubernetes calls.
+See [package operator notes](../package/README.robot.md).
 Old owner files containing only a worktree path count as claims started long ago.
 The next claim reports the reclaim on stderr and records the new owner. `status`
 prints `free` for an unused or stale slot, and `status` and `down` never create its
