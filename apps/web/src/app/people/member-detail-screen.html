@@ -51,15 +51,38 @@
         <div class="member-actions">
           <button type="button" class="button secondary" (click)="refresh()"
             [disabled]="state() === 'loading'">Refresh</button>
-          @if (detail() && person.role === 'owner') {
-            <a class="button secondary" href="/org/people/owners">Owners step down first</a>
-          } @else if (detail() && person.permissions.remove) {
+          @if (detail() && person.role !== 'owner' && person.permissions.changeRole
+            && !roleCommandId) {
+            <button #roleButton type="button" class="button secondary"
+              (click)="openRole(roleButton)">Change role</button>
+          }
+          @if (detail() && person.role !== 'owner' && person.permissions.remove) {
             <button #removeOpener type="button" class="button destructive"
               (click)="openDeparture(removeOpener)">Remove from
               {{ organisationName() }}</button>
           }
         </div>
       </div>
+      @if (person.role === 'owner') {
+        <p>Owners are managed on the <a href="/org/people/owners">Owners page</a>.</p>
+      }
+      @if (!person.permissions.changeRole && person.role !== 'owner') {
+        <section class="paper-card" role="note">
+          <strong>Changing roles needs the Admin role</strong>
+          <p>{{ name() }} is a {{ person.role === 'admin' ? 'Admin' : 'Member' }}.</p>
+        </section>
+      }
+      @if (roleNotice()) {
+        <p class="refresh-notice" role="status">{{ roleNotice() }}
+          @if (roleState() === 'unknown' || roleState() === 'applying') {
+            <button type="button" class="button secondary" [disabled]="roleChecking()"
+              (click)="checkRoleStatus()">Check status</button>
+          }
+          @if (roleState() === 'unchanged' || roleNotice().includes('Owners page')) {
+            <a href="/org/people/owners">Owners page</a>
+          }
+        </p>
+      }
       @if (state() === 'failed' || accessState() === 'failed') {
         <p class="refresh-notice" role="status">
           Member details loaded at {{ loadedTime(memberLoadedAt()) }}.
@@ -69,9 +92,9 @@
         </p>
       }
       <div [class.stale]="state() === 'failed' || accessState() === 'failed'">
-        <div class="detail-cards member-summary">
-          <section class="paper-card"><h2>Role</h2><p>{{ person.role }}</p></section>
-          @if (detail(); as full) {
+        @if (detail(); as full) {
+          <div class="detail-cards member-summary">
+            <section class="paper-card"><h2>Role</h2><p>{{ person.role }}</p></section>
             <section class="paper-card"><h2>Groups</h2>
               @for (group of full.groups; track group.groupId) {
                 <p>{{ group.name }} · {{ groupSource(group) }}</p>
@@ -79,8 +102,8 @@
             </section>
             <section class="paper-card"><h2>Personal assistant</h2>
               <p>Not available yet</p></section>
-          }
-        </div>
+          </div>
+        }
         @if (detail()) {
           <section class="member-access">
             <h2>What {{ name() }} can use — and why</h2>
@@ -155,6 +178,7 @@
     }
   }
 </section>
+
 <oc-hinge-drawer [open]="drawerOpen()"
   [title]="'Remove ' + name() + ' from ' + organisationName() + '?'"
   backLabel="Cancel" [returnFocusTo]="reviewOpener" (closed)="closeDeparture()">
@@ -233,3 +257,33 @@
     <button type="button" class="button secondary" (click)="closeDeparture()">Cancel</button>
   </div>
 </oc-hinge-drawer>
+<oc-modal-sheet [open]="roleOpen()" [title]="'Change ' + name() + '’s role'"
+  backLabel="Cancel" [returnFocusTo]="roleOpener" (closed)="closeRole()">
+  <fieldset class="member-role-options">
+    <legend>Choose a role for {{ name() }}</legend>
+    <label><input type="radio" name="member-role" value="member"
+      [checked]="chosenRole() === 'member'" (change)="selectRole($event)" />
+      <strong>Member</strong> @if (detail()?.role === 'member') { <small>Current</small> }
+      <span>Uses what groups and grants allow.</span></label>
+    <label><input type="radio" name="member-role" value="admin"
+      [checked]="chosenRole() === 'admin'" (change)="selectRole($event)" />
+      <strong>Admin</strong> @if (detail()?.role === 'admin') { <small>Current</small> }
+      <span>Manages people, tools, models and spending.</span></label>
+    <label><input type="radio" name="member-role" value="owner" disabled />
+      <strong>Owner</strong> <a href="/org/people/owners">Owners page</a></label>
+  </fieldset>
+  <p>Groups and grants stay the same. Changing an Admin to a Member removes access
+    to admin pages.</p>
+  @if (roleState() === 'sending') { <p role="status">Saving role change…</p> }
+  @if (roleState() === 'unknown') {
+    <p role="status">{{ roleNotice() }}</p>
+    <button type="button" class="button secondary" [disabled]="roleChecking()"
+      (click)="checkRoleStatus()">Check status</button>
+  }
+  <div overlayFooter class="overlay-actions">
+    <button type="button" class="button secondary" (click)="closeRole()">Cancel</button>
+    <button type="button" class="button primary"
+      [disabled]="roleState() !== 'idle' || chosenRole() === detail()?.role"
+      (click)="changeRole()">{{ roleConfirmLabel() }}</button>
+  </div>
+</oc-modal-sheet>

@@ -252,6 +252,13 @@ same command to find the saved result.
 
 ## Change a Member or Admin role
 
+The member detail page sends this command only after a role review. It checks the
+original id with GET after a saved or uncertain reply. A 404 status leaves the result
+unknown because the first request may still arrive. When both progress values are
+`current`, the page reads the member again. A self-demotion may return a minimal
+member header; the page then clears email, groups and access. A 401 or 403 clears
+the detail page. Owner targets go to `/org/people/owners`.
+
 `POST /api/members/:memberId/role` accepts only `{ commandId, expectedSequence,
 newRole: "member" | "admin" }`, within 1 KiB. It requires an organisation session,
 the exact configured Origin, and current Owner/Admin access in events and OpenFGA.

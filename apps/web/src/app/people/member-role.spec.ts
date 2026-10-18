@@ -2,6 +2,15 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemberDetailScreen } from './member-detail-screen';
 
+function showDialog(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
+function closeDialog(this: HTMLDialogElement): void { this.removeAttribute('open'); }
+Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+  configurable: true, value: showDialog,
+});
+Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+  configurable: true, value: closeDialog,
+});
+
 const member = { memberId: 'alex-kim', displayName: 'Alex Kim', role: 'member',
   permissions: { changeRole: true, remove: false, manageOwnership: false },
   email: 'alex@example.test', status: 'joined', joinedAt: '2026-03-12T10:00:00Z',
@@ -129,4 +138,36 @@ it('shows a minimal read-only header without loading access', async () => {
   expect(page(fixture).textContent).not.toContain('alex@example.test');
   expect(page(fixture).textContent).not.toContain('Change role');
   expect(paths).toEqual(['/api/members/alex-kim']);
+});
+
+it('keeps the outcome but clears protected rows after a self-demotion reread', async () => {
+  const paths: string[] = [];
+  let memberReads = 0;
+  function fetcher(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = path(input);
+    paths.push(url);
+    if (url.endsWith('/access')) return Promise.resolve(reply(access));
+    if (init?.method === 'POST') return Promise.resolve(reply({ ...receipt, newRole: 'member' }));
+    if (url.endsWith('/changes/role-command')) {
+      return Promise.resolve(reply({ ...receipt, newRole: 'member', effect: 'role_changed',
+        projection: { content: 'current', iam: 'current' } }));
+    }
+    memberReads += 1;
+    if (memberReads > 1) {
+      return Promise.resolve(reply({ memberId: member.memberId,
+        displayName: member.displayName, role: 'member',
+        permissions: { changeRole: false, remove: false, manageOwnership: false } }));
+    }
+    return Promise.resolve(reply({ ...member, role: 'admin' }));
+  }
+  const fixture = mount(fetcher);
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Sales team'));
+  click(fixture, 'Change role');
+  page(fixture).querySelector<HTMLInputElement>('input[value="member"]')?.click();
+  click(fixture, 'Make Alex Kim a Member');
+  await vi.waitFor(() => expect(page(fixture).textContent).toContain('Alex Kim is now a Member'));
+  await vi.waitFor(() => expect(page(fixture).textContent).not.toContain('alex@example.test'));
+  expect(page(fixture).textContent).not.toContain('alex@example.test');
+  expect(page(fixture).textContent).not.toContain('Sales team');
+  expect(paths.filter(url => url.endsWith('/access'))).toHaveLength(1);
 });

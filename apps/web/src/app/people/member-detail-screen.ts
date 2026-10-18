@@ -4,10 +4,12 @@ import {
 } from '@angular/core';
 import { GrainLoader } from '../ui/grain-loader';
 import { HingeDrawer } from '../ui/hinge-drawer';
+import { ModalSheet } from '../ui/modal-sheet';
 import { checkTimeLabel } from './group-wording';
 import { fetchDeparture, fetchMember, fetchMemberAccess, fetchRemovalStatus,
-  sendMemberRemoval, type Access, type Departure, type Detail, type Header,
-  type RemovalReceipt } from './members-api';
+  fetchMemberRoleStatus, sendMemberRemoval, sendMemberRole, type Access,
+  type Departure, type Detail, type Header, type RemovalReceipt,
+  type RoleStatus } from './members-api';
 
 type ScreenState = 'loading' | 'ready' | 'failed' | 'missing' | 'access';
 type AccessState = 'idle' | 'loading' | 'ready' | 'failed';
@@ -17,7 +19,7 @@ type Check = Row['eligibility']['person'];
 
 @Component({
   selector: 'oc-member-detail-screen',
-  imports: [GrainLoader, HingeDrawer],
+  imports: [GrainLoader, HingeDrawer, ModalSheet],
   templateUrl: './member-detail-screen.html',
   styleUrls: ['./people.css', './member-detail-screen.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,6 +43,12 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   protected readonly removalReceipt = signal<RemovalReceipt | undefined>(undefined);
   protected readonly checkingStatus = signal(false);
   protected readonly lostAfterRemoval = signal(false);
+  protected readonly roleOpen = signal(false);
+  protected readonly chosenRole = signal<'member' | 'admin'>('member');
+  protected readonly roleState = signal<'idle' | 'sending' | 'unknown' | 'applying'
+    | 'confirmed' | 'unchanged'>('idle');
+  protected readonly roleNotice = signal('');
+  protected readonly roleChecking = signal(false);
   protected readonly checkLabel = checkLabel;
   protected readonly sectionLabel = sectionLabel;
   protected readonly sourceLabel = sourceLabel;
@@ -51,18 +59,131 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
   private generation = 0;
   private drawerGeneration = 0;
   private commandId: string | undefined;
+  protected roleCommandId: string | undefined;
+  private roleGeneration = 0;
+  protected roleOpener: HTMLButtonElement | undefined;
   protected reviewOpener: HTMLButtonElement | undefined;
   private focusTimer: number | undefined;
 
   ngOnInit(): void { void this.refresh(); }
   ngOnDestroy(): void {
     this.generation += 1;
+    this.roleGeneration += 1;
     this.request.abort();
     if (this.focusTimer !== undefined) clearTimeout(this.focusTimer);
   }
 
   protected name(): string {
     return this.member()?.displayName || 'Member';
+  }
+
+  protected openRole(opener: HTMLButtonElement): void {
+    const detail = this.detail();
+    if (!detail?.permissions.changeRole || detail.role === 'owner'
+      || this.roleCommandId || this.state() !== 'ready') return;
+    this.roleOpener = opener;
+    this.chosenRole.set(detail.role === 'admin' ? 'admin' : 'member');
+    this.roleNotice.set('');
+    this.roleOpen.set(true);
+  }
+
+  protected closeRole(): void {
+    if (!this.roleOpen()) return;
+    this.roleGeneration += 1;
+    this.roleOpen.set(false);
+    if (this.roleState() === 'sending') {
+      this.roleState.set('unknown');
+      this.roleNotice.set("We couldn't tell whether the role change was saved.");
+    }
+  }
+
+  protected selectRole(event: Event): void {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    if (input.value === 'member' || input.value === 'admin') this.chosenRole.set(input.value);
+  }
+
+  protected roleConfirmLabel(): string {
+    const role = this.chosenRole() === 'admin' ? 'Admin' : 'Member';
+    const article = role === 'Admin' ? 'an' : 'a';
+    return `Make ${this.name()} ${article} ${role}`;
+  }
+
+  protected async changeRole(): Promise<void> {
+    const detail = this.detail();
+    if (!detail || !this.roleOpen() || this.roleState() !== 'idle'
+      || this.chosenRole() === detail.role || !detail.permissions.changeRole) return;
+    const generation = ++this.roleGeneration;
+    const commandId = crypto.randomUUID();
+    this.roleCommandId = commandId;
+    this.roleState.set('sending');
+    const body = { commandId, expectedSequence: detail.memberSequence,
+      newRole: this.chosenRole() };
+    const result = await sendMemberRole(this.memberId(), body, this.request.signal);
+    if (generation !== this.roleGeneration || this.state() === 'access') return;
+    if (result.kind === 'denied') { this.clearForAccessLoss(result.status); return; }
+    if (result.kind === 'ok') {
+      this.closeRole();
+      this.roleState.set('applying');
+      this.roleNotice.set('Role change saved. Access is still updating.');
+      void this.checkRoleStatus();
+      return;
+    }
+    if (result.kind === 'conflict' || result.kind === 'invalid') {
+      this.roleCommandId = undefined;
+      this.roleState.set('idle');
+      this.closeRole();
+      if (result.kind === 'conflict' && result.reason === 'ownership_stream_required') {
+        this.roleNotice.set('This person is an Owner. Manage owners on the Owners page.');
+      } else if (result.kind === 'conflict') {
+        this.roleNotice.set('Nothing was saved. Review the latest member role.');
+        void this.refresh();
+      } else {
+        this.roleNotice.set('The role change was not sent. Review it again.');
+      }
+      return;
+    }
+    this.roleState.set('unknown');
+    this.roleNotice.set("We couldn't tell whether the role change was saved.");
+  }
+
+  protected async checkRoleStatus(): Promise<void> {
+    const commandId = this.roleCommandId;
+    if (!commandId || this.roleChecking()) return;
+    const generation = this.roleGeneration;
+    this.roleChecking.set(true);
+    const result = await fetchMemberRoleStatus(this.memberId(), commandId, this.request.signal);
+    this.roleChecking.set(false);
+    if (generation !== this.roleGeneration || this.state() === 'access') return;
+    if (result.kind === 'denied') { this.clearForAccessLoss(result.status); return; }
+    if (result.kind === 'ok') { this.showRoleStatus(result.value); return; }
+    this.roleState.set('unknown');
+    if (result.kind === 'missing') {
+      this.roleNotice.set('No result recorded yet. The original request may still arrive.');
+    } else {
+      this.roleNotice.set("We couldn't tell whether the role change was saved.");
+    }
+  }
+
+  private showRoleStatus(status: RoleStatus): void {
+    if (this.roleOpen()) this.closeRole();
+    if (status.effect === 'none_target_became_owner') {
+      this.roleState.set('unchanged');
+      this.roleNotice.set('The role was not changed. This person became an Owner.');
+      void this.refresh();
+      return;
+    }
+    if (status.projection.content !== 'current' || status.projection.iam !== 'current') {
+      this.roleState.set('applying');
+      this.roleNotice.set('Role change saved. Access is still updating.');
+      return;
+    }
+    this.roleState.set('confirmed');
+    const role = status.newRole === 'admin' ? 'Admin' : 'Member';
+    const article = role === 'Admin' ? 'an' : 'a';
+    this.roleNotice.set(`${this.name()} is now ${article} ${role}`);
+    this.roleCommandId = undefined;
+    void this.refresh();
   }
 
   protected joinedDate(): string {
@@ -278,6 +399,7 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     this.detail.set(undefined);
     this.access.set(undefined);
     this.clearDeparture();
+    this.clearRole();
     this.memberLoadedAt.set(undefined);
     this.accessLoadedAt.set(undefined);
     this.accessState.set('idle');
@@ -292,6 +414,7 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     this.access.set(undefined);
     this.lostAfterRemoval.set(!!this.commandId);
     this.clearDeparture();
+    this.clearRole();
     this.memberLoadedAt.set(undefined);
     this.accessLoadedAt.set(undefined);
     this.denialStatus.set(status);
@@ -307,6 +430,13 @@ export class MemberDetailScreen implements OnInit, OnDestroy {
     this.removalReceipt.set(undefined);
     this.commandId = undefined;
     this.removalNotice.set('');
+  }
+
+  private clearRole(): void {
+    this.roleGeneration += 1;
+    this.roleOpen.set(false);
+    this.roleCommandId = undefined;
+    this.roleNotice.set('');
   }
 }
 
