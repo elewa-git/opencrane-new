@@ -94,6 +94,7 @@ class TurnRunner {
   private preparingCount = 0;
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
+  private readonly grantInstalls = new Map<string, number>();
   private readonly driver: TurnDriver;
   private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'>
     & Partial<Pick<ReturnType<typeof approvalHolds>, 'stop' | 'size'>> | undefined;
@@ -337,14 +338,31 @@ class TurnRunner {
     if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
       throw new Error('Turn ended');
     }
+    this.grantInstalls.set(turn.id, (this.grantInstalls.get(turn.id) ?? 0) + 1);
     try {
       await this.driver.grant(thread, turn.conversationId, grant.token, grant.expiresAt);
     } finally {
-      // Remove a late installation even if thread closure already released the turn.
-      if (this.gate.closed) await this.gate.track(this.dropAccess(thread, turn));
-      else if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
-        await this.dropAccess(thread, turn);
+      try {
+        // Remove a late installation before another turn can reuse this thread.
+        if (this.gate.closed) await this.gate.track(this.dropAccess(thread, turn));
+        else if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
+          await this.dropAccess(thread, turn);
+        }
+      } finally {
+        this.finishGrantInstall(turn.id);
       }
+    }
+    if (this.state.cancelled.has(turn.id) || !this.isActiveTurn(turn.id)) {
+      throw new Error('Turn ended');
+    }
+  }
+
+  private finishGrantInstall(turnId: string) {
+    const remaining = (this.grantInstalls.get(turnId) ?? 1) - 1;
+    if (remaining) this.grantInstalls.set(turnId, remaining);
+    else {
+      this.grantInstalls.delete(turnId);
+      if (this.isFinished(turnId)) this.releaseTurn(turnId);
     }
   }
 
@@ -387,6 +405,7 @@ class TurnRunner {
   }
 
   private releaseTurn(turnId: string) {
+    if (this.keepInstallingTurn(turnId)) return;
     const threadId = this.findRunningThread(turnId);
     const turn = threadId && this.state.running.get(threadId);
     if (threadId) this.approvals?.endThread(threadId);
@@ -409,6 +428,19 @@ class TurnRunner {
     if (threadId && turn) {
       void this.gate.track(this.dropAccess(threadId, turn));
     }
+  }
+
+  private keepInstallingTurn(turnId: string) {
+    if (!this.grantInstalls.has(turnId)) return false;
+    // Keep an old installation from replacing or revoking the next turn's pass.
+    this.state.cancelled.add(turnId);
+    const threadId = this.findRunningThread(turnId);
+    const turn = threadId && this.state.running.get(threadId);
+    if (threadId && turn) {
+      this.approvals?.endThread(threadId);
+      void this.gate.track(this.dropAccess(threadId, turn));
+    }
+    return true;
   }
 
   private failTurn(input: Turn) {
@@ -638,7 +670,7 @@ class TurnRunner {
       this.releaseClosedThread(threadId, input);
       return;
     }
-    if (!input) {
+    if (!this.isUnfinishedTurn(input)) {
       return;
     }
 
@@ -667,6 +699,10 @@ class TurnRunner {
       return;
     }
     this.completeTurn(input, threadId, params);
+  }
+
+  private isUnfinishedTurn(input: Turn | undefined): input is Turn {
+    return input !== undefined && !this.isFinished(input.id);
   }
 
   private refuseTool(input: Turn, threadId: string) {

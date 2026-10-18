@@ -53,6 +53,7 @@ async function stopFixture() {
   const lists = new Map<string, string>();
   const started = new Map<string, ReturnType<typeof Promise.withResolvers<void>>>();
   const revoked = Promise.withResolvers<void>();
+  const interrupted = Promise.withResolvers<void>();
   const rpc = computer.driver.rpc.bind(computer.driver);
   function recordRpc(method: string, params: Record<string, unknown>) {
     const result = rpc(method, params);
@@ -61,6 +62,7 @@ async function stopFixture() {
       return Promise.resolve({ thread: { id: params['threadId'] } });
     }
     if (method === 'turn/start') started.get(String(params['threadId']))?.resolve();
+    if (method === 'turn/interrupt') interrupted.resolve();
     return result;
   }
   computer.driver.rpc = recordRpc;
@@ -127,7 +129,7 @@ async function stopFixture() {
   }
   return { ...computer, local, start, stop, call, close, received, open,
     arrived: arrived.promise, departed: departed.promise, revoked: revoked.promise,
-    firstRequest: firstRequest.promise };
+    firstRequest: firstRequest.promise, interrupted: interrupted.promise };
 }
 
 async function abortsOnlyStoppedRequests() {
@@ -314,6 +316,7 @@ async function finishesOldInstallationBeforeReusingThread() {
     await entered.promise;
     test.stop();
     await withinStopDeadline(test.revoked);
+    await withinStopDeadline(test.interrupted);
     test.finish('thread-1');
     test.finish('thread-1');
     const beforeRetry = [...test.calls];

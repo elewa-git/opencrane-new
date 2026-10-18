@@ -10,6 +10,9 @@ waits with a fixed error. It reuses `dropAccess`; the signed takeover gate keeps
 its own removal path. Thread preparation checks cancellation before and after
 registering tools. A grant installation already in progress removes its result
 if the turn ended while it waited.
+The runner keeps that conversation occupied until pending grant installations
+finish their cleanup. A new turn can then retry without an old installation
+removing its access. Repeated terminal notifications keep the first result.
 
 Both local proxies track outgoing requests by thread. `/drop` destroys that
 thread's requests and client responses before acknowledging removal. Dropping
