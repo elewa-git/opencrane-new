@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages and tool holds"]
-  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child requests and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices and spending stop replies| protocol
+  server["apps/server<br/>back end"] -.->|image admission, member flags, access replies, child requests and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and live stop notices| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool list and publication shapes"]
@@ -64,7 +64,9 @@ Child requests carry reviewed choices and a signed review. Status replies show o
 the requester’s saved request and child id, without the source message text.
 
 Spending stop replies carry saved reasons and execution status. The server
-decides who may read them and whether to include a limit.
+decides who may read them and whether to include a limit. A live stop notice
+names the original request so the browser can read its saved status. Reconnecting
+uses that same read; it does not send the request again.
 Approval cards may name their saved turn. The browser then shows a stopped card
 without decision controls.
 

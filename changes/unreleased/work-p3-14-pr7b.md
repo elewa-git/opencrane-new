@@ -1,0 +1,2 @@
+- Chat sockets notify authorised readers when a spending Stop is saved for a visible request. The original status remains readable after reconnect, without repeating work or exposing another person's limit.
+- Chat sockets close for recovery when loading an update takes more than ten seconds. A delayed original-turn lookup cannot leave stop notifications waiting forever or send late frames after closure.

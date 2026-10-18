@@ -1,5 +1,6 @@
 import type { WebSocket } from 'ws';
 import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
+import { chatMessageSchema, type ChatRow } from '@opencrane/protocol';
 import { AuthorityApplying } from '@opencrane/models';
 import { chatSubscriptionAccess, isChatRefused } from './access.ts';
 import { chatRows } from './history.ts';
@@ -118,29 +119,55 @@ async function drain(state: Subscription) {
   const mode = await pollAccess(state);
   if (!mode || state.running || state.socket.readyState !== state.socket.OPEN) return;
   state.running = true;
+  let position: Awaited<ReturnType<typeof conversationPosition>> | undefined;
   try {
-    const position = await conversationPosition(state.options, state.conversationId, mode);
-    if (state.ready && state.mode === mode && state.position === position.position &&
-        state.generation === position.generation &&
-        state.computerPosition === position.computerPosition) {
-      return;
-    }
     while (state.socket.readyState === state.socket.OPEN) {
       const version = state.accessVersion;
-      const result = await chatRows(state.options, state.conversationId, mode, state.position,
-        state.joinPosition);
+      const content = await loadContent(state, mode, position);
+      if (!content) return;
+      position = content.position;
       const confirmed = await pollAccess(state);
       if (!confirmed || version !== state.accessVersion) return;
       if (state.socket.readyState !== state.socket.OPEN) return;
       state.mode = mode;
-      state.computerPosition = position.computerPosition;
-      sendRows(state, result);
-      if (result.rows.length < 100) return;
+      state.computerPosition = content.position.computerPosition;
+      sendRows(state, content.result, content.stops);
+      if (content.result.rows.length < 100) return;
     }
   } catch {
     state.socket.close(1013);
   } finally {
     state.running = false;
+  }
+}
+
+async function loadContent(state: Subscription, mode: Mode,
+  previousPosition: Awaited<ReturnType<typeof conversationPosition>> | undefined) {
+  const expired = Promise.withResolvers<never>();
+  function expire() {
+    expired.reject(new Error('Chat history unavailable'));
+  }
+  // Bound all content reads together, separately from the short access checks.
+  const timer = setTimeout(expire, 10_000);
+  try {
+    return await Promise.race([readContent(), expired.promise]);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  async function readContent() {
+    const position = previousPosition ??
+      await conversationPosition(state.options, state.conversationId, mode);
+    if (!previousPosition && state.ready && state.mode === mode &&
+        state.position === position.position &&
+        state.generation === position.generation &&
+        state.computerPosition === position.computerPosition) {
+      return;
+    }
+    const result = await chatRows(state.options, state.conversationId, mode, state.position,
+      state.joinPosition);
+    const stops = await visibleBudgetStops(state, result.rows);
+    return { position, result, stops };
   }
 }
 
@@ -165,7 +192,37 @@ async function conversationPosition(options: ChatOptions, conversationId: string
   };
 }
 
-function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRows>>) {
+function isBudgetStop(row: ChatRow) {
+  return row.type === 'agent.turn_stop_requested' && row.data.reason === 'budget';
+}
+
+async function visibleBudgetStops(state: Subscription, rows: ChatRow[]) {
+  const stops = rows.filter(isBudgetStop);
+  const turns: string[] = [];
+  for (const stop of stops) {
+    if (stop.data.turnId) turns.push(stop.data.turnId);
+  }
+  const visible = new Set<string>();
+  if (turns.length === 0) return visible;
+  // Load original turn positions before checking access again. A later Stop must
+  // not reveal a request from before this person's visible history.
+  const result = await state.options.db.query<{
+    event_id: string; position: string; author_kind: string;
+  }>(
+    `SELECT event_id, position, data->>'authorKind' AS author_kind
+      FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
+      AND type = 'message.posted' AND event_id = ANY($3::text[])`,
+    [state.options.silo, state.conversationId, turns]);
+  for (const row of result.rows) {
+    if (row.author_kind === 'human' && Number(row.position) >= (state.joinPosition ?? 0)) {
+      visible.add(row.event_id);
+    }
+  }
+  return visible;
+}
+
+function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRows>>,
+  visibleStops: Set<string>) {
   if ((state.position > 0 && state.generation !== result.generation) ||
       state.position > result.position) {
     state.generation = result.generation;
@@ -182,8 +239,7 @@ function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRow
       return;
     }
     state.position = row.position;
-    const extra = { row };
-    send(state, 'event', extra);
+    sendRow(state, row, visibleStops);
   }
   if (result.rows.length === 100) return;
   // All rows through this boundary were scanned, including hidden late reports.
@@ -201,13 +257,26 @@ function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRow
   }
 }
 
+function sendRow(state: Subscription, row: ChatRow, visibleStops: Set<string>) {
+  const budgetStop = isBudgetStop(row);
+  const turnId = row.data.turnId;
+  if (budgetStop && (!turnId || !visibleStops.has(turnId))) return;
+  const extra = { row };
+  send(state, 'event', extra);
+  if (budgetStop) {
+    const notification = { turnId };
+    send(state, 'budget_stop', notification);
+  }
+}
+
 function send(state: Subscription, type: string, extra = {}) {
   if (state.socket.readyState !== state.socket.OPEN) return;
   const message = {
     version: 1, topic: 'conversation', conversationId: state.conversationId,
     type, position: state.position, generation: state.generation, ...extra,
   };
-  state.socket.send(JSON.stringify(message));
+  const checked = chatMessageSchema.parse(message);
+  state.socket.send(JSON.stringify(checked));
 }
 
 function refuse(state: Subscription) {
