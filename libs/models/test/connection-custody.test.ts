@@ -1126,7 +1126,7 @@ it('requires the saved activation to match the private stage before rebuilding r
   refusesMismatchedSavedStage);
 
 async function cleanupFixture() {
-  const test = await candidateFixture();
+  const test = await candidateFixture(Date.now() + 60_000);
   await test.activate();
   const rows = await history(events.store, test.subject, 'test');
   const previous = foldConnection(rows).data!;
