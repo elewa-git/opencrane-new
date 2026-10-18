@@ -55,18 +55,32 @@ export function memoryKeyFiles(directory: string, identity: MemoryIdentity) {
     const [file, data] = args;
     const path = typeof file === 'number' ? descriptors.get(file) : undefined;
     if (path) {
-      files.set(path, Buffer.from(data as Uint8Array));
+      let bytes: Buffer;
+      if (typeof data === 'string') {
+        bytes = Buffer.from(data);
+      } else {
+        bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      }
+      files.set(path, bytes);
       return;
     }
     original.writeFileSync(...args);
   }
-  function read(path: fs.PathOrFileDescriptor, ...args: unknown[]) {
+  type ReadOptions = Parameters<typeof fs.readFileSync>[1];
+  type NoEncoding = { encoding?: null; flag?: string } | null;
+  type Encoding = BufferEncoding | { encoding: BufferEncoding; flag?: string };
+  function read(path: fs.PathOrFileDescriptor, options?: NoEncoding): Buffer<ArrayBuffer>;
+  function read(path: fs.PathOrFileDescriptor, options: Encoding): string;
+  function read(path: fs.PathOrFileDescriptor, options?: ReadOptions): Buffer<ArrayBuffer> | string;
+  function read(path: fs.PathOrFileDescriptor, options?: ReadOptions) {
     if (isKeyPath(String(path))) {
       const bytes = files.get(String(path));
       if (!bytes) throw Object.assign(new Error('File missing'), { code: 'ENOENT' });
-      return bytes;
+      if (typeof options === 'string') return bytes.toString(options);
+      if (options?.encoding) return bytes.toString(options.encoding);
+      return Buffer.from(bytes);
     }
-    return Reflect.apply(original.readFileSync, original, [path, ...args]) as Buffer | string;
+    return original.readFileSync(path, options);
   }
   function link(source: fs.PathLike, destination: fs.PathLike) {
     if (!isKeyPath(String(source))) return original.linkSync(source, destination);
@@ -100,7 +114,7 @@ export function memoryKeyFiles(directory: string, identity: MemoryIdentity) {
     vi.spyOn(fs, 'existsSync').mockImplementation(exists),
     vi.spyOn(fs, 'openSync').mockImplementation(open),
     vi.spyOn(fs, 'writeFileSync').mockImplementation(write),
-    vi.spyOn(fs, 'readFileSync').mockImplementation(read as typeof fs.readFileSync),
+    vi.spyOn(fs, 'readFileSync').mockImplementation(read),
     vi.spyOn(fs, 'linkSync').mockImplementation(link),
     vi.spyOn(fs, 'renameSync').mockImplementation(rename),
     vi.spyOn(fs, 'rmSync').mockImplementation(remove),
