@@ -1093,6 +1093,41 @@ async function preservesApprovalDates(type: string, details: object, state: stri
 it.each(datedApprovalEnds)('keeps saved UTC dates for %s / %s after restart and replay',
   preservesApprovalDates, 40_000);
 
+async function replaysOffsetApprovalDates(type: string, details: object, state: string,
+  dates: object) {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const original = (await setup.read()).cards[0]!;
+    const current = await readApproval(setup.nats.store, 'test', original.approvalId);
+    const approvalId = 'f'.repeat(64);
+    const subject = `approval-${approvalId}`;
+    const request = { ...current.request, approvalId };
+    const requested = { ...envelope('test', subject, 'tool.approval_requested', request),
+      time: '2026-10-12T12:00:00+02:00' };
+    const ended = { ...envelope('test', subject, type, { approvalId, ...details }),
+      time: '2026-10-12T12:01:00+02:00' };
+    expect(parseEventByType(requested).success).toBe(true);
+    expect(parseEventByType(ended).success).toBe(true);
+    await setup.nats.seed([requested, ended]);
+    await setup.restart();
+    await setup.runner.rebuild(auditTrail);
+    await setup.restartReader();
+    const replayed = await readApproval(setup.nats.store, 'test', approvalId);
+    const expected = { state, requestedAt: '2026-10-12T10:00:00.000Z', ...dates };
+    expect(replayed).toMatchObject(expected);
+    const response = await setup.read();
+    function isOffsetApproval(card: (typeof response.cards)[number]) {
+      return card.approvalId === approvalId;
+    }
+    expect(response.cards.find(isOffsetApproval)).toMatchObject(expected);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(datedApprovalEnds)('replays offset dates as UTC for %s / %s in cards replies',
+  replaysOffsetApprovalDates, 40_000);
+
 const recordedCancellations = [
   ['conversation.closed', { conversationId: 'conversation', closedBy: 'alice' },
     'conversation-conversation', 'conversation_closed'],
