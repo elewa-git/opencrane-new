@@ -2651,6 +2651,17 @@ One conditional `decision.recorded` precedes the serialised zero-cost dispatch c
 and relay registration. The saved decision and dispatch prevent pass reuse after
 restart. Audit uncertainty refuses connection. Replay registers no listener.
 
+After the dispatch append succeeds, the handler checks current authority once more,
+using what remains of the original two seconds. This checks the small member and
+assistant streams, any relevant team stream, the three exact destination grant
+streams, new turn activity and the turn, grant and optional lease expiry. It never
+rereads a whole conversation. A changed authority, expired pass or missed deadline
+returns the fixed `egress_refused` response without registering a relay. The existing
+`egress.observed` error outcome closes the saved zero-cost dispatch. It has no relay
+fields because no listener was registered. A failed outcome save still refuses access.
+The last check before registration is the authority boundary; the relay's own
+60-second capability cap covers changes after that point.
+
 Tests use real NATS, PostgreSQL, OpenFGA and the pinned gateway with a recording
 upstream. The initial failing test is in commit `98ba6b80`.
 Startup wiring, authorised receipt reads, revocation closure/watchdogs and live

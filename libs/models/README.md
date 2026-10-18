@@ -338,7 +338,11 @@ No request route uses this operation yet. Native execution remains disabled.
 An isolated gateway test opens a CONNECT tunnel after the decision is saved and
 the spending process grants one send. A saved stop or access change prevents that
 send. A separate test adds TLS hostname and public address checks before connecting.
-The full relay still needs one-use registration and lifetime controls.
+The private relay limits each pass to one connection and at most 60 seconds.
+
+The private outside-connection handler checks access again after saving permission
+to send. If access changed or its deadline passed during the save, it registers no
+relay and records an error outcome. Normal startup keeps outside connections off.
 
 A private credential stage saves one generation and returns its reference, UID and version.
 Recovery needs its saved identity or an exact identity supplied by the caller.

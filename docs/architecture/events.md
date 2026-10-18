@@ -114,7 +114,7 @@ no access and start no model work. Replay copies ciphertext without touching key
 | `credential.released` | credential broker (P3-8; fixture contract) | audit lease metadata only | none; never release on replay |
 | `egress.destination_allowed` | Owner/Admin destination command | egress-policy, audit | none; networking stays off |
 | `egress.destination_revoked` | Owner/Admin destination command | egress-policy, audit | none; networking stays off |
-| `egress.observed` | relay close reaction (networking disabled; older observations remain readable) | audit | none; never dispatch on replay |
+| `egress.observed` | relay close reaction or admission refusal after a saved dispatch (networking disabled) | audit | none; never dispatch on replay |
 | `gateway.observation_recorded` | safe gateway log ingest | audit, including unverified JWT failures | none; no asserted requester identity |
 | `decision.recorded` | ext_authz, including operation-bound egress; server bridge for budget admission refusals | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | egress allows register one private relay only after the final zero-cost spending check; replay opens none; admission is not an observed effect |
 
@@ -814,7 +814,9 @@ The gateway's fractional timestamp defect is ignored: ids join records and event
 positions show append order, without claiming causal order between streams.
 
 Confirmed `egress.observed` success or error determines the permitted egress
-summary, just as `effect.observed` does for a model call. Missing observations
+summary, just as `effect.observed` does for a model call. An admission refused after
+its dispatch was saved records error without relay fields, because no listener
+was registered. Missing observations
 remain unknown. New relay close receipts always use unknown or error, never success:
 a socket byte count cannot prove remote processing. The optional modern shape has
 `observationId` and `relay`: exact host/port, checked address or null, permit id,

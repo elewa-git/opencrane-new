@@ -3,7 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { JSONWebKeySet } from 'jose';
 import { tokenVerifier, verifyEgressCapability, type EgressCapability } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { egressDestinationDataSchema, legacyMemberRole } from '@opencrane/events';
+import { egressDestinationDataSchema, egressObservationId, legacyMemberRole }
+  from '@opencrane/events';
 import { egressGrantStream } from '@opencrane/projections';
 import { BudgetActor, envelope, history } from './actor.ts';
 import { authorityFence } from './authority.ts';
@@ -131,6 +132,21 @@ async function checkRules(actor: BudgetActor, claims: EgressCapability, fresh: F
   }
 }
 
+async function recordRefusedDispatch(actor: BudgetActor, claims: EgressCapability) {
+  const digest = createHash('sha256');
+  digest.update(JSON.stringify([claims.host, claims.port]));
+  const destinationDigest = digest.digest('hex');
+  const details = { requestId: claims.jti, permitId: claims.jti, channel: claims.channel,
+    destinationDigest, outcome: 'error' };
+  const observationId = egressObservationId(actor.silo, claims.jti);
+  // Save the existing error outcome without relay fields: no listener was registered.
+  const event = envelope(actor.silo, `egress-${claims.jti}`, 'egress.observed',
+    details, observationId);
+  const command = { event, expectedSequence: 0, deadline: performance.now() + 1000 };
+  const result = await actor.store.append(command);
+  if (result.status !== 'appended') throw new Error('Egress refused');
+}
+
 export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding,
   registry?: EgressRelayRegistry) {
@@ -174,10 +190,12 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     const fresh = await authorityFence(actor.store, performance.now(), subjects);
     await checkAccess(actor, binding, checked, activity, fresh);
     await checkRules(actor, checked, fresh);
+    const expiresAt = Math.min(checked.exp * 1000, checked.turnExpiresAt,
+      checked.grantExpiresAt, checked.leaseExpiresAt ?? Infinity);
     async function confirm() {
       await activity.confirm(fresh.deadline, false);
       await fresh();
-      if (Date.now() >= checked.exp * 1000 || req.socket.destroyed || res.destroyed) {
+      if (Date.now() >= expiresAt || req.socket.destroyed || res.destroyed) {
         throw new Error('Egress refused');
       }
     }
@@ -192,6 +210,14 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     const dispatch = { callId: requestId, decisionId, bodyDigest: checked.operationDigest,
       modelCall, ...root };
     await actor.admitDispatch(dispatch, confirm, work.admittedAt);
+    // Recheck after append retries, within the original deadline. This is the last
+    // authority check before registration; the relay's 60-second cap applies afterwards.
+    try {
+      await confirm();
+    } catch (error) {
+      await recordRefusedDispatch(actor, checked);
+      throw error;
+    }
     const registration = { permitId: requestId, host: checked.host, port: checked.port,
       expiresAt: checked.exp * 1000 };
     const relay = await registry.register(registration);
