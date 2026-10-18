@@ -5,7 +5,7 @@ import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { pgDb } from '@opencrane/projections';
-import { BudgetActor, envelope, history } from '../src/actor.ts';
+import { BudgetActor, envelope, history, migrateBudgetDefault } from '../src/actor.ts';
 import { applyBudget, budgetSummary, emptyBudget } from '../src/state.ts';
 import { configureBudget } from '../src/budget-config.ts';
 
@@ -28,7 +28,7 @@ async function stopServices() {
   await dbs.close();
   await fga.close();
 }
-async function initialise() {
+async function initialise(defaultPayer = 'original') {
   nats = await natsFixture();
   binding = await createStore(fga.apiUrl, 'test');
   const member = envelope('test', 'member-alice', 'member.joined', {
@@ -38,14 +38,17 @@ async function initialise() {
   const auth = memberAuthorisation(binding);
   await auth.handler.handle(member, pgDb(dbs.queue));
   actor = new BudgetActor(nats.store, 'test');
-  await actor.start(100, 1000, 'original');
+  await actor.start(100, 1000, defaultPayer);
 }
 async function close() {
   await nats.close();
 }
 beforeAll(startServices, 120_000);
 afterAll(stopServices);
-beforeEach(initialise);
+async function initialiseDefault() {
+  await initialise();
+}
+beforeEach(initialiseDefault);
 afterEach(close);
 
 async function save(raw: unknown) {
@@ -235,3 +238,32 @@ async function refusesCaller(problem: typeof accessProblems[number]) {
   expect(await nats.store.head('budget-test')).toBe(before);
 }
 it.each(accessProblems)('refuses a budget save when caller access is %s', refusesCaller);
+
+async function editsMigratedInstallation() {
+  await nats.close();
+  await initialise('');
+  expect(actor.state.defaultPayingGroupId).toBeUndefined();
+  await migrateBudgetDefault(nats.store, 'test', 'installation-default');
+  actor = new BudgetActor(nats.store, 'test');
+  await actor.start();
+  expect(actor.state.defaultPayingGroupId).toBe('installation-default');
+  expect(await nats.store.head('team-installation-default')).toBe(0);
+  const command = { commandId: 'migrated-stop', expectedSequence: actor.state.sequence,
+    scope: 'global', ceilingCents: 0, defaultPayingGroupId: 'installation-default' };
+  expect(await save(command)).toMatchObject({ status: 'appended',
+    budget: { ceilingCents: 0, defaultPayingGroupId: 'installation-default' } });
+  expect(await nats.store.head('team-installation-default')).toBe(0);
+}
+it('saves a zero global ceiling after migrating an existing installation',
+  editsMigratedInstallation);
+
+async function refusesUnsavedInstallationPayer() {
+  const before = await nats.store.head('budget-test');
+  const command = { commandId: 'unsaved-installation', expectedSequence: before,
+    scope: 'global', ceilingCents: 0, defaultPayingGroupId: 'installation-default' };
+  await expect(save(command)).rejects.toThrow('Spending choice unavailable');
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.defaultPayingGroupId).toBe('original');
+}
+it('refuses the installation payer when it was not saved in this budget',
+  refusesUnsavedInstallationPayer);

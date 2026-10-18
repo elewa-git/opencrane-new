@@ -100,7 +100,7 @@ beforeEach(async () => {
   await runner.initialise(members);
   await runner.initialise(auditTrail);
   await runner.initialise(budgets);
-  actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000, 'personal-default');
+  actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000, 'installation-default');
   await runner.run(budgets);
   await runner.initialise(mcpCatalogue);
   await runner.initialise(computers);
@@ -144,10 +144,7 @@ beforeEach(async () => {
     computerId: 'computer-alice', sandboxUid: 'sandbox-alice', generation: 1, tokenId: 'token:alice' }));
   await append(fixture('computer.ready', 'computer-personal-alice', { assistantId: 'personal-alice', computerId: 'computer-alice' }));
   await runner.run(computers);
-  const defaultPayer = fixture('team.created', 'team-personal-default', {
-    teamId: 'personal-default', name: 'Personal work', createdBy: 'alice',
-  });
-  await append(defaultPayer);
+
 
   const connectionString = String(dbs.queue.options.connectionString);
   feed = await connectMemberFeed(connectionString);
@@ -612,7 +609,7 @@ it('lets Owner and Admin configure the one budget actor, refuses others and repl
   });
   await append(shared);
   const url = '/api/org/models';
-  const payload = { commandId: 'budget-global', expectedSequence: actor.state.sequence, scope: 'global', ceilingCents: 30000, dailyCeilingCents: 2000, defaultPayingGroupId: 'personal-default' };
+  const payload = { commandId: 'budget-global', expectedSequence: actor.state.sequence, scope: 'global', ceilingCents: 30000, dailyCeilingCents: 2000, defaultPayingGroupId: 'installation-default' };
   for (const sub of ['oidc-bob', 'oidc-mallory']) expect((await app.inject({ method: 'POST', url, headers: { ...headers(sub), origin: new URL(config.redirectUri).origin }, payload })).statusCode).toBe(403);
   expect((await app.inject({ method: 'POST', url, headers: headers('oidc-alice'), payload })).statusCode).toBe(403);
   for (const bad of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) expect((await app.inject({ method: 'POST', url, headers: { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin }, payload: { ...payload, ceilingCents: bad } })).statusCode).toBe(400);
@@ -632,7 +629,7 @@ it('lets Owner and Admin configure the one budget actor, refuses others and repl
     { scope: 'paying_group', scopeId: 'sales', ceilingCents: 1000 },
     { scope: 'assistant', scopeId: 'shared-sales', ceilingCents: 1000 },
   ];
-  expect(reply.json()).toMatchObject({ budget: { defaultPayingGroupId: 'personal-default',
+  expect(reply.json()).toMatchObject({ budget: { defaultPayingGroupId: 'installation-default',
     ceilings } });
   const race = await Promise.all(['first', 'second'].map(commandId => save('oidc-alice', { ...payload, commandId, expectedSequence: actor.state.sequence, ceilingCents: 40000 })));
   expect(race.map(r => r.statusCode).sort()).toEqual([200, 409]);
@@ -908,7 +905,7 @@ it('lists 50 held and settled reservations and reads their details within two se
   for (let index = 0; index < 50; index++) {
     const permitId = await actor.reserve({ model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
       computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private-conversation',
-      turnId: 'private-turn', threadId: 'private-thread', payingGroupId: 'personal-default', contextDigest: '0'.repeat(64) }, 10);
+      turnId: 'private-turn', threadId: 'private-thread', payingGroupId: 'installation-default', contextDigest: '0'.repeat(64) }, 10);
     permits.push(permitId);
     await actor.effect(permitId, index < 25 ? undefined : { inputTokens: 1, outputTokens: 1 });
     if (index >= 25) {
@@ -950,7 +947,7 @@ it('lists 50 held and settled reservations and reads their details within two se
 it('exposes safe effect evidence to Owner/Admin, refuses other identities and records a resolution without dispatch', async () => {
   const permitId = await actor.reserve({ model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
     computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private-conversation',
-    turnId: 'private-turn', threadId: 'private-thread', payingGroupId: 'personal-default', contextDigest: '0'.repeat(64) }, 10);
+    turnId: 'private-turn', threadId: 'private-thread', payingGroupId: 'installation-default', contextDigest: '0'.repeat(64) }, 10);
   await actor.effect(permitId);
   const url = `/api/org/effects/${permitId}`;
   const operatorHeaders = headers('oidc-alice');
@@ -993,7 +990,7 @@ async function readsSlowEffects(view: 'list' | 'detail') {
     model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
     computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
     conversationId: 'private-conversation', turnId: 'private-turn', threadId: 'private-thread',
-    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+    payingGroupId: 'installation-default', contextDigest: '0'.repeat(64),
   };
   const permitId = await actor.reserve(call, 10);
   await actor.effect(permitId);
@@ -1032,7 +1029,7 @@ async function refusesAdminRemovedDuringEffectRead(view: 'list' | 'detail') {
     model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
     computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
     conversationId: 'private-conversation', turnId: 'private-turn', threadId: 'private-thread',
-    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+    payingGroupId: 'installation-default', contextDigest: '0'.repeat(64),
   };
   const permitId = await actor.reserve(call, 10);
   await actor.effect(permitId);
@@ -1075,7 +1072,7 @@ async function resolvesAfterBudgetRead(removeDuringRead: boolean) {
     model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
     computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
     conversationId: 'private-conversation', turnId: 'turn', threadId: 'thread',
-    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+    payingGroupId: 'installation-default', contextDigest: '0'.repeat(64),
   };
   const permitId = await actor.reserve(call, 10);
   await actor.effect(permitId);
@@ -1137,7 +1134,7 @@ async function refusesHoldReleasedDuringBudgetRead() {
     model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
     computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
     conversationId: 'private-conversation', turnId: 'turn', threadId: 'thread',
-    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+    payingGroupId: 'installation-default', contextDigest: '0'.repeat(64),
   };
   const permitId = await actor.reserve(call, 1000);
   const url = `/api/org/effects/${permitId}`;
@@ -1199,7 +1196,7 @@ async function refusesResolutionWithoutOpenFgaAdminPermission() {
     model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
     computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
     conversationId: 'private-conversation', turnId: 'turn', threadId: 'thread',
-    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+    payingGroupId: 'installation-default', contextDigest: '0'.repeat(64),
   };
   const permitId = await actor.reserve(call, 1000);
   const url = `/api/org/effects/${permitId}`;
@@ -1251,7 +1248,7 @@ async function readsConfiguredBudgetStop() {
   const refusedCall = { model: 'gpt-6-luna', priceTableId,
     computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
     conversationId: 'conversation', turnId: 'refused', threadId: 'thread',
-    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64) };
+    payingGroupId: 'installation-default', contextDigest: '0'.repeat(64) };
   await expect(actor.reserve(refusedCall, 1)).rejects.toThrow('spending cap');
   expect(await nats.store.head('budget-test')).toBe(before + 2);
   await runner.rebuild(budgets);
@@ -1840,7 +1837,7 @@ async function recoversOriginalCeiling() {
   const recordedTime = originalRows.at(-1)!.event.time;
   const call = { model: 'gpt-6-luna', priceTableId, computerId: 'computer',
     assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private',
-    turnId: 'turn', threadId: 'thread', payingGroupId: 'personal-default',
+    turnId: 'turn', threadId: 'thread', payingGroupId: 'installation-default',
     contextDigest: '0'.repeat(64) };
   await actor.reserve(call, 1);
   expect((await saveCeiling('second-ceiling', 0)).statusCode).toBe(200);
@@ -1981,7 +1978,7 @@ async function conflictsOnBudgetChurn() {
   expect(rows).toHaveLength(3);
   const call = { model: 'gpt-6-luna', priceTableId, computerId: 'computer',
     assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private',
-    turnId: 'turn', threadId: 'thread', payingGroupId: 'personal-default',
+    turnId: 'turn', threadId: 'thread', payingGroupId: 'installation-default',
     contextDigest: '0'.repeat(64) };
   const beforeReservation = actor.state.sequence;
   await actor.reserve(call, 1);
@@ -1992,3 +1989,20 @@ async function conflictsOnBudgetChurn() {
 }
 it('keeps one conditional append for competing edits and conflicts on reservation churn',
   conflictsOnBudgetChurn);
+
+async function editsInstallationDefault(ceilingCents: number) {
+  expect(await nats.store.head('team-installation-default')).toBe(0);
+  const payload = { commandId: 'startup-edit', expectedSequence: actor.state.sequence,
+    scope: 'global', ceilingCents, dailyCeilingCents: 1200,
+    defaultPayingGroupId: 'installation-default' };
+  const requestHeaders = { ...headers('oidc-amina'),
+    origin: new URL(config.redirectUri).origin };
+  const response = await app.inject({ method: 'POST', url: '/api/org/models',
+    headers: requestHeaders, payload });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ budget: { ceilingCents,
+    dailyCeilingCents: 1200, defaultPayingGroupId: 'installation-default' } });
+  expect(await nats.store.head('team-installation-default')).toBe(0);
+}
+it.each([30000, 0])('saves a global ceiling of %s from actual installation startup',
+  editsInstallationDefault);
