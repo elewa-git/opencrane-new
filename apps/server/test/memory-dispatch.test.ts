@@ -1559,3 +1559,98 @@ async function refusesRevocationDuringFinalScopeRead(change: LoadedChange) {
 it.each(['assistant_read', 'member_mcp'] as const)(
   'refuses turn renewal when %s is revoked during the final scope read',
   refusesRevocationDuringFinalScopeRead);
+
+async function refusesTerminalMemoryDuringSigning(action: 'invalidated' | 'ended') {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const rows = await history(setup.nats.store, 'conversation-conversation', 'test');
+  let prepared: z.infer<typeof memoryContextRecordedEventSchema> | undefined;
+  for (const row of rows) {
+    if (row.event.type !== 'agent.memory_context_recorded') continue;
+    const recorded = memoryContextRecordedEventSchema.parse(row.event);
+    if (recorded.data.action === 'prepared') prepared = recorded;
+  }
+  if (!prepared) throw new Error('Memory preparation missing from fixture');
+  const reason = action === 'ended' ? 'ended' : 'access_changed';
+  const terminal = { ...prepared.data, action, reason };
+  const bridge = await renewalBridge();
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function endDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    await setup.append('conversation-conversation', 'agent.memory_context_recorded', terminal);
+    return result;
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(endDuringSigning);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).toHaveBeenCalledOnce();
+  } finally {
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each(['invalidated', 'ended'] as const)(
+  'refuses turn renewal when memory becomes %s during signing',
+  refusesTerminalMemoryDuringSigning);
+
+async function refusesRenewalAtOriginalDeadline() {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const confirm = decisionAccess.confirmDecisionAccess;
+  let originalDeadline: number | undefined;
+  async function captureDeadline(...args: Parameters<typeof confirm>) {
+    originalDeadline ??= args[1].deadline;
+    return confirm(...args);
+  }
+  const clock = vi.spyOn(performance, 'now');
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function expireDuringSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    if (originalDeadline === undefined) throw new Error('Access check did not run');
+    clock.mockReturnValue(originalDeadline);
+    return result;
+  }
+  const access = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+  access.mockImplementation(captureDeadline);
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(expireDuringSigning);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).toHaveBeenCalledOnce();
+  } finally {
+    clock.mockRestore();
+    access.mockRestore();
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it('refuses turn renewal when signing reaches the original access deadline',
+  refusesRenewalAtOriginalDeadline);
+
+async function sanitisesMemoryPreparationError() {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  async function* unavailableScope(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) throw new Error('Private canary in storage error');
+    yield* read(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(unavailableScope);
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).not.toHaveBeenCalled();
+  } finally {
+    reads.mockRestore();
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it('returns only the fixed refusal when memory preparation fails', sanitisesMemoryPreparationError);
