@@ -1454,3 +1454,44 @@ async function refusesMissingRenewalBinding() {
 }
 it('refuses turn renewal with loaded references but no permissions binding',
   refusesMissingRenewalBinding);
+
+const renewalAccessChanges = [
+  { subject: 'member-alice', type: 'member.removed',
+    data: { memberId: 'alice', removedBy: 'alice' } },
+  { subject: 'assistant-assistant', type: 'assistant.settings_changed',
+    data: { assistantId: 'assistant', active: false } },
+];
+async function refusesIdentityDuringRenewal(change: typeof renewalAccessChanges[number]) {
+  const bridge = await renewalBridge();
+  let signed = false;
+  const issue = setup.tokens.turn.bind(setup.tokens);
+  async function markSigning(input: Parameters<typeof issue>[0]) {
+    const result = await issue(input);
+    signed = true;
+    return result;
+  }
+  const confirm = decisionAccess.confirmDecisionAccess;
+  async function removeBeforeFinalCheck(...args: Parameters<typeof confirm>) {
+    if (signed) {
+      signed = false;
+      await setup.append(change.subject, change.type, change.data);
+    }
+    return confirm(...args);
+  }
+  const issuance = vi.spyOn(setup.tokens, 'turn');
+  issuance.mockImplementationOnce(markSigning);
+  const access = vi.spyOn(decisionAccess, 'confirmDecisionAccess');
+  access.mockImplementation(removeBeforeFinalCheck);
+  try {
+    const refused = { type: 'ack', sequence: 1, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(1)).toEqual(refused);
+    expect(issuance).toHaveBeenCalledOnce();
+  } finally {
+    access.mockRestore();
+    issuance.mockRestore();
+    await bridge.close();
+  }
+}
+it.each(renewalAccessChanges)(
+  'refuses turn renewal when $type arrives during the final activity check',
+  refusesIdentityDuringRenewal);
