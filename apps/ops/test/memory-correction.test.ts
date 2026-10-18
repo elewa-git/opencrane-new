@@ -6,7 +6,8 @@ import { HandlerRuntime } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
 import { memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner,
   readMemoryFactIds } from '@opencrane/projections';
-import type { EventEnvelope, MemoryIdentity } from '@opencrane/events';
+import { memoryCorrectedEventSchema, type EventEnvelope, type MemoryIdentity }
+  from '@opencrane/events';
 import { database } from '../../../libs/projections/test/database.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from '../src/memory-cleanup.ts';
 import { scanNightlyMemory } from '../src/nightly-memory.ts';
@@ -36,7 +37,7 @@ afterEach(async function cleanup() {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-async function save(memoryId: string, revision = 1,
+function memoryRecord(memoryId: string, revision = 1,
   dependsOn: { scopeId: string; memoryId: string; revision: number }[] = []) {
   const identity = { ...root, memoryId, revision };
   keys.provision(identity);
@@ -53,9 +54,42 @@ async function save(memoryId: string, revision = 1,
   }
   const record = { ...event(`${memoryId}-${revision}`), type,
     subject: `scope-${scopeId}`, data: payload };
+  return record;
+}
+
+async function save(memoryId: string, revision = 1,
+  dependsOn: { scopeId: string; memoryId: string; revision: number }[] = []) {
+  const record = memoryRecord(memoryId, revision, dependsOn);
   await nats.seed([record]);
   return record;
 }
+
+const invalidBindings = [
+  { ownerId: 'bob' },
+  { keyId: `key:${'a'.repeat(64)}` },
+];
+it.each(invalidBindings)('refuses a correction with an unrelated identity %j before append',
+  async function refusedCorrection(patch) {
+    await save('root');
+    const before = await history();
+    const correction = memoryRecord('root', 2);
+    const parsed = memoryCorrectedEventSchema.parse(correction);
+    const invalid = { ...parsed, data: { ...parsed.data, ...patch } };
+    const result = await nats.store.append({ event: invalid, expectedSequence: 1 });
+    expect(result).toEqual({ status: 'rejected', reason: 'invalid_event' });
+    expect(await history()).toEqual(before);
+    expect(await nats.store.head(correction.subject)).toBe(1);
+  });
+
+it('appends a correction whose scope, owner and revision key agree', async function validAppend() {
+  await save('root');
+  const correction = memoryRecord('root', 2);
+  const result = await nats.store.append({ event: correction, expectedSequence: 1 });
+  expect(result).toEqual({ status: 'appended', sequence: 2 });
+  const rows = await history();
+  expect(rows).toHaveLength(2);
+  expect(rows[1]?.event).toEqual(correction);
+});
 
 async function history() {
   const rows = [];
