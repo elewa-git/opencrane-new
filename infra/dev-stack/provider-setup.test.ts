@@ -83,3 +83,49 @@ async function recordsSetup() {
   }
 }
 test('provider setup uses ordered authenticated product calls and stops at each refusal', recordsSetup);
+
+async function refusesUnsafeReplies() {
+  for (const failure of ['redirect', 'transport', 'json']) {
+    let requests = 0;
+    function handle(request: import('node:http').IncomingMessage,
+      response: import('node:http').ServerResponse) {
+      requests++;
+      request.resume();
+      if (failure === 'transport') {
+        request.socket.destroy(new Error('sensitive-value /private/location'));
+        return;
+      }
+      if (failure === 'redirect') {
+        response.writeHead(307, { location: '/private/location?sensitive-value' });
+      }
+      response.end('sensitive-value /private/location');
+    }
+    const server = createServer(handle);
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
+      cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
+    async function run() { await setupProvider(options); }
+    function safeError(error: unknown) {
+      assert(error instanceof Error);
+      const reason = failure === 'json' ? 'invalid' : 'unavailable';
+      assert.equal(error.message, `Provider setup create: ${reason}`);
+      assert.equal(error.stack!.includes('sensitive-value'), false);
+      assert.equal(error.stack!.includes('/private/location'), false);
+      assert.equal(error.cause, undefined);
+      return true;
+    }
+    try {
+      await assert.rejects(run, safeError);
+      assert.equal(requests, 1, 'A failed setup must neither follow a redirect nor continue');
+    } finally {
+      server.closeAllConnections();
+      const closed = once(server, 'close');
+      server.close();
+      await closed;
+    }
+  }
+}
+test('setup refuses redirects and sanitises transport and JSON errors', refusesUnsafeReplies);

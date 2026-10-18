@@ -165,3 +165,55 @@ async function supportsManagedVerification() {
 }
 test('the stub verifies managed calls, counts credentials and keeps streaming',
   { timeout: 15_000 }, supportsManagedVerification);
+
+async function handlesMissingCredential() {
+  const folder = await mkdtemp('/tmp/missing-stub-');
+  const file = `${folder}/private-credential-location`;
+  const value = randomUUID();
+  const environment = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_GENERATION: randomUUID(),
+    MODEL_STUB_MCP_REVISION: catalogueDigest([approvalJourneyTool()]),
+    MODEL_STUB_MANAGED_FILE: file };
+  const stub = spawn(process.execPath, ['--experimental-strip-types', stubPath],
+    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+  let diagnostics = '';
+  function capture(chunk: Buffer) { diagnostics += chunk.toString(); }
+  stub.stderr.on('data', capture);
+  stub.stdout.on('data', capture);
+  try {
+    await once(stub.stdout, 'data');
+    const port = /Stub ready (\d+)/u.exec(diagnostics)?.[1];
+    assert(port);
+    const origin = `http://127.0.0.1:${port}`;
+    let other = 0;
+    for (const state of ['missing', 'empty']) {
+      if (state === 'empty') await writeFile(file, '', { mode: 0o600 });
+      for (const credential of [value, '']) {
+        const headers = { authorization: `Bearer ${credential}` };
+        const list = await fetch(`${origin}/v1/models`, { headers });
+        assert.equal(list.status, 200);
+        const listing = await list.text();
+        const input = { method: 'POST', headers, body: JSON.stringify({ stream: false }) };
+        const reply = await fetch(`${origin}/v1/responses`, input);
+        assert.equal(reply.status, 200);
+        const answer = await reply.text();
+        other += 2;
+        const counts = await fetch(`${origin}/provider-counts`);
+        assert.deepEqual(await counts.json(), { managed: 0, other });
+        assert.equal(listing.includes(value), false);
+        assert.equal(answer.includes(value), false);
+        assert.equal(listing.includes(file), false);
+        assert.equal(answer.includes(file), false);
+      }
+    }
+    assert.equal(diagnostics.includes(value), false);
+    assert.equal(diagnostics.includes(file), false);
+  } finally {
+    const stopped = once(stub, 'exit');
+    stub.kill('SIGTERM');
+    await stopped;
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+test('missing and empty credential files never match or disclose a bearer or file location',
+  { timeout: 15_000 }, handlesMissingCredential);

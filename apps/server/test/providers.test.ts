@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { decisionRecordedDataSchema, parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
-import type { StoredEvent } from '@opencrane/event-store';
+import { budgetCallDispatchAdmittedDataSchema, decisionRecordedDataSchema, parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
+import { createEventStore, type StoredEvent } from '@opencrane/event-store';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -1222,3 +1222,119 @@ async function deniesRevokedRoleBeforeIamCatchesUp() {
 }
 it('revoked role denies reads and key rotation before the IAM projection catches up',
   deniesRevokedRoleBeforeIamCatchesUp);
+
+async function prepareRealSwitchOn() {
+  await close();
+  await initialise();
+  await createsConnection();
+  await savesKeyOnce();
+  const reachability = verificationInput('switch-reachability', 'reachability');
+  const reached = await request('POST', '/api/org/providers/primary/verify', reachability);
+  expect(reached.statusCode).toBe(200);
+  await runsPricedTestOnce();
+  const selected = { action: 'models', commandId: 'switch-models', providerId: 'primary',
+    expectedRevision: 2, models: ['gpt-6-luna'] };
+  expect((await request('POST', '/api/org/providers', selected)).statusCode).toBe(200);
+  const choice = { action: 'select', commandId: 'switch-default', kind: 'silo_default',
+    dependantId: 'acme', task: 'chat_turn', model: 'gpt-6-luna', expectedRevision: 3,
+    expectedProviderSequence: await nats.store.head('provider-*'), expectedBindingSequence: 0 };
+  const chosen = await request('POST', '/api/org/providers/primary/bindings', choice);
+  expect(chosen.statusCode, chosen.body).toBe(200);
+}
+async function switchPositions() {
+  const status = await request('GET', '/api/org/providers/primary/drain');
+  expect(status.statusCode).toBe(200);
+  const current = status.json<{ revision: number; expectedProviderSequence: number;
+    sequence: number }>();
+  return { expectedRevision: current.revision,
+    expectedProviderSequence: current.expectedProviderSequence,
+    expectedDrainSequence: current.sequence };
+}
+async function appendSwitchSettlement(callId: string, unknown: boolean) {
+  const settlement = { ...event(`switch-settlement-${unknown}`, 'budget-acme', 'budget.settled'),
+    silo: 'acme', data: { reservationId: callId, permitId: callId, settledCents: 0,
+      ...(unknown ? { outcome: 'unknown' } : {}) } };
+  const result = await nats.store.append({ event: settlement,
+    expectedSequence: await nats.store.head('budget-acme') });
+  expect(result.status).toBe('appended');
+}
+async function switchesAfterRealVerification(kind: 'reachability' | 'paid' | 'unreserved') {
+  await prepareRealSwitchOn();
+  let unresolvedId = '';
+  if (kind === 'paid') {
+    upstreamInvalidJson = true;
+    try {
+      const input = { ...verificationInput('unresolved-test', 'test'), expectedRevision: 3 };
+      const response = await request('POST', '/api/org/providers/primary/verify', input);
+      expect(response.statusCode).toBe(200);
+      unresolvedId = actor.state.reservations.at(-1)!.id;
+      expect(actor.state.reservations.at(-1)?.settledCents).toBeUndefined();
+    } finally {
+      upstreamInvalidJson = false;
+    }
+  }
+  if (kind === 'unreserved') {
+    unresolvedId = 'ordinary-unreserved';
+    const modelCall = { model: 'mcp-zero-cost', priceTableId: 'zero',
+      payingGroupId: 'installation-default', assistantId: 'assistant', computerId: 'computer',
+      conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'owner',
+      contextDigest: 'a'.repeat(64), requestId: unresolvedId };
+    const dispatch = { callId: unresolvedId, decisionId: 'ordinary-decision',
+      bodyDigest: 'b'.repeat(64), modelCall };
+    async function fresh() {}
+    await actor.admitDispatch(dispatch, fresh);
+  }
+  const drain = { ...await switchPositions(), action: 'start', commandId: 'switch-drain' };
+  expect((await request('POST', '/api/org/providers/primary/drain', drain)).statusCode).toBe(200);
+  const command = { ...await switchPositions(), commandId: 'real-switch-on' };
+  if (unresolvedId) {
+    const refused = await request('POST', '/api/org/providers/primary/switch-on', command);
+    expect(refused.statusCode).toBe(403);
+    if (kind === 'paid') {
+      await actor.effect(unresolvedId, { inputTokens: 10, outputTokens: 2 });
+      for await (const row of nats.store.readStream(`effect-${unresolvedId}`)) {
+        if (row.event.type === 'effect.observed') {
+          await actor.settleRecorded(unresolvedId, row.event.id);
+        }
+      }
+      expect(actor.state.reservations.at(-1)?.settledCents).toBe(1);
+    } else {
+      await appendSwitchSettlement(unresolvedId, true);
+      expect((await request('POST', '/api/org/providers/primary/switch-on', command))
+        .statusCode).toBe(403);
+      // Supply confirmed evidence as a fixture; ordinary unreserved sends have no completion writer.
+      await appendSwitchSettlement(unresolvedId, false);
+    }
+  }
+  const response = await request('POST', '/api/org/providers/primary/switch-on', command);
+  expect(response.statusCode, response.body).toBe(200);
+  await runner.rebuild(providers);
+  await app.close();
+  nats.store = await createEventStore(nats.connection);
+  function memberId() { return Promise.resolve('owner'); }
+  const options = { silo: 'acme', store: nats.store, binding: auth.binding, db: database,
+    feed: { memberId }, secrets };
+  app = buildServer(config, { providers: options });
+  const before = upstreamCount;
+  const repeated = await request('POST', '/api/org/providers/primary/switch-on', command);
+  expect(repeated.statusCode).toBe(200);
+  expect(repeated.json()).toEqual(response.json());
+  expect(upstreamCount).toBe(before);
+  let markers = 0;
+  let reachabilityDispatches = 0;
+  for await (const row of nats.store.readStream('budget-acme')) {
+    if (row.event.type === 'provider.managed_calls_enabled') markers++;
+    if (row.event.type === 'budget.call_dispatch_admitted') {
+      const dispatch = budgetCallDispatchAdmittedDataSchema.parse(row.event.data);
+      if (dispatch.modelCall.model === 'provider-reachability') {
+        expect(dispatch.reservationId).toBeUndefined();
+        reachabilityDispatches++;
+      }
+    }
+  }
+  expect(markers).toBe(1);
+  expect(reachabilityDispatches).toBe(1);
+}
+it.each(['reachability', 'paid', 'unreserved'] as const)(
+  'switches on after real verification and confirmed spending, including replay (%s)',
+  switchesAfterRealVerification, 120_000);

@@ -851,3 +851,21 @@ async function conflictingUsageAfterResolution() {
 }
 it('keeps conflicting usage blocked after an accepted release, redelivery and restart',
   conflictingUsageAfterResolution);
+
+async function reservedReachabilityStillBlocks() {
+  const reservationId = 'reserved-reachability';
+  const modelCall = { model: 'provider-reachability', priceTableId: 'zero', payingGroupId: 'sales',
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+    turnId: 'legacy', threadId: 'legacy-thread', requesterId: 'alice',
+    contextDigest: 'a'.repeat(64), requestId: 'reserved-reachability-call' };
+  // Isolate the dispatch check: even without an open hold, a reserved send needs settlement.
+  await setup.append('budget-test', 'budget.call_dispatch_admitted', {
+    callId: modelCall.requestId, decisionId: 'reserved-reachability-decision',
+    bodyDigest: 'b'.repeat(64), reservationId, modelCall,
+  });
+  await refused(403);
+  await setup.append('budget-test', 'budget.settled',
+    { reservationId, permitId: reservationId, settledCents: 0 });
+  expect((await request(await input())).statusCode).toBe(200);
+}
+it('never exempts a reachability dispatch that carries a reservation', reservedReachabilityStillBlocks);
