@@ -57,8 +57,39 @@ function privateFileVolume(volume) {
   return volume.name === 'runtime-files';
 }
 
+function privateFileSourceVolume(volume) {
+  return volume.name === 'runtime-file-source';
+}
+
+function privateFileSourceMount(mount) {
+  return mount.name === 'runtime-file-source' && mount.readOnly === true &&
+    mount.mountPath === '/run/opencrane-source';
+}
+
+function writablePrivateFileMount(mount) {
+  return mount.name === 'runtime-files' && mount.mountPath === '/run/opencrane/files';
+}
+
 function privateFileImport(source) {
   return source.secretRef.name === 'runtime-files';
+}
+
+function assertPrivateFileDelivery(podSpec) {
+  const source = podSpec.volumes.find(privateFileSourceVolume);
+  assert.ok(source);
+  assert.deepEqual(source.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
+  const files = podSpec.volumes.find(privateFileVolume);
+  assert.deepEqual(files.emptyDir, { medium: 'Memory' });
+  let copy;
+  for (const container of podSpec.initContainers) {
+    if (container.name === 'copy-private-files') copy = container;
+  }
+  assert.ok(copy);
+  assert.equal(copy.securityContext.runAsUser, 0);
+  assert.ok(copy.volumeMounts.some(privateFileSourceMount));
+  assert.ok(copy.volumeMounts.some(writablePrivateFileMount));
+  assert.match(copy.args.join(' '), /chown 1000:1000/u);
+  assert.match(copy.args.join(' '), /chmod 0400/u);
 }
 
 test('the package runs member and conversation projections and a dispatcher', () => {
@@ -115,20 +146,17 @@ test('a binary key stays in a mounted Secret and outside every environment impor
     assert.ok(container.volumeMounts.some(privateFileMount));
     assert.ok(!container.envFrom.some(privateFileImport));
   }
-  const files = server.spec.template.spec.volumes.find(privateFileVolume);
-  assert.deepEqual(files.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
+  assertPrivateFileDelivery(server.spec.template.spec);
 
   const bootstrap = namedResource('Job', 'bootstrap');
   const bootstrapSpec = bootstrap.spec.template.spec;
   assert.ok(bootstrapSpec.containers[0].volumeMounts.some(privateFileMount));
-  const bootstrapFiles = bootstrapSpec.volumes.find(privateFileVolume);
-  assert.deepEqual(bootstrapFiles.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
+  assertPrivateFileDelivery(bootstrapSpec);
 
   const worker = namedResource('Deployment', 'worker-members');
   const workerSpec = worker.spec.template.spec;
   assert.ok(workerSpec.containers[0].volumeMounts.some(privateFileMount));
-  const workerFiles = workerSpec.volumes.find(privateFileVolume);
-  assert.deepEqual(workerFiles.secret, { secretName: 'runtime-files', defaultMode: 0o400 });
+  assertPrivateFileDelivery(workerSpec);
 
   for (const role of ['members', 'dispatcher']) {
     const deployment = namedResource('Deployment', `worker-${role}`);
