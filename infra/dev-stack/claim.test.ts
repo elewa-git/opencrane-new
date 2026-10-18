@@ -264,7 +264,7 @@ esac
 }
 test('cleanup refuses a Helm release with no recorded identity', unrecordedReleaseIsRefused);
 
-async function interruptedOwnedInstallIsRemoved() {
+async function checkInterruptedInstallCleanup(secretInstallId: string | undefined) {
   const fixture = await createClaimFixture();
   try {
     const stackOwner = `worktree=${process.cwd()}\nstartedAt=${new Date().toISOString()}\n`;
@@ -273,14 +273,16 @@ async function interruptedOwnedInstallIsRemoved() {
       worktree: process.cwd(), slot: '1', context: 'k3d-ocn',
       namespace: 'opencrane-package-1', namespaceUid: 'owned-package',
       release: 'opencrane-package-1', heartbeatAt: new Date().toISOString(),
-      installStartedAt: new Date(Date.now() - 1000).toISOString(),
+      installStartedAt: '2026-10-17T12:00:00.000Z',
+      installId: '50b427cd-1874-4785-908c-9d209e2c095f',
     };
     await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(packageOwner));
     const namespace = JSON.stringify({ metadata: { uid: 'owned-package', annotations: {
       'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1',
     } } });
     const secret = JSON.stringify({ metadata: {
-      uid: 'owned-release', creationTimestamp: new Date().toISOString(),
+      uid: 'release-after-attempt', creationTimestamp: '2026-10-17T12:01:00.000Z',
+      labels: { 'opencrane.dev/install-id': secretInstallId },
     } });
     const kubectlScript = `#!/bin/sh
 case " $* " in
@@ -300,13 +302,34 @@ esac
     const actions = `${fixture.home}/actions`;
     const env = { ...fixture.env, KUBE_TEST_NAMESPACE: namespace,
       KUBE_TEST_SECRET: secret, TEST_ACTIONS: actions };
-    await exec('infra/dev-stack/run.sh', ['package-down', '--id', '1'], { env });
-    assert.equal(await readFile(actions, 'utf8'), 'uninstall\ndelete\n');
-    await assert.rejects(stat(`${fixture.slotDirectory}/package-owner.json`), { code: 'ENOENT' });
+    const cleanup = exec('infra/dev-stack/run.sh', ['package-down', '--id', '1'], { env });
+    const recordFile = `${fixture.slotDirectory}/package-owner.json`;
+    if (secretInstallId === packageOwner.installId) {
+      await cleanup;
+      assert.equal(await readFile(actions, 'utf8'), 'uninstall\ndelete\n');
+      await assert.rejects(stat(recordFile), { code: 'ENOENT' });
+    } else {
+      await assert.rejects(cleanup);
+      await assert.rejects(stat(actions), { code: 'ENOENT' });
+      assert.equal(await readFile(recordFile, 'utf8'), JSON.stringify(packageOwner));
+    }
   } finally {
     await rm(fixture.home, { recursive: true, force: true });
   }
 }
+async function interruptedOwnedInstallIsRemoved() {
+  await checkInterruptedInstallCleanup('50b427cd-1874-4785-908c-9d209e2c095f');
+}
+async function laterForeignInstallIsRefused() {
+  await checkInterruptedInstallCleanup('c441a51b-0e3e-4935-a05b-066f4909a240');
+}
+async function laterUnlabelledInstallIsRefused() {
+  await checkInterruptedInstallCleanup(undefined);
+}
+test('cleanup refuses a foreign release created after a recorded install attempt',
+  laterForeignInstallIsRefused);
+test('cleanup refuses an unlabelled release created after a recorded install attempt',
+  laterUnlabelledInstallIsRefused);
 test('cleanup removes an owned install interrupted before its Secret UID was saved',
   interruptedOwnedInstallIsRemoved);
 
