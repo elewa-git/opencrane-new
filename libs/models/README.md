@@ -16,8 +16,8 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, private reviews, saved fact references, recall progress and access through memory saving, child joins, owners, providers and saved spending stop reasons| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
-  models -->|rechecks loaded memory after access; checks revision, reload cancellation, spending, catalogue expiry, holds and root stops before tool and memory sends| mcp["MCP server<br/>checks revision before execution"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status, calls, control, reviews, saved fact references, recall progress, access through memory saving and child joins, owners, providers and original spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
+  models -->|rechecks loaded memory; checks revision, reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -256,6 +256,10 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+Spending-limit changes keep their original receipt after a restart or later edits.
+The library loads history before checking write access. A reservation can also
+change the budget revision, so a refused save does not identify another editor.
 
 Saved spending stops explain the limits that applied to one turn. The server
 uses the same payer choice as admission and the stop handler.

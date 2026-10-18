@@ -1,3 +1,4 @@
+import { budgetChange } from '@opencrane/models';
 import { readPublication, publicationChange } from '@opencrane/projections';
 import { readHostedAdmission } from '@opencrane/models';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
@@ -31,12 +32,16 @@ export interface IntegrationOptions {
   budget?: { decisionUrl: string; tokens: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'budget'> };
 }
 
+const budgetChangeParameters = z.object({
+  commandId: z.string().regex(/^[\w-]{1,200}$/u),
+}).strict();
+
 export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConfig, options?: IntegrationOptions): void {
   if (options?.store && options.discovery) installWorker(app, options.store, options.silo, options.discovery).start();
   const authorisation = options && memberAuthorisation(options.binding);
   const now = options?.now ?? (() => new Date());
   const paths = [
-    '/api/org/integrations', '/api/org/models',
+    '/api/org/integrations', '/api/org/models', '/api/org/models/changes/:commandId',
     '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/review',
     '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/discovery',
     '/api/org/integrations/:serverId/admission',
@@ -62,26 +67,39 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
         if (!memberId) {
           return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
         }
-        const permission = await authorisation.check(memberId, 'admin');
-        if (permission.status === 'unavailable') return reply.code(503).send({ status: 'unavailable' });
-        if (!permission.allowed) {
-          return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
-        }
-        if (options.store) {
-          if (request.method === 'GET') {
-            await readActiveMember(options.store, options.binding, memberId, 'admin');
-          } else {
-            const authority = { requiredRole: 'admin' as const };
-            await activeMember(options.store, options.binding, memberId, authority);
-          }
-        }
-        return await authorisedRequest(path, request, reply, config, options, memberId, now());
+        return await checkedIntegrationRequest(path, request, reply, config, options, memberId, now());
       } catch (error) {
         return routeError(request, reply, error);
       }
     }
     app.route({ method, url: path, handler: handleIntegration });
   }
+}
+
+async function checkedIntegrationRequest(path: string, request: FastifyRequest,
+  reply: FastifyReply, config: AuthConfig, options: IntegrationOptions,
+  memberId: string, now: Date) {
+  const authorisation = memberAuthorisation(options.binding);
+  if (path === '/api/org/models/changes/:commandId') {
+    const { commandId } = budgetChangeParameters.parse(request.params);
+    if (!options.store) return reply.code(503).send({ status: 'unknown' });
+    const result = await budgetChange(options.store, options.binding, memberId, commandId);
+    return reply.send(result);
+  }
+  const permission = await authorisation.check(memberId, 'admin');
+  if (permission.status === 'unavailable') return reply.code(503).send({ status: 'unavailable' });
+  if (!permission.allowed) {
+    return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
+  }
+  if (options.store) {
+    if (request.method === 'GET') {
+      await readActiveMember(options.store, options.binding, memberId, 'admin');
+    } else {
+      const authority = { requiredRole: 'admin' as const };
+      await activeMember(options.store, options.binding, memberId, authority);
+    }
+  }
+  return await authorisedRequest(path, request, reply, config, options, memberId, now);
 }
 
 async function authorisedRequest(path: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string, now: Date) {

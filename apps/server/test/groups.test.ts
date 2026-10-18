@@ -212,7 +212,9 @@ const usesExistingPayingGroupCeiling = async () => {
   const fresh = await payingGroupAuthority(nats.store, 'acme', 'owner', 'finance', auth.binding);
   const actor = new BudgetActor(nats.store, 'acme');
   await actor.start(2000, 20000, 'personal-default');
-  expect(await actor.configure({ scope: 'paying_group', scopeId: 'finance', ceilingCents: 1, setBy: 'owner' })).toEqual({ status: 'appended' });
+  const ceiling = { scope: 'paying_group', scopeId: 'finance', ceilingCents: 1, setBy: 'owner' };
+  const configured = await actor.configure(ceiling);
+  expect(configured.status).toBe('appended');
   await expect(actor.reserve({ model: 'gpt-6-luna', payingGroupId: 'finance', priceTableId, computerId: 'computer', assistantId: 'assistant', requesterId: 'owner', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', contextDigest: 'a'.repeat(64) }, 2, fresh)).rejects.toThrow('Paying group spending cap reached');
   expect(actor.state.defaultPayingGroupId).toBe('personal-default');
   expect(actor.state.reservations).toHaveLength(0);

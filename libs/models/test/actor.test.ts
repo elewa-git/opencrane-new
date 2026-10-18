@@ -1,3 +1,5 @@
+import { jetstreamManager } from '@nats-io/jetstream';
+import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
@@ -268,7 +270,7 @@ async function keepsConfigureRepeatFromWritingAgain() {
   await actor.start();
   await reserve();
   const before = await nats.store.head();
-  expect(await actor.configure(payload, 'configure-once')).toEqual({ status: 'appended' });
+  expect(await actor.configure(payload, 'configure-once')).toMatchObject({ status: 'appended' });
   expect(await nats.store.head()).toBe(before);
   const changed = { ...payload, ceilingCents: 300 };
   expect(await actor.configure(changed, 'configure-once')).toEqual({ status: 'conflict' });
@@ -386,7 +388,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   expect(returned.sequence).toBe(expectedSequence);
   expect(projected.sequence).toBe(returned.sequence);
   const retry = await actor.configure(payload, 'configure-switch', projected.sequence, checkAccess);
-  expect(retry).toEqual({ status: 'appended' });
+  expect(retry).toMatchObject({ status: 'appended' });
   expect(checks).toBe(3);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   expect(actor.state.sequence).toBe(before + 1);
@@ -395,7 +397,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   expect(after).toEqual(budgetSummary(actor.state, clock));
   const stale = await actor.configure(payload, 'configure-stale', expectedSequence, checkAccess);
   expect(stale).toEqual({ status: 'conflict' });
-  expect(checks).toBe(3);
+  expect(checks).toBe(4);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   let reservedCents = 0;
   if (withHold) {
@@ -420,7 +422,7 @@ async function configuresAfterRefusingReservationPastSwitchOn() {
     scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',
   };
   const result = await actor.configure(payload, 'configure-after-refusal', projected.sequence);
-  expect(result).toEqual({ status: 'appended' });
+  expect(result).toMatchObject({ status: 'appended' });
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   expect(actor.state.sequence).toBe(before + 1);
   const after = await projectedBudgetSummary();
@@ -549,3 +551,43 @@ async function admitsOnlyCheckedManagedHolds(restart: boolean) {
 }
 it.each([false, true])('admits only validated, checked managed holds after switch-on (restart: %s)',
   admitsOnlyCheckedManagedHolds);
+
+async function recoversCeilingAfterRestart() {
+  const manager = await jetstreamManager(nats.connection);
+  await manager.streams.update('EVENTS', { duplicate_window: 1_000_000_000 });
+  const payload = { scope: 'global', ceilingCents: 300, setBy: 'alice' };
+  const revision = actor.state.sequence;
+  const saved = await actor.configure(payload, 'original-ceiling', revision);
+  expect(saved).toMatchObject({ status: 'appended', receipt: {
+    commandId: 'original-ceiling', ceilingCents: 300, setBy: 'alice',
+  } });
+  await reserve();
+  await actor.configure({ ...payload, ceilingCents: 250 }, 'later-ceiling');
+  await delay(1100);
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  const before = await nats.store.head();
+  expect(await actor.configure(payload, 'original-ceiling', revision)).toEqual(saved);
+  expect(await actor.configure({ ...payload, setBy: 'bob' }, 'original-ceiling'))
+    .toEqual({ status: 'conflict' });
+  expect(await actor.configure({ ...payload, ceilingCents: 301 }, 'original-ceiling'))
+    .toEqual({ status: 'conflict' });
+  expect(await nats.store.head()).toBe(before);
+}
+it('returns the original ceiling receipt after restart and duplicate expiry',
+  recoversCeilingAfterRestart);
+
+async function recoversReplacementReceipt() {
+  const replacement = new BudgetActor(nats.store, 'test', now);
+  await replacement.start();
+  const payload = { scope: 'global', ceilingCents: 0, setBy: 'alice' };
+  const saved = await replacement.configure(payload, 'replacement-ceiling');
+  expect(saved).toMatchObject({ receipt: {
+    stop: { status: 'stopping', stopId: 'replacement-ceiling' },
+  } });
+  const before = await nats.store.head();
+  expect(await actor.configure(payload, 'replacement-ceiling')).toEqual(saved);
+  expect(await nats.store.head()).toBe(before);
+}
+it('recovers the exact stop receipt saved by a replacement budget actor',
+  recoversReplacementReceipt);
