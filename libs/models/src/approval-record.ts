@@ -7,7 +7,13 @@ type RecordFields = Pick<ApprovalCard,
   'state' | 'requestedAt' | 'decidedAt' | 'usedAt' | 'endedAt' | 'cancelReason'>;
 
 export function utcInstant(savedTime: string) {
-  return new Date(savedTime).toISOString();
+  if (savedTime.endsWith('Z')) return savedTime;
+  const fractionMatch = savedTime.match(/\.(\d+)(?=[+-]\d{2}:\d{2}$)/u);
+  const savedFraction = fractionMatch?.[1];
+  const convertedTime = new Date(savedTime).toISOString();
+  if (savedFraction === undefined) return convertedTime;
+  const utcDateAndTime = convertedTime.slice(0, -5);
+  return `${utcDateAndTime}.${savedFraction}Z`;
 }
 
 export function approvalRecord(rows: StoredEvent[]) {
