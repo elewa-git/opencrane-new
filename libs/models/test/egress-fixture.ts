@@ -11,7 +11,7 @@ import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { onTestFinished } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { egressGrantStream } from '@opencrane/projections';
-import { BudgetActor, authorityFence, envelope, history, priceTableId, startGateway }
+import { BudgetActor, authorityFence, envelope, history, priceTableId, startGateway, startDecision }
   from '../src/index.ts';
 
 const destination = { host: 'registry.npmjs.org', port: 443 };
@@ -26,7 +26,10 @@ export type EgressScenario = 'allow' | 'deny' | 'stop' | 'revoke' | 'audit-outag
   'gate-outage' | 'missing-relay' | 'foreign-relay';
 
 export async function egressFixture(enabled = true, guarded = false,
-  receiptOptions: { captureReceipts?: boolean } = {}) {
+  receiptOptions: { captureReceipts?: boolean; production?: {
+    actor: BudgetActor; identity: Parameters<typeof startDecision>[1];
+    binding: Parameters<typeof startDecision>[2];
+  } } = {}) {
   const directory = await mkdtemp(`${tmpdir()}/egress-gateway-`);
   const nats = await natsFixture();
   const actor = new BudgetActor(nats.store, 'test');
@@ -174,13 +177,20 @@ export async function egressFixture(enabled = true, guarded = false,
   await once(decision, 'listening');
   const address = decision.address();
   if (!address || typeof address === 'string') throw new Error('No decision listener');
-  const decisionUrl = `http://127.0.0.1:${address.port}`;
+  let decisionUrl = `http://127.0.0.1:${address.port}`;
+  const production = receiptOptions.production;
+  let productionDecision: Awaited<ReturnType<typeof startDecision>> | undefined;
+  if (production) {
+    productionDecision = await startDecision(production.actor, production.identity,
+      production.binding, 0, undefined, undefined, undefined, registry);
+    decisionUrl = productionDecision.url;
+  }
   let port = await freePort();
   let readinessPort = await freePort();
   const binary = resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64');
   const options: Parameters<typeof startGateway>[0] = { binary,
     configFile: `${directory}/config.json`, usageFile: `${directory}/usage.jsonl`,
-    keyFile: `${directory}/unused-key`, port, readinessPort, decisionUrl, issuer,
+    keyFile: `${directory}/unused-key`, port, readinessPort, decisionUrl, issuer: production?.identity.issuer ?? issuer,
     mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed',
       upstream: `127.0.0.1:${relayPort}` }] };
   if (enabled) options.egressDecisionUrl = decisionUrl;
@@ -260,6 +270,7 @@ export async function egressFixture(enabled = true, guarded = false,
     for (const socket of sockets) socket.destroy();
     await relayClosed;
     await decisionDown();
+    await productionDecision?.close();
     if (receiptOptions.captureReceipts) await receipt.retry();
     await nats.close();
     await rm(directory, { recursive: true, force: true });
