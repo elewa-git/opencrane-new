@@ -273,18 +273,28 @@ def parse_debian_main_packages(index_text):
     return packages
 
 
-def check_entry(entry, osi_ids, debian_main_packages):
-    if len(entry) != 5:
+def check_entry(entry, osi_ids, debian_main_packages, pgdg_packages=None):
+    if len(entry) not in (5, 6):
         raise ValueError("Inventory entry needs type, name, version, licence and evidence")
-    package_type, name, version, licence, evidence = entry
+    package_type, name, version, licence, evidence = entry[:5]
     if not all(isinstance(value, str) and value for value in entry):
         raise ValueError("Inventory entry has an empty field")
     if package_type == "deb":
-        if licence != "Debian-main":
-            raise ValueError(f"Operating-system package has no Debian main review: {name}")
-        if (name, version) not in debian_main_packages:
-            raise ValueError(f"Operating-system package is absent from Debian main: {name} {version}")
+        if len(entry) == 6 and entry[5] == "PGDG":
+            reviewed_licence = (pgdg_packages or {}).get((name, version))
+            if reviewed_licence is None:
+                raise ValueError(f"Operating-system package is absent from PGDG: {name} {version}")
+            if licence != reviewed_licence or licence not in osi_ids:
+                raise ValueError(f"PGDG package has no matching OSI licence review: {name}")
+        elif len(entry) == 5 and licence == "Debian-main":
+            if (name, version) not in debian_main_packages:
+                raise ValueError(
+                    f"Operating-system package is absent from Debian main: {name} {version}")
+        else:
+            raise ValueError(f"Operating-system package has no Debian main or PGDG review: {name}")
     elif package_type in APPLICATION_TYPES:
+        if len(entry) != 5:
+            raise ValueError(f"Application package has an extra source label: {name}")
         if licence not in osi_ids:
             raise ValueError(f"Unknown or non-OSI application licence: {name} {licence}")
     else:
@@ -342,6 +352,15 @@ def main(arguments):
     reviewed = read_json(PACKAGE / "reviewed-images.json")
     inventory = read_json(PACKAGE / "licence-inventory.json")
     osi_ids = set(read_json(PACKAGE / "osi-licences.json"))
+    pgdg_extract = read_json(PACKAGE / "pgdg-trixie-main.json")
+    if pgdg_extract["imagePin"] != INDEX_IMAGE_PINS["postgres"]:
+        raise ValueError("PGDG package index was reviewed for a different postgres image")
+    pgdg_packages = {}
+    for package in pgdg_extract["packages"]:
+        key = (package["name"], package["version"])
+        if key in pgdg_packages:
+            raise ValueError(f"PGDG package appears twice: {package['name']} {package['version']}")
+        pgdg_packages[key] = package["licence"]
     bookworm_main = parse_debian_main_packages(BOOKWORM_MAIN)
     trixie_main = parse_debian_main_packages(TRIXIE_MAIN)
     debian_main_by_role = {
@@ -373,7 +392,8 @@ def main(arguments):
         if not entries:
             raise ValueError(f"{role} has an empty licence inventory")
         for entry in entries:
-            check_entry(entry, osi_ids, debian_main_by_role[role])
+            reviewed_pgdg = pgdg_packages if role == "postgres" else {}
+            check_entry(entry, osi_ids, debian_main_by_role[role], reviewed_pgdg)
         if role in arguments:
             check_scan(role, entries, arguments[role], osi_ids)
         print(f"PASS {role}: {len(entries)} reviewed components")

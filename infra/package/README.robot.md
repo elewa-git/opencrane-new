@@ -9,7 +9,8 @@ digest and exposure checks at render time. The server and website share one
 source image, pinned by the OCI index digest in the local registry. A missing
 entry always refuses installation. `npm run check:package-licences` checks the
 reviewed contents of every pinned image. It refuses unknown application licences,
-non-OSI application licences and operating-system packages outside Debian main.
+non-OSI application licences and operating-system packages without a matching
+Debian main or PostgreSQL apt archive review.
 
 Claim a secondary slot with `infra/dev-stack/claim.sh`. Set `DEV_STACK_ID` to the
 returned id. `infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"` creates
@@ -70,7 +71,12 @@ The licence inventory lists the components found by Syft in the pinned images.
 `osi-licences.json` contains the OSI-approved IDs from SPDX licence list 3.28.0
 (source JSON SHA-256
 `f728c534d8bd1044fc515a2ddb2292be99559021d830bfa3281be0bcd36302ee`).
-The Node and PostgreSQL package versions were checked against signed Debian
-main package indexes. Go modules without embedded licence metadata were checked
-against their source licence files. Pass Syft JSON scan paths as `ROLE PATH` pairs
+The Node packages and most PostgreSQL image packages were checked against signed
+Debian main indexes. The five PostgreSQL apt archive packages in the PostgreSQL
+image were checked against the signed `trixie-pgdg` main index. Their exact
+package records and reviewed copyright licences are in `pgdg-trixie-main.json`.
+These five inventory entries have a sixth field, `PGDG`, to name their source.
+The checker requires each name, version and licence to match that review. Other
+Debian packages must still match Debian main. Go modules without embedded
+licence metadata were checked against their source licence files. Pass Syft JSON scan paths as `ROLE PATH` pairs
 to `check-licences.py` to compare a fresh scan with the reviewed inventory.

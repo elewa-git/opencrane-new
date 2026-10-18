@@ -33,7 +33,8 @@ flowchart LR
 - Refuse missing secrets and public network settings before installation.
 - Keep the package inside the slot owned by the current worktree.
 - Remove only the package owned by that worktree.
-- Check the licences of the pinned images before they are shipped.
+- Check the licences of the pinned images against reviewed package sources before
+  they are shipped.
 
 ## Processes it handles
 

@@ -19,7 +19,8 @@ class LicenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
-                             "reviewed-images.json", "osi-licences.json", "Dockerfile"):
+                             "reviewed-images.json", "osi-licences.json", "Dockerfile",
+                             "pgdg-trixie-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
 
             inventory_path = package / "licence-inventory.json"
@@ -32,7 +33,12 @@ class LicenceTests(unittest.TestCase):
                     entry[3] = licence
                     entry[4] = "Signed PostgreSQL apt package index"
                     if source_label == "PGDG":
-                        entry.append(source_label)
+                        if len(entry) == 5:
+                            entry.append(source_label)
+                        else:
+                            entry[5] = source_label
+                    elif len(entry) == 6:
+                        entry.pop()
                     break
             inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
             return subprocess.run(
@@ -61,7 +67,8 @@ class LicenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
-                             "reviewed-images.json", "osi-licences.json", "Dockerfile"):
+                             "reviewed-images.json", "osi-licences.json", "Dockerfile",
+                             "pgdg-trixie-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
             for index in source.parent.glob("debian-main-*.json"):
                 shutil.copy2(index, package / index.name)
@@ -96,7 +103,8 @@ class LicenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
-                             "reviewed-images.json", "osi-licences.json", "Dockerfile"):
+                             "reviewed-images.json", "osi-licences.json", "Dockerfile",
+                             "pgdg-trixie-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
 
             inventory_path = package / "licence-inventory.json"

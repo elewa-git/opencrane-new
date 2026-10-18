@@ -100,6 +100,7 @@ infra/dev-stack/claim.test.ts infra/package/preflight.test.mjs`. These suites do
 not use PostgreSQL. Logs are `/tmp/p5-1-final-tests-1.log` and
 `/tmp/p5-1-final-tests-2.log`; the typecheck log is
 `/tmp/p5-1-final-typecheck.log`. The lint log is `/tmp/p5-1-final-lint.log`.
+
 ## 18 October 2026: packaged runtime and licence review
 
 This follow-up used branch `work/p5-1b` and claimed secondary slot 1. The final
@@ -163,12 +164,13 @@ Debian main indexes. It checks each Debian package in every image inventory
 against the list for that image's base release. Lint does not download indexes.
 The checker also refuses a changed Debian-based image pin until the index list
 is reviewed for the new image.
-The list has 88 bookworm pairs and 137 trixie pairs. The remaining five packages
-in the PostgreSQL image are absent from trixie main:
+The list has 88 bookworm pairs and 137 trixie pairs. At that point, the remaining
+five packages in the PostgreSQL image were absent from trixie main:
 `libpq5 18.6-1.pgdg13+2`, `postgresql-17 17.11-1.pgdg13+2`,
 `postgresql-client-17 17.11-1.pgdg13+2`,
 `postgresql-client-common 293.pgdg13+1` and
-`postgresql-common 293.pgdg13+1`. The check refuses the current image.
+`postgresql-common 293.pgdg13+1`. That check refused the image until the
+PostgreSQL apt archive review below was added.
 
 One HTTPS download batch used Debian's snapshot archive. The bookworm files
 came from `snapshot.debian.org/archive/debian/20260713T000000Z/dists/bookworm/`;
@@ -217,3 +219,70 @@ new signed index is checked and the list is reviewed.
 | Licence refusal tests | PASS | Unknown, BUSL, non-main, bundled notice and manual component cases passed twice. |
 | `helm lint` | PASS | The final chart rendered with reviewed pins and five named secret references. |
 | `npm run lint` | PASS | The full command completed with no errors and 20 existing function-length warnings outside this change. |
+
+### PostgreSQL apt archive review, 18 October 2026
+
+The pinned upstream `postgres:17` image is still
+`sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f`.
+Five of its 142 Debian packages came from the PostgreSQL project's apt archive
+(PGDG). The other 137 still match the signed trixie Debian main index. The
+checker now requires each PGDG package's exact name, version and licence to
+match [the reviewed extract](../../infra/package/pgdg-trixie-main.json). It
+refuses a PGDG label for an absent package. A PGDG package labelled as Debian
+main still fails the Debian check.
+
+One HTTPS retrieval batch read the `trixie-pgdg` `InRelease` and the `main`
+and `17` amd64 `Packages.gz` files from
+`https://apt.postgresql.org/pub/repos/apt/dists/trixie-pgdg/`. The signed
+release is dated 15 October 2026. The repository key came from
+`/usr/local/share/keyrings/postgres.gpg.asc` in the pinned image. Its SHA-256
+is `ab3ea5fa18220d88318cd9e41d1e4e709c9003c71494f9022cbd76353ba7c5e1`.
+Its fingerprint is `B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8`.
+`gpgv` reported a good `InRelease` signature from that key. The signed
+`InRelease` SHA-256 is
+`97fbcf24b43ff386ea077b1a4887199e4edbb5de38ee5a9fd1ab30a7d03dfb09`;
+the extracted `Release` SHA-256 is
+`10ffe4b0b5abc256f7174a346e5bc9bc0073b5e9f6d100927b0d77e0ef2c4628`.
+The downloaded `main/binary-amd64/Packages.gz` SHA-256 is
+`a3f950abbc70349df9319027bda0cf963a10e22535f6492b984e8ef1f7fc1965`.
+The downloaded `17/binary-amd64/Packages.gz` SHA-256 is
+`96cc182eeecbfaff9284c2a783febd9c06f55c054ddcc5077e7c550dafdb9c54`.
+Both hashes matched the SHA-256 entries in the signed Release. All five
+installed versions were present in the `main` index. The `17` index was not
+needed for the extract.
+
+The five package copyright files in that same image were checked separately.
+`libpq5`, `postgresql-17` and `postgresql-client-17` name the PostgreSQL
+License. Their copyright file SHA-256 is
+`afcc052a946b4117667527211b4ca303f07044f5585222f4c8f577e0764b2123`.
+`postgresql-common` and `postgresql-client-common` name GPL version 2 or
+later. Their copyright file SHA-256 is
+`292dcc67fc22ad11156da2b7a154da74b65e63e0f673f3d301a5ed6df85327fe`.
+The extract also records each package archive checksum from the signed index.
+No new image or dependency was added.
+
+The new refusal tests were committed before the checker change. Before it,
+the 13 licence tests had two failures: the PGDG case reported a
+five-field format error, and the unchanged real inventory was refused at
+`libpq5`. The Debian-main-labelled PGDG package already failed as required.
+No Helm install or live stack was started for this fix.
+
+| Check in this fix round | Result | Observation |
+| --- | --- | --- |
+| Rebase onto `origin/work/p5-1` at `ac8dbc7a` | PASS | The rebase finished, and that base is an ancestor of this branch. |
+| PGDG package and real inventory tests | PASS | All 13 licence tests passed twice. The checked inventory has 454 server, 454 web, 146 PostgreSQL, 11 NATS and 143 OpenFGA components. |
+| Changed slot and package tests | PASS | All 31 tests passed twice with `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and `nice -n 10`. |
+| Typecheck | PASS | The first run found an optional Helm Secret UID assignment in the rebase conflict resolution. After that was fixed, the full workspace and package typecheck passed. |
+| Event catalogue | PASS | All 143 event types agreed. |
+| Knip | PASS | The `lint:unused` stage of full lint exited 0 with two configuration hints. |
+| Changelog check | PASS | The branch fragment passed. |
+| Full lint | PASS | The first run found a missing blank line in this receipt. After the spacing fix, full lint passed, including package licences. ESLint reported 20 existing warnings and no errors. |
+| Full root suite | NOT RUN | This fix round ran the changed tests only. |
+| Live Helm install | NOT RUN | The pinned image and review data did not need a new install for this source fix. |
+
+Logs: `/tmp/p5-1b-changed-tests-final-1.log`,
+`/tmp/p5-1b-changed-tests-final-2.log`,
+`/tmp/p5-1b-licence-tests-final-1.log`,
+`/tmp/p5-1b-licence-tests-final-2.log`,
+`/tmp/p5-1b-typecheck-2.log`, `/tmp/p5-1b-events.log`,
+`/tmp/p5-1b-changelog.log` and `/tmp/p5-1b-lint-2.log`.
