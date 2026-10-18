@@ -463,3 +463,72 @@ async function keepsNextTurnAccessWhenOldDropArrives() {
 }
 it('keeps the next turn streams and pass when an old Stop drop arrives',
   keepsNextTurnAccessWhenOldDropArrives);
+
+async function refusesModelBodyArrivingAfterExpiry() {
+  const test = await stopFixture();
+  const result = Promise.withResolvers<number | undefined>();
+  function receive(response: IncomingMessage) {
+    response.resume();
+    result.resolve(response.statusCode);
+  }
+  function finishUnexpectedRequest(upstream: ServerResponse) { upstream.end('{}'); }
+  void test.firstRequest.then(finishUnexpectedRequest);
+  const headers = { authorization: `Bearer ${test.local.caller}`, 'session-id': 'thread-1',
+    expect: '100-continue' };
+  let outgoing: ReturnType<typeof request> | undefined;
+  const clock = vi.spyOn(Date, 'now');
+  try {
+    await test.start('first', 'thread-1');
+    outgoing = request(`${test.local.url}/v1/responses`, { method: 'POST', headers }, receive);
+    outgoing.on('error', result.reject);
+    const reading = once(outgoing, 'continue');
+    outgoing.flushHeaders();
+    await reading;
+    clock.mockReturnValue(Date.now() + 60_001);
+    outgoing.end('{}');
+    expect(await result.promise).toBe(403);
+    expect(test.received).toEqual([]);
+  } finally {
+    clock.mockRestore();
+    outgoing?.destroy();
+    await test.close();
+  }
+}
+it('rechecks pass expiry after reading a model request body',
+  refusesModelBodyArrivingAfterExpiry);
+
+async function cancelsOnlyStoppedTurnWaiters() {
+  const test = await stopFixture();
+  let otherSettled = false;
+  function refused(error: unknown) { return error; }
+  function otherFinished() { otherSettled = true; }
+  try {
+    await test.start('first', 'thread-1');
+    await test.start('second', 'thread-2');
+    test.pauseAcks();
+    let reported = once(test.socket, 'message');
+    const firstRenewal = test.channel.renew('thread-1').catch(refused);
+    await reported;
+    reported = once(test.socket, 'message');
+    const secondRenewal = test.channel.renew('thread-2').catch(refused);
+    void secondRenewal.then(otherFinished);
+    await reported;
+    test.stop();
+    await withinStopDeadline(test.interrupted);
+    expect(await firstRenewal).toEqual(new Error('Turn ended'));
+    expect(otherSettled).toBe(false);
+    test.send({ type: 'ack', sequence: 2, token: 'second-renewed',
+      expiresAt: Date.now() + 60_000 });
+    expect(await secondRenewal).toBeUndefined();
+    const response = test.call('thread-2', 'second', true);
+    const upstream = await test.firstRequest;
+    upstream.end('{}');
+    expect(await response).toBe('200: {}');
+    expect(await test.call('thread-1', 'first', true)).toContain('403:');
+    expect(test.received).toEqual(['thread-2:/v1/responses']);
+  } finally {
+    await test.close();
+  }
+}
+it('leaves another turn renewal waiting when Stop cancels its own waiter',
+  cancelsOnlyStoppedTurnWaiters);
