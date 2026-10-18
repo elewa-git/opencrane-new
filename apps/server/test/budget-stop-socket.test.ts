@@ -229,6 +229,49 @@ async function slowHistory() {
 }
 it('keeps a viewer open during slow history and unrelated chat activity', slowHistory);
 
+async function originalTurnLookupExpires() {
+  const client = await connect();
+  await ready(client);
+  const framesBeforeStop = [...client.frames];
+  const original = setup.db.query.bind(setup.db);
+  const gate = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const finished = Promise.withResolvers<void>();
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    const result = await original<Row>(sql, values);
+    if (sql.startsWith('SELECT event_id, position')) {
+      entered.resolve();
+      await gate.promise;
+      finished.resolve();
+    }
+    return result;
+  }
+  vi.spyOn(setup.db, 'query').mockImplementation(query);
+  let closeCode: number | undefined;
+  function recordClose(code: number) {
+    closeCode = code;
+  }
+  client.socket.once('close', recordClose);
+  try {
+    await stop();
+    await entered.promise;
+    function closedForRecovery() {
+      expect(closeCode).toBe(1013);
+    }
+    await vi.waitFor(closedForRecovery, { timeout: 11_000 });
+    expect(client.frames).toEqual(framesBeforeStop);
+    gate.resolve();
+    await finished.promise;
+    await delay(200);
+    expect(client.frames).toEqual(framesBeforeStop);
+    expect((await read()).statusCode).toBe(200);
+  } finally {
+    gate.resolve();
+  }
+}
+it('closes with 1013 after ten seconds of original-turn loading and sends no late frames',
+  originalTurnLookupExpires);
+
 async function reconnectAndReplay() {
   const first = await connect();
   await ready(first);
