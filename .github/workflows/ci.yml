@@ -49,8 +49,11 @@ jobs:
       - name: Check the event catalogue matches the registry
         run: npm run check:events
 
-      - name: Check the local approval stub
-        run: nice -n 10 node --experimental-strip-types --test infra/dev-stack/model-stub.test.ts
+      - name: Check local provider setup and model stub
+        run: >-
+          nice -n 10 node --experimental-strip-types --test
+          infra/dev-stack/model-stub.test.ts infra/dev-stack/models-environment.test.ts
+          infra/dev-stack/provider-setup.test.ts
 
       # apps/web builds and tests through the Angular CLI, so it needs its own steps.
       - name: Build apps/web

@@ -139,9 +139,9 @@ async function supportsManagedVerification() {
     const reply = await fetch(`${origin}/v1/responses`, request);
     assert.equal(reply.headers.get('content-type'), 'application/json');
     const answer = await reply.json() as Record<string, unknown>;
-    assert.equal(answer.status, 'completed');
-    assert.deepEqual(answer.usage, { input_tokens: 10, output_tokens: 1, total_tokens: 11 });
-    assert.deepEqual(answer.output, [{ type: 'message', role: 'assistant',
+    assert.equal(answer['status'], 'completed');
+    assert.deepEqual(answer['usage'], { input_tokens: 10, output_tokens: 1, total_tokens: 11 });
+    assert.deepEqual(answer['output'], [{ type: 'message', role: 'assistant',
       content: [{ type: 'output_text', text: 'OK' }] }]);
     const streaming = { method: 'POST', body: JSON.stringify({ stream: true }) };
     const stream = await fetch(`${origin}/v1/responses`, streaming);

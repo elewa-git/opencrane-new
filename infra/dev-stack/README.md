@@ -20,6 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|keeps Helm installs owned| package["package<br/>local Helm install"]
+  stack -->|runs browser checks and daily stub-based journeys| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
 ```
@@ -33,6 +34,7 @@ flowchart LR
   include email claims in their signed tokens.
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
+- Connect and test that provider as the Owner before a fresh stack starts its chat checks.
 - Run browser checks against real local services. The approval journey is currently skipped.
 - Check group chats from the To line, participant access, direct chats, shared assistants and
   provider key saving in a fresh stack.
@@ -42,6 +44,11 @@ flowchart LR
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
 
 ## Processes it handles
+
+A fresh stack with the development Owner connects the local model provider through the
+product APIs. It saves a private credential, checks the provider, selects the chat models
+and default, then records switch-on. Models restarts with that saved credential before
+any chat check. Later starts read the recorded mode again.
 
 The models process gets a separate control port for checking loaded configuration.
 The stack never forwards it. The approval journey is skipped while publication
