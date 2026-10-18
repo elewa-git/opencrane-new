@@ -162,10 +162,14 @@ export async function forget(options: MemoryOptions, requester: string, params: 
     return forgetLocked(options, requester, scope, memoryId, input, state, fresh, reference,
       access.audience);
   }
+  async function lockFact() {
+    return options.db.lock!(`memory-fact:${options.silo}:${scope.scopeId}:${memoryId}`,
+      execute, { timeoutMs: 100 });
+  }
   const release = await acquireMemoryWrite(options.silo, requester, scope.scopeId);
   try {
     await fresh();
-    return await options.db.lock(`memory-command:${reference}`, execute, { timeoutMs: 100 });
+    return await options.db.lock(`memory-command:${reference}`, lockFact, { timeoutMs: 100 });
   } finally {
     release();
   }
@@ -175,6 +179,8 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   fresh: Awaited<ReturnType<typeof authorityFence>>, reference: string,
   audience: { kind: string; ownerId: string }) {
   const journal = commandJournal(options.keyDirectory!, reference);
+  const factReference = commandReference(options.silo, scope.scopeId, requester, memoryId);
+  const reservation = commandJournal(options.keyDirectory!, `fact-${factReference}`);
   const fingerprint = createHash('sha256');
   const metadata = { operation: 'forget', memoryId, ...input };
   fingerprint.update(JSON.stringify(metadata));
@@ -182,6 +188,8 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   function recoveredReceipt(row: StoredEvent, rows: StoredEvent[]) {
     const receipt = originalForget(row, rows, input, memoryId, audience);
     journal.remove();
+    // Remove the reservation only after history proves the fact is permanently forgotten.
+    reservation.remove();
     return receipt;
   }
   async function reconcile() {
@@ -236,6 +244,7 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   }
   if (result.status === 'appended') {
     journal.remove();
+    reservation.remove();
     const saved = { event, sequence: result.sequence };
     return changeReceipt(saved, [], audience);
   }
