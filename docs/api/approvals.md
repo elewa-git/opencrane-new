@@ -9,7 +9,7 @@ has `canApprove: false` and `canDeny: true` for its requester. Its target may be
 empty; other review text remains required. `canDecide` stays false for older clients.
 
 Cards carry `requestedAt`, `decidedAt`, `usedAt` and `endedAt` when the corresponding
-saved event exists. Each value is the original event envelope's UTC time. `decidedAt`
+saved event exists. Each value is the saved event's time, converted to UTC. `decidedAt`
 and `usedAt` retain the first decision and use through retries. `uses` lists each
 consumed permit and its own `usedAt`, in event order. Use means `outcome_unknown`;
 it never proves that a tool succeeded. `endedAt` dates denial, expiry or cancellation.

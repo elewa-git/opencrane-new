@@ -2581,12 +2581,15 @@ qualification: NOT RUN. No dependency, event field or API field was added.
 
 The [approval API](../../docs/api/approvals.md) defines the optional UTC fields,
 first-use retention and dated permit list. Dates come from approval event envelopes,
-not read tables or the read clock. `approval.cancelled` has its own strict schema
+not read tables or the read clock. The read fold converts saved offset dates to UTC
+before returning them to the browser. `approval.cancelled` has its own strict schema
 with an optional `cancelReason`; old events still parse without one. Expiry uses
 `approval.expired` and has no cancellation reason. Reads preserve unknown outcomes.
 
 `apps/server/test/approvals.test.ts` checks restart, audit rebuild, delayed reads,
-recorded causes, old cancellations, retry history and identical hidden-id refusals.
+offset dates, recorded causes, old cancellations, retry history and identical hidden-id
+refusals. `test/approval-cancellation.test.ts` checks unrelated grant changes and
+matching requester and assistant revocations.
 The reader recognises direct requester/assistant tool-grant revocations only.
 Other access refusals do not invent cancellation evidence. A missing turn and
 clock-only catalogue expiry still cancel without a reason. UI, native consent,
