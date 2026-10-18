@@ -18,7 +18,7 @@ type Snapshot = ReturnType<typeof assistantSnapshot>;
 type Progress = ConversationProgress & {
   head: number;
   computerEventId: string | undefined;
-  computerHead: number;
+  computerStartHead: number;
   kind: string | undefined;
 };
 type ConversationLink = Awaited<ReturnType<Parameters<typeof processConversation>[5]>>;
@@ -33,7 +33,8 @@ function canReuseProgress(previous: Progress, head: number, assistant: Snapshot,
   const linkClosed = previous.connectionId !== undefined &&
     previous.connectionId !== currentConnectionId;
   return previous.head === head && previous.computerEventId === assistant.current?.id &&
-    previous.computerHead === assistant.computerHead && previous.kind === assistant.kind &&
+    previous.computerStartHead === assistant.computerStartHead &&
+    previous.kind === assistant.kind &&
     !linkClosed;
 }
 
@@ -119,7 +120,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       const result = await processConversation(options, tokens, conversation,
         assistant, refused, connection, computerHistoryUnavailable, checkControl);
       const progress = { ...result, head, computerEventId,
-        computerHead: assistant.computerHead, kind: assistant.kind };
+        computerStartHead: assistant.computerStartHead, kind: assistant.kind };
       seen.set(conversationId, progress);
       return result.pending;
     } catch {

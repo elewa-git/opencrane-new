@@ -146,6 +146,7 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
   const turnComputers = new Map<string, string>();
   const closedStatuses = new Map<string, 'completed' | 'failed'>();
   const running = new Set<string>();
+  let computerStartHead = 0;
   let controlPending = false;
   for (const row of lifecycle) {
     if (row.event.silo !== silo) throw new Error('Computer silo mismatch');
@@ -164,6 +165,7 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
     }
     if (row.event.type === 'computer.turn_started') {
       const turnId = turnIdData.parse(row.event.data).turnId;
+      computerStartHead = row.sequence;
       started.add(turnId);
       running.add(turnId);
       turnComputers.set(turnId, computerData.parse(row.event.data).computerId);
@@ -173,9 +175,8 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
       running.clear();
     }
   }
-  const computerHead = lifecycle.at(-1)?.sequence ?? 0;
   return { current, kind, closed, started, lostTurns, turnComputers, closedStatuses,
-    computerHead, controlPending };
+    computerStartHead, controlPending };
 }
 
 export async function processConversation(options: WatchOptions, tokens: Tokens,
