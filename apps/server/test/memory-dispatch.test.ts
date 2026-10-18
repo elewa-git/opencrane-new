@@ -1560,6 +1560,95 @@ it.each(['assistant_read', 'member_mcp'] as const)(
   'refuses turn renewal when %s is revoked during the final scope read',
   refusesRevocationDuringFinalScopeRead);
 
+type MemoryBoundaryTiming = 'last_scope_read' | 'final_access_read';
+async function checkRenewalMemoryBoundary(change: 'correct' | 'forget',
+  timing: MemoryBoundaryTiming) {
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  try {
+    expect(await bridge.exchange(1)).toHaveProperty('token');
+    const issue = setup.tokens.turn.bind(setup.tokens);
+    let signed = false;
+    let scopeReads = 0;
+    let changed = false;
+    async function markSigning(input: Parameters<typeof issue>[0]) {
+      const result = await issue(input);
+      signed = true;
+      return result;
+    }
+    const head = setup.nats.store.head.bind(setup.nats.store);
+    async function changeAtBoundary(...args: Parameters<typeof head>) {
+      if (signed && args[0] === `scope-${scopeId}`) {
+        scopeReads += 1;
+        // Save before the second read so its exact position includes the change.
+        if (scopeReads === 2 && timing === 'last_scope_read') {
+          changed = true;
+          await changeLoadedMemory(change);
+        }
+      }
+      const position = await head(...args);
+      if (signed && scopeReads === 2 && !changed && args[0] === 'member-alice'
+        && timing === 'final_access_read') {
+        // Finish saving while the final access read is still waiting to return.
+        changed = true;
+        await changeLoadedMemory(change);
+      }
+      return position;
+    }
+    const issuance = vi.spyOn(setup.tokens, 'turn');
+    issuance.mockImplementationOnce(markSigning);
+    const heads = vi.spyOn(setup.nats.store, 'head');
+    heads.mockImplementation(changeAtBoundary);
+    try {
+      const reply = await bridge.exchange(2);
+      expect(changed).toBe(true);
+      expect(issuance).toHaveBeenCalledOnce();
+      let refusedSequence = 2;
+      if (timing === 'final_access_read') {
+        expect(scopeReads).toBe(2);
+        expect(reply).toHaveProperty('token', expect.any(String));
+        expect(reply).not.toHaveProperty('context');
+        expect(reply).not.toHaveProperty('refused');
+        refusedSequence = 3;
+      } else {
+        expect(reply).toEqual({ type: 'ack', sequence: 2,
+          refused: 'memory_context_unavailable' });
+        expect(reply).not.toHaveProperty('token');
+        expect(reply).not.toHaveProperty('context');
+      }
+      heads.mockRestore();
+      issuance.mockClear();
+      const refused = { type: 'ack', sequence: refusedSequence,
+        refused: 'memory_context_unavailable' };
+      const next = await bridge.exchange(refusedSequence);
+      expect(next).toEqual(refused);
+      expect(next).not.toHaveProperty('token');
+      expect(next).not.toHaveProperty('context');
+      expect(issuance).not.toHaveBeenCalled();
+      expect(await bridge.exchange(refusedSequence)).toEqual(refused);
+    } finally {
+      heads.mockRestore();
+      issuance.mockRestore();
+    }
+  } finally {
+    await bridge.close();
+  }
+}
+async function allowsMemoryChangeAfterScopeBoundary(change: 'correct' | 'forget') {
+  await checkRenewalMemoryBoundary(change, 'final_access_read');
+}
+it.each(['correct', 'forget'] as const)(
+  'allows %s during the final access read but refuses the next turn renewal',
+  allowsMemoryChangeAfterScopeBoundary);
+
+async function refusesMemoryChangeAtScopeBoundary(change: 'correct' | 'forget') {
+  await checkRenewalMemoryBoundary(change, 'last_scope_read');
+}
+it.each(['correct', 'forget'] as const)(
+  'refuses turn renewal when %s is visible at the last scope-position read',
+  refusesMemoryChangeAtScopeBoundary);
+
 async function refusesTerminalMemoryDuringSigning(action: 'invalidated' | 'ended') {
   await seedRecallFact();
   expect((await directRecall('load')).statusCode).toBe(200);
