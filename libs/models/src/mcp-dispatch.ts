@@ -194,8 +194,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     }
-    await recordStarted(permit, deadline);
     try {
+      await recordStarted(permit, deadline);
       if (permit.gatewayBinding) {
         await permit.confirmAccess();
       }

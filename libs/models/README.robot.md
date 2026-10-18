@@ -2455,7 +2455,9 @@ A refusal after a confirmed start saves `tool.dispatch_recorded` on the same dec
 stream with `outcome: not_dispatched` and `evidence: dispatch_refused`, before replying.
 The existing outcome writer keeps any already saved outcome and uses one conditional
 append. A failed outcome save still refuses the call; it never restores the spent permit.
-An uncertain start-save reply remains unresolved. No outcome claims that save succeeded.
+A lost or throwing start-save reply also refuses the call. The outcome writer closes
+that start only if the saved history ends with its exact event id and type. An absent
+start or unavailable history cannot be treated as a confirmed save.
 `tool.dispatch_recorded` remains the last outcome row for approval retry verification.
 The new evidence value does not enable an approval retry; existing retry checks still
 require `connection_refused`. Reusing the original permit always refuses.
