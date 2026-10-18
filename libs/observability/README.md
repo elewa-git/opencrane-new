@@ -19,7 +19,8 @@ flowchart LR
 
 ## What it is responsible for
 
-- Write structured log lines and remove sensitive fields and web address queries.
+- Write structured log lines, hide member and conversation ids in sensitive paths,
+  and remove sensitive fields and web address queries.
 - Carry request details, such as a request id, into later work, so that every log line for one request can be linked.
 - Record when an event handler starts, finishes or fails, and how long it takes.
 - Start optional OpenTelemetry traces, timing records that link work across services.

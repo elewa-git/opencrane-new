@@ -6,6 +6,18 @@ import { createServerLogger, redactedRequestSerializer } from '../src/logging.ts
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
+function requestUrlFromLogLine(line: string): string {
+  const logRecord = record(JSON.parse(line));
+  const requestRecord = record(logRecord['req']);
+  const requestUrl = requestRecord['url'];
+
+  if (typeof requestUrl !== 'string') {
+    throw new Error('expected a request URL');
+  }
+
+  return requestUrl;
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
 });
@@ -112,15 +124,18 @@ describe('createServerLogger', () => {
     logger.info({
       req: { method: 'GET', url: requestPath, host: 'localhost:8080' },
     }, 'incoming request');
+    logger.info({
+      req: { method: 'GET', url: '/api/org/history', host: 'localhost:8080' },
+    }, 'incoming request');
 
     const output = chunks.join('');
+    const loggedRequests = chunks.map(requestUrlFromLogLine);
 
     expect(output).not.toContain('private-member-canary');
     expect(output).not.toContain('private-command-canary');
-    expect(JSON.parse(output) as unknown).toMatchObject({
-      req: {
-        url: '/api/members/:memberId/changes/:commandId',
-      },
-    });
+    expect(loggedRequests).toEqual([
+      '/api/members/:memberId/changes/:commandId',
+      '/api/org/history',
+    ]);
   });
 });
