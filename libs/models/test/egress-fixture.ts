@@ -278,7 +278,7 @@ export async function egressFixture(enabled = true, guarded = false,
   function activeConnections() {
     return sockets.size;
   }
-  return { token, tunnel, actor, order, port, controlRequests, decisionDown,
+  return { token, tunnel, actor, order, port, decisionUrl, controlRequests, decisionDown,
     registry, closeRecords, permit, activeConnections, receipt, restartReceipt,
     store: nats.store, directory, connection: nats.connection, restartStore,
     received: () => received, connected: () => connected, authorised: () => authorised,

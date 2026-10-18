@@ -4,6 +4,7 @@ import { egressGrantStream } from '@opencrane/projections';
 import { z } from 'zod';
 import { decodeJwt } from 'jose';
 import { verifyEgressCapability } from '@opencrane/auth';
+import { failingPublishStore } from '@opencrane/event-store/testing';
 import { history } from '../src/event-history.ts';
 import { fixture } from './fixture.ts';
 import { egressFixture } from './egress-fixture.ts';
@@ -218,3 +219,83 @@ async function refusesFailedRegistration() {
   expect(test.facts.actor.state.dispatches).toHaveLength(1);
 }
 it('opens no connection when admitted relay registration fails', refusesFailedRegistration);
+
+async function changesDuringDispatchRetry(change: string) {
+  const test = await setup();
+  const bearer = await test.token();
+  const requestId = decodeJwt(bearer).jti!;
+  const retry = await failingPublishStore(test.facts.nats.connection);
+  const append = test.facts.nats.store.append.bind(test.facts.nats.store);
+  const registration = vi.spyOn(test.gateway.registry, 'register');
+  onTestFinished(registration.mockRestore.bind(registration));
+
+  async function changeAuthority() {
+    expect(registration).not.toHaveBeenCalled();
+    expect(test.gateway.connected()).toBe(0);
+    if (change === 'destination') {
+      const rule = { ...destination, scope: 'person' as const, subjectId: 'alice' };
+      const subject = egressGrantStream('test', rule);
+      const expectedSequence = await test.facts.nats.store.head(subject);
+      const payload = { ...rule, changedBy: 'alice', expectedSequence };
+      const eventId = randomUUID();
+      const event = { id: eventId, commandId: eventId, subject, silo: 'test',
+        type: 'egress.destination_revoked', source: 'opencrane-server',
+        time: new Date().toISOString(), principal: { kind: 'human' as const, id: 'alice' },
+        correlation: {}, data: payload };
+      const command = { event, expectedSequence };
+      expect(await append(command)).toMatchObject({ status: 'appended' });
+    } else if (change === 'turn') {
+      const closed = { assistantId: 'assistant', computerId: 'computer',
+        conversationId: 'conversation', turnId: 'turn', requesterId: 'alice',
+        task: 'chat_turn', status: 'completed' };
+      await test.facts.append('computer-assistant', 'computer.turn_closed', closed);
+    } else if (change === 'deadline') {
+      const now = performance.now.bind(performance);
+      function afterDeadline() {
+        return now() + 2100;
+      }
+      const clock = vi.spyOn(performance, 'now').mockImplementation(afterDeadline);
+      onTestFinished(clock.mockRestore.bind(clock));
+    } else if (change === 'expiry') {
+      const now = Date.now;
+      function afterExpiry() {
+        return now() + 61_000;
+      }
+      const clock = vi.spyOn(Date, 'now').mockImplementation(afterExpiry);
+      onTestFinished(clock.mockRestore.bind(clock));
+    }
+  }
+  async function retryDispatch(input: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(input.event);
+    if (event.type !== 'budget.call_dispatch_admitted') return append(input);
+    retry.failNextPublish(changeAuthority);
+    return retry.store.append(input);
+  }
+  const barrier = vi.spyOn(test.facts.nats.store, 'append').mockImplementation(retryDispatch);
+  onTestFinished(barrier.mockRestore.bind(barrier));
+  const headers = { authorization: `Bearer ${bearer}`,
+    'x-egress-authority': 'registry.npmjs.org:443' };
+  const options = { method: 'POST', headers };
+  const response = await fetch(`${test.gateway.decisionUrl}/authorize/egress`, options);
+  expect(retry.publishAttempts()).toBe(2);
+  expect(test.facts.actor.state.dispatches).toHaveLength(1);
+  expect(test.facts.actor.state.reservations).toHaveLength(0);
+  expect(test.gateway.connected()).toBe(0);
+  if (change === 'none') {
+    expect(response.status).toBe(200);
+    expect(registration).toHaveBeenCalledTimes(1);
+    expect(response.headers.get('x-egress-relay')).toMatch(/^127\.0\.0\.1:\d+$/u);
+    return;
+  }
+  expect.soft(response.status).toBe(403);
+  expect.soft(await response.text()).toBe('{"reason":"egress_refused"}');
+  expect.soft(response.headers.get('x-egress-relay')).toBeNull();
+  expect.soft(registration).not.toHaveBeenCalled();
+  const outcomes = await history(test.facts.nats.store, `egress-${requestId}`, 'test');
+  expect(outcomes).toHaveLength(1);
+  expect(outcomes[0]!.event.type).toBe('egress.observed');
+  expect(outcomes[0]!.event.data).toMatchObject({ requestId, permitId: requestId,
+    channel: 'command', outcome: 'error' });
+}
+it.each(['destination', 'turn', 'deadline', 'expiry', 'none'])(
+  'rechecks %s after the real budget dispatch append retries', changesDuringDispatchRetry);
