@@ -113,6 +113,85 @@ describe('reviewed changed tools', () => {
     fixture.destroy();
   });
 
+  it('checks a saved earlier publication then offers review of newer drift', async () => {
+    const drifted = policy();
+    drifted.reviewRevision = 6;
+    drifted.publication = { serverId: 'fixture-server', publishedBy: 'owner',
+      commandId: 'earlier-publication', expectedSequence: 6, reviewRevision: 6,
+      fragmentDigest: 'f'.repeat(64) };
+    sessionStorage.setItem('integration-publication:fixture-server', 'earlier-publication');
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(drifted))
+      .mockResolvedValueOnce(reply({ status: 'applying', changeRef: 'earlier-publication',
+        stage: 'preparation', reason: 'not_current' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('Review and publish'));
+    expect(requestUrl(fetchMock.mock.calls[2]?.[0]))
+      .toBe('/api/org/integrations/changes/earlier-publication');
+    expect(sessionStorage.getItem('integration-publication:fixture-server')).toBeNull();
+    expect(content(fixture).textContent).not.toContain('Check status');
+    fixture.destroy();
+  });
+
+  it('keeps a saved publication uncertain for the current policy', async () => {
+    sessionStorage.setItem('integration-publication:fixture-server', 'current-publication');
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()))
+      .mockResolvedValueOnce(reply({ status: 'unknown', changeRef: 'current-publication',
+        stage: 'observation', reason: 'deadline' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('Check status'));
+    expect(requestUrl(fetchMock.mock.calls[2]?.[0]))
+      .toBe('/api/org/integrations/changes/current-publication');
+    expect(sessionStorage.getItem('integration-publication:fixture-server'))
+      .toBe('current-publication');
+    expect(content(fixture).textContent).not.toContain('Review and publish');
+    fixture.destroy();
+  });
+
+  it('discards an invalid saved reference before checking publication', async () => {
+    sessionStorage.setItem('integration-publication:fixture-server', 'invalid/reference');
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()))
+      .mockResolvedValueOnce(reply({ status: 'disabled' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).textContent).toContain('Review and publish'));
+    expect(requestUrl(fetchMock.mock.calls[2]?.[0]))
+      .toBe('/api/org/integrations/fixture-server/publication');
+    expect(sessionStorage.getItem('integration-publication:fixture-server')).toBeNull();
+    fixture.destroy();
+  });
+
+  it('clears a saved reference after the original publication is confirmed', async () => {
+    sessionStorage.setItem('integration-publication:fixture-server', 'confirmed-publication');
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()))
+      .mockResolvedValueOnce(reply({ status: 'ready', changeRef: 'confirmed-publication' }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).textContent)
+      .toContain('The current publication is confirmed'));
+    expect(sessionStorage.getItem('integration-publication:fixture-server')).toBeNull();
+    fixture.destroy();
+  });
+
+  it('clears a saved reference when the original status read refuses access', async () => {
+    sessionStorage.setItem('integration-publication:fixture-server', 'refused-publication');
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
+      .mockResolvedValueOnce(reply(policy()))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
+    const fixture = page();
+    await vi.waitFor(() => expect(content(fixture).querySelector('.access-state'))
+      .not.toBeNull());
+    expect(sessionStorage.getItem('integration-publication:fixture-server')).toBeNull();
+    expect(content(fixture).textContent).not.toContain('Review and publish');
+    fixture.destroy();
+  });
+
   it.each(['missing', 'equal'])('withholds review when the earlier list is %s', async (kind) => {
     const incomplete = policy();
     if (kind === 'missing') incomplete.previousCatalogue = null;
