@@ -483,7 +483,8 @@ async function refusesModelBodyArrivingAfterExpiry() {
   const clock = vi.spyOn(Date, 'now');
   try {
     await test.start('first', 'thread-1');
-    outgoing = request(`${test.local.url}/v1/responses`, { method: 'POST', headers }, receive);
+    const options = { method: 'POST', headers };
+    outgoing = request(`${test.local.url}/v1/responses`, options, receive);
     outgoing.on('error', result.reject);
     const reading = once(outgoing, 'continue');
     outgoing.flushHeaders();
@@ -521,8 +522,9 @@ async function cancelsOnlyStoppedTurnWaiters() {
     await withinStopDeadline(test.interrupted);
     expect(await firstRenewal).toEqual(new Error('Turn ended'));
     expect(otherSettled).toBe(false);
-    test.send({ type: 'ack', sequence: 2, token: 'second-renewed',
-      expiresAt: Date.now() + 60_000 });
+    const acknowledgement = { type: 'ack', sequence: 2, token: 'second-renewed',
+      expiresAt: Date.now() + 60_000 };
+    test.send(acknowledgement);
     expect(await secondRenewal).toBeUndefined();
     const response = test.call('thread-2', 'second', true);
     const upstream = await test.firstRequest;

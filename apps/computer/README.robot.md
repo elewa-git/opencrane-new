@@ -8,8 +8,8 @@ The runner marks the turn cancelled before removing its model and MCP passes,
 tool lists and approval waits. `turn-stop.ts` settles pending start and renewal
 waits with a fixed error. It reuses `dropAccess`; the signed takeover gate keeps
 its own removal path. Thread preparation checks cancellation before and after
-registering tools. The runner sends the turn id with each `/grant`, `/drop` and tool list. The proxy
-remembers cancelled turn ids for its process lifetime and refuses their grants
+registering tools. The runner sends the turn id with each `/grant`, `/drop` and
+tool list. The proxy remembers cancelled turn ids for its process lifetime and refuses their grants
 before installing them, including when an old control reply is still pending.
 A restarted proxy has no grants or pending control requests from the old process.
 The runner keeps that conversation occupied until pending grant installations
@@ -19,8 +19,8 @@ A delayed `/drop` only removes that turn's grant, tool lists and requests. It le
 a newer turn on the same thread alone. This uses the turn identity already needed
 to refuse cancelled installations, without waiting for every old removal reply.
 
-Both local proxies track outgoing requests by thread. `/drop` destroys that
-thread's requests and client responses before acknowledging removal. Dropping
+Both local proxies track outgoing requests by thread. A matching `/drop` destroys
+that thread's requests and client responses before acknowledging removal. Dropping
 a tool list also ends its approval waits and MCP calls. Reading a model request
 body does not retain permission to send after Stop. Other threads keep working.
 Aborting these local connections does not prove that a remote effect stopped.

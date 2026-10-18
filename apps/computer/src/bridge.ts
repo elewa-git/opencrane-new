@@ -190,7 +190,8 @@ const channel = bridgeChannel(server, {
   },
   grant(thread, conversation, token, expiresAt, turnId) {
     const path = token ? '/grant' : '/drop';
-    const input = { thread, turnId, conversation, computer: computerCredential, token, expires: expiresAt };
+    const input = { thread, turnId, conversation, computer: computerCredential,
+      token, expires: expiresAt };
     return proxyControl(path, input);
   },
 }, runtimeProxy.approvals);

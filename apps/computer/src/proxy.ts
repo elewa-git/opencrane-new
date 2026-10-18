@@ -75,8 +75,8 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
           throw new Error('Bad grant');
         }
         deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
-        const grant: ProxyGrant = { turnId: input['turnId'], computer: input['computer'], token: input['token'],
-          expires: input['expires'] };
+        const grant: ProxyGrant = { turnId: input['turnId'], computer: input['computer'],
+          token: input['token'], expires: input['expires'] };
         if (typeof input['conversation'] === 'string') grant.conversation = input['conversation'];
         turns.set(input['thread'], grant);
         mcp.extendThread(input['thread'], grant.expires);
