@@ -6,7 +6,7 @@ import type { ApprovalCard } from '@opencrane/protocol';
 type RecordFields = Pick<ApprovalCard,
   'state' | 'requestedAt' | 'decidedAt' | 'usedAt' | 'endedAt' | 'cancelReason'>;
 
-function utcInstant(savedTime: string) {
+export function utcInstant(savedTime: string) {
   return new Date(savedTime).toISOString();
 }
 

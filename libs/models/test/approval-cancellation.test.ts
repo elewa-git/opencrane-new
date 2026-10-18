@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { toolApprovalRequestedDataSchema } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '../src/actor.ts';
-import { approvalGrantRevoked } from '../src/approval-cancellation.ts';
+import { approvalGrantRevoked, approvalPolicyChange, policyReason }
+  from '../src/approval-cancellation.ts';
 
 const digest = 'a'.repeat(64);
 const request = toolApprovalRequestedDataSchema.parse({
@@ -86,3 +88,41 @@ async function refusesAnotherSilo() {
   }
 }
 it('refuses a revocation saved for another silo', refusesAnotherSilo);
+
+function sha256(value: string) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+const toolDefinition = '{"inputSchema":{"type":"object"},"name":"read"}';
+const toolRevision = sha256(toolDefinition);
+const catalogueDigest = sha256(JSON.stringify([{ name: 'read', revision: toolRevision }]));
+const discoveredCatalogue = { serverId: 'fixture', toolCount: 0,
+  schemaDigest: sha256('[]'),
+  checkedAt: '2030-01-01T12:00:00.000Z', expiresAt: '2030-01-01T12:05:00.000Z',
+  connectionId: 'connection', accountMode: 'none', tools: [] };
+
+async function reportsSchemaChangeWhenConnectionAndProfileStayTheSame() {
+  const nats = await natsFixture();
+  try {
+    const subject = 'mcp-fixture';
+    const original = envelope('test', subject, 'mcp.server_discovered', discoveredCatalogue);
+    const changed = envelope('test', subject, 'mcp.server_discovered', {
+      ...discoveredCatalogue, toolCount: 1, schemaDigest: catalogueDigest,
+      tools: [{ name: 'read', revision: toolRevision, reviewed: true,
+        definition: toolDefinition }],
+    });
+    await nats.seed([original, changed]);
+    const result = await approvalPolicyChange(nats.store, 'test', request, Infinity);
+    expect(result).toEqual({ closed: true, cancelReason: 'schema_changed' });
+  } finally {
+    await nats.close();
+  }
+}
+it('reports a schema change when connection and profile stay the same',
+  reportsSchemaChangeWhenConnectionAndProfileStayTheSame);
+
+function leavesUnknownPolicyRevisionWithoutACause() {
+  expect(policyReason('mcp.future_revision_event', {}, request)).toBeUndefined();
+}
+it('does not invent a cause for an unrecognised policy revision event',
+  leavesUnknownPolicyRevisionWithoutACause);

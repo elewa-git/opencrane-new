@@ -1128,6 +1128,48 @@ async function replaysOffsetApprovalDates(type: string, details: object, state: 
 it.each(datedApprovalEnds)('replays offset dates as UTC for %s / %s in cards replies',
   replaysOffsetApprovalDates, 40_000);
 
+async function keepsMicrosecondsInOffsetApprovalDates() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const original = (await setup.read()).cards[0]!;
+    const current = await readApproval(setup.nats.store, 'test', original.approvalId);
+    const approvalId = 'e'.repeat(64);
+    const subject = `approval-${approvalId}`;
+    const request = { ...current.request, approvalId };
+    const requested = { ...envelope('test', subject, 'tool.approval_requested', request),
+      time: '2026-10-12T12:00:00.123456+02:00' };
+    const decided = { ...envelope('test', subject, 'approval.decided',
+      { approvalId, decision: 'approved', decidedBy: 'alice' }),
+      time: '2026-10-12T12:01:00.123456+02:00' };
+    const used = { ...envelope('test', subject, 'approval.used',
+      { approvalId, permitId: 'microsecond-permit' }),
+      time: '2026-10-12T12:02:00.123456+02:00' };
+    const ended = { ...envelope('test', subject, 'approval.expired', { approvalId }),
+      time: '2026-10-12T12:03:00.123456+02:00' };
+    await setup.nats.seed([requested, decided, used, ended]);
+    await setup.restart();
+    await setup.runner.rebuild(auditTrail);
+    await setup.restartReader();
+
+    const response = await setup.read();
+    function isOffsetApproval(card: (typeof response.cards)[number]) {
+      return card.approvalId === approvalId;
+    }
+    expect(response.cards.find(isOffsetApproval)).toMatchObject({
+      requestedAt: '2026-10-12T10:00:00.123456Z',
+      decidedAt: '2026-10-12T10:01:00.123456Z',
+      usedAt: '2026-10-12T10:02:00.123456Z',
+      endedAt: '2026-10-12T10:03:00.123456Z',
+      uses: [{ permitId: 'microsecond-permit', usedAt: '2026-10-12T10:02:00.123456Z' }],
+    });
+  } finally {
+    await setup.close();
+  }
+}
+it('keeps six fractional digits when offset approval dates reach parsed cards replies',
+  keepsMicrosecondsInOffsetApprovalDates, 40_000);
+
 const recordedCancellations = [
   ['conversation.closed', { conversationId: 'conversation', closedBy: 'alice' },
     'conversation-conversation', 'conversation_closed'],

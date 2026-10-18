@@ -55,7 +55,7 @@ export async function approvalPolicyChange(store: EventStore, silo: string, requ
   return { closed };
 }
 
-function policyReason(type: string, data: unknown, request: Request): Reason | undefined {
+export function policyReason(type: string, data: unknown, request: Request): Reason | undefined {
   if (type === 'mcp.server_unpublished') return 'unpublished';
   if (type === 'mcp.tools_changed') return 'schema_changed';
   if (type === 'mcp.server_discovered') {
