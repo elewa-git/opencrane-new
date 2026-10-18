@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { toolApprovalRequestedDataSchema, toolDispatchRecordedDataSchema,
-  approvalDecidedDataSchema, type EventEnvelope } from '@opencrane/events';
+  type EventEnvelope } from '@opencrane/events';
 import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
-import { isToolPolicyAvailable, readEvents } from '@opencrane/projections';
+import { readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
-import { readToolPolicy } from './tool-policy.ts';
+import { approvalGrantRevoked, approvalPolicyChange } from './approval-cancellation.ts';
+import { approvalRecord } from './approval-record.ts';
 import type { JsonValue } from '@opencrane/events/lossless-json';
 import type { mcpPolicy } from './mcp.ts';
 
@@ -15,7 +16,6 @@ export interface ReviewKeys {
   decrypt(silo: string, conversation: string, value: unknown): string;
 }
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
-const approvalDecisionStates = { approved: 'approved', rejected: 'denied' } as const;
 type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
@@ -119,42 +119,35 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
 export async function readApproval(store: EventStore, silo: string, approvalId: string,
   options: ApprovalReadOptions = {}):
   Promise<{ request: Request; state: ApprovalCard['state']; sequence: number;
-    requestPosition: number; conversationPosition: number; canRetry: boolean }> {
+    requestPosition: number; conversationPosition: number; canRetry: boolean } &
+    ReturnType<typeof approvalRecord>> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
   const rows = await history(store, `approval-${approvalId}`, silo, deadline);
   const request = toolApprovalRequestedDataSchema.parse(rows[0]?.event.data);
-  let state: ApprovalCard['state'] = 'requested';
-  let permitId: string | undefined;
-  for (const { event } of rows.slice(1)) {
-    if (event.type === 'approval.decided') {
-      const { decision } = approvalDecidedDataSchema.parse(event.data);
-      state = approvalDecisionStates[decision];
-    }
-    if (event.type === 'approval.used') {
-      state = 'outcome_unknown';
-      permitId = z.object({ permitId: z.string() }).parse(event.data).permitId;
-    }
-    if (event.type === 'approval.retry_requested') state = 'approved';
-    if (event.type === 'approval.expired') state = 'expired';
-    if (event.type === 'approval.cancelled') state = 'cancelled';
-  }
+  const record = approvalRecord(rows);
+  const { state, permitId } = record;
   const sequence = rows.at(-1)!.sequence;
   let conversationPosition = 0;
   const canRetry = await verifiedRetry(store, silo, approvalId, permitId, deadline, state);
   const needsCurrentChecks = canRetry || ['requested', 'approved'].includes(state);
   if (needsCurrentChecks) {
-    const checked = await invalidated(store, silo, request, deadline, options.conversationRows);
+    const checked = await invalidated(store, silo, request, rows[0]!.sequence,
+      deadline, options.conversationRows);
     conversationPosition = checked.conversationPosition;
     const terminal = approvalTerminalState(checked.closed, request.expiresAt, now);
     if (terminal) {
-      const result = await store.append({ event: envelope(silo, `approval-${approvalId}`, `approval.${terminal}`, { approvalId }), expectedSequence: sequence });
+      const data = { approvalId };
+      const cancellation = { ...data, cancelReason: checked.cancelReason };
+      const payload = terminal === 'cancelled' ? cancellation : data;
+      const event = envelope(silo, `approval-${approvalId}`, `approval.${terminal}`, payload);
+      const result = await store.append({ event, expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
       const readOptions = { now, deadline, conversationRows: options.conversationRows };
       return readApproval(store, silo, approvalId, readOptions);
     }
   }
-  return { request, state, sequence, requestPosition: rows[0]!.sequence, conversationPosition, canRetry };
+  return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence, conversationPosition, canRetry };
 }
 
 async function verifiedRetry(store: EventStore, silo: string, approvalId: string,
@@ -196,7 +189,8 @@ export function closesDecisionTurn(event: EventEnvelope, turnId: string) {
   return closesTurn && z.object({ turnId: z.string() }).parse(event.data).turnId === turnId;
 }
 
-async function invalidated(store: EventStore, silo: string, request: Request, deadline: number,
+async function invalidated(store: EventStore, silo: string, request: Request,
+  requestPosition: number, deadline: number,
   conversationRows?: StoredEvent[]) {
   const rows = conversationRows ?? await history(
     store, `conversation-${request.conversationId}`, silo, deadline);
@@ -210,21 +204,25 @@ async function invalidated(store: EventStore, silo: string, request: Request, de
   const start = rows.findIndex(startsBoundTurn);
   const later = rows.slice(start + 1);
   const conversationPosition = rows.at(-1)?.sequence ?? 0;
-  let closed = start < 0 || later.some(invalidatesBoundApproval);
-  if (!closed) closed = await approvalPolicyChanged(store, silo, request, deadline);
-  return { closed, conversationPosition };
+  if (start < 0) return { closed: true, conversationPosition };
+  const invalidating = later.find(invalidatesBoundApproval);
+  if (invalidating) {
+    const cancelReason = turnCancellationReason(invalidating.event.type);
+    return { closed: true, conversationPosition, cancelReason };
+  }
+  if (await approvalGrantRevoked(store, silo, request, requestPosition, deadline)) {
+    return { closed: true, conversationPosition, cancelReason: 'grant_revoked' as const };
+  }
+  const policy = await approvalPolicyChange(store, silo, request, deadline);
+  return { ...policy, conversationPosition };
 }
 
-async function approvalPolicyChanged(store: EventStore, silo: string, request: Request,
-  deadline: number) {
-  const policy = await readToolPolicy(store, silo, request.serverId, deadline);
-  let published = policy.published;
-  if (policy.publication) published = policy.configurationObservation !== undefined;
-  // Keep consent tied to the reviewed publication, without requiring a running gateway.
-  const currentPublication = { ...policy, published };
-  const available = isToolPolicyAvailable(currentPublication);
-  return !available || policy.policyRevision !== request.policySequence ||
-    policy.connectionId !== request.connectionId;
+function turnCancellationReason(type: string): ApprovalCard['cancelReason'] {
+  if (type === 'conversation.closed') return 'conversation_closed';
+  if (type === 'message.posted') return 'new_message';
+  if (type === 'agent.turn_started') return 'new_turn';
+  if (type === 'agent.turn_stop_requested') return 'turn_stopped';
+  return 'turn_ended';
 }
 
 async function approvalChangedSinceRead(store: EventStore, silo: string,
@@ -240,7 +238,8 @@ async function approvalChangedSinceRead(store: EventStore, silo: string,
       if (invalidatesApproval(row.event, request.turnId)) return true;
     }
   }
-  return approvalPolicyChanged(store, silo, request, deadline);
+  const policy = await approvalPolicyChange(store, silo, request, deadline);
+  return policy.closed;
 }
 
 function approvalActionRefusal(current: Awaited<ReturnType<typeof readApproval>>,
@@ -336,22 +335,26 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   }
   const cards: ApprovalCard[] = [];
   for (const id of ids) {
-    const { request, state, canRetry } = await readApproval(store, silo, id, readOptions);
+    const current = await readApproval(store, silo, id, readOptions);
+    const { request } = current;
     const text = keys.decrypt(silo, conversationId, request);
     if (hash(text) !== request.reviewDigest) throw new Error('Review digest mismatch');
-    const card = approvalCard(request, state, memberId, text, canRetry);
+    const card = approvalCard(current, memberId, text);
     cards.push(card);
   }
   return cards;
 }
 
-function approvalCard(request: Request, state: ApprovalCard['state'], memberId: string,
-  text: string, canRetry: boolean): ApprovalCard {
+function approvalCard(current: Awaited<ReturnType<typeof readApproval>>, memberId: string,
+  text: string): ApprovalCard {
+  const { request, state, canRetry, requestedAt, decidedAt, usedAt, endedAt,
+    cancelReason, uses } = current;
   const canDeny = memberId === request.requesterId && state === 'requested';
   const missingFields = request.missingFields ?? [];
   const canApprove = canDeny && missingFields.length === 0;
   const review = approvalReviewSchema.parse(JSON.parse(text));
-  const card = { canApprove, canDeny, canRetry: canRetry && memberId === request.requesterId,
+  const card = { requestedAt, decidedAt, usedAt, endedAt, cancelReason, uses, canApprove,
+    canDeny, canRetry: canRetry && memberId === request.requesterId,
     missingFields, approvalId: request.approvalId, conversationId: request.conversationId,
     turnId: request.turnId,
     requesterId: request.requesterId,

@@ -26,7 +26,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests, hosted image check requests and results, registration, startup, saved turn, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch and not-sent outcomes| events["libs/events<br/>checks records<br/>previews dates"]
+  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests, hosted image check requests and results, registration, startup, saved turn, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch, not-sent outcomes and cancellation reasons| events["libs/events<br/>checks records and previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication subscriptions, nightly memory reviews and records, and cleanup results| events
@@ -34,6 +34,9 @@ flowchart LR
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
+
+Approval cancellation records may carry a fixed reason code. Older records without
+a reason stay readable. No review text or tool result belongs in a reason.
 
 Tool catalogue records keep exact definitions and the dates of successful or failed checks.
 The back end checks tool hashes against their saved definitions. A hash is a fixed-length

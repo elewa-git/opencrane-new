@@ -290,3 +290,18 @@ After refusal, the client clears protected status and ignores late socket and GE
 callbacks from that subscription. A new selection or reconnect needs a new local
 subscription revision so an old reply cannot restore access. Angular integration
 and its delayed-callback tests remain with the screen work.
+
+## Saved approval dates and cancellation reasons
+
+The [approval API](../../docs/api/approvals.md) defines the optional UTC fields,
+first-use retention and dated permit list. Dates come from approval event envelopes,
+not read tables or the read clock. `approval.cancelled` has its own strict schema
+with an optional `cancelReason`; old events still parse without one. Expiry uses
+`approval.expired` and has no cancellation reason. Reads preserve unknown outcomes.
+
+`apps/server/test/approvals.test.ts` checks restart, audit rebuild, delayed reads,
+recorded causes, old cancellations, retry history and identical hidden-id refusals.
+The reader recognises direct requester/assistant tool-grant revocations only.
+Other access refusals do not invent cancellation evidence. A missing turn and
+clock-only catalogue expiry still cancel without a reason. UI, native consent,
+retry delivery and fresh-install qualification remain outside this change.

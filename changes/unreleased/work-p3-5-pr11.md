@@ -1,0 +1,1 @@
+Tool approval replies retain saved UTC decision, use and end times after restart and replay. Retries keep the first use time and list later uses separately. Cancellations name a fixed cause only when saved events prove it; older cancellations stay without a reason. Missing and foreign approvals return the same refusal.

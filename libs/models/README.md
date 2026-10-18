@@ -18,7 +18,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, saved fact references, access after memory reads and turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, saved fact references, access after memory reads and turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
   models -->|rechecks loaded memory and corrected memory revisions; checks reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
@@ -30,6 +30,10 @@ flowchart LR
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
 uses this library to check saved dependencies at the intended nightly time.
+
+Approval cards retain the saved decision, use and end times after a restart.
+They name a cancellation cause only when a saved event proves it. Retrying keeps
+the first use time and adds another dated use; use alone never proves success.
 
 Approval cards include the turn they belong to. The chat hides decisions after that turn stops.
 

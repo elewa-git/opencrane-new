@@ -112,3 +112,7 @@ export { egressCloseSchema, egressObservationSchema, egressObservationId }
   from './egress-observation.ts';
 
 export { memoryCorrectedEventSchema, memoryValueEventSchema } from './memory.ts';
+
+export { approvalCancelReasonSchema, approvalCancelledDataSchema }
+  from './approval-cancellation.ts';
+export { approvalUsedDataSchema } from './data.ts';
