@@ -61,7 +61,7 @@ async function readScopeChanges(store: EventStore, scopes: Iterable<Scope>, dead
 }
 
 /** Read scope history before starting the short access check. */
-export async function prepareLoadedMemory(store: EventStore, binding: Binding,
+export async function prepareLoadedMemory(store: EventStore, binding: Binding | undefined,
   claims: Identity, conversation: StoredEvent[], deadline: number) {
   try {
     const state = loadedContext(conversation, claims);
@@ -84,6 +84,7 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding,
         return;
       }
       try {
+        if (!binding) throw new LoadedMemoryRefused();
         if (!rightsChecked) {
           for (const scope of scopes.values()) {
             await loadedMemoryRights(store, binding, claims, scope.scopeId, fresh, conversation);

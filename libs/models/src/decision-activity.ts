@@ -13,7 +13,8 @@ const harmlessConversationTypes = [
   ...outputReportTypes,
 ];
 
-export async function confirmDecisionAccess(activity: Awaited<ReturnType<typeof decisionActivity>>,
+export async function confirmDecisionAccess(
+  activity: Pick<Awaited<ReturnType<typeof decisionActivity>>, 'confirm'>,
   authority: Awaited<ReturnType<typeof decisionAuthorityFence>>, needsApproval: boolean,
   refuseMemoryLoads = false) {
   while (true) {

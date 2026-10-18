@@ -18,8 +18,8 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, saved fact references, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
-  models -->|rechecks loaded memory; checks corrected revisions, reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, saved fact references, turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
+  models -->|rechecks loaded memory and corrected memory revisions; checks reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -38,6 +38,7 @@ A change to the tools or their rules ends that approval. Saving a replacement pu
 also ends waiting and unused approvals for that server. Reloading another server keeps
 them valid. A gateway acknowledgement cannot revive an ended approval.
 Every model, tool and recall call checks all memory facts already loaded by its turn.
+The server uses the same check before releasing a renewed turn pass.
 A corrected, forgotten or expired fact, an invalid dependency, or removed memory access
 refuses the next call. Other facts, messages and uploads do not refuse it.
 Memory writes keep their original access check. Removing and restoring a grant while

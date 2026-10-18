@@ -2379,7 +2379,12 @@ backwards scope position, incomplete history, expiry advancing during confirmati
 and repeated unrelated changes reaching the original deadline.
 Native memory admission remains disabled.
 
-Remaining row 2 work: turn-pass renewal in PR 2e and correction target proofs.
+The server also uses `prepareLoadedMemory` at turn-pass renewal, before signing and
+before returning the token. Both confirmations retain one authority snapshot and
+reject new loaded evidence during signing. A caller without an IAM binding can check
+a turn without references; loaded references always require the binding.
+
+Remaining row 2 work: correction target proofs and agent correct/forget contracts.
 Output release and process interruption remain row 3. Initial injection and native
 forwarding remain later rows. Fresh-install qualification and real model calls: NOT RUN.
 
