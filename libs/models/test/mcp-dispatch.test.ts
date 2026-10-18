@@ -1850,7 +1850,14 @@ async function refusesAfterDispatchStart(change: typeof startFailures[number]) {
   if (change === 'conflict' || change === 'rejected') {
     expect(rows).toHaveLength(1);
   } else {
-    expect(rows).toHaveLength(2);
+    const uncertainSave = change === 'lost reply' || change === 'throw';
+    expect(rows).toHaveLength(uncertainSave ? 2 : 3);
+    if (!uncertainSave) {
+      expect(rows[2]!.event.type).toBe('tool.dispatch_recorded');
+      expect(rows[2]!.event.data).toMatchObject({
+        outcome: 'not_dispatched', evidence: 'dispatch_refused',
+      });
+    }
     const event = rows[1]!.event;
     expect(event.type).toBe('tool.dispatch_started');
     const requestId = z.object({ requestId: z.string() }).parse(event.data).requestId;
@@ -1924,6 +1931,13 @@ async function refusesGenerationDuringLastMcpRead(afterStart: boolean) {
       return row.event.type === 'tool.dispatch_started';
     }
     expect(rows.filter(isStarted)).toHaveLength(afterStart ? 1 : 0);
+    if (afterStart) {
+      expect(rows).toHaveLength(3);
+      expect(rows[2]!.event.type).toBe('tool.dispatch_recorded');
+      expect(rows[2]!.event.data).toMatchObject({
+        requestId, outcome: 'not_dispatched', evidence: 'dispatch_refused',
+      });
+    }
     expect((await send(setup, value)).status).toBe(403);
   } finally {
     release.resolve();
@@ -1934,6 +1948,94 @@ async function refusesGenerationDuringLastMcpRead(afterStart: boolean) {
 }
 it.each([false, true])('refuses a saved generation during the last MCP read, after start: %s',
   refusesGenerationDuringLastMcpRead);
+
+async function ordersDispatchAtLastGatewayRead(savedAfterRead: boolean) {
+  const context = await publishedFixture();
+  const { setup, delivery } = context;
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(setup, headers);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const head = setup.nats.store.head.bind(setup.nats.store);
+  const waiting = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let started = false;
+  let gatewayChecked = false;
+  let mcpChecked = false;
+  let held = false;
+  let subject = '';
+  async function noteStart(command: AppendCommand) {
+    const result = await append(command);
+    const event = z.object({ type: z.string(), subject: z.string() }).parse(command.event);
+    if (event.type === 'tool.dispatch_started') {
+      started = true;
+      subject = event.subject;
+    }
+    return result;
+  }
+  async function holdLastGatewayRead(...parameters: Parameters<typeof head>) {
+    if (started && parameters[0] === 'gateway-config-test') {
+      gatewayChecked = true;
+    }
+    if (gatewayChecked && parameters[0] === 'mcp-fixture') {
+      mcpChecked = true;
+    }
+    if (parameters[0] !== 'gateway-config-test' || !mcpChecked || held) {
+      return head(...parameters);
+    }
+    held = true;
+    if (savedAfterRead) {
+      const position = await head(...parameters);
+      waiting.resolve();
+      await release.promise;
+      return position;
+    }
+    waiting.resolve();
+    await release.promise;
+    return head(...parameters);
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append').mockImplementation(noteStart);
+  const reader = vi.spyOn(setup.nats.store, 'head').mockImplementation(holdLastGatewayRead);
+  const dispatch = send(setup, value);
+  function repliedTooSoon(): never {
+    throw new Error('Dispatch replied before the final gateway read barrier');
+  }
+  try {
+    await Promise.race([waiting.promise, dispatch.then(repliedTooSoon)]);
+    const mcpPosition = await head('mcp-fixture');
+    const acknowledgement = delivery.acknowledged();
+    const next = await nextCarriedGeneration(context);
+    expect(next.generation).toBe(context.record.generation + 1);
+    expect(await head('mcp-fixture')).toBe(mcpPosition);
+    expect(delivery.acknowledged()).toEqual(acknowledgement);
+    expect(await head('gateway-config-test')).toBeGreaterThan(acknowledgement!.position);
+    expect(setup.received()).toBe(0);
+    release.resolve();
+    const response = await dispatch;
+    expect(response.status).toBe(savedAfterRead ? 200 : 403);
+    expect(setup.received()).toBe(savedAfterRead ? 1 : 0);
+    const rows = await history(setup.nats.store, subject, 'test');
+    expect(rows[1]!.event.type).toBe('tool.dispatch_started');
+    expect(rows[1]!.event.data).toMatchObject({ generation: context.record.generation });
+    if (savedAfterRead) {
+      expect(rows).toHaveLength(2);
+    } else {
+      expect(rows).toHaveLength(3);
+      expect(rows[2]!.event.type).toBe('tool.dispatch_recorded');
+      expect(rows[2]!.event.data).toMatchObject({
+        outcome: 'not_dispatched', evidence: 'dispatch_refused',
+      });
+    }
+    expect((await send(setup, value)).status).toBe(403);
+    expect(setup.received()).toBe(savedAfterRead ? 1 : 0);
+  } finally {
+    release.resolve();
+    await dispatch;
+    reader.mockRestore();
+    writer.mockRestore();
+  }
+}
+it.each([false, true])('orders dispatch at the last gateway read, saved after read: %s',
+  ordersDispatchAtLastGatewayRead);
 
 async function refusesCompetingOutcome(afterRead: boolean) {
   const context = await publishedFixture();
