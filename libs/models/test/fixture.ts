@@ -131,7 +131,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     await auth.handler.handle(event, db);
   }
   let clock = Date.now();
-  const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly, 'personal-default');
+  let actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly, 'personal-default');
   const keys = conversationKeys(`${directory}/keys`); keys.provision('test', 'conversation');
 
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
@@ -204,7 +204,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     revisionHeader: 'x-opencrane-mcp-revision' as const }];
   const dispatchOptions: McpDispatchOptions = { routes: mcpRoutes, requireLeader: async function requireLeader() {},
     requireCatalogue: function requireCatalogue(_serverId: string) {} };
-  const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
+  let decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
     binding, 0, keys, undefined, dispatchOptions);
   let gatewayChild: ChildProcess | undefined;
   function rememberGatewayChild(child: ChildProcess,
@@ -297,7 +297,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   return { databaseUrl: dbs.queue.options.connectionString,
     gatewayChild: () => gatewayChild,
     dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, refuseMcpConnection,
-    upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+    upstreamBody: () => upstreamBody, get actor() { return actor; }, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     providerAuthHashes, decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
@@ -371,6 +371,16 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
       });
     },
     // Replay checks drain completed requests; crash checks explicitly request SIGKILL.
+    async restartActor() {
+      await gateway.stop();
+      await decision.close();
+      actor = new BudgetActor(nats.store, 'test', actor.now);
+      await actor.start();
+      decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
+        binding, 0, keys, undefined, dispatchOptions);
+      options = { ...options, decisionUrl: decision.url };
+      gateway = await startGateway(options);
+    },
     async restart(signal: NodeJS.Signals = 'SIGTERM') { await gateway.stop(signal); gateway = await startGateway(options); },
     async close() {
       await gateway.stop();
