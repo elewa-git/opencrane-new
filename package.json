@@ -49,6 +49,7 @@
     "visual:screen-p4-3-detail": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-3-detail.mjs",
     "visual:screen-p4-3-invite": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-3-invite.mjs",
     "visual:screen-p4-3-departure": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-3-departure.mjs",
+    "visual:screen-p4-3-role": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-3-role.mjs",
     "visual:p4-2-screens": "node docs/process/p4-2-screens/check-screens.mjs",
     "visual:p4-7-screens": "node scripts/check-p4-7-screens.mjs",
     "visual:p4-12-memory": "npm run build -w apps/web && node scripts/check-p4-12-memory.mjs",

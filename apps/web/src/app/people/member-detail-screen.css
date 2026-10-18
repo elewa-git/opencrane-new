@@ -19,6 +19,17 @@
 .member-access-table small, .member-access-line { display: block; margin-top: 4px; }
 .member-access-table small { color: var(--oc-ink-admin-muted); }
 .member-boundary { border: 1px dashed var(--oc-accent); padding: 12px; }
+.member-role-status { background: var(--oc-accent-tint);
+  border-color: var(--oc-accent-border); }
+.member-role-status p { margin: 0 0 12px; }
+.member-role-status p:last-child { margin-bottom: 0; }
+.member-role-options { display: grid; gap: 10px; border: 0; padding: 0; }
+.member-role-options label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  min-height: 44px; border: 1px solid var(--oc-border-default); padding: 12px; }
+.member-role-options label span { flex-basis: 100%; margin-left: 24px; }
+.member-role-options input { width: 18px; height: 18px; }
+.member-role-options a, .member-detail-page p > a { display: inline-flex;
+  align-items: center; min-height: 44px; }
 .member-detail-page .stale { opacity: .7; }
 @media (max-width: 700px) {
   .page-heading { display: block; }

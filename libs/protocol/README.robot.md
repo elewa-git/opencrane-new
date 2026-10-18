@@ -5,6 +5,9 @@ For people, read [README.md](README.md) first.
 `memberHeaderSchema` requires literal false role and removal flags.
 `memberDetailSchema` accepts booleans for those flags. The directory accepts a
 boolean `permissions.invite`; it does not give a Member directory access.
+`memberRoleCommandSchema` checks the Member/Admin choice and member position.
+`memberRoleReceiptSchema` checks the saved event reply. `memberRoleStatusSchema`
+also checks the effect and separate content and IAM progress from the status GET.
 
 `chatStateCommandSchema` strictly checks archive/read command ids and join ids.
 Archive carries a boolean and non-negative expected position. Read carries a positive

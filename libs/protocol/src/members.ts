@@ -38,6 +38,28 @@ export const memberDetailSchema = memberDirectoryRowSchema.extend({
   personalAssistant: z.object({ status: z.literal('unavailable') }).strict(),
   rejoinedAt: z.object({ status: z.literal('unavailable') }).strict(),
 }).strict();
+export const memberRoleCommandSchema = z.object({
+  commandId: memberId,
+  expectedSequence: z.int().nonnegative(),
+  newRole: z.enum(['member', 'admin']),
+}).strict();
+export const memberRoleReceiptSchema = z.object({
+  status: z.literal('recorded'),
+  commandId: memberId,
+  changeId: memberId,
+  type: z.literal('member.role_changed'),
+  sequence: z.int().positive(),
+  recordedAt: z.iso.datetime({ offset: true }),
+  memberId,
+  newRole: z.enum(['member', 'admin']),
+}).strict();
+export const memberRoleStatusSchema = memberRoleReceiptSchema.extend({
+  effect: z.enum(['role_changed', 'none_target_became_owner']),
+  projection: z.object({
+    content: z.enum(['applying', 'current']),
+    iam: z.enum(['applying', 'current']),
+  }).strict(),
+}).strict();
 const count = z.object({
   status: z.enum(['current', 'applying', 'unavailable']),
   value: z.int().nonnegative().nullable(),
