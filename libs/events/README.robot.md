@@ -431,6 +431,13 @@ can still settle its cost. The event catalogue and registry name the same event.
 
 ## MCP send admission
 
+`tool.dispatch_started` uses `decision-<requestId>` and the fixed event and command id
+`<requestId>:tool-dispatch-started`. Its strict fields are requestId (UUID), serverId,
+connectionId, generation (positive gateway generation), recordDigest (SHA-256) and
+reviewRevision (positive saved review position). It consumes a published call's permit
+before any send; it does not claim an upstream outcome. It has no reaction on replay.
+`tool.dispatch_recorded` remains the later outcome record used by approval retries.
+
 `mcp.dispatch_admitted` records one accepted send on `mcp-<server>`. It carries the
 request id, connection, tool name and revision, catalogue digest and backend generation.
 It contains no pass, credentials or arguments. Its conditional append orders that

@@ -2436,10 +2436,20 @@ Restoration checks refuse the unsupported conversations `--verify` command, then
 its supported offline rebuild and audit verification without new events or upstream calls.
 Conversations verification remains unsupported by the existing CLI. Existing authority tests remain unchanged.
 
-PARTIAL: this is steps 1–3 of row 4. Part b adds `tool.dispatch_started`, its conditional
-append and uncertain-reply tests, and the final access and MCP position checks after saving.
-No event contract changes belong to this first part. Row 5 still supplies the guarded
-destination; production routes remain empty. Fresh-install journey: SKIP.
+Part b adds `tool.dispatch_started` after `mcp.dispatch_admitted` for intent-backed
+publications only. Its fixed id is `<requestId>:tool-dispatch-started` on
+`decision-<requestId>`. One conditional append requires the decision to remain the
+latest event. An earlier outcome or any failed or uncertain save refuses the call.
+The permit is spent in memory before any await and cannot be retried or restored on restart.
+After saving, dispatch rechecks access, the gateway position and the exact MCP admission
+position. A changed position refuses, including another intervening admission. Local
+acknowledgement, route and deadline checks follow the last await, immediately before send.
+`tool.dispatch_recorded` remains the last outcome row for approval retry verification.
+
+Tests hold the saved start reply while asserting zero upstream requests, lose that reply,
+withdraw publication or revoke access immediately after saving, and repeat a permit both
+in sequence and concurrently. They verify the saved gateway fields and later outcome order.
+Row 5 still supplies the guarded destination; production routes remain empty. Fresh-install journey: SKIP.
 
 ## Saved reload approval cancellation (Part of #48)
 

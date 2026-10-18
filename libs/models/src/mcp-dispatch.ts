@@ -43,6 +43,7 @@ interface Permit {
   silo: string;
   route: Route;
   policyRevision: number;
+  reviewRevision: number | undefined;
   catalogueSequence: number;
   schemaDigest: string;
   toolRevision: string;
@@ -116,6 +117,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const binding = { requestId, silo, route: { ...route },
       ...(policy.gatewayBinding ? { gatewayBinding: policy.gatewayBinding } : {}),
       policyRevision: policy.policy.policyRevision, catalogueSequence: policy.policy.sequence,
+      reviewRevision: policy.policy.reviewRevision,
       schemaDigest: policy.schemaDigest,
       toolRevision: policy.revision, toolName: policy.name, bodyDigest: digest(body), expiresAt };
     const signedBinding = { ...binding, nonce: randomUUID() };
@@ -183,12 +185,48 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireFreshDispatch(req, res, permit);
     }
     await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
-    await admit(req, res, permit, route, position, deadline);
+    const admittedPosition = await admit(req, res, permit, route, position, deadline);
+    await recordStarted(permit, deadline);
+    if (permit.gatewayBinding) {
+      await permit.confirmAccess();
+    }
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
       acknowledged, deadline);
+    if (permit.gatewayBinding) {
+      const currentPosition = await store.head(`mcp-${route.serverId}`, deadline);
+      if (currentPosition !== admittedPosition) {
+        throw new Error('MCP policy changed');
+      }
+    }
+    // Recheck local state after the last awaited read, then open the connection immediately.
     requireCurrentRoute(permit);
     requireFreshDispatch(req, res, permit);
     forward(route, permit, body, res, memoryContext);
+  }
+
+  async function recordStarted(permit: Permit, deadline: number) {
+    const binding = permit.gatewayBinding;
+    if (!binding) {
+      return;
+    }
+    const subject = `decision-${permit.requestId}`;
+    const expectedSequence = await store.head(subject, deadline);
+    // Keep any saved outcome last, including one written after a gateway timeout.
+    const decision = await store.readEvent(expectedSequence, deadline);
+    if (decision.event.id !== permit.budget.decisionId) {
+      throw new Error('Tool dispatch decision changed');
+    }
+    const payload = { requestId: permit.requestId, serverId: permit.route.serverId,
+      connectionId: permit.route.connectionId, generation: binding.generation,
+      recordDigest: binding.recordDigest, reviewRevision: permit.reviewRevision };
+    const eventId = `${permit.requestId}:tool-dispatch-started`;
+    const event = envelope(silo, subject, 'tool.dispatch_started', payload, eventId);
+    // Consume once in this process. Never recover a failed save reply by sending later.
+    const command = { event, expectedSequence, deadline, historyChecked: true as const };
+    const result = await store.append(command);
+    if (result.status !== 'appended') {
+      throw new Error('Tool dispatch start unavailable');
+    }
   }
 
   function requireCurrentRoute(permit: Permit) {
@@ -217,11 +255,11 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         acknowledged, deadline);
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
-      // Order sends with Block and quarantine writes on the same server stream.
-      // A later Block applies to later admissions, even if this send is still pending.
+      // Order admission with Block and quarantine writes on the same server stream.
+      // Published calls also recheck this position after saving their start.
       const command = { event, expectedSequence, deadline, historyChecked: true as const };
       const result = await store.append(command);
-      if (result.status === 'appended') return;
+      if (result.status === 'appended') return result.sequence;
       if (result.status !== 'conflict' || attempt === 2) {
         throw new Error('MCP admission refused');
       }
@@ -230,6 +268,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         currentPosition, deadline);
       expectedSequence = currentPosition;
     }
+    throw new Error('MCP admission refused');
   }
 
   return { handle, bindPolicy, setPermit, acknowledged };

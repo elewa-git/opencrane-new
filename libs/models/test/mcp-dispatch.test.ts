@@ -1732,6 +1732,7 @@ async function consumesPublishedPermitOnce(concurrent: boolean) {
   const statuses = replies.map(status);
   expect(statuses.sort()).toEqual([200, 403]);
   expect(setup.received()).toBe(1);
+  await expectDispatchStarted(setup, context.record, 0);
   const unused = await permit(setup, headers);
   const restarted = await startDecision(setup.actor, setup.identity, setup.binding,
     0, setup.keys, undefined, setup.dispatchOptions);
@@ -1743,6 +1744,165 @@ async function consumesPublishedPermitOnce(concurrent: boolean) {
 }
 it.each([false, true])('consumes a published permit once, concurrent: %s',
   consumesPublishedPermitOnce);
+
+async function waitsForDispatchStartReply() {
+  const context = await publishedFixture();
+  const { setup } = context;
+  const saved = Promise.withResolvers<string>();
+  const release = Promise.withResolvers<void>();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  async function holdStartReply(command: AppendCommand) {
+    const result = await append(command);
+    const event = z.object({ type: z.string(), subject: z.string() }).parse(command.event);
+    if (event.type === 'tool.dispatch_started') {
+      saved.resolve(event.subject);
+      await release.promise;
+    }
+    return result;
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append').mockImplementation(holdStartReply);
+  const dispatch = gatewayCall(context);
+  function repliedTooSoon(): never {
+    throw new Error('Gateway replied before saving the start');
+  }
+  try {
+    const subject = await Promise.race([saved.promise, dispatch.then(repliedTooSoon)]);
+    const rows = await history(setup.nats.store, subject, 'test');
+    expect(rows.at(-1)!.event.type).toBe('tool.dispatch_started');
+    expect(setup.received()).toBe(0);
+  } finally {
+    release.resolve();
+    writer.mockRestore();
+  }
+  expect(await dispatch).toBe(200);
+  expect(setup.received()).toBe(1);
+  await expectDispatchStarted(setup, context.record, 0);
+  async function recordsOutcome() {
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    const subject = await saved.promise;
+    const rows = await history(setup.nats.store, subject, 'test');
+    expect(rows.at(-1)!.event.type).toBe('tool.dispatch_recorded');
+    expect(rows).toHaveLength(3);
+  }
+  await expect.poll(recordsOutcome).toBeUndefined();
+  await verifyRestorationReplay(setup);
+}
+it('saves tool.dispatch_started before any upstream byte and keeps the outcome last',
+  waitsForDispatchStartReply, 60_000);
+
+const startFailures = ['lost reply', 'throw', 'conflict', 'rejected', 'withdrawal',
+  'access revoked', 'acknowledgement lost', 'new generation', 'backend changed'] as const;
+async function refusesAfterDispatchStart(change: typeof startFailures[number]) {
+  const context = await publishedFixture();
+  const { setup, delivery } = context;
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(setup, headers);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let subject = '';
+  let attempts = 0;
+  async function interruptStart(command: AppendCommand) {
+    const event = z.object({ type: z.string(), subject: z.string() }).parse(command.event);
+    if (event.type !== 'tool.dispatch_started') return append(command);
+    subject = event.subject;
+    attempts++;
+    if (change === 'conflict') return { status: 'conflict' as const };
+    if (change === 'rejected') {
+      return { status: 'rejected' as const, reason: 'duplicate_id' as const };
+    }
+    const result = await append(command);
+    expect(result.status).toBe('appended');
+    expect(setup.received()).toBe(0);
+    if (change === 'lost reply') {
+      return { status: 'unavailable' as const, cause: new Error('START_REPLY_CANARY') };
+    }
+    if (change === 'throw') throw new Error('START_REPLY_CANARY');
+    if (change === 'withdrawal') {
+      await setup.append('mcp-fixture', 'mcp.server_unpublished',
+        { serverId: 'fixture', unpublishedBy: 'alice' });
+    } else if (change === 'access revoked') {
+      await setup.append('member-alice', 'member.removed',
+        { memberId: 'alice', removedBy: 'alice' });
+    } else if (change === 'acknowledgement lost') {
+      delivery.close();
+    } else if (change === 'new generation') {
+      await nextCarriedGeneration(context);
+    } else if (change === 'backend changed') {
+      setup.options.mcpRoutes[0]!.generation = 'instance-2';
+    }
+    return result;
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append').mockImplementation(interruptStart);
+  try {
+    const first = await send(setup, value);
+    expect(first.status).toBe(403);
+    expect(await first.json()).toEqual({});
+    expect((await send(setup, value)).status).toBe(403);
+  } finally {
+    writer.mockRestore();
+  }
+  expect(attempts).toBe(1);
+  expect(setup.received()).toBe(0);
+  const rows = await history(setup.nats.store, subject, 'test');
+  if (change === 'conflict' || change === 'rejected') {
+    expect(rows).toHaveLength(1);
+  } else {
+    expect(rows).toHaveLength(2);
+    const event = rows[1]!.event;
+    expect(event.type).toBe('tool.dispatch_started');
+    const requestId = z.object({ requestId: z.string() }).parse(event.data).requestId;
+    expect(event.id).toBe(`${requestId}:tool-dispatch-started`);
+    expect(event.commandId).toBe(event.id);
+  }
+}
+it.each(startFailures)('sends nothing after tool.dispatch_started: %s',
+  refusesAfterDispatchStart);
+
+async function refusesDuringFinalPublishedRead(change: 'withdrawal' | 'acknowledgement') {
+  const context = await publishedFixture();
+  const { setup, delivery } = context;
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(setup, headers);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const head = setup.nats.store.head.bind(setup.nats.store);
+  let started = false;
+  let gatewayChecked = false;
+  let changed = false;
+  async function noteStart(command: AppendCommand) {
+    const result = await append(command);
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'tool.dispatch_started') started = true;
+    return result;
+  }
+  async function changeDuringRead(...parameters: Parameters<typeof head>) {
+    const position = await head(...parameters);
+    if (!started || changed) return position;
+    if (parameters[0] === 'gateway-config-test') {
+      gatewayChecked = true;
+      if (change === 'withdrawal') {
+        changed = true;
+        await setup.append('mcp-fixture', 'mcp.server_unpublished',
+          { serverId: 'fixture', unpublishedBy: 'alice' });
+      }
+    } else if (parameters[0] === 'mcp-fixture' && gatewayChecked) {
+      changed = true;
+      delivery.close();
+    }
+    return position;
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append').mockImplementation(noteStart);
+  const reader = vi.spyOn(setup.nats.store, 'head').mockImplementation(changeDuringRead);
+  try {
+    expect((await send(setup, value)).status).toBe(403);
+    expect((await send(setup, value)).status).toBe(403);
+    expect(changed).toBe(true);
+    expect(setup.received()).toBe(0);
+  } finally {
+    reader.mockRestore();
+    writer.mockRestore();
+  }
+}
+it.each(['withdrawal', 'acknowledgement'] as const)(
+  'refuses a final read change after tool.dispatch_started: %s', refusesDuringFinalPublishedRead);
 
 async function refusesRejectedGeneration() {
   const context = await publishedFixture();

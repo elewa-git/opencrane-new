@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication subscriptions, nightly memory reviews and records, and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission, personal connection references and blocks, expired saves, control intent and pausing, private and shared turns, root allowances, root dispatch checks, source-linked root stops, overruns, spending and safe spending stop references| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission and saved starts, personal connection references and blocks, expired saves, control intent and pausing, private and shared turns, root allowances, root dispatch checks, source-linked root stops, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -159,6 +159,11 @@ supply the ownership and revision needed to read a fact.
 
 Hosted image check requests record the exact image, registration and attempt number.
 They contain no report bytes or credentials and say nothing about passing checks.
+
+Before sending a published tool call, the models process saves a start record with
+the request, server, connection, reviewed revision and acknowledged gateway configuration.
+It contains no request bytes or credentials. It records that the pass was spent;
+it does not prove that the call reached the tool. Replaying it never sends a call.
 
 The publication subscription names the worker that prepares complete gateway
 configurations. Withdrawal has no preparation subscription.
