@@ -344,3 +344,56 @@ async function finishesOldInstallationBeforeReusingThread() {
 }
 it('finishes an old grant installation before admitting another turn on its thread',
   finishesOldInstallationBeforeReusingThread);
+
+async function refusesRenewalBeforeItsReplyReturns() {
+  const test = await stopFixture();
+  const entered = Promise.withResolvers<void>();
+  const apply = Promise.withResolvers<void>();
+  const applied = Promise.withResolvers<void>();
+  const reply = Promise.withResolvers<void>();
+  const grant = test.driver.grant.bind(test.driver);
+  async function heldGrant(...input: Parameters<typeof grant>) {
+    if (!input[2]) return grant(...input);
+    entered.resolve();
+    await apply.promise;
+    let failure: unknown;
+    try {
+      await grant(...input);
+    } catch (error) {
+      failure = error;
+    }
+    applied.resolve();
+    await reply.promise;
+    if (failure) throw failure;
+  }
+  function refused(error: unknown) { return error; }
+  function finishUnexpectedRequest(upstream: ServerResponse) { upstream.end('{}'); }
+  void test.firstRequest.then(finishUnexpectedRequest);
+  async function blockedModel() {
+    const response = test.call('thread-1', 'first', true);
+    expect(await response).toContain('403:');
+    expect(test.received).toEqual([]);
+  }
+  try {
+    await test.start('first', 'thread-1');
+    test.driver.grant = heldGrant;
+    const renewing = test.channel.renew('thread-1').catch(refused);
+    await entered.promise;
+    test.stop();
+    await withinStopDeadline(test.interrupted);
+    await blockedModel();
+    apply.resolve();
+    await applied.promise;
+    await blockedModel();
+    reply.resolve();
+    expect(await renewing).toEqual(new Error('Turn ended'));
+    await blockedModel();
+    expect(await test.call('thread-1', 'first')).toContain('Unknown tool list');
+  } finally {
+    apply.resolve();
+    reply.resolve();
+    await test.close();
+  }
+}
+it('never makes a stopped renewal usable while its control reply is held',
+  refusesRenewalBeforeItsReplyReturns);
