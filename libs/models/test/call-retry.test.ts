@@ -222,3 +222,19 @@ async function managedRetry() {
   await context.settled();
 }
 it('uses the same retry binding for managed model calls', managedRetry);
+
+async function stoppedRetry() {
+  const context = await unsent();
+  const saved = context.actor.state.reservations[0]!;
+  const subject = 'conversation-conversation';
+  const payload = { conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice' };
+  await context.append(subject, 'agent.turn_stop_requested', payload);
+  const position = await context.nats.store.head(subject);
+  await context.actor.stopRoot(saved.rootId!, 'requester_stop', subject, position);
+  const before = await context.nats.store.head();
+  expect((await context.call()).status).not.toBe(200);
+  expect(await context.nats.store.head()).toBe(before);
+  expect(context.received()).toBe(0);
+  expect(context.actor.state.dispatches).toHaveLength(0);
+}
+it('checks Stop again before granting a recovered hold', stoppedRetry);
