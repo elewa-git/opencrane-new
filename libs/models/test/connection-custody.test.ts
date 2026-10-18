@@ -1417,6 +1417,9 @@ async function loadsPrivateCustodyConfiguration() {
   const filename = `${test.store.directory}/configuration.json`;
   await writeFile(filename, JSON.stringify(config));
   const loaded = await connectionCustodyFromFile(filename);
+  if (!loaded) {
+    throw new Error('Connection custody configuration did not load');
+  }
   expect(await loaded.recover(test.input)).toMatchObject({ status: 'recovered' });
   await writeFile(filename, material);
   await expect(connectionCustodyFromFile(filename)).rejects.toThrow(
