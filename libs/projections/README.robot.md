@@ -740,7 +740,7 @@ The existing `position` reply is the captured boundary, not a read acknowledgeme
 A full page continues from its last returned row. A shorter page has scanned the
 boundary completely. Raw reports and first-close metadata remain replayable.
 
-## Memory correction replay
+## Memory corrections
 
 Version-1 corrections share the current-value projection. `memoryErasureHistory`
 returns superseded revision bounds separately from permanently hidden fact ids.

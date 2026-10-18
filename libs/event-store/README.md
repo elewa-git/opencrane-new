@@ -21,7 +21,7 @@ with `libs/events`.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|saves changes with principal, access, retry and cancellation checks, and checks child publication positions| store["libs/event-store<br/>checked event writes and stream ownership"]
+  server["apps/server<br/>back end"] -->|saves changes with principal, access, retry and cancellation checks, and checks child publication positions and memory owners and keys| store["libs/event-store<br/>checked event writes and stream ownership"]
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes, provider switch-on positions, publication receipts and hosted image checks| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams, counts names and finds numbered events| nats["NATS JetStream<br/>event service"]
@@ -38,6 +38,7 @@ flowchart LR
   or answer when a relevant change arrives before it is saved.
 - Require the current memory event version for new writes, while still reading old events.
   Check that its scope id matches its recorded owner, kind and silo before saving it.
+  Apply the same scope and key checks to versioned memory corrections.
   Refuse repeated dependencies and a key reference that belongs to another memory revision.
 - Refuse hosted image check results unless they name the models system principal.
 - Stop retries when the caller's access time limit expires or permission is withdrawn.

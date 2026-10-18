@@ -1,1 +1,1 @@
-Memory workers can replay saved corrections without opening superseded text, remove old and dependent revision keys, and recover unfinished cleanup. HTTP and tool correction commands remain planned.
+Memory workers can replay saved corrections without opening superseded text, remove old and dependent revision keys, and recover unfinished cleanup. New versioned corrections are refused before saving if their scope does not match their owner or their key reference belongs to another revision. HTTP and tool correction commands remain planned.

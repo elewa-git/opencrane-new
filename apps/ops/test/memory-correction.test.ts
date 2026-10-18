@@ -2,11 +2,12 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { memoryReferences } from '@opencrane/models';
-import { HandlerRuntime } from '@opencrane/handlers';
+import { HandlerRuntime, type Handler } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
-import { memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner,
+import { memoryKeys, memoryProjection, memoryScopeId, memoryErasureHistory, ProjectionRunner,
   readMemoryFactIds } from '@opencrane/projections';
-import { memoryCorrectedEventSchema, type EventEnvelope, type MemoryIdentity }
+import { memoryCorrectedEventSchema, memoryValueEventSchema,
+  type EventEnvelope, type MemoryIdentity }
   from '@opencrane/events';
 import { database } from '../../../libs/projections/test/database.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from '../src/memory-cleanup.ts';
@@ -232,3 +233,265 @@ it('selects the current correction for nightly review without opening old text',
     inputRefs: [{ memoryId: 'source', revision: 1 }, { memoryId: 'root', revision: 4 }],
   });
 });
+
+it('retains the greatest replaced revision when corrections arrive out of order',
+  async function reorderedCorrections() {
+    await save('root');
+    await save('root', 4);
+    await save('root', 2);
+    await save('child', 1, [{ scopeId, memoryId: 'root', revision: 3 }]);
+    const erasure = await memoryErasureHistory(await history());
+    expect(erasure.superseded('test', scopeId).get('root')).toBe(3);
+    expect(erasure.hidden('test', scopeId)).toEqual(new Set(['child']));
+  });
+
+it('closes the candidate after the greatest hidden revision in reordered history',
+  async function reorderedHiddenRevisions() {
+    const correction = await save('root', 4);
+    await save('root', 2);
+    const candidate = { ...root, revision: 5 };
+    keys.provision(candidate);
+    const forgotten = { ...event('forget-root'), subject: `scope-${scopeId}`,
+      type: 'memory.forgotten', data: { schemaVersion: 1, scopeId, scopeKind: 'person',
+        ownerId: 'alice', memoryId: 'root', expectedRevision: 4, revision: 5 } };
+    await nats.seed([forgotten]);
+    await runner.run(memoryProjection(keys));
+    await memoryCleanupHandler(nats.store, keys).handle(correction, storage.db);
+    expect(keys.status(candidate)).toBe('destroyed');
+  });
+
+function completion(changeId: string) {
+  const id = 'cleanup-result';
+  return { ...event(id), source: 'opencrane-worker', subject: `scope-${scopeId}`,
+    principal: { kind: 'system' as const, id: 'opencrane-worker' },
+    type: 'memory.cleanup_recorded', data: { schemaVersion: 1, scopeId, scopeKind: 'person',
+      ownerId: 'alice', changeId, outcome: 'completed' } };
+}
+
+const unrelatedCompletions = [
+  { changeId: 'another-change' },
+  { scopeId: memoryScopeId('test', 'person', 'bob') },
+  { scopeKind: 'group' },
+  { ownerId: 'bob' },
+  { outcome: 'unavailable', failureCode: 'retry_exhausted' },
+];
+it.each(unrelatedCompletions)('keeps cleanup pending for an unrelated completion %j',
+  async function unrelatedCompletion(patch) {
+    await save('root');
+    const correction = await save('root', 2);
+    const record = completion(correction.id);
+    const data = { ...record.data, ...patch };
+    await nats.seed([{ ...record, subject: `scope-${data.scopeId}`, data }]);
+    const reaction = memoryCleanupHandler(nats.store, keys);
+    const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test', handlers: [reaction] });
+    try {
+      await runtime.start();
+      expect(await recoverMemoryCleanup(runtime, nats.reader, 2)).toBe(1);
+    } finally {
+      await runtime.stop();
+    }
+    await expect(reaction.handle(correction, storage.db))
+      .rejects.toThrow('Memory projection is behind cleanup');
+  });
+
+it.each([{ silo: 'other' }, { subject: 'scope-other' }])(
+  'refuses foreign cleanup history %j before deleting keys', async function foreignHistory(patch) {
+    await save('root');
+    const correction = await save('root', 2);
+    const rows = await history();
+    const foreign = { ...rows[0]!, event: { ...rows[0]!.event, ...patch } };
+    async function* damagedHistory() {
+      yield foreign;
+      for await (const row of nats.reader.readStream(correction.subject, 2)) {
+        yield row;
+      }
+    }
+    vi.spyOn(nats.store, 'readStream').mockImplementation(damagedHistory);
+    const reaction = memoryCleanupHandler(nats.store, keys);
+    await expect(reaction.handle(correction, storage.db))
+      .rejects.toThrow('Unsupported memory cleanup history');
+    expect(keys.status(root)).toBe('available');
+  });
+
+it('refuses cleanup when a legacy value has no recorded ownership', async function legacyValue() {
+  await save('root');
+  const legacy = { ...event('legacy'), subject: `scope-${scopeId}`, type: 'memory.written',
+    data: { scopeId, memoryId: 'legacy', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:old' } };
+  await nats.seed([legacy]);
+  const correction = await save('root', 2);
+  await runner.run(memoryProjection(keys));
+  await expect(memoryCleanupHandler(nats.store, keys).handle(correction, storage.db))
+    .rejects.toThrow('Memory cleanup requires recorded ownership');
+  expect(keys.status(root)).toBe('available');
+});
+
+it('refuses completion when key deletion returns without a permanent marker',
+  async function missingDeletionMarker() {
+    await save('root');
+    const correction = await save('root', 2);
+    await runner.run(memoryProjection(keys));
+    function noDeletion() {}
+    const failedKeys = { ...keys, delete: noDeletion };
+    await expect(memoryCleanupHandler(nats.store, failedKeys).handle(correction, storage.db))
+      .rejects.toThrow('Memory deletion was not verified');
+    expect(keys.status(root)).toBe('available');
+    expect(await nats.store.head()).toBe(2);
+  });
+
+const remainingSearchData = [
+  "content_status='available'",
+  "search_text='leftover'",
+  "search_vector=to_tsvector('simple', 'leftover')",
+  "ciphertext='leftover'",
+  "key_id='leftover'",
+];
+it.each(remainingSearchData)('refuses correction cleanup while a hidden row retains %s',
+  async function incompleteSearchRemoval(assignment) {
+    const correction = await correctedChain();
+    await runner.run(memoryProjection(keys));
+    await storage.db.query(`UPDATE memory_facts SET ${assignment} WHERE memory_id='child'`);
+    const sequence = await nats.store.head();
+    await expect(memoryCleanupHandler(nats.store, keys).handle(correction, storage.db))
+      .rejects.toThrow('Memory search removal was not verified');
+    expect(await nats.store.head()).toBe(sequence);
+  });
+
+it('refuses completion when an affected projected row is missing', async function missingRow() {
+  const correction = await correctedChain();
+  await runner.run(memoryProjection(keys));
+  await storage.db.query("DELETE FROM memory_facts WHERE memory_id='child'");
+  const sequence = await nats.store.head();
+  await expect(memoryCleanupHandler(nats.store, keys).handle(correction, storage.db))
+    .rejects.toThrow('Memory removal has not been projected');
+  expect(await nats.store.head()).toBe(sequence);
+});
+
+it.each(['checkpoint', 'silo'])('refuses recovery with an invalid %s',
+  async function invalidRecovery(boundary) {
+    await save('root');
+    await save('root', 2);
+    const reaction = memoryCleanupHandler(nats.store, keys);
+    let silo = 'test';
+    let checkpoint = 3;
+    let message = 'Cleanup recovery checkpoint exceeds history';
+    if (boundary === 'silo') {
+      silo = 'other';
+      checkpoint = 2;
+      message = 'Cleanup recovery silo mismatch';
+    }
+    const runtime = new HandlerRuntime({ db: storage.db, logger, silo, handlers: [reaction] });
+    try {
+      await runtime.start();
+      await expect(recoverMemoryCleanup(runtime, nats.reader, checkpoint)).rejects.toThrow(message);
+      expect(await runtime.deadLetters('cleanup-memory')).toEqual([]);
+      expect(await nats.store.head()).toBe(2);
+    } finally {
+      await runtime.stop();
+    }
+  });
+
+const invalidOriginals = ['handler', 'type', 'silo', 'absent', 'not-failed', 'altered', 'callback'];
+it.each(invalidOriginals)('refuses an exhaustion report with an invalid %s',
+  async function invalidOriginal(boundary) {
+    await save('root');
+    const correction = await save('root', 2);
+    const reaction = memoryCleanupHandler(nats.store, keys);
+    const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test', handlers: [reaction] });
+    async function enqueue(tx: Parameters<typeof reaction.handle>[1]) {
+      await runtime.enqueue(reaction, correction, tx);
+    }
+    try {
+      await runtime.start();
+      await storage.db.transaction(enqueue);
+      const jobs = await storage.db.query<{ id: string }>(
+        "SELECT id FROM pgboss.job WHERE name='cleanup-memory'");
+      const jobId = jobs.rows[0]!.id;
+      await storage.db.query("UPDATE pgboss.job SET state='failed' WHERE id=$1", [jobId]);
+      let reported = correction;
+      let handler: Handler = { ...reaction };
+      if (boundary === 'handler') handler = { ...reaction, name: 'update-members' };
+      if (boundary === 'type') reported = { ...correction, type: 'member.joined' };
+      if (boundary === 'silo') reported = { ...correction, silo: 'other' };
+      if (boundary === 'absent') {
+        await storage.db.query('DELETE FROM pgboss.job WHERE id=$1', [jobId]);
+      }
+      if (boundary === 'not-failed') {
+        await storage.db.query("UPDATE pgboss.job SET state='created' WHERE id=$1", [jobId]);
+      }
+      if (boundary === 'altered') reported = { ...correction, time: '2026-10-18T00:00:00Z' };
+      if (boundary === 'callback') {
+        delete handler.exhausted;
+      }
+      const result = runtime.reportFailedOriginal(handler, reported, jobId);
+      if (boundary === 'handler' || boundary === 'type' || boundary === 'silo') {
+        await expect(result).rejects.toThrow('Invalid cleanup original');
+      } else if (boundary === 'callback') {
+        await expect(result).rejects.toThrow('Cleanup exhaustion handler missing');
+      } else {
+        await expect(result).resolves.toBe(false);
+      }
+      expect(await nats.store.head()).toBe(2);
+    } finally {
+      await runtime.stop();
+    }
+  });
+
+it('ignores duplicate correction delivery without adding a second change',
+  async function duplicateCorrection() {
+    await save('root');
+    const correction = await save('root', 2);
+    async function head() {
+      const sequence = await nats.reader.head();
+      return sequence + 1;
+    }
+    async function* subscribe(fromSequence: number) {
+      for await (const row of nats.reader.readStream(correction.subject, fromSequence)) {
+        yield row;
+      }
+      if (fromSequence <= 3) yield { sequence: 3, event: correction };
+    }
+    const source = { head, subscribe };
+    const replay = new ProjectionRunner(storage.db, source, logger);
+    const projection = memoryProjection(keys);
+    await replay.run(projection);
+    expect(await replay.checkpoint(projection)).toBe(3);
+    const changes = await storage.db.query(
+      'SELECT position FROM memory_changes WHERE change_id=$1', [correction.id]);
+    expect(changes.rows).toEqual([{ position: '2' }]);
+    expect(await readMemoryFactIds(storage.db, 'test', scopeId)).toEqual([{ memory_id: 'root' }]);
+  });
+
+it('reuses saved cleanup after a lost reply and preserves another owner with the same memory id',
+  async function lostReplyAndOtherOwner() {
+    const original = await save('root');
+    const otherScope = memoryScopeId('test', 'person', 'bob');
+    const other = { ...root, scopeId: otherScope, ownerId: 'bob' };
+    keys.provision(other);
+    const encrypted = keys.encrypt(other, 'Private Bob root');
+    const data = { ...memoryValueEventSchema.parse(original).data,
+      scopeId: otherScope, ownerId: 'bob', ...encrypted };
+    const otherEvent = { ...original, id: 'bob-root', commandId: 'bob-root',
+      subject: `scope-${otherScope}`, data };
+    await nats.seed([otherEvent]);
+    const correction = await save('root', 2);
+    await runner.run(memoryProjection(keys));
+    const append = nats.store.append.bind(nats.store);
+    async function lostReply(command: Parameters<typeof append>[0]): Promise<never> {
+      const result = await append(command);
+      expect(result.status).toBe('appended');
+      throw new Error('Reply lost');
+    }
+    const failing = vi.spyOn(nats.store, 'append');
+    failing.mockImplementation(lostReply);
+    const reaction = memoryCleanupHandler(nats.store, keys);
+    await expect(reaction.handle(correction, storage.db)).rejects.toThrow('Reply lost');
+    failing.mockRestore();
+    const sequence = await nats.store.head();
+    await reaction.handle(correction, storage.db);
+    expect(await nats.store.head()).toBe(sequence);
+    expect(keys.status(root)).toBe('destroyed');
+    expect(keys.status({ ...root, revision: 2 })).toBe('available');
+    expect(keys.status(other)).toBe('available');
+    expect(await readMemoryFactIds(storage.db, 'test', otherScope)).toEqual([{ memory_id: 'root' }]);
+    expect(keys.decrypt(other, encrypted)).toBe('Private Bob root');
+  });
