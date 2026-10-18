@@ -1,5 +1,5 @@
 import { conversationParticipantIds, conversationCreatedDataSchema, conversationEventId,
-  decisionRecordedDataSchema,
+  decisionRecordedDataSchema, messagePostedDataSchema,
   toolDispatchRecordedDataSchema,
   getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { ProjectionRunner, type EventSource, type Projection } from './runner.ts';
@@ -186,17 +186,20 @@ export async function readConversation(db: Query, silo: string, conversationId: 
     for (const row of page.rows) {
       // Advance past hidden reports too, without changing a visible row's saved position.
       scannedPosition = Number(row.position);
-      if (isHiddenConversationRow(row.type, scannedPosition, closedPosition)) continue;
+      if (isHiddenConversationRow(row.type, row.data, scannedPosition, closedPosition)) continue;
       rows.push(displayRow(row));
     }
   }
   return { generation: Number(metadata.rows[0]?.generation ?? 0), position, rows };
 }
 
-export function isHiddenConversationRow(type: string, position: number, closedPosition: number) {
+export function isHiddenConversationRow(type: string, data: unknown, position: number,
+  closedPosition: number) {
   if (closedPosition === 0 || position <= closedPosition) return false;
   // Keep human posts that were saved after close, but freeze all other displayed output.
-  return type !== 'message.posted';
+  if (type !== 'message.posted') return true;
+  const post = messagePostedDataSchema.safeParse(data);
+  return !post.success || post.data.authorKind !== 'human';
 }
 
 function displayRow(row: FeedRow) {

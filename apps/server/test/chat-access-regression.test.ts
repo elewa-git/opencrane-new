@@ -2552,7 +2552,7 @@ async function frozenChildOutput(memberId: string) {
       const data = { ...example, conversationId: 'child', turnId: 'close-turn' };
       await context.append('conversation-child', type, data, false);
     }
-    const latePosts = [];
+    const latePosts: Array<{ id: string; position: number }> = [];
     for (const authorKind of ['system', 'agent'] as const) {
       const encryptedPost = context.keys.encrypt('test', 'child', `Late ${authorKind} post`);
       const postData = { conversationId: 'child', authorId: authorKind,
@@ -2561,6 +2561,10 @@ async function frozenChildOutput(memberId: string) {
       const position = await context.nats.store.head('conversation-child');
       latePosts.push({ id: post.id, position });
     }
+    function latePostId(post: typeof latePosts[number]) {
+      return post.id;
+    }
+    const latePostIds = latePosts.map(latePostId);
     // Retain saved human posts that raced close admission.
     const encrypted = context.keys.encrypt('test', 'child', 'Retained human post');
     const humanData = { conversationId: 'child', authorId: 'bob', authorKind: 'human',
@@ -2606,8 +2610,7 @@ async function frozenChildOutput(memberId: string) {
     expect(scans.length).toBeGreaterThan(2);
     expect(new Set(scans).size).toBe(scans.length);
     expect(rows.map(chatRowId)).toEqual(expected);
-    for (const hiddenId of [decision.id, dispatch.id, publication.id,
-      ...latePosts.map(post => post.id)]) {
+    for (const hiddenId of [decision.id, dispatch.id, publication.id, ...latePostIds]) {
       expect(rows.map(chatRowId)).not.toContain(hiddenId);
     }
     expect(rows.find(isBefore)?.data.text).toBe('Partial answer');
@@ -2619,8 +2622,7 @@ async function frozenChildOutput(memberId: string) {
       if (message.row) delivered.push(message.row.id);
     }
     expect(delivered).toEqual(expected);
-    for (const hiddenId of [decision.id, dispatch.id, publication.id,
-      ...latePosts.map(post => post.id)]) {
+    for (const hiddenId of [decision.id, dispatch.id, publication.id, ...latePostIds]) {
       expect(delivered).not.toContain(hiddenId);
     }
     expect(client.socket.readyState).toBe(WebSocket.OPEN);

@@ -381,6 +381,8 @@ The first `conversation.closed` sets `closed_event_id`, `closed_position`, `clos
 and `closed_at` from its event id, global position, data and envelope time. These columns
 are null while open. Later closes never replace them. TypeScript applies both rules;
 SQL only stores the results. Live updates and offline rebuild use the same functions.
+`readConversation` keeps a late `message.posted` only when its saved `authorKind` is
+`human`. It skips late agent and system posts while advancing the scan position.
 Startup refuses older metadata tables without all four closing columns and names the existing
 offline replay command. Rebuild restores activity and closing details, and increases generation.
 

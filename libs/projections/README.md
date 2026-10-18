@@ -34,8 +34,9 @@ flowchart LR
 
 ## What it is responsible for
 
-Closed chat history stops showing assistant output, decisions, tool dispatches and
-child publications at the first saved close. Human posts remain visible.
+Closed chat history stops showing assistant output, decisions, tool dispatches,
+child publications and agent or system posts at the first saved close. Human posts
+remain visible.
 Later rows stay in the read table as evidence. History pages skip those rows
 and keep scanning for visible human posts, using their original saved positions.
 

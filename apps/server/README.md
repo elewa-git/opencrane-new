@@ -47,8 +47,8 @@ restoring a grant during the write still refuses it.
 ## What it is responsible for
 
 Closed chats keep displayed output as it stood when the chat closed. Later assistant
-reports, decisions, tool dispatches and child publications remain saved, but do not
-appear in history or live updates. Human posts remain visible.
+reports, decisions, tool dispatches, child publications and agent or system posts
+remain saved, but do not appear in history or live updates. Human posts remain visible.
 Saved human posts remain readable. The list keeps showing Closed. History checks
 current participation after loading, before opening the saved text.
 

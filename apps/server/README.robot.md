@@ -72,6 +72,8 @@ The chat summary keeps its content append position separate from a later legacy
 close. Late reports retain their digest, duplicate and sequence checks. The approval
 watcher checks both conversation and participation positions before leaving a pending
 approval unchanged. Closure cancels that approval through the existing reader.
+History and read acknowledgements use the same close-position and message-author check.
+After close, only human `message.posted` rows remain visible and can be marked read.
 
 Public close and execution cleanup remain later work. Display reads are covered
 below. Fresh-install qualification: NOT RUN.

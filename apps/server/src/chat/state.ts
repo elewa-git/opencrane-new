@@ -108,16 +108,16 @@ async function verifyRead(options: ChatOptions, conversationId: string,
   input: Extract<Input, { action: 'read' }>, historyPosition: number, deadline: number) {
   if (input.throughPosition < historyPosition) throw new ChatConflict('Read precedes this join');
   // Accept only a row that the history reader can already return to this device.
-  const visible = await options.db.query<{ event_id: string; type: string;
+  const visible = await options.db.query<{ event_id: string; type: string; data: unknown;
     closed_position: string | null }>(
-    `SELECT f.event_id, f.type, c.closed_position FROM conversation_feed f
+    `SELECT f.event_id, f.type, f.data, c.closed_position FROM conversation_feed f
       JOIN conversations c ON c.silo=f.silo AND c.conversation_id=f.conversation_id
       WHERE f.silo=$1 AND f.conversation_id=$2 AND f.position=$3 AND f.event_id=$4`,
     [options.silo, conversationId, input.throughPosition, input.throughEventId]);
   const target = visible.rows[0];
   if (!target) throw new ChatConflict('Read row is not available');
   const closedPosition = Number(target.closed_position ?? 0);
-  if (isHiddenConversationRow(target.type, input.throughPosition, closedPosition)) {
+  if (isHiddenConversationRow(target.type, target.data, input.throughPosition, closedPosition)) {
     throw new ChatConflict('Read row is not available');
   }
   const row = await options.store.readEvent(input.throughPosition, deadline);
