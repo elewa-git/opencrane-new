@@ -3008,8 +3008,8 @@ checks are unchanged. `bridge-gate.test.ts` also covers refusal and lost append 
 
 The [child request API](../../docs/api/group-chats.md#reviewed-child-requests) signs
 reviewed choices and completes intent, creation and first input through separate commands.
-Retried POSTs recover after a restart; background reconciliation and saved failure events
-remain unbuilt. The bridge point-reads the parent intent before delivery or admission.
+Retried POSTs and the background worker recover missing creation and first input.
+Saved failure events remain unbuilt. The bridge point-reads the parent intent before delivery or admission.
 A saved intent holds all child work; an unavailable read also releases no work.
 `test/child-summon.test.ts` checks real NATS/PostgreSQL/OpenFGA recovery, expiry,
 refused reviews, private status, replay and the delivery/admission hold. Live qualification: NOT RUN.
@@ -3057,6 +3057,26 @@ not record reductions above spent-plus-held money as stops.
 `test/integrations.test.ts` covers lost HTTP replies, later edits/reservations,
 concurrent edits, replay, restricted receipts, slow history, role loss, unrelated
 chat activity and unavailable or lagging history. Fresh-install qualification: NOT RUN.
+
+## Child recovery before activation (P4-8 PR 7b)
+
+`chat/child-recovery.ts` starts with the configured chat service and stops before its
+connections close. It builds `childRequests`, then scans at most 32 candidates per pass
+in saved order, with a one-second pause. The next pass continues after the last position;
+a shorter page restarts the scan. Refusals remain queued and are checked on later scans.
+It rereads the exact parent event and derives all command values from it. Existing
+commands verify the child, copied text, original joins and current access. Conversation
+history stays outside the short access check. Errors use fixed log messages without
+source text. The bridge hold remains unchanged.
+
+This is the permitted index-and-worker split. The durable handler host is in apps/ops;
+the checked commands and conversation keys are in apps/server. Durable job integration,
+bounded attempt records, saved failure events, public retry, activation, root allocation
+and dispatch remain later work. No second event dispatcher or execution path is added.
+`test/child-recovery.test.ts` covers crashes, competing workers, changed index records,
+replay and access refusals with disposable NATS, PostgreSQL and OpenFGA.
+`test/child-summon.test.ts` checks the bridge hold after background recovery.
+Fresh-install qualification: NOT RUN.
 
 ## Shared memory reference fold
 

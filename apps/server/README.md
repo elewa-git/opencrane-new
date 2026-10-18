@@ -16,7 +16,7 @@ flowchart LR
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
+  server -->|indexes unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates and root stops without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
@@ -273,8 +273,9 @@ minimal confirmation after losing that role, while they remain a member.
 The check saves nothing and makes no AI call.
 
 A member can review a child chat from their own group message, then save its first input.
-Retrying a request completes missing saves after a restart. These children stay queued;
-they cannot start assistant work yet. Automatic recovery is not built yet.
+A background worker completes missing child creation and first input after a restart.
+It checks the saved request and current permissions each time. These children stay queued;
+they cannot start assistant work yet.
 
 Owners and admins can read whether a saved publication is Applying, Ready, Disabled
 or Unknown. Ready requires matching saved gateway and server receipts. Checking a
@@ -318,8 +319,8 @@ Registration does not fetch an image, discover tools or start a process.
 Internal child-chat commands review a person’s own group message, save their chosen
 people and assistant, and create the named child. A separate command waits for its
 permissions to apply, then copies only the reviewed message under the child’s own key.
-Repeating a request returns the same saved records. These commands have no public route
-and do not start assistant work.
+Repeating a request returns the same saved records. The reviewed start route and recovery
+worker use these commands. They do not start assistant work.
 
 A person continues a shared child chat. The server gives the assistant completed
 exchanges from that child, including replies to other people. It leaves out parent
