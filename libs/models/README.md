@@ -25,7 +25,7 @@ flowchart LR
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks access and saved work; records tool starts, not-sent outcomes, admissions, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
+  models -->|checks access and saved work; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -267,6 +267,11 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+A repeated model call on a child root can reuse its open, unsent hold and original
+permission record. The verified turn and exact request bytes must match. A call
+already admitted for sending never receives another send permission, even when its
+reply was lost. Its money stays held until settlement establishes the cost.
 
 Spending-limit changes keep their original receipt after a restart or later edits.
 The library loads history before checking write access. A reservation can also

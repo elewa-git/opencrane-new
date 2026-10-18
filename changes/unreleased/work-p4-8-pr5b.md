@@ -1,0 +1,1 @@
+- Child chat model retries reuse the original unsent spending hold and permission. Changed calls refuse, and a call already admitted for sending cannot be sent again after a lost reply.

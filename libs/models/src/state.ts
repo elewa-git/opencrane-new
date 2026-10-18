@@ -106,6 +106,7 @@ export function checkedManagedReservation(event: EventEnvelope) {
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   rootId: z.string().optional(), call: callSchema, dispatchGate: z.literal(1).optional(),
+  retryDigest: z.string().optional(), bodyDigest: z.string().optional(),
   expired: z.literal(true).optional(),
   settledCents: z.int().nonnegative().optional(), outcomeUnknown: z.boolean().optional() });
 const ceilingsSchema = z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: z.string(), ceilingCents: z.int().nonnegative() }));
@@ -139,7 +140,8 @@ export function requireDispatchReservation(state: BudgetState,
   if (!reservation || reservation.settledCents !== undefined || reservation.expired) {
     throw new Error('Reservation is no longer open');
   }
-  if (reservation.rootId !== input.rootId ||
+  if ((reservation.bodyDigest !== undefined && reservation.bodyDigest !== input.bodyDigest) ||
+      reservation.rootId !== input.rootId ||
       !isDeepStrictEqual(reservation.call, input.modelCall) ||
       (reservation.call.requestId !== undefined && reservation.call.requestId !== input.callId)) {
     throw new Error('Reservation binding changed');
@@ -162,6 +164,8 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
       amountCents: z.int().nonnegative().parse(d['amountCents']),
       dispatchGate: z.literal(1).optional().parse(d['dispatchGate']),
       rootId: z.string().optional().parse(d['rootId']),
+      retryDigest: z.string().optional().parse(d['retryDigest']),
+      bodyDigest: z.string().optional().parse(d['bodyDigest']),
       call: callSchema.parse({ ...data({ ...event, data: d['modelCall'] }), payingGroupId: d['payingGroupId'] }) });
   } else if (event.type === 'budget.reservation_expired') {
     function matchesReservation(reservation: BudgetState['reservations'][number]) {

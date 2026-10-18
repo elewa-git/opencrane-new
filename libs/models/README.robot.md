@@ -2103,7 +2103,7 @@ Parent removal and creator departure remain for activation reconciliation.
 `libs/models/test/root-stop-evidence.test.ts` checks exact references, rejected evidence, serial
 ordering, lost replies, duplicate-window expiry, old writers and PostgreSQL replay.
 No new caller, reaction, route or running-turn interruption is connected here.
-Root grant/dispatch checks are described below. Trusted retry ids and the child
+Root grant/dispatch and retry checks are described below. The child
 dispatcher remain separate work. Stop callers and running-turn interruption are absent.
 
 ## Hosted registration — first part of P3-6 PR 4
@@ -2254,7 +2254,7 @@ The delivery tests also check projection-only Ready/Applying/Disabled/Unknown re
 receipt mismatches, failure deadlines and replay. Generation admission and final-send checks remain row 4. Fresh-install
 qualification is NOT RUN. The approval journey prints SKIP until rows 4, 5 and 14.
 
-## Root checks at grant and dispatch (P4-8 PR 5, first part; Part of #90)
+## Root checks and trusted model retries (P4-8 PR 5 and PR 5b; Part of #90)
 
 `grantModelCall` in `call-retry.ts` handles both legacy and managed model branches.
 It finds the root from the verified conversation and turn, passes it to `reserve`,
@@ -2267,11 +2267,36 @@ A changed dispatch root conflicts before any write or release. Older internal ca
 may omit the root on a held call; the actor copies it from the saved hold before checking.
 The new optional event field keeps older admission records readable.
 
-The request id, retry behaviour, provider checks and egress are unchanged. Trusted
-retry binding, lost-reply hold recovery and altered-retry conflicts remain the next
-part of row 5. No source-evidence reader, stop caller, route, activation or running-turn
-interruption is added. Roots remain absent from `budgetSummary`; errors use fixed text.
-Existing settlement keeps the original payer and tariff and accepts late usage once.
+For rooted models, `retryDigest` hashes JSON `[silo, rootId, computerId, generation,
+conversationId, turnId, threadId, bodyDigest]` with SHA-256. `bodyDigest` hashes the
+exact request body forwarded by the gateway to the decision service. The pinned
+gateway may re-encode JSON for the provider. All identity fields come from verified credentials
+and the saved turn. Headers and agent-chosen retry ids cannot select a hold.
+The actor checks retry state in its serial queue before applying a new spending bound.
+Recovery checks current root and spending stops again before returning the old hold.
+Only an open, unadmitted hold with no send, effect or security evidence is reusable.
+The amount and complete saved call must match, apart from the new random request id.
+A changed tariff, payer or context hash conflicts without appending or releasing.
+The helper recovers the original allow decision on `decision-<requestId>`, or saves
+it there if missing. Concurrent decision appends recover the same saved event.
+Admission grants one send and checks the hold's body hash. A lost admission reply
+or an admitted call's timeout never authorises a resend; its full hold remains.
+
+Both legacy and managed model branches use this helper. Non-root calls, provider
+checks and egress retain their existing paths. Settlement keeps the original payer
+and tariff and accepts late usage once. Roots stay out of `budgetSummary`; refusals
+use fixed text. No source-evidence reader, stop caller, route, activation or running-turn
+interruption is added. `call-retry.test.ts` uses real NATS, PostgreSQL, OpenFGA,
+the pinned gateway and a recording upstream, with barriers for concurrent calls.
+The managed retry assertion reports only a refusal stage and a fixed reason. Its
+observers retain the original access and actor calls and never print request data.
+`call-retry-guards.test.ts` checks each retry digest input, saved-decision field,
+changed call binding and unsafe hold state before later admission checks can hide
+a missing guard. It also checks spending stops on recovery, Stop after a paused
+access check, and provider, effect and security evidence before a zero release.
+Refusal response tests require fixed text even when the internal error holds private
+values. The memory dispatch tests also stop only the root through allowance exhaustion;
+conversation Stop cannot hide that check.
 Fresh-install qualification and paid calls: NOT RUN.
 
 ## Reviewed drift restoration (#48 PR 3c, first part)
