@@ -349,7 +349,7 @@ async function finishesOldInstallationBeforeReusingThread() {
 it('finishes an old grant installation before admitting another turn on its thread',
   finishesOldInstallationBeforeReusingThread);
 
-async function refusesRenewalBeforeItsReplyReturns() {
+async function refusesRenewalBeforeItsReplyReturns(signedGate: boolean) {
   const test = await stopFixture();
   const entered = Promise.withResolvers<void>();
   const apply = Promise.withResolvers<void>();
@@ -383,14 +383,17 @@ async function refusesRenewalBeforeItsReplyReturns() {
     test.driver.grant = heldGrant;
     const renewing = test.channel.renew('thread-1').catch(refused);
     await entered.promise;
-    test.stop();
+    if (signedGate) test.send(await test.signedGate());
+    else test.stop();
+    await withinStopDeadline(test.revoked);
     await withinStopDeadline(test.interrupted);
     await blockedModel();
     apply.resolve();
     await applied.promise;
     await blockedModel();
     reply.resolve();
-    expect(await renewing).toEqual(new Error('Turn ended'));
+    if (signedGate) expect(await renewing).toBeUndefined();
+    else expect(await renewing).toEqual(new Error('Turn ended'));
     await blockedModel();
     expect(await test.call('thread-1', 'first')).toContain('Unknown tool list');
   } finally {
@@ -399,7 +402,8 @@ async function refusesRenewalBeforeItsReplyReturns() {
     await test.close();
   }
 }
-it('never makes a stopped renewal usable while its control reply is held',
+it.each([false, true])(
+  'never makes a cancelled renewal usable while its reply is held (signed gate: %s)',
   refusesRenewalBeforeItsReplyReturns);
 
 async function keepsNextTurnAccessWhenOldDropArrives() {
