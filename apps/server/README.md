@@ -55,7 +55,9 @@ An approval belonging to another person or silo gets the same refusal as a missi
 When a chat closes, the back end ends waiting requests and asks the computer to
 stop work already under way. It keeps checking saved events after a restart.
 It can repair a missing record that says a computer turn ended. Other chats on
-the same computer continue.
+the same computer continue. This also works for older closes saved with chat
+participation. If a shared computer reports a start after cleanup ended the
+request, the server records a refusal tied to that turn and accepts its failure.
 
 Closed chats keep displayed output as it stood when the chat closed. Later assistant
 reports, decisions, tool dispatches, child publications and agent or system posts

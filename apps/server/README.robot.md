@@ -16,8 +16,23 @@ repaired independently, using conditional appends. The existing computer turn
 check prevents idle suspension before its ending is saved. No close route is
 available yet. Confirmed Codex thread unload remains for a later change.
 
+The progress cache checks one indexed position that includes both
+`conversation-<id>` and older `participation-<id>` close events. An older close
+therefore starts cleanup on the next pass, even if the running turn changed nothing else.
+It keeps a settled chat cached when only the computer changes. A new saved
+computer turn start still checks that chat again, so a late start can receive Stop.
+The separate Stop watcher uses that same position, so an unchanged older close
+does not make it reread the whole chat on every poll.
+When cleanup ends a queued turn before its start report arrives, the chat summary
+remembers that the system wrote the failure. `turnCommand` then saves a failed
+`computer.turn_closed` with the reported thread and requester. The shared bridge
+accepts only the matching terminal failure; other shared output still needs an
+admitted start.
+
 `test/bridge-control.test.ts` uses NATS, PostgreSQL and OpenFGA to check waiting
-inputs, repeat passes, terminal repair, Stop retry and a lost computer. Spend
+inputs, repeat passes, legacy close detection, terminal repair, Stop retry and a
+lost computer. `test/shared-assistant.test.ts` checks the delayed shared start and
+terminal failure on a real bridge, followed by another chat on that connection. Spend
 reservations still follow their existing call reports; cleanup writes no budget
 event. Fresh-install qualification: NOT RUN.
 

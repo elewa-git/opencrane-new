@@ -1497,8 +1497,10 @@ async function acceptsLateSharedChildFailureAfterCleanup() {
     const rows = await chatHistory(nats.store, 'test', test.conversationId);
     const computerRows = await history(nats.store, `computer-${test.context.assistantId}`, 'test');
     const assistant = assistantSnapshot(computerRows, 'team', 'test');
-    async function connection() {
-      return { socket: test.link.socket, connectionId: 1, sentStops: new Map<string, number>() };
+    function connection() {
+      const link = { socket: test.link.socket, connectionId: 1,
+        sentStops: new Map<string, number>() };
+      return Promise.resolve(link);
     }
     await cleanClosedConversation(chat!, test.conversationId, test.context.assistantId,
       rows, assistant, new Set<string>(), connection);

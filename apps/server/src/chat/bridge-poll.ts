@@ -32,10 +32,13 @@ function canReuseProgress(previous: Progress, head: number, assistant: Snapshot,
   if (computerHistoryUnavailable || previous.retry) return false;
   const linkClosed = previous.connectionId !== undefined &&
     previous.connectionId !== currentConnectionId;
-  return previous.head === head && previous.computerEventId === assistant.current?.id &&
-    previous.computerStartHead === assistant.computerStartHead &&
-    previous.kind === assistant.kind &&
-    !linkClosed;
+  if (previous.head !== head || previous.computerStartHead !== assistant.computerStartHead ||
+      previous.kind !== assistant.kind) {
+    return false;
+  }
+  // Reuse settled chats when a computer changes; a new computer turn start still gets a pass.
+  if (!previous.pending) return true;
+  return previous.computerEventId === assistant.current?.id && !linkClosed;
 }
 
 export function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
@@ -109,7 +112,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     computerHistoryUnavailable = false, checkControl?: () => Promise<boolean>) {
     try {
       const conversationId = conversation.conversationId;
-      const head = await options.store.head(`conversation-${conversationId}`);
+      // Include older closes saved on participation streams in this one position read.
+      const head = await options.store.head(`conversation-${conversationId}`, Infinity, true);
       const previous = seen.get(conversationId);
       const computerEventId = assistant.current?.id;
       const currentConnectionId = connectionId(conversation.assistantId);
@@ -178,7 +182,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       if (!assistant.kind || assistant.current?.type !== 'computer.ready') return;
       const computer = computerData.parse(assistant.current.data);
       if (refused.has(computer.computerId)) return;
-      const head = await options.store.head(`conversation-${conversation.conversationId}`);
+      const head = await options.store.head(
+        `conversation-${conversation.conversationId}`, Infinity, true);
       const previous = seen.get(conversation.conversationId);
       if (previous?.head === head && !previous.retry) return;
       const rows = await chatHistory(options.store, options.silo, conversation.conversationId);

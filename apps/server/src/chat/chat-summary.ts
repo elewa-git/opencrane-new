@@ -13,6 +13,7 @@ type ChatSummary = {
   conversationClosed: boolean;
   messages: Map<string, Message>;
   closedTurnIds: Set<string>;
+  cleanupEndedTurnIds: Set<string>;
   reports: Map<string, ComputerReports>;
   reportCount: number;
   memoryContexts: Map<string, MemoryContextState>;
@@ -23,6 +24,7 @@ export type ChatFacts = {
   created: Record<string, unknown> | undefined;
   message: Message | undefined;
   turnEnded: boolean;
+  cleanupEnded: boolean;
   lastReportSequence: number;
   reportPosition: number | undefined;
   sequence: number;
@@ -32,7 +34,8 @@ const closedTurn = z.object({ turnId: z.string() });
 
 function emptyChat(): ChatSummary {
   return { contentSequence: 0, created: undefined, conversationClosed: false,
-    messages: new Map(), closedTurnIds: new Set(), reports: new Map(), reportCount: 0, memoryContexts: new Map() };
+    messages: new Map(), closedTurnIds: new Set(), cleanupEndedTurnIds: new Set(),
+    reports: new Map(), reportCount: 0, memoryContexts: new Map() };
 }
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
@@ -58,9 +61,19 @@ function addChat(summary: ChatSummary, row: StoredEvent) {
     summary.messages.set(event.id, message);
   }
   addConversationFacts(summary, row, data);
-  if (closedTurnId !== undefined) summary.closedTurnIds.add(closedTurnId);
+  recordClosedTurn(summary, row, closedTurnId);
   closeMemoryContexts(summary, closedTurnId);
   if (event.report) addReport(summary, event.report, row.sequence);
+}
+function recordClosedTurn(summary: ChatSummary, row: StoredEvent,
+  turnId: string | undefined) {
+  if (turnId === undefined) return;
+  summary.closedTurnIds.add(turnId);
+  const event = row.event;
+  if (event.type === 'agent.turn_failed' && event.source === 'opencrane-server' &&
+      event.principal?.id === 'close-cleanup') {
+    summary.cleanupEndedTurnIds.add(turnId);
+  }
 }
 function addMemoryContext(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
@@ -123,7 +136,8 @@ const chat: SummaryKind<ChatSummary> = {
 function chatSize(summary: ChatSummary) {
   // Count compact replay positions separately so many reply chunks can stay warm.
   return summary.messages.size * 256 + summary.closedTurnIds.size * 128 +
-    summary.reports.size * 256 + summary.reportCount * 64 + memorySize(summary);
+    summary.cleanupEndedTurnIds.size * 128 + summary.reports.size * 256 +
+    summary.reportCount * 64 + memorySize(summary);
 }
 function memorySize(summary: ChatSummary) {
   let bytes = 0;
@@ -147,6 +161,7 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
       created: summary.created === undefined ? undefined : { ...summary.created },
       message: message === undefined ? undefined : { ...message },
       turnEnded: summary.closedTurnIds.has(turnId),
+      cleanupEnded: summary.cleanupEndedTurnIds.has(turnId),
       latestHuman: summary.latestHuman,
       conversationClosed: summary.conversationClosed,
       lastReportSequence: reports?.lastSequence ?? 0,
