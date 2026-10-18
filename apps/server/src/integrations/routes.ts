@@ -1,6 +1,6 @@
 import { budgetChange } from '@opencrane/models';
 import { readPublication, publicationChange } from '@opencrane/projections';
-import { readHostedAdmission } from '@opencrane/models';
+import { readHostedAdmission, requestHostedCheck } from '@opencrane/models';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
 import { AuthorityApplying, registerHosted, hostedRegistrationChange } from '@opencrane/models';
 import { activeMember, readActiveMember, GroupRefused } from '../members/groups.ts';
@@ -44,13 +44,19 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
     '/api/org/integrations', '/api/org/models', '/api/org/models/changes/:commandId',
     '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/review',
     '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/discovery',
-    '/api/org/integrations/:serverId/admission',
+    '/api/org/integrations/:serverId/admission', '/api/org/integrations/:serverId/checks',
     '/api/org/integrations/discovery', '/api/org/integrations/changes/:commandId',
   ];
   for (const path of paths) {
     const readOnly = path.endsWith('/discovery') || path.endsWith('/:commandId') ||
       path.endsWith('/admission');
-    const method: ('GET' | 'POST')[] = readOnly ? ['GET'] : ['GET', 'POST'];
+    let method: ('GET' | 'POST')[] = ['GET', 'POST'];
+    if (readOnly) {
+      method = ['GET'];
+    }
+    if (path.endsWith('/checks')) {
+      method = ['POST'];
+    }
     async function handleIntegration(request: FastifyRequest, reply: FastifyReply) {
       if (path.endsWith('/publication') || path.endsWith('/:commandId')) {
         reply.header('cache-control', 'no-store');
@@ -105,6 +111,9 @@ async function checkedIntegrationRequest(path: string, request: FastifyRequest,
 async function authorisedRequest(path: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string, now: Date) {
       if (isStatusRead(path, request.method)) {
         return integrationStatus(path, request, reply, options);
+      }
+      if (path.endsWith('/checks')) {
+        return requestImageCheck(request, reply, config, options, memberId);
       }
       if (path.endsWith('/discovery')) {
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
@@ -258,4 +267,30 @@ async function setBudget(request: FastifyRequest, reply: FastifyReply, config: A
   const response = await fetch(`${options.budget.decisionUrl}/budgets`, budgetRequest);
   const raw: unknown = await response.json();
   return reply.code(response.status).send(raw);
+}
+
+async function requestImageCheck(request: FastifyRequest, reply: FastifyReply,
+  config: AuthConfig, options: IntegrationOptions, memberId: string) {
+  if (request.headers.origin !== new URL(config.redirectUri).origin) {
+    return reply.code(403).send({ status: 'refused' });
+  }
+  if (!options.store) return reply.code(503).send({ status: 'unavailable' });
+  const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const { serverId } = params.parse(request.params);
+  const result = await requestHostedCheck(options.store, options.binding, memberId,
+    serverId, request.body);
+  let statusCode = 409;
+  if (result.status === 'appended') {
+    statusCode = 202;
+  }
+  if (result.status === 'not_found') {
+    statusCode = 404;
+  }
+  if (result.status === 'unavailable') {
+    statusCode = 503;
+  }
+  if (result.status !== 'appended') {
+    return reply.code(statusCode).send({ status: result.status });
+  }
+  return reply.code(statusCode).send(result);
 }

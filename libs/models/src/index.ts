@@ -72,7 +72,7 @@ export { RootBudgetRefused, rootTotals } from './root-budget.ts';
 export { registerHosted, hostedRegistrationChange } from './hosted-registration.ts';
 export { gatewayDelivery } from './gateway-delivery.ts';
 
-export { readHostedAdmission, foldHostedAdmission }
+export { readHostedAdmission, foldHostedAdmission, requestHostedCheck }
   from './hosted-admission.ts';
 
 export { gatewayConfigurationWorker } from './gateway-configuration-worker.ts';

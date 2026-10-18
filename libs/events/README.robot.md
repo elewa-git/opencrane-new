@@ -651,3 +651,10 @@ next `revision`, matching `supersedes` memory/revision and a fixed `reason` enum
 It shares written-value bounds and refuses self-dependencies and shared preferences.
 The registry retains the explicit legacy alternative and example; full event parsing
 checks version-1 encryption bounds and identity. No correction command is exposed yet.
+
+## Hosted image check requests
+
+`mcp.image_check_requested` records serverId, attemptId (at least 2), imageDigest,
+platform, registrationRevision and expectedSequence. Its command id and human actor
+live in the event envelope. `mcp.image_checked` accepts positive attempt numbers;
+the models fold checks that each result belongs to the current requested attempt.

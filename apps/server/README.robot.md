@@ -3142,3 +3142,27 @@ The protocol contract is in [the shared library](../../libs/protocol/README.robo
 Browser handling, call-status references and fresh-install qualification are NOT RUN
 in this part. In particular, late browser callbacks after revocation still need
 screen-level proof; the server tests prove that a held read sends no late frame.
+
+## Hosted image check requests (P3-6 PR 4c; Part of #47)
+
+`POST /api/org/integrations/:serverId/checks` requires same-origin session access,
+current Owner/Admin membership and applied OpenFGA admin permission. The strict input
+contains commandId, expectedSequence, registrationRevision, attemptId, imageDigest
+and platform. registrationRevision is the original registration event position;
+expectedSequence is the latest position in that server stream. Registration queues
+attempt 1. The first explicit request therefore names attempt 2 after a failed or
+expired result. Later requests advance by exactly one. Pending, unavailable and
+unknown evidence cannot be bypassed, including a failure mixed with an unavailable check.
+
+A successful reply is HTTP 202 with status appended, serverId, changeRef, attemptId
+and sequence. It confirms only a saved request. Repeating the same command and payload
+with current access returns that original receipt, including after a lost reply or
+later result. Changed payloads or actors conflict (409). Unknown, remote and foreign
+servers return 404. Invalid inputs return 400; lost acknowledgements return 503 and
+can be recovered by repeating the exact request. History has its own ten-second
+read deadline before the short access check. Conditional append rejects a replaced
+registration or moved sequence; membership changes are checked again before append.
+
+Storage, short-lived leases and authorised hash-checked evidence GET remain for 4d.
+No fetch, scan, image execution, discovery or dispatch is enabled. Fresh-install
+qualification: NOT RUN.

@@ -167,3 +167,55 @@ async function recordsNonPassingResult(verdict: 'fail' | 'unavailable') {
 }
 it.each(['fail', 'unavailable'] as const)(
   'records a models result with a %s check', recordsNonPassingResult);
+
+async function writesOnlyCurrentAttempt() {
+  const serverId = await installed();
+  const valid = result(serverId);
+  const failed = { ...valid, checks: { ...valid.checks,
+    signature: { ...dated, verdict: 'fail', reasonCodes: ['unsigned'] } } };
+  expect((await writeHostedAdmission(nats.store, 'test', failed, now)).status).toBe('appended');
+  const rows = await registrations();
+  const data = { serverId, attemptId: 2, imageDigest: digest, platform: 'linux/amd64',
+    registrationRevision: rows[0]!.sequence, expectedSequence: rows[1]!.sequence };
+  const event = envelope('test', `mcp-${serverId}`, 'mcp.image_check_requested', data,
+    'recheck', now);
+  event.principal = { kind: 'human', id: 'alice' };
+  const entry = { event, expectedSequence: rows[1]!.sequence };
+  expect((await nats.store.append(entry)).status).toBe('appended');
+  expect((await writeHostedAdmission(nats.store, 'test', valid, now)).status).toBe('conflict');
+  const next = { ...valid, attemptId: 2 };
+  expect((await writeHostedAdmission(nats.store, 'test', next, now)).status).toBe('appended');
+  expect((await writeHostedAdmission(nats.store, 'test', next, now)).status).toBe('appended');
+  expect(await readHostedAdmission(nats.store, 'test', serverId, now))
+    .toMatchObject({ status: 'admitted', attemptId: 2 });
+  expect(await registrations()).toHaveLength(4);
+}
+it('keeps private result writes bound to the current requested attempt', writesOnlyCurrentAttempt);
+
+async function refusesAlteredRequestHistory() {
+  const serverId = await installed();
+  const valid = result(serverId);
+  const failed = { ...valid, checks: { ...valid.checks,
+    signature: { ...dated, verdict: 'fail', reasonCodes: ['unsigned'] } } };
+  await writeHostedAdmission(nats.store, 'test', failed, now);
+  const rows = await registrations();
+  const data = { serverId, attemptId: 2, imageDigest: digest, platform: 'linux/amd64',
+    registrationRevision: rows[0]!.sequence, expectedSequence: rows[1]!.sequence };
+  const event = envelope('test', `mcp-${serverId}`, 'mcp.image_check_requested', data,
+    'recheck', now);
+  event.principal = { kind: 'human', id: 'alice' };
+  for (const patch of [{ serverId: 'other' }, { imageDigest: 'b'.repeat(64) },
+    { platform: 'linux/arm64' }, { registrationRevision: 999 }, { expectedSequence: 999 },
+    { attemptId: 3 }, { attemptId: 1 }]) {
+    const altered = { event: { ...event, data: { ...data, ...patch } }, sequence: 99 };
+    expect(foldHostedAdmission([...rows, altered], 'test', serverId, now))
+      .toMatchObject({ status: 'rejected', attemptId: 1 });
+  }
+  const system = { event: { ...event, principal: { kind: 'system' as const, id: 'models' } },
+    sequence: 99 };
+  expect(foldHostedAdmission([...rows, system], 'test', serverId, now))
+    .toMatchObject({ status: 'rejected', attemptId: 1 });
+  expect(foldHostedAdmission([...rows, rows[0]!], 'test', serverId, now)).toBeUndefined();
+}
+it('ignores altered request identities and refuses replaced registrations during replay',
+  refusesAlteredRequestHistory);

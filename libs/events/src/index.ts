@@ -100,7 +100,8 @@ export { mcpPublicationIntentDataSchema } from './data.ts';
 export { gatewayEntrySchema, gatewayConfigurationSchema, gatewayObservationSchema,
   mcpConfigurationObservationSchema } from './gateway-configuration.ts';
 export { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema } from './budget-root.ts';
-export { hostedImageInstallationSchema, hostedImageCheckedSchema } from './hosted-image.ts';
+export { hostedImageInstallationSchema, hostedImageCheckedSchema,
+  hostedImageCheckRequestedSchema } from './hosted-image.ts';
 export { departureCleanupCompletedSchema } from './identity-events.ts';
 export { childRequestedDataSchema, childRequestedEventSchema, type ChildRequest }
   from './child-request.ts';

@@ -2197,7 +2197,8 @@ changed retries conflict. Only the models source and system principal count.
 `foldHostedAdmission` ignores invalid and later results. Checks last at most 24 hours;
 scan databases must also be no older than 24 hours when the result is recorded.
 All-pass admission expires at the earliest check expiry or database age limit.
-Rechecks, evidence storage and readers, scans and deployment remain separate work.
+Check requests are implemented below. Evidence storage and readers, scans and
+deployment remain separate work.
 Fresh-install qualification: NOT RUN.
 
 ## Reading a saved turn stop
@@ -2495,3 +2496,16 @@ while earlier pages are deleted, response limits and replay without external wor
 Automatic reactions and active credential injection coordination are deferred to the
 next part. Credentialed routes remain closed. Live Kubernetes/provider and fresh-install
 qualification: NOT RUN. No dependency, event field or API field was added.
+
+## Hosted image check requests
+
+`requestHostedCheck` reuses saveToolCommand for current admin access and one conditional
+append. The helper reuses already-read history and supplies an access check to the
+event store for each publish attempt. Request data binds the registration position,
+expected stream position,
+digest, platform and next attempt. Recovery compares the saved event and actor too.
+The admission fold accepts ordered human requests only after failed or expired checks.
+Unavailable evidence takes precedence over failure. A replaced registration is refused.
+The private result writer keeps its models identity checks and accepts only the current
+attempt. The first matching result per attempt is retained; replay starts no work.
+Evidence storage, leases and evidence GET remain for P3-6 PR 4d.

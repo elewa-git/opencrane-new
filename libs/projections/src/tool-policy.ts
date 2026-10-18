@@ -5,7 +5,9 @@ import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscovered
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 
-const sequenceOnlyEvents = new Set(['mcp.dispatch_admitted', 'mcp.image_checked']);
+const sequenceOnlyEvents = new Set([
+  'mcp.dispatch_admitted', 'mcp.image_check_requested', 'mcp.image_checked',
+]);
 
 type Catalogue = ReturnType<typeof mcpServerDiscoveredDataSchema.parse>;
 

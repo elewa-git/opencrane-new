@@ -164,6 +164,8 @@ export async function saveToolCommand(store: EventStore, binding: Binding, membe
     return { status: 'conflict' };
   }
   const deadline = Math.min(fresh.deadline, performance.now() + expiresAt - Date.now());
-  const append = { event, expectedSequence: command.expectedSequence, deadline };
+  // Reuse the history already read and recheck access immediately before publishing.
+  const append = { event, expectedSequence: command.expectedSequence, deadline,
+    historyChecked: true as const, checkAccess: fresh };
   return store.append(append);
 }
