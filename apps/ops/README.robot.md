@@ -237,7 +237,9 @@ and the runner stopped; it increments the generation so reconnecting browsers
 reload. No chat reaction runs during replay. Bridge delivery reads durable posted
 messages, invokes the existing resume command, and waits for Ready before issuing
 a turn. The idle timer accounts for pending messages and recent conversation
-activity. Pod-proxy GET permission permits the server's inbound bridge WebSocket.
+activity. Only human posts enter the waiting-turn set; system and agent posts
+cannot leave a computer permanently busy. Pod-proxy GET permission permits the
+server's inbound bridge WebSocket.
 
 `npm run worker -w apps/ops -- files` runs the conversation files projection.
 
