@@ -59,12 +59,10 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
         // Remember cancelled turns before acknowledging Stop or accepting another pass.
         cancelledTurns.add(input['turnId']);
         const grant = turns.get(input['thread']);
-        // Leave a newer turn's pass, tools and connections alone.
-        if (!grant || grant.turnId === input['turnId']) {
-          turns.delete(input['thread']);
-          mcp.dropThread(input['thread'], input['turnId']);
-          requests.drop(input['thread']);
-        }
+        // Leave a newer turn's pass alone while closing the old turn's requests.
+        if (grant?.turnId === input['turnId']) turns.delete(input['thread']);
+        mcp.dropThread(input['thread'], input['turnId']);
+        requests.drop(input['turnId']);
       }
       else if (req.url === '/grant') {
         if (cancelledTurns.has(input['turnId'])) throw new Error('Turn ended');
@@ -122,7 +120,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
       });
       outgoing.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => outgoing.destroy());
       outgoing.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
-      requests.track(String(thread), outgoing, res);
+      requests.track(grant.turnId, outgoing, res);
       outgoing.end(raw);
     })().catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); });
   });

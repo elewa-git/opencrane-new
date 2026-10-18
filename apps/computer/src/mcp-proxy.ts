@@ -76,8 +76,8 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     const loadKey = input['loadKey'];
     const load = catalogues.get(loadKey);
     if (load?.thread) {
-      approvals.endThread(load.thread);
-      requests.drop(load.thread);
+      endTurnHolds(load.thread, load.turnId);
+      requests.drop(load.turnId);
     }
     if (load) clearTimeout(load.expiry);
     catalogues.delete(loadKey);
@@ -108,9 +108,14 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     throw new Error('Tools were not discovered');
   }
 
+  function endTurnHolds(thread: string, turnId: string) {
+    const grant = grants.get(thread);
+    if (!grant || grant.turnId === turnId) approvals.endThread(thread);
+  }
+
   function dropThread(thread: string, turnId: string) {
-    approvals.endThread(thread);
-    requests.drop(thread);
+    endTurnHolds(thread, turnId);
+    requests.drop(turnId);
     for (const [loadKey, load] of catalogues) {
       if (load.thread === thread && load.turnId === turnId) drop({ loadKey });
     }
@@ -327,7 +332,7 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
     const path = `/mcp/${server.serverId}/${server.connectionId}`;
     const outgoing = request(`${gateway}${path}`, { method: 'POST', headers }, receive);
     function timedOut() { outgoing.destroy(); }
-    requests.track(thread, outgoing, response);
+    requests.track(grant.turnId, outgoing, response);
     outgoing.setTimeout(120_000, timedOut);
     outgoing.on('error', failed);
     // Preserve number text and every metadata field reviewed by the decision service.

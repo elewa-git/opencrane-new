@@ -3,9 +3,9 @@ import type { ClientRequest, ServerResponse } from 'node:http';
 export function proxyRequests() {
   const active = new Map<string, Set<() => void>>();
 
-  function track(thread: string, outgoing: ClientRequest, response: ServerResponse) {
-    const requests = active.get(thread) ?? new Set<() => void>();
-    active.set(thread, requests);
+  function track(turnId: string, outgoing: ClientRequest, response: ServerResponse) {
+    const requests = active.get(turnId) ?? new Set<() => void>();
+    active.set(turnId, requests);
     function abort() {
       outgoing.destroy();
       if (!response.writableEnded) response.destroy();
@@ -13,16 +13,16 @@ export function proxyRequests() {
     function disconnected() {
       outgoing.destroy();
       requests.delete(abort);
-      if (!requests.size && active.get(thread) === requests) active.delete(thread);
+      if (!requests.size && active.get(turnId) === requests) active.delete(turnId);
     }
     requests.add(abort);
     // Keep tracking until the client finishes, even if the upstream has already replied.
     response.once('close', disconnected);
   }
 
-  function drop(thread: string) {
-    const requests = active.get(thread);
-    active.delete(thread);
+  function drop(turnId: string) {
+    const requests = active.get(turnId);
+    active.delete(turnId);
     for (const abort of requests ?? []) abort();
   }
 

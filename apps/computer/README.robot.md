@@ -19,8 +19,9 @@ A delayed `/drop` only removes that turn's grant, tool lists and requests. It le
 a newer turn on the same thread alone. This uses the turn identity already needed
 to refuse cancelled installations, without waiting for every old removal reply.
 
-Both local proxies track outgoing requests by thread. A matching `/drop` destroys
-that thread's requests and client responses before acknowledging removal. Dropping
+Both local proxies track outgoing requests by turn id. `/drop` destroys the
+matching requests and client responses before acknowledging removal, including
+old requests left open after the thread starts another turn. Dropping
 a tool list also ends its approval waits and MCP calls. Reading a model request
 body does not retain permission to send after Stop. Other threads keep working.
 Aborting these local connections does not prove that a remote effect stopped.
