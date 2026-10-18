@@ -570,9 +570,10 @@ try {
       return true;
     }
     async function renew(thread) {
-      await control('/grant', { thread, turnId: wireTurns.get(thread),
+      const input = { thread, turnId: wireTurns.get(thread),
         conversation: wireConversations.get(thread),
-        token: 'local-renewed', computer: 'local-computer', expires: Date.now() + 60_000 });
+        token: 'local-renewed', computer: 'local-computer', expires: Date.now() + 60_000 };
+      await control('/grant', input);
     }
     const approvalDriver = { waiting, renew };
     runtimeProxy = await proxyModule.proxy(`http://127.0.0.1:${modelPort}`, options,

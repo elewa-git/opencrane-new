@@ -74,8 +74,9 @@ async function grant(threadId) {
     }
     const outgoing = request(options, received);
     outgoing.on('error', reject);
-    outgoing.end(JSON.stringify({ thread: threadId, turnId: threadId, computer: 'fixture-computer',
-      token: 'fixture-turn', expires: Date.now() + 120_000 }));
+    const input = { thread: threadId, turnId: threadId, computer: 'fixture-computer',
+      token: 'fixture-turn', expires: Date.now() + 120_000 };
+    outgoing.end(JSON.stringify(input));
   }
   await new Promise(send);
 }

@@ -908,7 +908,8 @@ it('recalls through the thread proxy, real gateway and backend with replaced cre
       const definition = JSON.stringify({ name: 'recall', inputSchema: { type: 'object' } });
       const tool = { key: toolKey, serverId: 'memory', connectionId: 'server',
         modes: { recall: 'allow' }, definitions: [definition] };
-      const catalogue = { loadKey, turnId: 'turn', conversation: 'conversation', thread: 'thread', tools: [tool] };
+      const catalogue = { loadKey, turnId: 'turn', conversation: 'conversation',
+        thread: 'thread', tools: [tool] };
       await controlProxy(controlSocket, '/catalogue', catalogue);
       const grant = { thread: 'thread', turnId: 'turn', conversation: 'conversation',
         computer: setup.headers.authorization.slice('Bearer '.length),
