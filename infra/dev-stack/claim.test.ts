@@ -238,16 +238,131 @@ async function unrecordedReleaseIsRefused() {
       'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1',
     } } });
     const releaseList = '[{"name":"opencrane-package-1"}]';
-    const helmScript = `#!/bin/sh\ncase " $* " in\n  *" list "*) echo '${releaseList}' ;;\nesac\n`;
+    const helmScript = `#!/bin/sh\ncase " $* " in\n  *" list "*) echo '${releaseList}' ;;\n  *" uninstall "*) touch "$TEST_UNINSTALL" ;;\nesac\n`;
     await writeFile(`${fixture.home}/bin/helm`, helmScript);
-    const env = { ...fixture.env, KUBE_TEST_NAMESPACE: namespace };
+    const secret = JSON.stringify({ metadata: { uid: 'foreign-release' } });
+    const kubectlScript = `#!/bin/sh
+case " $* " in
+  *" get namespace opencrane-package-1 "*) printf '%s\\n' "$KUBE_TEST_NAMESPACE" ;;
+  *" get secret sh.helm.release.v1.opencrane-package-1.v1 "*)
+    touch "$TEST_SECRET_READ"
+    printf '%s\\n' "$KUBE_TEST_SECRET" ;;
+esac
+`;
+    await writeFile(`${fixture.home}/bin/kubectl`, kubectlScript, { mode: 0o755 });
+    const uninstall = `${fixture.home}/uninstall`;
+    const secretRead = `${fixture.home}/secret-read`;
+    const env = { ...fixture.env, KUBE_TEST_NAMESPACE: namespace,
+      KUBE_TEST_SECRET: secret, TEST_UNINSTALL: uninstall, TEST_SECRET_READ: secretRead };
     await assert.rejects(exec('infra/dev-stack/run.sh', ['package-down', '--id', '1'], { env }));
+    assert.ok((await stat(secretRead)).isFile());
     assert.ok((await stat(`${fixture.slotDirectory}/package-owner.json`)).isFile());
+    await assert.rejects(stat(uninstall), { code: 'ENOENT' });
   } finally {
     await rm(fixture.home, { recursive: true, force: true });
   }
 }
 test('cleanup refuses a Helm release with no recorded identity', unrecordedReleaseIsRefused);
+
+async function interruptedOwnedInstallIsRemoved() {
+  const fixture = await createClaimFixture();
+  try {
+    const stackOwner = `worktree=${process.cwd()}\nstartedAt=${new Date().toISOString()}\n`;
+    await writeFile(`${fixture.slotDirectory}/stack-owner`, stackOwner);
+    const packageOwner = {
+      worktree: process.cwd(), slot: '1', context: 'k3d-ocn',
+      namespace: 'opencrane-package-1', namespaceUid: 'owned-package',
+      release: 'opencrane-package-1', heartbeatAt: new Date().toISOString(),
+      installStartedAt: new Date(Date.now() - 1000).toISOString(),
+    };
+    await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(packageOwner));
+    const namespace = JSON.stringify({ metadata: { uid: 'owned-package', annotations: {
+      'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1',
+    } } });
+    const secret = JSON.stringify({ metadata: {
+      uid: 'owned-release', creationTimestamp: new Date().toISOString(),
+    } });
+    const kubectlScript = `#!/bin/sh
+case " $* " in
+  *" get namespace opencrane-package-1 "*) printf '%s\\n' "$KUBE_TEST_NAMESPACE" ;;
+  *" get secret sh.helm.release.v1.opencrane-package-1.v1 "*) printf '%s\\n' "$KUBE_TEST_SECRET" ;;
+  *" delete namespace "*) printf '%s\\n' delete >> "$TEST_ACTIONS" ;;
+esac
+`;
+    await writeFile(`${fixture.home}/bin/kubectl`, kubectlScript, { mode: 0o755 });
+    const helmScript = `#!/bin/sh
+case " $* " in
+  *" list "*) printf '[{"name":"opencrane-package-1"}]\\n' ;;
+  *" uninstall "*) printf '%s\\n' uninstall >> "$TEST_ACTIONS" ;;
+esac
+`;
+    await writeFile(`${fixture.home}/bin/helm`, helmScript, { mode: 0o755 });
+    const actions = `${fixture.home}/actions`;
+    const env = { ...fixture.env, KUBE_TEST_NAMESPACE: namespace,
+      KUBE_TEST_SECRET: secret, TEST_ACTIONS: actions };
+    await exec('infra/dev-stack/run.sh', ['package-down', '--id', '1'], { env });
+    assert.equal(await readFile(actions, 'utf8'), 'uninstall\ndelete\n');
+    await assert.rejects(stat(`${fixture.slotDirectory}/package-owner.json`), { code: 'ENOENT' });
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+test('cleanup removes an owned install interrupted before its Secret UID was saved',
+  interruptedOwnedInstallIsRemoved);
+
+async function runningComposeRefusesPackagePreparation() {
+  const fixture = await createClaimFixture(true);
+  try {
+    const owner = `worktree=${process.cwd()}\nstartedAt=${new Date().toISOString()}\n`;
+    await writeFile(`${fixture.slotDirectory}/stack-owner`, owner);
+    const namespace = JSON.stringify({ metadata: { uid: 'new-package' } });
+    const kubectlScript = `#!/bin/sh
+case " $* " in
+  *" create namespace "*) touch "$TEST_CREATED_NAMESPACE" ;;
+  *" get namespace opencrane-package-1 "*)
+    if [ -f "$TEST_CREATED_NAMESPACE" ]; then printf '%s\\n' "$KUBE_TEST_NAMESPACE"; fi ;;
+esac
+`;
+    await writeFile(`${fixture.home}/bin/kubectl`, kubectlScript, { mode: 0o755 });
+    const createdNamespace = `${fixture.home}/created-namespace`;
+    const env = { ...fixture.env, KUBE_TEST_NAMESPACE: namespace,
+      TEST_CREATED_NAMESPACE: createdNamespace };
+    const result = exec('infra/dev-stack/run.sh', ['package-prepare', '--id', '1'],
+      { env });
+    await assert.rejects(result);
+    await assert.rejects(stat(createdNamespace), { code: 'ENOENT' });
+    await assert.rejects(stat(`${fixture.slotDirectory}/package-owner.json`),
+      { code: 'ENOENT' });
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+test('package preparation refuses a running Compose stack in the same slot',
+  runningComposeRefusesPackagePreparation);
+
+async function composeDownSurvivesUnavailableKubernetes() {
+  const fixture = await createClaimFixture();
+  try {
+    const owner = `worktree=${process.cwd()}\nstartedAt=${new Date().toISOString()}\n`;
+    await writeFile(`${fixture.slotDirectory}/stack-owner`, owner);
+    await writeFile(`${fixture.slotDirectory}/settings.env`, '');
+    const dockerScript = `#!/bin/sh
+case " $* " in
+  *" compose "*" down "*) printf '%s\\n' down >> "$TEST_ACTIONS" ;;
+esac
+`;
+    await writeFile(`${fixture.home}/bin/docker`, dockerScript, { mode: 0o755 });
+    await writeFile(`${fixture.home}/bin/kubectl`, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    const actions = `${fixture.home}/actions`;
+    const env = { ...fixture.env, TEST_ACTIONS: actions };
+    await assert.rejects(exec('infra/dev-stack/run.sh', ['down', '--id', '1'], { env }));
+    assert.match(await readFile(actions, 'utf8'), /down/u);
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+test('secondary down stops Compose when Kubernetes is unavailable',
+  composeDownSurvivesUnavailableKubernetes);
 
 async function ownedPackageCleanupLeavesOtherSlot() {
   const fixture = await createClaimFixture();
