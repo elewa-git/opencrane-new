@@ -1850,14 +1850,11 @@ async function refusesAfterDispatchStart(change: typeof startFailures[number]) {
   if (change === 'conflict' || change === 'rejected') {
     expect(rows).toHaveLength(1);
   } else {
-    const uncertainSave = change === 'lost reply' || change === 'throw';
-    expect(rows).toHaveLength(uncertainSave ? 2 : 3);
-    if (!uncertainSave) {
-      expect(rows[2]!.event.type).toBe('tool.dispatch_recorded');
-      expect(rows[2]!.event.data).toMatchObject({
-        outcome: 'not_dispatched', evidence: 'dispatch_refused',
-      });
-    }
+    expect(rows).toHaveLength(3);
+    expect(rows[2]!.event.type).toBe('tool.dispatch_recorded');
+    expect(rows[2]!.event.data).toMatchObject({
+      outcome: 'not_dispatched', evidence: 'dispatch_refused',
+    });
     const event = rows[1]!.event;
     expect(event.type).toBe('tool.dispatch_started');
     const requestId = z.object({ requestId: z.string() }).parse(event.data).requestId;
