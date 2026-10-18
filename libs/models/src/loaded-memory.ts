@@ -100,6 +100,9 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding | 
           // after new scope rows, keeping the original deadline for every attempt.
           changed = await readScopeChanges(store, scopes.values(), fresh.deadline);
         } while (changed);
+        // Catch access revoked during the last scope read, even when no scope changed.
+        // Keep the same small access streams and the original deadline.
+        await fresh();
         if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
         confirmReferences(scopes.values(), references, claims.silo);
       } catch {

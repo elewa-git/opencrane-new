@@ -18,7 +18,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, saved fact references, turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, saved fact references, access after memory reads and turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
   models -->|rechecks loaded memory and corrected memory revisions; checks reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
@@ -237,7 +237,8 @@ Retrying a model request does not yet recover an earlier hold.
   Keep membership checks for writes within the caller’s original deadline.
 - Check that an invitation's sender still has authority before it is accepted.
 - Recheck saved memory after checking access, so a forget saved during that check stops the call.
-  Repeat when memory changes, within the same two-second limit.
+  Repeat when memory changes, within the same two-second limit. Check access once more
+  after the last memory read, so a revocation during that read also stops the call.
 - Keep chat, computer and model grant facts in memory and read new events before each call.
   Include both closing formats in the existing chat activity read.
   Keep only the latest grant facts for each person, assistant or group.

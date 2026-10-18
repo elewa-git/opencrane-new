@@ -2361,7 +2361,10 @@ checking saved grant changes without repeating IAM reads. Each confirm reads onl
 rows after its checked position, confirms access, then reads scope changes again.
 If new rows arrived during access checking, it repeats both checks under the original
 two-second deadline. It refuses with `memory_context_unavailable` if they cannot settle
-before that deadline. It then checks every revision and dependency at the current time.
+before that deadline. After the final scope read it confirms access again, even when
+no scope position changed. This catches revocations saved during that read without
+adding scope or conversation streams to the authority fence or extending the deadline.
+It then checks every revision and dependency at the current time.
 `memoryReferences` has an explicit `event-only` mode for processes without revision keys.
 Server reads and writes retain their custody checks. No scope or conversation stream is
 added to the authority fence. A turn with no loaded references reads no scope stream.

@@ -3126,7 +3126,14 @@ It appends no memory evidence and does not close the computer turn or stop its p
 `test/memory-dispatch.test.ts` covers renewal after correction, forgetting, requester
 and assistant read/MCP revocation, changes during signing, expiry at release, valid
 renewal, no-reference renewal, access removal during the final activity check and
-cold replay with a forgotten dependency.
+cold replay with a forgotten dependency. Barriers also revoke assistant memory-read
+access and requester MCP access during the last scope-position read of a repeated
+turn-start report, even when that position stays unchanged. Both return only the fixed refusal, with no token or context.
+Further tests cover terminal evidence during signing, the original deadline across
+signing and errors during memory preparation. Accounting tests cover duplicate
+references, equal ids in different scopes, scope positions and limits, initial input
+arriving twice or after recall, reused dispatches, late loads and reference limits.
+Changing a returned value must also leave the saved accounting unchanged.
 Remaining row 2 work: correction target proofs and agent correct/forget contracts.
 Output invalidation and process interruption belong to row 3. Native memory admission
 remains disabled. Fresh-install qualification: NOT RUN.
