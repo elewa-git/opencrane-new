@@ -175,18 +175,32 @@ export async function egressFixture(enabled = true, guarded = false,
   const address = decision.address();
   if (!address || typeof address === 'string') throw new Error('No decision listener');
   const decisionUrl = `http://127.0.0.1:${address.port}`;
-  const port = await freePort();
+  let port = await freePort();
+  let readinessPort = await freePort();
   const binary = resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64');
   const options: Parameters<typeof startGateway>[0] = { binary,
     configFile: `${directory}/config.json`, usageFile: `${directory}/usage.jsonl`,
-    keyFile: `${directory}/unused-key`, port, readinessPort: await freePort(), decisionUrl, issuer,
+    keyFile: `${directory}/unused-key`, port, readinessPort, decisionUrl, issuer,
     mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed',
       upstream: `127.0.0.1:${relayPort}` }] };
   if (enabled) options.egressDecisionUrl = decisionUrl;
   const gatewayState: { gateway?: Awaited<ReturnType<typeof startGateway>> } = {};
   onTestFinished(close);
   await writeFile(options.keyFile, 'fixture-only-unused-key');
-  gatewayState.gateway = await startGateway(options);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      gatewayState.gateway = await startGateway(options);
+      break;
+    } catch (error) {
+      const addressInUse = error instanceof Error &&
+        /address (?:already )?in use/iu.test(error.message);
+      if (!addressInUse || attempt >= 2) throw error;
+      port = await freePort();
+      readinessPort = await freePort();
+      options.port = port;
+      options.readinessPort = readinessPort;
+    }
+  }
 
   async function token(audience = 'computer-egress', expires = 60) {
     const jwt = new SignJWT({ permit });

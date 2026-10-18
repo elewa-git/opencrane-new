@@ -57,7 +57,7 @@ function registerGatewayCleanup(
   }
 }
 async function freePort() {
-  const server = createServer(); server.listen(0, '::'); await once(server, 'listening');
+  const server = createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   await new Promise<void>(resolve => server.close(() => resolve())); return address.port;
 }

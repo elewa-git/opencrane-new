@@ -10,7 +10,7 @@ import { startGateway } from '../src/gateway.ts';
 
 export async function freePort() {
   const server = createServer();
-  server.listen(0, '::');
+  server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
   const closed = once(server, 'close');
@@ -79,15 +79,31 @@ export async function gatewayFixture() {
     await rm(directory, { recursive: true, force: true });
   }
   onTestFinished(close);
+  let port = await freePort();
+  let readinessPort = await freePort();
   const options = {
     binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`,
-    keyFile: `${directory}/provider`, port: await freePort(), readinessPort: await freePort(),
+    keyFile: `${directory}/provider`, port, readinessPort,
     decisionUrl: `http://127.0.0.1:${address.port}`, issuer: 'reload-fixture',
     onChildSpawn: spawned,
   };
   await writeFile(options.keyFile, 'KEY-FILE-CANARY', { mode: 0o600 });
-  const gateway = await startGateway(options);
+  let gateway: Awaited<ReturnType<typeof startGateway>>;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      gateway = await startGateway(options);
+      break;
+    } catch (error) {
+      const addressInUse = error instanceof Error &&
+        /address (?:already )?in use/iu.test(error.message);
+      if (!addressInUse || attempt >= 2) throw error;
+      port = await freePort();
+      readinessPort = await freePort();
+      options.port = port;
+      options.readinessPort = readinessPort;
+    }
+  }
   const signer = new SignJWT({});
   signer.setProtectedHeader({ alg: 'ES256', kid: 'fixture' });
   signer.setIssuer(options.issuer);
