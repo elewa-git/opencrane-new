@@ -1,6 +1,6 @@
 import { wireSubject, type EventStore } from '@opencrane/event-store';
 import { assistantCreatedDataSchema, assistantSettingsChangedDataSchema,
-  teamCreatedDataSchema } from '@opencrane/events';
+  budgetCeilingSetDataSchema, teamCreatedDataSchema } from '@opencrane/events';
 import { budgetCommandSchema } from '@opencrane/protocol';
 import { history } from './event-history.ts';
 import { MemberAccessRefused } from './member-authority.ts';
@@ -47,7 +47,11 @@ export async function budgetScope(store: EventStore, silo: string, raw: unknown)
     await checkGroup(ownerId);
   }
   if (command.scope === 'global' && command.defaultPayingGroupId !== undefined) {
-    await checkGroup(command.defaultPayingGroupId);
+    const savedDefault = await savedDefaultPayer(store, silo, deadline);
+    if (command.defaultPayingGroupId !== 'installation-default' ||
+        savedDefault !== command.defaultPayingGroupId) {
+      await checkGroup(command.defaultPayingGroupId);
+    }
   }
   return positions;
 }
@@ -77,4 +81,23 @@ function sharedAssistantOwner(rows: Awaited<ReturnType<typeof history>>, assista
     throw new MemberAccessRefused('Spending choice unavailable');
   }
   return ownerId;
+}
+
+
+async function savedDefaultPayer(store: EventStore, silo: string, deadline: number) {
+  const subject = `budget-${silo}`;
+  const rows = await history(store, subject, silo, deadline);
+  let defaultPayer: string | undefined;
+  for (const { event } of rows) {
+    if (event.subject !== subject) {
+      throw new MemberAccessRefused('Spending choice unavailable');
+    }
+    if (event.type !== 'budget.ceiling_set') continue;
+    const ceiling = budgetCeilingSetDataSchema.parse(event.data);
+    if (ceiling.scope === 'global' && ceiling.defaultPayingGroupId !== undefined) {
+      defaultPayer = ceiling.defaultPayingGroupId;
+    }
+  }
+  // Accept only the installation payer already recorded by startup or migration.
+  return defaultPayer;
 }
