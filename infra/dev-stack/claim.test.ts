@@ -373,9 +373,9 @@ async function composeDownSurvivesUnavailableKubernetes() {
     const dockerScript = `#!/bin/sh\nprintf '%s\\n' "$*" >> '${actions}'\n`;
     await writeFile(`${fixture.home}/bin/docker`, dockerScript, { mode: 0o755 });
     const kubernetesCalls = `${fixture.home}/kubernetes-calls`;
-    const kubectlScript = '#!/bin/sh\ntouch "$TEST_KUBERNETES_CALLS"\nexit 1\n';
+    const kubectlScript = `#!/bin/sh\ntouch '${kubernetesCalls}'\nexit 1\n`;
     await writeFile(`${fixture.home}/bin/kubectl`, kubectlScript, { mode: 0o755 });
-    const env = { ...fixture.env, TEST_KUBERNETES_CALLS: kubernetesCalls };
+    const env = fixture.env;
     await exec('infra/dev-stack/run.sh', ['down', '--id', '1'], { env });
     await assert.rejects(stat(kubernetesCalls), { code: 'ENOENT' });
     await assert.rejects(stat(fixture.slotDirectory), { code: 'ENOENT' });
@@ -386,6 +386,30 @@ async function composeDownSurvivesUnavailableKubernetes() {
 }
 test('secondary down without package or computer records never calls Kubernetes',
   composeDownSurvivesUnavailableKubernetes);
+
+async function recordedComputersAreRemoved() {
+  const fixture = await createClaimFixture();
+  try {
+    const owner = `worktree=${process.cwd()}\nstartedAt=${new Date().toISOString()}\n`;
+    await writeFile(`${fixture.slotDirectory}/stack-owner`, owner);
+    await writeFile(`${fixture.slotDirectory}/quota.json`, '{}');
+    const actions = `${fixture.home}/actions`;
+    const kubectlScript = `#!/bin/sh\nprintf '%s\\n' "$*" >> '${actions}'\n`;
+    await writeFile(`${fixture.home}/bin/kubectl`, kubectlScript, { mode: 0o755 });
+    const env = fixture.env;
+    await exec('infra/dev-stack/run.sh', ['down', '--id', '1'], { env });
+    const calls = await readFile(actions, 'utf8');
+    assert.match(calls, /delete namespace opencrane-dev-1 opencrane-dev-1-gateway/u);
+    assert.match(calls, /delete validatingadmissionpolicies /u);
+    assert.match(calls, /delete validatingadmissionpolicybindings /u);
+    assert.doesNotMatch(calls, /opencrane-package/u);
+    await assert.rejects(stat(fixture.slotDirectory), { code: 'ENOENT' });
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+test('secondary down removes recorded computers without querying a Helm namespace',
+  recordedComputersAreRemoved);
 
 async function packageRecordSurvivesUnavailableKubernetes() {
   const fixture = await createClaimFixture();
