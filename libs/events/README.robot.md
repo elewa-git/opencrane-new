@@ -29,6 +29,11 @@ binding. Optional `rootId` equals the hold's root for paid calls and the verifie
 turn's root for zero-cost calls. The actor checks it after refreshing access and
 refuses stopped roots. Old records without this field still replay.
 New reservations carry `dispatchGate: 1`; older records remain readable.
+Rooted model holds add optional SHA-256 `retryDigest` and `bodyDigest` fields.
+The models actor uses these to recover the same open, unadmitted hold and original
+request/decision ids. A body mismatch refuses admission. Admitted, settled, expired,
+uncertain or evidence-bearing holds cannot grant another send. Old holds without
+these fields remain readable and do not acquire retry recovery.
 The models actor orders dispatch and expiry on one budget stream. This record
 changes no money. Its absence proves non-dispatch only for the new sender contract.
 The first successful append permits one gateway send; duplicates grant no send.

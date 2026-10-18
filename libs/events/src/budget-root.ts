@@ -18,3 +18,10 @@ export const budgetRootStoppedDataSchema = z.discriminatedUnion('reason', [
   z.object({ rootId: id, reason: z.literal('budget_reservation_exceeded'),
     reservationId: id }).strict(),
 ]);
+
+// Keep older holds readable; only new rooted model calls carry retry hashes.
+export const budgetCallRetrySchema = z.object({
+  dispatchGate: z.literal(1).optional(),
+  retryDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  bodyDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+});

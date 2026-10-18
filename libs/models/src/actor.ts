@@ -1,3 +1,4 @@
+import { hasCallEvidence, retryReservation, type CallRetry } from './call-retry.ts';
 import { prepareCeilingChange } from './ceiling-command.ts';
 import { CeilingReceiptRecovery } from './ceiling-receipt-recovery.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -12,7 +13,7 @@ import { applyBudget, costCents, data, emptyBudget, models, budgetStopId, budget
   type BudgetState, type ModelCall, type ModelUsage } from './state.ts';
 
 import { history } from './event-history.ts';
-import { checkDispatchBinding, checkRootDispatch, checkRootGrant, checkRootReservation,
+import { wasAdmitted, checkDispatchBinding, checkRootDispatch, checkRootGrant, checkRootReservation,
   setRootAllowance, stopRootAtCeiling, stopRootOnOverrun } from './root-budget.ts';
 import { readRootStopEvidence, saveRootStop, type RootStopReason } from './root-stop-evidence.ts';
 export { history } from './event-history.ts';
@@ -146,8 +147,11 @@ export class BudgetActor {
     return this.serial(save);
   }
   reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>, admittedAt?: number,
-    rootId?: string) {
+    rootId?: string, retry?: CallRetry) {
     return this.serial(async () => {
+      const saved = await retryReservation(this.state, call, amountCents, rootId, retry,
+        this.hasDispatchEvidence.bind(this), fresh);
+      if (saved !== undefined) return saved;
       z.int().positive().parse(amountCents);
       if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
       if (!call.payingGroupId) throw new Error('Paying group unavailable');
@@ -174,7 +178,7 @@ export class BudgetActor {
       const id = randomUUID();
       await this.append('budget.reserved', { reservationId: id, permitId: id, amountCents,
         payingGroupId: call.payingGroupId, assistantId: call.assistantId, modelCall: call,
-        dispatchGate: 1, ...(rootId === undefined ? {} : { rootId }) }, undefined, fresh);
+        dispatchGate: 1, ...retry, ...(rootId === undefined ? {} : { rootId }) }, undefined, fresh);
       return id;
     });
   }
@@ -244,7 +248,7 @@ export class BudgetActor {
     return this.serial(async () => {
       const r = this.state.reservations.find(r => r.id === id);
       if (!r) throw new Error('Unmatched reservation');
-      if (r.settledCents === 0 && !r.outcomeUnknown && !this.wasAdmitted(id)) return;
+      if (r.settledCents === 0 && !r.outcomeUnknown && !wasAdmitted(this.state, id)) return;
       if (r.settledCents !== undefined) throw new Error('Reservation already settled');
       // Call only with proof that the permit was not used for provider dispatch.
       await this.appendNotDispatched(id);
@@ -418,8 +422,8 @@ export class BudgetActor {
       return;
     }
     const dispatched = await this.providerDispatched(reservation);
-    const hasEvidence = await this.hasCallEvidence(reservation.id);
-    if (!this.wasAdmitted(reservation.id) && !dispatched && !hasEvidence) {
+    const hasEvidence = await hasCallEvidence(this.store, this.silo, reservation.id);
+    if (!wasAdmitted(this.state, reservation.id) && !dispatched && !hasEvidence) {
       // Release only when no send permission or other call evidence exists.
       // Keep the hold if a read fails, then try again at the next expiry check.
       await this.appendNotDispatched(reservation.id);
@@ -443,8 +447,7 @@ export class BudgetActor {
       return saved.id === reservationId;
     }
     const reservation = this.state.reservations.find(matchesReservation);
-    if (!reservation || this.wasAdmitted(reservationId) ||
-        await this.providerDispatched(reservation) || await this.hasCallEvidence(reservationId)) {
+    if (!reservation || await this.hasDispatchEvidence(reservation)) {
       throw new Error('Call may have been dispatched');
     }
     const payload = {
@@ -452,16 +455,9 @@ export class BudgetActor {
     };
     await this.append('budget.settled', payload);
   }
-  private wasAdmitted(reservationId: string) {
-    function matchesDispatch(saved: BudgetState['dispatches'][number]) {
-      return saved.reservationId === reservationId;
-    }
-    return this.state.dispatches.some(matchesDispatch);
-  }
-  private async hasCallEvidence(reservationId: string) {
-    const effects = await history(this.store, `effect-${reservationId}`, this.silo);
-    const security = await history(this.store, `security-${reservationId}`, this.silo);
-    return effects.length > 0 || security.length > 0;
+  private async hasDispatchEvidence(reservation: BudgetState['reservations'][number]) {
+    return wasAdmitted(this.state, reservation.id) || await this.providerDispatched(reservation) ||
+      await hasCallEvidence(this.store, this.silo, reservation.id);
   }
   private async providerDispatched(reservation: BudgetState['reservations'][number]) {
     if (reservation.call.assistantId !== 'provider-verification') {

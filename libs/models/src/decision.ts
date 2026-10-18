@@ -1,4 +1,4 @@
-import { grantModelCall } from './call-retry.ts';
+import { refuseCallRetry, grantModelCall } from './call-retry.ts';
 import { turnRootBinding } from './root-budget.ts';
 import { modelPermission } from './decision-provider.ts';
 import { LoadedMemoryRefused, prepareLoadedMemory } from './loaded-memory.ts';
@@ -212,7 +212,8 @@ export async function startDecision(
     let auditedContext: { requesterId: string; assistantId: string } | undefined;
     // This records that a write was started; it does not mean the audit succeeded.
     let auditAttempted = false;
-    const requestId = randomUUID(), route = req.url?.startsWith('/authorize/mcp/') ? 'mcp' : 'model';
+    let requestId: string = randomUUID();
+    const route = req.url?.startsWith('/authorize/mcp/') ? 'mcp' : 'model';
     let contextDigest = createHash('sha256').update('unverified').digest('hex');
     let callId: string | undefined;
     let toolFacts: { logicalRequestId: string; serverId: string; toolName: string } | undefined;
@@ -233,14 +234,9 @@ export async function startDecision(
       }
       return event.id;
     };
-    async function allowModel(reservation: string) {
-      try {
-        return await audit('allow', 'model_allowed', reservation);
-      } catch (error) {
-        // Release only before handing permission to the gateway.
-        await actor.releaseUndispatched(reservation);
-        throw error;
-      }
+    async function allowModel(reservation: string, originalRequestId: string) {
+      requestId = originalRequestId;
+      return audit('allow', 'model_allowed', reservation);
     }
     void (async () => {
       res.setHeader('content-type', 'application/json');
@@ -374,12 +370,15 @@ export async function startDecision(
       const { credential, modelCall } = await modelPermission(
         call, requestId, turnToken, activity, fresh.deadline, providers);
       requireConnectedClient(req, res);
-      const reservation = await grantModelCall(actor, modelCall, amountCents, raw,
+      const granted = await grantModelCall(actor, modelCall, amountCents, raw,
         fresh, admittedAt, allowModel);
+      const reservation = granted.reservationId;
+      requestId = granted.requestId;
       res.setHeader('x-request-id', requestId);
       if (credential !== undefined) res.setHeader('x-provider-key', credential);
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {
+      if (refuseCallRetry(error, res, auditAttempted)) return;
       const capped = error instanceof BudgetRefused;
       try {
         if (!auditAttempted) await audit('deny', capped ? 'budget_exhausted' : 'request_refused');

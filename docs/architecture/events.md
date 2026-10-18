@@ -417,6 +417,15 @@ A root is one turn's fixed allowance. `budget.root_allowance_set` binds rootId,
 requesterId, conversationId, turnId, threadId, assistantId, computerId, generation,
 payingGroupId and allowanceCents (1–1,000). Allocation holds no money.
 `budget.reserved.rootId` optionally links the call's sole hold to that root.
+Rooted model holds also save optional `retryDigest` and `bodyDigest` SHA-256 values.
+The retry hash covers the silo, root, computer, generation, conversation, turn and
+thread from verified credentials, plus the exact forwarded body's hash. It never
+uses caller-selected retry headers. Only an open, unadmitted hold without send,
+effect or security evidence can be reused. Its complete call binding and amount
+must match, including tariff, payer and context hash. Recovery keeps its original
+request id and allow decision on `decision-<requestId>`, saving that decision there
+if missing. Admission checks the saved body hash. Other states refuse without
+appending or releasing money. Non-root calls keep their existing behaviour.
 Root totals count those calls over their whole lifetime, across budget periods.
 `budget.root_stopped` records allowance_exhausted with attemptedBoundCents and
 availableCents, ceiling_stop with the existing budget stopId, or

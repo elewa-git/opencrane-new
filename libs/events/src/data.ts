@@ -1,3 +1,4 @@
+import { budgetCallRetrySchema } from './budget-root.ts';
 import { hostedCredentialContractSchema } from './startup-credentials.ts';
 import { hostedImageInstallationSchema } from './hosted-image.ts';
 import { optionalProviderTurnBindingSchema } from './turn-binding.ts';
@@ -567,10 +568,9 @@ const reservedModelCallDataSchema = optionalProviderTurnBindingSchema.safeExtend
   generation: z.int().nonnegative().optional(),
   turnId: id, threadId: id, payingGroupId: id.optional(), contextDigest: digestSchema,
 });
-export const budgetReservedDataSchema = z.object({
+export const budgetReservedDataSchema = budgetCallRetrySchema.extend({
   reservationId: id, permitId: id, amountCents: centsSchema, rootId: id.optional(),
   payingGroupId: id, assistantId: id, modelCall: reservedModelCallDataSchema.optional(),
-  dispatchGate: z.literal(1).optional(),
 }).strict();
 
 export const budgetReservationExpiredDataSchema = z.object({ reservationId: id }).strict();

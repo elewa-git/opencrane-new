@@ -373,11 +373,12 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     // Replay checks drain completed requests; crash checks explicitly request SIGKILL.
     async restartActor() {
       await gateway.stop();
+      const decisionPort = Number(new URL(decision.url).port);
       await decision.close();
       actor = new BudgetActor(nats.store, 'test', actor.now);
       await actor.start();
       decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
-        binding, 0, keys, undefined, dispatchOptions);
+        binding, decisionPort, keys, undefined, dispatchOptions);
       options = { ...options, decisionUrl: decision.url };
       gateway = await startGateway(options);
     },

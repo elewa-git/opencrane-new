@@ -225,3 +225,10 @@ export function checkDispatchBinding(state: BudgetState,
   requireDispatchReservation(state, input);
   return input;
 }
+
+export function wasAdmitted(state: BudgetState, reservationId: string) {
+  function matchesDispatch(saved: BudgetState['dispatches'][number]) {
+    return saved.reservationId === reservationId;
+  }
+  return state.dispatches.some(matchesDispatch);
+}

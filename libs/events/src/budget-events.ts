@@ -21,10 +21,13 @@ export const budgetEvents = [
   event(
     'budget.reserved',
     'budget',
-    'The budget actor reserved the worst-case cost of a call.',
+    'The budget actor reserved a call cost and optionally bound a rooted retry.',
     data.budgetReservedDataSchema,
     {
       reservationId: 'res_1',
+      rootId: 'root_1',
+      retryDigest: 'a'.repeat(64),
+      bodyDigest: 'b'.repeat(64),
       permitId: 'permit_1',
       amountCents: 200,
       payingGroupId: 'team_1',
