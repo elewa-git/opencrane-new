@@ -106,7 +106,8 @@ async function startsManaged() {
     const rows = await history(setup.nats.store, 'gateway-config-test', 'test');
     expect(rows.at(-1)?.event.data).toMatchObject({ outcome: 'loaded' });
   }
-  await expect.poll(delivered, { timeout: 15_000 }).toBeUndefined();
+  // Allow a temporary service error to delay the worker while still requiring its loaded receipt.
+  await expect.poll(delivered, { timeout: 30_000 }).toBeUndefined();
   await assertManaged();
   const response = await process.call();
   expect(response.status).toBe(200);
