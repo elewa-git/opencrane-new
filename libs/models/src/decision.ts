@@ -1,3 +1,5 @@
+import { authoriseEgress } from './egress-admission.ts';
+import type { EgressRelayRegistry } from './egress-relay.ts';
 import { refuseCallRetry, grantModelCall } from './call-retry.ts';
 import { turnRootBinding } from './root-budget.ts';
 import { modelPermission } from './decision-provider.ts';
@@ -9,12 +11,12 @@ import { admitProviderVerification, runProviderVerification, verifyProviderCapab
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
 import { groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
 import { configureBudget, BudgetAccessRefused } from './budget-config.ts';
-import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approvals.ts';
+import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
-  decisionAccessStarted }
+  decisionAccessStarted, requireActiveConversationTurn }
   from './decision-activity.ts';
 import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools }
   from './turn-binding-check.ts';
@@ -162,12 +164,6 @@ function queuedPosition(conversation: StoredEvent[], turn: StoredEvent) {
   return queued?.sequence ?? turn.sequence;
 }
 
-function requireActiveConversationTurn(conversation: StoredEvent[], turnId: string) {
-  function closesCurrentTurn(row: StoredEvent) {
-    return closesDecisionTurn(row.event, turnId);
-  }
-  if (conversation.some(closesCurrentTurn)) throw new Error('Turn is not active');
-}
 
 function requireModelRoute(turnToken: z.infer<typeof legacyTurnSchema>,
   managedRoute: boolean, enabled: boolean) {
@@ -199,11 +195,15 @@ export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string;
     memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
-  dispatchOptions?: McpDispatchOptions,
+  dispatchOptions?: McpDispatchOptions, egress?: EgressRelayRegistry,
 ) {
   const mcpSender = mcpDispatch(actor, dispatchOptions);
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
+    if (req.url === '/authorize/egress') {
+      void authoriseEgress(req, res, actor, identity, binding, egress);
+      return;
+    }
     if (req.url?.startsWith('/dispatch/mcp/')) {
       void dispatchRequest(req, res, mcpSender);
       return;

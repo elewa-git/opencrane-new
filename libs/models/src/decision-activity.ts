@@ -150,3 +150,10 @@ export function decisionAccessStarted(managedRoute: boolean, loadedMemory: boole
   }
   return started;
 }
+
+export function requireActiveConversationTurn(conversation: StoredEvent[], turnId: string) {
+  function closesCurrentTurn(row: StoredEvent) {
+    return closesDecisionTurn(row.event, turnId);
+  }
+  if (conversation.some(closesCurrentTurn)) throw new Error('Turn is not active');
+}

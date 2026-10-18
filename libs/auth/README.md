@@ -12,13 +12,17 @@ This is a shared library used by the back end, background workers and the models
 flowchart LR
   server["apps/server<br/>back end"] -.->|checks sign-in and signs turn classes| auth["libs/auth<br/>checked sign-in details and passes"]
   ops["apps/ops<br/>background workers"] -.-> auth
-  models["libs/models<br/>AI access and spending"] -.->|signs memory passes| auth
+  models["libs/models<br/>AI access and spending"] -.->|signs memory and outside-connection passes| auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
   auth -->|rebuilds readiness, control, budget refusals and pausing from events| events["Event log<br/>saved events"]
   auth -.->|checks chat turns and refuses native task passes| catalogue["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
+
+It can sign a pass for one outside connection and operation. The pass lasts at most
+one minute and ends sooner when its turn, grant or lease expires. It keeps command
+and desktop passes separate. Computers cannot request these passes yet.
 
 It rebuilds requested and pausing computer control from saved events. Both states
 refuse new work. Rebuilding these facts contacts no computer or supervisor.

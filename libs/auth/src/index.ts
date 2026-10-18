@@ -36,3 +36,5 @@ export { computerSummary, type ComputerSummary, type TurnSummary,
 
 export { readComputerControl, isComputerLifecycle, type ComputerControl }
   from './computer-summary.ts';
+
+export { verifyEgressCapability, type EgressCapability } from './tokens.ts';

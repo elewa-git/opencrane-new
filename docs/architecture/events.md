@@ -116,7 +116,7 @@ no access and start no model work. Replay copies ciphertext without touching key
 | `egress.destination_revoked` | Owner/Admin destination command | egress-policy, audit | none; networking stays off |
 | `egress.observed` | relay close reaction (networking disabled; older observations remain readable) | audit | none; never dispatch on replay |
 | `gateway.observation_recorded` | safe gateway log ingest | audit, including unverified JWT failures | none; no asserted requester identity |
-| `decision.recorded` | ext_authz; server bridge for budget admission refusals | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | none; admission is not an observed effect |
+| `decision.recorded` | ext_authz, including operation-bound egress; server bridge for budget admission refusals | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | egress allows register one private relay only after the final zero-cost spending check; replay opens none; admission is not an observed effect |
 
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
 `reason` and `contextDigest`. Verified callers also carry `requesterId`,

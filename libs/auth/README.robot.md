@@ -250,3 +250,14 @@ the signature, claims, expiry and audience separation with a real issuer key.
 The computer summary retains a chat close's optional `budgetStopId`. The server
 uses it to finish recording a refused start after a lost connection, even if the
 ceiling has since risen. The field grants no pass and cannot reopen a closed turn.
+
+## Operation-bound egress passes
+
+`tokenIssuer.egress` signs `computer-egress` passes with ES256. The exact destination,
+operation id/kind/digest, channel, requester, silo, assistant, computer generation,
+conversation, thread, turn and three grant positions are signed together.
+Expiry is at most 60 seconds and cannot exceed the supplied turn, grant or lease
+expiry. Desktop signing requires a lease expiry. `verifyEgressCapability` checks
+the requested channel; the shared verifier also enforces the lifetime and audience.
+No route delivers these passes to computers. Desktop admission remains closed until
+saved lease and control bindings can be checked.
