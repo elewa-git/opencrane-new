@@ -272,8 +272,8 @@ async function unavailableData() {
   vi.spyOn(setup.db, 'query').mockImplementation(query);
   const closed = once(client.socket, 'close');
   await stop();
-  const [code]: unknown[] = await closed;
-  expect(code).toBe(1013);
+  const details: unknown[] = await closed;
+  expect(details[0]).toBe(1013);
   expect(client.frames.filter(isNotice)).toEqual([]);
   const readStream = setup.nats.store.readStream.bind(setup.nats.store);
   async function* unavailable(stream: string, from?: number, deadline?: number) {
@@ -299,8 +299,8 @@ async function foreignMember() {
     await auth.handler.handle(joined, setup.db);
     await stop();
     const client = await connect('foreign-reader');
-    const [code]: unknown[] = await once(client.socket, 'close');
-    expect(code).toBe(1008);
+    const details: unknown[] = await once(client.socket, 'close');
+    expect(details[0]).toBe(1008);
     expect(client.frames.filter(isNotice)).toEqual([]);
     expect((await read('foreign-reader')).statusCode).toBe(403);
   } finally {
