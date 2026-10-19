@@ -89,6 +89,7 @@ async function sanitisesRetainedLogs(withhold = false) {
     secrets.push(assignmentSecret, jsonSecret);
     lines.push(`status=failed APP_${name}="${assignmentSecret} with spaces"`);
     lines.push(`{"app_${name.toLowerCase()}": "${jsonSecret}", "message": "failed"}`);
+    lines.push(`{"app ${name.toLowerCase()} value": "${jsonSecret}", "message": "failed"}`);
   }
   await writeFile(`${slot}/zitadel-owner-password`, 'slot-password-canary\n');
   await writeFile(`${slot}/zitadel-client-secret`, 'slot-client-canary\n');
