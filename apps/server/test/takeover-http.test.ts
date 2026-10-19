@@ -4,6 +4,7 @@ import * as crypto from 'node:crypto';
 import * as access from '../src/chat/access.ts';
 import { encodeSession } from '@opencrane/auth';
 import type { AppendCommand } from '@opencrane/event-store';
+import { parseEventByType } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
 import { buildServer, buildProductionServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
@@ -195,9 +196,10 @@ async function otherChat() {
   });
   return { ...body, commandId: 'other-command', requesterEventId: message.id };
 }
-async function competingRequests() {
+async function competingRequests(sameCommand: boolean) {
   await setup();
   const other = await otherChat();
+  if (sameCommand) other.commandId = body.commandId;
   const append = fixture.nats.store.append.bind(fixture.nats.store);
   const both = Promise.withResolvers<void>();
   let arrivals = 0;
@@ -218,7 +220,8 @@ async function competingRequests() {
   }
   expect(intents).toBe(1);
 }
-it('saves exactly one intent when two chats request the same computer at once', competingRequests);
+it.each([false, true])('saves one intent for competing chats, same command id: %s',
+  competingRequests);
 async function privateStatusAndRestart() {
   await setup();
   const other = await otherChat();
@@ -353,7 +356,10 @@ async function overlappingRetries() {
   async function together(command: AppendCommand) {
     arrivals++;
     // Force different generated times without delaying either request.
-    command.event.time = new Date(1_800_000_000_000 + arrivals).toISOString();
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success) throw new Error('Expected a valid takeover event');
+    parsed.event.time = new Date(1_800_000_000_000 + arrivals).toISOString();
+    command.event = parsed.event;
     if (arrivals === 2) both.resolve();
     await both.promise;
     return append(command);
