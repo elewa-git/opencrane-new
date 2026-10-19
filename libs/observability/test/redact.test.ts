@@ -14,6 +14,7 @@ describe('redactUrl', () => {
     ['Route GET:/nope?token=SECRET_B404&code=SECRET_CODE not found', 'Route GET:/nope not found'],
     ['callback /cb?requestId=prefix\'private-canary trailing text', 'callback /cb'],
     ['/api/conversations/private-canary/history//?unknown=private-canary', '/api/conversations/:conversationId/history//'],
+    ['/api/org/history/private-canary?unknown=private-canary', '/api/org/history/:auditId'],
   ])('drops the entire query or fragment in %s', (text, expected) => {
     expect(redactUrl(text)).toBe(expected);
   });

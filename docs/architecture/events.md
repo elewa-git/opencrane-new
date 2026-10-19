@@ -794,6 +794,14 @@ redelivery harmless; chronological replay produces the same denied state.
 
 ### Permission-scoped audit (P3-19)
 
+Audit replay stores each allowed event's time, safe actor kind and a digest of
+its command id. A person id requires a human envelope principal matching the
+event's checked command field. System and mismatched principals never become
+people. The read table indexes UTC time, event family, actor id and outcome.
+Organisation history returns up to 20 anchors by default, each with at most 20
+related records. An access-checked detail read pages the remaining records by
+event position. Rebuild fills older rows and starts no reactions.
+
 `decision.recorded` is admission, not an observed outcome. Model reservations carry
 `modelCall.requestId`; the decision maps that request to its permit. Settlement and
 observations join by permit. The optional envelope `correlation.request` lets

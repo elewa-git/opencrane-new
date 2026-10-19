@@ -23,8 +23,9 @@ own retry deadlines and duplicate-delivery behaviour. Never log personal content
 The logger redacts sensitive field names and drops entire URL queries and fragments
 after serialisation, including child bindings and Error properties. Text following
 a query is dropped too; Fastify route messages retain their fixed `not found` suffix.
-Conversation history paths mask the conversation id. Member change paths mask both the
-member id and command id, including role and removal changes. Redaction is not permission
+Conversation history paths mask the conversation id. Organisation history detail
+paths mask the audit id. Member change paths mask both the member id and command
+id, including role and removal changes. Redaction is not permission
 to log secrets.
 An invalid log line is replaced with a fixed error record instead of being emitted raw.
 

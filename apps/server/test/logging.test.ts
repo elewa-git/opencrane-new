@@ -18,6 +18,13 @@ function requestUrlFromLogLine(line: string): string {
   return requestUrl;
 }
 
+function expectedStatus(method: string, path: string, slash: string): number {
+  if (method !== 'GET' || path === '/nope') return 404;
+  if (path === '/healthz' && slash === '') return 200;
+  if (slash === '' || (path === '/api/org/history' && slash === '/')) return 401;
+  return 404;
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
 });
@@ -79,10 +86,7 @@ describe('createServerLogger', () => {
               req.on('error', reject);
               req.end();
             });
-            const expectedStatus = method === 'GET' && slash === '' && path !== '/nope'
-              ? path === '/healthz' ? 200 : 401
-              : 404;
-            expect(status).toBe(expectedStatus);
+            expect(status).toBe(expectedStatus(method, path, slash));
             const lines = chunks.flatMap(chunk => chunk.trim().split('\n')).map(line => record(JSON.parse(line)));
             const incoming = lines.find(line => line['msg'] === 'incoming request');
             expect.soft(record(incoming?.['req'])['url']).toBe(`${loggedPath}${slash}`);

@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, memory, indexed member history and survey progress"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables, including closed assistant chats for cleanup, bounded lists and join times| pg["PostgreSQL<br/>database"]
   projections -->|indexes unfinished child requests outside feeds; saves public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
@@ -102,6 +102,7 @@ stays inside the projection.
 - Keeps the time of that choice and each night's reviewed fact references, so the
   back end can show whether any facts are waiting.
 - Keeps control references and affected-turn counts in history without private turn details.
+- Keeps a short, dated change history. Each row can open more saved evidence in small pages.
 - Keep tool discovery separate from an owner or admin’s recorded review.
   Require a new review when the connection or account mode changes.
   Keep blocked tools blocked when rebuilding the tables.

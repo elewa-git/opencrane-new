@@ -4,7 +4,8 @@ export const REDACTED_VALUE = '[Redacted]';
 /**
  * Remove the whole query and fragment without parsing parameters. Keep
  * Fastify's fixed fallback text and hide ids in conversation history and
- * member change paths. Remove other text after a query as well.
+ * member change and organisation history detail paths. Remove other text
+ * after a query as well.
  */
 export function redactUrl(text: string): string {
   const path = text.split(/[?#]/u, 1)[0] ?? '';
@@ -17,6 +18,10 @@ export function redactUrl(text: string): string {
     /\/api\/members\/[^/\s"'\\]+\/changes\/[^/\s"'\\]+(?=\/*(?:[\s"'\\]|$))/gu,
     '/api/members/:memberId/changes/:commandId',
   );
+  const safeAuditDetailPath = safeMemberChangePath.replace(
+    /\/api\/org\/history\/[^/\s"'\\]+(?=\/*(?:[\s"'\\]|$))/gu,
+    '/api/org/history/:auditId',
+  );
 
-  return safeMemberChangePath + suffix;
+  return safeAuditDetailPath + suffix;
 }

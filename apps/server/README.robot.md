@@ -998,18 +998,23 @@ conversation read permission and returns only that requester's actions.
 `GET /api/org/history` requires live Owner/Admin membership and returns safe
 organisation metadata. Neither route decrypts text or approval details, nor returns
 credential references, bearer material, raw arguments or gateway diagnostics.
-For organisation history, the server checks the member's role before reading a
-page. It checks OpenFGA permission after the page is read. For conversation
-history, it reads the page before checking access. PostgreSQL gives each query a
+Both routes load a page before checking current event-backed membership and
+OpenFGA once. `GET /api/org/history/:auditId` does the same for one page of
+related records. A removed or demoted caller receives a fixed refusal, including
+when their access changes during the load. PostgreSQL gives each query a
 one-second limit.
 The access check reads only member and ownership history; it never reads the
 conversation event stream or rejects the result because ordinary chat activity
 arrived during the read. A missing membership receipt or permission outage refuses
 the request. No audit read scans global event history.
 
-Filters: `requestId`, `turnId`, `decision` (`allow`, `ask`, `deny`) and `before`
-(an exclusive event-position cursor). Pages contain at most 50 anchors with all
-relevant evidence; decision and observed outcome are separate. An allowed request
+Conversation filters remain `requestId`, `turnId`, `decision` and `before`, with
+50 anchors per page. Organisation history also accepts `from` and `to` UTC times,
+`type` family, `actorId`, `outcome`, `reference` and `limit` (20 by default,
+at most 50). Detail accepts `before` and `limit` (20 by default, at most 50).
+Both cursors are exclusive event positions. List rows carry no more than 20
+related records and mark further evidence; detail pages can read all of it.
+Decision and observed outcome are separate. An allowed request
 without an observation reads `unknown`, never success. The
 [shared response contract](../../libs/protocol/src/audit.ts) is strict and permits
 only fixed readable reasons. Run the `audit` ops worker alongside the existing

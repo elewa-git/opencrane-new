@@ -22,10 +22,10 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, parseEventByType, mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, computers, connectComputers, connectMcpCatalogue, connectMemberFeed,
-  isToolPolicyAvailable, mcpCatalogue, members, pgDb, ProjectionRunner
+  isToolPolicyAvailable, mcpCatalogue, members, pgDb, ProjectionRunner, type Query
 } from '@opencrane/projections';
 import {
-  computersResponseSchema, effectDetailResponseSchema, effectListResponseSchema,
+  auditResponseSchema, computersResponseSchema, effectDetailResponseSchema, effectListResponseSchema,
   integrationsResponseSchema,
 } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
@@ -686,6 +686,22 @@ it('serves safe admin changes and requester actions while refusing foreign users
     const response = await app.inject({ url: '/api/org/history', headers: headers(sub) });
     expect(response.statusCode).toBe(status); expect(response.body).not.toContain('canary');
   }
+  const change = await app.inject({ url: '/api/org/history', headers: headers('oidc-alice') });
+  const auditId = auditResponseSchema.parse(change.json()).rows[0]!.id;
+  for (const [sub, status] of [['oidc-alice', 200], ['oidc-amina', 200],
+    ['oidc-bob', 403], ['oidc-mallory', 403]] as const) {
+    const response = await app.inject({ url: `/api/org/history/${auditId}`, headers: headers(sub) });
+    expect(response.statusCode).toBe(status);
+    expect(response.body).not.toContain('canary');
+  }
+  expect((await app.inject({ url: `/api/org/history/${auditId}?limit=51`,
+    headers: headers('oidc-alice') })).statusCode).toBe(400);
+  expect((await app.inject({ url: '/api/org/history?limit=51',
+    headers: headers('oidc-alice') })).statusCode).toBe(400);
+  expect((await app.inject({ url: '/api/org/history?outcome=allow',
+    headers: headers('oidc-alice') })).statusCode).toBe(400);
+  expect((await app.inject({ url: '/api/org/history?from=2026-10-03T01%3A00%3A00%2B01%3A00',
+    headers: headers('oidc-alice') })).statusCode).toBe(400);
   expect((await app.inject({ url })).statusCode).toBe(401);
   expect((await app.inject({ url, headers: headers('oidc-alice', 'foreign') })).statusCode).toBe(403);
   expect((await app.inject({ url: '/api/org/history?arguments=raw-canary', headers: headers('oidc-alice') })).statusCode).toBe(400);
@@ -698,6 +714,8 @@ it('serves safe admin changes and requester actions while refusing foreign users
   // Refuse without waiting for OpenFGA's projection.
   expect((await app.inject({ url, headers: headers('oidc-alice') })).statusCode).toBe(403);
   expect((await app.inject({ url: '/api/org/history', headers: headers('oidc-alice') })).statusCode).toBe(403);
+  expect((await app.inject({ url: `/api/org/history/${auditId}`,
+    headers: headers('oidc-alice') })).statusCode).toBe(403);
 });
 
 it('never logs private audit filters, tokens or dependency error bodies', async () => {
@@ -717,9 +735,79 @@ it('never logs private audit filters, tokens or dependency error bodies', async 
     expect(reply.statusCode).toBe(503); expect(reply.body).not.toContain('canary');
     const invalid = await logged.inject({ url: '/api/org/history?arguments=private-arguments-canary&review=private-review-canary', headers: headers('oidc-alice') });
     expect(invalid.statusCode).toBe(400);
+    const invalidDetail = await logged.inject({
+      url: '/api/org/history/private-detail-canary?arguments=private-arguments-canary',
+      headers: headers('oidc-alice'),
+    });
+    expect(invalidDetail.statusCode).toBe(400);
+    expect(invalidDetail.body).not.toContain('canary');
     await logged.inject({ url: '/api/conversations/private-conversation-canary/history?requestId=private-request-canary', headers: headers('oidc-alice') });
     expect(logs).not.toContain('canary');
   } finally { failed.mockRestore(); await logged.close(); vi.unstubAllEnvs(); }
+});
+
+it('refuses detail when membership ends while its records load', async () => {
+  const event = fixture('decision.recorded', 'decision-detail', {
+    requestId: 'detail-request', outcome: 'allow', reason: 'model_allowed',
+  });
+  await append(event);
+  await runner.run(auditTrail);
+  const database = pgDb(dbs.queue);
+  let reportLoad!: () => void;
+  let resumeLoad!: () => void;
+  const loading = new Promise<void>(resolve => { reportLoad = resolve; });
+  const held = new Promise<void>(resolve => { resumeLoad = resolve; });
+  const blockedDatabase: Query = {
+    async query<Row extends Record<string, unknown>>(sql: string, parameters?: unknown[]) {
+      const result = await database.query<Row>(sql, parameters);
+      if (sql.startsWith('SELECT * FROM audit_entries WHERE silo = $1 AND event_id = $2')) {
+        reportLoad();
+        await held;
+      }
+      return result;
+    },
+  };
+  const detailServer = buildServer(config, { audit: { silo: 'test', store: nats.store,
+    db: blockedDatabase, feed, binding: authorisation.binding } });
+  try {
+    const pending = detailServer.inject({ url: `/api/org/history/${event.id}`,
+      headers: headers('oidc-alice') });
+    await loading;
+    await append(fixture('member.removed', 'member-alice', { memberId: 'alice' }));
+    resumeLoad();
+    const response = await pending;
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain(event.id);
+  } finally {
+    resumeLoad();
+    await detailServer.close();
+  }
+});
+
+it('refuses detail when OpenFGA denies or cannot answer', async () => {
+  const event = fixture('decision.recorded', 'decision-iam-detail', {
+    requestId: 'iam-detail', outcome: 'allow', reason: 'model_allowed',
+  });
+  await append(event);
+  await runner.run(auditTrail);
+  const unavailableBinding = { ...authorisation.binding, apiUrl: 'http://127.0.0.1:1' };
+  const unavailableServer = buildServer(config, { audit: { silo: 'test', store: nats.store,
+    db: pgDb(dbs.queue), feed, binding: unavailableBinding } });
+  try {
+    const response = await unavailableServer.inject({ url: `/api/org/history/${event.id}`,
+      headers: headers('oidc-amina') });
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain(event.id);
+  } finally { await unavailableServer.close(); }
+
+  const roleChange = fixture('member.role_changed', 'member-amina', {
+    memberId: 'amina', previousRole: 'admin', newRole: 'member', changedBy: 'alice',
+  });
+  await authorisation.handler.handle(roleChange, pgDb(dbs.queue));
+  const denied = await app.inject({ url: `/api/org/history/${event.id}`,
+    headers: headers('oidc-amina') });
+  expect(denied.statusCode).toBe(403);
+  expect(denied.body).not.toContain(event.id);
 });
 
 it('registers a remote source once and restores its stable change reference through status and replay', async () => {

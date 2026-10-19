@@ -128,12 +128,25 @@ TypeScript fold is shared with decision reads; SQL only stores the result.
 Legacy name-only modes never grant execution. Both ordinary and online catalogue
 rebuilds retain this policy; replay does not dispatch tools.
 
-`auditTrail` stores a metadata allowlist in `audit_entries`, indexed by silo,
-request, permit, approval, conversation, requester and turn. `readAudit` reads
-50 indexed anchors then their relevant request/permit/approval and conversation/turn streams; it never
-reads the event store. Decisions and observed outcomes remain separate, including
-unknown outcomes. Private text, approval details, connection material, raw
-arguments, destinations and gateway timestamps are excluded at projection time.
+`auditTrail` stores only chosen fields in `audit_entries`. Each record has the
+event time, a safe actor kind and a SHA-256 digest of the command id when present.
+A human id appears only when the envelope principal matches a checked command
+field. The table has `(silo, column, position DESC)` indexes for `recorded_at`,
+`event_type`, `actor_id` and `outcome`, as well as its earlier link indexes.
+The event type range and its index use PostgreSQL's bytewise `C` order, so a
+host's language sorting cannot hide matching families. Initialisation replaces
+the earlier language-sorted event type index.
+`auditTrail.create` adds these four columns to older tables. Existing rows keep
+null columns until `npm run replay -- audit` replays their events. Run this once
+after upgrading, then use `npm run replay -- audit --verify` to compare every
+rebuilt row, including the new columns, with the live table.
+
+`readAudit` reads 20 anchors by default, at most 50. Each row includes its
+anchor and at most 20 related records, plus `hasMoreEvidence` when more exist.
+`readAuditDetail` pages the same related records by descending event position,
+including the anchor. Neither read opens the event store. Decisions and observed
+outcomes stay separate. Private text, approval details, connection material,
+raw arguments, destinations and gateway timestamps never enter this table.
 
 Run `node --experimental-strip-types apps/ops/src/worker.ts audit` with the usual
 projection settings. `npm run replay -- audit --verify` replays metadata under the

@@ -26,6 +26,14 @@ export const auditReasons = {
 } as const;
 
 const id = z.string().regex(/^[\w:.-]{1,300}$/u);
+const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const utc = z.iso.datetime({ offset: false });
+const actor = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('person'), id }).strict(),
+  z.object({ kind: z.literal('agent'), id: id.optional() }).strict(),
+  z.object({ kind: z.literal('system'), id: id.optional() }).strict(),
+  z.object({ kind: z.literal('unverified') }).strict(),
+]);
 export const auditRecordSchema = z.object({
   computerId: id.optional(), generation: z.int().positive().optional(),
   takeoverId: id.optional(), leaseId: id.optional(),
@@ -35,6 +43,7 @@ export const auditRecordSchema = z.object({
   operation: z.enum(['invite', 'join']).optional(),
   role: z.enum(['owner', 'admin', 'member']).optional(),
   recordedAt: z.iso.datetime({ offset: true }).optional(),
+  actor: actor.optional(), commandRef: digest.optional(),
   eventId: id, type: id, position: z.number().int().positive(),
   source: z.enum(['decision', 'gateway', 'computer', 'authoritative']),
   status: z.enum(['allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched', 'recorded']),
@@ -47,13 +56,31 @@ export const auditRowSchema = z.object({
   outcome: z.enum(['success', 'error', 'unknown', 'not_dispatched', 'recorded']),
   reservedCents: z.number().int().nonnegative().safe().optional(), settledCents: z.number().int().nonnegative().safe().optional(),
   records: z.array(auditRecordSchema),
+  hasMoreEvidence: z.boolean().optional(),
 }).strict();
 export const auditResponseSchema = z.object({ rows: z.array(auditRowSchema), nextBefore: z.number().int().positive().optional() }).strict();
 export const auditFilterSchema = z.object({
   before: z.coerce.number().int().positive().safe().optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  from: utc.optional(), to: utc.optional(),
+  type: z.enum(['decision', 'effect', 'approval', 'mcp', 'connection', 'egress',
+    'takeover', 'team', 'ownership', 'assistant', 'grant', 'budget', 'tool',
+    'credential', 'security', 'gateway', 'agent', 'member', 'computer', 'silo']).optional(),
+  actorId: id.optional(),
+  outcome: z.enum(['success', 'error', 'unknown', 'not_dispatched', 'recorded']).optional(),
+  reference: id.optional(),
   requestId: id.optional(), turnId: id.optional(),
   decision: z.enum(['allow', 'ask', 'deny']).optional(),
 }).strict();
+export const auditDetailFilterSchema = z.object({
+  before: z.coerce.number().int().positive().safe().optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+}).strict();
+export const auditDetailSchema = z.object({
+  id, records: z.array(auditRecordSchema),
+  nextBefore: z.number().int().positive().optional(),
+}).strict();
 export type AuditRow = z.infer<typeof auditRowSchema>;
 export type AuditRecord = z.infer<typeof auditRecordSchema>;
-export type AuditFilter = z.infer<typeof auditFilterSchema>;
+export type AuditFilter = Omit<z.infer<typeof auditFilterSchema>, 'limit'> & { limit?: number };
+export type AuditDetailFilter = z.infer<typeof auditDetailFilterSchema>;

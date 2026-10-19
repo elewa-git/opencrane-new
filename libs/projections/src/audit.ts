@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import type { EventEnvelope } from '@opencrane/events';
-import { auditReasons, auditResponseSchema, type AuditRow, type AuditRecord, type AuditFilter } from '@opencrane/protocol';
+import { auditReasons, auditResponseSchema, auditDetailSchema, type AuditRow,
+  type AuditRecord, type AuditFilter, type AuditDetailFilter } from '@opencrane/protocol';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 
@@ -67,6 +69,31 @@ interface Entry extends Record<string, unknown> {
   event_id: string; position: string | number; request_id: string | null; permit_id: string | null; approval_id: string | null;
   conversation_id: string | null; turn_id: string | null; requester_id: string | null; metadata: unknown;
 }
+const verifiedActorFields: Record<string, string> = {
+  'budget.ceiling_set': 'setBy',
+  'mcp.tool_mode_set': 'setBy',
+  'member.invited': 'invitedBy',
+  'member.role_changed': 'changedBy',
+  'member.removed': 'removedBy',
+  'team.created': 'createdBy',
+  'ownership.transferred': 'transferredBy',
+  'takeover.requested': 'requestedBy',
+};
+function actor(event: EventEnvelope, data: Record<string, unknown>): AuditRecord['actor'] {
+  const principal = event.principal;
+  if (!principal) return { kind: 'unverified' };
+  const principalId = safeId(principal.id);
+  if (principal.kind === 'system') return { kind: 'system', ...(principalId ? { id: principalId } : {}) };
+  if (principal.kind === 'agent') return { kind: 'agent', ...(principalId ? { id: principalId } : {}) };
+  const fieldName = verifiedActorFields[event.type];
+  const verifiedField = fieldName ? data[fieldName] : undefined;
+  if (principalId && verifiedField === principalId) return { kind: 'person', id: principalId };
+  return { kind: 'unverified' };
+}
+function commandRef(event: EventEnvelope): string | undefined {
+  if (!event.commandId) return undefined;
+  return createHash('sha256').update(event.commandId).digest('hex');
+}
 function invitationMetadata(event: EventEnvelope, data: Record<string, unknown>) {
   if (!['member.invited', 'member.command_refused'].includes(event.type)) {
     return {};
@@ -75,7 +102,7 @@ function invitationMetadata(event: EventEnvelope, data: Record<string, unknown>)
   const role = z.enum(['owner', 'admin', 'member']).safeParse(data['role']).data;
   return {
     memberId: safeId(data['memberId']), invitationId: safeId(data['invitationId']),
-    operation, role, recordedAt: event.time,
+    operation, role,
   };
 }
 function isDestinationRule(event: EventEnvelope) {
@@ -94,15 +121,16 @@ function takeoverMetadata(event: EventEnvelope, data: Record<string, unknown>) {
   const generation = z.int().positive().safeParse(data['generation']).data;
   return { computerId: safeId(data['computerId']), generation,
     takeoverId: safeId(data['takeoverId']), leaseId: safeId(data['leaseId']),
-    requesterEventId: safeId(data['requesterEventId']), affectedTurnCount: turns?.length,
-    recordedAt: event.time };
+    requesterEventId: safeId(data['requesterEventId']), affectedTurnCount: turns?.length };
 }
 function metadata(event: EventEnvelope, d: Record<string, unknown>, position: number): AuditRecord {
   const status = z.enum(['allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched']).safeParse(d['outcome']).data;
   const reason = typeof d['reason'] === 'string' ? Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ?? 'Recorded reason withheld' : undefined;
   const cents = amount(d['amountCents'] ?? d['settledCents']);
+  const digest = commandRef(event);
   return { ...invitationMetadata(event, d), ...takeoverMetadata(event, d),
-    eventId: event.id, type: event.type, position,
+    eventId: event.id, type: event.type, position, recordedAt: event.time,
+    actor: actor(event, d), ...(digest ? { commandRef: digest } : {}),
     source: auditSource(event),
     status: event.type === 'effect.uncertain' ? 'unknown' : status ?? 'recorded',
     ...(reason ? { reason } : {}), ...(cents !== undefined ? { amountCents: cents } : {}) };
@@ -114,6 +142,18 @@ export const auditTrail: Projection = {
       silo TEXT NOT NULL, event_id TEXT NOT NULL, position BIGINT NOT NULL, anchor BOOLEAN NOT NULL,
       request_id TEXT, permit_id TEXT, approval_id TEXT, conversation_id TEXT, turn_id TEXT, requester_id TEXT,
       decision TEXT, context_digest TEXT, metadata JSONB NOT NULL, PRIMARY KEY (silo, event_id))`);
+    for (const column of ['recorded_at TIMESTAMPTZ', 'event_type TEXT',
+      'actor_id TEXT', 'outcome TEXT']) {
+      await db.query(`ALTER TABLE audit_entries ADD COLUMN IF NOT EXISTS ${column}`);
+    }
+    for (const column of ['recorded_at', 'actor_id', 'outcome']) {
+      await db.query(`CREATE INDEX IF NOT EXISTS audit_${column}
+        ON audit_entries (silo, ${column}, position DESC)`);
+    }
+    // Keep the index and prefix comparisons in the same bytewise order on every host.
+    await db.query(`CREATE INDEX IF NOT EXISTS audit_event_type_bytewise
+      ON audit_entries (silo, event_type COLLATE "C", position DESC)`);
+    await db.query('DROP INDEX IF EXISTS audit_event_type');
     for (const key of ['request_id', 'permit_id', 'approval_id', 'conversation_id', 'requester_id', 'turn_id', 'decision']) {
       await db.query(`CREATE INDEX IF NOT EXISTS audit_${key} ON audit_entries (silo, ${key}, position DESC)`);
     }
@@ -130,14 +170,37 @@ export const auditTrail: Projection = {
     const approval = firstId(d['approvalId'], event.correlation.approval);
     const anchor = isAnchor(event, request, permit, approval);
     const digest = z.string().regex(/^[a-f0-9]{64}$/u).safeParse(d['contextDigest']).data;
-    await db.query(`INSERT INTO audit_entries VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+    const record = metadata(event, d, position);
+    await db.query(`INSERT INTO audit_entries (silo,event_id,position,anchor,request_id,permit_id,
+      approval_id,conversation_id,turn_id,requester_id,decision,context_digest,metadata,
+      recorded_at,event_type,actor_id,outcome)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
       ON CONFLICT (silo, event_id) DO NOTHING`, [event.silo, event.id, position, anchor, request, permit, approval,
       firstId(d['conversationId'], call['conversationId'], event.correlation.conversation),
       firstId(d['turnId'], call['turnId'], event.correlation.turn),
       firstId(d['requesterId'], call['requesterId'], d['requestedBy']),
-      event.type === 'decision.recorded' ? d['outcome'] : null, digest, JSON.stringify(metadata(event, d, position))].map(value => value ?? null));
+      event.type === 'decision.recorded' ? d['outcome'] : null, digest, JSON.stringify(record),
+      event.time, event.type, record.actor?.kind === 'unverified' ? null : record.actor?.id,
+      record.status].map(value => value ?? null));
+    if (anchor || ['effect.observed', 'egress.observed', 'budget.settled',
+      'security.alert_raised', 'gateway.observation_recorded'].includes(event.type)) {
+      await refreshOutcomes(db, event.silo, request, permit, event.id);
+    }
   },
 };
+
+async function refreshOutcomes(db: Query, silo: string, request: string | undefined,
+  permit: string | undefined, eventId: string): Promise<void> {
+  const anchors = (await db.query<Entry>(`SELECT * FROM audit_entries WHERE silo = $1
+    AND anchor = TRUE AND (event_id = $2 OR request_id = $3 OR permit_id = $4)`,
+  [silo, eventId, request ?? null, permit ?? null])).rows;
+  for (const anchor of anchors) {
+    const signals = await readSignals(db, silo, anchor);
+    const summary = explain(anchor, [], signals, false);
+    await db.query('UPDATE audit_entries SET outcome = $3 WHERE silo = $1 AND event_id = $2',
+      [silo, anchor.event_id, summary.outcome]);
+  }
+}
 
 function isAnchor(event: EventEnvelope, request: string | undefined, permit: string | undefined,
   approval: string | undefined): boolean {
@@ -159,43 +222,138 @@ function isAnchor(event: EventEnvelope, request: string | undefined, permit: str
   return !event.type.startsWith('effect.');
 }
 
-/** Indexed anchors plus their relevant evidence. Positions order events; gateway time is never read. */
-export async function readAudit(db: Query, silo: string, filter: AuditFilter & { conversationId?: string; requesterId?: string } = {}) {
-  const where = ['silo = $1', 'anchor = TRUE']; const parameters: unknown[] = [silo];
-  for (const [key, value] of Object.entries({ conversation_id: filter.conversationId, requester_id: filter.requesterId,
-    request_id: filter.requestId, turn_id: filter.turnId, decision: filter.decision })) {
-    if (value !== undefined) { parameters.push(value); where.push(`${key} = $${parameters.length}`); }
-  }
-  if (filter.before !== undefined) { parameters.push(filter.before); where.push(`position < $${parameters.length}`); }
-  const anchors = (await db.query<Entry>(`SELECT * FROM audit_entries WHERE ${where.join(' AND ')} ORDER BY position DESC LIMIT 51`, parameters)).rows;
-  const page = anchors.slice(0, 50);
-  const requests = page.flatMap(e => e.request_id ? [e.request_id] : []), permits = page.flatMap(e => e.permit_id ? [e.permit_id] : []);
-  const turns = [...new Map(page.filter(e => e.conversation_id && e.turn_id)
-    .map(e => [JSON.stringify([e.conversation_id, e.turn_id]), e])).values()];
-  const related = (await db.query<Entry>(`SELECT * FROM audit_entries WHERE silo = $1 AND
-    (request_id = ANY($2::text[]) OR permit_id = ANY($3::text[])) ORDER BY position`, [silo, requests, permits])).rows;
-  // Match each conversation and turn together, so unrelated events cannot add rows to the audit view.
-  const context = await Promise.all(turns.map(turn => db.query<Entry>(`SELECT * FROM audit_entries
-    WHERE silo = $1 AND conversation_id = $2 AND turn_id = $3 AND request_id IS NULL AND permit_id IS NULL ORDER BY position`,
-    [silo, turn.conversation_id, turn.turn_id])));
-  related.push(...context.flatMap(result => result.rows));
-  const approvals = related.flatMap(e => e.approval_id ? [e.approval_id] : []);
-  const lifecycle = approvals.length ? (await db.query<Entry>('SELECT * FROM audit_entries WHERE silo = $1 AND approval_id = ANY($2::text[]) ORDER BY position', [silo, approvals])).rows : [];
-  const rows = page.map(anchor => explain(anchor, [...related, ...lifecycle]));
-  return auditResponseSchema.parse({ rows, ...(anchors.length > 50 ? { nextBefore: Number(page.at(-1)!.position) } : {}) });
+/** Read indexed anchors, then a fixed number of related records for each row. */
+function checkedAuditLimit(value: number | undefined): number {
+  const limit = value ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error('Invalid audit limit');
+  return limit;
 }
-function explain(anchor: Entry, entries: Entry[]): AuditRow {
-  const selected = entries.filter(e => (anchor.request_id && e.request_id === anchor.request_id) || (anchor.permit_id && e.permit_id === anchor.permit_id) || contextEvidence(anchor, e));
-  const approvalIds = selected.flatMap(e => e.approval_id ? [e.approval_id] : []);
-  const all = [...selected, ...entries.filter(e => e.approval_id && approvalIds.includes(e.approval_id)), anchor];
-  const records = [...new Map(all.map(e => [e.event_id, auditResponseSchema.shape.rows.element.shape.records.element.parse(e.metadata)])).values()]
-    .sort((a, b) => a.position - b.position);
+
+export async function readAudit(db: Query, silo: string,
+  filter: AuditFilter & { conversationId?: string; requesterId?: string } = {}) {
+  const where = ['silo = $1', 'anchor = TRUE'];
+  const parameters: unknown[] = [silo];
+  const equality = {
+    conversation_id: filter.conversationId, requester_id: filter.requesterId,
+    request_id: filter.requestId, turn_id: filter.turnId, decision: filter.decision,
+    actor_id: filter.actorId, outcome: filter.outcome,
+  };
+  for (const [column, value] of Object.entries(equality)) {
+    if (value === undefined) continue;
+    parameters.push(value);
+    where.push(`${column} = $${parameters.length}`);
+  }
+  if (filter.type) {
+    parameters.push(`${filter.type}.`);
+    const start = parameters.length;
+    parameters.push(`${filter.type}/`);
+    where.push(`event_type COLLATE "C" >= $${start}
+      AND event_type COLLATE "C" < $${parameters.length}`);
+  }
+  if (filter.from) {
+    parameters.push(filter.from);
+    where.push(`recorded_at >= $${parameters.length}`);
+  }
+  if (filter.to) {
+    parameters.push(filter.to);
+    where.push(`recorded_at <= $${parameters.length}`);
+  }
+  if (filter.reference) {
+    parameters.push(filter.reference);
+    const index = parameters.length;
+    where.push(`(event_id = $${index} OR request_id = $${index} OR permit_id = $${index})`);
+  }
+  if (filter.before !== undefined) {
+    parameters.push(filter.before);
+    where.push(`position < $${parameters.length}`);
+  }
+  const limit = checkedAuditLimit(filter.limit);
+  parameters.push(limit + 1);
+  const sql = `SELECT * FROM audit_entries WHERE ${where.join(' AND ')}
+    ORDER BY position DESC LIMIT $${parameters.length}`;
+  const anchors = (await db.query<Entry>(sql, parameters)).rows;
+  const page = anchors.slice(0, limit);
+  const rows: AuditRow[] = [];
+  for (const anchor of page) {
+    const related = await readEvidence(db, silo, anchor, undefined, 21, false);
+    const signals = await readSignals(db, silo, anchor);
+    const row = explain(anchor, related.slice(0, 20), signals, related.length > 20);
+    rows.push(row);
+  }
+  const nextBefore = anchors.length > limit ? Number(page.at(-1)!.position) : undefined;
+  return auditResponseSchema.parse({ rows, ...(nextBefore ? { nextBefore } : {}) });
+}
+
+function evidenceCondition(alias: string): string {
+  return `(${alias}.request_id = $3 OR ${alias}.permit_id = $4 OR
+    (${alias}.conversation_id = $5 AND ${alias}.turn_id = $6 AND
+      ${alias}.request_id IS NULL AND ${alias}.permit_id IS NULL AND
+      (${alias}.requester_id IS NULL OR ${alias}.requester_id = $7)))`;
+}
+
+async function readEvidence(db: Query, silo: string, anchor: Entry,
+  before: number | undefined, limit: number, includeAnchor: boolean): Promise<Entry[]> {
+  const direct = evidenceCondition('e');
+  const matching = evidenceCondition('linked');
+  const parameters: unknown[] = [silo, anchor.event_id, anchor.request_id,
+    anchor.permit_id, anchor.conversation_id, anchor.turn_id, anchor.requester_id];
+  const anchorCondition = includeAnchor ? 'e.event_id = $2 OR ' : '';
+  const excludeAnchor = includeAnchor ? '' : 'AND e.event_id <> $2';
+  const beforeCondition = before === undefined ? '' : 'AND e.position < $8';
+  if (before !== undefined) parameters.push(before);
+  parameters.push(limit);
+  const sql = `SELECT e.* FROM audit_entries e WHERE e.silo = $1 ${excludeAnchor}
+    ${beforeCondition} AND (${anchorCondition}${direct} OR
+      (e.approval_id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM audit_entries linked WHERE linked.silo = $1
+          AND linked.approval_id = e.approval_id AND ${matching})))
+    ORDER BY e.position DESC LIMIT $${parameters.length}`;
+  return (await db.query<Entry>(sql, parameters)).rows;
+}
+
+async function readSignals(db: Query, silo: string, anchor: Entry): Promise<Entry[]> {
+  const types = ['effect.observed', 'egress.observed', 'security.alert_raised',
+    'budget.settled', 'budget.reserved', 'gateway.observation_recorded'];
+  const parameters = [silo, anchor.event_id, anchor.request_id, anchor.permit_id,
+    anchor.conversation_id, anchor.turn_id, anchor.requester_id, types];
+  const direct = evidenceCondition('e');
+  const sql = `SELECT DISTINCT ON (e.event_type) e.* FROM audit_entries e
+    WHERE e.silo = $1 AND e.event_type = ANY($8::text[])
+      AND (e.event_id = $2 OR ${direct})
+    ORDER BY e.event_type, e.position DESC`;
+  return (await db.query<Entry>(sql, parameters)).rows;
+}
+
+export async function readAuditDetail(db: Query, silo: string, auditId: string,
+  filter: AuditDetailFilter = { limit: 20 }) {
+  const anchor = (await db.query<Entry>(
+    'SELECT * FROM audit_entries WHERE silo = $1 AND event_id = $2 AND anchor = TRUE',
+    [silo, auditId])).rows[0];
+  if (!anchor) return undefined;
+  const page = await readEvidence(db, silo, anchor, filter.before, filter.limit + 1, true);
+  const records = page.slice(0, filter.limit).map(entry => auditResponseSchema.shape.rows.element
+    .shape.records.element.parse(entry.metadata));
+  const nextBefore = page.length > filter.limit ? Number(page[filter.limit - 1]!.position) : undefined;
+  return auditDetailSchema.parse({ id: anchor.event_id, records,
+    ...(nextBefore ? { nextBefore } : {}) });
+}
+
+function explain(anchor: Entry, entries: Entry[], signals: Entry[],
+  hasMoreEvidence: boolean): AuditRow {
+  const records = [anchor, ...entries].map(entry => auditResponseSchema.shape.rows.element
+    .shape.records.element.parse(entry.metadata)).sort((left, right) => left.position - right.position);
+  const summaryEntries = new Map<string, Entry>();
+  for (const entry of [anchor, ...signals]) summaryEntries.set(entry.event_id, entry);
+  const summaryRecords = [...summaryEntries.values()].map(entry => auditResponseSchema.shape.rows
+    .element.shape.records.element.parse(entry.metadata))
+    .sort((left, right) => left.position - right.position);
   const decision = z.enum(['allow', 'ask', 'deny']).safeParse(anchor['decision']).data ?? 'not_recorded';
-  const effect = records.findLast(r => r.type === 'effect.observed' || r.type === 'egress.observed');
-  const settlement = records.findLast(r => r.type === 'budget.settled');
-  const reservation = records.find(r => r.type === 'budget.reserved');
-  const outcome = observedOutcome(decision, records, effect, settlement);
+  const effect = summaryRecords.findLast(r => r.type === 'effect.observed' || r.type === 'egress.observed');
+  const settlement = summaryRecords.findLast(r => r.type === 'budget.settled');
+  const reservation = summaryRecords.find(r => r.type === 'budget.reserved');
+  const outcome = observedOutcome(decision, summaryRecords, effect, settlement);
   return auditResponseSchema.shape.rows.element.parse({ id: anchor.event_id, decision, outcome, records,
+    ...(hasMoreEvidence ? { hasMoreEvidence } : {}),
     requestId: anchor.request_id ?? undefined, permitId: anchor.permit_id ?? undefined,
     conversationId: anchor.conversation_id ?? undefined, turnId: anchor.turn_id ?? undefined,
     requesterId: anchor.requester_id ?? undefined, contextDigest: anchor['context_digest'] ?? undefined,
@@ -209,10 +367,4 @@ function observedOutcome(decision: AuditRow['decision'], records: AuditRecord[],
   if (decision === 'allow') return 'unknown';
   const gateway = records.findLast(r => r.type === 'gateway.observation_recorded');
   return gateway ? gateway.status === 'unknown' ? 'unknown' : 'error' : 'recorded';
-}
-
-function contextEvidence(anchor: Entry, entry: Entry) {
-  return Boolean(anchor.conversation_id && anchor.turn_id && !entry.request_id && !entry.permit_id &&
-    anchor.conversation_id === entry.conversation_id && anchor.turn_id === entry.turn_id &&
-    (!entry.requester_id || anchor.requester_id === entry.requester_id));
 }

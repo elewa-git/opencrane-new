@@ -69,9 +69,13 @@ Chat HTTP response schemas (`chatContextSchema`, `chatListSchema`,
 are typed; unrendered event fields stay opaque. `WebSocketService.received` in the
 web app delivers each validated envelope without Angular signal coalescing.
 
-Audit history uses `auditFilterSchema` and `auditResponseSchema`: request/permit/
-conversation/turn ids, separate decision and observed outcome, integer cents and
-fixed readable reasons. Strict metadata schemas reject private payload fields.
+Audit history uses `auditFilterSchema`, `auditDetailFilterSchema`,
+`auditResponseSchema` and `auditDetailSchema`: request/permit/conversation/turn
+ids, event time, safe actor, command digest, separate decision and observed
+outcome, integer cents and fixed readable reasons. Strict metadata schemas
+reject private payload fields. Organisation filters include UTC bounds, event
+family, actor id, outcome and event/request/permit reference. The list defaults
+to 20 anchors and the detail defaults to 20 records; both stop at 50.
 The Angular history views use this same contract; no event payload is passed to
 browser rendering. See the [HTTP contract](../../apps/server/README.robot.md#permission-scoped-audit-p3-19).
 

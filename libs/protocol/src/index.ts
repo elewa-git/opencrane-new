@@ -74,7 +74,9 @@ export {
   type EffectStatus,
   type EffectDetail,
 } from './effects.ts';
-export { auditReasons, auditRecordSchema, auditRowSchema, auditResponseSchema, auditFilterSchema, type AuditRow, type AuditRecord, type AuditFilter } from './audit.ts';
+export { auditReasons, auditRecordSchema, auditRowSchema, auditResponseSchema,
+  auditFilterSchema, auditDetailFilterSchema, auditDetailSchema,
+  type AuditRow, type AuditRecord, type AuditFilter, type AuditDetailFilter } from './audit.ts';
 
 
 export { approvalReviewSchema, approvalCardsSchema, type ApprovalCard } from './approvals.ts';
