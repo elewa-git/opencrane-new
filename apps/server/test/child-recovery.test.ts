@@ -308,6 +308,9 @@ async function savesOneFailureAndStops() {
   const hidden = await context.request(input.conversationId, `children/${input.requestId}`,
     undefined, 'bob');
   expect(hidden.json()).toEqual({ state: 'unknown' });
+  const { conversationId, ...reviewInput } = input;
+  const refused = await context.request(conversationId, 'child-review', reviewInput, 'bob');
+  expect(refused.statusCode).toBe(403);
   await resetAccess();
   await recoverChildRequest(context.options, row);
   const before = await context.nats.store.head(`conversation-${input.conversationId}`);
@@ -332,6 +335,10 @@ async function savesOneFailureAndStops() {
   expect(feed.statusCode, feed.body).toBe(200);
   expect(feed.body).not.toContain('child_start_failed');
   expect(feed.body).not.toContain(failure.id);
+  await context.append(`participation-${conversationId}`, 'participant.removed',
+    { conversationId, participantId: 'alice', removedBy: 'bob' });
+  const removed = await context.request(conversationId, 'child-review', reviewInput);
+  expect(removed.statusCode).toBe(403);
 }
 function isFailure(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
   return row.event.type === 'conversation.child_start_failed';
