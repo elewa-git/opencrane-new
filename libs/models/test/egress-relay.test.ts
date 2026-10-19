@@ -245,7 +245,10 @@ async function preparationKeepsExpiry() {
   }
   const setup = await fixture('open', false, prepare);
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
-  onTestFinished(vi.useRealTimers);
+  function restoreTimers() {
+    vi.useRealTimers();
+  }
+  onTestFinished(restoreTimers);
   const registering = setup.register('permit', Date.now() + 60_000);
   await entered.promise;
   await vi.advanceTimersByTimeAsync(30_000);

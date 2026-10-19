@@ -175,7 +175,7 @@ export class EgressRelayRegistry {
       relay.listener.close();
       relays.delete(request.permitId);
     }
-    const timer = setTimeout(expire, lifetime);
+    const timer = setTimeout(expire, request.expiresAt - Date.now());
     timer.unref();
     try {
       relay.listener.listen(0, '127.0.0.1');
