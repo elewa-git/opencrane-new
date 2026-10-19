@@ -25,7 +25,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes and public keys| computer
   server["apps/server<br/>the back end"] <-->|turns, files, shared history, stops, signed gates, immediate gate replies, root stop receipts and reports| computer
   events["libs/events<br/>report text check"] -.-> computer
-  computer --> supervisor["Root supervisor<br/>protected launch and stable process checks"]
+  computer --> supervisor["Root supervisor<br/>protected launch and desktop checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
   computer -->|checks each turn before model and reviewed tool calls| gateway["agentgateway<br/>AI gateway"]
@@ -59,8 +59,8 @@ flowchart LR
 - Separates the assistant, file tools and desktop into different Linux users.
   Protects temporary desktop files before those users start.
 - Stops executors through a root-only socket. Keeps executor admission closed after
-  a stop, including when the supervisor restarts. Browser quietness is still unproven,
-  so taking control remains disabled.
+  a stop, including when the supervisor restarts. It checks for unexpected desktop
+  processes while keeping the desktop and viewers running. Taking control stays disabled.
 - Supplies the Kubernetes files that restrict network access.
 - Checks the image's licences before publishing it.
 

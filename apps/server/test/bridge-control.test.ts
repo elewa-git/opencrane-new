@@ -561,3 +561,20 @@ async function holdsTurnAfterSnapshot(subject: string) {
 it.each(['conversation-chat', 'member-alice'])(
   'holds a new turn when intent arrives after the cached snapshot during %s reads',
   holdsTurnAfterSnapshot, 30_000);
+
+async function holdsSavedOutcome(phase: 'paused' | 'failed') {
+  fixture = await bridgeFixture(true);
+  const binding = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
+    podUid: 'fixture', takeoverId: 'control', affectedTurnIds: [] };
+  let data: unknown = { ...binding, reason: 'pause_timeout' };
+  if (phase === 'paused') {
+    data = { ...binding, bridgeEpoch: 'bridge', supervisorEpoch: 'supervisor',
+      quietProof: 'complete' };
+  }
+  // Check the outcome itself: a preceding request must not hide a missing type check.
+  await fixture.append('computer-assistant', `takeover.${phase}`, data);
+  await fixture.process();
+  await fixture.flushFrames();
+  expect(fixture.frames.filter(isTurnOrFile)).toEqual([]);
+}
+it.each(['paused', 'failed'] as const)('holds a new chat turn after saved %s', holdsSavedOutcome);

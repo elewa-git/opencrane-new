@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { takeoverRequestedDataSchema, takeoverPausingDataSchema,
+  takeoverPausedDataSchema, takeoverFailedDataSchema,
   computerTurnStartedDataSchema as startDetails,
   computerTurnClosedDataSchema as closeDetails } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
@@ -13,8 +14,11 @@ const lifecycleTypes = new Set([
 export function isComputerLifecycle(type: string) {
   return lifecycleTypes.has(type);
 }
-export type ComputerControl = (z.infer<typeof takeoverRequestedDataSchema> & {
-  phase: 'requested' | 'pausing'; position: number; commandId: string; requestedAt: string;
+export type ComputerControl = (Omit<z.infer<typeof takeoverRequestedDataSchema>, 'reason'> & {
+  phase: 'requested' | 'pausing' | 'paused' | 'failed';
+  reason: 'requester_requested' | 'pause_timeout';
+  supervisorEpoch?: string; bridgeEpoch?: string;
+  position: number; commandId: string; requestedAt: string;
 }) | { phase: 'unverified'; position: number };
 export async function readComputerControl(store: Pick<EventStore, 'readStream'>,
   silo: string, assistantId: string, deadline = performance.now() + 10_000) {
@@ -71,7 +75,9 @@ function addComputer(summary: ComputerSummary, row: StoredEvent) {
     summary.control = { ...details, phase: 'requested', position: row.sequence,
       commandId: z.string().parse(row.event.commandId), requestedAt: row.event.time };
   }
-  if (type === 'takeover.pausing') addPausing(summary, row);
+  if (type === 'takeover.pausing' || type === 'takeover.paused' || type === 'takeover.failed') {
+    addControl(summary, row);
+  }
   // Keep old records paused. They contain no checked proof of writer closure.
   if (type === 'takeover.started' || type === 'takeover.ended') {
     summary.control = { phase: 'unverified', position: row.sequence };
@@ -80,17 +86,40 @@ function addComputer(summary: ComputerSummary, row: StoredEvent) {
   if (type === 'computer.claimed') summary.claim = row;
   if (type === 'computer.claimed' || type === 'computer.resumed') summary.grant = row;
 }
-function addPausing(summary: ComputerSummary, row: StoredEvent) {
-  const details = takeoverPausingDataSchema.parse(row.event.data);
+const controlSchemas = { pausing: takeoverPausingDataSchema, paused: takeoverPausedDataSchema,
+  failed: takeoverFailedDataSchema };
+function addControl(summary: ComputerSummary, row: StoredEvent) {
+  let phase: 'pausing' | 'paused' | 'failed' = 'pausing';
+  if (row.event.type === 'takeover.paused') phase = 'paused';
+  if (row.event.type === 'takeover.failed') phase = 'failed';
+  const parsed = controlSchemas[phase].safeParse(row.event.data);
+  const details = parsed.data;
   const control = summary.control;
-  if (!control || control.phase === 'unverified' || details.takeoverId !== control.takeoverId
+  if (!details || !control || control.phase === 'unverified'
+    || !validControlPhase(control, phase, details)
+    || details.takeoverId !== control.takeoverId
     || details.computerId !== control.computerId || details.assistantId !== control.assistantId
     || details.generation !== control.generation || details.podUid !== control.podUid
     || !sameAffectedTurns(details.affectedTurnIds, control.affectedTurnIds)) {
     summary.control = { phase: 'unverified', position: row.sequence };
   } else {
-    summary.control = { ...control, phase: 'pausing', position: row.sequence };
+    summary.control = { ...control, phase, position: row.sequence };
+    if ('reason' in details) {
+      summary.control.reason = details.reason;
+    }
+    if ('supervisorEpoch' in details) {
+      summary.control.supervisorEpoch = details.supervisorEpoch;
+      summary.control.bridgeEpoch = details.bridgeEpoch;
+    }
   }
+}
+function validControlPhase(control: Exclude<ComputerControl, { phase: 'unverified' }>,
+  phase: 'pausing' | 'paused' | 'failed', details: { generation: number; supervisorEpoch?: string }) {
+  if (phase === 'paused') {
+    return control.phase === 'pausing' && details.supervisorEpoch === control.supervisorEpoch;
+  }
+  if (phase === 'pausing') return control.phase === 'requested';
+  return control.phase === 'requested' || control.phase === 'pausing';
 }
 function sameAffectedTurns(first: string[], second: string[]) {
   const sortedFirst = [...first];

@@ -210,6 +210,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
       const desktopEnvironment = { ...process.env, NODE_OPTIONS: '' };
       const desktopOptions = { stdio: 'inherit' as const, env: desktopEnvironment };
       const desktop = spawn('/usr/bin/setpriv', desktopArgs, desktopOptions);
+      supervisor.desktopStarted(desktop.pid);
       watch(desktop, true);
       const bridgeArgs = ['--disable-sigusr1', '--experimental-strip-types', '/app/src/bridge.ts'];
       const bridgeEnvironment = {

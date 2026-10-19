@@ -82,7 +82,8 @@ export { mcpInstanceStartSchema, mcpInstanceStopSchema,
 
 export { budgetExhaustedDataSchema, budgetStopReasonSchema } from './data.ts';
 export { budgetCallDispatchAdmittedDataSchema } from './data.ts';
-export { takeoverRequestedDataSchema, takeoverPausingDataSchema } from './takeover.ts';
+export { takeoverRequestedDataSchema, takeoverPausingDataSchema,
+  takeoverPausedDataSchema, takeoverFailedDataSchema } from './takeover.ts';
 export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema }
   from './survey.ts';
 export { routineDefinitionSchema } from './routines.ts';

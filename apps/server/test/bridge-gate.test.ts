@@ -473,13 +473,14 @@ async function gateSigningDuringReplay() {
 it('waits for one in-flight gate when intent arrives during report replay',
   gateSigningDuringReplay);
 
-async function savesPausing() {
+async function savesPausing(phase: 'pausing' | 'paused') {
   const stops: StopInput[] = [];
   function stopExecution(input: StopInput) {
     stops.push(input);
     const { computerId: _computer, ...binding } = input;
     const receipt = { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
-      executionQuiet: true, executionInventory: [], quietProof: 'unavailable',
+      executionQuiet: true, executionInventory: [], desktopInventory: [],
+      quietProof: phase === 'paused' ? 'complete' : 'unavailable',
       controlEnabled: false };
     return Promise.resolve(receipt);
   }
@@ -488,11 +489,12 @@ async function savesPausing() {
   const link = await test.connect();
   async function pausing() {
     const control = await readComputerControl(test.store, test.silo, 'assistant');
-    return control?.phase === 'pausing';
+    await link.control.send();
+    return control?.phase === phase;
   }
   await until(pausing, 2000);
-  expect(stops).toEqual([{ computerId: 'computer', podUid: 'pod', generation: 1,
-    takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] }]);
+  expect(stops[0]).toEqual({ computerId: 'computer', podUid: 'pod', generation: 1,
+    takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] });
   await link.control.send();
   const rebuilt = computerSummary.empty();
   const types = [];
@@ -500,25 +502,25 @@ async function savesPausing() {
     computerSummary.add(rebuilt, row);
     types.push(row.event.type);
   }
-  expect(rebuilt.control?.phase).toBe('pausing');
-  expect(types).toEqual(['computer.claimed', 'computer.ready',
-    'takeover.requested', 'takeover.pausing']);
-  expect(stops).toHaveLength(1);
+  expect(rebuilt.control?.phase).toBe(phase);
+  const expected = ['computer.claimed', 'computer.ready', 'takeover.requested', 'takeover.pausing'];
+  if (phase === 'paused') expected.push('takeover.paused');
+  expect(types).toEqual(expected);
   await refusesLateWork(test.computer, link.socket);
 }
-it('saves pausing after a verified bridge gate and bound root stop, and replays without effects',
+it.each(['pausing', 'paused'] as const)('saves %s from bound proof and replays without effects',
   savesPausing);
 
 const badStops = [
   {}, { podUid: 'other' }, { generation: 2 }, { takeoverId: 'other' },
   { affectedTurnIds: [] }, { epoch: '' }, { executionQuiet: false },
-  { executionInventory: ['process'] }, { quietProof: 'complete' },
+  { executionInventory: ['process'] }, { quietProof: 'partial' },
   { controlEnabled: true }, { rawOutput: 'protected-process' },
 ];
 function stopped(input: StopInput, changes = {}) {
   const { computerId: _computer, ...binding } = input;
   return { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
-    executionQuiet: true, executionInventory: [], quietProof: 'unavailable',
+    executionQuiet: true, executionInventory: [], desktopInventory: [], quietProof: 'unavailable',
     controlEnabled: false, ...changes };
 }
 async function refusesStop(changes: Record<string, unknown>) {
@@ -540,8 +542,9 @@ async function refusesStop(changes: Record<string, unknown>) {
 }
 it.each(badStops)('keeps requested after an empty or forged supervisor result %j', refusesStop);
 
-async function recoversTransition(fault: string) {
+async function recoversTransition(fault: string, phase = 'pausing') {
   const stopping = Promise.withResolvers<void>();
+  const appendInterrupted = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let first = true;
   async function stop(input: StopInput) {
@@ -551,7 +554,8 @@ async function recoversTransition(fault: string) {
       first = false;
       throw new Error('protected-process');
     }
-    return stopped(input);
+    const quietProof = phase === 'paused' ? 'complete' : 'unavailable';
+    return stopped(input, { quietProof });
   }
   const test = await setup(true, stop);
   await test.save();
@@ -560,9 +564,9 @@ async function recoversTransition(fault: string) {
   const eventType = z.object({ type: z.string() });
   async function interruptedAppend(...args: Parameters<typeof append>) {
     const event = eventType.parse(args[0].event);
-    if (first && event.type === 'takeover.pausing') {
-      first = false;
+    if (first && event.type === `takeover.${phase}`) {
       if (fault === 'after') await append(...args);
+      appendInterrupted.resolve();
       throw new Error('Lost append reply');
     }
     return append(...args);
@@ -579,14 +583,23 @@ async function recoversTransition(fault: string) {
   }
   release.resolve();
   await link.control.settled();
-  const expected = before + Number(fault === 'changed' || fault === 'after');
+  if (phase === 'paused') {
+    function quietReceived() { return link.control.receipt?.type === 'bridge_quiet'; }
+    await until(quietReceived);
+    await link.control.send();
+    await link.control.settled();
+    await appendInterrupted.promise;
+  }
+  const expected = before + Number(phase === 'paused') + Number(fault === 'changed' || fault === 'after');
   expect(await test.store.head('computer-assistant')).toBe(expected);
   link.socket.terminate();
   await link.settled();
+  first = false;
   const reconnected = await test.connect();
   async function pausing() {
     const control = await readComputerControl(test.store, test.silo, 'assistant');
-    return control?.phase === 'pausing';
+    await reconnected.control.send();
+    return control?.phase === phase;
   }
   await until(pausing);
   await reconnected.control.settled();
@@ -594,7 +607,9 @@ async function recoversTransition(fault: string) {
   for await (const row of test.store.readStream('computer-assistant')) {
     if (row.event.type.startsWith('takeover.')) transitions.push(row.event.type);
   }
-  expect(transitions).toEqual(['takeover.requested', 'takeover.pausing']);
+  const expectedTransitions = ['takeover.requested', 'takeover.pausing'];
+  if (phase === 'paused') expectedTransitions.push('takeover.paused');
+  expect(transitions).toEqual(expectedTransitions);
   await refusesLateWork(test.computer, reconnected.socket);
 }
 it.each(['before', 'after', 'changed', 'stop'])(
@@ -665,7 +680,7 @@ async function stopsBeforeResume() {
   function accepted() { return reconnected.control.receipt !== undefined; }
   await until(accepted);
   await reconnected.control.settled();
-  expect(stops).toHaveLength(1);
+  expect(stops.length).toBeGreaterThan(1);
   expect(await readComputerControl(test.store, test.silo, 'assistant'))
     .toMatchObject({ phase: 'pausing' });
 }
@@ -706,3 +721,35 @@ it.each(badAcceptances)('refuses a forged or old acceptance %j before root stop'
   forgedAcceptance);
 it('refuses a replayed acceptance on a connection without saved intent',
   async function replayedAcceptance() { await refusesAcceptance({}, false); });
+
+async function recoversPaused(fault: string) {
+  await recoversTransition(fault, 'paused');
+}
+it.each(['before', 'after'])('recovers one paused event after %s append interruption',
+  recoversPaused);
+
+async function requiresCurrentQuiet(changes: Record<string, unknown> | undefined) {
+  function stop(input: StopInput) {
+    return Promise.resolve(stopped(input, { quietProof: 'complete' }));
+  }
+  const test = await setup(false, stop);
+  await test.save();
+  const pausing = {
+    ...test.ready, takeoverId: 'takeover', affectedTurnIds: ['first', 'second'],
+    bridgeEpoch: 'first-epoch', supervisorEpoch: 'supervisor-epoch',
+    executionProof: 'exited', quietProof: 'unavailable',
+  };
+  await test.append('computer-assistant', 'takeover.pausing', pausing);
+  const position = await test.store.head('computer-assistant');
+  const link = await test.connect();
+  const acceptance = { type: 'bridge_gated', takeoverId: 'takeover', generation: 1,
+    affectedTurnIds: ['first', 'second'], epoch: 'first-epoch' };
+  link.control.receive(acceptance);
+  await link.control.settled();
+  if (changes) link.control.receive(quiet(changes));
+  await link.control.settled();
+  expect(await test.store.head('computer-assistant')).toBe(position);
+}
+it.each([undefined, { epoch: 'old-epoch' }, { preparingTurnIds: ['first'] },
+  { runningTurnIds: ['first'] }, { loadedThreadIds: ['thread'] }, { heldApprovalIds: ['hold'] }])(
+  'requires current empty bridge proof before complete root proof %j', requiresCurrentQuiet);

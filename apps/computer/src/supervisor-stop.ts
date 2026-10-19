@@ -9,7 +9,7 @@ import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { body, json, record } from './http.ts';
-import { EXECUTION_UIDS, hasLiveExecutionTasks } from './execution-inventory.ts';
+import { EXECUTION_UIDS, hasLiveExecutionTasks, desktopInventory } from './execution-inventory.ts';
 
 const execute = promisify(execFile);
 const GATE_FILE = '/home/agent/supervisor/stopped.json';
@@ -96,7 +96,13 @@ export function supervisorStop() {
   let denied = existsSync(GATE_FILE);
   let gate: Gate | undefined;
   let stopping: Promise<void> | undefined;
+  let desktopQuiet: (() => boolean) | undefined;
   const sockets = new Set<Socket>();
+
+  function desktopStarted(pid: number | undefined) {
+    if (pid === undefined) throw new Error('Desktop unavailable');
+    desktopQuiet = desktopInventory(pid);
+  }
 
   function admit(socket: Socket) {
     if (denied) {
@@ -144,15 +150,16 @@ export function supervisorStop() {
     } finally {
       stopping = undefined;
     }
+    const quietProof = desktopQuiet?.() ? 'complete' : 'unavailable';
+    const desktopTasks = quietProof === 'complete' ? [] : 'unavailable';
     return { kind: 'executor_stop', ...gate, executionQuiet: true, executionInventory: [],
-      quietProof: 'unavailable', controlEnabled: false };
+      desktopInventory: desktopTasks, quietProof, controlEnabled: false };
   }
 
   async function receive(request: IncomingMessage, response: ServerResponse) {
     if (request.method !== 'POST' || request.url !== '/stop') throw new Error('Unknown request');
     const input = readStopRequest(await body(request));
     const receipt = await stop(input);
-    // Report only executor exit. Browser connections and queued input still need proof.
     json(response, receipt);
   }
 
@@ -166,5 +173,5 @@ export function supervisorStop() {
   const server = createServer(incoming);
   server.requestTimeout = 2000;
   server.listen(CONTROL_SOCKET);
-  return { admit };
+  return { admit, desktopStarted };
 }

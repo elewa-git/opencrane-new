@@ -28,4 +28,23 @@ const pausingExample = { assistantId: 'asst_1', computerId: 'computer_1', genera
 const pausing = event('takeover.pausing', 'computer',
   'The bridge denied work and the root supervisor confirmed executor exit. Control stays closed.',
   takeoverPausingDataSchema, pausingExample);
-export const takeoverEvents = [requested, pausing];
+export const takeoverPausedDataSchema = takeoverPausingDataSchema.omit({
+  executionProof: true,
+}).extend({ quietProof: z.literal('complete') }).strict();
+const { executionProof: _proof, ...pausedExample } = pausingExample;
+const completeExample = { ...pausedExample, quietProof: 'complete' as const };
+const paused = event('takeover.paused', 'computer',
+  'The bridge and root supervisor proved quiet. Work and control stay closed.',
+  takeoverPausedDataSchema, completeExample);
+export const takeoverFailedDataSchema = takeoverPausingDataSchema.omit({
+  bridgeEpoch: true, supervisorEpoch: true, executionProof: true, quietProof: true,
+}).extend({ reason: z.literal('pause_timeout'),
+  // Keep failures recordable when the request is too large for a signed gate.
+  affectedTurnIds: takeoverRequestedDataSchema.shape.affectedTurnIds }).strict();
+const { bridgeEpoch: _bridge, supervisorEpoch: _supervisor, quietProof: _quiet,
+  ...failedExample } = pausedExample;
+const timeoutExample = { ...failedExample, reason: 'pause_timeout' as const };
+const failed = event('takeover.failed', 'computer',
+  'The pause deadline expired. Work and control stay closed.',
+  takeoverFailedDataSchema, timeoutExample);
+export const takeoverEvents = [requested, pausing, paused, failed];

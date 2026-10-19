@@ -24,14 +24,14 @@ function requireSameTask(path: string, pid: string, started: string) {
   if (startTime(path, pid) !== started) throw new Error('Task identity changed');
 }
 
-function isLiveExecutionTask(status: string) {
+function isLiveTask(status: string, uids: readonly number[]) {
   const identities = /^Uid:[ \t]+(\d+)[ \t]+(\d+)[ \t]+(\d+)[ \t]+(\d+)[ \t]*$/mu.exec(status);
   if (!identities) throw new Error('Task identity unavailable');
   const state = /^State:[ \t]+([A-Zt])(?:[ \t]|$)/mu.exec(status)?.[1];
   if (!state) throw new Error('Task state unavailable');
   if (state === 'Z' || state === 'X') return false;
   for (const identity of identities.slice(1)) {
-    if (EXECUTION_UIDS.includes(Number(identity))) return true;
+    if (uids.includes(Number(identity))) return true;
   }
   return false;
 }
@@ -54,7 +54,10 @@ function requireSameMembers(directory: string, before: readonly string[]) {
   }
 }
 
-function hasLiveExecutionThread(directory: string, pid: string) {
+type AllowedTask = (path: string, pid: string, started: string, status: string) => boolean;
+
+function hasLiveThread(directory: string, pid: string, uids: readonly number[],
+  allowed?: AllowedTask) {
   const processStarted = startTime(directory, pid);
   const taskDirectory = `${directory}/task`;
   const threads = taskNumbers(taskDirectory);
@@ -63,7 +66,8 @@ function hasLiveExecutionThread(directory: string, pid: string) {
     const path = `${taskDirectory}/${thread}`;
     const threadStarted = startTime(path, thread);
     const status = fs.readFileSync(`${path}/status`, 'utf8');
-    const executing = isLiveExecutionTask(status);
+    const live = isLiveTask(status, uids);
+    const executing = live && !allowed?.(path, pid, processStarted, status);
     // Bind the status to one task even if its number is reused while we read it.
     requireSameTask(path, thread, threadStarted);
     if (executing) liveTask = true;
@@ -74,12 +78,44 @@ function hasLiveExecutionThread(directory: string, pid: string) {
   return liveTask;
 }
 
-export function hasLiveExecutionTasks(processRoot = '/proc') {
+function hasLiveTasks(processRoot: string, uids: readonly number[], allowed?: AllowedTask) {
   const processes = taskNumbers(processRoot);
   for (const pid of processes) {
     // Let every observation error refuse proof, including exits after seeing live work.
-    if (hasLiveExecutionThread(`${processRoot}/${pid}`, pid)) return true;
+    if (hasLiveThread(`${processRoot}/${pid}`, pid, uids, allowed)) return true;
   }
   requireSameMembers(processRoot, processes);
   return false;
+}
+
+export function hasLiveExecutionTasks(processRoot = '/proc') {
+  return hasLiveTasks(processRoot, EXECUTION_UIDS);
+}
+
+export function desktopInventory(launcherPid: number) {
+  const launcher = String(launcherPid);
+  const launcherPath = `/proc/${launcher}`;
+  const launcherStarted = startTime(launcherPath, launcher);
+
+  function allowed(path: string, pid: string, started: string, status: string) {
+    const processName = fs.readFileSync(`/proc/${pid}/comm`, 'utf8');
+    const name = processName.trim();
+    const parent = /^PPid:[ \t]+(\d+)[ \t]*$/mu.exec(status)?.[1];
+    if (!parent) throw new Error('Task parent unavailable');
+    if (pid === launcher) {
+      return started === launcherStarted && name === 'node';
+    }
+    if (parent === launcher && name === 'Xvnc') return true;
+    // Recognise only childless Node relays started outside the Pod's PID namespace.
+    const children = fs.readFileSync(`${path}/children`, 'utf8');
+    return parent === '0' && name === 'node' && children.trim() === '';
+  }
+
+  function quiet() {
+    requireSameTask(launcherPath, launcher, launcherStarted);
+    const unexpected = hasLiveTasks('/proc', [1002], allowed);
+    requireSameTask(launcherPath, launcher, launcherStarted);
+    return !unexpected;
+  }
+  return quiet;
 }

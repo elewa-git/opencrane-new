@@ -106,10 +106,11 @@ outgoing.end(process.argv[1]);
 `;
     const result = await computer.exec('node', '--input-type=module', '-e', request,
       JSON.stringify(binding));
+    const quietProof = uid === 1002 ? 'unavailable' : 'complete';
     const expected = { executionQuiet: true, executionInventory: [],
-      quietProof: 'unavailable', controlEnabled: false };
+      quietProof, controlEnabled: false };
     expect(JSON.parse(result)).toMatchObject(expected);
-    // Keep desktop automation outside the executor proof until browser closure is checked.
+    // Keep desktop automation alive and refuse complete proof while it remains.
     const inspect = `
 import { readFileSync } from 'node:fs';
 let live = false;

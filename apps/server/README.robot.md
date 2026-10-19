@@ -3017,7 +3017,7 @@ Production dispatch routes remain empty until the guarded destination is connect
 ## Signed bridge gate delivery (P3-17 PR 2d; Part of #58)
 
 `bridge-control.ts` sends one signed `bridge_gate` per connection after saved
-`takeover.requested` intent. `readComputerControl` must return `requested` or `pausing`, never
+`takeover.requested` intent. `readComputerControl` must return a verified phase, never
 `unverified`. The ready computer, generation and Pod UID must match. The sender
 checks the requester's membership again with `requireTurnMember`. Missing signing
 support, changed identity, removed membership or more than 64 affected turns sends
@@ -3052,7 +3052,7 @@ events or API replies. After bridge acceptance, root Pod exec calls the fixed lo
 supervisor socket. The server caps output at 16 KiB, ignores stderr and stops the
 transport after fifteen seconds. Strict receipt checks require the exact Pod,
 generation, takeover and affected turns, an epoch, an empty execution inventory,
-executor exit, unavailable full quiet proof and disabled control.
+executor exit, desktop inventory, a complete or unavailable quiet proof and disabled control.
 
 One conditional append saves `takeover.pausing` at the position read before `/stop`.
 A computer-stream change refuses that append. The next check reads current facts
@@ -3068,8 +3068,16 @@ reads for 2,300 ms and require a verified gate within two seconds, for both idle
 connected computers. They hold report replay, close a turn during signing and hold
 signing across replay completion. Each requires the gate before resume. Scripted
 replies cover forged receipts. Fresh-install qualification
-is NOT RUN. Paused/failure events, browser and queued input proof, saved hold
-cancellation, writer access, leases and full recovery remain later work. The access
+is NOT RUN. PR 2g adds strict paused/failure records and commands. Paused requires
+saved pausing, a current connection's empty bridge proof and a fresh complete root
+receipt with the saved supervisor epoch. Invalid or missing proof saves no pause.
+Both outcomes use the pausing command's deterministic id and read-back pattern;
+both block work. Failed is allowed only from requested or pausing, with reason
+`pause_timeout`. PR 2h will call it from the 30-second deadline runner, including
+when the bridge or computer is down; that runner and its race/clock/outage tests
+are deferred by the size split. PR 2h also cancels saved approvals and releases
+unadmitted reservations at zero through the existing commands, once.
+Writer access, leases and full recovery remain later work. The access
 checks are unchanged. `bridge-gate.test.ts` also covers refusal and lost append replies;
 `supervisor-stop.test.ts` checks real executor children and restart denial.
 

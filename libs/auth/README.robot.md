@@ -228,7 +228,10 @@ computer/generation/Pod, lease reference, affected turns and requested time.
 `readComputerControl` returns a copy after catching up with saved events. It is
 an internal reader; callers must check access before exposing any private fields.
 `takeover.pausing` advances a matching request and preserves its requester and
-command identity. A mismatched record becomes unverified and still refuses work.
+command identity and saves both epochs. `takeover.paused` requires pausing and the
+same supervisor epoch. `takeover.failed` requires requested or pausing. Both match
+the saved computer, generation, Pod, takeover and turns; mismatches become unverified.
+All these phases refuse work.
 Replay runs no stop or other outside action.
 Generation replacement preserves control until a later checked recovery contract.
 Old `takeover.started` and `takeover.ended` shapes become unverified control and

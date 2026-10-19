@@ -337,13 +337,13 @@ while (true) {
     expect(result).toContain('200\n');
     expect(result).toContain('"executionQuiet":true');
     expect(result).toContain('"controlEnabled":false');
-    expect(result).toContain('"quietProof":"unavailable"');
+    expect(result).toContain('"quietProof":"complete"');
     expect(await inventory(computer)).toBe('[]');
     const repeated = await control(computer);
     expect(repeated).toContain('"executionQuiet":true');
     await computer.restart();
     await expectAdmissionClosed(computer);
-    // Keep the desktop running because executor exit cannot prove browser input has drained.
+    // Keep viewing available after executor exit and desktop inventory checks.
     expect(await computer.exec('pgrep', '-x', 'Xvnc')).toMatch(/^\d+$/u);
   } finally {
     socket?.terminate();
@@ -430,3 +430,61 @@ else process.stdout.write('200\\n' + result.stdout);
   const request = { computerId: 'computer', ...attempt, ...changes };
   return computer.exec('node', '--input-type=module', '-e', helper, JSON.stringify(request));
 }
+
+async function preservesDesktop(child: boolean) {
+  const computer = await uploadComputer();
+  let viewer: Promise<string> | undefined;
+  try {
+    const script = `
+import { readFileSync, writeFileSync, watch } from 'node:fs';
+import { spawn } from 'node:child_process';
+import WebSocket from '/app/node_modules/ws/wrapper.mjs';
+const child = ${String(child)} ? spawn('node', ['-e', 'process.stdin.resume()']) : undefined;
+process.setgroups([]); process.setgid(1002); process.setuid(1002);
+const { viewer } = JSON.parse(readFileSync('/home/desktop/credentials.json', 'utf8'));
+const options = {
+  origin: 'http://opencrane.local',
+  headers: { authorization: 'Basic ' + Buffer.from('viewer:' + viewer).toString('base64') },
+};
+const socket = new WebSocket('ws://127.0.0.1:6901/websockify', 'binary', options);
+function opened() {
+  writeFileSync('/tmp/viewer-ready', String(process.pid));
+}
+function finish(_event, file) {
+  if (file !== 'viewer-end') return;
+  watcher.close();
+  socket.terminate();
+  child?.stdin.end();
+}
+socket.on('open', opened);
+const watcher = watch('/tmp', finish);
+`;
+    viewer = computer.exec('node', '--input-type=module', '-e', script);
+    await waitForFile(computer, '/tmp/viewer-ready');
+    const identities = `
+import { readdirSync, readFileSync } from 'node:fs';
+const found = [];
+for (const pid of readdirSync('/proc')) {
+  if (!/^\\d+$/.test(pid)) continue;
+  const status = readFileSync('/proc/' + pid + '/status', 'utf8');
+  if (!/Uid:\\s+1002\\s/.test(status)) continue;
+  const stat = readFileSync('/proc/' + pid + '/stat', 'utf8');
+  found.push([pid, stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]]);
+}
+console.log(JSON.stringify(found));
+`;
+    const before = await computer.exec('node', '--input-type=module', '-e', identities);
+    expect(JSON.parse(before)).toHaveLength(3);
+    const result = await control(computer);
+    const quietProof = child ? 'unavailable' : 'complete';
+    expect(result).toContain(`"quietProof":"${quietProof}"`);
+    expect(await computer.exec('node', '--input-type=module', '-e', identities)).toBe(before);
+    await expectAdmissionClosed(computer);
+  } finally {
+    await computer.exec('touch', '/tmp/viewer-end');
+    await viewer;
+    await computer.close();
+  }
+}
+it.each([false, true])('keeps launcher, Xvnc and open viewer identities, viewer has child: %s',
+  preservesDesktop, 60_000);
