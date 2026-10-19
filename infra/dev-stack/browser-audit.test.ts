@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { request, type Page } from 'playwright';
-import { assertPublishedAudit } from './browser-audit.ts';
+import { assertPublishedAudit, waitForPublishedEvent } from './browser-audit.ts';
 
 async function readsOlderPublication() {
   for (const published of [true, false]) {
@@ -48,3 +48,43 @@ async function readsOlderPublication() {
 }
 test('finds a publication behind newer grants and still refuses a missing publication',
   readsOlderPublication);
+
+async function waitsForLoadedHistory() {
+  let loaded = false;
+  let pageNumber = 1;
+  async function waitForHistory() {
+    loaded = true;
+  }
+  async function publicationCount() {
+    return loaded && pageNumber === 2 ? 1 : 0;
+  }
+  async function waitForPublication() {
+    assert.equal(await publicationCount(), 1, 'The publication is visible on the older page');
+  }
+  const publication = { count: publicationCount, waitFor: waitForPublication };
+  function firstPublication() {
+    return publication;
+  }
+  function getByText(text: string) {
+    if (text === 'History loaded') return { waitFor: waitForHistory };
+    assert.equal(text, 'mcp.server_published');
+    return { first: firstPublication };
+  }
+  async function olderCount() {
+    return loaded && pageNumber === 1 ? 1 : 0;
+  }
+  async function olderClick() {
+    assert(loaded);
+    pageNumber++;
+    loaded = false;
+  }
+  function getByRole() {
+    return { count: olderCount, click: olderClick };
+  }
+  const page = { getByText, getByRole } as unknown as Page;
+  await waitForPublishedEvent(page);
+  assert.equal(pageNumber, 2);
+  assert.equal(await publicationCount(), 1);
+}
+test('waits for history to load before checking publication and older pages',
+  waitsForLoadedHistory);

@@ -125,7 +125,7 @@ export async function assertPublishedAudit(owner: Page, origin: string) {
   assert.fail('Organisation history contains the saved MCP publication');
 }
 
-async function waitForPublishedEvent(page: Page): Promise<void> {
+export async function waitForPublishedEvent(page: Page): Promise<void> {
   const deadline = Date.now() + 60_000;
   const event = page.getByText('mcp.server_published', { exact: true }).first();
   while (Date.now() < deadline) {
