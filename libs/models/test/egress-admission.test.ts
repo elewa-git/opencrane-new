@@ -15,8 +15,8 @@ import { egressFixture } from './egress-fixture.ts';
 import { clientHello } from './egress-hello-fixture.ts';
 
 const destination = { host: 'registry.npmjs.org', port: 443 };
-async function setup(missing?: string, problem = 'missing') {
-  const facts = await fixture();
+async function setup(missing?: string, problem = 'missing', team = false) {
+  const facts = await fixture(2000, 20000, false, 'gpt-6-luna', team);
   // Allow the test services to drain before removing their temporary data.
   onTestFinished(facts.close.bind(facts), 30_000);
   await facts.stopDispatch();
@@ -230,8 +230,14 @@ async function changesDuringDispatchRetry(change: string) {
   const requestId = decodeJwt(bearer).jti!;
   const retry = await failingPublishStore(test.facts.nats.connection);
   const append = test.facts.nats.store.append.bind(test.facts.nats.store);
+  const register = test.gateway.registry.register.bind(test.gateway.registry);
   const registration = vi.spyOn(test.gateway.registry, 'register');
   onTestFinished(registration.mockRestore.bind(registration));
+  async function expiredRegistration(input: Parameters<typeof register>[0]) {
+    expireAuthority();
+    return register(input);
+  }
+  if (change === 'registration-deadline') registration.mockImplementation(expiredRegistration);
 
   async function changeAuthority() {
     expect(registration).not.toHaveBeenCalled();
@@ -254,12 +260,7 @@ async function changesDuringDispatchRetry(change: string) {
         task: 'chat_turn', status: 'completed' };
       await test.facts.append('computer-assistant', 'computer.turn_closed', closed);
     } else if (change === 'deadline') {
-      const now = performance.now.bind(performance);
-      function afterDeadline() {
-        return now() + 2100;
-      }
-      const clock = vi.spyOn(performance, 'now').mockImplementation(afterDeadline);
-      onTestFinished(clock.mockRestore.bind(clock));
+      expireAuthority();
     } else if (change === 'expiry') {
       const now = Date.now;
       function afterExpiry() {
@@ -294,17 +295,27 @@ async function changesDuringDispatchRetry(change: string) {
   expect.soft(response.status).toBe(403);
   expect.soft(await response.text()).toBe('{"reason":"egress_refused"}');
   expect.soft(response.headers.get('x-egress-relay')).toBeNull();
-  expect.soft(registration).not.toHaveBeenCalled();
+  if (change !== 'registration-deadline') expect.soft(registration).not.toHaveBeenCalled();
   const outcomes = await history(test.facts.nats.store, `egress-${requestId}`, 'test');
   expect(outcomes).toHaveLength(1);
   expect(outcomes[0]!.event.type).toBe('egress.observed');
   expect(outcomes[0]!.event.data).toMatchObject({ requestId, permitId: requestId,
     channel: 'command', outcome: 'error' });
 }
-it.each(['destination', 'turn', 'deadline', 'expiry', 'none'])(
+it.each(['destination', 'turn', 'deadline', 'registration-deadline', 'expiry', 'none'])(
   'rechecks %s after the real budget dispatch append retries', changesDuringDispatchRetry);
 
+function expireAuthority() {
+  const now = performance.now.bind(performance);
+  function afterDeadline() {
+    return now() + 2100;
+  }
+  const clock = vi.spyOn(performance, 'now').mockImplementation(afterDeadline);
+  onTestFinished(clock.mockRestore.bind(clock));
+}
+
 async function closeObservation(test: Awaited<ReturnType<typeof setup>>, bearer: string) {
+  await test.gateway.upstreamClosed();
   await test.gateway.runtime.flush();
   const rows = await history(test.facts.nats.store, `egress-${decodeJwt(bearer).jti!}`, 'test');
   expect(rows).toHaveLength(1);
@@ -316,8 +327,9 @@ async function callerReceipt() {
   const test = await setup();
   const bearer = await test.token();
   expect(await test.tunnel(bearer)).toBe(200);
+  expect(await closeObservation(test, bearer)).toMatchObject({
+    outcome: 'unknown', relay: { reason: 'finished' } });
   await test.gateway.runtime.close();
-  expect(await closeObservation(test, bearer)).toMatchObject({ outcome: 'unknown' });
   expect(await test.tunnel(bearer)).toBe(403);
   await test.gateway.restartRuntime();
   expect(await test.tunnel(bearer)).toBe(403);
@@ -327,19 +339,29 @@ async function callerReceipt() {
 it('saves one caller close through startup and refuses permit reuse across restart', callerReceipt);
 
 async function revokeLive(change: string) {
-  const test = await setup();
+  const test = await setup(undefined, 'missing', change === 'team');
   const bearer = await test.token();
   async function duringRelay(socket: import('node:net').Socket) {
-    const closed = once(socket, 'close');
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2000) });
     const started = performance.now();
     if (['silo', 'person', 'assistant-rule'].includes(change)) {
-      const scope = change === 'assistant-rule' ? 'assistant' : change;
-      const subjectId = scope === 'silo' ? 'test' : scope === 'person' ? 'alice' : 'assistant';
+      const scope = z.enum(['silo', 'person', 'assistant']).parse(
+        change === 'assistant-rule' ? 'assistant' : change);
+      const subjects = { silo: 'test', person: 'alice', assistant: 'assistant' };
+      const subjectId = subjects[scope];
       const rule = { ...destination, scope, subjectId };
-      const subject = egressGrantStream('test', rule as Parameters<typeof egressGrantStream>[1]);
+      const subject = egressGrantStream('test', rule);
       const expectedSequence = await test.facts.nats.store.head(subject);
-      await test.facts.append(subject, 'egress.destination_revoked',
-        { ...rule, changedBy: 'alice', expectedSequence });
+      const id = randomUUID();
+      const event = { id, commandId: id, subject, silo: 'test',
+        type: 'egress.destination_revoked', source: 'opencrane-server',
+        time: new Date().toISOString(), principal: { kind: 'human' as const, id: 'alice' },
+        correlation: {}, data: { ...rule, changedBy: 'alice', expectedSequence } };
+      expect(await test.facts.nats.store.append({ event, expectedSequence }))
+        .toMatchObject({ status: 'appended' });
+    } else if (change === 'team') {
+      await test.facts.append('team-sales', 'team.member_removed',
+        { teamId: 'sales', memberId: 'alice', removedBy: 'alice' });
     } else if (change === 'member') {
       await test.facts.append('member-alice', 'member.removed',
         { memberId: 'alice', removedBy: 'alice' });
@@ -357,8 +379,12 @@ async function revokeLive(change: string) {
       await test.facts.append('participation-conversation', 'conversation.closed',
         { conversationId: 'conversation', closedBy: 'alice' });
     } else {
-      await test.facts.actor.configure({ scope: 'assistant', scopeId: 'assistant',
-        ceilingCents: 0, setBy: 'alice' });
+      let scope: 'global' | 'paying_group' | 'assistant' = 'assistant';
+      if (change === 'silo-stop') scope = 'global';
+      if (change === 'group-stop') scope = 'paying_group';
+      const scopeId = scope === 'paying_group' ? 'personal-default' : 'assistant';
+      const subject = scope === 'global' ? {} : { scopeId };
+      await test.facts.actor.configure({ scope, ...subject, ceilingCents: 0, setBy: 'alice' });
     }
     await closed;
     expect(performance.now() - started).toBeLessThan(2000);
@@ -370,7 +396,7 @@ async function revokeLive(change: string) {
   expect(test.gateway.activeConnections()).toBe(0);
 }
 it.each(['silo', 'person', 'assistant-rule', 'member', 'assistant', 'generation', 'turn',
-  'conversation', 'spending'])('closes a live relay within two seconds after %s revocation', revokeLive);
+  'conversation', 'spending', 'group-stop', 'silo-stop', 'team'])('closes a live relay within two seconds after %s revocation', revokeLive);
 
 async function harmlessChange() {
   const test = await setup();
@@ -379,14 +405,13 @@ async function harmlessChange() {
   const read = test.facts.nats.store.readStream.bind(test.facts.nats.store);
   async function duringRelay(socket: import('node:net').Socket) {
     function track(subject: string, from?: number, deadline?: number, closes?: boolean) {
-      reads.push({ subject, from });
+      if (!subject.startsWith('budget-')) reads.push({ subject, from });
       return read(subject, from, deadline, closes);
     }
     const wrapped = vi.spyOn(test.facts.nats.store, 'readStream').mockImplementation(track);
     onTestFinished(wrapped.mockRestore.bind(wrapped));
     await test.facts.append('assistant-assistant', 'assistant.settings_changed',
-      { assistantId: 'assistant', changedBy: 'alice', changedFields: ['displayName'],
-        displayName: 'Harmless' });
+      { assistantId: 'assistant', changedBy: 'alice', changedFields: ['model'] });
     await test.facts.actor.configure({ scope: 'assistant', scopeId: 'other',
       ceilingCents: 0, setBy: 'alice' });
     const head = test.facts.nats.store.head.bind(test.facts.nats.store);
@@ -403,7 +428,11 @@ async function harmlessChange() {
     expect(socket.destroyed).toBe(false);
     expect(test.gateway.activeConnections()).toBe(1);
     expect(reads.length).toBeGreaterThan(0);
-    for (const row of reads) expect(row.from).toBeGreaterThan(1);
+    for (const row of reads) {
+      expect(row.from).toBeGreaterThan(1);
+      expect(row.subject.startsWith('conversation-')).toBe(false);
+      expect(row.subject.startsWith('computer-')).toBe(false);
+    }
   }
   expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
     duringRelay)).toBe(200);
@@ -414,7 +443,7 @@ async function gracefulRestart() {
   const test = await setup();
   const bearer = await test.token();
   async function duringRelay(socket: import('node:net').Socket) {
-    const closed = once(socket, 'close');
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2000) });
     await test.gateway.restartRuntime();
     await closed;
   }
@@ -440,9 +469,10 @@ async function retainedRecords() {
   expect(files).toHaveLength(1);
   const original = join(directory, files[0]!);
   await copyFile(original, join(directory, 'renamed.jsonl'));
-  const foreign = JSON.parse(await readFile(original, 'utf8')) as Record<string, unknown>;
+  const foreign = z.record(z.string(), z.unknown()).parse(
+    JSON.parse(await readFile(original, 'utf8')));
   foreign['silo'] = 'foreign';
-  await writeFile(join(directory, 'foreign.jsonl'), JSON.stringify(foreign));
+  await writeFile(join(directory, 'foreign.jsonl'), JSON.stringify(foreign), { mode: 0o600 });
   await test.facts.nats.restart();
   await test.gateway.restartRuntime();
   await closeObservation(test, bearer);

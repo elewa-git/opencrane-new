@@ -25,7 +25,7 @@ flowchart LR
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
+  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -82,6 +82,11 @@ make the verifier unavailable. A private licence checker then uses Syft, a tool 
 image packages, on those same verified bytes. It requires a separate review of the image's
 files and licence notices. Debian main exceptions apply only to reviewed OS layers.
 Neither checker admits an image or starts it; malware and vulnerability checks remain pending.
+
+The models process prepares private connection relays and records their closure.
+It checks access and spending again while a relay is open. Removing access ends it.
+Restart recovers saved closure records without reopening connections. Outside networking
+remains switched off while outage and crash handling await qualification.
 
 ## What it is responsible for
 

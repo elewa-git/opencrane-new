@@ -83,3 +83,5 @@ export { connectionCleanupHandler } from './connection-cleanup.ts';
 export { connectionCustodyFromFile } from './connection-custody-file.ts';
 
 export { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-https.ts';
+
+export { startEgress } from './egress-startup.ts';

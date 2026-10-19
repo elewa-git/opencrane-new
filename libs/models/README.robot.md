@@ -40,11 +40,11 @@ they do not prove that the remote application received or processed those bytes.
 Reasons are finished (socket ended), failed (transport error), refused (guard refusal),
 expired, revoked (explicit closure) or unavailable (explicit outage closure). The first close determines the record.
 The gateway fixture registers one relay after each allowed guarded CONNECT decision.
-Only the receipt tests enable receipt capture. Gateway routing tests keep their relay
-checks without adding receipt file and event writes.
+Production admission tests also run the startup receipt wiring. Routing-only tests
+keep their relay checks without adding receipt file and event writes.
 Own checks are in [the relay receipt](../../docs/process/p3-20-pr2c-relays.md).
 
-NOT BUILT: checked-set fallback or production wiring.
+NOT BUILT: checked-set fallback. Startup wiring is described below.
 Capabilities and admission rules are described below. Watchdogs remain later work.
 Durable closure receipts are described below.
 CONNECT stays off at startup. Fresh-install egress qualification remains NOT RUN.
@@ -75,8 +75,8 @@ append. The event parser requires the silo-derived id, stream and system/models 
 This is application validation; separate process NATS credentials remain #432.
 
 Tests use the pinned gateway, recording upstream, real NATS and PostgreSQL audit replay.
-Automatic outage detection, admission, capability binding, revocation wiring, restart
-scanning and native enablement remain later parts. The authorised original-receipt API
+Automatic outage detection and native enablement remain later parts. Admission,
+capability binding, revocation checks and restart scanning are described below. The authorised original-receipt API
 is deferred to keep this part below about 600 changed lines. The existing audit table
 rebuilds receipt ids and outcomes; richer safe connection detail reads are still deferred.
 Production CONNECT and command networking stay off. Fresh-install qualification: NOT RUN.
@@ -108,8 +108,7 @@ It also verifies tokens strictly; the gateway JWT check alone permits clock skew
 The fixture is not a production capability issuer or policy reader. Its optional
 relay registry tests the socket checks and closure described above.
 
-Remaining PR 2 work: startup and receipt-read wiring, access/turn/budget/outage
-changes to closure, watchdogs and open receipts. Durable close/outage receipts
+Remaining PR 2 work: authorised receipt reads, outage watchdogs and open receipts. Durable close/outage receipts
 are described above. The binary removes raw Host before extAuthz;
 authority/Host disagreement still needs proof or the accepted broker fallback.
 The first routing-only receipt did not cover DNS or TLS checks. Open-tunnel expiry
@@ -2661,13 +2660,12 @@ rereads a whole conversation. A changed authority, expired pass or missed deadli
 returns the fixed `egress_refused` response without registering a relay. The existing
 `egress.observed` error outcome closes the saved zero-cost dispatch. It has no relay
 fields because no listener was registered. A failed outcome save still refuses access.
-The last check before registration is the authority boundary; the relay's own
-60-second capability cap covers changes after that point.
+After registration, periodic checks use the same admission rules. The relay also
+keeps its original expiry; it never renews a permit.
 
 Tests use real NATS, PostgreSQL, OpenFGA and the pinned gateway with a recording
 upstream. The initial failing test is in commit `98ba6b80`.
-Startup wiring, authorised receipt reads, revocation closure/watchdogs and live
-qualification remain deferred. CONNECT and command-worker networking stay off.
+Authorised receipt reads, outage watchdogs and live qualification remain deferred. CONNECT and command-worker networking stay off.
 
 ## Automatic connection cleanup
 
@@ -2825,3 +2823,34 @@ Regression checks also remove six guards one at a time: queued access refresh,
 allowance preload and renewal, root-turn forwarding at dispatch and retry, and
 single admission after a lost reply. Each removal fails its targeted test at the
 expected assertion. The guards are restored for the passing runs.
+
+## Relay startup and revocation checks (Part of #61)
+
+`startEgress` creates `MODEL_STATE_DIR/egress` with mode 0700 and refuses an existing
+non-directory or wider permissions with `egress_directory_refused`. Each retained
+close record is checked against its silo-derived filename and existing receipt checks,
+then retried once. Invalid files stay in place and produce only `egress_receipt_refused`.
+Registration prepares one receipt before listening. Closing captures the record through
+that receipt. Shutdown closes all relays as unavailable and waits up to two seconds
+for receipt saves. Restart scans evidence only; it never registers a relay.
+
+Each relay checks every 500 ms, with no overlapping check. It retains its admitted
+claims and the histories and positions of the exact member, assistant, team and three
+destination streams. Later checks read their heads and new events only. They reuse
+admission checks under a fresh two-second authority fence. Turn and generation changes
+use the original `approvalActivity.confirm` tails; conversation history is never reloaded.
+Saved spending stops use `requireBudget` on the actor state, without a reservation.
+Harmless settings changes and unrelated assistants' stops leave the relay open.
+
+Scope cutoff: items 1–2 only. The next part must add an independent outage watchdog,
+classify unavailable dependencies separately from revocation, check actor availability,
+and retry pending receipts after recovery without restarting. A stalled check currently
+waits for its dependency; its deadline alone cannot guarantee two-second outage closure.
+Crash markers and the authorised receipt read follow in 2g. No live egress capability is
+claimed: `models-main.ts` still supplies no `egressDecisionUrl`, so CONNECT stays off.
+
+Own checks use real NATS, PostgreSQL, OpenFGA and the pinned gateway. Tests cover each
+of the three destination revocations, member removal, assistant inactivity, ended turns,
+conversation closure, changed generation, spending stops, harmless updates, narrow reads,
+private directories, retained-file refusal, restart deduplication and permit reuse.
+Fresh-install qualification and the deferred outage watchdog: NOT RUN.

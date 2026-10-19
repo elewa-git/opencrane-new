@@ -1,0 +1,1 @@
+- Prepare private connection relays in the models process, recover saved closure records after restart, and close relays when access or spending permission ends. Gateway CONNECT and command-worker networking remain off; outage watchdogs and crash reconciliation remain later work.

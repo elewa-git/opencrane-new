@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';
 import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
-import { providerSecrets, BudgetActor, startDecision, startGateway,
+import { providerSecrets, BudgetActor, startDecision, startGateway, startEgress,
   ingestUsage, managedProviderCallsEnabled, mcpDispatchRouteSchema, mcpCatalogueWatch,
   gatewayConfigurationWorker
 } from '@opencrane/models';
@@ -131,9 +131,17 @@ try {
     }
     const dispatchOptions = { acknowledged, routes: mcpRoutes, requireLeader: requireDispatchLeader,
       requireCatalogue: watch.requireCurrent };
+    function egressReceiptRefused() {
+      logger.error('egress_receipt_refused');
+    }
+    const egress = await startEgress(events.store, silo, directory, egressReceiptRefused);
+    function closeRelays() {
+      egress.registry.closeAll('unavailable');
+    }
+    stop.signal.addEventListener('abort', closeRelays, { once: true });
     const decisionPort = Number(required('MODEL_DECISION_PORT'));
     const decision = await startDecision(actor, identity, binding, decisionPort,
-      keys, verification, dispatchOptions);
+      keys, verification, dispatchOptions, egress.registry);
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
     function configurationFailed(error: unknown) {
       const errorName = error instanceof Error ? error.name : typeof error;
@@ -190,6 +198,8 @@ try {
         await delay(100, undefined, { signal: stop.signal });
       }
     } finally {
+      stop.signal.removeEventListener('abort', closeRelays);
+      await egress.close();
       watch.close();
       await configurationWorker?.close();
       await gateway?.stop();

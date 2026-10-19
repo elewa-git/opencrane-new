@@ -47,6 +47,7 @@ export async function egressFixture(enabled = true, guarded = false,
     authority: string | string[] | undefined }[] = [];
   const permit = randomUUID();
   const sockets = new Set<Socket>();
+  const upstreamEnd = Promise.withResolvers<void>();
   const order: string[] = [];
 
   function recordSocket(socket: Socket) {
@@ -59,6 +60,7 @@ export async function egressFixture(enabled = true, guarded = false,
     }
     function removeSocket() {
       sockets.delete(socket);
+      upstreamEnd.resolve();
     }
     socket.on('data', recordBytes);
     socket.on('close', removeSocket);
@@ -276,6 +278,8 @@ export async function egressFixture(enabled = true, guarded = false,
     if (!production) throw new Error('Production fixture required');
     await productionDecision?.close();
     await runtime?.close();
+    production.actor = new BudgetActor(production.actor.store, production.actor.silo);
+    await production.actor.start();
     runtime = await startEgress(production.actor.store, production.actor.silo, directory,
       recordStartupFailure, transport);
     registry = runtime.registry;
@@ -297,11 +301,14 @@ export async function egressFixture(enabled = true, guarded = false,
     await nats.close();
     await rm(directory, { recursive: true, force: true });
   }
+  function upstreamClosed() {
+    return upstreamEnd.promise;
+  }
   function activeConnections() {
     return sockets.size;
   }
   return { token, tunnel, actor, order, port, decisionUrl, controlRequests, decisionDown,
-    registry, closeRecords, permit, restartRuntime, get runtime() { return runtime!; }, activeConnections, receipt, restartReceipt,
+    registry, closeRecords, permit, restartRuntime, upstreamClosed, get runtime() { return runtime!; }, activeConnections, receipt, restartReceipt,
     store: nats.store, directory, connection: nats.connection, restartStore,
     received: () => received, connected: () => connected, authorised: () => authorised,
     scenario(value: EgressScenario) { scenario = value; },
