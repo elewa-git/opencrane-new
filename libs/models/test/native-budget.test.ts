@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { request, type IncomingMessage } from 'node:http';
+import { request, IncomingMessage } from 'node:http';
 import { once } from 'node:events';
 import { z } from 'zod';
 import { tokenVerifier } from '@opencrane/auth';
@@ -15,7 +15,7 @@ import { fixture } from './fixture.ts';
 type Context = Awaited<ReturnType<typeof setup>>;
 const start = { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
   turnId: 'native-root', threadId: 'native-thread', requesterId: 'alice', task: 'chat_turn',
-  payingGroupId: 'personal-default', executionMode: 'memory_free', model: 'gpt-5.6-sol',
+  payingGroupId: 'personal-default', executionMode: 'memory_free', model: 'gpt-5.5-pro',
   providerId: 'provider', bindingSequence: 1 };
 const allowance = { requesterId: 'alice', conversationId: 'conversation', turnId: start.turnId,
   threadId: start.threadId, assistantId: 'assistant', computerId: 'computer', generation: 1,
@@ -75,13 +75,13 @@ function claims(context: Context, binding: ReturnType<typeof child>) {
 }
 async function reserve(context: Context, binding: ReturnType<typeof child>, cents: number | string,
   store = context.nats.store, actor = context.actor) {
+  const raw = typeof cents === 'string' ? cents : JSON.stringify(bodyForCents(cents));
   const checked = await context.credentials.check(context.headers);
   const turn = parseTurnToken(claims(context, binding));
   const computer = { assistant: 'assistant', computer: 'computer', generation: 1 };
   const started = performance.now();
   return reserveNativeCall(actor, store, context.binding, computer, turn,
-    checked.sequence, started, started + 2000,
-    typeof cents === 'string' ? cents : JSON.stringify(bodyForCents(cents)));
+    checked.sequence, started, started + 2000, raw);
 }
 async function refusedRoute(context: Context, binding: ReturnType<typeof child>, url: string,
   expected: string) {
@@ -186,7 +186,7 @@ async function racesCapacity() {
     const recovered = new BudgetActor(context.store, 'test', context.actor.now);
     await recovered.start();
     expect(rootTotals(recovered.state, context.root.rootId)).toEqual(totals);
-    await expect(reserve(context, first, 2, context.store, recovered)).rejects.toThrow();
+    await expect(reserve(context, first, 10, context.store, recovered)).rejects.toThrow();
     expect(rootTotals(recovered.state, context.root.rootId)).toEqual(totals);
     expect(recovered.state.dispatches).toHaveLength(0);
     expect(context.received()).toBe(0);
@@ -297,9 +297,13 @@ async function checksRequestCost() {
       { ...body, max_output_tokens: 15 }, { ...body, max_output_tokens: 2001 },
       { ...body, extra: 'private-value' }];
     for (const requestBody of invalid) {
-      await expect(reserve(context, binding, JSON.stringify(requestBody))).rejects.toThrow();
+      await expect(reserve(context, binding, JSON.stringify(requestBody)))
+        .rejects.toThrow(/^Descendant request refused$/u);
       expect(await context.store.head('budget-test')).toBe(position);
     }
+    await expect(reserve(context, binding, 'private malformed JSON'))
+      .rejects.toThrow(/^Descendant request refused$/u);
+    expect(await context.store.head('budget-test')).toBe(position);
     const narrow = child(context, 'unscoped');
     narrow.scopes.models = [];
     await admit(context, narrow);
@@ -322,7 +326,7 @@ function dispatch(context: Context, id: string) {
   function matches(row: Context['actor']['state']['reservations'][number]) {
     return row.id === id;
   }
-  return { callId: id, reservationId: id, rootId: context.root.rootId,
+  return { callId: id, decisionId: id, reservationId: id, rootId: context.root.rootId,
     bodyDigest: '0'.repeat(64), modelCall: hold!.call };
 }
 async function checksNativeDispatch(change: string) {
@@ -359,7 +363,8 @@ async function checksNativeDispatch(change: string) {
     const original = context.actor.store.append.bind(context.actor.store);
     async function append(command: Parameters<typeof original>[0]) {
       const result = await original(command);
-      if (command.event.type === 'budget.call_dispatch_admitted') {
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'budget.call_dispatch_admitted') {
         throw new Error('Lost admission reply');
       }
       return result;
@@ -429,8 +434,10 @@ async function checksAllowanceRead(stop: boolean) {
   const context = await setup();
   try {
     const binding = child(context, 'allowance');
+    const computerPosition = await context.store.head('computer-assistant');
     let checking = false;
     let preloaded = false;
+    let grantsLoaded = false;
     const originalRead = context.store.readStream.bind(context.store);
     const originalHead = context.store.head.bind(context.store);
     async function* readStream(...args: Parameters<typeof originalRead>) {
@@ -439,9 +446,10 @@ async function checksAllowanceRead(stop: boolean) {
         else preloaded = true;
       }
       yield* originalRead(...args);
+      if (args[0] === grantStream('model', start.model)) grantsLoaded = true;
     }
     async function head(...args: Parameters<typeof originalHead>) {
-      if (args[0] === 'member-alice' && !checking) {
+      if (args[0] === undefined && grantsLoaded && !checking) {
         checking = true;
         expect(preloaded).toBe(true);
         if (stop) {
@@ -460,6 +468,9 @@ async function checksAllowanceRead(stop: boolean) {
     expect(checking).toBe(true);
     const rows = await history(context.nats.store, `delegation-${binding.delegationId}`, 'test');
     expect(rows).toHaveLength(stop ? 0 : 1);
+    if (stop) {
+      expect(await context.store.head('computer-assistant')).toBe(computerPosition);
+    }
   } finally {
     vi.restoreAllMocks();
     await close(context);
@@ -483,7 +494,8 @@ async function refusesWithoutReadingBody() {
     outgoing.flushHeaders();
     // Wait for refusal before sending any of the declared, valid body.
     const result: unknown[] = await responseReady;
-    const response = result[0] as IncomingMessage;
+    const response = result[0];
+    if (!(response instanceof IncomingMessage)) throw new Error('Unexpected response');
     const chunks: Buffer[] = [];
     for await (const chunk of response) {
       const bytes: unknown = chunk;
@@ -500,3 +512,36 @@ async function refusesWithoutReadingBody() {
   }
 }
 it('refuses a valid native route before reading any body bytes', refusesWithoutReadingBody);
+
+async function recoversNativeRootTurn() {
+  const context = await setup();
+  try {
+    const binding = child(context, 'retry');
+    await admit(context, binding);
+    const call = { ...rootCall, requestId: 'original', contextDigest: binding.delegationId,
+      turnId: binding.turnId, threadId: binding.threadId };
+    const retry = { retryDigest: '1'.repeat(64), bodyDigest: '2'.repeat(64) };
+    const id = await context.actor.reserve(call, 1, fresh, undefined,
+      context.root.rootId, retry, rootTurn);
+    const again = { ...call, requestId: 'replacement' };
+    expect(await context.actor.reserve(again, 1, fresh, undefined,
+      context.root.rootId, retry, rootTurn)).toBe(id);
+    expect(context.actor.state.reservations).toHaveLength(1);
+    expect(context.actor.state.reservations[0]?.call.requestId).toBe('original');
+    const changed = { ...dispatch(context, id), callId: 'original' };
+    await expect(context.actor.admitDispatch(changed, fresh, undefined, rootTurn))
+      .rejects.toThrow('Reservation binding changed');
+    expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(1);
+    for (const patch of [{ payingGroupId: 'changed' }, { priceTableId: 'changed' },
+      { contextDigest: '3'.repeat(64) }]) {
+      const altered = { ...again, ...patch };
+      await expect(context.actor.reserve(altered, 1, fresh, undefined,
+        context.root.rootId, retry, rootTurn)).rejects.toThrow('Model call retry refused');
+      expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(1);
+    }
+  } finally {
+    await close(context);
+  }
+}
+it('keeps the native root turn on actor retry and refuses changed bindings without release',
+  recoversNativeRootTurn);

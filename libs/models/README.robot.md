@@ -227,8 +227,8 @@ Spending history loads before the short access check; later confirmations read
 only new events. No conversation stream is added to the authority check.
 
 `reserveNativeCall` is an internal operation with no HTTP route or production caller.
-Its inputs are already verified computer/turn claims and a server-computed call bound
-in integer cents. It repeats the saved-record and current-access checks used by the
+Its inputs are already verified computer/turn claims and the raw request body.
+It computes the call bound in integer cents and repeats the access checks used by the
 HTTP refusal path, then uses the budget actor's existing queue. The actor accepts the
 checked root turn/thread separately and retains the child's identity on the hold.
 It checks access before capacity, so stale access cannot create an exhaustion stop.
@@ -242,10 +242,10 @@ Settlement tests cover 300/200 holds settling at 180/120, duplicate settlement,
 release of an unsent 90, retention of an unknown 110 and fresh-actor replay.
 
 Scope is PARTIAL: this is the saved allowance and internal capacity part of row 2.
-Native request-cost calculation, trusted call/body binding, dispatch, token minting,
-authenticated bridge evidence and the remaining restart/Stop races are deferred.
-The current dispatch gate cannot send these native holds. Both multi_agent settings
-and native credential issuance remain off. Fresh-install qualification: NOT RUN.
+Trusted call/body binding, token minting, authenticated bridge evidence and the
+remaining restart/Stop races are deferred. Internal request-cost and root dispatch
+checks are described below. Both multi_agent settings and native credential issuance
+remain off. Fresh-install qualification: NOT RUN.
 
 ## Budget writes
 
@@ -2793,3 +2793,34 @@ an MCP session; only Content-Type is forwarded. Errors return fixed 502/504 resp
 The whole HTTPS exchange has a 30-second deadline and never retries or follows redirects.
 After start saving, remote failures leave the outcome unknown. Authenticated adapter
 observations are deferred to 5b. No events are added. Fresh-install qualification: NOT RUN.
+## Native request cost and dispatch (P4-11 PR 2g; Part of #93)
+
+`reserveNativeCall` takes the raw body instead of caller cents. It uses the strict
+request schema shared with `decision.ts`, requires the turn model within the saved
+scopes, and computes `requestReservationCents` before asking the actor for a hold.
+Invalid JSON, extra fields, another model, n other than 1 and output bounds outside
+16–2,000 refuse before any budget event. The schema's behaviour is unchanged.
+
+The actor's internal reservation recovery and dispatch methods accept the checked
+root turn separately from the child's turn. Native checks require `fresh()` before
+checking capacity. Dispatch checks Stop and exhaustion on that root, saves one
+admission, and keeps an admitted hold after a lost reply. Refused unsent holds use
+`appendNotDispatched` to settle at zero. No new event or wire field is added.
+
+Tests use disposable NATS, PostgreSQL and OpenFGA. They cover computed cost, strict
+body refusal, one dispatch including lost replies, Stop, the 240/110/400/300 example,
+queued revocation without stopping the root, mandatory fresh access, allowance
+preload before the short access check and another writer's Stop during confirmation.
+The route test withholds a valid body until the disabled response arrives.
+
+PARTIAL: part 2h must connect native calls to `grantModelCall` using the saved root
+and root turn. That includes exact body/retry identity, request-id and decision
+recovery, competing replicas and changed-binding refusal. This internal hold helper
+still allocates a new hold per invocation; no production route calls it.
+Native token minting, both `multi_agent=false` settings and the refusal before body
+reading remain unchanged. Row 3 owns enablement. Fresh-install qualification: NOT RUN.
+
+Regression checks also remove six guards one at a time: queued access refresh,
+allowance preload and renewal, root-turn forwarding at dispatch and retry, and
+single admission after a lost reply. Each removal fails its targeted test at the
+expected assertion. The guards are restored for the passing runs.

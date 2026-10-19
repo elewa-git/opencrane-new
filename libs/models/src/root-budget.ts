@@ -187,11 +187,11 @@ export async function checkRootReservation(state: BudgetState, call: ModelCall,
 export async function checkRootDispatch(state: BudgetState,
   input: z.infer<typeof budgetCallDispatchAdmittedDataSchema>, now: Date,
   fresh: () => Promise<void>, append: Append, release: (id: string) => Promise<void>,
-  admittedAt: number | undefined) {
+  admittedAt: number | undefined, rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>) {
   // Order Stop and dispatch in the actor queue, after checking current access.
   try {
     return await checkRootGrant(state, input.modelCall, input.rootId, now, fresh,
-      append, admittedAt);
+      append, admittedAt, rootTurn);
   } catch (error) {
     // Release only through the existing proof that no send or usage was recorded.
     if (input.reservationId !== undefined) {
@@ -203,13 +203,13 @@ export async function checkRootDispatch(state: BudgetState,
 
 export async function checkRootGrant(state: BudgetState, call: ModelCall,
   rootId: string | undefined, now: Date, fresh: (() => Promise<void>) | undefined, append: Append,
-  admittedAt: number | undefined) {
-  const turnRoot = turnRootId(state, call.conversationId, call.turnId);
+  admittedAt: number | undefined, rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>) {
+  const turnRoot = turnRootId(state, call.conversationId, rootTurn?.turnId ?? call.turnId);
   if (rootId === undefined && turnRoot === undefined) {
     return admittedAt;
   }
   await fresh?.();
-  const root = await checkRootReservation(state, call, rootId, 0, append);
+  const root = await checkRootReservation(state, call, rootId, 0, append, rootTurn, fresh);
   let stopId = budgetStopId(state, call, now, root?.position);
   if (stopId === undefined) {
     const reasons = exceededReasons(state, call, now, 0);

@@ -8,7 +8,8 @@ import { decisionActivity } from './decision-activity.ts';
 import { requireCurrentComputer, requireTurnDelegation } from './turn-binding-check.ts';
 import type { parseTurnToken } from './decision-turn-token.ts';
 import type { BudgetActor } from './actor.ts';
-import { priceTableId } from './state.ts';
+import { priceTableId, requestReservationCents } from './state.ts';
+import { requestSchema } from './model-request.ts';
 
 type Computer = { assistant: string; computer: string; generation: number };
 type SignedTurn = ReturnType<typeof parseTurnToken>;
@@ -99,10 +100,15 @@ async function prepareNativeCall(store: EventStore, access: Binding, computer: C
 /** Hold a server-computed call bound without issuing a token or permission to send. */
 export async function reserveNativeCall(actor: BudgetActor, store: EventStore, access: Binding,
   computer: Computer, turn: SignedTurn, computerSequence: number, started: number,
-  deadline: number, amountCents: number) {
+  deadline: number, raw: string) {
   if (actor.silo !== access.silo) {
     throw new Error('Descendant claim refused');
   }
+  const body = nativeRequest(raw);
+  if (body.model !== turn.model) {
+    throw new Error('Descendant request refused');
+  }
+  const amountCents = requestReservationCents(body);
   const { binding, fresh } = await prepareNativeCall(store, access, computer, turn,
     computerSequence, started, deadline);
   const call = { model: binding.model!, priceTableId, providerId: binding.providerId,
@@ -113,4 +119,13 @@ export async function reserveNativeCall(actor: BudgetActor, store: EventStore, a
     contextDigest: binding.delegationId };
   const rootTurn = { turnId: binding.rootTurnId, threadId: binding.rootThreadId };
   return actor.reserve(call, amountCents, fresh, undefined, binding.rootId, undefined, rootTurn);
+}
+
+function nativeRequest(raw: string) {
+  try {
+    return requestSchema.parse(JSON.parse(raw));
+  } catch {
+    // Keep request contents out of errors, including malformed JSON and extra fields.
+    throw new Error('Descendant request refused');
+  }
 }
