@@ -2547,7 +2547,8 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     function noReply() { return undefined; }
     if (mode === 'deadline') {
       remote.respond(noReply);
-      vi.spyOn(globalThis, 'setTimeout').mockImplementation(captureDeadline as typeof timer);
+      const replacement = Object.assign(captureDeadline, timer);
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation(replacement);
     }
     if (mode === 'permit_timeout') await pause(1500);
     const canaries = { host: 'caller.example.test', authorization: 'CANARY',
