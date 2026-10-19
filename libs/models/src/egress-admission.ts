@@ -215,12 +215,15 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     await actor.admitDispatch(dispatch, confirm, work.admittedAt);
     // Recheck after append retries, within the original deadline. This is the last
     // authority check before registration; the relay's 60-second cap applies afterwards.
-    try {
-      await confirm();
-    } catch (error) {
-      await recordRefusedDispatch(actor, checked);
-      throw error;
+    async function confirmRegistration() {
+      try {
+        await confirm();
+      } catch (error) {
+        await recordRefusedDispatch(actor, checked);
+        throw error;
+      }
     }
+    await confirmRegistration();
     async function recheck() {
       const subjects = [...access.positions.keys()];
       const started = performance.now();
@@ -239,15 +242,9 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
         }
       }
     }
-    const registration = { recheck, confirm, permitId: requestId, host: checked.host, port: checked.port,
+    const registration = { recheck, confirm: confirmRegistration, permitId: requestId, host: checked.host, port: checked.port,
       expiresAt: checked.exp * 1000 };
-    let relay: string;
-    try {
-      relay = await registry.register(registration);
-    } catch (error) {
-      await recordRefusedDispatch(actor, checked);
-      throw error;
-    }
+    const relay = await registry.register(registration);
     res.setHeader('x-egress-relay', relay);
     res.end();
   } catch (error) {
