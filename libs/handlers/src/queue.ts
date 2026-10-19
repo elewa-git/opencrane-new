@@ -238,12 +238,14 @@ export class HandlerRuntime {
     async function perform() {
       await database.transaction(transactionWork);
     }
-    if (handler.name === 'cleanup-memory') {
+    if (handler.name === 'cleanup-memory' || handler.name === 'cleanup-connection') {
       // Keep custody errors out of logs and the job queue's saved error output.
       try {
         await perform();
       } catch {
-        throw new Error('Memory cleanup attempt failed');
+        const failure = handler.name === 'cleanup-memory'
+          ? 'Memory cleanup attempt failed' : 'Connection cleanup attempt failed';
+        throw new Error(failure);
       }
       return;
     }

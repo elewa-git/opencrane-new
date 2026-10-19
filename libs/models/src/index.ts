@@ -79,3 +79,5 @@ export { gatewayConfigurationWorker } from './gateway-configuration-worker.ts';
 
 export { foldMemoryContext, type MemoryContextState } from './memory-context-fold.ts';
 export { LoadedMemoryRefused, prepareLoadedMemory } from './loaded-memory.ts';
+export { connectionCleanupHandler } from './connection-cleanup.ts';
+export { connectionCustodyFromFile } from './connection-custody-file.ts';

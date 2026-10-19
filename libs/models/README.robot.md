@@ -1867,8 +1867,9 @@ The fixtures use real NATS, OpenFGA and PostgreSQL. Custody stays behind a test 
 ## Staged connection candidate cleanup (P3-8 PR 3b, Part of #49)
 
 `reconcileConnectionStage(store, db, custody, stage)` checks one supplied private stage.
-It returns only `retained` or `deleted`. It is an internal live maintenance entry point;
-no timer, event reaction or replay path calls it. It performs no provider call or release.
+It returns `retained`, `deleted`, or `absent` for a saved generation no longer in custody.
+The live connection cleanup reaction calls it. Replay never calls it, and it performs
+no provider call or release.
 
 Saving and cleanup both use `withConnectionStage` with the same silo/member/server/profile
 lock name. The existing PostgreSQL advisory lock waits at most 100 ms for acquisition.
@@ -1890,8 +1891,9 @@ preconditions. A conflict, missing record or failed read returns `retained`, wit
 copying dependency errors or adopting a replacement identity.
 
 This is the first bounded cleanup part under the approximately 600-line review target.
-Automatic revoke/rotation reactions and tracking future active credential injections
-remain planned. Bounded scanning and journal reconstruction are described below. The caller must
+Automatic revoke/rotation reactions are described below. Credential injection remains
+planned and must share the cleanup lock. Bounded scanning and journal reconstruction
+are described below. The caller must
 supply a trusted private stage, never browser input. All credentialed routes stay closed.
 
 P3-8 PR 3c adds the strict `connection.operation_closed` event. Its id hashes silo, subject,
@@ -2586,7 +2588,7 @@ Malformed objects or stage annotations stay in storage and are excluded from the
 examined count. Healthy neighbours are still checked and the continuation is preserved.
 An unknown page result must be retried with the same continuation. An expired Kubernetes
 continuation requires a new pass; duplicate checks are harmless. No timer, command,
-HTTP route or replay path calls this entry point yet.
+HTTP route or replay path calls this entry point yet. Automatic startup scanning remains deferred.
 
 New stages carry their complete stage details in a private Secret annotation. The
 existing HMAC check verifies these details before using them to find the profile.
@@ -2666,3 +2668,24 @@ Tests use real NATS, PostgreSQL, OpenFGA and the pinned gateway with a recording
 upstream. The initial failing test is in commit `98ba6b80`.
 Startup wiring, authorised receipt reads, revocation closure/watchdogs and live
 qualification remain deferred. CONNECT and command-worker networking stay off.
+
+## Automatic connection cleanup
+
+`connectionCleanupHandler` subscribes to saved owner revocations and bearer rotations.
+It verifies the exact trigger against profile history and sends each superseded saved
+activation to `reconcileConnectionStage`. It never calls the provider or releases material.
+A confirmed activation occupies its append position, so its superseded material can be
+removed before its original deadline. Unconfirmed stages still require the existing
+expiry and conflicting-append proof. An absent saved generation makes duplicate delivery harmless.
+
+The handler receives the root PostgreSQL `Db`, not the queue transaction. Cleanup holds
+`withConnectionStage` from its fresh history read through recovery and exact deletion.
+A future broker must hold this same silo/member/server/profile lock across its current
+access and generation checks, custody read and injection. It must deny use if any check,
+read or lock fails. Merely checking the lock and releasing it before injection is unsafe.
+No broker or injection path exists in this change. Both personal dispatch gates stay closed.
+
+Retained material causes a fixed error and the existing queue retries. Exhaustion leaves
+material and the failed job intact. `reconcileConnectionPage` remains available for bounded
+maintenance; automatic startup scanning is deferred to keep this change small.
+Live Kubernetes, fresh-install and provider qualification: NOT RUN.

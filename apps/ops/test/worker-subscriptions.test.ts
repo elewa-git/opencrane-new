@@ -34,6 +34,7 @@ async function workerWaitsBeforeStartingReactions() {
     OPENFGA_MODEL_ID: '01ARZ3NDEKTSV4RRFFQ69G5FAV', KUBECONFIG: '/unused',
     KUBE_NAMESPACE: 'test', TOKEN_SIGNING_KEY_FILE: `${directory}/key.pem`,
     TOKEN_ISSUER: 'https://test.example', LOG_LEVEL: 'info',
+    CONNECTION_CUSTODY_FILE: `${directory}/missing-custody.json`,
     PATH: `${directory}:${process.env['PATH'] ?? ''}` };
   const filename = new URL('../src/worker.ts', import.meta.url);
   const options: ForkOptions = { env, execArgv: ['--experimental-strip-types'],
@@ -53,6 +54,10 @@ async function workerWaitsBeforeStartingReactions() {
       return output.includes('--dry-run');
     }
     await until(waiting);
+    expect(output).toContain('Connection cleanup disabled: custody file is missing');
+    expect(output).not.toContain(`${directory}/missing-custody.json`);
+    expect(output).toContain('prepare-gateway-configuration');
+    expect(output).not.toContain('cleanup-connection');
     expect(output).toContain('drain');
     expect((await pool.query('SELECT * FROM pgboss.job')).rows).toEqual([]);
     expect((await pool.query('SELECT * FROM handler_receipts')).rows).toEqual([]);

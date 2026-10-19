@@ -27,7 +27,7 @@ assistants, claims computers and stops private tool processes when configured.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|starts memory cleanup, ordered publications and private tool stops| handlers["libs/handlers<br/>reaction jobs"]
+  ops["apps/ops<br/>workers"] -->|starts memory and connection cleanup, ordered publications and private tool stops| handlers["libs/handlers<br/>reaction jobs"]
   nats["NATS JetStream<br/>event log"] -->|new events, appointments and upgrade history| handlers
   reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
@@ -54,6 +54,9 @@ even though their events use separate streams. Both new jobs and historical jobs
 queued during an upgrade use that order.
 
 ## Processes it handles
+
+Connection cleanup retries use fixed error text and retain failed jobs. A failed
+cleanup never makes a connection usable.
 
 Memory cleanup jobs cover corrections as well as forgetting. When retries run out,
 the retained failed job records an unavailable result for that saved change.

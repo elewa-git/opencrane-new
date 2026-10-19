@@ -389,8 +389,8 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.instance_stop_requested` | current owner or admin command | close the exact run with its original start and stop references; `owner_stop` requires the instance owner, while `admin_stop` records the acting admin | `stop-mcp-instance` checks the saved current run, stops its exact Kubernetes workload and records absence when configured |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade; departure revocation reaction | grants | OpenFGA tuples |
 | `connection.created` | personal bearer create command after private staging | connection fold (exact reference and generation; identity unverified) | explicit live candidate cleanup keeps current references; no automatic reaction |
-| `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | explicit live candidate cleanup can delete a superseded exact UID/version after its append deadline and a proven conflicting event; never release on replay |
-| `connection.revoked` | personal profile owner command | connection fold invalidates the profile at its expected revision | retain material in the command; explicit live candidate cleanup can remove a staged version once the saved conflict defeats late appends; automatic reaction remains planned |
+| `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | `cleanup-connection` confirms the saved rotation and removes superseded exact generations under the shared profile lock; never release on replay |
+| `connection.revoked` | personal profile owner command | connection fold invalidates the profile at its expected revision | retain material in the command; `cleanup-connection` confirms the saved revocation and removes invalidated exact generations under the shared profile lock |
 | `connection.operation_closed` | live staged-secret reconciliation after its private append deadline | connection fold keeps the current reference and reserves the closed generation number | conditional append at the stage's expected profile position blocks a delayed save; exact UID/version deletion follows confirmation; no replay effects or provider outcome claim |
 | `connection.disabled` | current admin command | member/server control stream blocks all personal profile saves, including new profiles | no deletion, enable or credential release; owner reconnect cannot clear the block |
 
@@ -718,6 +718,7 @@ events. Desktop admission additionally requires an explicit member
 | `prepare-gateway-configuration` | `mcp.server_published` |
 | `stop-mcp-instance` | `mcp.instance_stop_requested` |
 | `cleanup-departure` | `member.removed` |
+| `cleanup-connection` | `connection.revoked`, `connection.refreshed` |
 | `cleanup-memory` | `memory.forgotten`, `memory.corrected` |
 | `stop-budget-turns` | `budget.ceiling_set`, `budget.exhausted` |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |

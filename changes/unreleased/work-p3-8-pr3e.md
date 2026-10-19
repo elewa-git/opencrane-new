@@ -1,0 +1,1 @@
+- Clean old personal connection copies automatically after a saved revoke or bearer rotation when private custody is configured. Delete only the recorded exact identity under the shared profile lock; retain uncertain copies and retry failures. Automatic startup scanning and live provider qualification remain outstanding.

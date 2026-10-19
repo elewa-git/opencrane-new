@@ -18,7 +18,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, saved fact references, access after memory reads and turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|cleans old connection copies, checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, saved fact references, access after memory reads and turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
   models -->|rechecks loaded memory and corrected memory revisions; checks reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
@@ -280,6 +280,9 @@ Later confirmed usage can still settle their cost.
 
 ## Processes it handles
 
+After a saved personal connection replacement or revocation, a background reaction
+removes old stored copies by their exact identity. Uncertain copies stay private.
+
 A repeated model call on a child root can reuse its open, unsent hold and original
 permission record. The verified turn and exact request bytes must match. A call
 already admitted for sending never receives another send permission, even when its
@@ -365,7 +368,8 @@ small page of private credentials. After restart, it can rebuild missing repair 
 from confirmed saved identities. It keeps uncertain stages and changed storage identities.
 Damaged credentials stay in storage while the scan checks healthy neighbours and later pages.
 Older credentials without discovery details stay in storage for individual checks.
-Automatic cleanup after a revoke or replacement is still planned.
+Configured workers clean old copies after a saved revoke or replacement. Automatic
+startup scanning is still planned.
 The event store checks profile changes and admin blocks together when it saves a profile.
 If the block is saved first, the profile save is refused, even if its access check has finished.
 A simultaneous change to another connection can also refuse the save; the caller can retry.

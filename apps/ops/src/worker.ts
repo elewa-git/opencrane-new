@@ -1,4 +1,4 @@
-import { budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
+import { connectionCleanupHandler, connectionCustodyFromFile, budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
   providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
@@ -133,6 +133,17 @@ try {
       const keys = conversationKeys(personalDirectory);
       available.push(personalKeyHandler(commands.store, keys));
     }
+    const custodyFile = process.env['CONNECTION_CUSTODY_FILE']?.trim();
+    let connectionCleanupAvailable = false;
+    if (custodyFile) {
+      const custody = await connectionCustodyFromFile(custodyFile);
+      if (custody) {
+        available.push(connectionCleanupHandler(commands.store, db.db, custody, silo));
+        connectionCleanupAvailable = true;
+      } else {
+        logger.warn('Connection cleanup disabled: custody file is missing');
+      }
+    }
     const memoryDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
     if (memoryDirectory) {
       available.push(memoryCleanupHandler(commands.store, memoryKeys(memoryDirectory)));
@@ -141,7 +152,7 @@ try {
     if (decisionUrl) {
       available.push(settlementHandler(decisionUrl));
     }
-    const names = dispatcherHandlerNames(process.env);
+    const names = dispatcherHandlerNames(process.env, connectionCleanupAvailable);
     function findHandler(name: HandlerName): Handler {
       function matches(handler: Handler) {
         return handler.name === name;

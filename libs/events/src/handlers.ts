@@ -4,6 +4,7 @@ export const handlerSubscriptions = {
   "prepare-gateway-configuration": ["mcp.server_published"],
   "stop-mcp-instance": ["mcp.instance_stop_requested"],
   "cleanup-departure": ["member.removed"],
+  "cleanup-connection": ["connection.revoked", "connection.refreshed"],
   "cleanup-memory": ["memory.forgotten", "memory.corrected"],
   "stop-budget-turns": ["budget.ceiling_set", "budget.exhausted"],
   "settle-budget": ["effect.observed", "effect.resolved", "computer.lost"],
