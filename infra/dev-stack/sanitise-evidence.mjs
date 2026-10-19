@@ -115,9 +115,9 @@ function redactPatterns(content) {
   const fieldName = `(?:${sensitiveField}|Authorization)`;
   const quotedValue = `"(?:\\\\[\\s\\S]|[^"\\\\])*"|'(?:\\\\[\\s\\S]|[^'\\\\])*'`;
   const namedValue = new RegExp(
-    `(["']?${fieldName}["']?\\s*[:=]\\s*)(?:${quotedValue}|[^\\r\\n,;}]+)`, 'giu');
+    `(["']?${fieldName}["']?\\s*[:=]\\s*)(?:${quotedValue}|[^\\r\\n]+)`, 'giu');
   let redacted = content.replace(namedValue, `$1${placeholder}`);
-  redacted = redacted.replace(/([a-z][a-z\d+.-]*:\/\/)[^\s/@]+:[^\s/@]*@/giu,
+  redacted = redacted.replace(/([a-z][a-z\d+.-]*:\/\/)[^\s/@]+:[^\s/]*@/giu,
     `$1${placeholder}@`);
   redacted = redacted.replace(/\bBearer\s+[^\s"',;}]+/giu, `Bearer ${placeholder}`);
   redacted = redacted.replace(/\bAuthorization\s*:[^\r\n]*/giu,
