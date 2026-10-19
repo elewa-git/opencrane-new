@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -19,7 +19,9 @@ const fixture = {
   storeId: 'new-store', memberIds: ['jente-rosseel'],
   siloEvents: [{ type: 'member.invited', time: '2026-10-19T12:00:01.000Z' },
     { type: 'member.joined', time: '2026-10-19T12:00:02.000Z' }],
-  rowCounts: { conversations: 0, conversation_files: 0, memory_facts: 0 },
+  rowCounts: { conversations: 0, conversation_files: 0, memory_facts: 0,
+    memory_changes: 0, memory_dependencies: 0, memory_maintenance_runs: 0,
+    memory_maintenance_bindings: 0 },
 };
 const owner = {
   issuer: 'https://issuer.example', expectedIssuer: 'https://issuer.example',
@@ -69,8 +71,6 @@ for (const [reason, change] of staleCases) {
 
 const ownerCases = [
   ['no identity row', { identityRows: [] }],
-  ['untrusted issuer', { issuer: 'https://other.example' }],
-  ['other subject', { subject: 'other' }],
   ['unverified email', { providerEmailVerified: false }],
   ['role member', { role: 'member' }],
   ['not joined', { status: 'invited' }],
@@ -88,53 +88,166 @@ for (const [reason, change] of ownerCases) {
   });
 }
 
-test('foreign claim fails before Helm', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'fresh-twice-'));
+test('internally consistent foreign issuer fails the trusted issuer comparison', () => {
+  const foreignOwner = { ...owner, issuer: 'https://other.example',
+    identityRows: [{ ...owner.identityRows[0]!, issuer: 'https://other.example' }] };
+  function acceptForeignIssuer() {
+    checkOwner(foreignOwner);
+  }
+  assert.throws(acceptForeignIssuer, { message: 'Untrusted owner issuer' });
+});
+
+test('internally consistent foreign subject fails the expected subject comparison', () => {
+  const foreignOwner = { ...owner, subject: 'other', authenticatedSubject: 'other',
+    identityRows: [{ ...owner.identityRows[0]!, subject: 'other' }],
+    ownerEvents: [
+      { email: 'jente@elewa.ke', role: 'owner', subject: 'other' },
+      { email: 'jente@elewa.ke', role: 'owner', subject: 'other' },
+    ] };
+  function acceptForeignSubject() {
+    checkOwner(foreignOwner);
+  }
+  assert.throws(acceptForeignSubject, { message: 'Wrong owner subject' });
+});
+
+const memoryTables = [
+  'memory_facts', 'memory_changes', 'memory_dependencies',
+  'memory_maintenance_runs', 'memory_maintenance_bindings',
+];
+for (const table of memoryTables) {
+  test(`retained ${table} row refuses a fresh install`, () => {
+    function acceptRetainedMemory() {
+      checkFresh({ ...fixture, rowCounts: { ...fixture.rowCounts, [table]: 1 } });
+    }
+    assert.throws(acceptRetainedMemory, { message: `${table} contains old silo data` });
+  });
+}
+
+type RunnerCase = {
+  name: string;
+  foreignStack?: boolean;
+  packageRecord?: boolean;
+  existingNamespace?: boolean;
+  changedUid?: boolean;
+  claimedPv?: boolean;
+  reason?: string;
+  cause?: string;
+};
+const runnerCases: RunnerCase[] = [
+  { name: 'foreign stack-owner only', foreignStack: true,
+    reason: 'This worktree does not own the slot' },
+  { name: 'foreign package-owner.json only', packageRecord: true,
+    reason: 'A package owner record still exists' },
+  { name: 'changed namespace UID only', changedUid: true,
+    reason: 'Fresh run 1 failed during package preparation',
+    cause: 'Package ownership differs from the recorded namespace' },
+  { name: 'existing namespace only', existingNamespace: true,
+    reason: 'The package namespace still exists' },
+  { name: 'claimed PV only', claimedPv: true,
+    reason: 'A PV remains claimed for this namespace' },
+  { name: 'valid start makes progress' },
+];
+
+for (const scenario of runnerCases) {
+  test(`actual runner: ${scenario.name}`, async () => {
+    const home = await mkdtemp(join(tmpdir(), 'fresh-twice-'));
+    try {
+      await exerciseRunner(home, scenario);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+}
+
+async function exerciseRunner(home: string, scenario: RunnerCase) {
+  const worktree = join(home, 'worktree');
   const slot = join(home, '.config/opencrane/dev-stack-1');
   const bin = join(home, 'bin');
   const writes = join(home, 'writes');
-  const worktree = process.cwd();
-  const namespace = JSON.stringify({ metadata: { uid: 'different', annotations: {
-    'opencrane.dev/worktree': worktree, 'opencrane.dev/slot': '1',
-  } } });
+  await mkdir(join(worktree, 'infra/package'), { recursive: true });
+  await mkdir(join(worktree, 'infra/dev-stack'), { recursive: true });
+  await mkdir(join(worktree, 'libs/event-store/test'), { recursive: true });
+  await mkdir(slot, { recursive: true });
+  await mkdir(bin);
+  const files = ['infra/package/fresh-twice.ts', 'infra/dev-stack/config.ts',
+    'infra/dev-stack/identity.ts', 'infra/dev-stack/packaged.ts',
+    'libs/event-store/test/certificates.ts'];
+  for (const file of files) {
+    await cp(file, join(worktree, file));
+  }
+  await symlink(join(process.cwd(), 'node_modules'), join(worktree, 'node_modules'));
+  await writeFile(join(worktree, 'package.json'), '{"type":"module"}');
+  const stackWorktree = scenario.foreignStack ? '/another/worktree' : worktree;
+  await writeFile(join(slot, 'stack-owner'), `worktree=${stackWorktree}\n`);
+  const packageOwner = { worktree, slot: '1', context: 'k3d-ocn',
+    namespace: 'opencrane-package-1', namespaceUid: 'original',
+    release: 'opencrane-package-1' };
+  if (scenario.packageRecord) {
+    const foreignOwner = { ...packageOwner, worktree: '/another/worktree' };
+    await writeFile(join(slot, 'package-owner.json'), JSON.stringify(foreignOwner));
+  }
+  const namespace = { metadata: {
+    uid: scenario.changedUid ? 'changed' : 'original', annotations: {
+      'opencrane.dev/worktree': worktree, 'opencrane.dev/slot': '1',
+    },
+  } };
+  await writeFile(join(home, 'namespace.json'), JSON.stringify(namespace));
+  await writeFile(join(home, 'owner.json'), JSON.stringify(packageOwner));
   const kubectl = `#!/bin/sh
 case "$*" in
-  *'get namespace'*) printf '%s' "$TEST_NAMESPACE" ;;
+  *'get namespace'*)
+    if [ "$TEST_EXISTING_NAMESPACE" = 1 ] || [ -f "$HOME/prepared" ]; then
+      cat "$HOME/namespace.json"
+    fi ;;
   *'get pv'*) printf '%s' "$TEST_PVS" ;;
-  *) printf '%s\\n' "$*" >> '${writes}' ;;
+  *) printf '%s\\n' "kubectl $*" >> "$HOME/writes" ;;
 esac
 `;
-  try {
-    await mkdir(slot, { recursive: true });
-    await mkdir(bin);
-    await writeFile(join(bin, 'kubectl'), kubectl, { mode: 0o755 });
-    await writeFile(join(bin, 'helm'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${writes}'\n`,
-      { mode: 0o755 });
-    const env: Record<string, string | undefined> = { ...process.env,
-      HOME: home, DEV_STACK_ID: '1', PATH: `${bin}:${process.env['PATH']}`,
-      TEST_NAMESPACE: namespace, TEST_PVS: '{"items":[]}' };
-    const runCheck = async (operation: string) => {
-      await assert.rejects(execute('node', ['--experimental-strip-types',
-        'infra/package/fresh-twice.ts', operation], { cwd: worktree, env }));
-    };
-    await writeFile(join(slot, 'stack-owner'), 'worktree=/another/worktree\n');
-    await runCheck('--check-start');
-    await writeFile(join(slot, 'stack-owner'), `worktree=${worktree}\n`);
-    await writeFile(join(slot, 'package-owner.json'), JSON.stringify({ worktree: '/another',
-      slot: '1', context: 'k3d-ocn', namespace: 'opencrane-package-1',
-      namespaceUid: 'original', release: 'opencrane-package-1' }));
-    await runCheck('--check-start');
-    await writeFile(join(slot, 'package-owner.json'), JSON.stringify({ worktree,
-      slot: '1', context: 'k3d-ocn', namespace: 'opencrane-package-1',
-      namespaceUid: 'original', release: 'opencrane-package-1' }));
-    await runCheck('--check-owner');
-    await rm(join(slot, 'package-owner.json'));
-    env['TEST_NAMESPACE'] = '';
-    env['TEST_PVS'] = '{"items":[{"spec":{"claimRef":' +
-      '{"namespace":"opencrane-package-1"}}}]}';
-    await runCheck('--check-start');
+  const helm = `#!/bin/sh
+printf '%s\\n' "helm $*" >> "$HOME/writes"
+`;
+  // Represent the completed namespace preparation without a cluster write.
+  // Later external writes show whether the runner checked ownership first.
+  const prepare = `#!/bin/sh
+if [ "$1" = package-prepare ]; then
+  cp "$HOME/owner.json" "$HOME/.config/opencrane/dev-stack-1/package-owner.json"
+  touch "$HOME/prepared"
+fi
+`;
+  const node = `#!/bin/sh
+printf '%s\\n' "private settings" >> "$HOME/writes"
+exit 23
+`;
+  await writeFile(join(bin, 'kubectl'), kubectl, { mode: 0o755 });
+  await writeFile(join(bin, 'helm'), helm, { mode: 0o755 });
+  await writeFile(join(bin, 'node'), node, { mode: 0o755 });
+  await writeFile(join(worktree, 'infra/dev-stack/run.sh'), prepare, { mode: 0o755 });
+  const harness = `
+import { runOnce } from './infra/package/fresh-twice.ts';
+try {
+  await runOnce(1, '/private/values.json');
+  console.log(JSON.stringify({ completed: true }));
+} catch (error) {
+  console.log(JSON.stringify({ reason: error.message, cause: error.cause?.message }));
+}
+`;
+  const claimedPvs = { items: [{ spec: {
+    claimRef: { namespace: 'opencrane-package-1' },
+  } }] };
+  const env = { ...process.env, HOME: home, DEV_STACK_ID: '1',
+    DEV_STACK_DIR: undefined, PATH: `${bin}:${process.env['PATH']}`,
+    TEST_EXISTING_NAMESPACE: scenario.existingNamespace ? '1' : '0',
+    TEST_PVS: JSON.stringify(scenario.claimedPv ? claimedPvs : { items: [] }) };
+  const result = await execute(process.execPath, ['--experimental-strip-types',
+    '--input-type=module', '-e', harness], { cwd: worktree, env });
+  const lastLine = result.stdout.trim().split('\n').at(-1)!;
+  const outcome = JSON.parse(lastLine) as { reason: string; cause?: string };
+  if (scenario.reason) {
+    assert.equal(outcome.reason, scenario.reason);
+    assert.equal(outcome.cause, scenario.cause);
     await assert.rejects(readFile(writes, 'utf8'), { code: 'ENOENT' });
-  } finally {
-    await rm(home, { recursive: true, force: true });
+  } else {
+    assert.equal(outcome.reason, 'Fresh run 1 failed during private settings');
+    assert.equal(await readFile(writes, 'utf8'), 'private settings\n');
   }
-});
+}
