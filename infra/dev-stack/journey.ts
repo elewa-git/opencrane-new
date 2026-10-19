@@ -18,6 +18,7 @@ import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage
 import { journeyTool, reviewJourneyTools } from './journey-tool-policy.ts';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
+import { prepareBudgetAssistant } from './budget-fixture.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
 import { browserPhase4, type Phase4Assertion } from './browser-phase4.ts';
@@ -547,14 +548,16 @@ try {
       'other audit member authenticated live chat access');
     const ceilings = await modelHistory(events.store, `budget-${silo}`, silo);
     const run = ceilings.some(row => row.event.type === 'budget.ceiling_set' && !['installation', 'dev-only-stub-journey'].includes((row.event.data as { setBy: string }).setBy)) ? 'repeat' : 'fresh';
+    await browserAuditJourney(browser.ownerPage, browser.memberPages, origin, member,
+      identities.get(other)!.cookie, run);
+    const budgetAssistant = await prepareBudgetAssistant(browser.ownerPage,
+      browser.memberPages, origin, member);
     try {
-      await browserAuditJourney(browser.ownerPage, browser.memberPages, origin, member,
-        identities.get(other)!.cookie, run);
       await browserBudgetJourney(browser.ownerPage, browser.memberPages, origin, events.store,
-        silo, computer!.assistant_id);
+        silo, budgetAssistant.assistantId, budgetAssistant.groupId);
     } finally {
       await restoreBudgetCeilings(browser.ownerPage, origin, events.store, silo,
-        computer!.assistant_id);
+        budgetAssistant.assistantId, budgetAssistant.groupId);
     }
   }
   const phase4Requested = process.env['P4_JOURNEY_ATTEMPT'] !== undefined;

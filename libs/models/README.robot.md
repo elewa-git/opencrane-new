@@ -2716,7 +2716,10 @@ qualification: NOT RUN. No dependency or event type was added.
 
 Spending saves also read saved budget history within the separate ten-second limit.
 Only a current saved default of exactly `installation-default` can be reused without
-a team stream. Startup and `migrateBudgetDefault` already record that payer.
+a team stream, both when selecting the global default and when setting its
+`paying_group` ceiling. Startup and `migrateBudgetDefault` already record that payer.
+Both paths read budget history before the two-second write access check. The expected
+budget position still prevents a save if that history changes before the append.
 Every other default, including an unknown id already saved in older history, needs
 a real team in this silo. It creates no team and never changes the payer without
 the admin choosing it.

@@ -67,11 +67,7 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     await capture(page, `${output}/${run}-action-${page.viewportSize()!.width}.png`);
     console.log(`PASS ${run} audit ${page.viewportSize()!.width}px: own stub turn, allow and success shown separately; other member and owner refused private history`);
   }
-  const response = await owner.request.get(`${origin}/api/org/history`);
-  assert.equal(response.status(), 200);
-  const changes = auditResponseSchema.parse(await response.json());
-  assert(changes.rows.some(row => row.records.some(record => record.type === 'mcp.server_published')));
-  assert(!JSON.stringify(changes).includes('canary'));
+  await assertPublishedAudit(owner, origin);
   assert.equal((await members[0]!.request.get(`${origin}/api/org/history`)).status(), 403);
   for (const width of [1280, 390]) {
     await owner.setViewportSize({ width, height: 900 });
@@ -105,10 +101,35 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
   }
 }
 
-async function waitForPublishedEvent(page: Page): Promise<void> {
+export async function assertPublishedAudit(owner: Page, origin: string) {
+  const deadline = Date.now() + 60_000;
+  let before: number | undefined;
+  function isPublication(record: { type: string }) {
+    return record.type === 'mcp.server_published';
+  }
+  function hasPublication(row: { records: Array<{ type: string }> }) {
+    return row.records.some(isPublication);
+  }
+  while (Date.now() < deadline) {
+    const query = before === undefined ? '' : `?before=${before}`;
+    const response = await owner.request.get(`${origin}/api/org/history${query}`);
+    assert.equal(response.status(), 200);
+    const changes = auditResponseSchema.parse(await response.json());
+    assert(!JSON.stringify(changes).includes('canary'));
+    if (changes.rows.some(hasPublication)) return;
+    if (changes.nextBefore === undefined) break;
+    assert(before === undefined || changes.nextBefore < before,
+      'Older change history moves towards earlier events');
+    before = changes.nextBefore;
+  }
+  assert.fail('Organisation history contains the saved MCP publication');
+}
+
+export async function waitForPublishedEvent(page: Page): Promise<void> {
   const deadline = Date.now() + 60_000;
   const event = page.getByText('mcp.server_published', { exact: true }).first();
   while (Date.now() < deadline) {
+    await page.getByText('History loaded', { exact: true }).waitFor();
     if (await event.count()) return;
     const olderHistory = page.getByRole('button', { name: 'Older history', exact: true });
     if (await olderHistory.count() === 0) break;

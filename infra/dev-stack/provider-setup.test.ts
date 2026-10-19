@@ -84,6 +84,58 @@ async function recordsSetup() {
 }
 test('provider setup uses ordered authenticated product calls and stops at each refusal', recordsSetup);
 
+async function waitsForSeededDefault() {
+  let bindingReads = 0;
+  let selections = 0;
+  async function handle(request: import('node:http').IncomingMessage,
+    response: import('node:http').ServerResponse) {
+    let contents = '';
+    for await (const chunk of request) contents += String(chunk);
+    const input = contents ? JSON.parse(contents) : {};
+    response.setHeader('content-type', 'application/json');
+    const isBindings = request.url === '/api/org/providers/dev-stub/bindings';
+    if (isBindings && request.method === 'GET') {
+      bindingReads++;
+      const rows = bindingReads === 1 ? [] : [{ kind: 'silo_default', position: 5 }];
+      const expectedProviderSequence = bindingReads === 1 ? 4 : 5;
+      response.end(JSON.stringify({ rows, expectedProviderSequence }));
+      return;
+    }
+    if (input.action === 'select') {
+      selections++;
+      // Model selection also schedules the product's first default provider binding.
+      if (input.expectedProviderSequence !== 5 || input.expectedBindingSequence !== 5) {
+        response.writeHead(409);
+        response.end(JSON.stringify({ status: 'conflict' }));
+        return;
+      }
+    }
+    const result = { status: 'appended', revision: 3, sequence: 6,
+      expectedProviderSequence: 5, priceTableId: 'price', reservedCents: 1,
+      projection: { content: 'current', iam: 'current' }, outcome: 'pass' };
+    response.end(JSON.stringify(result));
+  }
+  const server = createServer(handle);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
+    cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
+  try {
+    await setupProvider(options);
+    assert.equal(bindingReads, 2);
+    assert.equal(selections, 1, 'Wait for the scheduled binding before the single owner selection');
+  } finally {
+    server.closeAllConnections();
+    const closed = once(server, 'close');
+    server.close();
+    await closed;
+  }
+}
+test('waits for the first provider binding before explicitly selecting the default',
+  waitsForSeededDefault);
+
 async function refusesUnsafeReplies() {
   for (const failure of ['redirect', 'transport', 'json']) {
     let requests = 0;

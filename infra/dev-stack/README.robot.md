@@ -500,7 +500,12 @@ unconfirmed Stop reservations while leaving enough headroom for the repeat run.
 Secondary journeys also read each member's completed stub turn in Action history,
 with the permission decision and observed outcome shown separately. The owner reads
 safe organisation changes; another joined member is refused private history, and
-members are refused organisation history. Owner/member sessions use real Zitadel
+members are refused organisation history. The organisation-history check follows older pages to find the saved MCP
+publication, checking each page for private canaries. Newer membership grants can
+fill the first page before this check starts.
+The browser waits for **History loaded** on each page before checking for the
+publication or an **Older history** button.
+Owner/member sessions use real Zitadel
 sign-in; the extra member uses a dev-only signed session to test resource authority.
 Both views and the refusal screen are checked at 1280px and 390px. Private chat,
 query, conversation-id and bearer canaries must be absent from live process and
@@ -605,8 +610,15 @@ the normal identity, organisation and cookie assertions.
 ## Budget journey cleanup
 
 Each zero-cent browser check restores that scope in a `finally` block. The calling
-journey also restores the paying group, assistant and global limits after the audit
-and budget browser checks, whether they pass or fail. Cleanup uses the authenticated
+journey creates the `budget-journey` group and `team-budget-journey` shared assistant
+through the owner APIs, adds the signed-in member and starts private shared sessions
+at both widths. It waits for the membership and assistant receipts to confirm their
+read tables and access records before opening sessions.
+Plain startup reuses the same creation commands and subjects.
+Personal assistants are not valid choices in the spending editor.
+The journey restores that exact paying group, assistant and global limits after the
+budget browser checks, whether they pass or fail. Audit checks finish before budget
+setup and change no ceilings. Cleanup uses the authenticated
 budget API rather than loading the Spending page. It waits for the budget table to
 catch up before the next step. Monthly test limits are 20,000 cents; the daily global
 limit is 5,000 cents. It attempts every scope and reports any failed restoration.
@@ -659,6 +671,10 @@ Owner, `jente@elewa.ke`. Setup uses product HTTP routes with the configured Orig
 create OpenAI connection, save random stub credential, check reachability, accept the
 quoted model test, enable `modelForTask('chat_turn')` and `gpt-6-luna`, explicitly
 select the silo default, drain, then switch on. Every write waits for its receipt.
+After enabling models, setup waits up to 30 seconds for `seed-provider-default` to
+record the first binding. It then reads that position for the explicit Owner selection.
+This avoids racing the scheduled binding; it still makes only one selection write
+and refuses any later conflict.
 The first refusal stops startup with only the step and status. A refused fresh setup
 needs diagnosis and another fresh start; it does not retry writes or undo product checks.
 Token-bootstrap qualification (`DEV_OWNER_BOOTSTRAP=0`) skips this setup and the journey.

@@ -12,7 +12,15 @@ import { readEvents } from '@opencrane/projections';
 import { directory, root } from './config.ts';
 
 /** Real owner edits and member refusals against the secondary stack's stub provider. */
-export async function browserBudgetJourney(owner: Page, members: Page[], origin: string, store: EventStore, silo: string, assistantId: string) {
+export async function browserBudgetJourney(owner: Page, members: Page[], origin: string,
+  store: EventStore, silo: string, assistantId: string, groupId: string) {
+  const assistantRows = await history(store, `assistant-${assistantId}`, silo);
+  function isSharedAssistant(row: StoredEvent) {
+    const data = row.event.data as { kind?: string };
+    return row.event.type === 'assistant.created' && data.kind === 'team';
+  }
+  assert(assistantRows.some(isSharedAssistant),
+    'Budget notices must use a shared assistant that the owner can choose in Spending');
   const output = `${root}/docs/process/p3-13-live`;
   await mkdir(output, { recursive: true });
   const ceilings = async () => (await history(store, `budget-${silo}`, silo)).filter(row => row.event.type === 'budget.ceiling_set');
@@ -30,8 +38,8 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   await owner.goto(`${origin}/org/spending`);
   await owner.getByText('Spending loaded', { exact: true }).waitFor();
   const starting = await summary();
-  const groupId = starting.defaultPayingGroupId;
-  assert(groupId);
+  const defaultPayingGroupId = starting.defaultPayingGroupId;
+  assert(defaultPayingGroupId);
   if (run === 'repeat') {
     assert.equal(starting.dailyCeilingCents, 5000, 'Plain startup preserves the owner daily cap');
     for (const scope of ['paying_group', 'assistant'] as const) assert.equal(starting.ceilings.find(row => row.scope === scope && row.scopeId === (scope === 'assistant' ? assistantId : groupId))?.ceilingCents, 20000, 'Plain startup preserves the owner monthly ceilings');
@@ -56,8 +64,17 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
       assert(Date.now() < deadline, 'Saved ceiling reaches the budget projection');
       await delay(100); projected = await summary();
     }
-    if (scope === 'global') { assert.equal(projected.ceilingCents, cents); assert.equal(projected.dailyCeilingCents, 5000); assert.equal(projected.defaultPayingGroupId, groupId); }
-    else assert.equal(projected.ceilings.find(row => row.scope === scope && row.scopeId === scopeId)?.ceilingCents, cents);
+    if (scope === 'global') {
+      assert.equal(projected.ceilingCents, cents);
+      assert.equal(projected.dailyCeilingCents, 5000);
+      assert.equal(projected.defaultPayingGroupId, defaultPayingGroupId);
+    } else {
+      function matchesScope(row: typeof projected.ceilings[number]) {
+        return row.scope === scope && row.scopeId === scopeId;
+      }
+      const ceiling = projected.ceilings.find(matchesScope);
+      assert.equal(ceiling?.ceilingCents, cents);
+    }
     assert(await owner.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Budget editor fits the viewport');
   };
   for (const width of [1280, 390]) {
@@ -152,10 +169,7 @@ async function readBudgetSummary(owner: Page, origin: string) {
 }
 
 export async function restoreBudgetCeilings(owner: Page, origin: string, store: EventStore,
-  silo: string, assistantId: string) {
-  const summary = await readBudgetSummary(owner, origin);
-  const groupId = summary.defaultPayingGroupId;
-  assert(groupId);
+  silo: string, assistantId: string, groupId: string) {
   const scopes = [
     { scope: 'paying_group' as const, scopeId: groupId },
     { scope: 'assistant' as const, scopeId: assistantId },
