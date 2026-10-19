@@ -14,8 +14,9 @@ const lifecycleTypes = new Set([
 export function isComputerLifecycle(type: string) {
   return lifecycleTypes.has(type);
 }
-export type ComputerControl = (z.infer<typeof takeoverRequestedDataSchema> & {
+export type ComputerControl = (Omit<z.infer<typeof takeoverRequestedDataSchema>, 'reason'> & {
   phase: 'requested' | 'pausing' | 'paused' | 'failed';
+  reason: 'requester_requested' | 'pause_timeout';
   supervisorEpoch?: string; bridgeEpoch?: string;
   position: number; commandId: string; requestedAt: string;
 }) | { phase: 'unverified'; position: number };
@@ -103,6 +104,9 @@ function addControl(summary: ComputerSummary, row: StoredEvent) {
     summary.control = { phase: 'unverified', position: row.sequence };
   } else {
     summary.control = { ...control, phase, position: row.sequence };
+    if ('reason' in details) {
+      summary.control.reason = details.reason;
+    }
     if ('supervisorEpoch' in details) {
       summary.control.supervisorEpoch = details.supervisorEpoch;
       summary.control.bridgeEpoch = details.bridgeEpoch;

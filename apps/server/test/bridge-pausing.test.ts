@@ -96,7 +96,8 @@ async function savesBoundOutcome(phase: 'paused' | 'failed', fromPausing: boolea
   } else {
     await saveFailed(test.store, 'test', control, position);
   }
-  expect(await readComputerControl(test.reader, 'test', 'assistant')).toMatchObject({ phase });
+  const reason = phase === 'failed' ? 'pause_timeout' : 'requester_requested';
+  expect(await readComputerControl(test.reader, 'test', 'assistant')).toMatchObject({ phase, reason });
   const ended = await readComputerControl(test.store, 'test', 'assistant');
   if (!ended || ended.phase === 'unverified') throw new Error('Missing outcome');
   await expect(saveFailed(test.store, 'test', ended, position)).rejects.toThrow();
