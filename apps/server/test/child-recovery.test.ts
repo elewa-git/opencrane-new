@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as authz from '@opencrane/authz';
 import { eventEnvelopeSchema, conversationCreatedDataSchema } from '@opencrane/events';
-import { childRequests, conversations } from '@opencrane/projections';
+import { childRequests, conversations, members } from '@opencrane/projections';
 import type { Db } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { chatHistory } from '../src/chat/commands.ts';
@@ -534,9 +534,14 @@ async function hidesFailedStatus(kind: string) {
     await context.append(`participation-${conversationId}`, 'participant.removed',
       { conversationId, participantId: 'alice', removedBy: 'bob' });
   } else if (kind === 'outsider') {
-    memberId = 'bob';
-    await context.append(`participation-${conversationId}`, 'participant.removed',
-      { conversationId, participantId: memberId, removedBy: 'alice' });
+    memberId = 'outsider';
+    await context.append(`member-${memberId}`, 'member.invited', { memberId,
+      invitationId: 'invite-outsider', email: 'outsider@example.test', role: 'member',
+      invitedBy: 'alice', invitedIdentity: { issuer: context.config.issuerUrl, sub: memberId } });
+    await context.append(`member-${memberId}`, 'member.joined', { memberId,
+      invitationId: 'invite-outsider', email: 'outsider@example.test',
+      displayName: 'Outsider', role: 'member' });
+    await context.runner.run(members);
   } else if (kind === 'different chat') {
     conversationId = otherConversationId;
   } else {
