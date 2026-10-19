@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { request, type Page } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
 import { restoreBudgetCeilings } from './browser-budgets.ts';
+import { prepareBudgetAssistant } from './budget-fixture.ts';
 
 async function restoresChosenScopes() {
   const totals = { todayCents: 0, monthCents: 0, reservedCents: 0, ceilingCents: 0 };
@@ -73,3 +74,64 @@ async function restoresChosenScopes() {
 }
 test('restores every changed ceiling using the chosen group, not the personal default',
   restoresChosenScopes);
+
+async function waitsForSharedAccess() {
+  const receipts = new Map<string, number>();
+  let sessions = 0;
+  function handle(incoming: import('node:http').IncomingMessage,
+    response: import('node:http').ServerResponse) {
+    incoming.resume();
+    response.setHeader('content-type', 'application/json');
+    const path = incoming.url!;
+    if (path.includes('/changes/')) {
+      const reads = (receipts.get(path) ?? 0) + 1;
+      receipts.set(path, reads);
+      const iam = reads >= 2 ? 'current' : 'applying';
+      response.end(JSON.stringify({ projection: { content: 'current', iam } }));
+      return;
+    }
+    if (path === '/api/assistants/team-budget-journey') {
+      const membership = receipts.get('/api/groups/budget-journey/changes/budget-journey-member');
+      const assistant = receipts.get(
+        '/api/assistants/team-budget-journey/changes/budget-journey-assistant');
+      if ((membership ?? 0) < 2 || (assistant ?? 0) < 2) {
+        response.writeHead(503);
+        response.end(JSON.stringify({ status: 'unavailable' }));
+        return;
+      }
+      const row = { assistantId: 'team-budget-journey', status: 'ready', canStartSession: true };
+      response.end(JSON.stringify({ rows: [row] }));
+      return;
+    }
+    if (path === '/api/conversations') sessions++;
+    response.end(JSON.stringify({ status: 'appended' }));
+  }
+  const server = createServer(handle);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const client = await request.newContext();
+  async function goto(url: string) {
+    assert(new URL(url).searchParams.has('conversation'));
+  }
+  async function waitFor() {}
+  function getByRole() {
+    return { waitFor };
+  }
+  const page = { request: client, goto, getByRole } as unknown as Page;
+  try {
+    const chosen = await prepareBudgetAssistant(page, [page, page], origin, 'member');
+    assert.deepEqual(chosen, { groupId: 'budget-journey', assistantId: 'team-budget-journey' });
+    assert.equal(sessions, 2);
+  } finally {
+    await client.dispose();
+    server.closeAllConnections();
+    const closed = once(server, 'close');
+    server.close();
+    await closed;
+  }
+}
+test('waits for saved membership and assistant access before opening both budget sessions',
+  waitsForSharedAccess);
