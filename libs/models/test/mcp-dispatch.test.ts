@@ -2493,8 +2493,8 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     const request = remote.network.request!;
     function wrongCertificate(...parameters: Parameters<typeof request>) {
       const [url, options, callback] = parameters;
-      return request(url, { ...options, checkServerIdentity: undefined,
-        servername: 'wrong.example.test' }, callback);
+      const wrongNameOptions = { ...options, servername: 'wrong.example.test' };
+      return request(url, wrongNameOptions, callback);
     }
     remote.network.request = wrongCertificate;
   }
