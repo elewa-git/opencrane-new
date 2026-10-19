@@ -6,7 +6,7 @@ and 90 GiB afterwards; DiskPressure was false. Disposable namespaces and policie
 were removed. Images were two label-only variants per run of the existing local
 computer image, pushed through the private registry without a public pull.
 
-PASS — final live file: 29 tests twice, at 18:37:58 and 18:38:51 UTC (50.15s and 51.38s).
+PASS — final live file: 29 tests twice, at 18:57:51 and 18:58:33 UTC (40.03s and 40.66s).
 Command: `MCP_HOSTED_K3D=1 DEV_STACK_ID=1 nice -n 10 npx vitest run apps/ops/test/mcp-hosted-k3d.test.ts --maxWorkers=1`.
 PASS — lint (including knip and changelog), typecheck, check:events (145 types),
 and security-rules (438 tests). Tests used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
