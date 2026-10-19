@@ -4,7 +4,8 @@ import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { request, type Page } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
-import { restoreBudgetCeilings } from './browser-budgets.ts';
+import { envelope } from '@opencrane/models';
+import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
 import { prepareBudgetAssistant } from './budget-fixture.ts';
 
 async function restoresChosenScopes() {
@@ -135,3 +136,22 @@ async function waitsForSharedAccess() {
 }
 test('waits for saved membership and assistant access before opening both budget sessions',
   waitsForSharedAccess);
+
+async function refusesPersonalAssistant() {
+  const data = { assistantId: 'personal-alice', ownerId: 'alice', kind: 'personal',
+    payingGroupId: 'installation-default' };
+  const event = envelope('test', 'assistant-personal-alice', 'assistant.created', data);
+  async function* readStream(subject: string) {
+    assert.equal(subject, 'assistant-personal-alice');
+    yield { event, sequence: 1 };
+  }
+  const store = { readStream } as EventStore;
+  const owner = {} as Page;
+  const journey = browserBudgetJourney(owner, [], 'http://localhost', store, 'test',
+    'personal-alice', 'sales');
+  const refusal = { name: 'AssertionError',
+    message: 'Budget notices must use a shared assistant that the owner can choose in Spending' };
+  await assert.rejects(journey, refusal);
+}
+test('refuses a personal assistant before starting the budget browser journey',
+  refusesPersonalAssistant);

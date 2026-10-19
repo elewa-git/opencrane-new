@@ -2085,3 +2085,39 @@ async function refusesSpendingChoice(choice: typeof invalidSpendingChoices[numbe
 }
 it.each(invalidSpendingChoices)('returns a fixed correctable refusal for an invalid %s',
   refusesSpendingChoice);
+
+async function refusesReplacedInstallationPayer(scope: 'global' | 'paying_group') {
+  const group = fixture('team.created', 'team-sales', {
+    teamId: 'sales', name: 'Sales', createdBy: 'alice',
+  });
+  await append(group);
+  expect(actor.state.defaultPayingGroupId).toBe('installation-default');
+  const requestHeaders = { ...headers('oidc-amina'),
+    origin: new URL(config.redirectUri).origin };
+  const replacement = { commandId: 'replace-installation', expectedSequence: actor.state.sequence,
+    scope: 'global', defaultPayingGroupId: 'sales', ceilingCents: 20000 };
+  const replaceRequest = { method: 'POST' as const, url: '/api/org/models',
+    headers: requestHeaders, payload: replacement };
+  const replaced = await app.inject(replaceRequest);
+  expect(replaced.statusCode).toBe(200);
+  expect(replaced.json()).toMatchObject({ budget: { defaultPayingGroupId: 'sales' } });
+  const before = await nats.store.head('budget-test');
+  let choice: Record<string, string> = { scope, defaultPayingGroupId: 'installation-default' };
+  if (scope === 'paying_group') {
+    choice = { scope, scopeId: 'installation-default' };
+  }
+  const payload = { commandId: 'obsolete-installation', expectedSequence: before,
+    ...choice, ceilingCents: 0 };
+  const request = { method: 'POST' as const, url: '/api/org/models',
+    headers: requestHeaders, payload };
+  const response = await app.inject(request);
+  expect(response.statusCode).toBe(422);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'spending_choice_unavailable' });
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.defaultPayingGroupId).toBe('sales');
+  expect(actor.state.ceilingCents).toBe(20000);
+  expect(actor.state.ceilings).toEqual([]);
+}
+it.each(['global', 'paying_group'] as const)(
+  'returns a fixed refusal for a replaced installation payer with a %s ceiling',
+  refusesReplacedInstallationPayer);

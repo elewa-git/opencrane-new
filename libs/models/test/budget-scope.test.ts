@@ -7,6 +7,7 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { pgDb } from '@opencrane/projections';
 import { BudgetActor, envelope, history, migrateBudgetDefault } from '../src/actor.ts';
 import { applyBudget, budgetSummary, emptyBudget } from '../src/state.ts';
+import { BudgetChoiceRefused } from '../src/budget-scope.ts';
 import { configureBudget } from '../src/budget-config.ts';
 
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -275,3 +276,30 @@ async function refusesUnsavedInstallationPayer(scope: 'global' | 'paying_group')
 it.each(['global', 'paying_group'] as const)(
   'refuses an unsaved installation payer for a %s ceiling',
   refusesUnsavedInstallationPayer);
+
+async function refusesReplacedInstallationPayer(scope: 'global' | 'paying_group') {
+  await nats.close();
+  await initialise('installation-default');
+  expect(actor.state.defaultPayingGroupId).toBe('installation-default');
+  await seedGroup('sales');
+  const replacement = { commandId: 'replace-installation', expectedSequence: actor.state.sequence,
+    scope: 'global', defaultPayingGroupId: 'sales', ceilingCents: 1000 };
+  expect(await save(replacement)).toMatchObject({ status: 'appended',
+    budget: { defaultPayingGroupId: 'sales' } });
+  const before = await nats.store.head('budget-test');
+  let choice: Record<string, string> = { scope, defaultPayingGroupId: 'installation-default' };
+  if (scope === 'paying_group') {
+    choice = { scope, scopeId: 'installation-default' };
+  }
+  const command = { commandId: 'obsolete-installation', expectedSequence: before,
+    ...choice, ceilingCents: 0 };
+  const refusal = new BudgetChoiceRefused('Spending choice unavailable');
+  await expect(save(command)).rejects.toStrictEqual(refusal);
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.defaultPayingGroupId).toBe('sales');
+  expect(actor.state.ceilingCents).toBe(1000);
+  expect(actor.state.ceilings).toEqual([]);
+}
+it.each(['global', 'paying_group'] as const)(
+  'refuses a replaced installation payer for a %s ceiling',
+  refusesReplacedInstallationPayer);
