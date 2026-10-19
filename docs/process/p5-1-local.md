@@ -435,90 +435,72 @@ come from this main install.
 
 ## P5-2: two fresh installs
 
-On 19 October 2026, this worktree claimed slot 1. The final pair ran with
-read-only provider setup. Its first install
-used namespace UID `fe963d90-a6f2-4f2c-b8e1-f9b57f62d322` and Helm install id
-`4b636f5b-1c7b-4e68-8e49-dc9ea9803446`. Its OpenFGA store id was
-`01M59V4WHV44BE46F0S9Q90XA5`. The second used namespace UID
-`e1e5c201-e1c1-4d48-ae97-0359795b94fc`, Helm install id
-`768252ae-1564-444d-b6d6-a3f8cf2b6540`, and OpenFGA store id
-`01M59VC02ESQRDQQGC4H1HJ8ND`.
-The disk had 95 GiB free before the run and 94 GiB after it. The k3d node
-reported `DiskPressure=False`; neither install timed out.
+On 19 October 2026, the corrected runner attempted one pair on secondary slot 1.
+`infra/dev-stack/claim.sh` returned `1` after `df -h /` showed 94 GiB free.
+The runner received `ZITADEL_KEY_FILE` as a path. Provider preparation stayed
+read-only. The owner stack was not changed.
+
+**Overall: FAIL.** The first install passed the fresh-data and provider/owner
+checks, then failed during browser capture. The runner stopped and cleaned up
+that install. The second install was **NOT RUN**. This attempt does not qualify
+two fresh installs or successful owner sign-in. The earlier passing pair does
+not replace this corrected-runner result.
+
+The first namespace UID was `5f8db8dd-7f47-4943-bdb6-0e4e1d6a4cf3`.
+Its Helm install id was `e70cd52f-210d-432b-aa4e-235c0638c524` and its release
+Secret UID was `890e2af9-05be-4640-9b43-eb4e7273f7d8`.
+The observer retained PVC UIDs `0e9eba4e-b2a1-413e-8979-ee6b52bfe259` and
+`29bbafc6-efc4-4738-84c9-ea073ed4151a`. It overwrote its earlier observations
+during cleanup, so the other PVC UIDs and OpenFGA store id were not retained.
+No second-install ids exist for this attempt.
 
 | Check | Fresh 1 | Fresh 2 |
 | --- | --- | --- |
-| Claim, install and fresh data | PASS — owned claim and release; four new PVC UIDs, new Kubernetes and silo events, only bootstrap owner, no conversation, file or memory rows before chat | PASS — different release, namespace, four PVC UIDs and OpenFGA store; the same empty-data checks passed |
-| Owner | PASS — configured issuer and slot test subject bound to `jente@elewa.ke`; read-only Zitadel lookup confirmed verified email; invitation and join events, joined owner row and OpenFGA owner check passed | PASS — the same checks passed for this new store and event stream |
-| Sign-in and stub chat | PASS — `/auth/me` returned the configured subject at 1280 and 390; both turns showed “Hello from your computer.” and Done | PASS — two new signed-in turns showed the same result |
-| 390px screen by eye | PASS — reply and composer did not overlap | PASS — reply and composer did not overlap |
-| Exposure | PASS — five live Services were ClusterIP, no Ingress; the forward listened on `127.0.0.1:25106`; a container on Docker's default bridge could not connect to the host gateway on that port | PASS — the same checks passed |
-| Owned cleanup | PASS — `package-down` removed the first namespace and its claim before the second install | PASS — namespace, forward, package owner record and PV claims were gone; owner namespace UIDs, eight existing owner or k3d container IDs, and listener `127.0.0.1:44200` matched the earlier snapshot |
-| Other-slot namespace UID | NOT RUN — slot 2 had no namespace | NOT RUN — slot 2 had no namespace |
-| Object storage | NOT RUN — outside this chart | NOT RUN — outside this chart |
-| Person's own Zitadel login | NOT RUN — owner-gated; the separate OpenCrane 2 Dev CI owner signed in | NOT RUN — owner-gated; the same slot test owner signed in |
+| Claim, install and fresh data | PASS — owned claim and release, new PVCs and events, only the bootstrap owner, no conversation, file or rows in any of the five memory tables before chat | NOT RUN |
+| Provider and owner binding | PASS — trusted issuer, slot test subject, verified provider email, invitation and join events, joined owner row and OpenFGA owner check | NOT RUN |
+| Browser sign-in and stub chat at 1280/390 | FAIL — browser capture failed before producing a new capture; the runner did not retain the browser substep | NOT RUN |
+| Screen review | NOT RUN — no new captures | NOT RUN |
+| Exposure | PASS — the runner checked ClusterIP Services and no public ingress; the forward listened on `127.0.0.1:25106`; a container on Docker's default bridge could not reach the host gateway on that port | NOT RUN |
+| Owned cleanup | PASS — namespace, package owner record, forward and namespace PV claims were removed; slot 1 was released | NOT RUN |
+| Owner and other-slot resource comparison | NOT RUN — no comparison in this attempt | NOT RUN |
+| Object storage | NOT RUN — outside this chart | NOT RUN |
+| Person's own Zitadel login | NOT RUN — the separate slot test owner was used | NOT RUN |
 
-The first PVC UIDs were `6ca7ca11-9827-46b5-8168-357c72dca8d1`,
-`4cdd08d2-c262-47d7-adce-2cb92788c016`,
-`d3ae359c-5862-4592-a60c-91463ccef7ce` and
-`46109f32-3894-45d8-8841-8035a3b4f878`. The second PVC UIDs were
-`e82f7f77-aef9-4bc7-a423-7788df8fe31a`,
-`7f1b073e-651c-4dd4-9d9d-32c51daf18b0`,
-`630060ed-a8b5-487e-8e4d-a7c9dc63b9b9` and
-`4b141235-cc82-4651-beda-7d4cdb02e5af`.
+The eight `fresh-1-` and `fresh-2-` PNG files in
+[p5-1-live](p5-1-live/) are from the earlier pair. They are historical evidence,
+not captures from this attempt. The disk still had 94 GiB free after cleanup.
+Browser launch and import of the sign-in helper passed as separate diagnostics;
+neither diagnostic proves sign-in.
 
-Browser captures: [first sign-in at 1280](p5-1-live/fresh-1-signed-in-1280.png),
-[first sign-in at 390](p5-1-live/fresh-1-signed-in-390.png),
-[first chat at 1280](p5-1-live/fresh-1-chat-1280.png),
-[first chat at 390](p5-1-live/fresh-1-chat-390.png),
-[second sign-in at 1280](p5-1-live/fresh-2-signed-in-1280.png),
-[second sign-in at 390](p5-1-live/fresh-2-signed-in-390.png),
-[second chat at 1280](p5-1-live/fresh-2-chat-1280.png), and
-[second chat at 390](p5-1-live/fresh-2-chat-390.png).
+The fixture suite now tests the runner with fake external commands. Each of
+five otherwise-valid refusal fixtures changes just one thing: the stack owner,
+the package record, the namespace UID, namespace existence, or a claimed PV.
+Namespace preparation is represented by local fixture files. The fake Helm and
+kubectl commands record later writes. Every refusal checks its exact reason and
+records zero such writes; a valid start reaches both fake commands.
+The issuer and subject fixtures keep their identity rows, events and browser
+subject consistent while leaving trusted expectations unchanged.
 
-Before an earlier passing pair, three trial runs failed: the first two limited
-startup to two events even though workers create more, and the third lacked
-the provider organisation header. All three failures stopped
-before browser capture, removed their own namespace, and led to the checks
-used above. The final pair repeated the journey after read-only provider setup
-was added. The person's existing Zitadel user was not changed.
+**Single-check removal probes: PASS.** All 34 refusal tests failed under their
+matching individual removal in a disposable copy. Each removal restored the
+source before the next probe. No whole function was removed. Removing the
+shared `checkStart()` call failed all four start-refusal tests. Removing the
+first `verifyPackageOwner()` call in the runner failed only the UID-change test.
+The two positive controls passed. The 36 probe logs are
+`/tmp/p5-2-guard-*.log`; the complete test-to-removal list is in the PR comment.
 
-The fresh fixture suite passed 26 cases. These removals were tried in a separate
-scratch worktree; the listed refusal cases then failed. The unmodified
-fixture passed separately.
-
-| Removed scratch check | Refusal tests that failed |
-| --- | --- |
-| Helm install id comparison | Reused or missing install id |
-| Fresh-state checks | All 11 leftover-data cases: reused or old PVC, old Kubernetes or silo event, conversation event, claimed PV, extra member, conversation/file/memory row and reused store |
-| Owner binding checks | Nine identity, email, role, join-event and OpenFGA refusals |
-| Browser identity checks | All 12 owner refusal cases, including unauthenticated and other-subject sign-in |
-| Pre-write claim check | Foreign claim before Helm |
-
-The nine owner-binding failures were: no identity row, untrusted issuer,
-unverified email, member role, not joined, different member email, different
-join event, missing join event and OpenFGA owner false. Removing the browser
-identity check also failed those cases, the other configured subject, an
-unauthenticated sign-in and a different signed-in subject. The foreign-claim
-fixture covers another worktree in either owner record, a changed namespace
-UID and a PV still claimed for this namespace; fake Helm and kubectl recorded
-no writes.
-
-The scratch logs are `/tmp/p5-2-pr1-mutation-*.log`. The first test commit
-failed because `fresh-twice.ts` did not yet exist. The claim and fresh checks
-passed twice with 46 cases each. The final fresh and read-only provider checks
-passed twice with 28 cases each. The event field security suite passed once
-with 438 cases. The tests started no package cluster.
+The failing-first test commits precede the memory-check implementation.
+The first corrected test run failed on the four untested memory tables and the
+missing runner export. The final changed tests passed twice, 38 tests each,
+with `PG_TEST_URL` set and `nice -n 10`. These Node tests use normal disposable
+fixtures and do not use PostgreSQL or start a live package.
 
 | Source check | Result |
 | --- | --- |
-| `npm ci` | PASS |
-| Changed claim and fresh Node tests, twice | PASS — 46 cases in each run |
-| Final fresh and read-only provider Node tests, twice | PASS — 28 cases in each run |
-| Event field security rules | PASS — 438 cases |
+| Changed fresh-install and provider tests, twice | PASS — 38 tests each |
+| Single-check removal probes | PASS — 36 removals; all 34 refusal tests covered |
 | `npm run lint` | PASS — 21 existing warnings, no errors |
 | `npm run typecheck` | PASS |
-| `npm run check:events` | PASS — 145 types agree |
-| Knip and changelog checks | PASS |
-| Extra `infra/dev-stack/tsconfig.json` check | FAIL — existing type errors in `daily-fresh.test.ts`, `wake-latency.ts` and an unchanged part of `zitadel-setup.test.ts`; this is outside the required typecheck script |
-| Full root test suite | NOT RUN — outside this change's requested checks |
+| `npm run check:events` | PASS |
+| Knip and `npm run lint:changelog` | PASS |
+| Full root test suite | NOT RUN — outside the requested checks |

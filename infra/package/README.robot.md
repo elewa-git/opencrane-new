@@ -85,7 +85,12 @@ copies; it refuses a missing provider app or user.
 It checks the saved claim
 before each install, compares both Helm install ids, PVC UIDs and OpenFGA store
 ids, and refuses older Kubernetes or silo events, old member or chat data, and
-wrong owner bindings. It checks the actual `/auth/me` subject at 1280 and 390
+wrong owner bindings. The empty-data check covers conversations, files and all five
+memory tables: facts, changes, dependencies, maintenance runs and maintenance
+bindings. The runner fixture tests use fake Helm and kubectl commands. Each
+refusal records no writes after the simulated namespace preparation; a valid
+claim reaches both commands. The live runner checks the actual `/auth/me`
+subject at 1280 and 390
 through `capture.mjs`. The four PNG files for each run are saved with
 `fresh-1-` or `fresh-2-` in `docs/process/p5-1-live/`. A failed run still calls
 owned `package-down`; inspect the claim before trying again. The operator

@@ -57,7 +57,8 @@ flowchart LR
    another worktree’s release.
 5. **A developer checks two fresh installs.** One runner checks the claim, data,
    test owner and browser chat for each install. It removes the first package
-   before preparing the second one on the same slot.
+   before preparing the second one on the same slot. It refuses retained rows in
+   every memory table before checking the first chat.
 
 ## How to run or test it
 
