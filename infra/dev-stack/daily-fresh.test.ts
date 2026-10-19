@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { test } from 'node:test';
@@ -14,6 +15,8 @@ async function preservesFailureBeforeCleanup() {
   await mkdir(scripts, { recursive: true });
   await copyFile('infra/dev-stack/daily-fresh.sh', `${scripts}/daily-fresh.sh`);
   await chmod(`${scripts}/daily-fresh.sh`, 0o755);
+  await symlink(resolve('infra/dev-stack/sanitise-evidence.mjs'),
+    `${scripts}/sanitise-evidence.mjs`);
   await writeFile(`${scripts}/claim.sh`, '#!/bin/sh\necho 1\n', { mode: 0o755 });
   const start = `#!/bin/sh
 mkdir -p "${slot}"
@@ -52,3 +55,70 @@ exit 1
 
 test('daily fresh saves the failed slot logs before down removes it',
   preservesFailureBeforeCleanup);
+
+async function sanitisesRetainedLogs() {
+  const home = await mkdtemp(`${tmpdir()}/daily-fresh-secrets-`);
+  const scripts = `${home}/checkout/infra/dev-stack`;
+  const slot = `${home}/.config/opencrane/dev-stack-1`;
+  await mkdir(scripts, { recursive: true });
+  await mkdir(slot, { recursive: true });
+  await copyFile('infra/dev-stack/daily-fresh.sh', `${scripts}/daily-fresh.sh`);
+  await chmod(`${scripts}/daily-fresh.sh`, 0o755);
+  await symlink(resolve('infra/dev-stack/sanitise-evidence.mjs'),
+    `${scripts}/sanitise-evidence.mjs`);
+  await writeFile(`${scripts}/claim.sh`, '#!/bin/sh\necho 1\n', { mode: 0o755 });
+  await writeFile(`${scripts}/up.sh`, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  await writeFile(`${scripts}/down.sh`, `#!/bin/sh\nrm -rf "${slot}"\n`, { mode: 0o755 });
+  const secrets = ['slot-password-canary', 'slot-client-canary', 'cookie-canary',
+    'model-canary', 'zitadel-canary', 'database-canary', 'url-canary', 'bearer-canary',
+    'basic-canary'];
+  const lines = [
+    'Setup failed; keep this explanation',
+    'Known values: slot-password-canary slot-client-canary cookie-canary',
+    'Key file values: model-canary zitadel-canary database-canary',
+    'postgres://user:url-canary@localhost/db',
+    'Bearer bearer-canary',
+    'Authorization: Basic basic-canary',
+  ];
+  for (const name of ['KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL', 'PAT']) {
+    const assignmentSecret = `assignment-${name}-canary`;
+    const jsonSecret = `json-${name}-canary`;
+    secrets.push(assignmentSecret, jsonSecret);
+    lines.push(`APP_${name}="${assignmentSecret} with spaces"`);
+    lines.push(`{"app_${name.toLowerCase()}": "${jsonSecret}", "message": "failed"}`);
+  }
+  await writeFile(`${slot}/zitadel-owner-password`, 'slot-password-canary\n');
+  await writeFile(`${slot}/zitadel-client-secret`, 'slot-client-canary\n');
+  await writeFile(`${slot}/auth.env`, 'OIDC_COOKIE_SECRET=cookie-canary\n');
+  await writeFile(`${slot}/passwords.json`, '{"server":"database-canary"}');
+  await writeFile(`${home}/model-key`, 'model-canary\n');
+  await writeFile(`${home}/zitadel-key`, 'zitadel-canary\n');
+  const content = `${lines.join('\n')}\n`;
+  for (const name of ['failure.log', 'last-error.log', 'server.log']) {
+    await writeFile(`${slot}/${name}`, content);
+  }
+  const environment = { ...process.env, HOME: home,
+    MODEL_KEY_FILE: `${home}/model-key`, ZITADEL_KEY_FILE: `${home}/zitadel-key` };
+  try {
+    await assert.rejects(exec(`${scripts}/daily-fresh.sh`, { env: environment }));
+    const ledger = `${home}/.opencrane/daily-fresh`;
+    const entries = await readdir(ledger);
+    function isEvidence(entry: string) { return entry !== 'ledger.md'; }
+    const evidence = entries.find(isEvidence);
+    assert.ok(evidence);
+    for (const name of ['failure.log', 'last-error.log', 'server.log']) {
+      const retained = await readFile(`${ledger}/${evidence}/${name}`, 'utf8');
+      for (const secret of secrets) {
+        assert.equal(retained.includes(secret), false, `${name} retained ${secret}`);
+      }
+      assert.ok(retained.includes('Setup failed; keep this explanation'));
+      assert.ok(retained.includes('Known values: [REDACTED] [REDACTED] [REDACTED]'));
+    }
+    await assert.rejects(stat(slot), { code: 'ENOENT' });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+test('daily fresh removes known secrets and credential patterns from every retained log',
+  sanitisesRetainedLogs);
