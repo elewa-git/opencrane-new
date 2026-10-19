@@ -1,0 +1,1 @@
+Native child calls now have internal checks that compute held money from the request body and check the saved root before granting one send. Refused unsent calls release at zero; lost send-admission replies keep their holds. Native execution remains disabled; exact call retry recovery is still pending.

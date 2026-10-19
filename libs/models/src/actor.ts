@@ -137,7 +137,7 @@ export class BudgetActor {
         this.hasDispatchEvidence.bind(this), fresh);
       if (saved !== undefined) {
         await checkRootGrant(this.state, call, rootId, this.now(), fresh,
-          this.append.bind(this), admittedAt);
+          this.append.bind(this), admittedAt, rootTurn);
         return saved;
       }
       z.int().positive().parse(amountCents);
@@ -175,12 +175,13 @@ export class BudgetActor {
       rootId, this.now, this.append.bind(this));
     return this.serial(check);
   }
-  admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number) {
+  admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number,
+    rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>) {
     const parsed = budgetCallDispatchAdmittedDataSchema.parse(raw);
     const admit = async () => {
       const input = checkDispatchBinding(this.state, parsed);
       admittedAt = await checkRootDispatch(this.state, input, this.now(), fresh,
-        this.append.bind(this), this.appendNotDispatched.bind(this), admittedAt);
+        this.append.bind(this), this.appendNotDispatched.bind(this), admittedAt, rootTurn);
       requireBudget(this.state, input.modelCall, this.now(), admittedAt);
       const reasons = exceededReasons(this.state, input.modelCall, this.now(), 0);
       if (reasons.length) {

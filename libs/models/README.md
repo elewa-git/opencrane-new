@@ -25,7 +25,7 @@ flowchart LR
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, installation payer limits, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
+  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -352,7 +352,10 @@ A revoked grant refuses even while the permissions service still allows it.
 A call that passes these checks still returns a fixed refusal before reading the
 request body or holding money.
 An internal hold operation lets checked children share that allowance. It keeps each
-child’s own turn on its hold and stops the root when a new hold cannot fit. Settling
+child’s own turn on its hold and stops the root when a new hold cannot fit. It computes
+the amount from the checked request body. Dispatch checks the saved root turn and
+records one permission to send. A lost reply cannot grant another send. A refused
+unsent call releases its hold at zero; uncertain calls keep their money. Settling
 a call returns its unused capacity; an uncertain call keeps its money held.
 No request route uses this operation yet. Native execution remains disabled.
 

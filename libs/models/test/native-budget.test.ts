@@ -1,10 +1,12 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { request, IncomingMessage } from 'node:http';
+import { once } from 'node:events';
 import { z } from 'zod';
 import { tokenVerifier } from '@opencrane/auth';
 import { grantStream } from '@opencrane/authz';
 import { createEventStore } from '@opencrane/event-store';
 import { BudgetActor, admitDescendant, descendantId, envelope, history, priceTableId,
-  startDecision } from '../src/index.ts';
+  startDecision, requestReservationCents } from '../src/index.ts';
 import { reserveNativeCall } from '../src/native-call-check.ts';
 import { parseTurnToken } from '../src/decision-turn-token.ts';
 import { rootTotals } from '../src/root-budget.ts';
@@ -13,7 +15,7 @@ import { fixture } from './fixture.ts';
 type Context = Awaited<ReturnType<typeof setup>>;
 const start = { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
   turnId: 'native-root', threadId: 'native-thread', requesterId: 'alice', task: 'chat_turn',
-  payingGroupId: 'personal-default', executionMode: 'memory_free', model: 'gpt-6.1-sol',
+  payingGroupId: 'personal-default', executionMode: 'memory_free', model: 'gpt-5.5-pro',
   providerId: 'provider', bindingSequence: 1 };
 const allowance = { requesterId: 'alice', conversationId: 'conversation', turnId: start.turnId,
   threadId: start.threadId, assistantId: 'assistant', computerId: 'computer', generation: 1,
@@ -22,6 +24,20 @@ const rootCall = { requesterId: 'alice', conversationId: 'conversation', turnId:
   threadId: start.threadId, assistantId: 'assistant', computerId: 'computer', generation: 1,
   payingGroupId: 'personal-default', model: start.model, priceTableId,
   contextDigest: '0'.repeat(64) };
+const body = { model: start.model, stream: true, input: 'hello', max_output_tokens: 16 };
+function bodyForCents(cents: number) {
+  let low = 0;
+  let high = 1_000_000;
+  while (low <= high) {
+    const size = Math.floor((low + high) / 2);
+    const candidate = { ...body, input: 'x'.repeat(size) };
+    const cost = requestReservationCents(candidate);
+    if (cost === cents) return candidate;
+    if (cost < cents) low = size + 1;
+    else high = size - 1;
+  }
+  throw new Error('Fixture cost unavailable');
+}
 async function setup(rootPatch: Record<string, unknown> = {}) {
   const context = await fixture(10_000, 20_000, false, start.model);
   await context.append('computer-assistant', 'computer.turn_started', start);
@@ -57,14 +73,15 @@ function claims(context: Context, binding: ReturnType<typeof child>) {
     providerId: binding.providerId, bindingSequence: binding.bindingSequence,
     delegation: ['alice', binding.delegationId], iat: 1, exp: 121 };
 }
-async function reserve(context: Context, binding: ReturnType<typeof child>, cents: number,
+async function reserve(context: Context, binding: ReturnType<typeof child>, cents: number | string,
   store = context.nats.store, actor = context.actor) {
+  const raw = typeof cents === 'string' ? cents : JSON.stringify(bodyForCents(cents));
   const checked = await context.credentials.check(context.headers);
   const turn = parseTurnToken(claims(context, binding));
   const computer = { assistant: 'assistant', computer: 'computer', generation: 1 };
   const started = performance.now();
   return reserveNativeCall(actor, store, context.binding, computer, turn,
-    checked.sequence, started, started + 2000, cents);
+    checked.sequence, started, started + 2000, raw);
 }
 async function refusedRoute(context: Context, binding: ReturnType<typeof child>, url: string,
   expected: string) {
@@ -169,7 +186,7 @@ async function racesCapacity() {
     const recovered = new BudgetActor(context.store, 'test', context.actor.now);
     await recovered.start();
     expect(rootTotals(recovered.state, context.root.rootId)).toEqual(totals);
-    await expect(reserve(context, first, 1, context.store, recovered)).rejects.toThrow();
+    await expect(reserve(context, first, 10, context.store, recovered)).rejects.toThrow();
     expect(rootTotals(recovered.state, context.root.rootId)).toEqual(totals);
     expect(recovered.state.dispatches).toHaveLength(0);
     expect(context.received()).toBe(0);
@@ -269,3 +286,262 @@ it.each([
   ['turnId', 'foreign'], ['threadId', 'foreign'], ['assistantId', 'foreign'],
   ['computerId', 'foreign'], ['generation', 2],
 ] as const)('requires the saved allowance %s to match the checked root', refusesSavedAllowance);
+
+async function checksRequestCost() {
+  const context = await setup();
+  try {
+    const binding = child(context, 'cost');
+    await admit(context, binding);
+    const position = await context.store.head('budget-test');
+    const invalid = [{ ...body, model: 'gpt-6-astra' }, { ...body, n: 2 },
+      { ...body, max_output_tokens: 15 }, { ...body, max_output_tokens: 2001 },
+      { ...body, extra: 'private-value' }];
+    for (const requestBody of invalid) {
+      await expect(reserve(context, binding, JSON.stringify(requestBody)))
+        .rejects.toThrow(/^Descendant request refused$/u);
+      expect(await context.store.head('budget-test')).toBe(position);
+    }
+    await expect(reserve(context, binding, 'private malformed JSON'))
+      .rejects.toThrow(/^Descendant request refused$/u);
+    expect(await context.store.head('budget-test')).toBe(position);
+    const narrow = child(context, 'unscoped');
+    narrow.scopes.models = [];
+    await admit(context, narrow);
+    await expect(reserve(context, narrow, JSON.stringify(body))).rejects.toThrow();
+    expect(await context.store.head('budget-test')).toBe(position);
+    const id = await reserve(context, binding, JSON.stringify(body));
+    expect(context.actor.state.reservations).toMatchObject([
+      { id, amountCents: requestReservationCents(body) },
+    ]);
+  } finally {
+    await close(context);
+  }
+}
+it('computes native cost from a strict scoped body before any budget write', checksRequestCost);
+
+const rootTurn = { turnId: start.turnId, threadId: start.threadId };
+async function fresh() {}
+function dispatch(context: Context, id: string) {
+  const hold = context.actor.state.reservations.find(matches);
+  function matches(row: Context['actor']['state']['reservations'][number]) {
+    return row.id === id;
+  }
+  return { callId: id, decisionId: id, reservationId: id, rootId: context.root.rootId,
+    bodyDigest: '0'.repeat(64), modelCall: hold!.call };
+}
+async function checksNativeDispatch(change: string) {
+  const context = await setup();
+  try {
+    const binding = child(context, 'dispatch');
+    await admit(context, binding);
+    const settled = await context.actor.reserve(rootCall, 240, undefined, undefined,
+      context.root.rootId);
+    await settle(context, settled, 240);
+    await context.actor.reserve(rootCall, 110, undefined, undefined, context.root.rootId);
+    const id = await reserve(context, binding, 400);
+    const input = dispatch(context, id);
+    if (change === 'exhaustion') {
+      await expect(reserve(context, binding, 300)).rejects.toThrow();
+    }
+    if (change === 'stop') {
+      const stop = { conversationId: 'conversation', turnId: start.turnId, requestedBy: 'alice' };
+      await context.append('conversation-conversation', 'agent.turn_stop_requested', stop);
+      const position = await context.store.head('conversation-conversation');
+      await context.actor.stopRoot(context.root.rootId, 'requester_stop',
+        'conversation-conversation', position);
+    }
+    if (change === 'stop' || change === 'exhaustion') {
+      await expect(context.actor.admitDispatch(input, fresh, undefined, rootTurn)).rejects.toThrow();
+      expect(rootTotals(context.actor.state, context.root.rootId)).toEqual({
+        settledCents: 240, heldCents: 110, availableCents: 650 });
+      const rows = await history(context.store, 'budget-test', 'test');
+      expect(rows.at(-1)?.event).toMatchObject({ type: 'budget.settled',
+        data: { reservationId: id, settledCents: 0, outcome: 'not_dispatched' } });
+      expect(context.actor.state.dispatches).toHaveLength(0);
+      return;
+    }
+    const original = context.actor.store.append.bind(context.actor.store);
+    async function append(command: Parameters<typeof original>[0]) {
+      const result = await original(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'budget.call_dispatch_admitted') {
+        throw new Error('Lost admission reply');
+      }
+      return result;
+    }
+    if (change === 'lost reply') vi.spyOn(context.actor.store, 'append').mockImplementation(append);
+    const admitted = context.actor.admitDispatch(input, fresh, undefined, rootTurn);
+    if (change === 'lost reply') await expect(admitted).rejects.toThrow('Lost admission reply');
+    else await admitted;
+    vi.restoreAllMocks();
+    const recovered = new BudgetActor(context.store, 'test', context.actor.now);
+    await recovered.start();
+    await expect(recovered.admitDispatch(input, fresh, undefined, rootTurn)).rejects.toThrow();
+    expect(recovered.state.dispatches).toHaveLength(1);
+    expect(rootTotals(recovered.state, context.root.rootId).heldCents).toBe(510);
+  } finally {
+    vi.restoreAllMocks();
+    await close(context);
+  }
+}
+it.each(['open', 'lost reply', 'stop', 'exhaustion'])(
+  'checks the native root at dispatch: %s', checksNativeDispatch);
+
+async function checksQueuedAccess() {
+  const context = await setup({ allowanceCents: 650 });
+  const release = Promise.withResolvers<void>();
+  try {
+    const binding = child(context, 'queued');
+    await admit(context, binding);
+    const entered = Promise.withResolvers<void>();
+    async function holdQueue() {
+      entered.resolve();
+      await release.promise;
+    }
+    const blocking = context.actor.reserve(rootCall, 1, holdQueue, undefined, context.root.rootId);
+    await entered.promise;
+    const queued = Promise.withResolvers<void>();
+    const original = context.actor.reserve.bind(context.actor);
+    function reserveCall(...args: Parameters<typeof original>) {
+      queued.resolve();
+      return original(...args);
+    }
+    vi.spyOn(context.actor, 'reserve').mockImplementation(reserveCall);
+    const pending = reserve(context, binding, 651);
+    const refused = expect(pending).rejects.toThrow();
+    await queued.promise;
+    const revoke = { resourceType: 'model', resourceId: start.model,
+      granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
+    await context.append(grantStream('model', start.model), 'grant.revoked', revoke);
+    release.resolve();
+    await blocking;
+    await refused;
+    expect(context.root.stop).toBeUndefined();
+    expect(context.actor.state.reservations).toHaveLength(1);
+    const childCall = { ...rootCall, turnId: binding.turnId, threadId: binding.threadId };
+    await expect(original(childCall, 1, undefined, undefined, context.root.rootId,
+      undefined, rootTurn)).rejects.toThrow('Descendant access check required');
+  } finally {
+    release.resolve();
+    vi.restoreAllMocks();
+    await close(context);
+  }
+}
+it('requires fresh native access and refuses queued revocation without stopping the root',
+  checksQueuedAccess);
+
+async function checksAllowanceRead(stop: boolean) {
+  const context = await setup();
+  try {
+    const binding = child(context, 'allowance');
+    const computerPosition = await context.store.head('computer-assistant');
+    let checking = false;
+    let preloaded = false;
+    let grantsLoaded = false;
+    const originalRead = context.store.readStream.bind(context.store);
+    const originalHead = context.store.head.bind(context.store);
+    async function* readStream(...args: Parameters<typeof originalRead>) {
+      if (args[0] === 'budget-test') {
+        if (checking) expect(args[1]).toBeGreaterThan(1);
+        else preloaded = true;
+      }
+      yield* originalRead(...args);
+      if (args[0] === grantStream('model', start.model)) grantsLoaded = true;
+    }
+    async function head(...args: Parameters<typeof originalHead>) {
+      if (args[0] === undefined && grantsLoaded && !checking) {
+        checking = true;
+        expect(preloaded).toBe(true);
+        if (stop) {
+          const data = { rootId: context.root.rootId, reason: 'allowance_exhausted',
+            attemptedBoundCents: 1001, availableCents: 1000 };
+          await context.append('budget-test', 'budget.root_stopped', data);
+        }
+      }
+      return originalHead(...args);
+    }
+    vi.spyOn(context.store, 'readStream').mockImplementation(readStream);
+    vi.spyOn(context.store, 'head').mockImplementation(head);
+    const pending = admit(context, binding);
+    if (stop) await expect(pending).rejects.toThrow('Descendant allowance refused');
+    else await pending;
+    expect(checking).toBe(true);
+    const rows = await history(context.nats.store, `delegation-${binding.delegationId}`, 'test');
+    expect(rows).toHaveLength(stop ? 0 : 1);
+    if (stop) {
+      expect(await context.store.head('computer-assistant')).toBe(computerPosition);
+    }
+  } finally {
+    vi.restoreAllMocks();
+    await close(context);
+  }
+}
+it.each([false, true])('preloads allowance and renews it after another writer stops: %s',
+  checksAllowanceRead);
+
+async function refusesWithoutReadingBody() {
+  const context = await setup();
+  try {
+    const binding = child(context, 'route');
+    await admit(context, binding);
+    const token = await context.sign(claims(context, binding), 'decision-service');
+    const raw = JSON.stringify(body);
+    const headers = { ...context.headers, 'x-turn-token': token, 'session-id': binding.threadId,
+      'content-length': Buffer.byteLength(raw) };
+    const options = { method: 'POST', headers };
+    const outgoing = request(`${context.options.decisionUrl}/authorize`, options);
+    const responseReady = once(outgoing, 'response');
+    outgoing.flushHeaders();
+    // Wait for refusal before sending any of the declared, valid body.
+    const result: unknown[] = await responseReady;
+    const response = result[0];
+    if (!(response instanceof IncomingMessage)) throw new Error('Unexpected response');
+    const chunks: Buffer[] = [];
+    for await (const chunk of response) {
+      const bytes: unknown = chunk;
+      if (!Buffer.isBuffer(bytes)) throw new Error('Unexpected response');
+      chunks.push(bytes);
+    }
+    outgoing.end(raw);
+    expect(response.statusCode).toBe(403);
+    expect(JSON.parse(Buffer.concat(chunks).toString())).toMatchObject({
+      error: 'Native delegation is disabled' });
+    expect(context.actor.state.reservations).toHaveLength(0);
+  } finally {
+    await close(context);
+  }
+}
+it('refuses a valid native route before reading any body bytes', refusesWithoutReadingBody);
+
+async function recoversNativeRootTurn() {
+  const context = await setup();
+  try {
+    const binding = child(context, 'retry');
+    await admit(context, binding);
+    const call = { ...rootCall, requestId: 'original', contextDigest: binding.delegationId,
+      turnId: binding.turnId, threadId: binding.threadId };
+    const retry = { retryDigest: '1'.repeat(64), bodyDigest: '2'.repeat(64) };
+    const id = await context.actor.reserve(call, 1, fresh, undefined,
+      context.root.rootId, retry, rootTurn);
+    const again = { ...call, requestId: 'replacement' };
+    expect(await context.actor.reserve(again, 1, fresh, undefined,
+      context.root.rootId, retry, rootTurn)).toBe(id);
+    expect(context.actor.state.reservations).toHaveLength(1);
+    expect(context.actor.state.reservations[0]?.call.requestId).toBe('original');
+    const changed = { ...dispatch(context, id), callId: 'original' };
+    await expect(context.actor.admitDispatch(changed, fresh, undefined, rootTurn))
+      .rejects.toThrow('Reservation binding changed');
+    expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(1);
+    for (const patch of [{ payingGroupId: 'changed' }, { priceTableId: 'changed' },
+      { contextDigest: '3'.repeat(64) }]) {
+      const altered = { ...again, ...patch };
+      await expect(context.actor.reserve(altered, 1, fresh, undefined,
+        context.root.rootId, retry, rootTurn)).rejects.toThrow('Model call retry refused');
+      expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(1);
+    }
+  } finally {
+    await close(context);
+  }
+}
+it('keeps the native root turn on actor retry and refuses changed bindings without release',
+  recoversNativeRootTurn);
