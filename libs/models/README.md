@@ -21,7 +21,7 @@ flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, saved fact references, access after memory reads and turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
   models -->|rechecks loaded memory and corrected memory revisions; checks reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
-  models -.-> auth["libs/auth + libs/authz<br/>passes and permissions"]
+  models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
@@ -76,6 +76,11 @@ only the operator's local public key and makes no network requests. Unreadable f
 make the verifier unavailable. It does not scan licences, admit images or start them yet.
 
 ## What it is responsible for
+
+A private decision handler checks a pass for one outside connection. The silo,
+person and assistant must each allow the same host and port. It saves the decision
+and checks spending stops before registering a single-use relay. Ordinary startup
+keeps this route off, and command workers still have no network access.
 
 A private relay receipt writer saves safe connection details after both sockets close.
 It keeps a pending record when storage is unavailable and can retry the same record.
@@ -333,7 +338,11 @@ No request route uses this operation yet. Native execution remains disabled.
 An isolated gateway test opens a CONNECT tunnel after the decision is saved and
 the spending process grants one send. A saved stop or access change prevents that
 send. A separate test adds TLS hostname and public address checks before connecting.
-The full relay still needs one-use registration and lifetime controls.
+The private relay limits each pass to one connection and at most 60 seconds.
+
+The private outside-connection handler checks access again after saving permission
+to send. If access changed or its deadline passed during the save, it registers no
+relay and records an error outcome. Normal startup keeps outside connections off.
 
 A private credential stage saves one generation and returns its reference, UID and version.
 Recovery needs its saved identity or an exact identity supplied by the caller.

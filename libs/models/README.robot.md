@@ -45,7 +45,7 @@ checks without adding receipt file and event writes.
 Own checks are in [the relay receipt](../../docs/process/p3-20-pr2c-relays.md).
 
 NOT BUILT: checked-set fallback or production wiring.
-Capabilities, admission rules and watchdogs remain later work.
+Capabilities and admission rules are described below. Watchdogs remain later work.
 Durable closure receipts are described below.
 CONNECT stays off at startup. Fresh-install egress qualification remains NOT RUN.
 Own checks are recorded in [the receipt](../../docs/process/p3-20-pr2b-guard.md).
@@ -100,7 +100,7 @@ headers are replaced before relay forwarding. No retries are configured.
 without a money hold. It uses the existing queue, saved stops, current-access
 callback and single-use dispatch event. Paid model calls still require a matching
 open hold. The fixture saves a decision first and consumes this gate before replying
-to extAuthz. Production egress admission is not implemented by this part.
+to extAuthz. The production admission handler is described below; startup keeps it off.
 
 `test/egress-gateway.test.ts` uses real disposable NATS and the checksum-verified
 gateway with a recording loopback relay. The control service is a test fixture.
@@ -108,9 +108,9 @@ It also verifies tokens strictly; the gateway JWT check alone permits clock skew
 The fixture is not a production capability issuer or policy reader. Its optional
 relay registry tests the socket checks and closure described above.
 
-Remaining PR 2 work: complete operation-bound capability checks, all three rules,
-wiring access/turn/budget/outage changes to closure, watchdogs and durable
-outage/open/close receipts. The binary removes raw Host before extAuthz;
+Remaining PR 2 work: startup and receipt-read wiring, access/turn/budget/outage
+changes to closure, watchdogs and open receipts. Durable close/outage receipts
+are described above. The binary removes raw Host before extAuthz;
 authority/Host disagreement still needs proof or the accepted broker fallback.
 The first routing-only receipt did not cover DNS or TLS checks. Open-tunnel expiry
 is now tested through the real gateway. Fresh-install journeys remain NOT RUN. No worker or browser uses this route.
@@ -2637,3 +2637,32 @@ Unavailable evidence takes precedence over failure. A replaced registration is r
 The private result writer keeps its models identity checks and accepts only the current
 attempt. The first matching result per attempt is retained; replay starts no work.
 Evidence storage, leases and evidence GET remain for P3-6 PR 4d.
+
+## Private egress admission (Part of #61)
+
+`startDecision` accepts an optional `EgressRelayRegistry` for `/authorize/egress`.
+The handler lives in `egress-admission.ts`. It reads turn facts within ten seconds,
+then checks membership, assistant activity, IAM receipts and the three exact
+host/port grant streams within two seconds. Team-owned assistants also check their
+small team stream. Conversation and computer activity use summaries and later rows,
+never whole histories inside the short check. Grant positions must match the pass.
+Only command passes for active chat turns are admitted. Desktop passes stay refused.
+One conditional `decision.recorded` precedes the serialised zero-cost dispatch check
+and relay registration. The saved decision and dispatch prevent pass reuse after
+restart. Audit uncertainty refuses connection. Replay registers no listener.
+
+After the dispatch append succeeds, the handler checks current authority once more,
+using what remains of the original two seconds. This checks the small member and
+assistant streams, any relevant team stream, the three exact destination grant
+streams, new turn activity and the turn, grant and optional lease expiry. It never
+rereads a whole conversation. A changed authority, expired pass or missed deadline
+returns the fixed `egress_refused` response without registering a relay. The existing
+`egress.observed` error outcome closes the saved zero-cost dispatch. It has no relay
+fields because no listener was registered. A failed outcome save still refuses access.
+The last check before registration is the authority boundary; the relay's own
+60-second capability cap covers changes after that point.
+
+Tests use real NATS, PostgreSQL, OpenFGA and the pinned gateway with a recording
+upstream. The initial failing test is in commit `98ba6b80`.
+Startup wiring, authorised receipt reads, revocation closure/watchdogs and live
+qualification remain deferred. CONNECT and command-worker networking stay off.
