@@ -1,1 +1,1 @@
-Fresh development stacks now keep the server running while the conversations worker builds the unfinished child request table. Failed daily checks save their error and recent process logs before removing the test stack.
+Fresh development stacks now keep the server running while the conversations worker builds the unfinished child request table. Failed daily checks save their error and recent process logs before removing the test stack, with known secrets and credential patterns removed. Logs are withheld if sanitisation fails.

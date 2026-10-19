@@ -73,7 +73,8 @@ and call checks are being connected.
    releases its id.
 4. **The daily check runs.** A user timer updates a detached checkout of `main`, then starts
    `up.sh --fresh` in a claimed spare stack. The local model stub keeps it free of paid model
-   calls. A result line and any failure evidence go in the user's home directory.
+   calls. Saved failure logs have known secrets and credential patterns removed.
+   A result line and any failure evidence go in the user's home directory.
 
 ## Secondary stack slots
 

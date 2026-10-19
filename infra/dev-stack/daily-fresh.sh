@@ -55,14 +55,13 @@ preserve_failure_artifacts() {
     log_name=$(basename "$private_log")
     case "$log_name" in
       zitadel-*) continue ;;
-      last-error.log|failure.log)
-        cp "$private_log" "$evidence_directory/$log_name"
-        ;;
-      *)
-        # Keep the last lines that explain a failed process without copying its whole log.
-        tail -n 100 "$private_log" > "$evidence_directory/$log_name"
-        ;;
     esac
+    if node "$script_directory/sanitise-evidence.mjs" "$stack_directory" \
+        "$private_log" "$repository_root" > "$evidence_directory/$log_name" 2>/dev/null; then
+      :
+    else
+      printf '%s\n' 'Log withheld: sanitisation failed.' > "$evidence_directory/$log_name"
+    fi
     chmod 600 "$evidence_directory/$log_name"
   done
   for screenshot in "$stack_directory"/*-failure*.png; do
