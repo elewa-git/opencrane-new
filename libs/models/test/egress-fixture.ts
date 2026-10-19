@@ -1,3 +1,4 @@
+import { startEgress } from '../src/egress-startup.ts';
 import { createEgressReceipt } from '../src/egress-receipt.ts';
 import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay.ts';
 import { once } from 'node:events';
@@ -91,7 +92,17 @@ export async function egressFixture(enabled = true, guarded = false,
     return connect(relayPort, '127.0.0.1');
   }
   const transport = { resolve: resolveDestination, connect: connectDestination };
-  const registry = new EgressRelayRegistry(recordClose, transport);
+  let runtime: Awaited<ReturnType<typeof startEgress>> | undefined;
+  let registry = new EgressRelayRegistry(recordClose, transport);
+  const production = receiptOptions.production;
+  if (production) {
+    runtime = await startEgress(production.actor.store, production.actor.silo, directory,
+      recordStartupFailure, transport);
+    registry = runtime.registry;
+  }
+  function recordStartupFailure() {
+    order.push('egress_receipt_refused');
+  }
 
   async function append(subject: string, type: string, data: unknown) {
     const event = envelope('test', subject, type, data);
@@ -178,7 +189,6 @@ export async function egressFixture(enabled = true, guarded = false,
   const address = decision.address();
   if (!address || typeof address === 'string') throw new Error('No decision listener');
   let decisionUrl = `http://127.0.0.1:${address.port}`;
-  const production = receiptOptions.production;
   let productionDecision: Awaited<ReturnType<typeof startDecision>> | undefined;
   if (production) {
     productionDecision = await startDecision(production.actor, production.identity,
@@ -262,7 +272,19 @@ export async function egressFixture(enabled = true, guarded = false,
     decision.close();
     await closed;
   }
+  async function restartRuntime() {
+    if (!production) throw new Error('Production fixture required');
+    await productionDecision?.close();
+    await runtime?.close();
+    runtime = await startEgress(production.actor.store, production.actor.silo, directory,
+      recordStartupFailure, transport);
+    registry = runtime.registry;
+    const decisionPort = Number(new URL(decisionUrl).port);
+    productionDecision = await startDecision(production.actor, production.identity,
+      production.binding, decisionPort, undefined, undefined, undefined, registry);
+  }
   async function close() {
+    await runtime?.close();
     registry.closeAll();
     await gatewayState.gateway?.stop();
     const relayClosed = once(relay, 'close');
@@ -279,7 +301,7 @@ export async function egressFixture(enabled = true, guarded = false,
     return sockets.size;
   }
   return { token, tunnel, actor, order, port, decisionUrl, controlRequests, decisionDown,
-    registry, closeRecords, permit, activeConnections, receipt, restartReceipt,
+    registry, closeRecords, permit, restartRuntime, get runtime() { return runtime!; }, activeConnections, receipt, restartReceipt,
     store: nats.store, directory, connection: nats.connection, restartStore,
     received: () => received, connected: () => connected, authorised: () => authorised,
     scenario(value: EgressScenario) { scenario = value; },

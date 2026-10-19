@@ -1,3 +1,7 @@
+import { once } from 'node:events';
+import { chmod, copyFile, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { startEgress } from '../src/egress-startup.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { egressGrantStream } from '@opencrane/projections';
@@ -299,3 +303,169 @@ async function changesDuringDispatchRetry(change: string) {
 }
 it.each(['destination', 'turn', 'deadline', 'expiry', 'none'])(
   'rechecks %s after the real budget dispatch append retries', changesDuringDispatchRetry);
+
+async function closeObservation(test: Awaited<ReturnType<typeof setup>>, bearer: string) {
+  await test.gateway.runtime.flush();
+  const rows = await history(test.facts.nats.store, `egress-${decodeJwt(bearer).jti!}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event.type).toBe('egress.observed');
+  expect(test.gateway.connected()).toBe(1);
+  return rows[0]!.event.data;
+}
+async function callerReceipt() {
+  const test = await setup();
+  const bearer = await test.token();
+  expect(await test.tunnel(bearer)).toBe(200);
+  await test.gateway.runtime.close();
+  expect(await closeObservation(test, bearer)).toMatchObject({ outcome: 'unknown' });
+  expect(await test.tunnel(bearer)).toBe(403);
+  await test.gateway.restartRuntime();
+  expect(await test.tunnel(bearer)).toBe(403);
+  await closeObservation(test, bearer);
+  expect(test.gateway.activeConnections()).toBe(0);
+}
+it('saves one caller close through startup and refuses permit reuse across restart', callerReceipt);
+
+async function revokeLive(change: string) {
+  const test = await setup();
+  const bearer = await test.token();
+  async function duringRelay(socket: import('node:net').Socket) {
+    const closed = once(socket, 'close');
+    const started = performance.now();
+    if (['silo', 'person', 'assistant-rule'].includes(change)) {
+      const scope = change === 'assistant-rule' ? 'assistant' : change;
+      const subjectId = scope === 'silo' ? 'test' : scope === 'person' ? 'alice' : 'assistant';
+      const rule = { ...destination, scope, subjectId };
+      const subject = egressGrantStream('test', rule as Parameters<typeof egressGrantStream>[1]);
+      const expectedSequence = await test.facts.nats.store.head(subject);
+      await test.facts.append(subject, 'egress.destination_revoked',
+        { ...rule, changedBy: 'alice', expectedSequence });
+    } else if (change === 'member') {
+      await test.facts.append('member-alice', 'member.removed',
+        { memberId: 'alice', removedBy: 'alice' });
+    } else if (change === 'assistant') {
+      await test.facts.append('assistant-assistant', 'assistant.settings_changed',
+        { assistantId: 'assistant', active: false, changedBy: 'alice', changedFields: ['active'] });
+    } else if (change === 'generation') {
+      await test.facts.append('computer-assistant', 'computer.ready',
+        { assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'next' });
+    } else if (change === 'turn') {
+      await test.facts.append('computer-assistant', 'computer.turn_closed', {
+        assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+        turnId: 'turn', requesterId: 'alice', task: 'chat_turn', status: 'completed' });
+    } else if (change === 'conversation') {
+      await test.facts.append('participation-conversation', 'conversation.closed',
+        { conversationId: 'conversation', closedBy: 'alice' });
+    } else {
+      await test.facts.actor.configure({ scope: 'assistant', scopeId: 'assistant',
+        ceilingCents: 0, setBy: 'alice' });
+    }
+    await closed;
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(socket.destroyed).toBe(true);
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+  expect(await closeObservation(test, bearer)).toMatchObject({ relay: { reason: 'revoked' } });
+  expect(test.gateway.activeConnections()).toBe(0);
+}
+it.each(['silo', 'person', 'assistant-rule', 'member', 'assistant', 'generation', 'turn',
+  'conversation', 'spending'])('closes a live relay within two seconds after %s revocation', revokeLive);
+
+async function harmlessChange() {
+  const test = await setup();
+  const bearer = await test.token();
+  const reads: { subject: string; from: number | undefined }[] = [];
+  const read = test.facts.nats.store.readStream.bind(test.facts.nats.store);
+  async function duringRelay(socket: import('node:net').Socket) {
+    function track(subject: string, from?: number, deadline?: number, closes?: boolean) {
+      reads.push({ subject, from });
+      return read(subject, from, deadline, closes);
+    }
+    const wrapped = vi.spyOn(test.facts.nats.store, 'readStream').mockImplementation(track);
+    onTestFinished(wrapped.mockRestore.bind(wrapped));
+    await test.facts.append('assistant-assistant', 'assistant.settings_changed',
+      { assistantId: 'assistant', changedBy: 'alice', changedFields: ['displayName'],
+        displayName: 'Harmless' });
+    await test.facts.actor.configure({ scope: 'assistant', scopeId: 'other',
+      ceilingCents: 0, setBy: 'alice' });
+    const head = test.facts.nats.store.head.bind(test.facts.nats.store);
+    const checked = Promise.withResolvers<void>();
+    let rounds = 0;
+    async function watch(subject?: string, deadline?: number, closes?: boolean) {
+      const position = await head(subject, deadline, closes);
+      if (subject === 'member-alice' && ++rounds === 4) checked.resolve();
+      return position;
+    }
+    const watched = vi.spyOn(test.facts.nats.store, 'head').mockImplementation(watch);
+    onTestFinished(watched.mockRestore.bind(watched));
+    await checked.promise;
+    expect(socket.destroyed).toBe(false);
+    expect(test.gateway.activeConnections()).toBe(1);
+    expect(reads.length).toBeGreaterThan(0);
+    for (const row of reads) expect(row.from).toBeGreaterThan(1);
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+}
+it('keeps harmless watched changes and unrelated spending open using only tails', harmlessChange);
+
+async function gracefulRestart() {
+  const test = await setup();
+  const bearer = await test.token();
+  async function duringRelay(socket: import('node:net').Socket) {
+    const closed = once(socket, 'close');
+    await test.gateway.restartRuntime();
+    await closed;
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+  expect(await closeObservation(test, bearer)).toMatchObject({ relay: { reason: 'unavailable' } });
+  expect(await test.tunnel(bearer)).toBe(403);
+  expect(test.gateway.connected()).toBe(1);
+}
+it('closes an open relay once on graceful restart and replay opens no relay', gracefulRestart);
+
+async function retainedRecords() {
+  const test = await setup();
+  const bearer = await test.token();
+  async function duringRelay() {
+    await test.facts.nats.stop();
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+  await test.gateway.runtime.close();
+  const directory = join(test.gateway.directory, 'egress');
+  const files = await readdir(directory);
+  expect(files).toHaveLength(1);
+  const original = join(directory, files[0]!);
+  await copyFile(original, join(directory, 'renamed.jsonl'));
+  const foreign = JSON.parse(await readFile(original, 'utf8')) as Record<string, unknown>;
+  foreign['silo'] = 'foreign';
+  await writeFile(join(directory, 'foreign.jsonl'), JSON.stringify(foreign));
+  await test.facts.nats.restart();
+  await test.gateway.restartRuntime();
+  await closeObservation(test, bearer);
+  await test.gateway.restartRuntime();
+  await closeObservation(test, bearer);
+  expect(await readdir(directory)).toHaveLength(3);
+  expect(test.gateway.order.filter(isRefusal)).toHaveLength(4);
+}
+function isRefusal(value: string) {
+  return value === 'egress_receipt_refused';
+}
+it('recovers retained outage evidence once and keeps renamed and foreign files refused', retainedRecords);
+
+async function privateDirectory() {
+  const test = await setup();
+  const directory = join(test.gateway.directory, 'egress');
+  expect((await stat(directory)).mode & 0o777).toBe(0o700);
+  await test.gateway.runtime.close();
+  await chmod(directory, 0o755);
+  await expect(startEgress(test.facts.nats.store, 'test', test.gateway.directory,
+    refusedDirectory)).rejects.toThrow('egress_directory_refused');
+}
+function refusedDirectory() {
+  throw new Error('Unexpected log');
+}
+it('creates a private receipt directory and refuses existing wider access', privateDirectory);
