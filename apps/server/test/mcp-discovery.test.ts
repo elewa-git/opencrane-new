@@ -1,6 +1,6 @@
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-import { remoteFixture } from "@opencrane/models/testing";
+import { remoteFixture } from "@opencrane/models/testing/remote-mcp";
 import { afterEach, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import { natsFixture } from '@opencrane/event-store/testing';

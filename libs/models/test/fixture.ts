@@ -1,4 +1,3 @@
-export { remoteFixture } from './support/remote-mcp.ts';
 import type { McpDispatchOptions } from '../src/mcp-dispatch.ts';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
