@@ -2026,6 +2026,28 @@ async function editsInstallationDefault(ceilingCents: number) {
 it.each([30000, 0])('saves a global ceiling of %s from actual installation startup',
   editsInstallationDefault);
 
+async function restoresInstallationPayerCeiling() {
+  expect(await nats.store.head('team-installation-default')).toBe(0);
+  const requestHeaders = { ...headers('oidc-amina'),
+    origin: new URL(config.redirectUri).origin };
+  for (const ceilingCents of [20000, 0, 20000]) {
+    const payload = { commandId: `payer-${actor.state.sequence}`,
+      expectedSequence: actor.state.sequence, scope: 'paying_group',
+      scopeId: 'installation-default', ceilingCents };
+    const request = { method: 'POST' as const, url: '/api/org/models',
+      headers: requestHeaders, payload };
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ budget: {
+      defaultPayingGroupId: 'installation-default',
+      ceilings: [{ scope: 'paying_group', scopeId: 'installation-default', ceilingCents }],
+    } });
+  }
+  expect(await nats.store.head('team-installation-default')).toBe(0);
+}
+it('sets, stops and restores the saved installation payer ceiling',
+  restoresInstallationPayerCeiling);
+
 
 const invalidSpendingChoices = ['group', 'personal', 'inactive', 'payer'] as const;
 async function refusesSpendingChoice(choice: typeof invalidSpendingChoices[number]) {

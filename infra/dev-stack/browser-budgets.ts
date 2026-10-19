@@ -13,6 +13,13 @@ import { directory, root } from './config.ts';
 
 /** Real owner edits and member refusals against the secondary stack's stub provider. */
 export async function browserBudgetJourney(owner: Page, members: Page[], origin: string, store: EventStore, silo: string, assistantId: string) {
+  const assistantRows = await history(store, `assistant-${assistantId}`, silo);
+  function isSharedAssistant(row: StoredEvent) {
+    const data = row.event.data as { kind?: string };
+    return row.event.type === 'assistant.created' && data.kind === 'team';
+  }
+  assert(assistantRows.some(isSharedAssistant),
+    'Budget notices must use a shared assistant that the owner can choose in Spending');
   const output = `${root}/docs/process/p3-13-live`;
   await mkdir(output, { recursive: true });
   const ceilings = async () => (await history(store, `budget-${silo}`, silo)).filter(row => row.event.type === 'budget.ceiling_set');

@@ -54,6 +54,7 @@ jobs:
           nice -n 10 node --experimental-strip-types --test
           infra/dev-stack/model-stub.test.ts infra/dev-stack/models-environment.test.ts
           infra/dev-stack/provider-setup.test.ts infra/dev-stack/daily-fresh.test.ts
+          infra/dev-stack/browser-budgets.test.ts
 
       # apps/web builds and tests through the Angular CLI, so it needs its own steps.
       - name: Build apps/web

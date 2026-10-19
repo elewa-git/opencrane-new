@@ -260,13 +260,18 @@ async function editsMigratedInstallation() {
 it('saves a zero global ceiling after migrating an existing installation',
   editsMigratedInstallation);
 
-async function refusesUnsavedInstallationPayer() {
+async function refusesUnsavedInstallationPayer(scope: 'global' | 'paying_group') {
   const before = await nats.store.head('budget-test');
+  let choice: Record<string, string> = { scope, defaultPayingGroupId: 'installation-default' };
+  if (scope === 'paying_group') {
+    choice = { scope, scopeId: 'installation-default' };
+  }
   const command = { commandId: 'unsaved-installation', expectedSequence: before,
-    scope: 'global', ceilingCents: 0, defaultPayingGroupId: 'installation-default' };
+    ...choice, ceilingCents: 0 };
   await expect(save(command)).rejects.toThrow('Spending choice unavailable');
   expect(await nats.store.head('budget-test')).toBe(before);
   expect(actor.state.defaultPayingGroupId).toBe('original');
 }
-it('refuses the installation payer when it was not saved in this budget',
+it.each(['global', 'paying_group'] as const)(
+  'refuses an unsaved installation payer for a %s ceiling',
   refusesUnsavedInstallationPayer);
