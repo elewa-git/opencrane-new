@@ -73,6 +73,9 @@ function requireOwnSource(source: StoredEvent | undefined, input: Input, memberI
   }
 }
 type Loaded = Awaited<ReturnType<typeof load>>;
+function requireUnfailed(loaded: Loaded) {
+  if (loaded.failed) throw new ChildRequestFailed('Child request failed');
+}
 async function check(options: Options, memberId: string, loaded: Loaded,
   audience: string[], writing = true) {
   const { input, source } = loaded;
@@ -105,7 +108,7 @@ async function check(options: Options, memberId: string, loaded: Loaded,
   if (await participationClosed(options.store, options.silo, input.conversationId,
     deadline)) throw new ChildRequestClosed('Conversation closed');
   await fresh?.();
-  if (loaded.failed) throw new ChildRequestFailed('Child request failed');
+  requireUnfailed(loaded);
   return { initialJoins, fresh };
 }
 async function review(options: Options, memberId: string, loaded: Loaded, writing = true) {
