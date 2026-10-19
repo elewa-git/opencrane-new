@@ -607,7 +607,9 @@ the normal identity, organisation and cookie assertions.
 Each zero-cent browser check restores that scope in a `finally` block. The calling
 journey creates the `budget-journey` group and `team-budget-journey` shared assistant
 through the owner APIs, adds the signed-in member and starts private shared sessions
-at both widths. Plain startup reuses the same creation commands and subjects.
+at both widths. It waits for the membership and assistant receipts to confirm their
+read tables and access records before opening sessions.
+Plain startup reuses the same creation commands and subjects.
 Personal assistants are not valid choices in the spending editor.
 The journey restores that exact paying group, assistant and global limits after the
 budget browser checks, whether they pass or fail. Audit checks finish before budget
