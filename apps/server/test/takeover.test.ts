@@ -72,6 +72,9 @@ it('keeps one intent, replayable status and audit, and independently authorised 
   keepsIntentAndReplay, 30_000);
 async function refusesAnotherRequester() {
   const { options, input } = await setup();
+  await fixture.append('participation-chat', 'participant.added', {
+    conversationId: 'chat', participantId: 'bob', addedBy: 'alice',
+  }, true);
   expect(await readComputerControl(options.store, 'test', 'assistant')).toBeUndefined();
   await expect(requestControl(options, 'bob', input)).rejects.toThrow('Requester only');
   expect(await readComputerControl(options.store, 'test', 'assistant')).toBeUndefined();

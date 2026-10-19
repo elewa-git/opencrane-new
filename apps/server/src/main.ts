@@ -18,7 +18,7 @@ import { connectComputers, connectMcpCatalogue, connectMemberFeed, connectProjec
 import { installShutdown } from './shutdown.ts';
 import type { RealtimeOptions } from './realtime.ts';
 import { createLogger, startTelemetry } from '@opencrane/observability';
-import { buildServer } from './server.ts';
+import { buildProductionServer } from './server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from './websocket.ts';
 
 // A no-op unless an exporter is configured. The process owns shutdown.
@@ -85,7 +85,7 @@ const membership = events && silo ? {
   store: events.store,
   ...(modelDb ? { db: modelDb.db } : {}),
 } : undefined;
-const app = buildServer(authConfig, {
+const app = buildProductionServer(authConfig, {
   processOwnsTelemetry: true,
   ...(onboarding ? { onboarding } : {}),
   ...(chat ? { chat, liveView: { ...chat, open: desktopConnection(process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!) } } : {}),

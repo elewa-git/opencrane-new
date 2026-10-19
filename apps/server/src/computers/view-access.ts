@@ -1,3 +1,4 @@
+import { ChatRefused } from '../chat/access.ts';
 import { isComputerLifecycle } from '@opencrane/auth';
 import { z } from 'zod';
 import type { Query } from '@opencrane/projections';
@@ -141,13 +142,13 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
   const denied = Promise.withResolvers<never>();
   function refuseRemovedMember(active: boolean) {
     if (!active) {
-      denied.reject(new Error('Access changed'));
+      denied.reject(new ChatRefused('Access changed'));
     }
     return active;
   }
   function refuseConversationRead(permission: Awaited<ReturnType<typeof auth.conversation>>) {
     if (permission.status === 'ok' && !permission.allowed) {
-      denied.reject(new Error('Access changed'));
+      denied.reject(new ChatRefused('Access changed'));
     }
     return permission;
   }
@@ -156,7 +157,7 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
   async function refuseRemovedParticipant() {
     const changes = await participationChanges(store, silo, conversationId, options.deadline);
     if (changes.get(memberId)?.row.event.type === 'participant.removed') {
-      denied.reject(new Error('Access changed'));
+      denied.reject(new ChatRefused('Access changed'));
     }
   }
   const removalRead = refuseRemovedParticipant();
@@ -204,10 +205,10 @@ async function conversationDesktop(options: ViewAccessOptions, memberId: string,
     options.deadline ?? Infinity);
   const access = await participation(store, silo, conversationId, memberId, legacy,
     options.deadline);
-  if (access.created.mode !== 'agent_session') throw new Error('Access changed');
+  if (access.created.mode !== 'agent_session') throw new ChatRefused('Access changed');
   const closed = await conversationClosed(store, options.db, silo, conversationId,
     options.deadline ?? Infinity);
-  if (closed) throw new Error('Access changed');
+  if (closed) throw new ChatRefused('Access changed');
   const assistantId = access.created.assistantId;
   async function checkDesktop() {
     const computer = await currentComputer(options, assistantId);
@@ -215,7 +216,7 @@ async function conversationDesktop(options: ViewAccessOptions, memberId: string,
     const permission = await auth.view(
       memberId, conversationId, computer.computerId, desktop.receipts);
     if (permission.status === 'unavailable') throw new ViewCheckUnavailable('authorisation');
-    if (!permission.allowed) throw new Error('Access changed');
+    if (!permission.allowed) throw new ChatRefused('Access changed');
     await confirmSnapshotStillCurrent(desktop.fresh);
     return computer;
   }
@@ -321,7 +322,7 @@ export async function desktopAccess(options: ViewAccessOptions, memberId: string
     if (unconfirmedTeam) {
       throw unconfirmedTeam;
     }
-    throw new Error('Desktop access required');
+    throw new ChatRefused('Desktop access required');
   }
   async function checkFresh() {
     await fresh();

@@ -13,7 +13,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, dated approvals, model grants, live updates, spending stop notices and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model grants, live updates, spending stop notices and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
   server -->|records child requests, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops and turn decisions| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
@@ -163,7 +163,9 @@ have not been checked. Unrelated read receipts do not require reading the event 
 - Preview bounded facts for a saved private turn without sending text to a computer.
   Facts with expired or unusable supporting facts are left out.
 
-- Record internal control intent for the current requester. Refuse new work while it is pending.
+- Read saved control status, including paused and failed requests, for chat participants.
+  Keep requests to take control switched off.
+- Record control intent for the current requester when enabled. Refuse new work while it is pending.
   Keep authorised viewing, explicit stops and approval denial available.
 - Accept an owner or admin’s review of exact saved tool definitions and free tool use.
   Refuse old reviews and changes to another connection.
