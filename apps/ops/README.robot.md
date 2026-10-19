@@ -674,5 +674,8 @@ placeholder admits nothing. The operator's `mcp-approved-images` ConfigMap maps 
 use `opencrane.ai/mcp-spec`. Only `mcp-lifecycle` may create or change workload specs;
 updates only change replicas between zero and one. Controller maintenance stays allowed.
 `MCP_HOSTED_K3D=1 DEV_STACK_ID=1 nice -n 10 npx vitest run apps/ops/test/mcp-hosted-k3d.test.ts`
-checks admission in disposable namespaces on a claimed, stopped secondary slot.
+checks admission, including hosted and computer Pod resize requests, in disposable
+namespaces on a claimed, stopped secondary slot. The device, privileged and missing-limit tests copy the relevant generated
+validation into an isolated policy. These fixtures are valid for Kubernetes; other
+template rules cannot hide a missing check.
 Quota and network isolation remain for 8b; no runtime start path is connected here.

@@ -99,7 +99,7 @@ const policies = [
       + `object.spec.template.metadata.annotations['opencrane.ai/mcp-spec']`,
     ...security,
   ]],
-  ['pod', '', ['pods', 'pods/ephemeralcontainers'], 'object.spec', security],
+  ['pod', '', ['pods', 'pods/ephemeralcontainers', 'pods/resize'], 'object.spec', security],
   ['scale', 'apps', ['statefulsets/scale'], '', [worker,
     `!has(object.spec.replicas) || ${replicas}`]],
 ];

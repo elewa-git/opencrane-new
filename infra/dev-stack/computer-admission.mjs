@@ -23,6 +23,8 @@ const security = [
   `!has(variables.p.ephemeralContainers) || size(variables.p.ephemeralContainers) == 0`,
   `!has(variables.p.securityContext) || (!has(variables.p.securityContext.sysctls) && !has(variables.p.securityContext.seLinuxOptions) && !has(variables.p.securityContext.windowsOptions) && (!has(variables.p.securityContext.seccompProfile) || variables.p.securityContext.seccompProfile.type == 'RuntimeDefault') && (!has(variables.p.securityContext.appArmorProfile) || variables.p.securityContext.appArmorProfile.type == 'RuntimeDefault'))`,
   `size(variables.p.containers) == 1`,
+  `variables.p.containers.all(container, `
+    + `container.resources == ${cel(spec.containers[0].resources)})`,
   `variables.p.containers.all(c, c.name == 'computer' && c.image == ${literal(spec.containers[0].image)} && (!has(c.command) || size(c.command) == 0) && (!has(c.args) || size(c.args) == 0) && (!has(c.envFrom) || size(c.envFrom) == 0) && !has(c.lifecycle) && !has(c.volumeDevices))`,
   `variables.p.containers.all(c, !has(c.livenessProbe) && !has(c.startupProbe) && has(c.readinessProbe) && has(c.readinessProbe.httpGet) && !has(c.readinessProbe.exec) && !has(c.readinessProbe.tcpSocket) && !has(c.readinessProbe.grpc) && c.readinessProbe.httpGet.path == '/health' && c.readinessProbe.httpGet.port == 8081 && (!has(c.readinessProbe.httpGet.host) || c.readinessProbe.httpGet.host == '') && (!has(c.readinessProbe.httpGet.httpHeaders) || size(c.readinessProbe.httpGet.httpHeaders) == 0))`,
   `variables.p.containers.all(c, has(c.securityContext) && !c.securityContext.allowPrivilegeEscalation && c.securityContext.readOnlyRootFilesystem && (!has(c.securityContext.privileged) || !c.securityContext.privileged) && !has(c.securityContext.procMount) && !has(c.securityContext.windowsOptions) && !has(c.securityContext.seLinuxOptions) && (!has(c.securityContext.appArmorProfile) || c.securityContext.appArmorProfile.type == 'RuntimeDefault') && (!has(c.securityContext.seccompProfile) || c.securityContext.seccompProfile.type == 'RuntimeDefault') && c.securityContext.capabilities.drop == ['ALL'] && c.securityContext.capabilities.add == ${literal(spec.containers[0].securityContext.capabilities.add)})`,
@@ -108,7 +110,7 @@ const policies = [
     `variables.labels['app'] == 'computer'`,
     `!(${worker}) || (${ordinaryWorkerUpdate}) || (${upgrade})`,
   ]],
-  ['pod', '', ['pods', 'pods/ephemeralcontainers'], 'object.spec', security],
+  ['pod', '', ['pods', 'pods/ephemeralcontainers', 'pods/resize'], 'object.spec', security],
   ['claim', 'extensions.agents.x-k8s.io', ['sandboxclaims'], 'object.spec', [
     `object.spec.warmPoolRef.name == 'computer' && object.spec.lifecycle.shutdownPolicy == 'Retain' && !has(object.spec.sandboxTemplateRef)`,
     `object.spec.additionalPodMetadata.all(k, k == 'labels') && object.spec.additionalPodMetadata.labels.all(k, k in ['sandbox.users.io/computer', 'sandbox.users.io/assistant']) && object.spec.additionalPodMetadata.labels['sandbox.users.io/computer'] == object.metadata.name`,

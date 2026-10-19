@@ -28,6 +28,7 @@ flowchart LR
 ## What it is responsible for
 
 Separate admission rules check hosted tool images and container settings. Their tests
+also check resource changes made through the Pod resize endpoint. Their tests
 use temporary namespaces on a claimed spare stack. Startup does not install them yet.
 
 - Start and stop the local services and OpenCrane processes.

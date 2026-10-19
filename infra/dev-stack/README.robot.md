@@ -710,3 +710,7 @@ Pod and scale policies with fail-closed image parameters. Apply
 provision `mcp-approved-images`; the lifecycle identity cannot edit it or any policy.
 These files are not installed by `up.sh` yet. Part 8b adds quota, network policies
 and secondary startup installation. See the [test contract](../../apps/ops/README.robot.md#hosted-mcp-admission).
+
+Pod admission includes `pods/resize` for hosted tools and computers. Computer Pod
+resource requests and limits must match the checked sandbox template. The hosted
+admission live file covers both policies in disposable secondary namespaces.

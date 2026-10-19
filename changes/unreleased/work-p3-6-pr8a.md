@@ -1,1 +1,1 @@
-Hosted tool admission now requires an approved image and hardened container settings. A separate lifecycle identity can create workloads and scale them to zero or one; application startup remains unavailable.
+Hosted tool admission now requires an approved image and hardened container settings. A separate lifecycle identity can create workloads and scale them to zero or one; application startup remains unavailable. Admission now checks Pod resize requests for both hosted tools and computers, which must retain their approved resource settings.
