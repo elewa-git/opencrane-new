@@ -19,7 +19,11 @@ function command(binary: string, args: string[], input?: string): string {
   const result = spawnSync(binary, args, { input, encoding: 'utf8', timeout: 180_000 });
   if (result.status !== 0) {
     if (args.includes('can-i') && result.stdout.trim() === 'no') throw new Error('forbidden');
-    const policyMessage = result.stderr?.match(/Hosted MCP check \d+ requires the approved template or identity|Computer must use the checked template[^\n]*/u);
+    const refusal = /Hosted MCP check \d+ requires the approved template or identity/u;
+    const policyMessage = result.stderr?.match(refusal);
+    if (result.stderr?.includes('Computer must use the checked template')) {
+      throw new Error('denied: Computer must use the checked template');
+    }
     if (policyMessage) throw new Error(`denied: ${policyMessage[0]}`);
     for (const reason of ['denied', 'forbidden', 'is invalid:']) {
       if (result.stderr?.includes(reason)) throw new Error(reason);
@@ -44,7 +48,7 @@ function field(value: unknown, path: string): unknown {
 function change(value: unknown, path: string, replacement: unknown) {
   const keys = path.split('.');
   const last = keys.pop()!;
-  const parent = field(value, keys.join('.'));
+  const parent = keys.length === 0 ? value : field(value, keys.join('.'));
   if (typeof parent !== 'object' || parent === null) throw new Error(`Missing ${path}`);
   if (replacement === undefined) Reflect.deleteProperty(parent, last);
   else Reflect.set(parent, last, replacement);
@@ -142,7 +146,6 @@ const guards: [string, string, unknown][] = [
   ['root user', `${security}.runAsUser`, 0],
   ['writable root', `${security}.readOnlyRootFilesystem`, false],
   ['privilege escalation', `${security}.allowPrivilegeEscalation`, true],
-  ['privileged', `${security}.privileged`, false],
   ['capability', `${security}.capabilities.add`, ['NET_ADMIN']],
   ['seccomp', `${security}.seccompProfile.type`, 'Unconfined'],
   ['host network', `${pod}.hostNetwork`, true],
@@ -162,13 +165,13 @@ const guards: [string, string, unknown][] = [
   ['disk scratch', `${pod}.volumes.0.emptyDir.medium`, ''],
   ['large scratch', `${pod}.volumes.0.emptyDir.sizeLimit`, '65Mi'],
   ['raised limits', `${container}.resources.limits.cpu`, '2'],
-  ['missing CPU limit', `${container}.resources.limits`,
-    { memory: '512Mi', 'ephemeral-storage': '1Gi' }],
 ];
 describe.skipIf(!live)('hosted MCP namespace', cases);
 function cases() {
   it.each(guards)('denies %s', guard);
   it('denies devices', devices);
+  it('denies privileged', privileged);
+  it('denies missing limits', missingLimits);
   it('denies another container', extraContainer);
   it('denies an approved image tag', imageTag);
   it('denies hosted Pod resize', hostedResize);
@@ -287,12 +290,14 @@ async function waitForPod(name: string, present: boolean) {
   throw new Error('Fixture Pod timeout');
 }
 
-function imageTag() {
+async function imageTag() {
   const image = 'example:latest';
   kube(['apply', '-f', '-'], approvedImages(image));
+  await delay(2000);
   try {
     const candidate = workload();
     change(candidate, `${container}.image`, image);
+    change(candidate, `${container}.imagePullPolicy`, 'IfNotPresent');
     refuse(candidate);
   } finally {
     kube(['apply', '-f', '-'], approvedImages(String(field(approved, `${container}.image`))));
@@ -345,40 +350,62 @@ async function computerResize() {
   }
 }
 
-function devices() {
-  // Isolate the device check so the fixed volume list cannot hide a missing guard.
+async function isolatedGuard(
+  candidate: unknown, expressionField: string, path: string, value: unknown,
+) {
+  // Isolate one check so other template rules cannot hide a missing guard.
   const policy: unknown = JSON.parse(kube(['get', 'validatingadmissionpolicy',
     `${namespace}-statefulset`, '-o', 'json']));
   const validations = field(policy, 'spec.validations');
   if (!Array.isArray(validations)) throw new Error('Missing policy validations');
   function checksContainer(value: unknown) {
-    return String(field(value, 'expression')).includes('!has(variables.container.command)');
+    return String(field(value, 'expression')).includes(expressionField);
   }
-  const deviceChecks = validations.filter(checksContainer);
-  expect(deviceChecks).toHaveLength(1);
-  change(policy, 'metadata', { name: `${otherNamespace}-devices` });
-  change(policy, 'spec.validations', deviceChecks);
+  const selectedChecks = validations.filter(checksContainer);
+  expect(selectedChecks).toHaveLength(1);
+  change(policy, 'metadata', { name: `${otherNamespace}-isolated` });
+  change(policy, 'spec.validations', selectedChecks);
   const binding = { apiVersion: 'admissionregistration.k8s.io/v1',
-    kind: 'ValidatingAdmissionPolicyBinding', metadata: { name: `${otherNamespace}-devices` },
-    spec: { policyName: `${otherNamespace}-devices`, validationActions: ['Deny'],
+    kind: 'ValidatingAdmissionPolicyBinding', metadata: { name: `${otherNamespace}-isolated` },
+    spec: { policyName: `${otherNamespace}-isolated`, validationActions: ['Deny'],
       paramRef: { name: 'mcp-approved-images', namespace, parameterNotFoundAction: 'Deny' },
       matchResources: { namespaceSelector: {
         matchLabels: { 'kubernetes.io/metadata.name': otherNamespace } } } } };
   kube(['apply', '-f', '-'], policy);
   kube(['apply', '-f', '-'], binding);
-  const candidate = workload();
-  const volumes = [field(candidate, `${pod}.volumes.0`),
-    { name: 'block', persistentVolumeClaim: { claimName: 'block' } }];
-  change(candidate, `${pod}.volumes`, volumes);
+  await delay(2000);
   const savedNamespace = namespace;
   namespace = otherNamespace;
   try {
     admit(candidate, false);
-    change(candidate, `${container}.volumeDevices`, [{ name: 'block', devicePath: '/dev/test' }]);
+    change(candidate, path, value);
     refuse(candidate, false);
   } finally {
     kube(['delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
-      `${namespace}-devices`, '--ignore-not-found']);
+      `${namespace}-isolated`, '--ignore-not-found']);
     namespace = savedNamespace;
   }
+}
+
+async function devices() {
+  const candidate = workload();
+  const volumes = [field(candidate, `${pod}.volumes.0`),
+    { name: 'block', persistentVolumeClaim: { claimName: 'block' } }];
+  change(candidate, `${pod}.volumes`, volumes);
+  const devices = [{ name: 'block', devicePath: '/dev/test' }];
+  await isolatedGuard(candidate, '!has(variables.container.command)',
+    `${container}.volumeDevices`, devices);
+}
+async function privileged() {
+  const candidate = workload();
+  // Allow Kubernetes to validate this privileged fixture before the isolated policy checks it.
+  change(candidate, `${security}.allowPrivilegeEscalation`, true);
+  change(candidate, `${security}.seccompProfile`, undefined);
+  await isolatedGuard(candidate, '!has(variables.container.securityContext.procMount)',
+    `${security}.privileged`, true);
+}
+
+async function missingLimits() {
+  await isolatedGuard(workload(), 'has(variables.pod.containers)',
+    `${container}.resources.limits`, undefined);
 }
