@@ -37,3 +37,12 @@ try { await captureBrowser(1); } catch (error) { console.log(error.message); }
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+test('unrecognised error messages and raw child stderr are withheld', async () => {
+  const { browserFailure, retainedBrowserFailure } = await import('./browser-capture.ts');
+  const error = new Error('cookie=planted-cookie token=planted-token <html>private body</html>');
+  assert.equal(browserFailure('390px session', error),
+    'FAIL browser during 390px session: Browser error (details withheld)');
+  assert.equal(retainedBrowserFailure(error.message),
+    'FAIL browser during unknown step: Browser process failed without a safe reason');
+});
