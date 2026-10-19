@@ -701,3 +701,12 @@ was accepted. A later-joining member chatted through the explicit default, with 
 legacy key-file setting and only managed credentials counted by the restarted stub.
 Free reachability admissions do not count as spending; all other unresolved sends
 still block switch-on. Twice-fresh qualification remains NOT RUN for PR 5e.
+
+## Hosted MCP namespace rules
+
+`node infra/dev-stack/mcp-admission.mjs <namespace>` installs separate StatefulSet,
+Pod and scale policies with fail-closed image parameters. Apply
+`mcp-lifecycle-rbac.yaml` in that namespace for lifecycle rights. The caller must
+provision `mcp-approved-images`; the lifecycle identity cannot edit it or any policy.
+These files are not installed by `up.sh` yet. Part 8b adds quota, network policies
+and secondary startup installation. See the [test contract](../../apps/ops/README.robot.md#hosted-mcp-admission).

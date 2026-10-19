@@ -665,3 +665,14 @@ The handler uses the normal five retries with exponential backoff, starting at o
 After exhaustion it keeps material and the failed job. Operators can retry the original job;
 bounded candidate maintenance can also find retained objects. Automatic startup maintenance
 is deferred. Replay does not register this handler. Live Kubernetes/provider checks: NOT RUN.
+
+## Hosted MCP admission
+
+`mcp-hosted-template.json` defines the shared, credential-free StatefulSet. Its image
+placeholder admits nothing. The operator's `mcp-approved-images` ConfigMap maps the
+64-character spec digest to the approved image digest. Workload and Pod annotations
+use `opencrane.ai/mcp-spec`. Only `mcp-lifecycle` may create or change workload specs;
+updates only change replicas between zero and one. Controller maintenance stays allowed.
+`MCP_HOSTED_K3D=1 DEV_STACK_ID=1 nice -n 10 npx vitest run apps/ops/test/mcp-hosted-k3d.test.ts`
+checks admission in disposable namespaces on a claimed, stopped secondary slot.
+Quota and network isolation remain for 8b; no runtime start path is connected here.

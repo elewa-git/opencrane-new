@@ -22,10 +22,13 @@ flowchart LR
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
   stack -->|checks provider setup, shared budgets and paged history| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
-  stack -->|uses local cluster| devbox
+  stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
 
 ## What it is responsible for
+
+Separate admission rules check hosted tool images and container settings. Their tests
+use temporary namespaces on a claimed spare stack. Startup does not install them yet.
 
 - Start and stop the local services and OpenCrane processes.
   Memory reads need an existing private key directory configured at startup.

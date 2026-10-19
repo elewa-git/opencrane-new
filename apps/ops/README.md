@@ -17,7 +17,7 @@ flowchart LR
   ops -->|destroys forgotten and superseded memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables, unfinished child requests and jobs; locks gateway preparation; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|updates computers, delivers passes and keys, stops private tools and cleans old connection copies| kube["Kubernetes<br/>computer manager"]
+  ops -->|updates computers, delivers passes and keys, defines hosted tool settings, stops private tools and cleans old connection copies| kube["Kubernetes<br/>computer manager"]
 ```
 
 ## What it is responsible for
@@ -49,6 +49,10 @@ flowchart LR
 - Runs one-off upgrades for model access, the default budget group and handler subscriptions.
 
 ## Processes it handles
+
+A reviewed template defines how hosted tools may run. Separate Kubernetes rules check
+the image and settings and limit who may create or scale a tool. Starting hosted tools
+through the application remains unavailable.
 
 When private connection custody is configured, the dispatcher cleans old personal
 connection copies after saved revocations or replacements. Failed cleanup is retried.

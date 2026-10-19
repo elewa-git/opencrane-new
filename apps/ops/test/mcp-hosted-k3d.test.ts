@@ -18,7 +18,8 @@ let secondImage = '';
 function command(binary: string, args: string[], input?: string): string {
   const result = spawnSync(binary, args, { input, encoding: 'utf8', timeout: 180_000 });
   if (result.status !== 0) {
-    for (const reason of ['denied', 'forbidden', 'exceeded quota']) {
+    if (args.includes('can-i') && result.stdout.trim() === 'no') throw new Error('forbidden');
+    for (const reason of ['denied', 'forbidden', 'is invalid:']) {
       if (result.stderr?.includes(reason)) throw new Error(reason);
     }
     throw new Error(`${binary} failed (private output withheld)`);
@@ -52,9 +53,11 @@ function workload() {
 function admit(value: unknown, lifecycle = true) {
   return kube(['create', '--dry-run=server', '-f', '-'], value, lifecycle);
 }
-function refuse(value: unknown, lifecycle = true) {
-  function request() { admit(value, lifecycle); }
-  expect(request).toThrow('denied');
+function refuse(value: unknown, lifecycle = true, builtIn = false) {
+  function request() {
+    admit(value, lifecycle);
+  }
+  expect(request).toThrow(builtIn ? /denied|is invalid:/u : /denied/u);
 }
 function buildImage(label: string) {
   const computer: unknown = JSON.parse(readFileSync('apps/computer/sandbox-template.json', 'utf8'));
@@ -92,6 +95,7 @@ async function setup() {
   const image = String(buildImage('first'));
   secondImage = String(buildImage('second'));
   expect(image).not.toBe(secondImage);
+  change(approved, 'spec.replicas', 1);
   change(approved, 'spec.template.spec.containers.0.image', image);
   change(approved, 'metadata.annotations', { 'opencrane.ai/mcp-spec': specDigest });
   change(approved, 'spec.template.metadata.annotations', { 'opencrane.ai/mcp-spec': specDigest });
@@ -99,10 +103,15 @@ async function setup() {
   kube(['create', 'namespace', otherNamespace]);
   kube(['apply', '-f', 'infra/dev-stack/mcp-lifecycle-rbac.yaml']);
   kube(['apply', '-f', '-'], approvedImages(image));
-  command('node', ['infra/dev-stack/mcp-admission.mjs', namespace]);
+  const script = process.env['MCP_ADMISSION_SCRIPT'] ?? 'infra/dev-stack/mcp-admission.mjs';
+  command('node', [script, namespace]);
+  const invalidReplicas = workload();
+  change(invalidReplicas, 'spec.replicas', 2);
   // Wait for policy distribution before testing the individual refusals.
   for (let attempt = 0; attempt < 60; attempt++) {
-    try { admit(workload(), false); } catch (error) {
+    try {
+      admit(invalidReplicas);
+    } catch (error) {
       if (error instanceof Error && error.message === 'denied') return;
       throw error;
     }
@@ -112,7 +121,7 @@ async function setup() {
 }
 function cleanup() {
   if (namespace) {
-    for (const suffix of ['statefulset', 'pod']) {
+    for (const suffix of ['statefulset', 'pod', 'scale']) {
       kube(['delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
         `${namespace}-${suffix}`, '--ignore-not-found']);
     }
@@ -152,93 +161,115 @@ const guards: [string, string, unknown][] = [
   ['raised limits', `${container}.resources.limits.cpu`, '2'],
   ['missing limits', `${container}.resources.limits`, undefined],
 ];
-describe.skipIf(!live)('hosted MCP namespace', function cases() {
-  it.each(guards)('denies %s', function guard(_name, path, value) {
+describe.skipIf(!live)('hosted MCP namespace', cases);
+function cases() {
+  it.each(guards)('denies %s', guard);
+  it('denies another container', extraContainer);
+  it('binds image and spec digest to protected parameters', images);
+  it('denies the admin creating an approved workload', requester);
+  it('fails closed without parameters', parameters);
+  it('limits lifecycle permissions to this namespace', permissions);
+  it('creates a Pod, allows only scaling and completes deletion', lifecycle, 90_000);
+}
+function guard(name: string, path: string, value: unknown) {
+  const candidate = workload();
+  change(candidate, path, value);
+  refuse(candidate, true, name === 'privileged' || name === 'devices');
+}
+function extraContainer() {
+  const candidate = workload();
+  const extra = { name: 'extra', image: secondImage };
+  const containers = [field(candidate, `${pod}.containers.0`), extra];
+  change(candidate, `${pod}.containers`, containers);
+  refuse(candidate);
+}
+function images() {
+  for (const image of [secondImage, 'example:latest']) {
     const candidate = workload();
-    change(candidate, path, value);
+    change(candidate, `${container}.image`, image);
     refuse(candidate);
-  });
-  it('denies another container', function extraContainer() {
-    const candidate = workload();
-    const extra = { name: 'extra', image: secondImage };
-    const containers = [field(candidate, `${pod}.containers.0`), extra];
-    change(candidate, `${pod}.containers`, containers);
-    refuse(candidate);
-  });
-  it('binds image and spec digest to protected parameters', function images() {
-    for (const image of [secondImage, 'example:latest']) {
-      const candidate = workload();
-      change(candidate, `${container}.image`, image);
-      refuse(candidate);
+  }
+  const candidate = workload();
+  change(candidate, 'spec.template.metadata.annotations', { 'opencrane.ai/mcp-spec': otherDigest });
+  change(candidate, 'metadata.annotations', { 'opencrane.ai/mcp-spec': otherDigest });
+  refuse(candidate);
+}
+function requester() {
+  refuse(workload(), false);
+}
+function parameters() {
+  kube(['delete', 'configmap', 'mcp-approved-images']);
+  try {
+    refuse(workload());
+  } finally {
+    kube(['apply', '-f', '-'], approvedImages(String(field(approved, `${container}.image`))));
+  }
+}
+function permissions() {
+  const forbidden = [
+    ['patch', 'configmaps'], ['patch', 'validatingadmissionpolicies'], ['patch', 'roles'],
+    ['patch', 'resourcequotas'], ['patch', 'networkpolicies'], ['create', 'pods/exec'],
+    ['get', 'secrets'], ['create', 'pods'],
+  ];
+  for (const [verb, resource] of forbidden) {
+    function request() {
+      kube(['auth', 'can-i', verb!, resource!], undefined, true);
     }
-    const candidate = workload();
-    change(candidate, 'spec.template.metadata.annotations', { 'opencrane.ai/mcp-spec': otherDigest });
-    change(candidate, 'metadata.annotations', { 'opencrane.ai/mcp-spec': otherDigest });
-    refuse(candidate);
-  });
-  it('denies the admin creating an approved workload', function requester() { refuse(workload(), false); });
-  it('fails closed without parameters', function parameters() {
-    kube(['delete', 'configmap', 'mcp-approved-images']);
-    try { refuse(workload()); } finally {
-      kube(['apply', '-f', '-'], approvedImages(String(field(approved, `${container}.image`))));
+    expect(request).toThrow('forbidden');
+  }
+  for (const target of [otherNamespace, `opencrane-dev-${process.env['DEV_STACK_ID']}`]) {
+    function request() {
+      kube(['delete', 'pod', 'absent', '-n', target, '--dry-run=server'], undefined, true);
     }
-  });
-  it('limits lifecycle permissions to this namespace', function permissions() {
-    const forbidden = [
-      ['patch', 'configmaps'], ['patch', 'validatingadmissionpolicies'], ['patch', 'roles'],
-      ['patch', 'resourcequotas'], ['patch', 'networkpolicies'], ['create', 'pods/exec'],
-      ['get', 'secrets'], ['create', 'pods'],
-    ];
-    for (const [verb, resource] of forbidden) {
-      function request() { kube(['auth', 'can-i', verb!, resource!], undefined, true); }
-      expect(request).toThrow();
+    expect(request).toThrow('forbidden');
+  }
+}
+async function lifecycle() {
+  const candidate = workload();
+  admit(candidate);
+  kube(['create', '-f', '-'], candidate, true);
+  const name = String(field(candidate, 'metadata.name'));
+  await waitForPod(name, true);
+  const changedImage = workload();
+  change(changedImage, `${container}.image`, secondImage);
+  change(changedImage, 'spec.template.metadata.annotations', { 'opencrane.ai/mcp-spec': otherDigest });
+  change(changedImage, 'metadata.annotations', { 'opencrane.ai/mcp-spec': otherDigest });
+  for (const patch of [
+    changedImage,
+    { spec: { template: { metadata: { labels: { changed: 'yes' } } } } },
+    { spec: { replicas: 2 } },
+  ]) {
+    function update() {
+      kube(['patch', `statefulset/${name}`, '--type=merge', '--dry-run=server',
+        '-p', JSON.stringify(patch)], undefined, true);
     }
-    for (const target of [otherNamespace, `opencrane-dev-${process.env['DEV_STACK_ID']}`]) {
-      function request() {
-        kube(['delete', 'pod', 'absent', '-n', target, '--dry-run=server'], undefined, true);
-      }
-      expect(request).toThrow('forbidden');
-    }
-  });
-  it('creates a Pod, allows only scaling and completes deletion', async function lifecycle() {
-    const candidate = workload();
-    admit(candidate);
-    kube(['create', '-f', '-'], candidate, true);
-    const name = String(field(candidate, 'metadata.name'));
-    await waitForPod(name, true);
-    for (const patch of [
-      { spec: { template: { spec: { containers: [{ name: 'mcp', image: secondImage }] } } } },
-      { spec: { template: { metadata: { labels: { changed: 'yes' } } } } },
-      { spec: { replicas: 2 } },
-    ]) {
-      function update() {
-        kube(['patch', `statefulset/${name}`, '--type=merge', '--dry-run=server',
-          '-p', JSON.stringify(patch)], undefined, true);
-      }
-      expect(update).toThrow('denied');
-    }
-    function adminScale() {
-      kube(['scale', `statefulset/${name}`, '--replicas=0', '--dry-run=server']);
-    }
-    expect(adminScale).toThrow('denied');
-    const bare = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'bare',
-      annotations: { 'opencrane.ai/mcp-spec': specDigest } },
-    spec: structuredClone(field(candidate, pod)) };
-    change(bare, 'spec.runtimeClassName', undefined);
-    refuse(bare, false);
-    function ephemeral() {
-      const patch = { spec: { ephemeralContainers: [{ name: 'debug', image: secondImage,
-        targetContainerName: 'mcp' }] } };
-      kube(['patch', `pod/${name}-0`, '--subresource=ephemeralcontainers', '--type=merge',
-        '--dry-run=server', '-p', JSON.stringify(patch)]);
-    }
-    expect(ephemeral).toThrow('denied');
-    kube(['scale', `statefulset/${name}`, '--replicas=0'], undefined, true);
-    await waitForPod(name, false);
-    kube(['delete', `statefulset/${name}`, '--cascade=foreground', '--wait=true',
-      '--timeout=30s'], undefined, true);
-  }, 90_000);
-});
+    expect(update).toThrow('denied');
+  }
+  function tooManyReplicas() {
+    kube(['scale', `statefulset/${name}`, '--replicas=2', '--dry-run=server'], undefined, true);
+  }
+  expect(tooManyReplicas).toThrow('denied');
+  function adminScale() {
+    kube(['scale', `statefulset/${name}`, '--replicas=0', '--dry-run=server']);
+  }
+  expect(adminScale).toThrow('denied');
+  const bare = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'bare',
+    annotations: { 'opencrane.ai/mcp-spec': specDigest } },
+  spec: structuredClone(field(candidate, pod)) };
+  change(bare, 'spec.runtimeClassName', undefined);
+  refuse(bare, false);
+  function ephemeral() {
+    const patch = { spec: { ephemeralContainers: [{ name: 'debug', image: secondImage,
+      targetContainerName: 'mcp' }] } };
+    kube(['patch', `pod/${name}-0`, '--subresource=ephemeralcontainers', '--type=merge',
+      '--dry-run=server', '-p', JSON.stringify(patch)]);
+  }
+  expect(ephemeral).toThrow('denied');
+  kube(['scale', `statefulset/${name}`, '--replicas=0'], undefined, true);
+  await waitForPod(name, false);
+  kube(['delete', `statefulset/${name}`, '--cascade=foreground', '--wait=true',
+    '--timeout=30s'], undefined, true);
+}
 async function waitForPod(name: string, present: boolean) {
   for (let attempt = 0; attempt < 60; attempt++) {
     const uid = kube(['get', `pod/${name}-0`, '--ignore-not-found', '-o', 'jsonpath={.metadata.uid}']);
