@@ -73,7 +73,7 @@ async function restoreOwnerApp() {
   assert.deepEqual(summary(after), desired, 'Owner app restoration did not persist');
   console.log(JSON.stringify({ orgId, projectId, appId, changed, before: summary(before), after: summary(after) }));
 }
-async function secondarySetup() {
+async function secondarySetup(readOnly: boolean) {
   // All secondary resources belong to this existing organisation and project.
   orgId = '393311211338337681';
   const projectId = '393311211539664273';
@@ -110,6 +110,7 @@ async function secondarySetup() {
     clientId = app.oidcConfig.clientId;
     assert(await exists(`${credentials}/zitadel-client-secret`), 'Existing secondary app secret missing');
   } else {
+    assert(!readOnly, 'Read-only setup requires the existing secondary app');
     const app = z.object({ appId: z.string(), clientId: z.string(), clientSecret: z.string() }).parse(
       await api(`/management/v1/projects/${projectId}/apps/oidc`, { name: appName,
         redirectUris: [`${localOrigin}/auth/callback`], postLogoutRedirectUris: [`${localOrigin}/`],
@@ -129,6 +130,7 @@ async function secondarySetup() {
     assert(found.length <= 1, 'Duplicate secondary users');
     let userId = found[0]?.id;
     if (!userId) {
+      assert(!readOnly, 'Read-only setup requires existing secondary test users');
       if (!await exists(`${credentials}/${file}`)) await retain(file, `Oc2!${randomBytes(24).toString('base64url')}a9`);
       userId = z.object({ userId: z.string() }).parse(await api('/management/v1/users/human/_import', {
         userName, profile: { firstName: 'OpenCrane CI', lastName: role, preferredLanguage: 'en' },
@@ -154,9 +156,11 @@ async function secondarySetup() {
 }
 try {
   if (process.argv[2] === '--restore-owner-app') { await restoreOwnerApp(); process.exit(0); }
-  assert(process.argv[2] === undefined, 'Unknown Zitadel setup option');
+  const readOnly = process.argv[2] === '--read-only';
+  assert(process.argv[2] === undefined || readOnly, 'Unknown Zitadel setup option');
   await prepareDirectory();
-  if (secondary) { await secondarySetup(); process.exit(0); }
+  if (secondary) { await secondarySetup(readOnly); process.exit(0); }
+  assert(!readOnly, 'Read-only setup requires a secondary slot');
   const pinned = z.object({ orgId: z.string().optional(), extraIdentities: z.array(identity).length(1) })
     .parse(JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')));
   const externalOwner = pinned.extraIdentities[0]!;

@@ -432,3 +432,133 @@ The signed-in pages were also refreshed at
 [1280px](p5-1-live/signed-in-1280.png) and
 [390px](p5-1-live/signed-in-390.png). These captures and the two chat captures
 come from this main install.
+
+## P5-2: two fresh installs
+
+**Overall: PASS**, 19 October 2026, 15:25–15:32 UTC. The corrected runner
+completed two fresh packaged installs in a row on one claimed secondary slot,
+including checked owner sign-in and stub chat at 1280px and 390px in each.
+No retry was needed. No code changed during this qualification.
+
+Source: `56a79c6d18c0062252ecbe94c1290826a587c800`, on `work/p5-2-pr1`.
+`git fetch origin` and `git rebase origin/main` completed; Git reported the
+branch already current. Main was `9c40e9c487ca745e0201990090d0c058614d71ea`.
+The ancestry check passed and neither rebase state directory remained.
+The cluster was `k3d-ocn`, chart version `0.1.0`. The server and web used
+`sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a`.
+The other image pins came from `infra/package/reviewed-images.json`.
+
+### Setup followed
+
+Before claiming, the exact sequence was written to
+`/tmp/p5-2-qualified-live/setup.md`. It was reconstructed from the passing
+pair's `last.md` and `events.jsonl` under `/home/jente/.fleet/p5-2-pr1`, the
+[package operator notes](../../infra/package/README.robot.md), and this receipt.
+
+1. `df -h /` showed 93 GiB free. `infra/dev-stack/claim.sh` returned `1`.
+2. With `DEV_STACK_ID=1` and `ZITADEL_KEY_FILE` pointing to
+   `/home/jente/dev/opencrane-new/.keys/.zitadel-key`, read-only provider setup
+   ran as `nice -n 10 node --experimental-strip-types
+   infra/dev-stack/zitadel-setup.ts --read-only`. It confirmed the secondary app
+   and test users were ready and copied the slot's private sign-in settings.
+3. `/home/jente/.config/opencrane/dev-stack-1/package-values.json` was recreated
+   with mode `0600`. It contained the reviewed chart version and image pins,
+   the six required Secret names prefixed with `package-` in kebab case, and
+   `ingress`, `loadBalancer` and `funnel` all set to `false`. It contained no
+   Secret values. This step had been missed in the previous stopped attempt.
+4. With the same environment, the command was `nice -n 10 node
+   --experimental-strip-types infra/package/fresh-twice.ts
+   /home/jente/.config/opencrane/dev-stack-1/package-values.json`. The runner
+   prepared each namespace and its six Secrets, installed Helm revision 1,
+   checked fresh data and owner access, forwarded loopback, captured the browser
+   journey and removed the package. Provider preparation remained read-only.
+5. After the runner exited 0, `infra/dev-stack/down.sh --id 1` released the
+   slot. Namespace, storage, claim and listener removal were checked afterwards.
+
+The key was passed as a path only. The separate OpenCrane 2 Dev slot test owner
+signed in and was linked to the `jente@elewa.ke` member. The person's own
+Zitadel account was not changed. No owner stack command was run.
+
+### Results for each install
+
+| Check | Fresh 1 | Fresh 2 |
+| --- | --- | --- |
+| Claimed slot and fresh Helm install | PASS — slot 1, revision 1, owned namespace and release | PASS — same claim, revision 1, different namespace and release IDs |
+| Fresh storage and events | PASS — four new PVCs, new OpenFGA store and no earlier Kubernetes or silo events | PASS — four different PVC UIDs and a different OpenFGA store; no earlier events |
+| Empty data before chat | PASS — only the bootstrap owner; no conversation, file or memory events; all seven checked conversation, file and memory table counts zero | PASS — the same checks passed before chat |
+| Provider and owner binding | PASS — trusted issuer, expected slot subject, provider-verified email, invitation and join events, joined owner row and OpenFGA owner check | PASS — the same checks passed |
+| Browser owner sign-in | PASS — `/auth/me` authenticated the expected subject at 1280px and 390px | PASS — expected subject at both widths |
+| Browser stub chat | PASS — “Say hello briefly.” received “Hello from your computer.” and Done at both widths | PASS — same reply and Done at both widths |
+| Mobile screen review by eye | PASS — signed-in page and chat at 390px; message, reply, Done and composer readable without overlap | PASS — both 390px views inspected, with the same result |
+| Private exposure | PASS — five ClusterIP Services, no Ingress, forward on `127.0.0.1:25106`; Docker bridge probe could not reach it | PASS — the same checks passed |
+| Owned package cleanup | PASS — runner removed the package; the next start confirmed no namespace, package record or PV claim remained | PASS — runner removed the package; final checks found no namespace, package record, PV claim or forward |
+| Person's own Zitadel login | NOT RUN — separate slot test owner used | NOT RUN — separate slot test owner used |
+| Object storage | NOT RUN — outside this chart | NOT RUN — outside this chart |
+
+The empty-data check covered `conversations`, `conversation_files`,
+`memory_facts`, `memory_changes`, `memory_dependencies`,
+`memory_maintenance_runs` and `memory_maintenance_bindings`.
+Each bridge probe used a throwaway container on Docker's default bridge and
+`host.docker.internal:25106`; a connection failure was the expected result.
+
+### Retained IDs
+
+| ID | Fresh 1 | Fresh 2 |
+| --- | --- | --- |
+| Namespace UID | `f0da2155-f566-4fbb-be3e-bf9687ba416e` | `e23f2727-5834-4394-90f1-23b81eb6c033` |
+| Helm install ID | `24208faa-4674-41fd-a268-3edf1cd80c9a` | `8e6f6212-f3b0-4fb5-9a8f-d4675d94118c` |
+| Release Secret UID | `4dc6367a-62f5-44c7-abe9-a1dc08def92f` | `20dfb1fb-b296-49db-aee7-4474420eb37c` |
+| OpenFGA store ID | `01M5ACA31VTYZ9E6CMARB952JZ` | `01M5ACG7KGJYGD72B6C04REWH7` |
+| PVC `conversation-keys` | `c2ad53f8-179a-4548-83e2-5e53fd9cf40e` | `fa92f518-26bf-4b1f-b961-03d728610d42` |
+| PVC `data-nats-0` | `bf62e82f-0c44-4984-907a-ab883d8d2110` | `3c7c547c-30d1-48b9-b286-d56d484199eb` |
+| PVC `data-postgres-0` | `855dbb0e-05ca-411c-8306-b96449de9356` | `84044ba4-7a31-4cbd-a925-4bf891a2dd79` |
+| Computer home PVC | `ab1e5885-0adb-4380-b9cb-486fd8ba78e5` | `c68deb39-2713-480c-b7be-b67034b75f90` |
+
+### Captures and cleanup
+
+All eight `fresh-1-` and `fresh-2-` captures were replaced with images from this
+passing pair. They show the checked test owner and completed stub turns:
+
+| View | Fresh 1 | Fresh 2 |
+| --- | --- | --- |
+| Signed in, 1280px | [Capture](p5-1-live/fresh-1-signed-in-1280.png) | [Capture](p5-1-live/fresh-2-signed-in-1280.png) |
+| Signed in, 390px | [Capture](p5-1-live/fresh-1-signed-in-390.png) | [Capture](p5-1-live/fresh-2-signed-in-390.png) |
+| Chat, 1280px | [Capture](p5-1-live/fresh-1-chat-1280.png) | [Capture](p5-1-live/fresh-2-chat-1280.png) |
+| Chat, 390px | [Capture](p5-1-live/fresh-1-chat-390.png) | [Capture](p5-1-live/fresh-2-chat-390.png) |
+
+**Cleanup and existing-resource comparison: PASS.** All seven pre-existing
+namespace UIDs and all fourteen pre-existing running container IDs remained.
+The owner listener stayed on `127.0.0.1:44200`. The package namespace, package
+owner record, slot claim, port 25106 listener and namespace PV claims were absent.
+Disk space remained 93 GiB free. **Other slot namespace comparison: NOT RUN** —
+there was no second slot namespace in the before snapshot.
+
+The local records are under `/tmp/p5-2-qualified-live/`: `setup.md`, `runner.log`,
+`observed.json`, `before.json`, `after.json` and `cleanup-check.txt`.
+The observer merged PVC observations by UID and kept both installs' IDs through
+cleanup. Its latest Service list became empty during deletion; the live Service
+checks above were made while each install was running. The second install's
+Service list is also saved in `fresh-2-exposure.json`.
+
+### Earlier attempts and source checks
+
+The earlier corrected-runner browser attempt **failed** at the first install's
+capture, with no kept reason. Its browser root cause remains unknown. A later
+attempt **failed** before installation because the private values file had not
+been recreated; its second install was **NOT RUN**. The setup omission was
+corrected before this pair. Neither earlier attempt counts as a passing pair.
+The runner's sanitised failure reporting remains in place. This pair needed no
+browser fix or retry.
+
+No code or tests changed in this qualification. Code checks were **NOT RUN**
+locally in this documentation and capture update. The full root suite was
+**NOT RUN**, as requested. Documentation and changelog checks are recorded below.
+
+| Check for this qualification update | Result |
+| --- | --- |
+| Documentation lint | PASS — zero issues |
+| Offline documentation links | PASS |
+| Changelog check | PASS |
+| Diff whitespace check | PASS |
+| Code lint, typecheck, event catalogue and Knip | NOT RUN — no code changed |
+| Test suites | NOT RUN — no code or tests changed; full root suite excluded |

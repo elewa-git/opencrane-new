@@ -74,6 +74,32 @@ If Kubernetes is unavailable during secondary
 Cleanup lets computer claims release their Pods and volumes before Helm removes
 the computer warm pool.
 
+`fresh-twice.ts` repeats the preparation, Helm install, loopback forward,
+browser capture and package cleanup on one claimed secondary slot. Pass the
+slot id through `DEV_STACK_ID`, a private values file as its only argument,
+and `ZITADEL_KEY_FILE` as a path. The runner reads the test owner's verified
+email from Zitadel without changing the provider. It requires the slot's
+existing test account and runs provider setup in read-only mode during private
+preparation. This mode creates only the slot's local settings and credential
+copies; it refuses a missing provider app or user.
+It checks the saved claim
+before each install, compares both Helm install ids, PVC UIDs and OpenFGA store
+ids, and refuses older Kubernetes or silo events, old member or chat data, and
+wrong owner bindings. The empty-data check covers conversations, files and all five
+memory tables: facts, changes, dependencies, maintenance runs and maintenance
+bindings. The runner fixture tests use fake Helm and kubectl commands. Each
+refusal records no writes after the simulated namespace preparation; a valid
+claim reaches both commands. The live runner checks the actual `/auth/me`
+subject at 1280 and 390
+through `capture.mjs`. The four PNG files for each run are saved with
+`fresh-1-` or `fresh-2-` in `docs/process/p5-1-live/`. Browser failures keep the step and a short timeout or network error. Other
+error text is withheld so cookies, tokens, Secret contents and page bodies cannot
+enter the runner log. No extra browser retries are added.
+A failed run still calls
+owned `package-down`; inspect the claim before trying again. The operator
+records the bridge probe, other-resource comparison and mobile screen review
+in `docs/process/p5-1-local.md`.
+
 The chart runs the member, catalogue, computer, conversation, file, budget and
 audit workers, plus the dispatcher. It starts the model gateway beside the server
 and installs the checked computer template and a zero-size warm pool. A computer

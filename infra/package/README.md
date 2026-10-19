@@ -18,7 +18,7 @@ Kubernetes cluster, but each package has its own namespace.
 ```mermaid
 flowchart LR
   infra["infra<br/>local infrastructure"] -->|contains| package["package<br/>Helm install"]
-  infra -->|contains| stack["dev-stack<br/>slot claims"]
+  infra -->|contains| stack["dev-stack<br/>slot claims and fresh checks"]
   infra -->|contains| devbox["devbox<br/>local cluster"]
   stack -->|checks the slot| package
   package -->|starts with a private chat secret| apps["apps<br/>website and server"]
@@ -55,6 +55,11 @@ flowchart LR
    release before removing them. A random ID saved before installation must match
    the release label. This allows cleanup after a stopped launcher and refuses
    another worktree’s release.
+5. **A developer checks two fresh installs.** One runner checks the claim, data,
+   test owner and browser chat for each install. It removes the first package
+   before preparing the second one on the same slot. It refuses retained rows in
+   every memory table before checking the first chat. A failed browser check
+   reports the step and a short error without private browser data.
 
 ## How to run or test it
 
