@@ -112,7 +112,8 @@ The daily timer runs at 03:17 UTC. Before each run, its launcher updates the det
 `~/dev/daily-fresh` checkout to the latest `main` and installs packages only when the lock
 file changes. It claims a spare stack, starts it fresh with the local model stub, and removes
 that stack when the run ends. If both spare stacks are busy, it records that it skipped the
-run. Results and saved failure files go in `~/.opencrane/daily-fresh/`, outside the repository.
+run. Saved logs have known secrets and credential patterns removed. Logs are withheld
+if sanitisation fails. Results and saved failure files go in `~/.opencrane/daily-fresh/`, outside the repository.
 
 Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user timer.
 
