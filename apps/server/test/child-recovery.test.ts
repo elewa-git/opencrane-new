@@ -250,8 +250,20 @@ async function refusesAfterAccessChanges(stage: string, kind: string) {
     vi.spyOn(authz, 'memberAuthorisation').mockImplementation(outage);
   }
   const before = await context.nats.store.head();
-  await expect(recoverChildRequest(context.options, row)).rejects.toThrow();
-  expect(await context.nats.store.head()).toBe(before);
+  if (kind === 'iam') {
+    await expect(recoverChildRequest(context.options, row)).rejects.toThrow();
+    expect(await context.nats.store.head()).toBe(before);
+  } else {
+    await recoverChildRequest(context.options, row);
+    const history = await chatHistory(context.nats.store, 'test', input.conversationId);
+    const failure = history.at(-1)!.event;
+    const reason = kind === 'closed' ? 'conversation_closed' : 'access_refused';
+    const failedStage = stage === 'conversation.created' ? 'first_input' : 'create';
+    expect(failure).toMatchObject({ type: 'conversation.child_start_failed',
+      data: { requestId: input.requestId, attempt: 1, stage: failedStage, reason } });
+    await recoverChildRequest(context.options, row);
+    expect(await context.nats.store.head()).toBe(before + 1);
+  }
   const rows = await chatHistory(context.nats.store, 'test', intent.childConversationId);
   expect(rows.length).toBe(stage === 'conversation.child_requested' ? 0 : 1);
 }
