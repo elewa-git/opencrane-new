@@ -60,7 +60,8 @@ After saving, it rechecks access, the gateway acknowledgement and both saved pos
 A newer gateway configuration saved while a tool-rule read waits refuses the call,
 even when that server's rules stay the same. A withdrawal or
 an uncertain save reply refuses the call and spends its pass. The start record alone
-does not prove that any bytes left. A later refusal records that nothing was sent.
+does not prove that any bytes left. For an operator route, a later refusal records
+that nothing was sent.
 The last gateway-position read decides which saved configuration applies to the call.
 A configuration saved afterwards does not stop a call using the still acknowledged one.
 Published remote tools can use their saved HTTPS address when the server promises to

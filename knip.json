@@ -23,7 +23,6 @@
       ],
       "ignoreBinaries": [
         "kubectl",
-        "openssl",
         "mkfifo"
       ]
     },
@@ -159,6 +158,9 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.ts"
+      ],
+      "ignoreBinaries": [
+        "openssl"
       ]
     }
   }
