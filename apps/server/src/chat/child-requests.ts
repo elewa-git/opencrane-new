@@ -42,7 +42,6 @@ async function load(options: Options, memberId: string, value: unknown) {
   const input = parsed.data;
   const rows = await chatHistory(options.store, options.silo, input.conversationId);
   const intentId = stageId(options, input, 'child-intent');
-  if (childStartFailure(rows, intentId)) throw new ChildRequestFailed('Child request failed');
   let source: StoredEvent | undefined;
   let intent: StoredEvent | undefined;
   let sequence = 0;
@@ -59,7 +58,8 @@ async function load(options: Options, memberId: string, value: unknown) {
     }
   }
   requireOwnSource(source, input, memberId);
-  return { input, source, intent, sequence };
+  const failed = childStartFailure(rows, intentId) !== undefined;
+  return { input, source, intent, sequence, failed };
 }
 function requireOwnSource(source: StoredEvent | undefined, input: Input, memberId: string)
   : asserts source is StoredEvent {
@@ -105,6 +105,7 @@ async function check(options: Options, memberId: string, loaded: Loaded,
   if (await participationClosed(options.store, options.silo, input.conversationId,
     deadline)) throw new ChildRequestClosed('Conversation closed');
   await fresh?.();
+  if (loaded.failed) throw new ChildRequestFailed('Child request failed');
   return { initialJoins, fresh };
 }
 async function review(options: Options, memberId: string, loaded: Loaded, writing = true) {
