@@ -445,3 +445,145 @@ async function refusesChangedChild() {
   expect(await chatHistory(context.nats.store, 'test', intent.childConversationId)).toHaveLength(1);
 }
 it('records a changed child without replacing its saved creation', refusesChangedChild);
+
+async function appliesCreationAfterPermissionRead() {
+  const { input, intent } = await savedRequest('conversation.child_requested');
+  const row = await reference(input.conversationId);
+  const denied = Promise.withResolvers<void>();
+  const applied = Promise.withResolvers<void>();
+  const original = authz.memberAuthorisation;
+  function delayedPermission(...args: Parameters<typeof original>) {
+    const auth = original(...args);
+    async function conversation(...parameters: Parameters<typeof auth.conversation>) {
+      const permission = await auth.conversation(...parameters);
+      if (parameters[1] === intent.childConversationId && !permission.allowed) {
+        denied.resolve();
+        await applied.promise;
+      }
+      return permission;
+    }
+    return { ...auth, conversation };
+  }
+  const fault = vi.spyOn(authz, 'memberAuthorisation').mockImplementation(delayedPermission);
+  const recovery = recoverChildRequest(context.options, row);
+  const settled = Promise.allSettled([recovery]);
+  await denied.promise;
+  try {
+    const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+    await context.auth.handler.handle(child[0]!.event, context.db);
+  } finally {
+    applied.resolve();
+  }
+  await settled;
+  fault.mockRestore();
+  const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
+  expect(parent.filter(isFailure)).toHaveLength(0);
+  await recoverChildRequest(context.options, row);
+  await recoverChildRequest(context.options, row);
+  const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+  expect(child).toHaveLength(2);
+  expect(child[1]!.event.id).toBe(intent.firstInputId);
+}
+it('retries a denial read before the child creation receipt without saving failure',
+  appliesCreationAfterPermissionRead);
+
+async function retriesUnavailableSaveOrKey(kind: string) {
+  const { input, intent } = await savedRequest('conversation.created');
+  const row = await reference(input.conversationId);
+  function unreadable(): never {
+    throw new Error('Key unavailable');
+  }
+  async function unavailable() {
+    return { status: 'unavailable' as const, cause: new Error('Append unavailable') };
+  }
+  const fault = kind === 'key'
+    ? vi.spyOn(context.keys, 'decrypt').mockImplementation(unreadable)
+    : vi.spyOn(context.nats.store, 'append').mockImplementation(unavailable);
+  const message = kind === 'key' ? 'Child input unavailable' : 'Child request outcome unavailable';
+  await expect(recoverChildRequest(context.options, row)).rejects.toThrow(message);
+  expect(fault).toHaveBeenCalled();
+  fault.mockRestore();
+  const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
+  expect(parent.filter(isFailure)).toHaveLength(0);
+  await recoverChildRequest(context.options, row);
+  const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+  expect(child).toHaveLength(2);
+  expect(child[1]!.event.id).toBe(intent.firstInputId);
+}
+it.each(['append', 'key'])('keeps an unavailable %s retryable without saving failure',
+  retriesUnavailableSaveOrKey);
+
+async function hidesFailedStatus(kind: string) {
+  const { input, intent } = await savedRequest('conversation.child_requested');
+  const row = await reference(input.conversationId);
+  await recordChildStartFailure(context.options, String(row['intent_id']), intent,
+    'create', 'access_refused');
+  let conversationId = input.conversationId;
+  let memberId = 'alice';
+  if (kind === 'removed member') {
+    await context.append('member-alice', 'member.removed',
+      { memberId: 'alice', removedBy: 'bob' }, false);
+  } else if (kind === 'removed') {
+    await context.append(`participation-${conversationId}`, 'participant.removed',
+      { conversationId, participantId: 'alice', removedBy: 'bob' });
+  } else if (kind === 'outsider') {
+    memberId = 'outsider';
+  } else if (kind === 'different chat') {
+    const other = await context.parent();
+    conversationId = other.conversationId;
+  } else {
+    await context.append(`participation-${conversationId}`, 'participant.removed',
+      { conversationId, participantId: 'alice', removedBy: 'bob' });
+    await context.append(`participation-${conversationId}`, 'participant.added',
+      { conversationId, participantId: 'alice', addedBy: 'bob' });
+  }
+  const unknown = await context.request(conversationId, 'children/unknown', undefined, memberId);
+  const failed = await context.request(conversationId, `children/${input.requestId}`,
+    undefined, memberId);
+  expect(failed.statusCode).toBe(unknown.statusCode);
+  expect(failed.body).toBe(unknown.body);
+  expect(failed.body).not.toContain('failed');
+  expect(failed.body).not.toContain(intent.childConversationId);
+}
+it.each(['removed', 'outsider', 'different chat', 'pre-join'])(
+  'hides failed status like an unknown request for %s', hidesFailedStatus);
+
+async function storesExactAttemptAndDeletesCompletedRow() {
+  const failed = await savedRequest('conversation.child_requested');
+  const failedRow = await reference(failed.input.conversationId);
+  const parent = await chatHistory(context.nats.store, 'test', failed.input.conversationId);
+  const intentEvent = parent.at(-1)!.event;
+  const failure = { ...intentEvent, id: `${intentEvent.id}-failed`,
+    commandId: `${intentEvent.id}-failed`,
+    type: 'conversation.child_start_failed', source: 'opencrane-server',
+    principal: { kind: 'system' as const, id: 'opencrane-server' },
+    data: { conversationId: failed.input.conversationId, requestId: failed.input.requestId,
+      intentEventId: intentEvent.id, childConversationId: failed.intent.childConversationId,
+      attempt: 3, stage: 'create', reason: 'access_refused' } };
+  await childRequests.apply(context.db, failure, 1);
+  const indexed = await context.db.query(
+    'SELECT failed_attempt FROM child_requests_v2 WHERE intent_id = $1',
+    [failedRow['intent_id']]);
+  expect(indexed.rows).toEqual([{ failed_attempt: 3 }]);
+  const completed = await savedRequest('conversation.created');
+  await recoverChildRequest(context.options, await reference(completed.input.conversationId));
+  await context.runner.run(childRequests);
+  const remaining = await context.db.query(
+    'SELECT * FROM child_requests_v2 WHERE child_id = $1', [completed.intent.childConversationId]);
+  expect(remaining.rows).toEqual([]);
+}
+it('stores the exact failed attempt and deletes the completed child index row',
+  storesExactAttemptAndDeletesCompletedRow);
+
+async function hidesFailureFromRemovedMember() {
+  const previous = context;
+  await setup();
+  try {
+    await hidesFailedStatus('removed member');
+  } finally {
+    await context.close();
+    context = previous;
+  }
+}
+it('hides failed status like an unknown request for a removed silo member',
+  hidesFailureFromRemovedMember);
