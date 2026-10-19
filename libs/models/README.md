@@ -18,8 +18,8 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|cleans old connection copies, checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, saved fact references, access after memory reads and turn pass renewals, recall progress, access through memory saving and child joins, owners, providers, free reachability and spending changes| models["libs/models<br/>AI rules, image checks, control, provider choice and spending"]
-  models -->|rechecks loaded memory and corrected memory revisions; checks reload cancellation, spending, expiry, holds, root stops and changed write grants before sends| mcp["MCP server<br/>checks revision before execution"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, memory, owners, providers, free reachability and spending| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
+  models -->|rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -73,7 +73,10 @@ other calls arrive, so a saved revocation still stops the write within the same 
 Other hosted images still need image admission. A private verifier checks a publisher's
 signature and each image file's hash against operator trust. The signature check uses
 only the operator's local public key and makes no network requests. Unreadable files
-make the verifier unavailable. It does not scan licences, admit images or start them yet.
+make the verifier unavailable. A private licence checker then uses Syft, a tool that lists
+image packages, on those same verified bytes. It requires a separate review of the image's
+files and licence notices. Debian main exceptions apply only to reviewed OS layers.
+Neither checker admits an image or starts it; malware and vulnerability checks remain pending.
 
 ## What it is responsible for
 
