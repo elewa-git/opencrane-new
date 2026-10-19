@@ -56,7 +56,7 @@ exit 1
 test('daily fresh saves the failed slot logs before down removes it',
   preservesFailureBeforeCleanup);
 
-async function sanitisesRetainedLogs() {
+async function sanitisesRetainedLogs(withhold = false) {
   const home = await mkdtemp(`${tmpdir()}/daily-fresh-secrets-`);
   const scripts = `${home}/checkout/infra/dev-stack`;
   const slot = `${home}/.config/opencrane/dev-stack-1`;
@@ -84,12 +84,13 @@ async function sanitisesRetainedLogs() {
     const assignmentSecret = `assignment-${name}-canary`;
     const jsonSecret = `json-${name}-canary`;
     secrets.push(assignmentSecret, jsonSecret);
-    lines.push(`APP_${name}="${assignmentSecret} with spaces"`);
+    lines.push(`status=failed APP_${name}="${assignmentSecret} with spaces"`);
     lines.push(`{"app_${name.toLowerCase()}": "${jsonSecret}", "message": "failed"}`);
   }
   await writeFile(`${slot}/zitadel-owner-password`, 'slot-password-canary\n');
   await writeFile(`${slot}/zitadel-client-secret`, 'slot-client-canary\n');
-  await writeFile(`${slot}/auth.env`, 'OIDC_COOKIE_SECRET=cookie-canary\n');
+  const authEnvironment = withhold ? 'invalid environment file' : 'OIDC_COOKIE_SECRET=cookie-canary\n';
+  await writeFile(`${slot}/auth.env`, authEnvironment);
   await writeFile(`${slot}/passwords.json`, '{"server":"database-canary"}');
   await writeFile(`${home}/model-key`, 'model-canary\n');
   await writeFile(`${home}/zitadel-key`, 'zitadel-canary\n');
@@ -108,6 +109,10 @@ async function sanitisesRetainedLogs() {
     assert.ok(evidence);
     for (const name of ['failure.log', 'last-error.log', 'server.log']) {
       const retained = await readFile(`${ledger}/${evidence}/${name}`, 'utf8');
+      if (withhold) {
+        assert.equal(retained, 'Log withheld: sanitisation failed.\n');
+        continue;
+      }
       for (const secret of secrets) {
         assert.equal(retained.includes(secret), false, `${name} retained ${secret}`);
       }
@@ -120,5 +125,13 @@ async function sanitisesRetainedLogs() {
   }
 }
 
+async function removesSecrets() {
+  await sanitisesRetainedLogs();
+}
+async function withholdsUnsanitisedLogs() {
+  await sanitisesRetainedLogs(true);
+}
 test('daily fresh removes known secrets and credential patterns from every retained log',
-  sanitisesRetainedLogs);
+  removesSecrets);
+test('daily fresh withholds logs when its secret files cannot be read correctly',
+  withholdsUnsanitisedLogs);
