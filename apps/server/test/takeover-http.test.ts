@@ -368,7 +368,7 @@ async function overlappingRetries() {
   const responses = await Promise.all([post(), post()]);
   expect(arrivals).toBe(2);
   for (const response of responses) expect(response.statusCode).toBe(202);
-  expect(responses[0]!.json()).toEqual(responses[1]!.json());
+  expect(responses[0].json()).toEqual(responses[1].json());
   let intents = 0;
   for await (const row of fixture.nats.store.readStream('computer-assistant')) {
     if (row.event.type === 'takeover.requested') intents++;
