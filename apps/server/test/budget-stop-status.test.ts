@@ -1,10 +1,12 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { agentTurnStopRequestedDataSchema } from '@opencrane/events';
 import { connectEventStore } from '@opencrane/event-store';
 import { budgetStopStatusSchema } from '@opencrane/protocol';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { conversations } from '@opencrane/projections';
+import * as models from '@opencrane/models';
 import { budgetStopHandler, history, priceTableId } from '@opencrane/models';
 import { fixture } from '@opencrane/models/testing';
 import { buildServer } from '../src/server.ts';
@@ -227,7 +229,7 @@ async function closesWithoutRecord() {
 it('waits for the handler or a terminal result after the stop', closesWithoutRecord);
 
 const failures = ['budget-test', 'computer-assistant', 'conversation-conversation',
-  'unknown-stop', 'timeout'];
+  'unknown-stop'];
 async function unavailable(subject: string) {
   await stop();
   if (subject === 'unknown-stop') {
@@ -235,11 +237,14 @@ async function unavailable(subject: string) {
     await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
       conversationId: 'conversation', turnId: next, reason: 'budget', stopId: 'unknown' });
     turnId = next;
+    const work = { conversationId: 'conversation', turnId, assistantId: 'assistant',
+      payingGroupId: 'personal-default' };
+    await expect(models.turnBudgetStopDetails(setup.nats.store, 'test', work, 0,
+      performance.now() + 10_000, 'unknown')).rejects.toThrow('Saved stop unavailable');
   } else {
     const original = setup.nats.store.readStream.bind(setup.nats.store);
     async function* fail(stream: string, from?: number, deadline?: number) {
       if (stream === subject) throw new Error('Unusable saved data');
-      if (subject === 'timeout' && stream === 'conversation-conversation') await delay(10_050);
       yield* original(stream, from, deadline);
     }
     vi.spyOn(setup.nats.store, 'readStream').mockImplementation(fail);
@@ -302,10 +307,18 @@ async function slowRead(removal: boolean) {
 it.each([false, true])('loads slow history before checking access (removal: %s)', slowRead);
 
 async function readOnlyAndRestart() {
-  await stop();
+  const calls = [];
+  for (const scenario of callCases.slice(0, 4)) calls.push(await saveCall(scenario));
+  await stopSavedCalls();
   const before = await setup.nats.store.head();
   const append = vi.spyOn(setup.nats.store, 'append');
   const response = await read();
+  expect(response.json()).toMatchObject({ calls });
+  await app.close();
+  const restartedChat = { silo: 'test', store: setup.nats.store, db: setup.db, keys: setup.keys,
+    binding: setup.binding, feed: { memberId } };
+  app = buildServer(config, { chat: restartedChat });
+  expect((await read()).json()).toEqual(response.json());
   const fresh = await connectEventStore(setup.nats.env('command'));
   const chat = { silo: 'test', store: fresh.store, db: setup.db, keys: setup.keys,
     binding: setup.binding, feed: { memberId } };
@@ -341,3 +354,195 @@ async function refusesSessionFirst() {
   expect(readStream).not.toHaveBeenCalled();
 }
 it('refuses missing, foreign organisation and foreign silo sessions before loading', refusesSessionFirst);
+
+interface CallCase {
+  name: string;
+  status: 'held' | 'released' | 'charged' | 'possibly_sent';
+  dispatch?: boolean;
+  expired?: boolean;
+  outcome?: 'unknown' | 'not_dispatched';
+  charge?: number;
+  free?: boolean;
+}
+const callCases: CallCase[] = [
+  { name: 'unknown settlement with expiry', status: 'possibly_sent', outcome: 'unknown',
+    charge: 0, dispatch: true, expired: true },
+  { name: 'confirmed non-dispatch with expiry', status: 'released',
+    outcome: 'not_dispatched', charge: 0, dispatch: true, expired: true },
+  { name: 'settlement with dispatch and expiry', status: 'charged',
+    charge: 3, dispatch: true, expired: true },
+  { name: 'open reservation', status: 'held' },
+  { name: 'admitted dispatch', status: 'possibly_sent', dispatch: true },
+  { name: 'expiry after dispatch', status: 'possibly_sent', dispatch: true, expired: true },
+  { name: 'expiry without dispatch', status: 'released', expired: true },
+  { name: 'zero-cent charge', status: 'charged', charge: 0 },
+  { name: 'free dispatch', status: 'possibly_sent', free: true },
+];
+async function saveCall(scenario: CallCase, conversationId = 'conversation', id = turnId) {
+  const reference = crypto.randomUUID();
+  const modelCall = { model: scenario.free ? 'mcp-zero-cost' : 'gpt-6-luna', priceTableId,
+    computerId: 'computer', assistantId: 'assistant', requesterId: 'alice', conversationId,
+    turnId: id, threadId: id, payingGroupId: 'personal-default', contextDigest: '0'.repeat(64) };
+  if (!scenario.free) {
+    await setup.append('budget-test', 'budget.reserved', { reservationId: reference,
+      permitId: reference, amountCents: 7, payingGroupId: 'personal-default',
+      assistantId: 'assistant', modelCall });
+  }
+  if (scenario.dispatch || scenario.free) {
+    const dispatch = { callId: crypto.randomUUID(), decisionId: 'decision',
+      bodyDigest: '0'.repeat(64), modelCall,
+      ...(scenario.free ? { callId: reference } : { reservationId: reference }) };
+    await setup.append('budget-test', 'budget.call_dispatch_admitted', dispatch);
+  }
+  if (scenario.expired) {
+    await setup.append('budget-test', 'budget.reservation_expired', { reservationId: reference });
+  }
+  if (scenario.charge !== undefined) {
+    await setup.append('budget-test', 'budget.settled', { reservationId: reference,
+      permitId: reference, settledCents: scenario.charge, outcome: scenario.outcome });
+  }
+  const result = { reference, status: scenario.status };
+  if (scenario.status === 'charged') return { ...result, chargedCents: scenario.charge };
+  if (scenario.status === 'held' || scenario.status === 'possibly_sent') {
+    return { ...result, heldCents: scenario.free ? 0 : 7 };
+  }
+  return result;
+}
+async function stopSavedCalls() {
+  // Reload the writer after seeding events outside its command queue.
+  await setup.restartActor();
+  return stop();
+}
+async function reportsCall(scenario: CallCase) {
+  const expected = await saveCall(scenario);
+  await stopSavedCalls();
+  const response = await read();
+  expect(response.statusCode).toBe(200);
+  expect(response.json<{ calls: unknown[] }>().calls).toEqual([expected]);
+  expect(budgetStopStatusSchema.safeParse(response.json()).success).toBe(true);
+  const extra = { ...response.json<Record<string, unknown>>(), calls: [{ ...expected, unexpected: true }] };
+  expect(budgetStopStatusSchema.safeParse(extra).success).toBe(false);
+}
+it.each(callCases)('reports $name', reportsCall);
+
+async function isolatesCalls() {
+  await participant('bob', 'member');
+  turnId = await message();
+  const calls = [];
+  for (const scenario of [callCases[0]!, callCases[8]!, ...callCases.slice(1, 4)]) {
+    calls.push(await saveCall(scenario));
+    await saveCall(scenario, 'other', turnId);
+    await saveCall(scenario, 'conversation', 'other-turn');
+  }
+  await stopSavedCalls();
+  expect((await read()).json<{ calls: unknown[] }>().calls).toEqual(calls);
+  function withoutCents(call: { reference: string; status: string }) {
+    return { reference: call.reference, status: call.status };
+  }
+  const response = await read(turnId, 'bob');
+  expect(response.statusCode).toBe(200);
+  expect(response.json<{ calls: unknown[] }>().calls).toEqual(calls.map(withoutCents));
+  expect(response.body).not.toMatch(/cents/iu);
+}
+it('keeps saved call order, joins dispatches once and limits calls and cents to their turn',
+  isolatesCalls);
+
+async function manualStopIsNotBudgetStop() {
+  await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
+    conversationId: 'conversation', turnId, requestedBy: 'alice' });
+  expect((await read()).json()).toEqual({ status: 'not_stopped' });
+}
+it('does not select a manual stop as the saved spending Stop', manualStopIsNotBudgetStop);
+
+async function earliestEnd() {
+  await start();
+  await finish();
+  await stop(false);
+  await setup.append('conversation-conversation', 'agent.turn_failed', {
+    conversationId: 'conversation', turnId, reason: 'computer_lost' });
+  expect((await read()).json()).toEqual({ status: 'not_stopped' });
+}
+it('uses the earlier computer close even when the chat fails after the Stop', earliestEnd);
+
+async function separateStops() {
+  const firstTurn = turnId;
+  const firstStop = await stop();
+  await setup.actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
+    ceilingCents: 100, setBy: 'alice' });
+  turnId = await message();
+  const secondStop = await stop();
+  const duplicate = { conversationId: 'conversation', turnId, reason: 'budget', stopId: secondStop };
+  expect(agentTurnStopRequestedDataSchema.safeParse({ ...duplicate, turnId: undefined }).success)
+    .toBe(false);
+  await setup.append('conversation-conversation', 'agent.turn_stop_requested', duplicate);
+  expect((await read(firstTurn)).json()).toMatchObject({ stopId: firstStop,
+    work: [{ turnId: firstTurn, execution: 'not_started' }] });
+  expect((await read()).json()).toMatchObject({ stopId: secondStop,
+    work: [{ turnId, execution: 'not_started' }] });
+}
+it('keeps each Stop work list separate and lists a redelivered turn once', separateStops);
+
+async function refusesWrongStart() {
+  await stop();
+  await setup.append('computer-assistant', 'computer.turn_started', {
+    assistantId: 'assistant', computerId: 'computer', conversationId: 'other', turnId,
+    threadId: turnId, requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' });
+  const response = await read();
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+}
+it('refuses a saved start naming another conversation', refusesWrongStart);
+
+async function totalDeadline() {
+  const original = setup.nats.store.readStream.bind(setup.nats.store);
+  const now = performance.now.bind(performance);
+  let elapsed = 0;
+  let loading = true;
+  function time() { return now() + elapsed; }
+  async function* slow(stream: string, from?: number, deadline?: number) {
+    yield* original(stream, from, deadline);
+    if (loading && (stream === 'conversation-conversation' || stream === 'computer-assistant')) {
+      elapsed += 3400;
+    }
+  }
+  const details = models.turnBudgetStopDetails;
+  async function timedDetails(...args: Parameters<typeof details>) {
+    const result = await details(...args);
+    elapsed += 3400;
+    loading = false;
+    return result;
+  }
+  vi.spyOn(models, 'turnBudgetStopDetails').mockImplementation(timedDetails);
+  vi.spyOn(performance, 'now').mockImplementation(time);
+  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(slow);
+  const response = await read();
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+}
+it('refuses a total history read past ten seconds even when individual reads finish', totalDeadline);
+
+async function pendingAccess() {
+  await participant('bob', 'member', false);
+  await setup.append('participation-conversation', 'participant.added', {
+    conversationId: 'conversation', participantId: 'bob', addedBy: 'alice' });
+  turnId = await message();
+  await stop();
+  const response = await read(turnId, 'bob');
+  expect(response.statusCode).toBe(425);
+  expect(response.json()).toEqual({ status: 'access_applying' });
+}
+it('withholds Stop data while access is still applying', pendingAccess);
+
+async function roleLoss() {
+  await stop();
+  const changed = await setup.append('member-alice', 'member.role_changed', {
+    memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'alice' });
+  await setup.auth.handler.handle(changed, setup.db);
+  const removed = await setup.append('member-alice', 'member.removed', {
+    memberId: 'alice', removedBy: 'alice' });
+  await setup.auth.handler.handle(removed, setup.db);
+  const response = await read();
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses a former owner after losing silo membership', roleLoss);
