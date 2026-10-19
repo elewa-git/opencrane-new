@@ -340,3 +340,30 @@ async function retryAfterStateChanged(field: 'requesterEventId' | 'generation') 
 }
 it.each(['requesterEventId', 'generation'] as const)(
   'rejects a changed retry %s even when it matches current state', retryAfterStateChanged);
+
+async function overlappingRetries() {
+  await setup();
+  const append = fixture.nats.store.append.bind(fixture.nats.store);
+  const both = Promise.withResolvers<void>();
+  let arrivals = 0;
+  async function together(command: AppendCommand) {
+    arrivals++;
+    // Force different generated times without delaying either request.
+    command.event.time = new Date(1_800_000_000_000 + arrivals).toISOString();
+    if (arrivals === 2) both.resolve();
+    await both.promise;
+    return append(command);
+  }
+  vi.spyOn(fixture.nats.store, 'append').mockImplementation(together);
+  const responses = await Promise.all([post(), post()]);
+  expect(arrivals).toBe(2);
+  for (const response of responses) expect(response.statusCode).toBe(202);
+  expect(responses[0]!.json()).toEqual(responses[1]!.json());
+  let intents = 0;
+  for await (const row of fixture.nats.store.readStream('computer-assistant')) {
+    if (row.event.type === 'takeover.requested') intents++;
+  }
+  expect(intents).toBe(1);
+}
+it('returns the same saved command and position for overlapping identical retries',
+  overlappingRetries);
