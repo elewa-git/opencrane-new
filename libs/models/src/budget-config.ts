@@ -9,8 +9,8 @@ import { currentMembership } from './ownership.ts';
 import { authorityFence } from './authority.ts';
 import { budgetSummary } from './state.ts';
 import { budgetCommandSchema } from '@opencrane/protocol';
+import { budgetScope, BudgetAccessRefused, BudgetChoiceRefused } from './budget-scope.ts';
 
-export class BudgetAccessRefused extends Error {}
 const claims = z.object({ typ: z.enum(['budget-admin', 'provider-verification']),
   silo: z.string(), memberId: z.string(), commandDigest: z.string() });
 /** The server signs the exact command after session and Origin checks. */
@@ -21,12 +21,32 @@ export async function configureBudget(actor: BudgetActor, binding: Binding,
     throw new BudgetAccessRefused('Access changed');
   }
   let fresh: Awaited<ReturnType<typeof authorityFence>> | undefined;
-  async function confirmAccess() {
+  async function confirmAccess(newCommand = false) {
     if (!fresh) {
+      let choiceUnavailable = false;
+      let scopePositions = new Map<string, number>();
+      try {
+        if (newCommand) {
+          scopePositions = await budgetScope(actor.store, actor.silo, raw);
+        }
+      } catch (error) {
+        if (error instanceof MemberAccessRefused ||
+            (error instanceof Error && error.message === 'Wrong silo')) {
+          choiceUnavailable = true;
+        } else {
+          throw error;
+        }
+      }
       const membership = await currentMembership(actor.store, actor.silo, checked.memberId,
         undefined, performance.now() + 10_000);
-      const subjects = [...membership.positions.keys()];
+      const subjects = [...membership.positions.keys(), ...scopePositions.keys()];
       fresh = await authorityFence(actor.store, performance.now(), subjects);
+      // Refuse changes saved between loading the choices and starting the write check.
+      for (const [subject, position] of scopePositions) {
+        if (await actor.store.head(subject, fresh.deadline) !== position) {
+          choiceUnavailable = true;
+        }
+      }
       const authority = { requiredRole: 'admin' as const, fresh, membership };
       try {
         await activeMember(actor.store, binding, checked.memberId, authority);
@@ -35,6 +55,10 @@ export async function configureBudget(actor: BudgetActor, binding: Binding,
           throw new BudgetAccessRefused(error.message);
         }
         throw error;
+      }
+      // Check the caller before reporting an invalid choice, so lost access still clears the page.
+      if (choiceUnavailable) {
+        throw new BudgetChoiceRefused('Spending choice unavailable');
       }
     }
     await fresh();

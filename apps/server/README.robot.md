@@ -3272,3 +3272,20 @@ They cover recovery and a later command, and require the corrected fact to remai
 `test/memory.test.ts` covers HTTP, competing changes, restart and candidate custody with real
 NATS, PostgreSQL and OpenFGA. Existing ops tests cover cleanup and replay.
 Fresh-install qualification: NOT RUN.
+
+## Spending choice validation
+
+The existing POST `/api/org/models` sends its signed command to `configureBudget`.
+New commands now validate saved groups, shared assistants and the chosen default
+payer before checking current caller access. The budget integration tests use the
+production startup payer, `installation-default`, without creating a team for it.
+Other valid group and shared-assistant cases seed their actual records.
+Personal-assistant caps are refused. Exact saved
+retries retain their original receipts. The scope-choices GET remains the next
+part of P4-26 row 3, together with its protocol and pagination tests.
+
+Spending choice refusals pass from the models process through POST `/api/org/models`
+as HTTP 422 with `{"status":"refused","reason":"spending_choice_unavailable"}`.
+No budget event is appended. Lost Owner/Admin access still returns 403.
+The Chromium integration check sends an unknown default payer, checks the fixed
+refusal and retained ceiling, corrects the payer and saves the same typed ceiling.

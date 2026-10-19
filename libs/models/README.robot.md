@@ -2689,3 +2689,40 @@ Retained material causes a fixed error and the existing queue retries. Exhaustio
 material and the failed job intact. `reconcileConnectionPage` remains available for bounded
 maintenance; automatic startup scanning is deferred to keep this change small.
 Live Kubernetes, fresh-install and provider qualification: NOT RUN.
+
+## Spending choices at save (P4-26 PR 3, first part; Part of #108)
+
+`configureBudget` calls `budget-scope.ts` for each new command. It loads the chosen
+team or shared assistant, its owning team and computer, or the newly chosen default
+payer. These exact histories share a ten-second deadline before the two-second
+write access check. Unknown or foreign groups and personal, inactive or retired
+assistants refuse. No replacement payer or assistant is selected.
+
+The access check watches those exact subjects and compares their loaded positions
+before checking current Owner/Admin membership and OpenFGA. It keeps that same
+check for the actor's switch-on retry. Saved commands still check current caller
+access, but skip scope validation and return their original receipt. Changed scope,
+scope id or default payer with the same command id conflicts. Checks add no events.
+
+`test/budget-scope.test.ts` uses real NATS, PostgreSQL and OpenFGA. Barriers cover
+deactivation, retirement and demotion after loading and during access checking.
+It checks refusal positions, exact retries, no substitution and identical replay.
+The existing server budget tests now use real groups and a shared assistant.
+
+PARTIAL: the bounded scope-choices GET, its strict protocol schemas, named choices,
+paging and optional-cap read states remain the next part of row 3. No earlier
+review defers that work. Personal choices remain unavailable. Fresh-install
+qualification: NOT RUN. No dependency or event type was added.
+
+Spending saves also read saved budget history within the separate ten-second limit.
+Only a current saved default of exactly `installation-default` can be reused without
+a team stream. Startup and `migrateBudgetDefault` already record that payer.
+Every other default, including an unknown id already saved in older history, needs
+a real team in this silo. It creates no team and never changes the payer without
+the admin choosing it.
+
+Choice refusals return HTTP 422 with exactly
+`{"status":"refused","reason":"spending_choice_unavailable"}`.
+Caller membership and OpenFGA permissions are checked before this reply. Lost
+Owner/Admin access still returns 403. The reply mapping lives in `budget-scope.ts`;
+`decision.ts` only forwards its status and fixed body.

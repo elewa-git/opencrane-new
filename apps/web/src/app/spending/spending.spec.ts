@@ -749,3 +749,69 @@ it('keeps loaded data after a read failure and shows separate unavailable states
   expect(root.querySelectorAll('.stale')).toHaveLength(1);
   expect(root.textContent).toContain('permit-1');
 });
+
+
+async function correctsUnavailableChoice() {
+  function refuseChoice(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    if (requestUrl(input) === '/api/org/models' && init?.method === 'POST') {
+      return jsonReply(422, { status: 'refused', reason: 'spending_choice_unavailable' });
+    }
+    return defaultFetch()(input);
+  }
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(refuseChoice);
+  const root = await mountScreen();
+  inputValue(root, '#monthly-ceiling', '45000');
+  inputValue(root, '#default-group', 'unknown-payer');
+  root.querySelector<HTMLFormElement>('.budget-form')?.requestSubmit();
+  function expectCorrectableRefusal() {
+    const editor = root.querySelector('.budget-form');
+    expect(editor?.textContent).toContain(
+      'This spending choice is unavailable. Choose another group or active shared assistant.',
+    );
+  }
+  await vi.waitFor(expectCorrectableRefusal);
+  expect(root.querySelector<HTMLInputElement>('#monthly-ceiling')?.value).toBe('45000');
+  expect(root.querySelector<HTMLInputElement>('#default-group')?.value).toBe('unknown-payer');
+  expect(root.querySelector<HTMLFieldSetElement>('.budget-form fieldset')?.disabled).toBe(false);
+  expect(root.textContent).toContain('permit-1');
+  expect(root.textContent).not.toContain('Spending needs the Owner or Admin role.');
+  fetchMock.mockImplementation(defaultFetch());
+  inputValue(root, '#default-group', 'personal-default');
+  root.querySelector<HTMLFormElement>('.budget-form')?.requestSubmit();
+  function expectSaved() {
+    expect(root.querySelector('.budget-form')?.textContent).toContain('Budget saved');
+  }
+  await vi.waitFor(expectSaved);
+  function isPost(call: Parameters<typeof fetch>) {
+    return call[1]?.method === 'POST';
+  }
+  const posts = fetchMock.mock.calls.filter(isPost);
+  expect(posts).toHaveLength(2);
+  expect(parseRequestBody(posts[1]?.[1])).toMatchObject({
+    ceilingCents: 45000, defaultPayingGroupId: 'personal-default',
+  });
+}
+it('keeps the editor, typed ceiling and payer after a choice refusal and allows correction',
+  correctsUnavailableChoice);
+
+async function clearsAfterBudgetAccessRefusal() {
+  function refuseAccess(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    if (requestUrl(input) === '/api/org/models' && init?.method === 'POST') {
+      return jsonReply(403, { status: 'refused' });
+    }
+    return defaultFetch()(input);
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(refuseAccess);
+  const root = await mountScreen();
+  inputValue(root, '#monthly-ceiling', '45000');
+  root.querySelector<HTMLFormElement>('.budget-form')?.requestSubmit();
+  function expectAccessLost() {
+    expect(root.textContent).toContain('Spending needs the Owner or Admin role.');
+  }
+  await vi.waitFor(expectAccessLost);
+  expect(root.querySelector('.budget-form')).toBeNull();
+  expect(root.textContent).not.toContain('personal-default');
+  expect(root.textContent).not.toContain('permit-1');
+}
+it('clears spending data when saving a ceiling loses Owner or Admin access',
+  clearsAfterBudgetAccessRefusal);

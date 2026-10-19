@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>sign-in, chat, checked approvals, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, status reads, live updates and access closures| server["apps/server<br/>the back end"]
+  web["apps/web<br/>sign-in, chat, checked approvals, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, live updates and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
@@ -20,6 +20,10 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+The Spending editor keeps the typed ceiling and payer when a chosen group or shared
+assistant is unavailable. A message beside the editor asks for another choice.
+Losing Owner or Admin access clears spending details and closes the editor.
 
 Admins can grant or remove model access for one person, group or assistant at a time.
 The editor checks that each save has taken effect. An uncertain reply offers a status
