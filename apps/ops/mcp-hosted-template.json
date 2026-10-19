@@ -1,0 +1,38 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "StatefulSet",
+  "metadata": { "name": "mcp", "annotations": {} },
+  "spec": {
+    "replicas": 0,
+    "serviceName": "mcp",
+    "selector": { "matchLabels": { "app": "mcp" } },
+    "template": {
+      "metadata": { "labels": { "app": "mcp" }, "annotations": {} },
+      "spec": {
+        "runtimeClassName": "gvisor",
+        "automountServiceAccountToken": false,
+        "enableServiceLinks": false,
+        "terminationGracePeriodSeconds": 5,
+        "containers": [{
+          "name": "mcp",
+          "image": "UNAPPROVED",
+          "securityContext": {
+            "runAsNonRoot": true,
+            "runAsUser": 10001,
+            "runAsGroup": 10001,
+            "readOnlyRootFilesystem": true,
+            "allowPrivilegeEscalation": false,
+            "capabilities": { "drop": ["ALL"] },
+            "seccompProfile": { "type": "RuntimeDefault" }
+          },
+          "resources": {
+            "requests": { "cpu": "100m", "memory": "256Mi" },
+            "limits": { "cpu": "1", "memory": "512Mi" }
+          },
+          "volumeMounts": [{ "name": "scratch", "mountPath": "/tmp" }]
+        }],
+        "volumes": [{ "name": "scratch", "emptyDir": { "medium": "Memory", "sizeLimit": "64Mi" } }]
+      }
+    }
+  }
+}
