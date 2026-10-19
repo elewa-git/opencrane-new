@@ -57,8 +57,15 @@ export async function budgetScope(store: EventStore, silo: string, raw: unknown)
     }
     throw new MemberAccessRefused('Spending choice unavailable');
   }
+  async function checkPayer(groupId: string) {
+    if (groupId === 'installation-default') {
+      const savedDefault = await savedDefaultPayer(store, silo, deadline);
+      if (savedDefault === groupId) return;
+    }
+    await checkGroup(groupId);
+  }
   if (command.scope === 'paying_group') {
-    await checkGroup(command.scopeId);
+    await checkPayer(command.scopeId);
   }
   if (command.scope === 'assistant') {
     const assistantRows = await load(`assistant-${command.scopeId}`);
@@ -72,11 +79,7 @@ export async function budgetScope(store: EventStore, silo: string, raw: unknown)
     await checkGroup(ownerId);
   }
   if (command.scope === 'global' && command.defaultPayingGroupId !== undefined) {
-    const savedDefault = await savedDefaultPayer(store, silo, deadline);
-    if (command.defaultPayingGroupId !== 'installation-default' ||
-        savedDefault !== command.defaultPayingGroupId) {
-      await checkGroup(command.defaultPayingGroupId);
-    }
+    await checkPayer(command.defaultPayingGroupId);
   }
   return positions;
 }

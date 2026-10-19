@@ -605,8 +605,13 @@ the normal identity, organisation and cookie assertions.
 ## Budget journey cleanup
 
 Each zero-cent browser check restores that scope in a `finally` block. The calling
-journey also restores the paying group, assistant and global limits after the audit
-and budget browser checks, whether they pass or fail. Cleanup uses the authenticated
+journey creates the `budget-journey` group and `team-budget-journey` shared assistant
+through the owner APIs, adds the signed-in member and starts private shared sessions
+at both widths. Plain startup reuses the same creation commands and subjects.
+Personal assistants are not valid choices in the spending editor.
+The journey restores that exact paying group, assistant and global limits after the
+budget browser checks, whether they pass or fail. Audit checks finish before budget
+setup and change no ceilings. Cleanup uses the authenticated
 budget API rather than loading the Spending page. It waits for the budget table to
 catch up before the next step. Monthly test limits are 20,000 cents; the daily global
 limit is 5,000 cents. It attempts every scope and reports any failed restoration.

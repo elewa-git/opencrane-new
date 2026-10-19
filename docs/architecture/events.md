@@ -541,6 +541,8 @@ group or shared assistant and any newly selected default payer against their sav
 events. Personal, inactive or retired assistants and unknown or foreign groups
 refuse without an append or a replacement choice. These histories load before the
 short write access check, which watches their exact streams for later changes.
+The current saved `installation-default` payer needs no team record when saving
+the global default or its own paying-group ceiling. Other payers need a real group.
 An exact saved retry checks current caller access and returns its original receipt
 before validating the old choice again. These checks add no event types or fields;
 the `budget.ceiling_set` registry entry and replay contract remain unchanged.
