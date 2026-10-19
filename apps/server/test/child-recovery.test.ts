@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import * as authz from '@opencrane/authz';
 import { eventEnvelopeSchema, conversationCreatedDataSchema } from '@opencrane/events';
 import { childRequests } from '@opencrane/projections';
+import type { Db } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { chatHistory } from '../src/chat/commands.ts';
 import { recoverChildRequest, watchChildRequests } from '../src/chat/child-recovery.ts';
@@ -28,6 +29,19 @@ async function resetAccess() {
   }
 }
 afterEach(resetAccess);
+
+async function recoveryUsesReadOnlyProjectionAccess() {
+  await context.runner.initialise(childRequests);
+  const readonlyDb = { query: context.db.query } as Db;
+  const stop = new AbortController();
+  const options = { ...context.options, db: readonlyDb };
+  const running = watchChildRequests(options, logger, stop.signal);
+  const result = running.then(() => undefined, (error: unknown) => error);
+  await delay(100);
+  stop.abort();
+  expect(await result).toBeUndefined();
+}
+it('recovers using a read-only projection connection', recoveryUsesReadOnlyProjectionAccess);
 
 async function savedRequest(stage: string) {
   const input = await context.parent();
