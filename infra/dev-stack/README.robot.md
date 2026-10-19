@@ -666,6 +666,10 @@ Owner, `jente@elewa.ke`. Setup uses product HTTP routes with the configured Orig
 create OpenAI connection, save random stub credential, check reachability, accept the
 quoted model test, enable `modelForTask('chat_turn')` and `gpt-6-luna`, explicitly
 select the silo default, drain, then switch on. Every write waits for its receipt.
+After enabling models, setup waits up to 30 seconds for `seed-provider-default` to
+record the first binding. It then reads that position for the explicit Owner selection.
+This avoids racing the scheduled binding; it still makes only one selection write
+and refuses any later conflict.
 The first refusal stops startup with only the step and status. A refused fresh setup
 needs diagnosis and another fresh start; it does not retry writes or undo product checks.
 Token-bootstrap qualification (`DEV_OWNER_BOOTSTRAP=0`) skips this setup and the journey.

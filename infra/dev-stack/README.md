@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|runs browser checks, including shared assistant budgets| apps
+  stack -->|waits for provider setup; checks shared assistant budgets| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
 ```
@@ -49,7 +49,8 @@ flowchart LR
 
 A fresh stack with the development Owner connects the local model provider through the
 product APIs. It saves a private credential, checks the provider, selects the chat models
-and default, then asks to switch on. When accepted, models restarts with that saved
+and waits for the first default to be recorded. It then explicitly selects that default
+and asks to switch on. When accepted, models restarts with that saved
 credential before any chat check. A refusal stops startup. Free reachability checks
 need no spending settlement. Paid tests and other sends still need confirmed outcomes.
 Later starts read the recorded mode again.

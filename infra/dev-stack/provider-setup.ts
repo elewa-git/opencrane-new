@@ -72,15 +72,25 @@ export async function setupProvider(options: SetupOptions) {
   const selected = await save('models', '/api/org/providers', {
     action: 'models', providerId: 'dev-stub', expectedRevision: saved.revision, models: enabledModels,
   });
-  const bindings = await request('bindings', `${route}/bindings`);
   function isDefault(row: { kind: string }) {
     return row.kind === 'silo_default';
   }
-  const previous = bindings.rows?.find(isDefault);
+  async function seededDefault() {
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      const bindings = await request('bindings', `${route}/bindings`);
+      const previous = bindings.rows?.find(isDefault);
+      if (previous) return { bindings, previous };
+      await delay(100);
+    }
+    throw new Error('Provider setup default: timeout');
+  }
+  // Wait for the default scheduled by model selection before making the owner's choice.
+  const { bindings, previous } = await seededDefault();
   await save('default', `${route}/bindings`, { action: 'select', kind: 'silo_default',
     dependantId: options.silo, task: 'chat_turn', model, expectedRevision: selected.revision,
     expectedProviderSequence: bindings.expectedProviderSequence,
-    expectedBindingSequence: previous?.position ?? 0 });
+    expectedBindingSequence: previous.position });
   function positions(status: Reply) {
     return { expectedRevision: status.revision,
       expectedProviderSequence: status.expectedProviderSequence,
