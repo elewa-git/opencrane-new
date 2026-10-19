@@ -35,7 +35,7 @@ async function readsOlderPublication() {
     }
     try {
       if (published) await check();
-      else await assert.rejects(check);
+      else await assert.rejects(check, /Organisation history contains the saved MCP publication/);
       assert.deepEqual(paths, ['/api/org/history', '/api/org/history?before=311']);
     } finally {
       await client.dispose();

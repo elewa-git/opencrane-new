@@ -102,11 +102,27 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
 }
 
 export async function assertPublishedAudit(owner: Page, origin: string) {
-  const response = await owner.request.get(`${origin}/api/org/history`);
-  assert.equal(response.status(), 200);
-  const changes = auditResponseSchema.parse(await response.json());
-  assert(changes.rows.some(row => row.records.some(record => record.type === 'mcp.server_published')));
-  assert(!JSON.stringify(changes).includes('canary'));
+  const deadline = Date.now() + 60_000;
+  let before: number | undefined;
+  function isPublication(record: { type: string }) {
+    return record.type === 'mcp.server_published';
+  }
+  function hasPublication(row: { records: Array<{ type: string }> }) {
+    return row.records.some(isPublication);
+  }
+  while (Date.now() < deadline) {
+    const query = before === undefined ? '' : `?before=${before}`;
+    const response = await owner.request.get(`${origin}/api/org/history${query}`);
+    assert.equal(response.status(), 200);
+    const changes = auditResponseSchema.parse(await response.json());
+    assert(!JSON.stringify(changes).includes('canary'));
+    if (changes.rows.some(hasPublication)) return;
+    if (changes.nextBefore === undefined) break;
+    assert(before === undefined || changes.nextBefore < before,
+      'Older change history moves towards earlier events');
+    before = changes.nextBefore;
+  }
+  assert.fail('Organisation history contains the saved MCP publication');
 }
 
 async function waitForPublishedEvent(page: Page): Promise<void> {

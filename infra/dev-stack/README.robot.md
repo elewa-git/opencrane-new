@@ -500,7 +500,10 @@ unconfirmed Stop reservations while leaving enough headroom for the repeat run.
 Secondary journeys also read each member's completed stub turn in Action history,
 with the permission decision and observed outcome shown separately. The owner reads
 safe organisation changes; another joined member is refused private history, and
-members are refused organisation history. Owner/member sessions use real Zitadel
+members are refused organisation history. The organisation-history check follows older pages to find the saved MCP
+publication, checking each page for private canaries. Newer membership grants can
+fill the first page before this check starts.
+Owner/member sessions use real Zitadel
 sign-in; the extra member uses a dev-only signed session to test resource authority.
 Both views and the refusal screen are checked at 1280px and 390px. Private chat,
 query, conversation-id and bearer canaries must be absent from live process and

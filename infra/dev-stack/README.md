@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|waits for provider setup; checks shared assistant budgets| apps
+  stack -->|checks provider setup, shared budgets and paged history| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
 ```
@@ -68,7 +68,8 @@ and call checks are being connected.
    and the computer screen. The organisation checks also cover groups, direct chats, shared
    assistants and saving a provider key. Group chat checks cover the mode before the first
    message, who can read each message, quiet ordinary sends, and access clearing after a
-   person leaves. Budget checks use a real group and shared assistant, and restore
+   person leaves. Audit checks follow older pages when newer grants fill the first page.
+   Budget checks use a real group and shared assistant, and restore
    their test limits even if a browser step fails.
 3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.
    Its services use separate data and ports, and `down.sh --id` removes that stack and
