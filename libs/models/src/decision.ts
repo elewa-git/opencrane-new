@@ -12,7 +12,7 @@ import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers
 import { groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
 import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
-import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approvals.ts';
+import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
