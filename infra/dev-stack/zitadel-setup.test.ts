@@ -86,6 +86,9 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
     ZITADEL_KEY_FILE: `${home}/pat`, MOCK_ZITADEL_FILE: providerFile };
   const setup = () => exec(process.execPath, ['--experimental-strip-types', '--import',
     './infra/dev-stack/test/zitadel-provider.mjs', 'infra/dev-stack/zitadel-setup.ts'], { env });
+  const readOnlySetup = () => exec(process.execPath, ['--experimental-strip-types', '--import',
+    './infra/dev-stack/test/zitadel-provider.mjs', 'infra/dev-stack/zitadel-setup.ts',
+    '--read-only'], { env });
   try {
     for (const value of [false, undefined, 'true']) {
       const refused = { apps: { [ownerApp.id]: { ...ownerApp,
@@ -129,6 +132,20 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
     await rm(directory, { recursive: true });
     await setup();
     assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), state);
+    await rm(directory, { recursive: true });
+    await readOnlySetup();
+    assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), state);
+    const missingApp = structuredClone(state);
+    delete missingApp.apps[config.appId];
+    await writeFile(providerFile, JSON.stringify(missingApp));
+    await assert.rejects(readOnlySetup(), /requires the existing secondary app/u);
+    assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), missingApp);
+    const missingUser = structuredClone(state);
+    delete missingUser.users[config.users.owner.id];
+    await writeFile(providerFile, JSON.stringify(missingUser));
+    await assert.rejects(readOnlySetup(), /requires existing secondary test users/u);
+    assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), missingUser);
+    await writeFile(providerFile, JSON.stringify(state));
     for (const [name, value] of Object.entries(credentials)) {
       assert.equal(await readFile(`${directory}/zitadel-${name}`, 'utf8'), value);
     }

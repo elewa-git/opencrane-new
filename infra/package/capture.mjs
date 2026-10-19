@@ -9,8 +9,11 @@ assert(secondary, 'Capture requires a claimed secondary slot');
 const port = 25000 + Number(stackId) * 100 + 6;
 const origin = `http://127.0.0.1:${port}`;
 const output = 'docs/process/p5-1-live';
+const prefix = process.argv[2];
+assert(/^fresh-[12]-$/u.test(prefix), 'Pass fresh-1- or fresh-2- as the capture prefix');
 const setup = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'));
 const owner = setup.users.owner;
+const signIns = [];
 let stage = 'browser launch';
 const browser = await chromium.launch({ headless: true, channel: 'chromium' });
 
@@ -30,7 +33,7 @@ async function completeChatTurn(page, width) {
   const reply = page.getByRole('article', { name: 'Agent reply', exact: true });
   await reply.filter({ hasText: 'Hello from your computer.' }).waitFor({ timeout: 120_000 });
   await reply.getByText('Done', { exact: true }).waitFor();
-  await page.screenshot({ path: `${output}/chat-${width}.png`, fullPage: true });
+  await page.screenshot({ path: `${output}/${prefix}chat-${width}.png`, fullPage: true });
   console.log(`PASS stub-model browser chat at ${width}px`);
 }
 
@@ -54,13 +57,17 @@ try {
     const response = await page.request.get(`${origin}/auth/me`);
     const session = await response.json();
     assert.equal(session.authenticated, true);
+    assert.equal(session.user?.sub, owner.id);
+    signIns.push({ width, authenticated: session.authenticated,
+      subject: session.user?.sub });
     await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
-    await page.screenshot({ path: `${output}/signed-in-${width}.png`, fullPage: true });
+    await page.screenshot({ path: `${output}/${prefix}signed-in-${width}.png`, fullPage: true });
     stage = `${width}px chat turn`;
     await completeChatTurn(page, width);
     await context.close();
     console.log(`PASS signed-in package screenshot at ${width}px`);
   }
+  console.log(JSON.stringify(signIns));
 } catch {
   console.error(`FAIL package screenshot during ${stage}`);
   process.exitCode = 1;

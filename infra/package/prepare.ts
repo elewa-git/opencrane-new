@@ -149,7 +149,13 @@ async function main() {
     secrets: Record<string, string>;
   };
   stage = 'development sign-in setup';
-  await command('node', ['--experimental-strip-types', 'infra/dev-stack/zitadel-setup.ts']);
+  if (process.env['PACKAGE_SKIP_PROVIDER_SETUP'] !== '1') {
+    await command('node', ['--experimental-strip-types', 'infra/dev-stack/zitadel-setup.ts']);
+  } else {
+    // Use the slot's existing test account without making provider changes.
+    await command('node', ['--experimental-strip-types',
+      'infra/dev-stack/zitadel-setup.ts', '--read-only']);
+  }
   stage = 'private settings';
   await prepareSettings();
   stage = 'Kubernetes secrets';

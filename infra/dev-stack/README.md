@@ -16,7 +16,7 @@ The stack starts OpenCrane apps against them. It uses the
 flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
-  stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
+  stack -->|sets up or checks test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
@@ -32,6 +32,8 @@ flowchart LR
 - Create private local credentials for the services.
 - Set up four sign-in test users for each spare stack. Check that the sign-in apps
   include email claims in their signed tokens.
+- Check existing test sign-in accounts without changing Zitadel during a fresh
+  package run.
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
 - Connect and test that provider as the Owner before a fresh stack starts its chat checks.

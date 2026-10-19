@@ -432,3 +432,93 @@ The signed-in pages were also refreshed at
 [1280px](p5-1-live/signed-in-1280.png) and
 [390px](p5-1-live/signed-in-390.png). These captures and the two chat captures
 come from this main install.
+
+## P5-2: two fresh installs
+
+On 19 October 2026, this worktree claimed slot 1. The final pair ran with
+read-only provider setup. Its first install
+used namespace UID `fe963d90-a6f2-4f2c-b8e1-f9b57f62d322` and Helm install id
+`4b636f5b-1c7b-4e68-8e49-dc9ea9803446`. Its OpenFGA store id was
+`01M59V4WHV44BE46F0S9Q90XA5`. The second used namespace UID
+`e1e5c201-e1c1-4d48-ae97-0359795b94fc`, Helm install id
+`768252ae-1564-444d-b6d6-a3f8cf2b6540`, and OpenFGA store id
+`01M59VC02ESQRDQQGC4H1HJ8ND`.
+The disk had 95 GiB free before the run and 94 GiB after it. The k3d node
+reported `DiskPressure=False`; neither install timed out.
+
+| Check | Fresh 1 | Fresh 2 |
+| --- | --- | --- |
+| Claim, install and fresh data | PASS — owned claim and release; four new PVC UIDs, new Kubernetes and silo events, only bootstrap owner, no conversation, file or memory rows before chat | PASS — different release, namespace, four PVC UIDs and OpenFGA store; the same empty-data checks passed |
+| Owner | PASS — configured issuer and slot test subject bound to `jente@elewa.ke`; read-only Zitadel lookup confirmed verified email; invitation and join events, joined owner row and OpenFGA owner check passed | PASS — the same checks passed for this new store and event stream |
+| Sign-in and stub chat | PASS — `/auth/me` returned the configured subject at 1280 and 390; both turns showed “Hello from your computer.” and Done | PASS — two new signed-in turns showed the same result |
+| 390px screen by eye | PASS — reply and composer did not overlap | PASS — reply and composer did not overlap |
+| Exposure | PASS — five live Services were ClusterIP, no Ingress; the forward listened on `127.0.0.1:25106`; a container on Docker's default bridge could not connect to the host gateway on that port | PASS — the same checks passed |
+| Owned cleanup | PASS — `package-down` removed the first namespace and its claim before the second install | PASS — namespace, forward, package owner record and PV claims were gone; owner namespace UIDs, eight existing owner or k3d container IDs, and listener `127.0.0.1:44200` matched the earlier snapshot |
+| Other-slot namespace UID | NOT RUN — slot 2 had no namespace | NOT RUN — slot 2 had no namespace |
+| Object storage | NOT RUN — outside this chart | NOT RUN — outside this chart |
+| Person's own Zitadel login | NOT RUN — owner-gated; the separate OpenCrane 2 Dev CI owner signed in | NOT RUN — owner-gated; the same slot test owner signed in |
+
+The first PVC UIDs were `6ca7ca11-9827-46b5-8168-357c72dca8d1`,
+`4cdd08d2-c262-47d7-adce-2cb92788c016`,
+`d3ae359c-5862-4592-a60c-91463ccef7ce` and
+`46109f32-3894-45d8-8841-8035a3b4f878`. The second PVC UIDs were
+`e82f7f77-aef9-4bc7-a423-7788df8fe31a`,
+`7f1b073e-651c-4dd4-9d9d-32c51daf18b0`,
+`630060ed-a8b5-487e-8e4d-a7c9dc63b9b9` and
+`4b141235-cc82-4651-beda-7d4cdb02e5af`.
+
+Browser captures: [first sign-in at 1280](p5-1-live/fresh-1-signed-in-1280.png),
+[first sign-in at 390](p5-1-live/fresh-1-signed-in-390.png),
+[first chat at 1280](p5-1-live/fresh-1-chat-1280.png),
+[first chat at 390](p5-1-live/fresh-1-chat-390.png),
+[second sign-in at 1280](p5-1-live/fresh-2-signed-in-1280.png),
+[second sign-in at 390](p5-1-live/fresh-2-signed-in-390.png),
+[second chat at 1280](p5-1-live/fresh-2-chat-1280.png), and
+[second chat at 390](p5-1-live/fresh-2-chat-390.png).
+
+Before an earlier passing pair, three trial runs failed: the first two limited
+startup to two events even though workers create more, and the third lacked
+the provider organisation header. All three failures stopped
+before browser capture, removed their own namespace, and led to the checks
+used above. The final pair repeated the journey after read-only provider setup
+was added. The person's existing Zitadel user was not changed.
+
+The fresh fixture suite passed 26 cases. These removals were tried in a separate
+scratch worktree; the listed refusal cases then failed. The unmodified
+fixture passed separately.
+
+| Removed scratch check | Refusal tests that failed |
+| --- | --- |
+| Helm install id comparison | Reused or missing install id |
+| Fresh-state checks | All 11 leftover-data cases: reused or old PVC, old Kubernetes or silo event, conversation event, claimed PV, extra member, conversation/file/memory row and reused store |
+| Owner binding checks | Nine identity, email, role, join-event and OpenFGA refusals |
+| Browser identity checks | All 12 owner refusal cases, including unauthenticated and other-subject sign-in |
+| Pre-write claim check | Foreign claim before Helm |
+
+The nine owner-binding failures were: no identity row, untrusted issuer,
+unverified email, member role, not joined, different member email, different
+join event, missing join event and OpenFGA owner false. Removing the browser
+identity check also failed those cases, the other configured subject, an
+unauthenticated sign-in and a different signed-in subject. The foreign-claim
+fixture covers another worktree in either owner record, a changed namespace
+UID and a PV still claimed for this namespace; fake Helm and kubectl recorded
+no writes.
+
+The scratch logs are `/tmp/p5-2-pr1-mutation-*.log`. The first test commit
+failed because `fresh-twice.ts` did not yet exist. The claim and fresh checks
+passed twice with 46 cases each. The final fresh and read-only provider checks
+passed twice with 28 cases each. The event field security suite passed once
+with 438 cases. The tests started no package cluster.
+
+| Source check | Result |
+| --- | --- |
+| `npm ci` | PASS |
+| Changed claim and fresh Node tests, twice | PASS — 46 cases in each run |
+| Final fresh and read-only provider Node tests, twice | PASS — 28 cases in each run |
+| Event field security rules | PASS — 438 cases |
+| `npm run lint` | PASS — 21 existing warnings, no errors |
+| `npm run typecheck` | PASS |
+| `npm run check:events` | PASS — 145 types agree |
+| Knip and changelog checks | PASS |
+| Extra `infra/dev-stack/tsconfig.json` check | FAIL — existing type errors in `daily-fresh.test.ts`, `wake-latency.ts` and an unchanged part of `zitadel-setup.test.ts`; this is outside the required typecheck script |
+| Full root test suite | NOT RUN — outside this change's requested checks |

@@ -122,7 +122,7 @@ export async function packagedSlotIsBusy() {
   }
 }
 
-async function requireOwner() {
+export async function requireOwner() {
   if (!secondary) throw new Error('A package needs a secondary slot');
   const record = await readFile(`${directory}/stack-owner`, 'utf8');
   if (!record.startsWith(`worktree=${root}\n`)) throw new Error('This worktree does not own the slot');

@@ -56,6 +56,7 @@ jobs:
           infra/dev-stack/provider-setup.test.ts infra/dev-stack/daily-fresh.test.ts
           infra/dev-stack/browser-budgets.test.ts
           infra/dev-stack/browser-audit.test.ts
+          infra/dev-stack/zitadel-setup.test.ts infra/package/fresh-twice.test.ts
 
       # apps/web builds and tests through the Angular CLI, so it needs its own steps.
       - name: Build apps/web

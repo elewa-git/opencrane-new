@@ -237,6 +237,10 @@ The stack uses `https://weownai-oidc-8dwlat.eu1.zitadel.cloud` with the
 
 The owner has `ORG_OWNER` in this organisation. OpenCrane product permissions
 come separately from invitation/join events and OpenFGA, never OIDC roles.
+For a packaged fresh check, `zitadel-setup.ts --read-only` checks the existing
+secondary app and four test users. It creates local settings and copies the
+slot's saved credentials, but refuses missing provider resources instead of
+creating them. The package runner uses this mode and makes no provider writes.
 The app uses code + S256 PKCE and client-secret POST authentication, with redirects
 `https://ocn-dev.tail00285e.ts.net/auth/callback` and
 `https://ocn-dev.tail00285e.ts.net/` after logout. The server pins the resource-owner
