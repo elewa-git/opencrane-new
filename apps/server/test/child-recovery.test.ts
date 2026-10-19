@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import * as authz from '@opencrane/authz';
 import { eventEnvelopeSchema, conversationCreatedDataSchema } from '@opencrane/events';
 import { childRequests } from '@opencrane/projections';
+import type { Db } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { chatHistory } from '../src/chat/commands.ts';
 import { recoverChildRequest, watchChildRequests } from '../src/chat/child-recovery.ts';
@@ -14,6 +15,7 @@ const eventSchema = eventEnvelopeSchema(z.unknown());
 const logger = createLogger('child-recovery-test');
 async function setup() {
   context = await summonFixture();
+  await context.runner.initialise(childRequests);
 }
 async function cleanup() {
   await context.close();
@@ -28,6 +30,30 @@ async function resetAccess() {
   }
 }
 afterEach(resetAccess);
+
+async function recoveryUsesReadOnlyProjectionAccess() {
+  let completedReads = 0;
+  async function readOnlyQuery<Row extends Record<string, unknown>>(
+    sql: string, parameters?: unknown[]) {
+    expect(sql.trimStart()).toMatch(/^SELECT\b/u);
+    const result = await context.db.query<Row>(sql, parameters);
+    completedReads++;
+    return result;
+  }
+  function refuseTransaction<Result>(): Promise<Result> {
+    return Promise.reject(new Error('Read-only connection cannot write'));
+  }
+  const readonlyDb: Db = { query: readOnlyQuery, transaction: refuseTransaction };
+  const stop = new AbortController();
+  const options = { ...context.options, db: readonlyDb };
+  const running = watchChildRequests(options, logger, stop.signal);
+  const result = running.then(() => undefined, (error: unknown) => error);
+  await delay(100);
+  stop.abort();
+  expect(await result).toBeUndefined();
+  expect(completedReads).toBeGreaterThan(0);
+}
+it('recovers using a read-only projection connection', recoveryUsesReadOnlyProjectionAccess);
 
 async function savedRequest(stage: string) {
   const input = await context.parent();
@@ -54,6 +80,7 @@ async function savedRequest(stage: string) {
   expect(response.statusCode, response.body).toBe(503);
   const intent = await context.intent(conversationId);
   await context.restart();
+  await context.runner.run(childRequests);
   return { input, start, intent };
 }
 function applyCreationPermissions() {
@@ -108,6 +135,40 @@ async function recoversWithoutPost(stage: string) {
 }
 it.each(['conversation.child_requested', 'conversation.created', 'message.posted'])(
   'recovers after %s without another POST', recoversWithoutPost);
+
+async function retriesUntilWorkerBuildsTable() {
+  const { intent } = await savedRequest('conversation.child_requested');
+  // Remove the test's earlier projection records to model a fresh installation.
+  await context.db.query('DROP TABLE child_requests');
+  await context.db.query('DELETE FROM projection_checkpoints WHERE name = $1',
+    [childRequests.name]);
+  await context.db.query('DELETE FROM projection_events WHERE projection = $1',
+    [childRequests.name]);
+  await context.db.query('DELETE FROM projection_generations WHERE name = $1',
+    [childRequests.name]);
+  applyCreationPermissions();
+  const warnings = vi.spyOn(logger, 'warn');
+  const before = await context.nats.store.head();
+  const stop = worker();
+  function expectRetries() {
+    expect(warnings.mock.calls.length).toBeGreaterThanOrEqual(2);
+  }
+  try {
+    await vi.waitFor(expectRetries, { timeout: 5_000, interval: 50 });
+    expect(await context.nats.store.head()).toBe(before);
+    expect(await chatHistory(context.nats.store, 'test', intent.childConversationId))
+      .toHaveLength(0);
+    await context.runner.initialise(childRequests);
+    await context.runner.run(childRequests);
+    const rows = await waitForInput(intent.childConversationId);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.event.id).toBe(intent.firstInputId);
+  } finally {
+    await stop();
+  }
+}
+it('retries without child work until the worker creates and fills the missing table',
+  retriesUntilWorkerBuildsTable);
 
 async function racesWithPost() {
   const { input, start, intent } = await savedRequest('conversation.child_requested');

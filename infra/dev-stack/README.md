@@ -43,6 +43,7 @@ flowchart LR
 - Keep up to three separate development stacks on one machine.
 - Put the package gateway Service IP in the computer settings before a chat turn starts.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
+  On failure, save the error and recent process logs before removing that stack.
 
 ## Processes it handles
 
@@ -72,7 +73,8 @@ and call checks are being connected.
    releases its id.
 4. **The daily check runs.** A user timer updates a detached checkout of `main`, then starts
    `up.sh --fresh` in a claimed spare stack. The local model stub keeps it free of paid model
-   calls. A result line and any failure evidence go in the user's home directory.
+   calls. Saved failure logs have known secrets and credential patterns removed.
+   A result line and any failure evidence go in the user's home directory.
 
 ## Secondary stack slots
 
@@ -110,7 +112,8 @@ The daily timer runs at 03:17 UTC. Before each run, its launcher updates the det
 `~/dev/daily-fresh` checkout to the latest `main` and installs packages only when the lock
 file changes. It claims a spare stack, starts it fresh with the local model stub, and removes
 that stack when the run ends. If both spare stacks are busy, it records that it skipped the
-run. Results and saved failure files go in `~/.opencrane/daily-fresh/`, outside the repository.
+run. Saved logs have known secrets and credential patterns removed. Logs are withheld
+if sanitisation fails. Results and saved failure files go in `~/.opencrane/daily-fresh/`, outside the repository.
 
 Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user timer.
 

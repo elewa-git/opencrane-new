@@ -744,11 +744,12 @@ Rebuild the MCP catalogue on upgrade so earlier publication events gain this pos
 
 ## Unfinished child requests
 
-`childRequests` is a separate projection owned by the server recovery worker. It records
+`childRequests` is a separate projection filled by the conversations worker. It records
 only silo, parent, intent id/position, child id and first-input id. The matching saved
 input removes the candidate. The index supplies candidates, never permission or proof
 that a stage can run. It does not write a conversation feed row or contain source text.
-Stop server workers before `ProjectionRunner.rebuild(childRequests)`. Replay performs
+Stop the conversations worker and server readers before `ProjectionRunner.rebuild(childRequests)`.
+Replay performs
 only database writes. A new installation or upgrade builds this separate index from
 position one; it does not require rebuilding other conversation tables.
 

@@ -3130,7 +3130,8 @@ chat activity and unavailable or lagging history. Fresh-install qualification: N
 ## Child recovery before activation (P4-8 PR 7b)
 
 `chat/child-recovery.ts` starts with the configured chat service and stops before its
-connections close. It builds `childRequests`, then scans at most 32 candidates per pass
+connections close. The conversations worker builds `childRequests`; the server reads it
+with a read-only PostgreSQL account. It scans at most 32 candidates per pass
 in saved order, with a one-second pause. The next pass continues after the last position;
 a shorter page restarts the scan. Refusals remain queued and are checked on later scans.
 It rereads the exact parent event and derives all command values from it. Existing
@@ -3138,8 +3139,8 @@ commands verify the child, copied text, original joins and current access. Conve
 history stays outside the short access check. Errors use fixed log messages without
 source text. The bridge hold remains unchanged.
 
-This is the permitted index-and-worker split. The durable handler host is in apps/ops;
-the checked commands and conversation keys are in apps/server. Durable job integration,
+The durable handler host is in apps/ops; the checked commands and conversation keys are
+in apps/server. Durable job integration,
 bounded attempt records, saved failure events, public retry, activation, root allocation
 and dispatch remain later work. No second event dispatcher or execution path is added.
 `test/child-recovery.test.ts` covers crashes, competing workers, changed index records,

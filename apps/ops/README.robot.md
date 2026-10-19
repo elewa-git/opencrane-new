@@ -232,7 +232,9 @@ readers, drains handler work and closes connections. The [local dev stack](../..
 supplies these settings and qualifies the processes together on real services.
 
 `npm run worker -w apps/ops -- conversations` runs the encrypted conversation
-feed projection. `ProjectionRunner.rebuild(conversations)` rebuilds it with readers
+feed and unfinished child request projections. The server reads the child request
+table without database write rights and retries when the worker is catching up.
+`ProjectionRunner.rebuild(conversations)` rebuilds the feed with readers
 and the runner stopped; it increments the generation so reconnecting browsers
 reload. No chat reaction runs during replay. Bridge delivery reads durable posted
 messages, invokes the existing resume command, and waits for Ready before issuing

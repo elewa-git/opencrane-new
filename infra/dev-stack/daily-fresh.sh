@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -u
+umask 077
 
 unset P4_JOURNEY_ATTEMPT
 
@@ -36,7 +37,7 @@ write_receipt() {
 }
 
 preserve_failure_artifacts() {
-  local evidence_time evidence_directory stack_directory screenshot
+  local evidence_time evidence_directory stack_directory screenshot private_log log_name
   if [ "$run_result" != FAIL ] || [ -z "$stack_id" ]; then
     return
   fi
@@ -47,12 +48,24 @@ preserve_failure_artifacts() {
   mkdir -p "$evidence_directory"
   chmod 700 "$evidence_directory"
 
-  if [ -f "$stack_directory/last-error.log" ]; then
-    cp "$stack_directory/last-error.log" "$evidence_directory/last-error.log"
-    chmod 600 "$evidence_directory/last-error.log"
-  fi
+  for private_log in "$stack_directory"/*.log; do
+    if [ ! -f "$private_log" ] || [ -L "$private_log" ]; then
+      continue
+    fi
+    log_name=$(basename "$private_log")
+    case "$log_name" in
+      zitadel-*) continue ;;
+    esac
+    if node "$script_directory/sanitise-evidence.mjs" "$stack_directory" \
+        "$private_log" "$repository_root" > "$evidence_directory/$log_name" 2>/dev/null; then
+      :
+    else
+      printf '%s\n' 'Log withheld: sanitisation failed.' > "$evidence_directory/$log_name"
+    fi
+    chmod 600 "$evidence_directory/$log_name"
+  done
   for screenshot in "$stack_directory"/*-failure*.png; do
-    if [ ! -f "$screenshot" ]; then
+    if [ ! -f "$screenshot" ] || [ -L "$screenshot" ]; then
       continue
     fi
     cp "$screenshot" "$evidence_directory/$(basename "$screenshot")"

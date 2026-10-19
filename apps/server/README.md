@@ -19,7 +19,7 @@ flowchart LR
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|indexes unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
+  server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
@@ -66,6 +66,9 @@ The server sends spending changes to the models process. It checks each chosen
 group and shared assistant before saving. Personal assistants cannot receive a new
 cap. The saved installation payer needs no group record. An unavailable choice
 asks the admin to correct the editor; lost admin access still clears the page.
+
+The back end reads unfinished child requests from a table kept by the conversations
+worker. It checks each saved request and current access before continuing the child.
 
 Closed chats keep displayed output as it stood when the chat closed. Later assistant
 reports, decisions, tool dispatches, child publications and agent or system posts
