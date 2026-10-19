@@ -493,8 +493,9 @@ async function retriesUnavailableSaveOrKey(kind: string) {
   function unreadable(): never {
     throw new Error('Key unavailable');
   }
-  async function unavailable() {
-    return { status: 'unavailable' as const, cause: new Error('Append unavailable') };
+  function unavailable() {
+    const result = { status: 'unavailable' as const, cause: new Error('Append unavailable') };
+    return Promise.resolve(result);
   }
   const fault = kind === 'key'
     ? vi.spyOn(context.keys, 'decrypt').mockImplementation(unreadable)
@@ -514,6 +515,12 @@ it.each(['append', 'key'])('keeps an unavailable %s retryable without saving fai
   retriesUnavailableSaveOrKey);
 
 async function hidesFailedStatus(kind: string) {
+  let otherConversationId = '';
+  // Use an older chat so source visibility cannot hide a lookup in the wrong chat.
+  if (kind === 'different chat') {
+    const other = await context.parent();
+    otherConversationId = other.conversationId;
+  }
   const { input, intent } = await savedRequest('conversation.child_requested');
   const row = await reference(input.conversationId);
   await recordChildStartFailure(context.options, String(row['intent_id']), intent,
@@ -531,8 +538,7 @@ async function hidesFailedStatus(kind: string) {
     await context.append(`participation-${conversationId}`, 'participant.removed',
       { conversationId, participantId: memberId, removedBy: 'alice' });
   } else if (kind === 'different chat') {
-    const other = await context.parent();
-    conversationId = other.conversationId;
+    conversationId = otherConversationId;
   } else {
     await context.append(`participation-${conversationId}`, 'participant.removed',
       { conversationId, participantId: 'alice', removedBy: 'bob' });
