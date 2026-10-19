@@ -1,0 +1,1 @@
+- Published remote tools can use their reviewed HTTPS address with public DNS checks, pinned TLS, a required revision guarantee and bounded replies. Failed sends keep an unknown outcome.

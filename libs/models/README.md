@@ -19,7 +19,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, memory, owners, providers, free reachability and spending| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
-  models -->|rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks remote HTTPS addresses and certificates; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
   models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -63,6 +63,10 @@ an uncertain save reply refuses the call and spends its pass. The start record a
 does not prove that any bytes left. A later refusal records that nothing was sent.
 The last gateway-position read decides which saved configuration applies to the call.
 A configuration saved afterwards does not stop a call using the still acknowledged one.
+Published remote tools can use their saved HTTPS address when the server promises to
+refuse calls for a changed tool list. DNS checks happen before saving a start; TLS opens
+after the final send checks. Replies are bounded and carry no upstream cookies or redirects.
+A remote failure after saving a start leaves the outcome unknown.
 Legacy publications keep their admission check.
 It checks the small access streams within two seconds.
 Built-in memory uses the same send check. Its signed context also identifies the one-use

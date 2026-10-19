@@ -33,7 +33,7 @@ export async function remoteFixture() {
         res.writeHead(409); res.end(); return;
       }
       const parsed = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]), method: z.string(), params: z.object({ cursor: z.string().optional(),
-        _meta: z.object({ 'io.modelcontextprotocol/protocolVersion': z.literal('2026-07-28'), 'io.modelcontextprotocol/clientCapabilities': z.object({}).strict() }) }) }).strict().safeParse(JSON.parse(Buffer.concat(chunks).toString()));
+        _meta: z.object({ 'io.modelcontextprotocol/protocolVersion': z.literal('2026-07-28'), 'io.modelcontextprotocol/clientCapabilities': z.record(z.string(), z.unknown()) }) }) }).strict().safeParse(JSON.parse(Buffer.concat(chunks).toString()));
       if (!parsed.success) { res.writeHead(400, { 'content-type': 'application/json' }); res.end('{}'); return; }
       const body = parsed.data;
       calls.push({ method: body.method, headers: req.headers, body, hostname: z.string().parse(Reflect.get(req.socket, 'servername')) });
@@ -61,11 +61,14 @@ export async function remoteFixture() {
   const resolver = new Resolver(); resolver.setServers([`127.0.0.1:${dns.address().port}`]);
   const pinned: string[] = [];
   let trust = true;
+  const pooling: unknown[] = [];
   const network: RemoteNetwork = {
     resolve: async host => (await resolver.resolve4(host)).map(address => ({ address, family: 4 })),
     // Map the checked public address to this local TLS server for the test.
     // Keep the production lookup, hostname checks, headers and response reading.
-    request: (url, options, callback) => request(url, {
+    request: (url, options, callback) => {
+      pooling.push(options.agent);
+      return request(url, {
       ...options, port: address.port, ...(trust ? { ca: cert } : {}),
       lookup: (host, opts, done) => {
         options.lookup!(host, opts, (error, ip, family) => {
@@ -73,9 +76,10 @@ export async function remoteFixture() {
           pinned.push(z.string().parse(ip)); done(null, '127.0.0.1', 4);
         });
       },
-    }, callback),
+    }, callback);
+    },
   };
-  return { network, calls, pinned, received,
+  return { network, calls, pinned, received, pooling,
     dnsCalls: () => dnsCalls, connections: () => connections,
     revision: (value: string) => { revision = value; },
     replyFields: (value: Record<string, string>) => { replyFields = value; }, setAnswers: (value: string[]) => { answers = value; }, rebind: () => { rebinding = true; dnsCalls = 0; },

@@ -1576,7 +1576,7 @@ async function nextCarriedGeneration(context: Awaited<ReturnType<typeof publishe
 }
 
 function gatewayCall(context: Awaited<ReturnType<typeof publishedFixture>>,
-  extra: Record<string, string | string[]> = {}) {
+  extra: Record<string, string | string[]> = {}, raw = body) {
   const headers = { ...context.headers, ...extra };
   const options = { method: 'POST', headers };
   const url = `http://127.0.0.1:${context.setup.options.port}/mcp/fixture/installed`;
@@ -1591,7 +1591,7 @@ function gatewayCall(context: Awaited<ReturnType<typeof publishedFixture>>,
     }
     const request = httpRequest(url, options, receive);
     request.on('error', reject);
-    request.end(body);
+    request.end(raw);
   }
   return new Promise<number>(sendRequest);
 }
@@ -2467,8 +2467,8 @@ async function refusesReloadDuringFinalRead() {
 it('refuses a saved reload during the final awaited watch read',
   refusesReloadDuringFinalRead, 60_000);
 
-const remoteGuards = ['bytes', 'private', 'metadata', 'mixed', 'empty', 'rebind',
-  'untrusted', 'wrong_name', 'redirect', 'oversize', 'session', 'reply_fields',
+const remoteGuards = ['gateway', 'bytes', 'private', 'metadata', 'mixed', 'empty', 'rebind',
+  'untrusted', 'wrong_name', 'redirect', 'oversize', 'session', 'mime', 'reply_fields',
   'undeclared', 'revision', 'dns_timeout', 'permit_timeout', 'held_start', 'lost_start',
   'deadline'] as const;
 async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
@@ -2500,6 +2500,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   if (mode === 'redirect') remote.status(307);
   function largeReply() { return 'x'.repeat(1024 * 1024 + 1); }
   if (mode === 'oversize') remote.respond(largeReply);
+  if (mode === 'mime') remote.replyFields({ 'content-type': 'text/plain' });
   if (mode === 'session') remote.replyFields({ 'mcp-session-id': 'REPLY_CANARY' });
   if (mode === 'reply_fields') remote.replyFields({ 'set-cookie': 'REPLY_CANARY' });
   if (mode === 'revision') remote.revision('a'.repeat(64));
@@ -2512,6 +2513,9 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   if (mode === 'undeclared') {
     expect(await gatewayCall(context)).toBe(403);
     expect(remote.dnsCalls()).toBe(0);
+  } else if (mode === 'gateway') {
+    expect(await gatewayCall(context, {}, raw)).toBe(200);
+    expect(remote.received[0]!.raw).toEqual(Buffer.from(raw));
   } else {
     const headers = { ...context.headers, ...context.constants };
     const value = await permit(setup, headers, raw);
@@ -2555,6 +2559,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     try {
       if (mode === 'held_start') {
         await startSaved.promise;
+        await pause(50);
         expect(remote.connections()).toBe(0);
         releaseStart.resolve();
       }
@@ -2576,7 +2581,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       expect(response.headers.get('mcp-session-id')).toBeNull();
       if (mode === 'dns_timeout') expect(performance.now() - beforeSend).toBeLessThan(1300);
       if (mode === 'permit_timeout') expect(performance.now() - beforeSend).toBeLessThan(700);
-      if (success || ['redirect', 'oversize', 'session', 'revision', 'deadline'].includes(mode)) {
+      if (success || ['redirect', 'oversize', 'session', 'mime', 'revision', 'deadline'].includes(mode)) {
         expect(remote.received).toHaveLength(1);
         expect(remote.received[0]!.raw).toEqual(Buffer.from(raw));
         expect(remote.received[0]!.hostname).toBe('mcp.example.test');
@@ -2587,6 +2592,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
           'x-opencrane-mcp-revision': catalogue.schemaDigest });
         expect(remote.dnsCalls()).toBe(1);
         expect(remote.pinned).toEqual(['93.184.216.34']);
+        expect(remote.pooling).toEqual([false]);
       } else {
         expect(remote.received).toHaveLength(0);
       }
@@ -2604,6 +2610,9 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   }
   const encoded = JSON.stringify(rows);
   expect(encoded).not.toContain('not_dispatched');
+  if (['redirect', 'untrusted', 'wrong_name', 'lost_start'].includes(mode)) {
+    expect(encoded).toContain('tool.dispatch_started');
+  }
   if (['private', 'metadata', 'mixed', 'empty', 'undeclared', 'dns_timeout',
     'permit_timeout'].includes(mode)) {
     expect(remote.connections()).toBe(0);

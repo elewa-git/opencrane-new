@@ -102,7 +102,8 @@ function reviewMetadata(rows: StoredEvent[], name: string,
   if (kind === 'remote') {
     destination = new URL(locator).origin;
   }
-  return { schemaDigest: discovery.schemaDigest, review, destination, serverKind: kind };
+  return { schemaDigest: discovery.schemaDigest, review, destination, serverKind: kind,
+    ...(kind === 'remote' ? { locator } : {}) };
 }
 
 function plain(node: JsonValue): unknown {

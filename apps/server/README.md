@@ -21,7 +21,7 @@ flowchart LR
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
-  server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
+  server -->|recaptures tool lists through shared checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records refused turn decisions| nats
 ```
@@ -32,7 +32,8 @@ The models process checks each configured tool call again before sending it. Its
 must compare the approved tool list and running instance before executing the call.
 The models process also supplies the running gateway's confirmed configuration for each
 published call check. Saved configuration alone cannot enable a call after restart.
-Production tool calls remain unavailable until the guarded destination is connected.
+Published remote calls use the shared HTTPS transport after checking the saved destination.
+The remote server must promise to refuse calls for a changed tool list.
 Memory discovery, recall and remember use this same check. The models process checks every
 previously loaded memory reference before allowing another call. The memory backend also
 checks each signed context once and keeps the existing scope and write-proof rules.
