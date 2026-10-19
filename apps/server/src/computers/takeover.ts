@@ -51,7 +51,11 @@ export async function requestControl(options: ChatOptions, memberId: string, raw
   if (facts?.lifecycle?.event.type !== 'computer.ready') {
     throw new ControlUnavailable('Computer unavailable');
   }
-  const ready = readySchema.parse(facts.lifecycle.event.data);
+  const parsedReady = readySchema.safeParse(facts.lifecycle.event.data);
+  if (!parsedReady.success) {
+    throw new ControlUnavailable('Computer unavailable', { cause: parsedReady.error });
+  }
+  const ready = parsedReady.data;
   if (ready.generation !== input.generation) throw new ControlConflict('Control conflict');
   const affectedTurnIds = affectedTurns(facts, memberId, input.conversationId);
   const fresh = await controlAccess(accessOptions, memberId, input, ready, chat, options.store);
@@ -196,8 +200,10 @@ export async function controlStatus(options: ChatOptions, memberId: string,
 }
 function canRequest(chat: ChatFacts, computer: ReturnType<typeof takeComputer> | undefined,
   memberId: string) {
-  return computer?.lifecycle?.event.type === 'computer.ready' && !computer.control &&
-    !chat.conversationClosed && chat.latestHuman?.authorId === memberId;
+  if (computer?.lifecycle?.event.type !== 'computer.ready') return false;
+  const ready = readySchema.safeParse(computer.lifecycle.event.data);
+  return ready.success && !computer.control && !chat.conversationClosed &&
+    chat.latestHuman?.authorId === memberId;
 }
 async function requesterFields(options: ChatOptions, control: ComputerSummary['control'],
   memberId: string, conversationId: string, deadline: number) {

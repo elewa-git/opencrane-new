@@ -163,6 +163,11 @@ async function checksStateBeforeSaving() {
   expect(await fixture.nats.store.head()).toBe(suspended);
   expect((await get('outsider')).body).toBe(hidden.body);
   expect(suspended).toBeGreaterThan(before);
+  await fixture.append('computer-assistant', 'computer.ready', {
+    assistantId: 'assistant', computerId: 'desktop', generation: 1,
+  });
+  expect((await post()).statusCode).toBe(503);
+  expect((await get()).json()).toMatchObject({ eligibleActions: [] });
 }
 it('rejects stale generations and unavailable computers without intent', checksStateBeforeSaving);
 async function removedMember() {
