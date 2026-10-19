@@ -183,10 +183,11 @@ claim. A failed startup still reaches that cleanup.
 If `claim.sh` cannot return an id, the script records `SKIPPED` with the reason
 `no free slot` and exits successfully. Every run adds one UTC line to
 `~/.opencrane/daily-fresh/ledger.md`. The line records the known `origin/main`
-commit, result, failed step and duration. On failure, it copies `last-error.log`
-and any journey failure screenshots into a folder named for that UTC run time
-before `down.sh` removes the stack files. The receipt line names that folder. The
-directory is mode 0700 and the ledger is mode 0600.
+commit, result, failed step and duration. On failure, it copies `last-error.log`,
+`failure.log`, the last 100 lines of each other process log, and any journey failure
+screenshots into a folder named for that UTC run time before `down.sh` removes the
+stack files. It skips `zitadel-*` files. The receipt line names that folder. The
+directory is mode 0700; the evidence files and ledger are mode 0600.
 
 The user service is `opencrane-daily-fresh.service`; its timer is
 `opencrane-daily-fresh.timer`. The timer runs daily at 03:17 UTC with

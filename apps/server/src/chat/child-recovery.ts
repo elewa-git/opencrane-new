@@ -2,7 +2,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { childRequestedEventSchema, chatIdSchema, type ChildRequest } from '@opencrane/events';
 import { readEventAt } from '@opencrane/event-store';
-import { childRequests, ProjectionRunner, type Db } from '@opencrane/projections';
 import type { Logger } from '@opencrane/observability';
 import type { ChatOptions } from './access.ts';
 import { createRequestedChild, addChildFirstInput } from './child-requests.ts';
@@ -64,22 +63,12 @@ async function recoverPage(options: Options, after: number, logger: Logger, sign
   return position;
 }
 
-export async function watchChildRequests(options: Options & { db: Db }, logger: Logger,
+export async function watchChildRequests(options: Options, logger: Logger,
   signal: AbortSignal) {
-  const runner = new ProjectionRunner(options.db, options.store, logger);
-  async function initialise(db: Db) {
-    const initial = new ProjectionRunner(db, options.store, logger);
-    await initial.initialise(childRequests);
-  }
-  if (!options.db.lock) {
-    throw new Error('Child recovery requires projection locking');
-  }
-  await options.db.lock(childRequests.name, initialise);
   let after = 0;
   const runOptions = { signal };
   while (!signal.aborted) {
     try {
-      await runner.run(childRequests, runOptions);
       after = await recoverPage(options, after, logger, signal);
     } catch {
       if (!signal.aborted) {

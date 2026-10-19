@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { once } from 'node:events';
 import { WebSocket, WebSocketServer } from 'ws';
 import { until } from '@opencrane/authz/testing';
-import { listConversations } from '@opencrane/projections';
+import { childRequests, listConversations } from '@opencrane/projections';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { processConversation, assistantSnapshot } from '../src/chat/bridge-conversation.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
@@ -150,6 +150,8 @@ async function holdsWork() {
   const rows = await chatHistory(context.nats.store, 'test', saved.childConversationId);
   await context.auth.handler.handle(rows[0]!.event, context.db);
   await context.restart();
+  await context.runner.initialise(childRequests);
+  await context.runner.run(childRequests);
   const stop = new AbortController();
   const options = { ...context.options, db: context.db };
   const recovering = watchChildRequests(options, createLogger('recovery-hold'), stop.signal);

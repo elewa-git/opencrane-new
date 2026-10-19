@@ -15,6 +15,7 @@ const eventSchema = eventEnvelopeSchema(z.unknown());
 const logger = createLogger('child-recovery-test');
 async function setup() {
   context = await summonFixture();
+  await context.runner.initialise(childRequests);
 }
 async function cleanup() {
   await context.close();
@@ -31,8 +32,18 @@ async function resetAccess() {
 afterEach(resetAccess);
 
 async function recoveryUsesReadOnlyProjectionAccess() {
-  await context.runner.initialise(childRequests);
-  const readonlyDb = { query: context.db.query } as Db;
+  let completedReads = 0;
+  async function readOnlyQuery<Row extends Record<string, unknown>>(
+    sql: string, parameters?: unknown[]) {
+    expect(sql.trimStart()).toMatch(/^SELECT\b/u);
+    const result = await context.db.query<Row>(sql, parameters);
+    completedReads++;
+    return result;
+  }
+  function refuseTransaction<Result>(): Promise<Result> {
+    return Promise.reject(new Error('Read-only connection cannot write'));
+  }
+  const readonlyDb: Db = { query: readOnlyQuery, transaction: refuseTransaction };
   const stop = new AbortController();
   const options = { ...context.options, db: readonlyDb };
   const running = watchChildRequests(options, logger, stop.signal);
@@ -40,6 +51,7 @@ async function recoveryUsesReadOnlyProjectionAccess() {
   await delay(100);
   stop.abort();
   expect(await result).toBeUndefined();
+  expect(completedReads).toBeGreaterThan(0);
 }
 it('recovers using a read-only projection connection', recoveryUsesReadOnlyProjectionAccess);
 
@@ -68,6 +80,7 @@ async function savedRequest(stage: string) {
   expect(response.statusCode, response.body).toBe(503);
   const intent = await context.intent(conversationId);
   await context.restart();
+  await context.runner.run(childRequests);
   return { input, start, intent };
 }
 function applyCreationPermissions() {

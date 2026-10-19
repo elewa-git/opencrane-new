@@ -43,6 +43,7 @@ flowchart LR
 - Keep up to three separate development stacks on one machine.
 - Put the package gateway Service IP in the computer settings before a chat turn starts.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
+  On failure, save the error and recent process logs before removing that stack.
 
 ## Processes it handles
 

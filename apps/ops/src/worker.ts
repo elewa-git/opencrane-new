@@ -5,7 +5,8 @@ import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
   mcpCatalogue, computers, modelAccess, egressPolicy, delegations,
-  conversations, files, personalSettings, conversationKeys, memoryKeys, memoryProjection,
+  conversations, childRequests, files, personalSettings, conversationKeys, memoryKeys,
+  memoryProjection,
   type Projection, type Db,
 } from '@opencrane/projections';
 import { dispatch, HandlerRuntime } from '@opencrane/handlers';
@@ -90,11 +91,22 @@ async function runProjectionWorker(projection: Projection) {
   if (mode === 'members') {
     await db.db.lock!('initialise', initialiseGroups);
   }
+  if (mode === 'conversations') {
+    // Build this table with the writer account; the server can only read projections.
+    async function initialiseChildRequests(locked: Db) {
+      const childRunner = new ProjectionRunner(locked, store, logger);
+      await childRunner.initialise(childRequests);
+    }
+    await db.db.lock!('initialise', initialiseChildRequests);
+  }
   if (mode === 'budgets') {
     await initialiseBudgetProjection(db.db, store, logger);
   }
   while (!stop.signal.aborted) {
     await runner.run(projection, { signal: stop.signal });
+    if (mode === 'conversations') {
+      await runner.run(childRequests, { signal: stop.signal });
+    }
     if (mode === 'members') {
       await runner.run(personalSettings, { signal: stop.signal });
       await runner.run(groups, { signal: stop.signal });
