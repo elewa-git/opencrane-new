@@ -24,7 +24,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables, including closed assistant chats for cleanup, bounded lists and join times| pg["PostgreSQL<br/>database"]
-  projections -->|indexes unfinished child requests outside feeds; saves public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
+  projections -->|indexes queued and failed child requests outside feeds; saves public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and reads unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
@@ -162,8 +162,8 @@ these details. The reports remain in the feed so their saved evidence is availab
 
 ## Processes it handles
 
-The server builds an index of unfinished child requests from saved events. It keeps only
-event references and ids. Rebuilding this index creates no child and copies no message.
+The conversations worker builds an index of child requests from saved events. It keeps
+event references, ids and failed attempt numbers. Recovery skips failed requests. Rebuilding this index creates no child and copies no message.
 
 Memory replay reads saved corrections before opening any text. It rebuilds only
 the latest usable revision and hides facts derived from superseded revisions.

@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, history and tool holds"]
-  server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies, live stop notices and dated approvals| protocol
+  server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies, live stop notices and dated approvals| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool lists, publications and not-sent outcomes"]
@@ -67,7 +67,8 @@ Tool outcome messages can say that the models process refused a call before send
 even when its start was already saved.
 
 Child requests carry reviewed choices and a signed review. Status replies show only
-the requester’s saved request and child id, without the source message text.
+the requester’s saved request and child id, or a saved refusal with its stage and attempt.
+They contain no source message text.
 
 Spending stop replies carry saved reasons and execution status. The server
 decides who may read them and whether to include a limit. A live stop notice

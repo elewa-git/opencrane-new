@@ -133,12 +133,19 @@ An unapplied access receipt returns 425 `access_applying`; an outage returns 503
 `unavailable`. These replies may follow a saved intent or creation. Retrying the same
 POST can complete them. The server also resumes missing creation and first input from
 saved intents after restart, with the original choices and current access checks.
-Denied or unavailable requests stay queued. Saved failure outcomes are not built yet.
+A proven refusal saves `conversation.child_start_failed`, even after parent close.
+Recovery stops and the original start POST cannot resume that request. An outage or
+applying access stays queued and retries with backoff without saving a failure.
+Public retry is the next part; this part records attempt 1 and accepts event attempts 1–3.
 
 `GET /api/conversations/:parent/children/:requestId` checks current parent read access
 once after loading history. It returns `{state: 'unknown'}` for missing ids and another
 person's ids alike. The requester receives `{requestId, state: 'queued'}` and
 `childConversationId` once creation exists. No source text or audience is returned.
+A saved failure returns `{state: 'failed', requestId, stage, reason, attempt, failureEventId}`.
+Stages are `create` or `first_input`; reasons are `access_refused`, `conversation_closed`
+or `record_changed`. This reply contains no child id, source text or audience.
+Failure records never appear in chat feeds or message history.
 All replies disable caching. New children stay held before delivery, computer resume,
 start admission and token issue. They reserve and spend zero cents. Activation and
 turn admission are not available through these routes yet.

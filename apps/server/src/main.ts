@@ -9,7 +9,7 @@ import type { FileOptions } from './files/routes.ts';
 //   node --experimental-strip-types src/main.ts
 import { requireLegacyClosesProjected } from './chat/participation.ts';
 import { conversationKeys } from './chat/keys.ts';
-import { watchChildRequests } from './chat/child-recovery.ts';
+import { startChildRecovery } from './chat/child-recovery.ts';
 import { startBridges } from './chat/start.ts';
 import type { ChatOptions } from './chat/routes.ts';
 import { loadAuthConfig } from '@opencrane/auth';
@@ -144,23 +144,11 @@ if (events && silo) {
     app.log.error({ err: error, operation: 'ownership.seed' }, 'Ownership seed unavailable');
   }
 }
-const childRecoveryStop = new AbortController();
-let childRecovery = Promise.resolve();
-if (chat && modelDb) {
-  const recoveryOptions = { ...chat, db: modelDb.db };
-  const recoveryLogger = createLogger('child-recovery');
-  childRecovery = watchChildRequests(recoveryOptions, recoveryLogger, childRecoveryStop.signal);
-}
-function childRecoveryFailed() {
-  app.log.fatal('Child recovery stopped; restarting the server');
-  process.exit(1);
-}
-void childRecovery.catch(childRecoveryFailed);
+const closeChildRecovery = chat ? startChildRecovery(chat, createLogger('child-recovery')) : undefined;
 const address = await app.listen({ port, host });
 const sockets = attachWebSocketServer(app.server, app.log, authConfig, realtime);
 installShutdown(app, sockets, graceMs, async () => {
-  childRecoveryStop.abort();
-  await childRecovery;
+  await closeChildRecovery?.();
   await closeBridges?.();
   const results = await Promise.allSettled([
     events?.close().then(() => app.log.info('event store connection closed')),

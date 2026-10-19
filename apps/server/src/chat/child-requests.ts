@@ -1,3 +1,4 @@
+import { childStartFailure } from './child-failure.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -14,6 +15,8 @@ import { participationClosed } from './participation.ts';
 export class ChildRequestRefused extends ChatConflict {}
 export class ChildRequestClosed extends ChatConflict {}
 export class ChildRequestChanged extends ChatConflict {}
+export class ChildRequestRace extends ChildRequestChanged {}
+export class ChildRequestFailed extends ChatConflict {}
 
 type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db' | 'keys'>;
 const inputSchema = z.strictObject({
@@ -39,6 +42,7 @@ async function load(options: Options, memberId: string, value: unknown) {
   const input = parsed.data;
   const rows = await chatHistory(options.store, options.silo, input.conversationId);
   const intentId = stageId(options, input, 'child-intent');
+  if (childStartFailure(rows, intentId)) throw new ChildRequestFailed('Child request failed');
   let source: StoredEvent | undefined;
   let intent: StoredEvent | undefined;
   let sequence = 0;
@@ -154,7 +158,8 @@ async function save(options: Options, memberId: string, id: string, subject: str
   const command = { event, expectedSequence: sequence, historyChecked: true as const,
     deadline: fresh.deadline };
   const result = await options.store.append(command);
-  if (result.status !== 'appended') throw new ChildRequestChanged('Child request changed');
+  if (result.status === 'conflict') throw new ChildRequestRace('Child request changed');
+  if (result.status !== 'appended') throw new Error('Child request outcome unavailable');
   const row = await readEventAt(options.store, subject, result.sequence, performance.now() + 10_000);
   if (!row) throw new Error('Child request outcome unavailable');
   verify(row, event);
@@ -224,7 +229,8 @@ function inputText(options: Options, conversationId: string, data: unknown) {
   try {
     return options.keys.decrypt(options.silo, conversationId, data);
   } catch {
-    throw new ChildRequestChanged('Child input changed');
+    // Keep key read failures retryable; unreadable input is not a proven refusal.
+    throw new ChatConflict('Child input unavailable');
   }
 }
 export async function addChildFirstInput(options: Options, memberId: string, value: unknown) {

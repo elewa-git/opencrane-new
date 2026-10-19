@@ -15,7 +15,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model grants, live updates, spending stop notices and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records child requests, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops and turn decisions| nats["NATS<br/>event log"]
+  server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops and turn decisions| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -70,6 +70,8 @@ asks the admin to correct the editor; lost admin access still clears the page.
 
 The back end reads unfinished child requests from a table kept by the conversations
 worker. It checks each saved request and current access before continuing the child.
+A proven refusal is saved and stops recovery. Only the requester can read its status.
+Temporary access outages remain queued. Failed requests cannot be retried yet.
 
 Closed chats keep displayed output as it stood when the chat closed. Later assistant
 reports, decisions, tool dispatches, child publications and agent or system posts

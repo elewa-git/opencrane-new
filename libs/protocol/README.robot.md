@@ -309,3 +309,6 @@ The reader recognises direct requester/assistant tool-grant revocations only.
 Other access refusals do not invent cancellation evidence. A missing turn and
 clock-only catalogue expiry still cancel without a reason. UI, native consent,
 retry delivery and fresh-install qualification remain outside this change.
+
+`childRequestStatusSchema` also accepts strict requester-only failed status with
+stage, reason, attempt 1–3 and failureEventId. The server checks access before returning it.

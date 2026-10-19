@@ -129,7 +129,8 @@ export async function rebuildConversationsProjection(db: Db, source: EventSource
 function conversationFeedEntry(event: EventEnvelope) {
   // Keep private memory evidence in the event log, away from public chat replies.
   if (event.type === 'agent.memory_context_recorded' ||
-      event.type === 'conversation.child_requested') return;
+      event.type === 'conversation.child_requested' ||
+      event.type === 'conversation.child_start_failed') return;
   if (event.type === 'decision.recorded') {
     const decision = decisionRecordedDataSchema.parse(event.data);
     const conversationId = decision.conversationId;

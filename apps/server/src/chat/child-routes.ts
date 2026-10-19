@@ -1,3 +1,4 @@
+import { childStartFailure } from './child-failure.ts';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -10,7 +11,8 @@ import { requireMember, MemberRefusal } from '../members/guard.ts';
 import { chatAccess, ChatAccessApplying, isChatRefused, type ChatOptions } from './access.ts';
 import { chatHistory } from './commands.ts';
 import { reviewChildRequest, requestChild, createRequestedChild, addChildFirstInput,
-  ChildRequestRefused, ChildRequestClosed, ChildRequestChanged } from './child-requests.ts';
+  ChildRequestRefused, ChildRequestClosed, ChildRequestChanged, ChildRequestFailed }
+  from './child-requests.ts';
 
 const bindingSchema = z.strictObject({ silo: chatIdSchema, data: childRequestedDataSchema,
   expiresAt: z.int().positive() });
@@ -124,6 +126,12 @@ async function status(options: ChatOptions, memberId: string, conversationId: st
     const data = childRequestedDataSchema.parse(row.event.data);
     if (data.requestId !== requestId || data.createdBy !== memberId ||
         data.sourcePosition < access.historyPosition) continue;
+    const failed = childStartFailure(rows, row.event.id);
+    if (failed) {
+      const { stage, reason, attempt } = failed.data;
+      return childRequestStatusSchema.parse({ state: 'failed', requestId,
+        stage, reason, attempt, failureEventId: failed.id });
+    }
     const response: z.infer<typeof childRequestStatusSchema> = { requestId, state: 'queued' };
     for await (const child of options.store.readStream(`conversation-${data.childConversationId}`,
       1, performance.now() + 10_000)) {
@@ -178,6 +186,7 @@ function failure(reply: FastifyReply, error: unknown, reviewing: boolean) {
   if (error instanceof MemberRefusal) {
     return reply.code(error.statusCode).send({ status: error.status });
   }
+  if (error instanceof ChildRequestFailed) return reply.code(409).send({ status: 'conflict' });
   if (error instanceof ChildRequestClosed) {
     return reply.code(reviewing ? 403 : 409).send({ status: reviewing ? 'refused' : 'conflict' });
   }

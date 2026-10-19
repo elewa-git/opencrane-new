@@ -3162,8 +3162,9 @@ chat activity and unavailable or lagging history. Fresh-install qualification: N
 `chat/child-recovery.ts` starts with the configured chat service and stops before its
 connections close. The conversations worker builds `childRequests`; the server reads it
 with a read-only PostgreSQL account. It scans at most 32 candidates per pass
-in saved order, with a one-second pause. The next pass continues after the last position;
-a shorter page restarts the scan. Refusals remain queued and are checked on later scans.
+in saved order, with a one-second pause (backing off to 30 seconds on uncertain outcomes). The next pass continues after the last position;
+a shorter page restarts the scan. Proven refusals save one deterministic failure and
+stop recovery. Unknown outcomes and applying access remain queued with backoff.
 It rereads the exact parent event and derives all command values from it. Existing
 commands verify the child, copied text, original joins and current access. Conversation
 history stays outside the short access check. Errors use fixed log messages without
@@ -3171,7 +3172,7 @@ source text. The bridge hold remains unchanged.
 
 The durable handler host is in apps/ops; the checked commands and conversation keys are
 in apps/server. Durable job integration,
-bounded attempt records, saved failure events, public retry, activation, root allocation
+public retry, activation, root allocation
 and dispatch remain later work. No second event dispatcher or execution path is added.
 `test/child-recovery.test.ts` covers crashes, competing workers, changed index records,
 replay and access refusals with disposable NATS, PostgreSQL and OpenFGA.
@@ -3327,3 +3328,11 @@ refusal and retained ceiling, corrects the payer and saves the same typed ceilin
 It uses `libs/models/src/remote-https.ts` for DNS checks and pinned TLS, with its existing
 4 MiB discovery reply bound. Published tool calls use the same exchange with the
 [models contract](../../libs/models/README.robot.md#published-remote-https-calls-part-of-45).
+
+## Saved child start refusals (P4-8 PR 7c, part of #90)
+
+Failure history stops both recovery and repeated start commands. It is checked before
+any new child write. Failed status is requester-only and absent from feeds and history.
+Attempt 1 is implemented; three attempts is the accepted limit for the next retry part.
+Next: `conversation.child_retry_requested` and POST retry with stable receipts and ids.
+Activation, root allocation and bridge release are not built. Fresh-install qualification: NOT RUN.

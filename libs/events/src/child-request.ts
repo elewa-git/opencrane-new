@@ -41,3 +41,25 @@ const example: ChildRequest = { conversationId: 'parent', sourceMessageId: 'sour
 export const childRequestEvent = event('conversation.child_requested', 'conversation',
   'The server saved a reviewed child request without copying source text.',
   childRequestedDataSchema, example);
+
+export const childStartFailedDataSchema = z.strictObject({
+  conversationId: chatIdSchema, requestId: chatIdSchema, childConversationId: chatIdSchema,
+  intentEventId: chatIdSchema, attempt: z.int().min(1).max(3),
+  stage: z.enum(['create', 'first_input']),
+  reason: z.enum(['access_refused', 'conversation_closed', 'record_changed']),
+});
+const failedEnvelope = eventEnvelopeSchema(childStartFailedDataSchema);
+function validFailureWriter(saved: z.infer<typeof failedEnvelope>) {
+  return saved.type === 'conversation.child_start_failed' &&
+    saved.subject === `conversation-${saved.data.conversationId}` &&
+    saved.source === 'opencrane-server' && saved.report === undefined &&
+    saved.commandId === saved.id && saved.principal?.kind === 'system' &&
+    saved.principal.id === 'opencrane-server';
+}
+export const childStartFailedEventSchema = failedEnvelope.refine(validFailureWriter);
+const failureExample = { conversationId: 'parent', requestId: 'request',
+  childConversationId: 'child', intentEventId: 'intent', attempt: 1,
+  stage: 'create', reason: 'access_refused' } as const;
+export const childStartFailedEvent = event('conversation.child_start_failed', 'conversation',
+  'The server saved a proven refusal before a child could start.',
+  childStartFailedDataSchema, failureExample);

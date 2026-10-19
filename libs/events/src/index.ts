@@ -106,6 +106,7 @@ export { hostedImageInstallationSchema, hostedImageCheckedSchema,
 export { departureCleanupCompletedSchema } from './identity-events.ts';
 export { childRequestedDataSchema, childRequestedEventSchema, type ChildRequest }
   from './child-request.ts';
+export { childStartFailedDataSchema, childStartFailedEventSchema } from './child-request.ts';
 
 export { childResultPublishedDataSchema } from './child-publication.ts';
 
