@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 
-test('browser failure keeps the substep and error without credentials or page contents', async () => {
+async function keepsBrowserFailureWithoutPrivateData() {
   const temporary = await mkdtemp(join(tmpdir(), 'browser-failure-'));
   try {
     const bin = join(temporary, 'bin');
@@ -36,13 +36,18 @@ try { await captureBrowser(1); } catch (error) { console.log(error.message); }
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
-});
+}
 
-test('unrecognised error messages and raw child stderr are withheld', async () => {
+async function withholdsUnknownBrowserOutput() {
   const { browserFailure, retainedBrowserFailure } = await import('./browser-capture.ts');
   const error = new Error('cookie=planted-cookie token=planted-token <html>private body</html>');
   assert.equal(browserFailure('390px session', error),
     'FAIL browser during 390px session: Browser error (details withheld)');
   assert.equal(retainedBrowserFailure(error.message),
     'FAIL browser during unknown step: Browser process failed without a safe reason');
-});
+}
+
+test('browser failure keeps the substep and error without credentials or page contents',
+  keepsBrowserFailureWithoutPrivateData);
+test('unrecognised error messages and raw child stderr are withheld',
+  withholdsUnknownBrowserOutput);
