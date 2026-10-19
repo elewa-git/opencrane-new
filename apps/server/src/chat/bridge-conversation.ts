@@ -152,7 +152,9 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
     if (row.event.silo !== silo) throw new Error('Computer silo mismatch');
     if (isComputerLifecycle(row.event.type)) current = row.event;
     // Keep both saved intent and old unverified control records paused.
-    if (['takeover.requested', 'takeover.pausing', 'takeover.started', 'takeover.ended'].includes(row.event.type)) {
+    const controlTypes = ['takeover.requested', 'takeover.pausing', 'takeover.paused',
+      'takeover.failed', 'takeover.started', 'takeover.ended'];
+    if (controlTypes.includes(row.event.type)) {
       controlPending = true;
     }
     if (row.event.type === 'computer.turn_closed') {

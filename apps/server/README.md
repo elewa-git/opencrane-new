@@ -15,7 +15,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, dated approvals, model grants, live updates, spending stop notices and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records child requests, answers, instance and stop reports, control intent, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops and turn decisions| nats["NATS<br/>event log"]
+  server -->|records child requests, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops and turn decisions| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
@@ -87,7 +87,8 @@ After switch-on it uses the checked call's saved provider key. A leftover fallba
 setting stops startup. Configuration reloads keep the same mode.
 
 It asks the root supervisor to stop executors after the computer accepts a signed
-work gate. It saves pausing only after checking both receipts. This grants no control.
+work gate. It saves pausing after checking both receipts, then saves paused only when
+the current bridge and root supervisor both prove quiet. This grants no control.
 
 Personal memory writes refuse access withdrawn before the fact is saved, including a
 removed write grant or a disabled assistant. They keep the original access time limit.

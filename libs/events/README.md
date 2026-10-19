@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup subscriptions, nightly memory reviews and records, and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission and saved starts, personal connection references and blocks, expired saves, control intent and pausing, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission and saved starts, personal connection references and blocks, expired saves, control intent and pause outcomes, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -93,7 +93,7 @@ An observation alone permits no call.
   and accepted cap of 100 euro cents. This record starts no work and spends no money.
 - Checks nightly `no_changes` records that review exact fact revisions and a saved
   position. Older blocked and missed records still load.
-- Define computer-wide control intent and checked pausing records. These name the
+- Define computer-wide control intent, checked pauses and failed pause records. These name the
   reviewed requester and affected turns without granting desktop control.
 - Describe an owner or admin’s exact tool review separately from tool discovery.
 

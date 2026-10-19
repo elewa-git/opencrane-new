@@ -1,0 +1,1 @@
+A computer can record a checked pause only after its bridge and root supervisor prove quiet. Desktop checks keep the launcher, Xvnc and viewers running and refuse unexpected automation. Paused and failed records keep work blocked; automatic timeout failure and saved hold cancellation follow in part 2h. Desktop control remains disabled.

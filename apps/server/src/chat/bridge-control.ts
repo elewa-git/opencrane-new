@@ -1,4 +1,4 @@
-import { savePausing, type StopExecution } from './bridge-pausing.ts';
+import { savePausing, savePaused, type StopExecution } from './bridge-pausing.ts';
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
@@ -143,7 +143,11 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
   function finishPausing() { pausing = undefined; }
   function reconcile() {
     if (pausing || !receipt || !options.stopExecution || rejected) return;
-    function stillAccepted() { return !rejected && socket.readyState === socket.OPEN; }
+    const accepted = receipt;
+    function stillAccepted() {
+      return !rejected && socket.readyState === socket.OPEN
+        && (accepted.type !== 'bridge_quiet' || receipt === accepted);
+    }
     const progress = advance(options, computer, receipt, sentPodUid, stillAccepted);
     const handled = progress.catch(unavailable);
     pausing = handled.finally(finishPausing);
@@ -180,14 +184,20 @@ async function advance(options: Options, computer: Computer,
   if (!options.stopExecution) return;
   const position = await options.store.head(`computer-${computer.assistantId}`);
   const control = await readComputerControl(options.store, options.silo, computer.assistantId);
-  if (!control || control.phase !== 'requested' || control.podUid !== podUid) return;
+  if (!control || control.phase === 'unverified' || control.podUid !== podUid) return;
+  if (control.phase !== 'requested'
+    && !(control.phase === 'pausing' && accepted.type === 'bridge_quiet')) return;
   const saved = await facts(options, computer);
   const binding = requireReadyControl(control, saved, computer);
   if (!matchesReceipt(accepted, binding, undefined)) return;
   const input = { computerId: computer.computerId, podUid: control.podUid, ...binding };
   const report = await options.stopExecution(input);
   if (!stillAccepted()) return;
-  await savePausing(options.store, options.silo, control, position, accepted.epoch, report);
+  if (control.phase === 'requested') {
+    await savePausing(options.store, options.silo, control, position, accepted.epoch, report);
+  } else {
+    await savePaused(options.store, options.silo, control, position, accepted.epoch, report);
+  }
 }
 
 async function sendUntilChecked(sendOnce: () => Promise<boolean>) {

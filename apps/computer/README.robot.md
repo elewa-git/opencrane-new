@@ -110,10 +110,15 @@ launcher's environment, seccomp and no_new_privs settings are unchanged.
 
 A successful `executor_stop` receipt binds the request and root-generated `epoch`,
 sets `executionQuiet: true` and returns an empty `executionInventory`. It always
-sets `quietProof: unavailable` and `controlEnabled: false`. It is **not** a
-`takeover.paused` quiet receipt or a writer closure receipt. It cannot prove that
-UID 1000 Codex has unloaded its threads or that UID 1002 browser automation and
-queued input have stopped. Kasm and authorised viewing remain running.
+sets `controlEnabled: false`. Desktop inventory uses the same task identity checks.
+Only the launcher's saved PID and start time, its Xvnc child, and childless Node
+viewer relays with PPid 0 are allowed under any of the four UID slots for 1002.
+Process names come from the leader's `comm`; worker thread names may differ.
+`desktopInventory: []` and `quietProof: complete` mean no other desktop tasks remain.
+Otherwise both fields are `unavailable`; observation errors refuse the receipt.
+The read-write requester account has no product user until design row 3. There is
+no requester connection count or writer closure claim. Kasm and viewers keep running.
+The server still needs separate proof that the bridge has unloaded its threads.
 
 Scope split: the supervisor foundation is this first part. Bridge deny gates,
 late preparation/grant refusal, catalogue removal, interruption/unload receipts,
@@ -922,8 +927,8 @@ socket's `/stop`. Input and output are capped at 16 KiB; the helper has a twelve
 limit. Errors contain only a fixed refusal. The server checks the returned identity,
 empty execution inventory and denial flags before saving `takeover.pausing`.
 The supervisor's disk gate survives restart. Its `quietProof: unavailable` is never
-complete quiet proof. Paused/failure events, browser and queued input proof, saved
-hold cancellation and writer access remain later work. Fresh-install qualification
+complete quiet proof. Paused/failure records are now defined. Saved hold cancellation, deadline failure
+and writer access remain later work. Fresh-install qualification
 is NOT RUN. Local process tests use Docker and a fixture provider.
 Deploy the server before the computer image: older servers do not recognise
 `bridge_gated`. Older computers still return the accepted quiet/unavailable shapes.
@@ -934,7 +939,7 @@ They must leave work unchanged and return no gate receipt.
 
 ## Process identity checks — P3-17 PR 2f, first split
 
-The root stop receipt still reports `quietProof: unavailable`. This split strengthens
+At this earlier split, the root stop receipt reported `quietProof: unavailable`. It strengthened
 executor exit proof only. It adds no event, field, writer route or permission.
 The next part still needs complete browser/requester-connection proof, the strict
 server quiet receipt, `takeover.paused` and deadline-driven `takeover.failed`.

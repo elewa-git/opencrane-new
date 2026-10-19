@@ -14,7 +14,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.->|signs memory and outside-connection passes| auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
-  auth -->|rebuilds readiness, control, budget refusals and pausing from events| events["Event log<br/>saved events"]
+  auth -->|rebuilds readiness, control, budget refusals and pause outcomes from events| events["Event log<br/>saved events"]
   auth -.->|checks chat turns and refuses native task passes| catalogue["libs/events<br/>event definitions"]
 ```
 
@@ -24,7 +24,7 @@ It can sign a pass for one outside connection and operation. The pass lasts at m
 one minute and ends sooner when its turn, grant or lease expires. It keeps command
 and desktop passes separate. Computers cannot request these passes yet.
 
-It rebuilds requested and pausing computer control from saved events. Both states
+It rebuilds requested, pausing, paused and failed control from saved events. These states
 refuse new work. Rebuilding these facts contacts no computer or supervisor.
 
 - Keep control intent separate from computer readiness. Refuse work passes while control is pending.
@@ -51,6 +51,9 @@ refuse new work. Rebuilding these facts contacts no computer or supervisor.
   turn and allowing a call read only new events. Drop older summaries when their
   memory budget is reached. Drop a computer that is too large on its own, so
   other computers keep their saved facts.
+
+Saved paused and failed control states keep work blocked. A mismatched record stays
+unverified, which also blocks work. Replay makes no call to the computer.
 
 ## Processes it handles
 

@@ -644,8 +644,12 @@ No event type or field was added. Withdrawal-only preparation remains deferred.
 It records bridge and supervisor epochs, `executionProof: exited` and
 `quietProof: unavailable`. It grants no writer or work admission. The server saves
 it only after matching receipts, with one conditional computer-stream append.
-Replay rebuilds the phase without calling the computer. Paused/failure records and
-full quiet proof remain later work.
+`takeover.paused` has the same binding and epochs, `quietProof: complete` and no
+writer fields. `takeover.failed` has the binding and only reason `pause_timeout`.
+Both are strict and keep work blocked. Replay calls neither supervisor nor bridge.
+The deadline runner that calls the failure command is deferred to PR 2h.
+Failed records retain the request's turn limit so an oversized intent can fail.
+Signed gates and quiet proof remain capped at 64 turns.
 
 ## Budget admission refusal records
 

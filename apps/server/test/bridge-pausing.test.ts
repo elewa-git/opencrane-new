@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { readComputerControl } from '@opencrane/auth';
 import { envelope } from '@opencrane/models';
-import { savePausing } from '../src/chat/bridge-pausing.ts';
+import { savePausing, savePaused, saveFailed } from '../src/chat/bridge-pausing.ts';
 
 let cleanup = async () => {};
 afterEach(async function closeFixture() {
@@ -10,11 +10,10 @@ afterEach(async function closeFixture() {
   await cleanup();
 });
 
-async function setup() {
+async function setup(affectedTurnIds = ['first', 'second']) {
   const test = await natsFixture();
   cleanup = test.close.bind(test);
-  const binding = { generation: 1, podUid: 'pod', takeoverId: 'takeover',
-    affectedTurnIds: ['first', 'second'] };
+  const binding = { generation: 1, podUid: 'pod', takeoverId: 'takeover', affectedTurnIds };
   const intent = { ...binding, computerId: 'computer', assistantId: 'assistant',
     conversationId: 'chat', requesterId: 'alice', requesterEventId: 'first',
     leaseId: 'takeover', reason: 'requester_requested' };
@@ -24,16 +23,16 @@ async function setup() {
   const requested = control;
   const position = await test.store.head('computer-assistant');
   const receipt = { kind: 'executor_stop', ...binding, epoch: 'supervisor-epoch',
-    executionQuiet: true, executionInventory: [], quietProof: 'unavailable',
+    executionQuiet: true, executionInventory: [], desktopInventory: [], quietProof: 'complete',
     controlEnabled: false };
   function save(report: unknown) {
     return savePausing(test.store, 'test', requested, position, 'bridge-epoch', report);
   }
-  return { ...test, position, receipt, save };
+  return { ...test, requested, position, receipt, save };
 }
 
 const requiredFields = ['kind', 'generation', 'podUid', 'takeoverId', 'affectedTurnIds',
-  'epoch', 'executionQuiet', 'executionInventory', 'quietProof', 'controlEnabled'];
+  'epoch', 'executionQuiet', 'executionInventory', 'desktopInventory', 'quietProof', 'controlEnabled'];
 async function refusesMissingField(field: string) {
   const test = await setup();
   const receipt: Record<string, unknown> = { ...test.receipt };
@@ -81,3 +80,70 @@ async function refusesAppend() {
   expect(await test.store.head('computer-assistant')).toBe(test.position);
 }
 it('refuses an unsuccessful append before reading it back', refusesAppend);
+
+async function savesBoundOutcome(phase: 'paused' | 'failed', fromPausing: boolean) {
+  const test = await setup();
+  if (phase === 'paused') {
+    await expect(savePaused(test.store, 'test', test.requested, test.position,
+      'bridge-epoch', test.receipt)).rejects.toThrow();
+  }
+  if (fromPausing) await test.save(test.receipt);
+  const control = await readComputerControl(test.store, 'test', 'assistant');
+  if (!control || control.phase === 'unverified') throw new Error('Missing control');
+  const position = await test.store.head('computer-assistant');
+  if (phase === 'paused') {
+    await savePaused(test.store, 'test', control, position, 'new-bridge', test.receipt);
+  } else {
+    await saveFailed(test.store, 'test', control, position);
+  }
+  expect(await readComputerControl(test.reader, 'test', 'assistant')).toMatchObject({ phase });
+  const ended = await readComputerControl(test.store, 'test', 'assistant');
+  if (!ended || ended.phase === 'unverified') throw new Error('Missing outcome');
+  await expect(saveFailed(test.store, 'test', ended, position)).rejects.toThrow();
+}
+it.each([['paused', true], ['failed', false], ['failed', true]] as const)(
+  'saves and rebuilds bound %s without outside calls, after pausing: %s', savesBoundOutcome);
+
+async function refusesQuietReceipt(changes: Record<string, unknown>) {
+  const test = await setup();
+  await test.save(test.receipt);
+  const control = await readComputerControl(test.store, 'test', 'assistant');
+  if (!control || control.phase === 'unverified') throw new Error('Missing control');
+  const position = await test.store.head('computer-assistant');
+  const receipt = { ...test.receipt, ...changes };
+  await expect(savePaused(test.store, 'test', control, position, 'bridge-epoch', receipt))
+    .rejects.toThrow();
+  expect(await test.store.head('computer-assistant')).toBe(position);
+}
+it.each([{ epoch: 'other' }, { podUid: 'other' }, { generation: 2 }, { takeoverId: 'other' },
+  { affectedTurnIds: ['second', 'first'] }, { extra: true }, { executionInventory: ['process'] },
+  { desktopInventory: 'unavailable' }, { desktopInventory: ['browser'] },
+  { quietProof: 'unavailable' }])('refuses incomplete or misbound quiet proof %j',
+  refusesQuietReceipt);
+
+async function refusesMismatchedFold(phase: 'paused' | 'failed') {
+  const test = await setup();
+  await test.save(test.receipt);
+  const binding = { assistantId: 'assistant', computerId: 'computer', generation: 1,
+    podUid: 'pod', takeoverId: 'other', affectedTurnIds: ['first', 'second'] };
+  let data: unknown = { ...binding, reason: 'pause_timeout' };
+  if (phase === 'paused') {
+    data = { ...binding, bridgeEpoch: 'bridge-epoch', supervisorEpoch: 'supervisor-epoch',
+      quietProof: 'complete' };
+  }
+  await test.seed([envelope('test', 'computer-assistant', `takeover.${phase}`, data)]);
+  expect(await readComputerControl(test.store, 'test', 'assistant'))
+    .toMatchObject({ phase: 'unverified' });
+}
+it.each(['paused', 'failed'] as const)('keeps a mismatched %s fold unverified',
+  refusesMismatchedFold);
+
+async function failsOversizedRequest() {
+  const turns = [];
+  for (let index = 0; index < 65; index++) turns.push(`turn-${index}`);
+  const test = await setup(turns);
+  await saveFailed(test.store, 'test', test.requested, test.position);
+  expect(await readComputerControl(test.store, 'test', 'assistant'))
+    .toMatchObject({ phase: 'failed', affectedTurnIds: turns });
+}
+it('can fail a saved request that exceeds the signed gate cap', failsOversizedRequest);
