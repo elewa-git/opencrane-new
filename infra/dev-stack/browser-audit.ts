@@ -129,6 +129,7 @@ export async function waitForPublishedEvent(page: Page): Promise<void> {
   const deadline = Date.now() + 60_000;
   const event = page.getByText('mcp.server_published', { exact: true }).first();
   while (Date.now() < deadline) {
+    await page.getByText('History loaded', { exact: true }).waitFor();
     if (await event.count()) return;
     const olderHistory = page.getByRole('button', { name: 'Older history', exact: true });
     if (await olderHistory.count() === 0) break;

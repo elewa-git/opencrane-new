@@ -503,6 +503,8 @@ safe organisation changes; another joined member is refused private history, and
 members are refused organisation history. The organisation-history check follows older pages to find the saved MCP
 publication, checking each page for private canaries. Newer membership grants can
 fill the first page before this check starts.
+The browser waits for **History loaded** on each page before checking for the
+publication or an **Older history** button.
 Owner/member sessions use real Zitadel
 sign-in; the extra member uses a dev-only signed session to test resource authority.
 Both views and the refusal screen are checked at 1280px and 390px. Private chat,
