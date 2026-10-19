@@ -1,9 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
+import * as crypto from 'node:crypto';
+import * as access from '../src/chat/access.ts';
 import { encodeSession } from '@opencrane/auth';
 import type { AppendCommand } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
-import { buildServer } from '../src/server.ts';
+import { buildServer, buildProductionServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
 
 let fixture: Awaited<ReturnType<typeof viewFixture>>;
@@ -367,3 +369,79 @@ async function overlappingRetries() {
 }
 it('returns the same saved command and position for overlapping identical retries',
   overlappingRetries);
+
+async function csrfBeforeLookup(tokenKind: 'length' | 'shape' | 'unequal') {
+  await setup();
+  const lookup = vi.spyOn(fixture.feed, 'memberId');
+  const compare = vi.spyOn(crypto, 'timingSafeEqual');
+  const valid = headers();
+  let token = 'a'.repeat(63);
+  if (tokenKind === 'shape') token = 'z'.repeat(64);
+  if (tokenKind === 'unequal') {
+    const first = valid['x-csrf-token'][0] === 'a' ? 'b' : 'a';
+    token = first + valid['x-csrf-token'].slice(1);
+  }
+  const request = { method: 'POST' as const, url: '/api/conversations/chat/takeover',
+    headers: { ...valid, 'x-csrf-token': token }, payload: body };
+  const response = await app.inject(request);
+  expect(response.statusCode).toBe(403);
+  expect(lookup).not.toHaveBeenCalled();
+  if (tokenKind === 'unequal') {
+    expect(compare).toHaveBeenCalledExactlyOnceWith(
+      Buffer.from(token, 'hex'), Buffer.from(valid['x-csrf-token'], 'hex'));
+  } else {
+    expect(compare).not.toHaveBeenCalled();
+  }
+}
+it.each(['length', 'shape', 'unequal'] as const)(
+  'rejects a CSRF token with wrong %s before member lookup', csrfBeforeLookup);
+
+async function disabledOrdering() {
+  await setup(false);
+  const lookup = vi.spyOn(fixture.feed, 'memberId');
+  expect((await post({ ...body, extra: true })).statusCode).toBe(400);
+  expect((await post()).statusCode).toBe(503);
+  expect(lookup).not.toHaveBeenCalled();
+}
+it('checks the disabled switch after body validation and before member lookup', disabledOrdering);
+
+async function oneReadCheck() {
+  await setup();
+  const check = vi.spyOn(access, 'chatAccess');
+  expect((await get()).statusCode).toBe(200);
+  expect(check).toHaveBeenCalledTimes(1);
+}
+it('checks GET access exactly once', oneReadCheck);
+
+async function terminalStatus(phase: 'paused' | 'failed') {
+  await setup();
+  expect((await post()).statusCode).toBe(202);
+  const binding = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
+    podUid: 'fixture', takeoverId: body.commandId, affectedTurnIds: [] };
+  if (phase === 'paused') {
+    await fixture.append('computer-assistant', 'takeover.pausing', { ...binding,
+      bridgeEpoch: 'bridge', supervisorEpoch: 'supervisor',
+      executionProof: 'exited', quietProof: 'unavailable' });
+    await fixture.append('computer-assistant', 'takeover.paused', { ...binding,
+      bridgeEpoch: 'bridge', supervisorEpoch: 'supervisor', quietProof: 'complete' });
+  } else {
+    await fixture.append('computer-assistant', 'takeover.failed', {
+      ...binding, reason: 'pause_timeout' });
+  }
+  const position = await fixture.nats.store.head('computer-assistant');
+  const response = await get();
+  expect(response.statusCode).toBe(200);
+  const reason = phase === 'failed' ? 'pause_timeout' : 'requester_requested';
+  expect(response.json()).toMatchObject({ status: phase, reason, controlPosition: position,
+    scope: 'this_conversation', commandId: body.commandId, eligibleActions: [] });
+}
+it.each(['paused', 'failed'] as const)('returns saved %s status over HTTP', terminalStatus);
+
+async function productionDisabled() {
+  await setup();
+  await app.close();
+  const chat = { ...fixture, store: fixture.nats.store, silo: 'test' };
+  app = buildProductionServer(fixture.config, { chat, takeoverRequestsEnabled: true });
+  expect((await post()).statusCode).toBe(503);
+}
+it('keeps requests disabled in the production route set', productionDisabled);
