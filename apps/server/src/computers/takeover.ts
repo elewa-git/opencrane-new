@@ -157,11 +157,15 @@ async function saveIntent(options: ChatOptions, memberId: string, input: Control
   if (result.status === 'unavailable') throw new ControlUnavailable('Control unavailable');
   if (result.status !== 'appended') throw new ControlConflict('Control conflict');
   const saved = await readEventAt(options.store, subject, result.sequence, performance.now() + 10_000);
-  if (!isDeepStrictEqual(saved?.event, event)) {
-    throw new ControlUnavailable('Control unavailable');
+  if (!saved) throw new ControlUnavailable('Control unavailable');
+  // Compare every binding while retaining the first append's generated time.
+  const expected = { ...event, time: saved.event.time };
+  if (!isDeepStrictEqual(saved.event, expected)) {
+    throw new ControlConflict('Control conflict');
   }
-  return { ...data, phase: 'requested' as const, position: result.sequence,
-    commandId: input.commandId, requestedAt: event.time };
+  const savedData = takeoverRequestedDataSchema.parse(saved.event.data);
+  return { ...savedData, phase: 'requested' as const, position: result.sequence,
+    commandId: saved.event.commandId, requestedAt: saved.event.time };
 }
 
 async function loadControl(options: ChatOptions, conversationId: string, turnId: string) {

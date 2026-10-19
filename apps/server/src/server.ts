@@ -126,3 +126,9 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
 
   return app;
 }
+
+// Keep production requests off until return and recovery are available.
+export function buildProductionServer(config: AuthConfig, options: BuildServerOptions) {
+  const productionOptions = { ...options, takeoverRequestsEnabled: false };
+  return buildServer(config, productionOptions);
+}

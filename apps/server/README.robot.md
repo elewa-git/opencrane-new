@@ -2324,15 +2324,19 @@ cannot be read. Model and memory decisions keep their provider-mode checks.
 GET `/api/conversations/:conversationId/takeover` loads chat and computer facts
 within ten seconds, then checks read access once. It returns status, controlPosition,
 serverTime, reason, scope, eligibleActions and a session/chat-bound csrf value.
+Statuses include none, requested, pausing, paused, failed and unverified.
 Only the requester receives commandId and their own affectedTurnIds in this chat.
 Direct and group chats return not_applicable. Reads save nothing and touch no computer.
 Access helpers reuse the loaded creation event; later write checks read only new activity.
 
 POST takes exactly commandId, requesterEventId and generation. Session, silo, Origin
 and CSRF checks precede body validation and the request switch. Registration defaults
-requestsEnabled to false; main.ts explicitly keeps it false. Tests enable it through
+requestsEnabled to false; main.ts uses buildProductionServer, which forces it false. Tests enable it through
 buildServer's takeoverRequestsEnabled option. Disabled requests return 503 because
 saved intent would leave shared work paused until return and recovery are available.
+CSRF tokens must be 64 lowercase hexadecimal characters. Their decoded bytes are
+compared with timingSafeEqual before member lookup. Overlapping identical retries
+keep the first saved event and position, including its original generated time.
 Saved requests and identical retries return 202; changed requests return 409,
 access refusals 403, malformed bodies 400 and unavailable dependencies 503.
 All replies use no-store. No error mapping depends on message text.

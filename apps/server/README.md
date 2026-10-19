@@ -163,7 +163,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
 - Preview bounded facts for a saved private turn without sending text to a computer.
   Facts with expired or unusable supporting facts are left out.
 
-- Read saved control status for chat participants. Keep requests to take control switched off.
+- Read saved control status, including paused and failed requests, for chat participants.
+  Keep requests to take control switched off.
 - Record control intent for the current requester when enabled. Refuse new work while it is pending.
   Keep authorised viewing, explicit stops and approval denial available.
 - Accept an owner or admin’s review of exact saved tool definitions and free tool use.

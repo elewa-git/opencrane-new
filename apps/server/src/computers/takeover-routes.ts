@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteOptions } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -39,7 +39,7 @@ export function registerTakeoverRoutes(app: FastifyInstance, config: AuthConfig,
       let input: z.infer<typeof body> | undefined;
       if (request.method === 'POST') {
         if (request.headers.origin !== new URL(config.redirectUri).origin ||
-            request.headers['x-csrf-token'] !== csrf) throw new ChatRefused();
+            !validCsrf(request.headers['x-csrf-token'], csrf)) throw new ChatRefused();
         input = body.parse(JSON.parse(z.string().parse(request.body)));
         if (!requestsEnabled) return reply.code(503).send({ status: 'unavailable' });
       }
@@ -69,4 +69,13 @@ function routeError(reply: FastifyReply, error: unknown) {
   }
   if (error instanceof ControlConflict) return reply.code(409).send({ status: 'conflict' });
   return reply.code(503).send({ status: 'unavailable' });
+}
+
+function validCsrf(token: unknown, expected: string) {
+  if (typeof token !== 'string' || !/^[a-f0-9]{64}$/u.test(token)) {
+    return false;
+  }
+  const suppliedBytes = Buffer.from(token, 'hex');
+  const expectedBytes = Buffer.from(expected, 'hex');
+  return timingSafeEqual(suppliedBytes, expectedBytes);
 }
