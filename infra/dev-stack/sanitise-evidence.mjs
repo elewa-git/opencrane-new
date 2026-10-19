@@ -104,18 +104,18 @@ function redactKnownSecrets(content, secrets) {
 }
 
 function redactPatterns(content) {
+  const sensitiveWord = '(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PAT)';
+  const sensitiveField = `[\\w.-]*${sensitiveWord}[\\w.-]*`;
+  const jsonField = String.raw`"(?:\\.|[^"\\])*${sensitiveWord}(?:\\.|[^"\\])*"`;
+  const fieldName = `(?:${jsonField}|["']?(?:${sensitiveField}|Authorization)["']?)`;
   // Withhold structured secret fields rather than risk retaining nested values.
-  const structured = /["']([^"'\r\n]+)["']\s*:\s*[{[]/gu;
-  for (const match of content.matchAll(structured)) {
-    if (sensitiveName.test(match[1])) {
-      throw new Error('Structured secret field');
-    }
+  const structured = new RegExp(`${fieldName}\\s*:\\s*[{[]`, 'iu');
+  if (structured.test(content)) {
+    throw new Error('Structured secret field');
   }
-  const sensitiveField = '[\\w.-]*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PAT)[\\w.-]*';
-  const fieldName = `(?:${sensitiveField}|Authorization)`;
   const quotedValue = `"(?:\\\\[\\s\\S]|[^"\\\\])*"|'(?:\\\\[\\s\\S]|[^'\\\\])*'`;
   const namedValue = new RegExp(
-    `(["']?${fieldName}["']?\\s*[:=]\\s*)(?:${quotedValue}|[^\\r\\n]+)`, 'giu');
+    `(${fieldName}\\s*[:=]\\s*)(?:${quotedValue}|[^\\r\\n]+)`, 'giu');
   let redacted = content.replace(namedValue, `$1${placeholder}`);
   redacted = redacted.replace(/([a-z][a-z\d+.-]*:\/\/)[^\s/@]+:[^\s/]*@/giu,
     `$1${placeholder}@`);
