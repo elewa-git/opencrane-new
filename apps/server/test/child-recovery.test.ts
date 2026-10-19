@@ -136,6 +136,40 @@ async function recoversWithoutPost(stage: string) {
 it.each(['conversation.child_requested', 'conversation.created', 'message.posted'])(
   'recovers after %s without another POST', recoversWithoutPost);
 
+async function retriesUntilWorkerBuildsTable() {
+  const { intent } = await savedRequest('conversation.child_requested');
+  // Remove the test's earlier projection records to model a fresh installation.
+  await context.db.query('DROP TABLE child_requests');
+  await context.db.query('DELETE FROM projection_checkpoints WHERE name = $1',
+    [childRequests.name]);
+  await context.db.query('DELETE FROM projection_events WHERE projection = $1',
+    [childRequests.name]);
+  await context.db.query('DELETE FROM projection_generations WHERE name = $1',
+    [childRequests.name]);
+  applyCreationPermissions();
+  const warnings = vi.spyOn(logger, 'warn');
+  const before = await context.nats.store.head();
+  const stop = worker();
+  function expectRetries() {
+    expect(warnings.mock.calls.length).toBeGreaterThanOrEqual(2);
+  }
+  try {
+    await vi.waitFor(expectRetries, { timeout: 5_000, interval: 50 });
+    expect(await context.nats.store.head()).toBe(before);
+    expect(await chatHistory(context.nats.store, 'test', intent.childConversationId))
+      .toHaveLength(0);
+    await context.runner.initialise(childRequests);
+    await context.runner.run(childRequests);
+    const rows = await waitForInput(intent.childConversationId);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.event.id).toBe(intent.firstInputId);
+  } finally {
+    await stop();
+  }
+}
+it('retries without child work until the worker creates and fills the missing table',
+  retriesUntilWorkerBuildsTable);
+
 async function racesWithPost() {
   const { input, start, intent } = await savedRequest('conversation.child_requested');
   applyCreationPermissions();

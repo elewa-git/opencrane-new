@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile }
+  from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
@@ -91,7 +92,8 @@ async function sanitisesRetainedLogs(withhold = false) {
   }
   await writeFile(`${slot}/zitadel-owner-password`, 'slot-password-canary\n');
   await writeFile(`${slot}/zitadel-client-secret`, 'slot-client-canary\n');
-  const authEnvironment = withhold ? 'invalid environment file' : 'OIDC_COOKIE_SECRET=cookie-canary\n';
+  const validEnvironment = 'OIDC_COOKIE_SECRET=cookie-canary\n';
+  const authEnvironment = withhold ? 'invalid environment file' : validEnvironment;
   await writeFile(`${slot}/auth.env`, authEnvironment);
   await writeFile(`${slot}/passwords.json`, '{"server":"database-canary"}');
   await writeFile(`${home}/model-key`, 'model-canary\n');
@@ -106,7 +108,9 @@ async function sanitisesRetainedLogs(withhold = false) {
     await assert.rejects(exec(`${scripts}/daily-fresh.sh`, { env: environment }));
     const ledger = `${home}/.opencrane/daily-fresh`;
     const entries = await readdir(ledger);
-    function isEvidence(entry: string) { return entry !== 'ledger.md'; }
+    function isEvidence(entry: string) {
+      return entry !== 'ledger.md';
+    }
     const evidence = entries.find(isEvidence);
     assert.ok(evidence);
     for (const name of ['failure.log', 'last-error.log', 'server.log']) {
