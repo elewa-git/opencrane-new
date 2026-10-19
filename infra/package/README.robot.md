@@ -92,7 +92,10 @@ refusal records no writes after the simulated namespace preparation; a valid
 claim reaches both commands. The live runner checks the actual `/auth/me`
 subject at 1280 and 390
 through `capture.mjs`. The four PNG files for each run are saved with
-`fresh-1-` or `fresh-2-` in `docs/process/p5-1-live/`. A failed run still calls
+`fresh-1-` or `fresh-2-` in `docs/process/p5-1-live/`. Browser failures keep the step and a short timeout or network error. Other
+error text is withheld so cookies, tokens, Secret contents and page bodies cannot
+enter the runner log. No extra browser retries are added.
+A failed run still calls
 owned `package-down`; inspect the claim before trying again. The operator
 records the bridge probe, other-resource comparison and mobile screen review
 in `docs/process/p5-1-local.md`.

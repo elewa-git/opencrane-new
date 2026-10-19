@@ -7,6 +7,8 @@ import { directory, root } from '../dev-stack/config.ts';
 import { secondary, stackId } from '../dev-stack/identity.ts';
 import { requireOwner, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
+import { retainedBrowserFailure } from './browser-capture.ts';
+
 const execute = promisify(execFile);
 const namespace = `opencrane-package-${stackId}`;
 const installLabel = 'opencrane.dev/install-id';
@@ -120,6 +122,18 @@ async function command(program: string, args: string[], timeout = 180_000,
   const env = { ...process.env, ...extraEnvironment };
   const result = await execute(program, args, { cwd: root, timeout, env });
   return result.stdout.trim();
+}
+
+export async function captureBrowser(index: number) {
+  try {
+    return await command('node', ['--experimental-strip-types', 'infra/package/capture.mjs',
+      `fresh-${index}-`], 360_000);
+  } catch (error) {
+    const failure = error as { stderr?: string };
+    const reason = retainedBrowserFailure(failure.stderr ?? '');
+    console.error(reason);
+    throw new Error(reason);
+  }
 }
 
 async function kubectl(args: string[]) {
@@ -316,8 +330,7 @@ export async function runOnce(index: number, values: string, previous?: FreshSta
       cwd: root, env: process.env, stdio: 'ignore' });
     await waitForForward(forward, 25000 + Number(stackId) * 100 + 6);
     stage = 'browser capture';
-    const capture = await command('node', ['--experimental-strip-types', 'infra/package/capture.mjs',
-      `fresh-${index}-`], 360_000);
+    const capture = await captureBrowser(index);
     const signIns = JSON.parse(capture.split('\n').at(-1) ?? 'null') as Array<{
       width: number; authenticated: boolean; subject: string;
     }>;

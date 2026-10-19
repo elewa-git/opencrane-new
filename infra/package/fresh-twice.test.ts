@@ -186,7 +186,7 @@ async function prepareRunnerFiles(home: string, scenario: RunnerCase) {
   await mkdir(join(worktree, 'libs/event-store/test'), { recursive: true });
   await mkdir(slot, { recursive: true });
   await mkdir(bin);
-  const files = ['infra/package/fresh-twice.ts', 'infra/dev-stack/config.ts',
+  const files = ['infra/package/fresh-twice.ts', 'infra/package/browser-capture.ts', 'infra/dev-stack/config.ts',
     'infra/dev-stack/identity.ts', 'infra/dev-stack/packaged.ts',
     'libs/event-store/test/certificates.ts'];
   for (const file of files) {

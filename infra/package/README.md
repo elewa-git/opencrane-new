@@ -58,7 +58,8 @@ flowchart LR
 5. **A developer checks two fresh installs.** One runner checks the claim, data,
    test owner and browser chat for each install. It removes the first package
    before preparing the second one on the same slot. It refuses retained rows in
-   every memory table before checking the first chat.
+   every memory table before checking the first chat. A failed browser check
+   reports the step and a short error without private browser data.
 
 ## How to run or test it
 
