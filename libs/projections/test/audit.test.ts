@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { eventRegistry, getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
+import type { AuditFilter, AuditRow } from '@opencrane/protocol';
+import type { Query } from '../src/db.ts';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, readAudit, readAuditDetail, rebuildAuditProjection, ProjectionRunner } from '../src/index.ts';
 import { isAuditEventType } from '../src/audit.ts';
@@ -220,10 +222,6 @@ it('filters indexed anchors and pages evidence without repeating records', async
     const third = await readAudit(db.db, 'test', { before: second.nextBefore, limit: 50 });
     expect([...first.rows, ...second.rows, ...third.rows].map(row => row.id))
       .toEqual(Array.from({ length: 120 }, (_, index) => `anchor-${120 - index}`));
-    expect((await readAudit(db.db, 'test', { outcome: 'not_dispatched', limit: 50 })).rows)
-      .toHaveLength(50);
-    expect((await readAudit(db.db, 'test', { type: 'decision', limit: 50 })).rows)
-      .toHaveLength(50);
     expect((await readAudit(db.db, 'test', { actorId: 'missing' })).rows).toEqual([]);
     expect((await readAudit(db.db, 'test', { from: '2026-10-04T00:00:00Z' })).rows)
       .toEqual([]);
@@ -237,10 +235,15 @@ it('filters indexed anchors and pages evidence without repeating records', async
       .toHaveLength(1);
     const indexes = (await db.db.query<{ indexname: string; indexdef: string }>(
       "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'audit_entries'", [])).rows;
-    for (const column of ['recorded_at', 'event_type', 'actor_id', 'outcome']) {
+    for (const column of ['recorded_at', 'actor_id', 'outcome']) {
       const index = indexes.find(candidate => candidate.indexname === `audit_${column}`);
       expect(index?.indexdef).toContain(`(silo, ${column}, "position" DESC)`);
     }
+    function isTypeIndex(index: { indexname: string }): boolean {
+      return index.indexname === 'audit_event_type_bytewise';
+    }
+    const typeIndex = indexes.find(isTypeIndex);
+    expect(typeIndex?.indexdef).toContain('(silo, event_type COLLATE "C", "position" DESC)');
     for (let position = 122; position < 622; position++) {
       const event = fixture('effect.uncertain', `related-${position}`,
         { permitId: 'permit-120' }, false);
@@ -262,3 +265,134 @@ it('filters indexed anchors and pages evidence without repeating records', async
     expect(seen).toEqual(expected);
   } finally { await db.close(); }
 }, 90_000);
+
+async function agentMatchingCommandField(): Promise<void> {
+  const db = await database('pg');
+  try {
+    await auditTrail.create(db.db);
+    const base = fixture('budget.ceiling_set', 'agent-command', { setBy: 'worker' }, false);
+    const event: EventEnvelope = {
+      ...base,
+      principal: { kind: 'agent', id: 'worker' },
+    };
+    await auditTrail.apply(db.db, event, 1);
+    const result = await readAudit(db.db, 'test');
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.records[0]?.actor).toEqual({ kind: 'agent', id: 'worker' });
+  } finally {
+    await db.close();
+  }
+}
+it('keeps an agent matching the command actor field separate from a person',
+  agentMatchingCommandField);
+
+async function ignoresActorData(): Promise<void> {
+  const db = await database('pg');
+  try {
+    await auditTrail.create(db.db);
+    const base = fixture('budget.ceiling_set', 'actor-data', { setBy: 'alice' }, false);
+    // Exercise the projection directly: typed events reject this extra field.
+    // Keep these rows in their own database so replay tests see only saved events.
+    const event: EventEnvelope = {
+      ...base,
+      data: { ...base.data, actor: 'mallory' },
+      principal: { kind: 'human', id: 'mallory' },
+    };
+    await auditTrail.apply(db.db, event, 1);
+    const result = await readAudit(db.db, 'test');
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.records[0]?.actor).toEqual({ kind: 'unverified' });
+  } finally {
+    await db.close();
+  }
+}
+it('ignores data.actor even when it matches the human principal', ignoresActorData);
+
+async function seedMixedAnchors(db: Query): Promise<void> {
+  let position = 0;
+  for (let index = 1; index <= 30; index++) {
+    const events = [
+      fixture('decision.recorded', `allowed-${index}`, {
+        requestId: `allowed-request-${index}`, permitId: `allowed-permit-${index}`,
+        outcome: 'allow', reason: 'model_allowed',
+      }, false),
+      fixture('decision.recorded', `denied-${index}`, {
+        requestId: `denied-request-${index}`, permitId: `denied-permit-${index}`,
+        outcome: 'deny', reason: 'policy_block',
+      }, false),
+      fixture('gateway.observation_recorded', `gateway-error-${index}`, {
+        requestId: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        outcome: 'error', reason: 'jwt_failed',
+      }, false),
+      fixture('gateway.observation_recorded', `gateway-unknown-${index}`, {
+        requestId: `00000000-0000-4000-8001-${String(index).padStart(12, '0')}`,
+        outcome: 'unknown', reason: 'observation_missing',
+      }, false),
+    ];
+    for (const event of events) {
+      position++;
+      await auditTrail.apply(db, event, position);
+    }
+  }
+}
+
+function rowId(row: AuditRow): string {
+  return row.id;
+}
+
+async function readAllFilteredIds(db: Query, filter: AuditFilter): Promise<string[]> {
+  const ids: string[] = [];
+  let before: number | undefined;
+  do {
+    const page = await readAudit(db, 'test', { ...filter, before, limit: 7 });
+    const pageIds = page.rows.map(rowId);
+    ids.push(...pageIds);
+    if (page.nextBefore !== undefined) {
+      expect(page.nextBefore).toBeLessThan(before ?? Infinity);
+    }
+    before = page.nextBefore;
+  } while (before !== undefined);
+  return ids;
+}
+
+interface FilterCase {
+  name: string;
+  filter: AuditFilter;
+  prefixes: string[];
+}
+const filterCases: FilterCase[] = [
+  { name: 'decision type', filter: { type: 'decision' }, prefixes: ['allowed', 'denied'] },
+  { name: 'gateway type', filter: { type: 'gateway' },
+    prefixes: ['gateway-error', 'gateway-unknown'] },
+  { name: 'not_dispatched outcome', filter: { outcome: 'not_dispatched' },
+    prefixes: ['denied'] },
+  { name: 'error outcome', filter: { outcome: 'error' }, prefixes: ['gateway-error'] },
+  { name: 'unknown outcome', filter: { outcome: 'unknown' },
+    prefixes: ['allowed', 'gateway-unknown'] },
+];
+
+async function filtersEveryPage(testCase: FilterCase): Promise<void> {
+  const db = await database('pg');
+  try {
+    await auditTrail.create(db.db);
+    // Reproduce language sorting that ignores punctuation, as some hosts do by default.
+    await db.db.query(`CREATE COLLATION audit_test_language
+      (provider = icu, locale = 'en-US-u-ka-shifted')`);
+    await db.db.query(`ALTER TABLE audit_entries
+      ALTER COLUMN event_type TYPE TEXT COLLATE audit_test_language`);
+    await seedMixedAnchors(db.db);
+    const expectedIds: string[] = [];
+    for (const prefix of testCase.prefixes) {
+      for (let index = 1; index <= 30; index++) {
+        expectedIds.push(`${prefix}-${index}`);
+      }
+    }
+    const actualIds = await readAllFilteredIds(db.db, testCase.filter);
+    actualIds.sort();
+    expectedIds.sort();
+    expect(actualIds).toEqual(expectedIds);
+  } finally {
+    await db.close();
+  }
+}
+it.each(filterCases)('returns exactly the $name matches across every page', filtersEveryPage);
