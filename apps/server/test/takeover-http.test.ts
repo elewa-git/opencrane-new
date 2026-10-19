@@ -12,6 +12,8 @@ let fixture: Awaited<ReturnType<typeof viewFixture>>;
 let app: ReturnType<typeof buildServer>;
 let body: { commandId: string; requesterEventId: string; generation: number };
 let desktopCalls = 0;
+vi.mock('node:crypto', { spy: true });
+
 const cookies = new Map<string, string>();
 function noDesktop(): Promise<never> {
   desktopCalls++;
@@ -373,7 +375,8 @@ it('returns the same saved command and position for overlapping identical retrie
 async function csrfBeforeLookup(tokenKind: 'length' | 'shape' | 'unequal') {
   await setup();
   const lookup = vi.spyOn(fixture.feed, 'memberId');
-  const compare = vi.spyOn(crypto, 'timingSafeEqual');
+  const compare = vi.mocked(crypto.timingSafeEqual);
+  compare.mockClear();
   const valid = headers();
   let token = 'a'.repeat(63);
   if (tokenKind === 'shape') token = 'z'.repeat(64);
