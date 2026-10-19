@@ -527,7 +527,9 @@ async function hidesFailedStatus(kind: string) {
     await context.append(`participation-${conversationId}`, 'participant.removed',
       { conversationId, participantId: 'alice', removedBy: 'bob' });
   } else if (kind === 'outsider') {
-    memberId = 'outsider';
+    memberId = 'bob';
+    await context.append(`participation-${conversationId}`, 'participant.removed',
+      { conversationId, participantId: memberId, removedBy: 'alice' });
   } else if (kind === 'different chat') {
     const other = await context.parent();
     conversationId = other.conversationId;
@@ -540,6 +542,8 @@ async function hidesFailedStatus(kind: string) {
   const unknown = await context.request(conversationId, 'children/unknown', undefined, memberId);
   const failed = await context.request(conversationId, `children/${input.requestId}`,
     undefined, memberId);
+  const readable = kind === 'different chat' || kind === 'pre-join';
+  expect(unknown.statusCode).toBe(readable ? 200 : 403);
   expect(failed.statusCode).toBe(unknown.statusCode);
   expect(failed.body).toBe(unknown.body);
   expect(failed.body).not.toContain('failed');
