@@ -2793,6 +2793,7 @@ an MCP session; only Content-Type is forwarded. Errors return fixed 502/504 resp
 The whole HTTPS exchange has a 30-second deadline and never retries or follows redirects.
 After start saving, remote failures leave the outcome unknown. Authenticated adapter
 observations are deferred to 5b. No events are added. Fresh-install qualification: NOT RUN.
+
 ## Native request cost and dispatch (P4-11 PR 2g; Part of #93)
 
 `reserveNativeCall` takes the raw body instead of caller cents. It uses the strict
