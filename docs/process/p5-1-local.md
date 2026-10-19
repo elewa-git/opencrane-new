@@ -408,17 +408,27 @@ full-suite run. That root run used main before its later chat cleanup commit.
 The focused Node, licence and wrapping-key tests passed twice again after the
 final rebase. The passing focused logs are under `/tmp/p5-1c-final-`.
 
-### Fresh package attempt
+### 19 October 2026: fresh package on main
 
-I claimed secondary slot 1 and created its package namespace. The secret setup
-stopped before creating runtime Secrets because the configured Zitadel management
-token file was absent. No Helm release or application Pod was started. The
-namespace and slot were then removed through the package cleanup commands.
+This run used main commit `81263fd7` and claimed secondary slot 1. The fresh
+namespace was `opencrane-package-1`, UID
+`c9c0e50c-710c-46de-aee1-6225be63fccc`. The existing Zitadel management
+token was passed by file path. The package used its own generated wrapping key
+and local model stub. No external model key was needed. The sign-in account was
+the separate OpenCrane 2 Dev CI owner linked to the `jente@elewa.ke` member.
+The existing person's Zitadel account and the owner stack were not changed.
 
 | Live check | Result | Observation |
 | --- | --- | --- |
-| Slot ownership | PASS | `claim.sh` selected slot 1, and package preparation created only its owned namespace. |
-| Private secret preparation | FAIL | Development sign-in setup could not find its configured management token file. No runtime Secret was created. |
-| Fresh Helm install | NOT RUN | Secret preparation stopped before `package-up`. |
-| Browser chat at 1280px and 390px | NOT RUN | No package was installed, so the existing captures were not replaced. |
-| Cleanup and owner isolation | PASS | Slot 1 reported free, its package namespace was absent, and the owner namespace UID and existing owner container IDs matched the earlier snapshot. |
+| Slot ownership | PASS | `claim.sh` selected slot 1; package preparation created only its owned namespace. |
+| Private secret preparation | PASS | The separate development sign-in app and test users were ready. Six named Kubernetes Secrets were created from files in the claimed slot. |
+| Fresh Helm install | PASS | Helm revision 1 deployed. The bootstrap Job completed, and all eleven Deployments reached Ready, including the server with its model gateway and the web app. A computer Pod ran for the turns. |
+| Browser chat at 1280px | PASS | The signed-in test owner sent “Say hello briefly.” The reply “Hello from your computer.” and Done were visible in the [capture](p5-1-live/chat-1280.png). |
+| Browser chat at 390px | PASS | A new turn showed the same reply and Done in the [capture](p5-1-live/chat-390.png). By eye, the message, reply and composer did not overlap. |
+| Model and key custody | PASS | The local stub counted exactly two model requests. The private conversation key directory held two 60-byte wrapped records; no key contents were read or printed. |
+| Cleanup and owner isolation | PASS | `package-down` removed the namespace, then `down.sh` released slot 1. The slot reported free, port 25106 closed, both owner namespace UIDs and all pre-existing container IDs remained, and owner port 44200 still listened on loopback. |
+
+The signed-in pages were also refreshed at
+[1280px](p5-1-live/signed-in-1280.png) and
+[390px](p5-1-live/signed-in-390.png). These captures and the two chat captures
+come from this main install.
