@@ -490,10 +490,13 @@ it('retries a denial read before the child creation receipt without saving failu
 async function retriesUnavailableSaveOrKey(kind: string) {
   const { input, intent } = await savedRequest('conversation.created');
   const row = await reference(input.conversationId);
+  const reads = vi.spyOn(context.nats.store, 'readStream');
+  let readsBeforeUnavailable = 0;
   function unreadable(): never {
     throw new Error('Key unavailable');
   }
   function unavailable() {
+    readsBeforeUnavailable = reads.mock.calls.length;
     const result = { status: 'unavailable' as const, cause: new Error('Append unavailable') };
     return Promise.resolve(result);
   }
@@ -503,6 +506,10 @@ async function retriesUnavailableSaveOrKey(kind: string) {
   const message = kind === 'key' ? 'Child input unavailable' : 'Child request outcome unavailable';
   await expect(recoverChildRequest(context.options, row)).rejects.toThrow(message);
   expect(fault).toHaveBeenCalled();
+  if (kind === 'append') {
+    expect(reads.mock.calls).toHaveLength(readsBeforeUnavailable);
+  }
+  reads.mockRestore();
   fault.mockRestore();
   const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
   expect(parent.filter(isFailure)).toHaveLength(0);
