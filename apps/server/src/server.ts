@@ -1,3 +1,4 @@
+import { registerTakeoverRoutes } from './computers/takeover-routes.ts';
 import { registerChildRoutes } from './chat/child-routes.ts';
 import { registerPublicationRoutes } from './chat/publications.ts';
 import { registerSurveyRoutes } from './onboarding/routes.ts';
@@ -51,6 +52,7 @@ export interface BuildServerOptions {
   memory?: import('./memory/access.ts').MemoryOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
+  takeoverRequestsEnabled?: boolean;
   onboarding?: ChatOptions;
   files?: FileOptions;
   integrations?: IntegrationOptions;
@@ -109,6 +111,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerEffectRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
+  registerTakeoverRoutes(app, authConfig, options.chat, options.takeoverRequestsEnabled);
   registerPublicationRoutes(app, authConfig, options.chat);
   registerChildRoutes(app, authConfig, options.chat);
   registerSurveyRoutes(app, authConfig, options.onboarding);

@@ -2289,7 +2289,7 @@ save before or after append, and recovery after the ceiling rises.
 after a decision save fails before append. It checks one decision, the authenticated
 member feed and reload, a second restart, no reservation and no revived turn.
 
-## Internal control intent
+## Control intent and HTTP status
 
 `src/computers/takeover.ts` checks the latest accepted human request, its reviewed
 id, the current generation and Pod, membership, participation, assistant rights
@@ -2321,11 +2321,29 @@ reading unrelated spending history. The tests keep the exact allowed-stream asse
 refuse intent saved during permission checks and allow decisions when budget history
 cannot be read. Model and memory decisions keep their provider-mode checks.
 
-This is the first split of P3-17 row 1. HTTP request/status routes, chat/realtime
-control status, remaining transition schemas and strict modern started/ended data
-are deferred. There is no route that can trigger intent, pause reaction, local gate,
-writer or input path. Supervisor proof, dispatch ordering and recovery remain later
-work. The accepted [design](../../docs/specs/phase-3/p3-17-take-control.md) owns that scope.
+GET `/api/conversations/:conversationId/takeover` loads chat and computer facts
+within ten seconds, then checks read access once. It returns status, controlPosition,
+serverTime, reason, scope, eligibleActions and a session/chat-bound csrf value.
+Only the requester receives commandId and their own affectedTurnIds in this chat.
+Direct and group chats return not_applicable. Reads save nothing and touch no computer.
+Access helpers reuse the loaded creation event; later write checks read only new activity.
+
+POST takes exactly commandId, requesterEventId and generation. Session, silo, Origin
+and CSRF checks precede body validation and the request switch. Registration defaults
+requestsEnabled to false; main.ts explicitly keeps it false. Tests enable it through
+buildServer's takeoverRequestsEnabled option. Disabled requests return 503 because
+saved intent would leave shared work paused until return and recovery are available.
+Saved requests and identical retries return 202; changed requests return 409,
+access refusals 403, malformed bodies 400 and unavailable dependencies 503.
+All replies use no-store. No error mapping depends on message text.
+
+Part of #58, P3-17 PR 1b. Refusal audit events are deferred to keep this change small.
+PR 1c adds control status to chat history and realtime ready replies. Writer, lease,
+renewal, return and recovery routes remain unavailable. The accepted
+[design](../../docs/specs/phase-3/p3-17-take-control.md) owns that scope.
+`test/takeover-http.test.ts` covers HTTP guards, competing requests, private status,
+retries, removal, restart and conversation reads outside access checks with real
+NATS, PostgreSQL and OpenFGA. Fresh-install qualification: NOT RUN.
 
 ## Source check receipt — 10 October 2026
 

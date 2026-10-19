@@ -88,6 +88,7 @@ const membership = events && silo ? {
 const app = buildServer(authConfig, {
   processOwnsTelemetry: true,
   ...(onboarding ? { onboarding } : {}),
+  takeoverRequestsEnabled: false,
   ...(chat ? { chat, liveView: { ...chat, open: desktopConnection(process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!) } } : {}),
   ...(realtime && events && modelDb ? { audit: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(files ? { files } : {}),

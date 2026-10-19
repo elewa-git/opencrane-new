@@ -1,0 +1,1 @@
+Chat participants can read saved take-control status. Only the requester sees their command and affected turns. The HTTP request route validates access and retries, but stays switched off until returning control and recovery are available.

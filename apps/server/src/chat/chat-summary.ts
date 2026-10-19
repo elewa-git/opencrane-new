@@ -151,7 +151,8 @@ function memorySize(summary: ChatSummary) {
 }
 
 export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo: string,
-  conversationId: string, turnId: string, computerId?: string, reportSequence?: number) {
+  conversationId: string, turnId: string, computerId?: string, reportSequence?: number,
+  deadline = performance.now() + 10_000) {
   function take(summary: ChatSummary): ChatFacts {
     const message = summary.messages.get(turnId);
     const reports = computerId === undefined ? undefined : summary.reports.get(computerId);
@@ -170,7 +171,6 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
     };
   }
   try {
-    const deadline = performance.now() + 10_000;
     return await readStreamSummary(store, silo, `conversation-${conversationId}`,
       chat, deadline, take);
   } catch (error) {
