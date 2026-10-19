@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { getEventDefinition, computerTurnStartedDataSchema, parseEventByType } from '@opencrane/events';
+import { until } from '@opencrane/authz/testing';
 import { BudgetActor, envelope, history } from '../src/actor.ts';
 import { priceTableId, totals } from '../src/state.ts';
 import { managedProviderCallsEnabled } from '../src/provider-turns.ts';
@@ -331,8 +332,16 @@ async function settlesLateUsageWithoutRestart() {
     const releaseId = await setup.actor.reserve(releaseCall, 12);
     const expiryId = await setup.actor.reserve(expiryCall, 12);
     await switchOn(setup);
-    await ingestUsage(setup.actor, setup.options.usageFile);
     const dispatched = setup.actor.state.reservations.slice(0, 2);
+    async function dispatchedEffectsExist() {
+      await ingestUsage(setup.actor, setup.options.usageFile);
+      for (const reservation of dispatched) {
+        const effects = await history(setup.nats.store, `effect-${reservation.id}`, 'test');
+        if (effects.length !== 1) return false;
+      }
+      return true;
+    }
+    await until(dispatchedEffectsExist);
     for (const reservation of dispatched) {
       const effects = await history(setup.nats.store, `effect-${reservation.id}`, 'test');
       expect(effects).toHaveLength(1);
