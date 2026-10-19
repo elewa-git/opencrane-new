@@ -1,1 +1,1 @@
-- Child chat starts now save proven refusals and show their stage and reason only to the requester. Recovery skips failed requests; temporary access outages stay queued. Children remain held before any turn. Public retry follows separately.
+- Child chat starts now save proven refusals and show their stage and reason only to the requester. Recovery skips failed requests; temporary access outages and access still being applied stay queued. Children remain held before any turn. Public retry follows separately.

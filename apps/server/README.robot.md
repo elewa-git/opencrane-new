@@ -3333,6 +3333,14 @@ It uses `libs/models/src/remote-https.ts` for DNS checks and pinned TLS, with it
 
 Failure history stops both recovery and repeated start commands. It is checked before
 any new child write. Failed status is requester-only and absent from feeds and history.
+Participation reads establish the join receipt before interpreting a permission denial.
+If access was not yet applied at that point, recovery retries without saving a failure.
+Member and parent removal checks still run after permission replies. The barrier test in
+`test/child-recovery.test.ts` pauses a denied permission reply while child creation is
+applied, then checks that recovery saves the first input once and no failure.
+Unchanged joins need only one receipt read. That file
+also checks unavailable append/key reads, hidden failed status, the exact indexed attempt
+and deletion of completed rows.
 Attempt 1 is implemented; three attempts is the accepted limit for the next retry part.
 Next: `conversation.child_retry_requested` and POST retry with stable receipts and ids.
 Activation, root allocation and bridge release are not built. Fresh-install qualification: NOT RUN.

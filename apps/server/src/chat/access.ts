@@ -184,6 +184,9 @@ export function conversationParticipationReader(options: ParticipationOptions, m
       memberId, legacy, deadline);
     await requireMember(deadline);
     await requireInheritedChildAccess(options, current, memberId, deadline);
+    // Read the join receipt before deciding whether a permission denial is final.
+    const checkedJoinEventId = current.joinEventId;
+    let applied = await auth.applied(checkedJoinEventId);
     const permission = await auth.conversation(memberId, conversationId, relation);
     if (permission.status === 'unavailable') throw new Error('IAM unavailable');
     await requireMember(deadline);
@@ -193,13 +196,20 @@ export function conversationParticipationReader(options: ParticipationOptions, m
       current = await participation(options.store, options.silo, conversationId,
         memberId, legacy, deadline);
     }
-    const applied = await auth.applied(current.joinEventId);
+    if (current.joinEventId !== checkedJoinEventId) {
+      applied = await auth.applied(current.joinEventId);
+    }
     await requireInheritedChildAccess(options, current, memberId, deadline);
     if (!applied) {
       if (allowApplying) return current;
       throw new ParticipationApplying('Conversation access still applying');
     }
-    if (!permission.allowed) throw new ChatRefused('Conversation refused');
+    if (!permission.allowed) {
+      if (current.joinEventId !== checkedJoinEventId) {
+        throw new ParticipationApplying('Conversation access still applying');
+      }
+      throw new ChatRefused('Conversation refused');
+    }
     return current;
   }
   return read;
