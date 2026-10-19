@@ -20,7 +20,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|indexes unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; sends individual stops and signed work gates and root stops without waiting for chats; acknowledges and checks reports and gate replies, including refused child failures; refuses closed chats| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
   server -->|recaptures tool lists| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records refused turn decisions| nats

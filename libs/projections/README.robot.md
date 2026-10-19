@@ -133,6 +133,9 @@ event time, a safe actor kind and a SHA-256 digest of the command id when presen
 A human id appears only when the envelope principal matches a checked command
 field. The table has `(silo, column, position DESC)` indexes for `recorded_at`,
 `event_type`, `actor_id` and `outcome`, as well as its earlier link indexes.
+The event type range and its index use PostgreSQL's bytewise `C` order, so a
+host's language sorting cannot hide matching families. Initialisation replaces
+the earlier language-sorted event type index.
 `auditTrail.create` adds these four columns to older tables. Existing rows keep
 null columns until `npm run replay -- audit` replays their events. Run this once
 after upgrading, then use `npm run replay -- audit --verify` to compare every

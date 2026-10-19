@@ -233,6 +233,11 @@ it('filters indexed anchors and pages evidence without repeating records', async
       .toHaveLength(1);
     expect((await readAudit(db.db, 'test', { reference: 'permit-120' })).rows)
       .toHaveLength(1);
+    // Check startup replaces an earlier index and remains safe to repeat.
+    await db.db.query(`CREATE INDEX audit_event_type
+      ON audit_entries (silo, event_type, position DESC)`);
+    await auditTrail.create(db.db);
+    await auditTrail.create(db.db);
     const indexes = (await db.db.query<{ indexname: string; indexdef: string }>(
       "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'audit_entries'", [])).rows;
     for (const column of ['recorded_at', 'actor_id', 'outcome']) {
@@ -242,6 +247,10 @@ it('filters indexed anchors and pages evidence without repeating records', async
     function isTypeIndex(index: { indexname: string }): boolean {
       return index.indexname === 'audit_event_type_bytewise';
     }
+    function isEarlierTypeIndex(index: { indexname: string }): boolean {
+      return index.indexname === 'audit_event_type';
+    }
+    expect(indexes.find(isEarlierTypeIndex)).toBeUndefined();
     const typeIndex = indexes.find(isTypeIndex);
     expect(typeIndex?.indexdef).toContain('(silo, event_type COLLATE "C", "position" DESC)');
     for (let position = 122; position < 622; position++) {
@@ -291,11 +300,12 @@ async function ignoresActorData(): Promise<void> {
   try {
     await auditTrail.create(db.db);
     const base = fixture('budget.ceiling_set', 'actor-data', { setBy: 'alice' }, false);
+    const data = z.record(z.string(), z.unknown()).parse(base.data);
     // Exercise the projection directly: typed events reject this extra field.
     // Keep these rows in their own database so replay tests see only saved events.
     const event: EventEnvelope = {
       ...base,
-      data: { ...base.data, actor: 'mallory' },
+      data: { ...data, actor: 'mallory' },
       principal: { kind: 'human', id: 'mallory' },
     };
     await auditTrail.apply(db.db, event, 1);

@@ -146,10 +146,14 @@ export const auditTrail: Projection = {
       'actor_id TEXT', 'outcome TEXT']) {
       await db.query(`ALTER TABLE audit_entries ADD COLUMN IF NOT EXISTS ${column}`);
     }
-    for (const column of ['recorded_at', 'event_type', 'actor_id', 'outcome']) {
+    for (const column of ['recorded_at', 'actor_id', 'outcome']) {
       await db.query(`CREATE INDEX IF NOT EXISTS audit_${column}
         ON audit_entries (silo, ${column}, position DESC)`);
     }
+    // Keep the index and prefix comparisons in the same bytewise order on every host.
+    await db.query(`CREATE INDEX IF NOT EXISTS audit_event_type_bytewise
+      ON audit_entries (silo, event_type COLLATE "C", position DESC)`);
+    await db.query('DROP INDEX IF EXISTS audit_event_type');
     for (const key of ['request_id', 'permit_id', 'approval_id', 'conversation_id', 'requester_id', 'turn_id', 'decision']) {
       await db.query(`CREATE INDEX IF NOT EXISTS audit_${key} ON audit_entries (silo, ${key}, position DESC)`);
     }
@@ -243,7 +247,8 @@ export async function readAudit(db: Query, silo: string,
     parameters.push(`${filter.type}.`);
     const start = parameters.length;
     parameters.push(`${filter.type}/`);
-    where.push(`event_type >= $${start} AND event_type < $${parameters.length}`);
+    where.push(`event_type COLLATE "C" >= $${start}
+      AND event_type COLLATE "C" < $${parameters.length}`);
   }
   if (filter.from) {
     parameters.push(filter.from);
