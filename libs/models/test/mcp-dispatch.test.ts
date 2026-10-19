@@ -1,3 +1,4 @@
+import { remoteFixture } from './support/remote-mcp.ts';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -34,13 +35,14 @@ const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0, review 
 const catalogue = catalogueEvidence([tool]);
 const body = JSON.stringify(capture.body);
 
-async function prepare(setup: Fixture, kind: 'remote' | 'hosted' = 'remote') {
-  let locator = 'https://fixture.example.test/mcp';
+async function prepare(setup: Fixture, kind: 'remote' | 'hosted' = 'remote', remote = false, declared = true) {
+  let locator = remote ? 'https://mcp.example.test/mcp' : 'https://fixture.example.test/mcp';
   if (kind === 'hosted') locator = `registry.example.test/fixture@sha256:${'a'.repeat(64)}`;
   const registration = { serverId: 'fixture', kind, locator, registeredBy: 'alice' };
   await setup.append('mcp-fixture', 'mcp.server_registered', registration);
   const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
-    ...catalogue };
+    ...catalogue, ...(remote && declared ? { discoverResult: JSON.stringify({ capabilities:
+      { experimental: { 'io.opencrane/expectedRevision': {} } } }) } : {}) };
   await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
   await reviewCatalogue(setup);
   const publication = { serverId: 'fixture', publishedBy: 'alice' };
@@ -67,8 +69,8 @@ async function prepare(setup: Fixture, kind: 'remote' | 'hosted' = 'remote') {
   return { ...setup.headers, ...capture.headers, 'session-id': thread, 'x-turn-token': token };
 }
 
-async function permit(setup: Fixture, headers: Record<string, string>) {
-  const request = { method: 'POST', headers, body };
+async function permit(setup: Fixture, headers: Record<string, string>, raw = body) {
+  const request = { method: 'POST', headers, body: raw };
   const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
     request);
   expect(response.status, await response.text()).toBe(200);
@@ -1551,10 +1553,10 @@ function generationHeaders(record: { generation: number; recordDigest: string;
     'x-opencrane-review-revision': String(entry.reviewRevision) };
 }
 
-async function publishedFixture(mode = 'allow') {
+async function publishedFixture(mode = 'allow', remote = false, declared = true) {
   const setup = await fixture();
   onTestFinished(setup.close.bind(setup));
-  const headers = await prepare(setup);
+  const headers = await prepare(setup, 'remote', remote, declared);
   await reviewRestoration(setup, 'review-generation', mode);
   const record = await publishRestoration(setup, 'publish-generation');
   const delivery = await restorationDelivery(setup);
@@ -2464,3 +2466,150 @@ async function refusesReloadDuringFinalRead() {
 }
 it('refuses a saved reload during the final awaited watch read',
   refusesReloadDuringFinalRead, 60_000);
+
+const remoteGuards = ['bytes', 'private', 'metadata', 'mixed', 'empty', 'rebind',
+  'untrusted', 'wrong_name', 'redirect', 'oversize', 'session', 'reply_fields',
+  'undeclared', 'revision', 'dns_timeout', 'permit_timeout', 'held_start', 'lost_start',
+  'deadline'] as const;
+async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
+  const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
+  const context = await publishedFixture('allow', true, mode !== 'undeclared');
+  const { setup } = context;
+  const remote = await remoteFixture();
+  onTestFinished(remote.close);
+  setup.dispatchOptions.routes.length = 0;
+  Object.assign(setup.dispatchOptions, { remoteNetwork: remote.network });
+  function noWatch() { throw new Error('Remote calls must use their saved dated check'); }
+  setup.dispatchOptions.requireCatalogue = noWatch;
+  remote.revision(catalogue.schemaDigest);
+  if (mode === 'private') remote.setAnswers(['127.0.0.1']);
+  if (mode === 'metadata') remote.setAnswers(['169.254.169.254']);
+  if (mode === 'mixed') remote.setAnswers(['93.184.216.34', '127.0.0.1']);
+  if (mode === 'empty') remote.setAnswers([]);
+  if (mode === 'rebind') remote.rebind();
+  if (mode === 'untrusted') remote.untrust();
+  if (mode === 'wrong_name') {
+    const request = remote.network.request!;
+    function wrongCertificate(...parameters: Parameters<typeof request>) {
+      const [url, options, callback] = parameters;
+      return request(url, { ...options, checkServerIdentity: undefined,
+        servername: 'wrong.example.test' }, callback);
+    }
+    remote.network.request = wrongCertificate;
+  }
+  if (mode === 'redirect') remote.status(307);
+  function largeReply() { return 'x'.repeat(1024 * 1024 + 1); }
+  if (mode === 'oversize') remote.respond(largeReply);
+  if (mode === 'session') remote.replyFields({ 'mcp-session-id': 'REPLY_CANARY' });
+  if (mode === 'reply_fields') remote.replyFields({ 'set-cookie': 'REPLY_CANARY' });
+  if (mode === 'revision') remote.revision('a'.repeat(64));
+  const releaseDns = Promise.withResolvers<{ address: string; family: number }[]>();
+  if (mode === 'dns_timeout' || mode === 'permit_timeout') {
+    function heldDns() { return releaseDns.promise; }
+    remote.network.resolve = heldDns;
+  }
+  const rowsBefore = await setup.nats.store.head();
+  if (mode === 'undeclared') {
+    expect(await gatewayCall(context)).toBe(403);
+    expect(remote.dnsCalls()).toBe(0);
+  } else {
+    const headers = { ...context.headers, ...context.constants };
+    const value = await permit(setup, headers, raw);
+    const append = setup.nats.store.append.bind(setup.nats.store);
+    const startSaved = Promise.withResolvers<void>();
+    const releaseStart = Promise.withResolvers<void>();
+    async function holdStart(command: AppendCommand) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'tool.dispatch_started') {
+        startSaved.resolve();
+        if (mode === 'lost_start') throw new Error('Save reply lost');
+        if (mode === 'held_start') await releaseStart.promise;
+      }
+      return result;
+    }
+    const writer = vi.spyOn(setup.nats.store, 'append').mockImplementation(holdStart);
+    const timer = globalThis.setTimeout;
+    let expire: (() => void) | undefined;
+    function captureDeadline(callback: (...args: unknown[]) => void, delay?: number,
+      ...args: unknown[]) {
+      if (delay === 30_000) {
+        expire = callback;
+        return timer(function heldDeadline() {}, 60_000);
+      }
+      return timer(callback, delay, ...args);
+    }
+    function noReply() { return undefined; }
+    if (mode === 'deadline') {
+      remote.respond(noReply);
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation(captureDeadline as typeof timer);
+    }
+    if (mode === 'permit_timeout') await pause(1500);
+    const canaries = { host: 'caller.example.test', authorization: 'CANARY',
+      'x-turn-token': 'CANARY', cookie: 'CANARY', 'session-id': 'CANARY',
+      'mcp-session-id': 'CANARY', 'x-forwarded-for': 'CANARY', 'x-memory-context': 'CANARY',
+      'x-opencrane-mcp-permit': value };
+    const request = { method: 'POST', headers: canaries, body: raw };
+    const beforeSend = performance.now();
+    const sending = fetch(`${setup.options.decisionUrl}/dispatch/mcp/fixture/installed`, request);
+    try {
+      if (mode === 'held_start') {
+        await startSaved.promise;
+        expect(remote.connections()).toBe(0);
+        releaseStart.resolve();
+      }
+      if (mode === 'deadline') {
+        function received() { return remote.received.length; }
+        await expect.poll(received).toBe(1);
+        expect(expire).toBeDefined();
+        expire!();
+      }
+      const response = await sending;
+      const success = ['bytes', 'rebind', 'reply_fields', 'held_start'].includes(mode);
+      let expected = success ? 200 : 502;
+      if (['private', 'metadata', 'mixed', 'empty', 'dns_timeout', 'permit_timeout',
+        'lost_start'].includes(mode)) expected = 403;
+      if (mode === 'deadline') expected = 504;
+      expect(response.status, await response.text()).toBe(expected);
+      expect(response.headers.get('set-cookie')).toBeNull();
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('mcp-session-id')).toBeNull();
+      if (mode === 'dns_timeout') expect(performance.now() - beforeSend).toBeLessThan(1300);
+      if (mode === 'permit_timeout') expect(performance.now() - beforeSend).toBeLessThan(700);
+      if (success || ['redirect', 'oversize', 'session', 'revision', 'deadline'].includes(mode)) {
+        expect(remote.received).toHaveLength(1);
+        expect(remote.received[0]!.raw).toEqual(Buffer.from(raw));
+        expect(remote.received[0]!.hostname).toBe('mcp.example.test');
+        expect(remote.received[0]!.headers).toEqual({ host: 'mcp.example.test',
+          'content-type': 'application/json', accept: 'application/json',
+          'content-length': String(Buffer.byteLength(raw)), 'mcp-protocol-version': '2026-07-28',
+          'mcp-method': 'tools/call', 'mcp-name': 'write',
+          'x-opencrane-mcp-revision': catalogue.schemaDigest });
+        expect(remote.dnsCalls()).toBe(1);
+        expect(remote.pinned).toEqual(['93.184.216.34']);
+      } else {
+        expect(remote.received).toHaveLength(0);
+      }
+    } finally {
+      releaseStart.resolve();
+      releaseDns.resolve([{ address: '93.184.216.34', family: 4 }]);
+      writer.mockRestore();
+      vi.restoreAllMocks();
+    }
+  }
+  const rows = [];
+  const last = await setup.nats.store.head();
+  for (let position = rowsBefore + 1; position <= last; position++) {
+    rows.push(await setup.nats.store.readEvent(position));
+  }
+  const encoded = JSON.stringify(rows);
+  expect(encoded).not.toContain('not_dispatched');
+  if (['private', 'metadata', 'mixed', 'empty', 'undeclared', 'dns_timeout',
+    'permit_timeout'].includes(mode)) {
+    expect(remote.connections()).toBe(0);
+    expect(encoded).not.toContain('tool.dispatch_started');
+    expect(encoded).not.toContain('mcp.dispatch_admitted');
+  }
+  expect(setup.received()).toBe(0);
+}
+it.each(remoteGuards)('guards published HTTPS tool calls: %s', guardsRemoteCall);
