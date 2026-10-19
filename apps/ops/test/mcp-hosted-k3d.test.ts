@@ -19,6 +19,8 @@ function command(binary: string, args: string[], input?: string): string {
   const result = spawnSync(binary, args, { input, encoding: 'utf8', timeout: 180_000 });
   if (result.status !== 0) {
     if (args.includes('can-i') && result.stdout.trim() === 'no') throw new Error('forbidden');
+    const policyMessage = result.stderr?.match(/Hosted MCP check \d+ requires the approved template or identity|Computer must use the checked template[^\n]*/u);
+    if (policyMessage) throw new Error(`denied: ${policyMessage[0]}`);
     for (const reason of ['denied', 'forbidden', 'is invalid:']) {
       if (result.stderr?.includes(reason)) throw new Error(reason);
     }
@@ -53,11 +55,11 @@ function workload() {
 function admit(value: unknown, lifecycle = true) {
   return kube(['create', '--dry-run=server', '-f', '-'], value, lifecycle);
 }
-function refuse(value: unknown, lifecycle = true, builtIn = false) {
+function refuse(value: unknown, lifecycle = true, message = /Hosted MCP check/u) {
   function request() {
     admit(value, lifecycle);
   }
-  expect(request).toThrow(builtIn ? /denied|is invalid:/u : /denied/u);
+  expect(request).toThrow(message);
 }
 function buildImage(label: string) {
   const computer: unknown = JSON.parse(readFileSync('apps/computer/sandbox-template.json', 'utf8'));
@@ -112,7 +114,7 @@ async function setup() {
     try {
       admit(invalidReplicas);
     } catch (error) {
-      if (error instanceof Error && error.message === 'denied') return;
+      if (error instanceof Error && error.message.startsWith('denied')) return;
       throw error;
     }
     await delay(500);
@@ -140,41 +142,47 @@ const guards: [string, string, unknown][] = [
   ['root user', `${security}.runAsUser`, 0],
   ['writable root', `${security}.readOnlyRootFilesystem`, false],
   ['privilege escalation', `${security}.allowPrivilegeEscalation`, true],
-  ['privileged', `${security}.privileged`, true],
+  ['privileged', `${security}.privileged`, false],
   ['capability', `${security}.capabilities.add`, ['NET_ADMIN']],
   ['seccomp', `${security}.seccompProfile.type`, 'Unconfined'],
   ['host network', `${pod}.hostNetwork`, true],
   ['host PID', `${pod}.hostPID`, true],
   ['host IPC', `${pod}.hostIPC`, true],
   ['host path', `${pod}.volumes`, [{ name: 'scratch', hostPath: { path: '/tmp' } }]],
-  ['devices', `${container}.volumeDevices`, [{ name: 'scratch', devicePath: '/dev/test' }]],
   ['token', `${pod}.automountServiceAccountToken`, true],
   ['init container', `${pod}.initContainers`, [{ name: 'init', image: 'test' }]],
   ['PVC', 'spec.volumeClaimTemplates', [{ metadata: { name: 'data' },
     spec: { accessModes: ['ReadWriteOnce'], resources: { requests: { storage: '1Gi' } } } }]],
-  ['env', `${container}.env`, [{ name: 'EXTRA', value: 'test' }]],
+  ['Secret-sourced env', `${container}.env`, [{ name: 'EXTRA',
+    valueFrom: { secretKeyRef: { name: 'secret', key: 'value' } } }]],
+  ['hostPort', `${container}.ports`, [{ containerPort: 8080, hostPort: 8080 }]],
   ['envFrom', `${container}.envFrom`, [{ configMapRef: { name: 'extra' } }]],
   ['command', `${container}.command`, ['/bin/true']],
   ['args', `${container}.args`, ['extra']],
   ['disk scratch', `${pod}.volumes.0.emptyDir.medium`, ''],
   ['large scratch', `${pod}.volumes.0.emptyDir.sizeLimit`, '65Mi'],
   ['raised limits', `${container}.resources.limits.cpu`, '2'],
-  ['missing limits', `${container}.resources.limits`, undefined],
+  ['missing CPU limit', `${container}.resources.limits`,
+    { memory: '512Mi', 'ephemeral-storage': '1Gi' }],
 ];
 describe.skipIf(!live)('hosted MCP namespace', cases);
 function cases() {
   it.each(guards)('denies %s', guard);
+  it('denies devices', devices);
   it('denies another container', extraContainer);
+  it('denies an approved image tag', imageTag);
+  it('denies hosted Pod resize', hostedResize);
+  it('denies computer Pod resize', computerResize);
   it('binds image and spec digest to protected parameters', images);
   it('denies the admin creating an approved workload', requester);
   it('fails closed without parameters', parameters);
   it('limits lifecycle permissions to this namespace', permissions);
   it('creates a Pod, allows only scaling and completes deletion', lifecycle, 90_000);
 }
-function guard(name: string, path: string, value: unknown) {
+function guard(_name: string, path: string, value: unknown) {
   const candidate = workload();
   change(candidate, path, value);
-  refuse(candidate, true, name === 'privileged' || name === 'devices');
+  refuse(candidate);
 }
 function extraContainer() {
   const candidate = workload();
@@ -184,7 +192,7 @@ function extraContainer() {
   refuse(candidate);
 }
 function images() {
-  for (const image of [secondImage, 'example:latest']) {
+  for (const image of [secondImage]) {
     const candidate = workload();
     change(candidate, `${container}.image`, image);
     refuse(candidate);
@@ -200,7 +208,7 @@ function requester() {
 function parameters() {
   kube(['delete', 'configmap', 'mcp-approved-images']);
   try {
-    refuse(workload());
+    refuse(workload(), true, /denied/u);
   } finally {
     kube(['apply', '-f', '-'], approvedImages(String(field(approved, `${container}.image`))));
   }
@@ -277,4 +285,100 @@ async function waitForPod(name: string, present: boolean) {
     await delay(500);
   }
   throw new Error('Fixture Pod timeout');
+}
+
+function imageTag() {
+  const image = 'example:latest';
+  kube(['apply', '-f', '-'], approvedImages(image));
+  try {
+    const candidate = workload();
+    change(candidate, `${container}.image`, image);
+    refuse(candidate);
+  } finally {
+    kube(['apply', '-f', '-'], approvedImages(String(field(approved, `${container}.image`))));
+  }
+}
+function resizePod(name: string, cpu: string) {
+  const patch = { spec: { containers: [{ name, resources: { limits: { cpu } } }] } };
+  return kube(['patch', `pod/${name}`, '--subresource=resize', '--type=strategic',
+    '--dry-run=server', '-p', JSON.stringify(patch)]);
+}
+function hostedResize() {
+  const candidate = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'mcp',
+    annotations: { 'opencrane.ai/mcp-spec': specDigest } },
+  spec: structuredClone(field(approved, pod)) };
+  kube(['create', '-f', '-'], candidate);
+  try {
+    resizePod('mcp', '1');
+    function increaseCpu() {
+      resizePod('mcp', '2');
+    }
+    expect(increaseCpu).toThrow(/Hosted MCP check/u);
+  } finally {
+    kube(['delete', 'pod', 'mcp', '--wait=false']);
+  }
+}
+async function computerResize() {
+  const template: unknown = JSON.parse(readFileSync('apps/computer/sandbox-template.json', 'utf8'));
+  const candidate = { apiVersion: 'v1', kind: 'Pod',
+    metadata: { name: 'computer', labels: { app: 'computer' } },
+    spec: field(template, 'spec.podTemplate.spec') };
+  const savedNamespace = namespace;
+  namespace = otherNamespace;
+  try {
+    const script = process.env['COMPUTER_ADMISSION_SCRIPT']
+      ?? 'infra/dev-stack/computer-admission.mjs';
+    command('node', [script, namespace]);
+    await delay(2000);
+    kube(['create', '-f', '-'], candidate);
+    function increaseCpu() {
+      resizePod('computer', '2');
+    }
+    expect(increaseCpu).toThrow(/Computer must use the checked template/u);
+  } finally {
+    for (const suffix of ['sandbox', 'pod', 'claim']) {
+      kube(['delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
+        `${namespace}-computer-${suffix}`, '--ignore-not-found']);
+    }
+    kube(['delete', 'pod', 'computer', '--ignore-not-found', '--wait=false']);
+    namespace = savedNamespace;
+  }
+}
+
+function devices() {
+  // Isolate the device check so the fixed volume list cannot hide a missing guard.
+  const policy: unknown = JSON.parse(kube(['get', 'validatingadmissionpolicy',
+    `${namespace}-statefulset`, '-o', 'json']));
+  const validations = field(policy, 'spec.validations');
+  if (!Array.isArray(validations)) throw new Error('Missing policy validations');
+  function checksContainer(value: unknown) {
+    return String(field(value, 'expression')).includes('!has(variables.container.command)');
+  }
+  const deviceChecks = validations.filter(checksContainer);
+  expect(deviceChecks).toHaveLength(1);
+  change(policy, 'metadata', { name: `${otherNamespace}-devices` });
+  change(policy, 'spec.validations', deviceChecks);
+  const binding = { apiVersion: 'admissionregistration.k8s.io/v1',
+    kind: 'ValidatingAdmissionPolicyBinding', metadata: { name: `${otherNamespace}-devices` },
+    spec: { policyName: `${otherNamespace}-devices`, validationActions: ['Deny'],
+      paramRef: { name: 'mcp-approved-images', namespace, parameterNotFoundAction: 'Deny' },
+      matchResources: { namespaceSelector: {
+        matchLabels: { 'kubernetes.io/metadata.name': otherNamespace } } } } };
+  kube(['apply', '-f', '-'], policy);
+  kube(['apply', '-f', '-'], binding);
+  const candidate = workload();
+  const volumes = [field(candidate, `${pod}.volumes.0`),
+    { name: 'block', persistentVolumeClaim: { claimName: 'block' } }];
+  change(candidate, `${pod}.volumes`, volumes);
+  const savedNamespace = namespace;
+  namespace = otherNamespace;
+  try {
+    admit(candidate, false);
+    change(candidate, `${container}.volumeDevices`, [{ name: 'block', devicePath: '/dev/test' }]);
+    refuse(candidate, false);
+  } finally {
+    kube(['delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
+      `${namespace}-devices`, '--ignore-not-found']);
+    namespace = savedNamespace;
+  }
 }
