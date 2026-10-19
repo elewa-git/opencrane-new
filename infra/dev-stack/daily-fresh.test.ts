@@ -71,12 +71,14 @@ async function sanitisesRetainedLogs(withhold = false) {
   await writeFile(`${scripts}/down.sh`, `#!/bin/sh\nrm -rf "${slot}"\n`, { mode: 0o755 });
   const secrets = ['slot-password-canary', 'slot-client-canary', 'cookie-canary',
     'model-canary', 'zitadel-canary', 'database-canary', 'url-canary', 'bearer-canary',
-    'basic-canary'];
+    'basic-canary', 'url-extra-canary', 'assignment-tail-canary'];
   const lines = [
     'Setup failed; keep this explanation',
     'Known values: slot-password-canary slot-client-canary cookie-canary',
     'Key file values: model-canary zitadel-canary database-canary',
     'postgres://user:url-canary@localhost/db',
+    'postgres://user:segment@url-extra-canary@localhost/db',
+    'PASSWORD=segment,assignment-tail-canary',
     'Bearer bearer-canary',
     'Authorization: Basic basic-canary',
   ];
