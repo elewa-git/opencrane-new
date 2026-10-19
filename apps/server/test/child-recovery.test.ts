@@ -544,7 +544,8 @@ async function hidesFailedStatus(kind: string) {
     memberId = 'outsider';
     await context.append(`member-${memberId}`, 'member.invited', { memberId,
       invitationId: 'invite-outsider', email: 'outsider@example.test', role: 'member',
-      invitedBy: 'alice', invitedIdentity: { issuer: context.config.issuerUrl, sub: memberId } });
+      invitedBy: 'alice',
+      invitedIdentity: { issuer: context.config.issuerUrl, sub: memberId } }, false);
     await context.append(`member-${memberId}`, 'member.joined', { memberId,
       invitationId: 'invite-outsider', email: 'outsider@example.test',
       displayName: 'Outsider', role: 'member' });
