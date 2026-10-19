@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { conversationCreatedDataSchema, computerTurnStartedDataSchema }
+import { agentTurnStopRequestedDataSchema,
+  conversationCreatedDataSchema, computerTurnStartedDataSchema }
   from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { history, queuedPayer, turnBudgetStopDetails } from '@opencrane/models';
@@ -12,8 +13,7 @@ import type { ChatOptions } from './routes.ts';
 
 const parameters = z.object({ conversationId: idSchema });
 const query = z.object({ turnId: idSchema }).strict();
-const fields = z.object({ turnId: z.string().optional(), stopId: z.string().optional(),
-  reason: z.string().optional(), authorKind: z.string().optional(),
+const fields = z.object({ turnId: z.string().optional(), authorKind: z.string().optional(),
   authorId: z.string().optional() });
 function data(row: StoredEvent) {
   return fields.parse(row.event.data);
@@ -105,8 +105,8 @@ function started(rows: StoredEvent[], turnId: string) {
 function stopRecord(rows: StoredEvent[], turnId: string) {
   for (const row of rows) {
     if (row.event.type !== 'agent.turn_stop_requested') continue;
-    const saved = data(row);
-    if (saved.turnId === turnId && saved.reason === 'budget') return { ...saved, position: row.sequence };
+    const saved = agentTurnStopRequestedDataSchema.parse(row.event.data);
+    if (saved.turnId === turnId && 'reason' in saved) return { ...saved, position: row.sequence };
   }
   return undefined;
 }
@@ -143,7 +143,12 @@ function status(loaded: NonNullable<Awaited<ReturnType<typeof load>>>, turnId: s
   }
   const reasons = stop.reasons.map(reason);
   const work = stoppedWork(rows, computer, stop.id, historyPosition);
-  return { status: 'stopped', stopId: stop.id, reasons, work,
+  function visibleCall(call: typeof budget.calls[number]) {
+    if (data(message).authorId === memberId) return call;
+    return { reference: call.reference, status: call.status };
+  }
+  const calls = budget.calls.map(visibleCall);
+  return { status: 'stopped', stopId: stop.id, reasons, work, calls,
     positions: { stop: stop.position, turn: recorded?.position ?? null,
       conversation: rows.at(-1)?.sequence ?? 0,
       computer: computer.at(-1)?.sequence ?? 0, budget: budget.position } };
@@ -155,8 +160,8 @@ function stoppedWork(rows: StoredEvent[], computer: StoredEvent[], stopId: strin
   const seen = new Set<string>();
   for (const row of rows) {
     if (row.event.type !== 'agent.turn_stop_requested') continue;
-    const saved = data(row);
-    if (saved.stopId !== stopId || !saved.turnId || seen.has(saved.turnId)) continue;
+    const saved = agentTurnStopRequestedDataSchema.parse(row.event.data);
+    if (!('stopId' in saved) || saved.stopId !== stopId || seen.has(saved.turnId)) continue;
     function visible(candidate: StoredEvent) {
       const human = candidate.event.id === saved.turnId;
       const admitted = candidate.event.type === 'agent.turn_started' &&

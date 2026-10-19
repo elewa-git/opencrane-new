@@ -2238,6 +2238,11 @@ Fresh-install qualification: NOT RUN.
 at the human message position, like renewal, or uses the saved chat stop id.
 It copies only reasons matching the admitted payer and assistant. Unknown saved
 stop ids fail closed. `queuedPayer` is shared with the handler for unstarted work.
+The summary also retains call positions to order reservations and unreserved
+admissions together. `BudgetState` keeps the optional saved settlement `outcome`,
+so a confirmed non-dispatch differs from an ordinary zero-cent charge. Call statuses
+use the reservation and its dispatch record; expiry never proves non-dispatch after
+admission. Only calls with the requested conversation and turn are returned.
 
 ## Per-server gateway receipts (P3-4 PR 3b; Part of #45)
 

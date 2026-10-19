@@ -18,7 +18,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, memory, owners, providers, free reachability and spending| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, memory, owners, providers, free reachability, spending and saved call statuses| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses and certificates; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
@@ -303,6 +303,10 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+Saved spending Stops include the calls for that conversation and turn, in saved
+order. Rebuilding from events keeps uncertain sends separate from released money.
+Reading these statuses sends no work and makes no new spending decision.
 
 After a saved personal connection replacement or revocation, a background reaction
 removes old stored copies by their exact identity. Uncertain copies stay private.

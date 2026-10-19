@@ -2986,8 +2986,19 @@ Callers without access receive the same 403 refusal as for an unknown turn.
 Authorised readers receive 503 for missing stop details, unfinished handler work,
 and failed or timed-out reads.
 Tests use real dependencies and a fresh store connection. No read appends or sends work.
-Live qualification is NOT RUN. Call references and their restart/leader
-reconciliation remain the next part of row 7; root stops remain with #90.
+The reply includes `calls` in saved event order for this conversation and turn only.
+Reservations use their id as `reference`; unreserved dispatches use their call id.
+A dispatch joined to a reservation appears once. An unknown settlement means
+`possibly_sent`; confirmed non-dispatch means `released`; other settlements mean
+`charged`. Without settlement, admission means `possibly_sent`, even after expiry.
+Expiry without dispatch means `released`; otherwise the reservation is `held`.
+A zero-cent charge remains `charged`.
+Only the requester receives `heldCents` for held or possibly sent calls, or
+`chargedCents` for charged calls. Participants receive references and statuses.
+Tests compare all four statuses after server restart and on a second store connection,
+with unchanged stream positions, computer lifecycle and recording upstream counts.
+Row 7 is implemented; row 8 consumes these statuses. Live qualification is NOT RUN.
+Root stops remain with #90.
 
 ## Reviewed child answers
 
@@ -3233,9 +3244,9 @@ Further tests check non-human authors, missing turn ids, unnecessary lookups
 and invalid outbound frames. GET and replay leave the event log unchanged and
 send no upstream requests.
 The protocol contract is in [the shared library](../../libs/protocol/README.robot.md#saved-budget-stop-notifications).
-Browser handling, call-status references and fresh-install qualification are NOT RUN
-in this part. In particular, late browser callbacks after revocation still need
-screen-level proof; the server tests prove that a held read sends no late frame.
+Call-status references are included in the saved GET reply described above.
+Fresh-install qualification is NOT RUN. These socket tests do not prove browser
+behaviour; they prove that a held server read sends no late frame.
 
 ## Saved approval dates and cancellation reasons
 

@@ -236,8 +236,12 @@ the observation date. It is a saved fact, not a live Ready status or call permis
 ## Saved budget stop replies
 
 `budgetStopStatusSchema` strictly checks `not_stopped` or the saved stop id,
-matching reasons, work execution and observed positions. Reasons allow optional
+matching reasons, work execution, call statuses and observed positions. Reasons allow optional
 `limitCents`, which the server includes only for the human message's author.
+Each strict `calls` entry has a `reference` and a status: `held`, `possibly_sent`,
+`charged` or `released`. Only held and possibly sent entries accept optional
+`heldCents`; only charged entries accept optional `chargedCents`. Amounts are
+non-negative integer euro cents. The server omits them for other participants.
 No names, scope ids, configuration references or spending totals are accepted.
 Approval cards accept an optional `turnId`; older replies still parse.
 
@@ -281,7 +285,7 @@ fields. `position` belongs to the saved chat stop event, not the budget stream.
 
 On notification or reconnect, the client GETs
 `/api/conversations/:conversationId/budget-stops?turnId=original-turn`.
-That read supplies the original stop id, reasons, execution status and positions.
+That read supplies the original stop id, reasons, execution status, calls and positions.
 It can return unavailable while saved work is catching up. Unavailable never means
 no stop or no previous effect. It never authorises another command or retries work.
 A failed socket data read closes with code 1013. An authorised GET reports saved-history

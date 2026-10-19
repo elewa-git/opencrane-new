@@ -31,7 +31,7 @@ function statusFor(frame) {
     resetAt, remedy: 'ask_admin_or_wait' };
   if (!frame.participant) reason.limitCents = 20000;
   return {
-    status: 'stopped', stopId: 'fixture-stop', reasons: [reason],
+    status: 'stopped', stopId: 'fixture-stop', calls: [], reasons: [reason],
     work: [{ turnId: 'event-2', execution: frame.execution }],
     positions: { stop: 3, turn: 4, conversation: 5, computer: 6, budget: 7 },
   };

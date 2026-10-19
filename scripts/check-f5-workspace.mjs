@@ -11,7 +11,7 @@ const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://f5.opencrane.test';
 const captures = [];
 const budgetStatus = {
-  status: 'stopped', stopId: 'fixture-stop',
+  status: 'stopped', stopId: 'fixture-stop', calls: [],
   reasons: [{ scope: 'paying_group', period: 'monthly', cause: 'bound_refused',
     resetAt: '2026-11-01T00:00:00Z', remedy: 'ask_admin_or_wait', limitCents: 20000 }],
   work: [{ turnId: 'event-2', execution: 'ended' }],

@@ -12,7 +12,7 @@ function stopped(
   limitCents?: number,
 ): Extract<BudgetStopStatus, { status: 'stopped' }> {
   return {
-    status: 'stopped', stopId: 'stop',
+    status: 'stopped', stopId: 'stop', calls: [],
     reasons: [{ scope, period, cause: 'bound_refused',
       resetAt: '2026-11-01T00:00:00Z', remedy,
       ...(limitCents === undefined ? {} : { limitCents }) }],

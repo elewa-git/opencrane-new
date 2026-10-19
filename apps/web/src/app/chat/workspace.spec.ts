@@ -949,7 +949,7 @@ it('refreshes unavailable stop details once when queued work gets its end report
     budgetReads += 1;
     if (budgetReads === 1) return Promise.resolve(new Response('{}', { status: 503 }));
     const details = {
-      status: 'stopped', stopId: 'fixture-stop',
+      status: 'stopped', stopId: 'fixture-stop', calls: [],
       reasons: [{ scope: 'paying_group', period: 'monthly', cause: 'bound_refused',
         resetAt: '2026-11-01T00:00:00Z', remedy: 'ask_admin_or_wait' }],
       work: [{ turnId: 'message', execution: 'ended' }],
