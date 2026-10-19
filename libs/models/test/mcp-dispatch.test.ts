@@ -2485,7 +2485,8 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   if (mode === 'private') remote.setAnswers(['127.0.0.1']);
   if (mode === 'metadata') remote.setAnswers(['169.254.169.254']);
   if (mode === 'mixed') remote.setAnswers(['93.184.216.34', '127.0.0.1']);
-  if (mode === 'empty') remote.setAnswers([]);
+  function emptyDns() { return Promise.resolve([]); }
+  if (mode === 'empty') remote.network.resolve = emptyDns;
   if (mode === 'rebind') remote.rebind();
   if (mode === 'untrusted') remote.untrust();
   if (mode === 'wrong_name') {
