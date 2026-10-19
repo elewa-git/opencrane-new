@@ -2612,6 +2612,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   }
   const encoded = JSON.stringify(rows);
   expect(encoded).not.toContain('not_dispatched');
+  if (mode === 'lost_start') expect(remote.connections()).toBe(0);
   if (['redirect', 'untrusted', 'wrong_name', 'lost_start'].includes(mode)) {
     expect(encoded).toContain('tool.dispatch_started');
   }
