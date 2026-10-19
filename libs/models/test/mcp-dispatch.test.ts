@@ -2475,7 +2475,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
   const context = await publishedFixture('allow', true, mode !== 'undeclared');
   const { setup } = context;
-  const remote = await remoteFixture();
+  const remote = await remoteFixture(mode === 'wrong_name');
   onTestFinished(remote.close);
   setup.dispatchOptions.routes.length = 0;
   Object.assign(setup.dispatchOptions, { remoteNetwork: remote.network });
@@ -2489,15 +2489,6 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   if (mode === 'empty') remote.network.resolve = emptyDns;
   if (mode === 'rebind') remote.rebind();
   if (mode === 'untrusted') remote.untrust();
-  if (mode === 'wrong_name') {
-    const request = remote.network.request!;
-    function wrongCertificate(...parameters: Parameters<typeof request>) {
-      const [url, options, callback] = parameters;
-      const wrongNameOptions = { ...options, servername: 'wrong.example.test' };
-      return request(url, wrongNameOptions, callback);
-    }
-    remote.network.request = wrongCertificate;
-  }
   if (mode === 'redirect') remote.status(307);
   function largeReply() { return 'x'.repeat(1024 * 1024 + 1); }
   if (mode === 'oversize') remote.respond(largeReply);
@@ -2577,7 +2568,12 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       if (['private', 'metadata', 'mixed', 'empty', 'dns_timeout', 'permit_timeout',
         'lost_start'].includes(mode)) expected = 403;
       if (mode === 'deadline') expected = 504;
-      expect(response.status, await response.text()).toBe(expected);
+      const responseBody = await response.text();
+      expect(response.status, responseBody).toBe(expected);
+      if (mode === 'wrong_name' || mode === 'untrusted') {
+        expect(responseBody).toBe('');
+        expect(remote.pooling).toEqual([false]);
+      }
       expect(response.headers.get('set-cookie')).toBeNull();
       expect(response.headers.get('location')).toBeNull();
       expect(response.headers.get('mcp-session-id')).toBeNull();

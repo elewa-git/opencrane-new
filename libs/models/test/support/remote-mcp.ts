@@ -2,17 +2,31 @@ import { z } from 'zod';
 import { createServer, request } from 'node:https';
 import { createSocket } from 'node:dgram';
 import { Resolver } from 'node:dns/promises';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { once } from 'node:events';
 import type { RemoteNetwork } from '../../src/remote-https.ts';
 
-export async function remoteFixture() {
+export async function remoteFixture(wrongHostname = false) {
   const directory = await mkdtemp(`${tmpdir()}/mcp-tls-`);
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', `${directory}/key`, '-out', `${directory}/cert`,
     '-days', '1', '-subj', '/CN=mcp.example.test', '-addext', 'subjectAltName=DNS:mcp.example.test'], { stdio: 'ignore' });
   const cert = await readFile(`${directory}/cert`);
+  let serverCert = cert;
+  if (wrongHostname) {
+    // Sign the other hostname with the CA already trusted by this client.
+    const extensions = 'subjectAltName=DNS:wrong.example.test\n';
+    await writeFile(`${directory}/extensions`, extensions);
+    const signingRequest = ['req', '-new', '-key', `${directory}/key`,
+      '-out', `${directory}/request`, '-subj', '/CN=wrong.example.test'];
+    execFileSync('openssl', signingRequest, { stdio: 'ignore' });
+    const signing = ['x509', '-req', '-in', `${directory}/request`,
+      '-CA', `${directory}/cert`, '-CAkey', `${directory}/key`, '-CAcreateserial',
+      '-out', `${directory}/wrong-cert`, '-days', '1', '-extfile', `${directory}/extensions`];
+    execFileSync('openssl', signing, { stdio: 'ignore' });
+    serverCert = await readFile(`${directory}/wrong-cert`);
+  }
   const received: { raw: Buffer; headers: import('node:http').IncomingHttpHeaders; hostname: string }[] = [];
   let connections = 0;
   let revision: string | undefined;
@@ -22,7 +36,7 @@ export async function remoteFixture() {
     ? { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {} }, _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1.0' } }, ttlMs: 1000, cacheScope: 'public' }
     : { resultType: 'complete', ttlMs: 1000, cacheScope: 'public', tools: [{ name: cursor ? 'write' : 'read', inputSchema: { type: 'object', properties: { id: { type: 'integer' } } }, annotations: { readOnlyHint: !cursor } }], ...(cursor ? {} : { nextCursor: 'page-2' }) };
   let status = 200;
-  const server = createServer({ key: await readFile(`${directory}/key`), cert }, (req, res) => {
+  const server = createServer({ key: await readFile(`${directory}/key`), cert: serverCert }, (req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
