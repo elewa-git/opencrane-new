@@ -176,7 +176,7 @@ for (const scenario of runnerCases) {
   });
 }
 
-async function exerciseRunner(home: string, scenario: RunnerCase) {
+async function prepareRunnerFiles(home: string, scenario: RunnerCase) {
   const worktree = join(home, 'worktree');
   const slot = join(home, '.config/opencrane/dev-stack-1');
   const bin = join(home, 'bin');
@@ -210,6 +210,10 @@ async function exerciseRunner(home: string, scenario: RunnerCase) {
   } };
   await writeFile(join(home, 'namespace.json'), JSON.stringify(namespace));
   await writeFile(join(home, 'owner.json'), JSON.stringify(packageOwner));
+  return { worktree, bin, writes };
+}
+
+async function prepareRunnerCommands(worktree: string, bin: string) {
   const kubectl = `#!/bin/sh
 case "$*" in
   *'get namespace'*)
@@ -240,6 +244,9 @@ exit 23
   await writeFile(join(bin, 'helm'), helm, { mode: 0o755 });
   await writeFile(join(bin, 'node'), node, { mode: 0o755 });
   await writeFile(join(worktree, 'infra/dev-stack/run.sh'), prepare, { mode: 0o755 });
+}
+
+async function runFixture(home: string, worktree: string, bin: string, scenario: RunnerCase) {
   const harness = `
 import { runOnce } from './infra/package/fresh-twice.ts';
 try {
@@ -258,14 +265,23 @@ try {
     TEST_PVS: JSON.stringify(scenario.claimedPv ? claimedPvs : { items: [] }) };
   const result = await execute(process.execPath, ['--experimental-strip-types',
     '--input-type=module', '-e', harness], { cwd: worktree, env });
-  const lastLine = result.stdout.trim().split('\n').at(-1)!;
-  const outcome = JSON.parse(lastLine) as { reason: string; cause?: string };
+  const output = result.stdout.trim();
+  const lines = output.split('\n');
+  const lastLine = lines.at(-1)!;
+  return JSON.parse(lastLine) as { reason: string; cause?: string };
+}
+
+async function exerciseRunner(home: string, scenario: RunnerCase) {
+  const { worktree, bin, writes } = await prepareRunnerFiles(home, scenario);
+  await prepareRunnerCommands(worktree, bin);
+  const outcome = await runFixture(home, worktree, bin, scenario);
   if (scenario.reason) {
     assert.equal(outcome.reason, scenario.reason);
     assert.equal(outcome.cause, scenario.cause);
     await assert.rejects(readFile(writes, 'utf8'), { code: 'ENOENT' });
   } else {
     assert.equal(outcome.reason, 'Fresh run 1 failed during private settings');
-    assert.equal(await readFile(writes, 'utf8'), 'kubectl create secret fixture\nhelm install fixture\n');
+    const recordedWrites = await readFile(writes, 'utf8');
+    assert.equal(recordedWrites, 'kubectl create secret fixture\nhelm install fixture\n');
   }
 }
