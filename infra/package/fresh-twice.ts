@@ -83,7 +83,9 @@ export function checkFresh(state: FreshState) {
   assert(state.storeId, 'OpenFGA store ID is missing');
   assert(state.storeId !== state.previousStoreId, 'OpenFGA store ID was reused');
   assert.deepEqual(state.memberIds, ['jente-rosseel'], 'Unexpected member rows');
-  for (const table of ['conversations', 'conversation_files', 'memory_facts']) {
+  for (const table of ['conversations', 'conversation_files', 'memory_facts',
+    'memory_changes', 'memory_dependencies', 'memory_maintenance_runs',
+    'memory_maintenance_bindings']) {
     const count = state.rowCounts[table];
     assert.equal(count, 0, `${table} contains old silo data`);
   }
@@ -164,7 +166,9 @@ try {
     (SELECT email FROM members WHERE silo='dev' AND member_id='jente-rosseel') AS email,
     (SELECT status FROM members WHERE silo='dev' AND member_id='jente-rosseel') AS status\`);
   const rowCounts = {};
-  for (const table of ['conversations', 'conversation_files', 'memory_facts']) {
+  for (const table of ['conversations', 'conversation_files', 'memory_facts',
+    'memory_changes', 'memory_dependencies', 'memory_maintenance_runs',
+    'memory_maintenance_bindings']) {
     const exists = await pool.query('SELECT to_regclass($1) AS name', [table]);
     rowCounts[table] = exists.rows[0].name
       ? Number((await pool.query('SELECT count(*)::int AS count FROM ' + table)).rows[0].count)
@@ -202,6 +206,8 @@ async function inspectData() {
     members: string[]; identities: OwnerState['identityRows']; role: string; status: string;
     email: string; ownerEvents: OwnerState['ownerEvents'];
     conversations: number; conversation_files: number; memory_facts: number;
+    memory_changes: number; memory_dependencies: number; memory_maintenance_runs: number;
+    memory_maintenance_bindings: number;
     storeId: string; eventTypes: string[]; siloEvents: FreshState['siloEvents'];
     openFgaOwner: boolean;
   };
@@ -244,7 +250,10 @@ async function snapshot(startedAt: string, previous?: FreshState): Promise<Fresh
     events: events.items.map(objectTime),
     storeId: data.storeId, memberIds: data.members ?? [], siloEvents: data.siloEvents,
     rowCounts: { conversations: data.conversations,
-      conversation_files: data.conversation_files, memory_facts: data.memory_facts },
+      conversation_files: data.conversation_files, memory_facts: data.memory_facts,
+      memory_changes: data.memory_changes, memory_dependencies: data.memory_dependencies,
+      memory_maintenance_runs: data.memory_maintenance_runs,
+      memory_maintenance_bindings: data.memory_maintenance_bindings },
   };
   return state;
 }
@@ -262,7 +271,7 @@ async function waitForForward(child: ChildProcess, port: number) {
   throw new Error('Package forward timed out');
 }
 
-async function runOnce(index: number, values: string, previous?: FreshState) {
+export async function runOnce(index: number, values: string, previous?: FreshState) {
   let stage = 'start ownership';
   await checkStart();
   const startedAt = new Date().toISOString();
@@ -323,7 +332,7 @@ async function runOnce(index: number, values: string, previous?: FreshState) {
   } catch (error) {
     if (error instanceof assert.AssertionError) console.error(error.message);
     console.error(`FAIL fresh ${index} during ${stage}`);
-    throw new Error(`Fresh run ${index} failed during ${stage}`);
+    throw new Error(`Fresh run ${index} failed during ${stage}`, { cause: error });
   } finally {
     forward?.kill();
     if (prepared) await command('infra/dev-stack/run.sh', ['package-down', '--id', stackId],
