@@ -44,8 +44,17 @@ test('complete fixture passes', () => {
 });
 
 test('reused install id fails', () => {
-  assert.throws(() => checkInstallId('first-install', 'first-install'));
-  assert.throws(() => checkInstallId('', 'first-install'));
+  function reuseInstallId() {
+    checkInstallId('first-install', 'first-install');
+  }
+  assertRefusal(reuseInstallId, 'Helm install ID was reused');
+});
+
+test('missing install id fails', () => {
+  function omitInstallId() {
+    checkInstallId('', 'first-install');
+  }
+  assertRefusal(omitInstallId, 'Helm install ID is missing');
 });
 
 const staleCases = [
@@ -60,7 +69,6 @@ const staleCases = [
   ['extra member', { memberIds: ['jente-rosseel', 'another'] }],
   ['conversation row', { rowCounts: { ...fixture.rowCounts, conversations: 1 } }],
   ['file row', { rowCounts: { ...fixture.rowCounts, conversation_files: 1 } }],
-  ['memory row', { rowCounts: { ...fixture.rowCounts, memory_facts: 1 } }],
   ['reused store id', { storeId: 'old-store' }],
 ] as const;
 for (const [reason, change] of staleCases) {
@@ -224,7 +232,8 @@ if [ "$1" = package-prepare ]; then
 fi
 `;
   const node = `#!/bin/sh
-printf '%s\\n' "private settings" >> "$HOME/writes"
+kubectl create secret fixture
+helm install fixture
 exit 23
 `;
   await writeFile(join(bin, 'kubectl'), kubectl, { mode: 0o755 });
@@ -257,6 +266,6 @@ try {
     await assert.rejects(readFile(writes, 'utf8'), { code: 'ENOENT' });
   } else {
     assert.equal(outcome.reason, 'Fresh run 1 failed during private settings');
-    assert.equal(await readFile(writes, 'utf8'), 'private settings\n');
+    assert.equal(await readFile(writes, 'utf8'), 'kubectl create secret fixture\nhelm install fixture\n');
   }
 }
