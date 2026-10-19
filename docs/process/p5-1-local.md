@@ -504,3 +504,72 @@ fixtures and do not use PostgreSQL or start a live package.
 | `npm run check:events` | PASS |
 | Knip and `npm run lint:changelog` | PASS |
 | Full root test suite | NOT RUN — outside the requested checks |
+
+### 19 October 2026: browser error reporting and stopped rerun
+
+**Overall: FAIL.** The runner now keeps a short browser failure reason, including
+its substep. The fixture plants a cookie value, a token value and page text. It
+checks that the timeout and substep reach the runner while those private values
+do not. Unknown error text is withheld. The first fixture failed before the
+implementation was added. No browser retry was added.
+
+Comparison with the earlier passing runner found the same `fresh-1-` and
+`fresh-2-` prefixes, slot-derived loopback URL and port, and owner subject from
+the claimed slot's sign-in settings. Both versions wait for the forward before
+capture. The memory correction adds database queries before capture; it does not
+change these inputs or the browser waits. The earlier browser failure has no
+retained error, so its cause remains **unknown**. This comparison is not a fix
+or a successful browser qualification.
+
+`df -h /` showed 93 GiB free before `claim.sh` returned secondary slot 1.
+The runner received `ZITADEL_KEY_FILE` as a path only. The operator launched the
+runner without recreating the private values file removed by the previous slot
+cleanup. The runner stopped during private settings, before Helm installation.
+Its kept reason was `FAIL fresh 1 during private settings`. The missing values
+file is an operator setup error. No second attempt was made after this failure.
+
+| Check | Fresh 1 | Fresh 2 |
+| --- | --- | --- |
+| Namespace preparation | PASS — namespace UID `1b954106-9996-4f76-83a1-e447cdfadbc6` | NOT RUN |
+| Private settings | FAIL — required private values file was absent | NOT RUN |
+| Helm install, PVC UIDs and OpenFGA store ID | NOT RUN — no release, PVCs or store were created | NOT RUN |
+| Fresh data and owner binding | NOT RUN | NOT RUN |
+| Browser sign-in and stub chat at 1280/390 | NOT RUN | NOT RUN |
+| Both 390px captures viewed by eye | NOT RUN — no new captures | NOT RUN |
+| Exposure journey | NOT RUN — no installed Services or forward | NOT RUN |
+| Owned cleanup | PASS — namespace and package record removed, no package PV claims or listener remained, slot released | NOT RUN |
+| Object storage | NOT RUN | NOT RUN |
+| Person's own Zitadel login | NOT RUN | NOT RUN |
+
+The observer saved records by namespace UID and merged PVC observations by UID.
+Cleanup did not overwrite earlier observations. This attempt created no install
+ID, release Secret UID, PVC UID or OpenFGA store ID to retain for either run.
+The record is `/tmp/p5-2-fix-live/observed.json`; the runner log is beside it.
+The historical PNG files remain from the earlier passing pair.
+
+**Owner and other-resource comparison: PASS for this stopped attempt.** All
+seven pre-existing namespace UIDs and all fifteen pre-existing running container
+IDs remained. The owner listener stayed on `127.0.0.1:44200`. The package namespace,
+port 25106 listener and namespace PV claims were absent after cleanup.
+No owner stack command was run.
+
+The changed fresh-install, browser-reporting and provider tests passed twice:
+40 tests per run, under `nice -n 10`, with the supplied `PG_TEST_URL` set. These
+Node fixtures do not use PostgreSQL. The full root suite was **NOT RUN**, as
+requested. The two-install browser journey remains blocked; no successful live
+result or browser root-cause fix is claimed.
+
+The completed rebase is based on `origin/main` at
+`5a8207484d7bfcf43c8959a0ef33f0035aefc3f9`. Git reported the branch was already
+current. The ancestry check passed and no rebase remained in progress. CI now
+includes the browser failure fixture beside the existing fresh-install tests.
+
+| Source check for this update | Result |
+| --- | --- |
+| Changed fresh-install, browser-reporting and provider tests, twice | PASS — 40 tests each |
+| Full lint | PASS — 21 warnings, no errors |
+| Typecheck | PASS — all workspaces and package project |
+| Event catalogue | PASS — 145 event types agree |
+| Knip | PASS — two configuration hints |
+| Documentation and changelog checks | PASS |
+| Full root test suite | NOT RUN — excluded from this task |
