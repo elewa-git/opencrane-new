@@ -58,12 +58,40 @@ spec:
     metadata:
       labels: { app: server }
     spec:
+      serviceAccountName: package-worker
+      securityContext: { fsGroup: 1000 }
       initContainers:
+        - name: kubeconfig
+          image: {{ .Values.images.server | quote }}
+          command: [node, infra/package/kubeconfig.mjs]
+          volumeMounts:
+            - { name: kubeconfig, mountPath: /run/kubeconfig }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
         - name: wait-for-binding
           image: {{ .Values.images.server | quote }}
           command: [sh, -c, 'until [ "$(cat /run/opencrane/OWNER_BOOTSTRAP_READY)" = ready ]; do sleep 2; done']
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
+        - name: copy-private-files
+          image: {{ .Values.images.server | quote }}
+          command: [sh, -ec]
+          args:
+            - >-
+              cp /run/opencrane-source/* /run/opencrane/files/ &&
+              chown 1000:1000 /run/opencrane/files/* &&
+              chmod 0400 /run/opencrane/files/*
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: runtime-file-source, mountPath: /run/opencrane-source, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files }
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
@@ -74,10 +102,17 @@ spec:
           env:
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }
+            - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
+            - name: KUBE_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
           envFrom:
             - secretRef: { name: {{ .Values.secrets.runtime | quote }} }
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+            - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
+            - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
           ports: [{ containerPort: 8080 }]
           readinessProbe:
             httpGet: { path: /healthz, port: 8080 }
@@ -85,9 +120,47 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
+        - name: models
+          image: {{ .Values.images.server | quote }}
+          command: [node, --experimental-strip-types, infra/dev-stack/secondary-models.ts]
+          envFrom:
+            - secretRef: { name: {{ .Values.secrets.runtime | quote }} }
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.runtime | quote }}
+                  key: PROJECTION_DATABASE_URL
+            - { name: NODE_OPTIONS, value: "--max-old-space-size=256" }
+          volumeMounts:
+            - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+            - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
+            - { name: model-state, mountPath: /var/lib/opencrane/models }
+          ports:
+            - { containerPort: 43000, name: model-gateway }
+            - { containerPort: 43001, name: model-decision }
+          readinessProbe:
+            httpGet: { path: /healthz/ready, port: 43002 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
       volumes:
         - name: runtime
           secret: { secretName: {{ .Values.secrets.runtime | quote }} }
+        - name: runtime-files
+          emptyDir: { medium: Memory }
+        - name: runtime-file-source
+          secret:
+            secretName: {{ .Values.secrets.runtimeFiles | quote }}
+            defaultMode: 256
+        - name: keys
+          persistentVolumeClaim: { claimName: conversation-keys }
+        - name: model-state
+          emptyDir: {}
+        - name: kubeconfig
+          emptyDir: { medium: Memory }
 ---
 apiVersion: apps/v1
 kind: Deployment

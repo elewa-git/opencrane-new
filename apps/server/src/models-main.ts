@@ -62,7 +62,8 @@ try {
     const conversationKeyDirectory = process.env['CONVERSATION_KEYS_DIR'];
     let keys: ReturnType<typeof conversationKeys> | undefined;
     if (conversationKeyDirectory) {
-      keys = conversationKeys(conversationKeyDirectory);
+      keys = conversationKeys(conversationKeyDirectory,
+        process.env['CONVERSATION_WRAP_KEY_FILE']);
     }
     async function readManagedMode(timeoutMs: number) {
       try {

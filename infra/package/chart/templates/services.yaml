@@ -32,7 +32,10 @@ metadata:
 spec:
   type: ClusterIP
   selector: { app: server }
-  ports: [{ port: 8080, targetPort: 8080 }]
+  ports:
+    - { name: http, port: 8080, targetPort: 8080 }
+    - { name: model, port: 43000, targetPort: 43000 }
+    - { name: decision, port: 43001, targetPort: 43001 }
 ---
 apiVersion: v1
 kind: Service

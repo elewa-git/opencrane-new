@@ -22,18 +22,28 @@ then runs `prepare.ts` with the private values file. That command creates five
 named Kubernetes secrets from files under the claimed slot. It also prepares the
 development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
 values in Helm values, command arguments or receipts.
+The owner bootstrap links the separate development sign-in account to the
+`jente@elewa.ke` owner member in this install. It does not edit the existing
+Zitadel user with that email.
 
-The `runtime` secret supplies the server and workers with NATS, PostgreSQL,
-OpenFGA and sign-in settings. The `postgres` secret holds PostgreSQL startup
+The `runtime` secret supplies text settings to the server and workers. The
+`runtimeFiles` secret holds certificates, model files, the local stub key and
+a fresh 32-byte conversation wrapping key. An init container copies those
+files into memory, gives them to the `node` user and sets mode 0400. The
+server, model process, workers and bootstrap Job mount the copy read-only.
+The server and model process share a private volume. They wrap each
+conversation key before saving it on the volume, which stays with the claimed
+install when its Pod restarts. Preparing a new key Secret for an existing volume
+would make its keys unreadable; a fresh install gets a fresh volume and Secret.
+The model can call only the local stub. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
-database setup credentials. The installer checks all five names and required
-fields before Helm
-applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
+database setup credentials. The installer checks all six names and required
+fields before Helm applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
 names in the chart.
 
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
-five secret names and all three exposure flags set to `false`:
+six secret names and all three exposure flags set to `false`:
 
 ```sh
 infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"
@@ -61,12 +71,17 @@ recovers it only from the matching Secret. A later foreign or unlabelled release
 is refused. Older records without an install ID cannot authorise release removal.
 If Kubernetes is unavailable during secondary
 `down`, Compose stops while the package record stays in place for a retry.
+Cleanup lets computer claims release their Pods and volumes before Helm removes
+the computer warm pool.
 
 The chart runs the member, catalogue, computer, conversation, file, budget and
-audit workers, plus the dispatcher. The memory worker needs a private key
-directory and is not started by this minimal package. Object storage, scanner,
-model gateway and computer runtime are outside this chart. The sign-in page and
-owner creation can be checked live; a full chat turn needs those extra services.
+audit workers, plus the dispatcher. It starts the model gateway beside the server
+and installs the checked computer template and a zero-size warm pool. A computer
+starts for each chat turn. The installer reads the server Service ClusterIP and
+puts that IP in the computer ConfigMap. The computer policy permits only TCP
+port 43000 to the server Pod and has no DNS egress. The memory worker needs a
+private key directory and is not started by this package. Object storage and
+the scanner are outside this chart.
 The licence inventory lists the components found by Syft in the pinned images.
 `osi-licences.json` contains the OSI-approved IDs from SPDX licence list 3.28.0
 (source JSON SHA-256
@@ -80,3 +95,6 @@ The checker requires each name, version and licence to match that review. Other
 Debian packages must still match Debian main. Go modules without embedded
 licence metadata were checked against their source licence files. Pass Syft JSON scan paths as `ROLE PATH` pairs
 to `check-licences.py` to compare a fresh scan with the reviewed inventory.
+The computer image uses its existing full licence inventory in
+`apps/computer/licences.json`; this package checks that file's digest and its
+image pin before installation.

@@ -2,16 +2,18 @@
   "chartVersion": "0.1.0",
   "requiredSecrets": [
     "runtime",
+    "runtimeFiles",
     "postgres",
     "nats",
     "openfga",
     "bootstrap"
   ],
   "images": {
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:9789e2934c50e5fb04830036a0a6a98a7f49eaee0001edab783183db77bc9afe",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:9789e2934c50e5fb04830036a0a6a98a7f49eaee0001edab783183db77bc9afe",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
     "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
     "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
-    "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796"
+    "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+    "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:2a0fe2d8c956f0b03d4267c476aa514239697d18ca7473dea6674f22c0e78be6"
   }
 }

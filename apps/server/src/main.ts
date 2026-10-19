@@ -64,7 +64,8 @@ if (realtime && events && modelDb && personalKeyDirectory) {
 }
 const keyDirectory = process.env['CONVERSATION_KEYS_DIR'];
 const chat: ChatOptions | undefined = realtime && events && modelDb && keyDirectory ? { silo: realtime.binding.silo, store: events.store,
-  db: modelDb.db, feed: realtime.feed, binding: realtime.binding, keys: conversationKeys(keyDirectory) } : undefined;
+  db: modelDb.db, feed: realtime.feed, binding: realtime.binding,
+  keys: conversationKeys(keyDirectory, process.env['CONVERSATION_WRAP_KEY_FILE']) } : undefined;
 if (chat) await requireLegacyClosesProjected(chat.store, chat.db);
 if (realtime && chat) realtime.chat = chat;
 let files: FileOptions | undefined;

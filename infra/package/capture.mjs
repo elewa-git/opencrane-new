@@ -18,6 +18,22 @@ function atApp(url) {
   return url.origin === origin && !url.pathname.startsWith('/auth/');
 }
 
+async function completeChatTurn(page, width) {
+  await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
+  const composer = page.getByRole('textbox', { name: 'Message your agent' });
+  await composer.waitFor({ timeout: 60_000 });
+  await page.waitForFunction(() => !document.querySelector('.skeleton'));
+  await page.keyboard.press('Control+n');
+  await page.getByText('Draft', { exact: true }).waitFor();
+  await composer.fill('Say hello briefly.');
+  await composer.press('Enter');
+  const reply = page.getByRole('article', { name: 'Agent reply', exact: true });
+  await reply.filter({ hasText: 'Hello from your computer.' }).waitFor({ timeout: 120_000 });
+  await reply.getByText('Done', { exact: true }).waitFor();
+  await page.screenshot({ path: `${output}/chat-${width}.png`, fullPage: true });
+  console.log(`PASS stub-model browser chat at ${width}px`);
+}
+
 try {
   await mkdir(output, { recursive: true });
   for (const width of [1280, 390]) {
@@ -40,8 +56,8 @@ try {
     assert.equal(session.authenticated, true);
     await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
     await page.screenshot({ path: `${output}/signed-in-${width}.png`, fullPage: true });
-    const workspace = await page.request.get(`${origin}/api/chat`);
-    console.log(`Package workspace API at ${width}px: HTTP ${workspace.status()}`);
+    stage = `${width}px chat turn`;
+    await completeChatTurn(page, width);
     await context.close();
     console.log(`PASS signed-in package screenshot at ${width}px`);
   }

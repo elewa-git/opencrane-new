@@ -19,7 +19,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|keeps Helm installs owned| package["package<br/>local Helm install"]
+  stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
   stack -->|runs browser checks and daily stub-based journeys| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
@@ -41,6 +41,7 @@ flowchart LR
 - Keep one extra computer place so a saved-data repeat can start a new shared assistant.
 - Measure reply arrival, process memory and open files during live-view checks.
 - Keep up to three separate development stacks on one machine.
+- Put the package gateway Service IP in the computer settings before a chat turn starts.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
 
 ## Processes it handles

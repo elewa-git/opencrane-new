@@ -5,8 +5,10 @@ images:
   postgres: ""
   nats: ""
   openfga: ""
+  computer: ""
 secrets:
   runtime: ""
+  runtimeFiles: ""
   postgres: ""
   nats: ""
   openfga: ""

@@ -286,3 +286,139 @@ Logs: `/tmp/p5-1b-changed-tests-final-1.log`,
 `/tmp/p5-1b-licence-tests-final-2.log`,
 `/tmp/p5-1b-typecheck-2.log`, `/tmp/p5-1b-events.log`,
 `/tmp/p5-1b-changelog.log` and `/tmp/p5-1b-lint-2.log`.
+
+## 18 October 2026: local chat turn
+
+This follow-up used branch `work/p5-1c` and claimed secondary slot 1. The final
+fresh namespace was `opencrane-package-1`, UID
+`146c87ae-4a0d-4873-8972-8e7100167327`. The final application image was
+published and installed at
+`sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a`.
+Its model gateway used only the local stub. A fresh wrapping key was generated in
+the claimed slot and passed to both chat processes through a Kubernetes Secret.
+The package's private volume held only wrapped conversation keys. Sign-in and
+model files also came from the claimed slot as Kubernetes secrets. No secret
+value was written to this receipt or to Helm values.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Failing-first chart check | FAIL | The previous chart had no chat key volume, model process or computer template. The new render test failed before these were added. |
+| First browser attempt | FAIL | Sign-in passed, but `/api/chat` returned HTTP 403 because the separate test owner's sign-in subject was not linked to the event-backed owner member. |
+| Final install | PASS | PostgreSQL, NATS, OpenFGA, web, server and eight workers reached Ready. The bootstrap Job created the joined owner and its OpenFGA grant. The model process and computer template ran in the same claimed namespace. |
+| Browser chat, 1280px | PASS | A signed-in owner sent “Say hello briefly.” The browser showed “Hello from your computer.” and Done. [Screenshot](p5-1-live/chat-1280.png). |
+| Browser chat, 390px | PASS | The same browser journey completed at mobile width. [Screenshot](p5-1-live/chat-390.png). |
+| Stub-only model calls | PASS | The local stub counted exactly two model requests after the two browser turns. The package checks that its upstream is the local stub before Helm applies resources. |
+| Chat key custody | PASS | The runtime Kubernetes Secret held a generated 32-byte wrapping key. Both chat processes used it. Two new key files on the private volume were 60-byte encrypted records. A wrong wrapping key failed the focused test. |
+| Private network | PASS | All five services were ClusterIP. There was no Ingress. A throwaway process on Docker's bridge could not reach the loopback-only forward on port 25106. |
+| Image licences | PASS | A fresh Syft scan matched all 454 reviewed application components. The added agentgateway binary has a checksum and Apache-2.0 review. The pinned computer image points to its existing 385-component licence review, checked by hash. The other image reviews still passed. |
+| Cleanup and isolation | PASS | Cleanup removed the computer claim before the warm pool, then removed the namespace and released slot 1. The owner namespace UIDs, every existing container name and ID, and loopback listener on 44200 matched the snapshots taken before installation. The package forward on 25106 was gone. Another worktree added slot 2 containers during this check; this install did not touch them. |
+| Existing person's own Zitadel login | NOT RUN | The available browser credential belongs to a separate Dev test owner linked to the `jente@elewa.ke` member. No credential path was available for the existing person's Zitadel account. That account was not changed. |
+
+The chart includes the same pinned computer image already reviewed in
+`apps/computer/licences.json`. The package's image inventory checks that file's
+digest and the computer image digest before installation. The final signed-in
+pages were also captured at [1280px](p5-1-live/signed-in-1280.png) and
+[390px](p5-1-live/signed-in-390.png).
+
+### Final local checks
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Key and chat tests | PASS | Two runs each passed 10 focused tests, including wrapped key storage, decryption with the same Secret, refusal with another Secret, and existing chat commands. |
+| Package chart and licence tests | PASS | Two runs each passed three chart tests and seven licence refusal tests. A fresh Syft scan of the final image matched all 454 reviewed application components. |
+| Package ownership and cleanup tests | PASS | Two runs each passed eight cases that check ownership, interrupted installs, safe cleanup and Kubernetes failures. |
+| Full claim test file after live cleanup | PARTIAL | Several fixture cases expected slot 2 to be free. Another worktree had started that slot, so these failed at setup. The full file passed twice before the wrapping-key change, which did not alter claim behaviour. |
+| Event catalogue, Knip and changelog | PASS | `check:events` checked 143 events; `lint:unused` and `lint:changelog` exited 0. |
+| Typecheck | PASS | `npm run typecheck` completed for all workspaces and the package TypeScript project. |
+| Lint | PASS | `npm run lint` completed with no errors. ESLint reported 20 existing function-length warnings outside this change. |
+| Full root suite | NOT RUN | This follow-up was instructed not to run it. |
+
+## 18 October 2026: private computer network and key files
+
+This fix round rebased only this branch's two earlier commits onto
+`origin/work/p5-1b` at `74b84388`. The rebase finished and that parent is an
+ancestor of this branch. I claimed secondary slot 1 with `claim.sh`. The
+final fresh namespace was `opencrane-package-1`, UID
+`b1300b25-e1b0-49d2-b8f0-3c621de6390d`. The application and computer image
+digests did not change. The model still used the local stub.
+
+The new chart test first failed on the DNS allowance and missing file mount.
+A later test first failed when the bootstrap Job did not mount the file Secret.
+Another first failed on the workers' old certificate paths. The final mode
+test first failed because it needed a private copy of the mounted files.
+Each test was committed before its fix.
+
+| Live check | Result | Observation |
+| --- | --- | --- |
+| First install attempt | FAIL | The bootstrap Job could not read its NATS files because its file Secret was not mounted. That namespace was removed. |
+| Second install attempt | FAIL | Bootstrap completed, but the workers still used old NATS file paths. That namespace was removed. |
+| Final fresh install | PASS | Bootstrap completed and all eleven Deployments reached Ready in a newly prepared namespace. |
+| Computer network | PASS | The live policy permits one egress rule: TCP 43000 to the server Pod. It permits no port 53. The computer ConfigMap contained `http://10.43.70.32:43000`, the live server Service ClusterIP. |
+| Wrapping key files | PASS | The text runtime Secret had no key file entry. The separate file Secret held a fresh 32-byte key. The server key and worker NATS file were owned by user 1000 with actual mode 0400. Application mounts were read-only. A test key containing a NUL byte survived `kubectl` Secret rendering. No key value was logged. |
+| Browser chat at 1280px | PASS | The signed-in test owner sent “Say hello briefly.” The stub reply and Done appeared. [Capture](p5-1-live/chat-1280.png). |
+| Browser chat at 390px | PASS | The same turn completed at mobile width. [Capture](p5-1-live/chat-390.png). |
+| Licence check | PASS | All 88 server Debian name/version pairs matched the reviewed Bookworm main list. The digest-bound server and web review matched the current image, and the computer kept its separate 385-component inventory check. |
+| Cleanup | PASS | The package namespace and forward were removed, slot 1 reported free, and both owner namespace UIDs and all pre-existing container names and IDs matched the earlier snapshot. |
+| Existing person's own Zitadel login | NOT RUN | The browser used the separate development test owner. |
+| Full root suite | NOT RUN | This fix round was instructed to run changed tests only. |
+
+The final signed-in pages were also captured at
+[1280px](p5-1-live/signed-in-1280.png) and
+[390px](p5-1-live/signed-in-390.png). No Secret value was put in Helm values,
+this receipt or the captures.
+
+### Final source checks
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Changed Node tests | PASS | The 34 claim, chart and package preflight tests passed twice with `nice -n 10` and the supplied `PG_TEST_URL`. |
+| Licence tests | PASS | All 14 Python tests passed twice. `check:package-licences` accepted all six pinned image roles. |
+| Wrapped key tests | PASS | The two tests passed twice with a throwaway PostgreSQL container and `PG_TEST_URL`; the container and volume were removed. |
+| Typecheck | PASS | All workspaces and the package TypeScript project completed. |
+| Event catalogue | PASS | All 143 event types agreed. |
+| Knip | PASS | The command exited 0 with two configuration hints. |
+| Changelog check | PASS | The branch fragment passed. |
+| Full lint | PASS | The command completed, including package licences. ESLint reported 20 existing warnings and no errors. |
+
+## 18 October 2026: rebase onto main
+
+This check rebased the eight package chat commits onto `origin/main` at
+`e3467aa2c`. Git skipped five older licence and package commits because their
+changes were already on main through the earlier package merge. The completed
+rebase has no unresolved files. The diff from main contains the chat runtime,
+key files, private computer network, package checks, documentation and captures.
+The server and dev-stack README diagrams keep the newer main text and the chat
+key and gateway details. Both diagrams still have at most eight nodes.
+
+| Source check | Result | Observation |
+| --- | --- | --- |
+| Full lint | PASS | `nice -n 10 npm run lint` completed, including the exact image licence checks. |
+| Typecheck | PASS | Every workspace and the package TypeScript project completed. |
+| Event catalogue | PASS | All 145 event types agree. |
+| Knip and changelog | PASS | Both separate commands exited 0. |
+| Package and dev-stack Node tests | PASS | Two runs passed all 47 cases each, including the preflight checks. |
+| Package licence tests | PASS | Two runs passed all 14 cases each. |
+| Wrapping-key tests | PASS | Two runs passed both cases each with `PG_TEST_URL` set. |
+| Full root suite | PARTIAL | A two-worker run reported two gateway test failures, then was stopped after 45 minutes without a full summary. It had a throwaway PostgreSQL database through `PG_TEST_URL`; the container and volume were removed. |
+| Isolated gateway cases | PASS | The two reported failures passed alone: five matching cases passed in 21 seconds. |
+
+The partial root log is `/tmp/p5-1c-root-suite.log`. It reports a current-claim
+readiness timeout and an Astra daily-cap case. Neither is counted as a passing
+full-suite run. That root run used main before its later chat cleanup commit.
+The focused Node, licence and wrapping-key tests passed twice again after the
+final rebase. The passing focused logs are under `/tmp/p5-1c-final-`.
+
+### Fresh package attempt
+
+I claimed secondary slot 1 and created its package namespace. The secret setup
+stopped before creating runtime Secrets because the configured Zitadel management
+token file was absent. No Helm release or application Pod was started. The
+namespace and slot were then removed through the package cleanup commands.
+
+| Live check | Result | Observation |
+| --- | --- | --- |
+| Slot ownership | PASS | `claim.sh` selected slot 1, and package preparation created only its owned namespace. |
+| Private secret preparation | FAIL | Development sign-in setup could not find its configured management token file. No runtime Secret was created. |
+| Fresh Helm install | NOT RUN | Secret preparation stopped before `package-up`. |
+| Browser chat at 1280px and 390px | NOT RUN | No package was installed, so the existing captures were not replaced. |
+| Cleanup and owner isolation | PASS | Slot 1 reported free, its package namespace was absent, and the owner namespace UID and existing owner container IDs matched the earlier snapshot. |

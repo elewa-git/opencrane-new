@@ -12,6 +12,9 @@ RUN rm -rf /app/apps/computer /app/node_modules/@opencrane/computer \
       /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 ADD --checksum=sha256:65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8 \
   https://dl.k8s.io/release/v1.37.1/bin/linux/amd64/kubectl /usr/local/bin/kubectl
-RUN chmod 755 /usr/local/bin/kubectl
+ADD --checksum=sha256:daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b \
+  https://github.com/agentgateway/agentgateway/releases/download/v1.5.0/agentgateway-linux-amd64 \
+  /usr/local/bin/agentgateway
+RUN chmod 755 /usr/local/bin/kubectl /usr/local/bin/agentgateway
 USER node
 CMD ["node", "--experimental-strip-types", "apps/server/src/main.ts"]

@@ -145,8 +145,12 @@ with readers stopped. Neither path runs reactions. Test:
 `conversationKeys(directory)` is the existing dev encrypted-content adapter shared
 by the chat server and approval decision process. It stores per-conversation keys
 with private filesystem permissions, exposes only key references in events, and
-refuses decryption with a different silo/conversation binding. Production secret
-custody remains a deployment qualification responsibility.
+refuses decryption with a different silo/conversation binding. A packaged install
+passes `CONVERSATION_WRAP_KEY_FILE` as the optional second argument. That file is
+a 32-byte Kubernetes Secret generated in the claimed slot. The adapter uses
+AES-256-GCM to wrap each new conversation key before saving it on the package's
+private volume. Both processes use the same Secret. A missing, changed or damaged
+wrapping key stops decryption; rotating it requires rewrapping existing keys.
 
 The members worker also maintains the flat-group view (`groups`, `group_members`,
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
