@@ -88,13 +88,22 @@ for (const [reason, change] of ownerCases) {
   });
 }
 
+function assertRefusal(operation: () => void, reason: string) {
+  function exactReason(error: unknown) {
+    assert(error instanceof assert.AssertionError);
+    assert.equal(error.message.split('\n')[0], reason);
+    return true;
+  }
+  assert.throws(operation, exactReason);
+}
+
 test('internally consistent foreign issuer fails the trusted issuer comparison', () => {
   const foreignOwner = { ...owner, issuer: 'https://other.example',
     identityRows: [{ ...owner.identityRows[0]!, issuer: 'https://other.example' }] };
   function acceptForeignIssuer() {
     checkOwner(foreignOwner);
   }
-  assert.throws(acceptForeignIssuer, { message: 'Untrusted owner issuer' });
+  assertRefusal(acceptForeignIssuer, 'Untrusted owner issuer');
 });
 
 test('internally consistent foreign subject fails the expected subject comparison', () => {
@@ -107,7 +116,7 @@ test('internally consistent foreign subject fails the expected subject compariso
   function acceptForeignSubject() {
     checkOwner(foreignOwner);
   }
-  assert.throws(acceptForeignSubject, { message: 'Wrong owner subject' });
+  assertRefusal(acceptForeignSubject, 'Wrong owner subject');
 });
 
 const memoryTables = [
@@ -119,7 +128,7 @@ for (const table of memoryTables) {
     function acceptRetainedMemory() {
       checkFresh({ ...fixture, rowCounts: { ...fixture.rowCounts, [table]: 1 } });
     }
-    assert.throws(acceptRetainedMemory, { message: `${table} contains old silo data` });
+    assertRefusal(acceptRetainedMemory, `${table} contains old silo data`);
   });
 }
 
@@ -228,7 +237,7 @@ try {
   await runOnce(1, '/private/values.json');
   console.log(JSON.stringify({ completed: true }));
 } catch (error) {
-  console.log(JSON.stringify({ reason: error.message, cause: error.cause?.message }));
+  console.log(JSON.stringify({ reason: error.message.split('\\n')[0], cause: error.cause?.message }));
 }
 `;
   const claimedPvs = { items: [{ spec: {
