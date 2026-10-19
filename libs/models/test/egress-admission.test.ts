@@ -1,3 +1,4 @@
+import { Server } from 'node:net';
 import { once } from 'node:events';
 import { chmod, copyFile, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -210,19 +211,28 @@ async function refusesAfterDecision(failure: string) {
 }
 it.each(['audit', 'lost-reply', 'budget', 'unrelated'])('checks %s between saved decision and relay registration', refusesAfterDecision);
 
-async function refusesFailedRegistration() {
+async function refusesFailedRegistration(failure: string) {
   const test = await setup();
-  function unavailableRelay(): Promise<string> {
-    return Promise.reject(new Error('private-canary'));
+  function unavailableRelay(): never {
+    throw new Error('private-canary');
   }
-  const registration = vi.spyOn(test.gateway.registry, 'register');
+  const registration = failure === 'listener'
+    ? vi.spyOn(Server.prototype, 'listen') : vi.spyOn(test.gateway.registry, 'register');
   registration.mockImplementation(unavailableRelay);
   onTestFinished(registration.mockRestore.bind(registration));
   expect(await test.tunnel(await test.token())).toBe(403);
   expect(test.gateway.connected()).toBe(0);
   expect(test.facts.actor.state.dispatches).toHaveLength(1);
+  if (failure === 'listener') {
+    await test.gateway.runtime.flush();
+    const dispatch = test.facts.actor.state.dispatches[0]!;
+    const rows = await history(test.facts.nats.store, `egress-${dispatch.callId}`, 'test');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.event.data).toMatchObject({ relay: { reason: 'failed' } });
+  }
 }
-it('opens no connection when admitted relay registration fails', refusesFailedRegistration);
+it.each(['registry', 'listener'])(
+  'opens no connection when admitted relay registration fails at %s', refusesFailedRegistration);
 
 async function changesDuringDispatchRetry(change: string) {
   const test = await setup();
