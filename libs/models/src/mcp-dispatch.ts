@@ -1,3 +1,4 @@
+import { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-https.ts';
 import { recordToolObservation } from './tool-dispatch.ts';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
@@ -17,9 +18,10 @@ export const mcpDispatchRouteSchema = z.strictObject({
   generation: identifier.optional(),
   revisionHeader: z.literal('x-opencrane-mcp-revision').optional(),
 });
-type Route = z.infer<typeof mcpDispatchRouteSchema>;
+type Route = z.infer<typeof mcpDispatchRouteSchema> & { locator?: string };
 export interface McpDispatchOptions {
   routes: Route[];
+  remoteNetwork?: RemoteNetwork;
   acknowledged?: () => GatewayAcknowledgement | null;
   requireLeader: () => Promise<void>;
   requireCatalogue?: (serverId: string) => void;
@@ -89,7 +91,19 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     if (policy.serverKind === 'hosted' && !builtInMemory) {
       throw new Error('Hosted image admission unavailable');
     }
-    return routeFor(policy.policy.serverId!, policy.policy.connectionId!);
+    function configured(route: Route) {
+      return route.serverId === policy.policy.serverId &&
+        route.connectionId === policy.policy.connectionId;
+    }
+    if (options?.routes.some(configured) || builtInMemory) {
+      return routeFor(policy.policy.serverId!, policy.policy.connectionId!);
+    }
+    if (!policy.gatewayBinding || !policy.locator || policy.serverKind !== 'remote' ||
+        policy.policy.accountMode !== 'none') throw new Error('Remote MCP unavailable');
+    requireRemoteRevision(policy.policy.catalogue?.discoverResult);
+    return { serverId: policy.policy.serverId!, connectionId: policy.policy.connectionId!,
+      upstream: '', locator: policy.locator, generation: String(policy.gatewayBinding.generation),
+      revisionHeader: 'x-opencrane-mcp-revision' as const };
   }
 
   function bindPolicy(policy: Policy) {
@@ -166,6 +180,12 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const route = requireCurrentRoute(permit);
     const remaining = Math.max(0, permit.expiresAt - Date.now());
     const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
+    let target: Awaited<ReturnType<typeof prepareRemote>> | undefined;
+    if (route.locator) {
+      const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
+      const signal = AbortSignal.timeout(duration);
+      target = await prepareRemote(route.locator, options?.remoteNetwork ?? {}, signal);
+    }
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
       acknowledged, deadline);
     const position = await store.head(`mcp-${route.serverId}`, deadline);
@@ -206,7 +226,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     } catch (error) {
-      if (permit.gatewayBinding) {
+      if (permit.gatewayBinding && !route.locator) {
         // Close the saved start before replying. No upstream connection has been opened.
         const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
           evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
@@ -214,6 +234,10 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         await recordToolObservation(actor, observation);
       }
       throw error;
+    }
+    if (target) {
+      await forwardRemote(target, permit, body, res, options?.remoteNetwork ?? {});
+      return;
     }
     forward(route, permit, body, res, memoryContext);
   }
@@ -263,6 +287,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     if (permit.gatewayBinding) {
       requireGatewayAcknowledgement(permit.gatewayBinding, acknowledged);
     }
+    if (permit.route.locator) return permit.route;
     const currentRoute = routeFor(permit.route.serverId, permit.route.connectionId);
     if (JSON.stringify(currentRoute) !== JSON.stringify(permit.route)) {
       throw new Error('MCP backend changed');
@@ -365,4 +390,36 @@ function forward(route: Route, permit: Permit, body: string, res: ServerResponse
   upstream.setTimeout(30_000, timedOut);
   upstream.on('error', failed);
   upstream.end(body);
+}
+
+async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, permit: Permit,
+  raw: string, res: ServerResponse, network: RemoteNetwork) {
+  const controller = new AbortController();
+  function timedOut() { controller.abort(); }
+  const timer = setTimeout(timedOut, 30_000);
+  const headers = { host: target.endpoint.host, 'content-type': 'application/json',
+    accept: 'application/json', 'content-length': String(Buffer.byteLength(raw)),
+    'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
+    'mcp-name': permit.toolName, 'x-opencrane-mcp-revision': permit.schemaDigest };
+  try {
+    const reply = await exchangeRemote(target, raw, headers, network,
+      controller.signal, 1024 * 1024);
+    res.writeHead(200, { 'content-type': reply.contentType });
+    res.end(reply.data);
+  } catch {
+    res.writeHead(controller.signal.aborted ? 504 : 502);
+    res.end();
+  } finally { clearTimeout(timer); }
+}
+
+function requireRemoteRevision(saved: string | undefined) {
+  try {
+    const declaration = z.object({ capabilities: z.object({
+      experimental: z.record(z.string(), z.unknown()),
+    }) }).parse(JSON.parse(saved ?? '{}'));
+    if (Object.hasOwn(declaration.capabilities.experimental, 'io.opencrane/expectedRevision')) {
+      return;
+    }
+  } catch { /* Refuse malformed declarations without exposing their contents. */ }
+  throw new Error('Remote MCP revision unavailable');
 }

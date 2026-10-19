@@ -3290,3 +3290,10 @@ as HTTP 422 with `{"status":"refused","reason":"spending_choice_unavailable"}`.
 No budget event is appended. Lost Owner/Admin access still returns 403.
 The Chromium integration check sends an unknown default payer, checks the fixed
 refusal and retained ceiling, corrects the payer and saves the same typed ceiling.
+
+## Shared remote transport
+
+`integrations/remote.ts` keeps its discovery/list-only `remoteRequest` signature.
+It uses `libs/models/src/remote-https.ts` for DNS checks and pinned TLS, with its existing
+4 MiB discovery reply bound. Published tool calls use the same exchange with the
+[models contract](../../libs/models/README.robot.md#published-remote-https-calls-part-of-45).

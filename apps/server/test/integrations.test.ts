@@ -4,7 +4,7 @@ import { prepareGatewayConfiguration, gatewayConfigurationCurrent, publicationEn
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { installWorker } from '../src/integrations/install-worker.ts';
-import { remoteFixture } from './support/remote-mcp.ts';
+import { remoteFixture } from '@opencrane/models/testing/remote-mcp';
 import { budgets, BudgetActor, readBudget, startDecision, settlementHandler, history, priceTableId } from '@opencrane/models';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';

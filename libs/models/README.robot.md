@@ -2771,3 +2771,25 @@ Existing verifier tests retain both architectures, wrong signer, substitution an
 the admission schema still refuses signature/licence passes with the other checks pending.
 Fresh-install qualification, production scanning, malware/vulnerability checks and startup:
 NOT RUN. No browser, authority, event or API contract is changed.
+
+## Published remote HTTPS calls (Part of #45)
+
+`remote-https.ts` owns DNS checks and the pinned HTTPS exchange shared with discovery.
+Explicit operator and memory routes retain their existing contract. With no operator
+route, a published remote server in account mode `none` uses only its saved locator.
+Its reviewed `discoverResult` must declare
+`capabilities.experimental["io.opencrane/expectedRevision"]`; otherwise it refuses
+before DNS. This declaration promises atomic refusal of a mismatched
+`x-opencrane-mcp-revision` before running a tool. Unsupported servers stay unavailable.
+Remote calls use the saved dated catalogue check, without an in-process watch.
+
+DNS takes at most one second and no longer than the remaining permit/access lifetime,
+before admission or start saving. Every answer must be public. TLS uses the checked
+address, saved hostname, certificate verification and no shared agent. The existing
+last gateway-position read still determines send ordering. Bytes are unchanged.
+Only Host, Content-Type, Accept, Content-Length, MCP version/method/name and the reviewed
+schema digest leave the process. Replies must be HTTP 200 JSON, at most 1 MiB and without
+an MCP session; only Content-Type is forwarded. Errors return fixed 502/504 responses.
+The whole HTTPS exchange has a 30-second deadline and never retries or follows redirects.
+After start saving, remote failures leave the outcome unknown. Authenticated adapter
+observations are deferred to 5b. No events are added. Fresh-install qualification: NOT RUN.

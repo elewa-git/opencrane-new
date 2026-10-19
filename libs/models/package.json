@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./routing": "./src/routing.ts",
-    "./testing": "./test/fixture.ts"
+    "./testing": "./test/fixture.ts",
+    "./testing/remote-mcp": "./test/support/remote-mcp.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
