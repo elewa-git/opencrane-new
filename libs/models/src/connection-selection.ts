@@ -61,7 +61,13 @@ async function facts(store: EventStore, silo: string, selection: Selection) {
   function registered(row: StoredEvent) {
     return row.event.type === 'mcp.server_registered';
   }
+  function replacesCatalogue(row: StoredEvent) {
+    const types = ['mcp.server_registered', 'mcp.server_discovered', 'mcp.tools_changed'];
+    return types.includes(row.event.type);
+  }
   const registration = rows.findLast(registered);
+  const catalogue = rows.findLast(replacesCatalogue);
+  const catalogueSequence = catalogue?.sequence ?? 0;
   const endpoint = z.object({ kind: z.literal('remote'), locator: z.string() });
   const remote = endpoint.safeParse(registration?.event.data);
   const control = `connection-control-${selection.userId}-${selection.serverId}`;
@@ -73,12 +79,14 @@ async function facts(store: EventStore, silo: string, selection: Selection) {
     const profileRows = await history(store, subject, silo, deadline);
     const profile = foldConnection(profileRows);
     positions.set(subject, profile.sequence);
-    available = controlSequence === 0 && policy.published && (policy.reviewRevision ?? 0) > 0 &&
+    available = controlSequence === 0 && policy.published &&
+      (policy.reviewRevision ?? 0) > catalogueSequence &&
       policy.accountMode === 'personal' && policy.connectionId === selection.connectionId &&
       profileMatchesSelection(profile, selection) && remote.success &&
       profile.data?.activation.endpointDigest === digest(remote.data.locator);
   }
-  return { available, positions, expiresAt: Date.parse(policy.expiresAt ?? '') };
+  return { available, positions, connectionId: policy.connectionId,
+    expiresAt: Date.parse(policy.expiresAt ?? '') };
 }
 function profileMatchesSelection(profile: ReturnType<typeof foldConnection>,
   selection: Extract<Selection, { action: 'select' }>) {
@@ -196,6 +204,7 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
     return sameReceipt(original, event);
   }
   if (input.expectedSequence !== (rows.at(-1)?.sequence ?? 0) ||
+      input.connectionId !== checked.connectionId ||
       (input.action === 'select' && !checked.available)) {
     throw new Error('Selection conflict');
   }

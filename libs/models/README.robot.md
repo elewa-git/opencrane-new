@@ -3059,7 +3059,8 @@ Base dependency #523 landed as `e3f593bf6d41ae465e3c49cb43f7444c4120c968`.
 `changeConnectionSelection(store, binding, userId, input)` takes the authenticated user
 separately. Strict input has action (select/clear), serverId, connectionId, changeRef and
 expectedSequence. Select also requires profileId and the checked profileRevision.
-Clear has no profile fields. Owner overrides refuse. The receipt contains only status,
+Clear has no profile fields. Both actions require the current installed connection.
+Select requires a review of the latest tool list. Owner overrides refuse. Receipts contain status,
 sequence and changeRef. Reusing a reference with changed fields conflicts, including after
 broker deduplication expires. Concurrent identical commands recover the original receipt.
 
