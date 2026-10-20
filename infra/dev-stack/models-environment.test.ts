@@ -16,7 +16,11 @@ function checksBothModes() {
 test('models receives shared custody and only legacy mode receives the stub file', checksBothModes);
 
 function realProviderEnvironment() {
-  const inherited = { MODEL_UPSTREAM: 'local', MODEL_KEY_FILE: '/synthetic/private' };
+  const inherited = {
+    MODEL_UPSTREAM: 'local',
+    MODEL_KEY_FILE: '/synthetic/private',
+    DEV_REAL_PROVIDER: '1',
+  };
   for (const managed of [false, true]) {
     const real = modelsEnvironment(inherited, '/private', managed, true);
     assert.equal(Object.hasOwn(real, 'MODEL_UPSTREAM'), false);
@@ -27,6 +31,7 @@ function realProviderEnvironment() {
     assert.equal(Object.hasOwn(stub, 'DEV_REAL_PROVIDER'), false);
   }
   assert.equal(inherited.MODEL_UPSTREAM, 'local');
+  assert.equal(inherited.DEV_REAL_PROVIDER, '1');
 }
 test('real opt-in removes upstream overrides without changing later stub starts',
   realProviderEnvironment);
