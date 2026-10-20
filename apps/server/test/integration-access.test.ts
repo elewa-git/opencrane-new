@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import type { EventEnvelope } from '@opencrane/events';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -339,3 +340,163 @@ async function historyPrecedesCheckAndTargetChangeRefuses() {
 }
 it('reads histories before the short check and refuses a target changed during it',
   historyPrecedesCheckAndTargetChangeRefuses);
+
+
+async function refusesNonAdminBeforeGrantHistory() {
+  const input = await command('team', 'sales');
+  const read = nats.store.readStream.bind(nats.store);
+  const grantReads: string[] = [];
+  nats.store.readStream = async function* observeGrantHistory(stream, from, deadline) {
+    if (stream === subject) {
+      grantReads.push(stream);
+    }
+    yield* read(stream, from, deadline);
+  };
+  try {
+    const response = await post(input, 'bob');
+    expect(response.statusCode).toBe(403);
+    expect(grantReads).toEqual([]);
+    const position = await nats.store.head(subject);
+    expect(position).toBe(input.expectedSequence);
+  } finally {
+    nats.store.readStream = read;
+  }
+}
+it('refuses a non-admin before reading grant history', refusesNonAdminBeforeGrantHistory);
+
+async function createAdmin(actor: string) {
+  const data = { memberId: actor, role: 'admin', email: `${actor}@example.test`,
+    displayName: actor, invitationId: `invite-${actor}` };
+  await append(`member-${actor}`, 'member.joined', data);
+}
+
+async function demoteAdmin(actor: string) {
+  const data = { memberId: actor, previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
+  await append(`member-${actor}`, 'member.role_changed', data);
+}
+
+async function refusesDemotionAfterPreparation() {
+  const actor = 'preparation-admin';
+  await createAdmin(actor);
+  const input = await command('assistant', 'helper');
+  const read = nats.store.readStream.bind(nats.store);
+  let demoted = false;
+  nats.store.readStream = async function* demoteAfterTargetHistory(stream, from, deadline) {
+    yield* read(stream, from, deadline);
+    if (stream === 'assistant-helper' && !demoted) {
+      demoted = true;
+      await demoteAdmin(actor);
+    }
+  };
+  try {
+    const response = await post(input, actor);
+    expect(demoted).toBe(true);
+    expect(response.statusCode).toBe(403);
+    const position = await nats.store.head(subject);
+    expect(position).toBe(input.expectedSequence);
+  } finally {
+    nats.store.readStream = read;
+  }
+}
+it('renews admin authority after target preparation', refusesDemotionAfterPreparation);
+
+async function refusesDemotionDuringRepeatHistory() {
+  const actor = 'repeat-admin';
+  await createAdmin(actor);
+  const input = await command('team', 'sales');
+  const saved = await post(input, actor);
+  expect(saved.statusCode).toBe(200);
+  const originalPosition = await nats.store.head(subject);
+  const read = nats.store.readStream.bind(nats.store);
+  let demoted = false;
+  nats.store.readStream = async function* demoteAfterGrantHistory(stream, from, deadline) {
+    yield* read(stream, from, deadline);
+    if (stream === subject && !demoted) {
+      demoted = true;
+      await demoteAdmin(actor);
+    }
+  };
+  try {
+    const response = await post(input, actor);
+    expect(demoted).toBe(true);
+    expect(response.statusCode).toBe(403);
+    const position = await nats.store.head(subject);
+    expect(position).toBe(originalPosition);
+  } finally {
+    nats.store.readStream = read;
+  }
+}
+it('renews admin authority before returning a repeated command receipt',
+  refusesDemotionDuringRepeatHistory);
+
+async function refusesDemotionDuringPositionChecks() {
+  const actor = 'position-admin';
+  await createAdmin(actor);
+  const input = await command('assistant', 'helper');
+  const head = nats.store.head.bind(nats.store);
+  let demoted = false;
+  nats.store.head = async function demoteDuringPositionCheck(stream, deadline) {
+    const position = await head(stream, deadline);
+    if (stream === 'mcp-fixture' && deadline !== undefined && !demoted) {
+      demoted = true;
+      await demoteAdmin(actor);
+    }
+    return position;
+  };
+  try {
+    const response = await post(input, actor);
+    expect(demoted).toBe(true);
+    expect(response.statusCode).toBe(403);
+    const position = await head(subject);
+    expect(position).toBe(input.expectedSequence);
+  } finally {
+    nats.store.head = head;
+  }
+}
+it('refuses caller demotion between target position checks and append',
+  refusesDemotionDuringPositionChecks);
+
+type ReceiptIdentity = Partial<Pick<EventEnvelope, 'silo' | 'principal'>>;
+const receiptIdentities: [string, ReceiptIdentity][] = [
+  ['silo', { silo: 'other' }],
+  ['principal kind', { principal: { kind: 'agent', id: 'owner' } }],
+  ['principal id', { principal: { kind: 'human', id: 'admin' } }],
+];
+
+async function refusesChangedReceiptIdentity(_name: string, identity: ReceiptIdentity) {
+  const serverId = `receipt-${++counter}`;
+  const serverData = { serverId, kind: 'remote',
+    locator: 'https://fixture.example.test/mcp', registeredBy: 'owner' };
+  await append(`mcp-${serverId}`, 'mcp.server_registered', serverData);
+  const prepared = await command('team', 'sales');
+  const input = { ...prepared, expectedSequence: 0 };
+  const url = path.replace('fixture', serverId);
+  const receiptSubject = grantStream('mcp_server', serverId);
+  const appendCommand = nats.store.append.bind(nats.store);
+  nats.store.append = async function appendWithChangedIdentity(command) {
+    const changedEvent = { ...command.event, ...identity };
+    const changedCommand = { ...command, event: changedEvent };
+    return appendCommand(changedCommand);
+  };
+  try {
+    const response = await post(input, 'owner', 'https://app.example.test', url);
+    expect(response.statusCode).toBe(409);
+    const rows = await history(nats.store, receiptSubject, identity.silo ?? 'acme');
+    expect(rows).toHaveLength(1);
+    const original = rows[0]!.event;
+    expect(original).toMatchObject(identity);
+    expect(original.commandId).toBe(input.commandId);
+    expect(original.subject).toBe(receiptSubject);
+    expect(original.type).toBe('grant.given');
+    const expectedData = { resourceType: 'mcp_server', resourceId: serverId,
+      granteeId: 'sales', granteeKind: 'team', grantedBy: 'owner' };
+    expect(original.data).toEqual(expectedData);
+    const expectedPrincipal = identity.principal ?? { kind: 'human', id: 'owner' };
+    expect(original.principal).toEqual(expectedPrincipal);
+    expect(original.silo).toBe(identity.silo ?? 'acme');
+  } finally {
+    nats.store.append = appendCommand;
+  }
+}
+it.each(receiptIdentities)('refuses an original receipt with a different %s only',
+  refusesChangedReceiptIdentity);
