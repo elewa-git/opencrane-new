@@ -296,3 +296,9 @@ leaves, an unknown result keeps its hold until usage or the existing settlement
 process resolves it. Settlement uses the original payer and tariff.
 Switch-off and retirement remain unavailable. The switch-on command itself never
 reads a key or calls a provider.
+
+Secondary development stacks also support an explicit real-provider opt-in through
+this same sequence. They omit the upstream override and use shared custody after
+restart. Default starts and the nightly retain their local stand-in. See the
+[real reply receipt](../process/demo-real-model/receipt.md) for partial live results;
+this does not qualify the remaining Stop and fresh-install proof.

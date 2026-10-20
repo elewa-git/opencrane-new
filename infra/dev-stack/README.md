@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|checks provider setup, shared budgets and paged history| apps
+  stack -->|checks provider setup and optional real replies| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -41,6 +41,7 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
 - Connect and test that provider as the Owner before a fresh stack starts its chat checks.
+- Optionally use a real OpenAI provider on a spare stack, with a separate paid chat check.
 - Run browser checks against real local services. The approval journey is currently skipped.
 - Check group chats from the To line, participant access, direct chats, shared assistants and
   provider key saving in a fresh stack.
@@ -59,7 +60,10 @@ and waits for the first default to be recorded. It then explicitly selects that 
 and asks to switch on. When accepted, models restarts with that saved
 credential before any chat check. A refusal stops startup. Free reachability checks
 need no spending settlement. Paid tests and other sends still need confirmed outcomes.
-Later starts read the recorded mode again.
+Later starts read the recorded mode again. An explicit real-provider start reads a private
+credential file only during setup and saves it through the same product API. Real mode
+uses a separate check for streamed answers, Stop, a later member and a supplier PDF.
+Changing an existing stack between real and local providers requires a fresh start.
 
 The models process gets a separate control port for checking loaded configuration.
 The stack never forwards it. The approval journey is skipped while publication

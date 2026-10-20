@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { setupProvider } from './provider-setup.ts';
 
 async function recordsSetup() {
@@ -23,6 +27,8 @@ async function recordsSetup() {
       steps.push(step);
       if (step === 'create') {
         assert.equal(input.provider, 'openai');
+        assert.equal(input.providerId, 'dev-openai');
+        assert.equal(input.name, 'OpenAI demo');
         assert.equal(input.expectedRevision, 0);
         assert.equal(Object.hasOwn(input, 'upstream'), false);
       }
@@ -55,7 +61,7 @@ async function recordsSetup() {
     const address = server.address();
     assert(address && typeof address !== 'string');
     const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
-      cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
+      cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value', real: true };
     try {
       if (refusal === -1) await setupProvider(options);
       else {
@@ -84,7 +90,10 @@ async function recordsSetup() {
 }
 test('provider setup uses ordered authenticated product calls and stops at each refusal', recordsSetup);
 
-async function waitsForSeededDefault() {
+async function waitsForSeededDefault(loseReply = false, absent = false) {
+  let saves = 0;
+  let savedCommand = '';
+  let recovered = false;
   let bindingReads = 0;
   let selections = 0;
   async function handle(request: import('node:http').IncomingMessage,
@@ -93,6 +102,22 @@ async function waitsForSeededDefault() {
     for await (const chunk of request) contents += String(chunk);
     const input = contents ? JSON.parse(contents) : {};
     response.setHeader('content-type', 'application/json');
+    if (request.method === 'POST' && request.url?.endsWith('/key')) {
+      saves++;
+      savedCommand = input.commandId;
+      if (loseReply) {
+        request.socket.destroy();
+        return;
+      }
+    }
+    if (savedCommand && request.url?.endsWith(`/changes/${savedCommand}`)) {
+      recovered = true;
+      if (absent) {
+        response.writeHead(404);
+        response.end('sensitive-value /private/location');
+        return;
+      }
+    }
     const isBindings = request.url === '/api/org/providers/dev-stub/bindings';
     if (isBindings && request.method === 'GET') {
       bindingReads++;
@@ -110,7 +135,7 @@ async function waitsForSeededDefault() {
         return;
       }
     }
-    const result = { status: 'appended', revision: 3, sequence: 6,
+    const result = { status: 'appended', operation: 'provider.key_saved', revision: 3, sequence: 6,
       expectedProviderSequence: 5, priceTableId: 'price', reservedCents: 1,
       projection: { content: 'current', iam: 'current' }, outcome: 'pass' };
     response.end(JSON.stringify(result));
@@ -123,7 +148,16 @@ async function waitsForSeededDefault() {
   const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
     cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
   try {
+    if (absent) {
+      async function run() { await setupProvider(options); }
+      await assert.rejects(run, { message: 'Provider setup save: 404' });
+      assert.equal(saves, 1);
+      assert.equal(selections, 0);
+      return;
+    }
     await setupProvider(options);
+    assert(recovered, 'Read the original save command');
+    assert.equal(saves, 1, 'An unknown write is never sent twice');
     assert.equal(bindingReads, 2);
     assert.equal(selections, 1, 'Wait for the scheduled binding before the single owner selection');
   } finally {
@@ -133,8 +167,19 @@ async function waitsForSeededDefault() {
     await closed;
   }
 }
-test('waits for the first provider binding before explicitly selecting the default',
-  waitsForSeededDefault);
+function seededDefaultTest() {
+  return waitsForSeededDefault();
+}
+function lostReplyTest() {
+  return waitsForSeededDefault(true);
+}
+function absentReceiptTest() {
+  return waitsForSeededDefault(true, true);
+}
+
+test('waits for the first provider binding before explicitly selecting the default', seededDefaultTest);
+test('a lost save reply is recovered by reading its original receipt', lostReplyTest);
+test('an absent receipt after a lost response never repeats the unknown write', absentReceiptTest);
 
 async function refusesUnsafeReplies() {
   for (const failure of ['redirect', 'transport', 'json']) {
@@ -171,7 +216,7 @@ async function refusesUnsafeReplies() {
     }
     try {
       await assert.rejects(run, safeError);
-      assert.equal(requests, 1, 'A failed setup must neither follow a redirect nor continue');
+      assert.equal(requests, 2, 'A lost reply permits only the original receipt GET');
     } finally {
       server.closeAllConnections();
       const closed = once(server, 'close');
@@ -181,3 +226,31 @@ async function refusesUnsafeReplies() {
   }
 }
 test('setup refuses redirects and sanitises transport and JSON errors', refusesUnsafeReplies);
+
+async function refusesMissingCredentials() {
+  const folder = await mkdtemp(`${tmpdir()}/provider-input-`);
+  try {
+    for (const contents of [undefined, '', '  \n']) {
+      if (contents !== undefined) await writeFile(`${folder}/synthetic-canary`, contents);
+      const script = `
+        import { setupDevProvider } from './infra/dev-stack/provider-setup.ts';
+        try { await setupDevProvider({}, process.argv[1]); }
+        catch (error) { console.log(error.message); }
+      `;
+      // Isolate all setup files, including when a regression ignores the supplied path.
+      const env = { ...process.env, DEV_STACK_ID: 'owner', DEV_STACK_DIR: folder };
+      const args = ['--experimental-strip-types', '--input-type=module', '-e', script,
+        `${folder}/synthetic-canary`];
+      const result = await promisify(execFile)(process.execPath, args, { env });
+      assert.equal(result.stdout.trim(), 'Provider setup preparation: unavailable');
+      assert.equal(result.stderr, '');
+      const files = await readdir(folder);
+      assert.equal(files.includes('model-managed-stub'), false);
+
+    }
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+test('private setup refuses missing and empty files without disclosing their locations',
+  refusesMissingCredentials);

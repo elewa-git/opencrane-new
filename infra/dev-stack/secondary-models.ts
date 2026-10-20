@@ -27,5 +27,5 @@ for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
   for (const server of servers) server.close();
   for (const socket of sockets) socket.destroy();
 });
-await import('./model-stub.ts');
+if (process.env['DEV_REAL_PROVIDER'] !== '1') await import('./model-stub.ts');
 await import('../../apps/server/src/models-main.ts');

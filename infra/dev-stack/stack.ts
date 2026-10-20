@@ -17,7 +17,7 @@ import { connectEventStore } from '@opencrane/event-store';
 import { envelope, managedProviderCallsEnabled } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
-import { modelsEnvironment } from './models-environment.ts';
+import { checkProviderMode, modelsEnvironment } from './models-environment.ts';
 import { setupDevProvider } from './provider-setup.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
 import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
@@ -311,6 +311,12 @@ async function removeComputers() {
 }
 async function up(fresh: boolean) {
   const firstStart = fresh || !await exists(`${directory}/settings.env`);
+  const credentialFile = process.env['DEV_REAL_PROVIDER_FILE'];
+  const real = credentialFile !== undefined;
+  if (real && (!secondary || !credentialFile || process.env['DEV_OWNER_BOOTSTRAP'] === '0')) {
+    throw new Error('Real provider setup requires a secondary with the dev Owner');
+  }
+  if (!firstStart) checkProviderMode(await readEnv('settings'), real);
   const tail = secondary ? { Self: { DNSName: '', TailscaleIPs: [] } } : JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
   const origin = secondary ? localOrigin : `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-zitadel-${process.getuid!()}.lock`,
@@ -333,6 +339,8 @@ async function up(fresh: boolean) {
     if (secondary) await writeEnv('models', {});
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
+  if (real) settings['DEV_REAL_PROVIDER'] = '1';
+  await writeEnv('settings', settings);
   // Create custody before Docker can create this mount as root.
   try {
     await mkdir(`${directory}/provider-secrets`, { recursive: true, mode: 0o700 });
@@ -359,7 +367,7 @@ async function up(fresh: boolean) {
   await start('minio-tokens', ['--experimental-strip-types', 'infra/dev-stack/minio-tokens.ts'], { DEV_STACK_DIR: directory });
   await objects.setBucketLifecycle('quarantine', { Rule: [{ ID: 'abandoned-uploads', Status: 'Enabled', Filter: { Prefix: '' }, Expiration: { Days: 1 } }] });
   await run('npm', ['run', 'provision'], { ...base, ...await readEnv('command') });
-  if (secondary) {
+  if (secondary && !real) {
     // Stop keeps reservations whose outcome is unknown, so leave room for each stub journey.
     const events = await connectEventStore(await readEnv('command'));
     try {
@@ -383,7 +391,8 @@ async function up(fresh: boolean) {
     // enough room for both fresh and repeat runs.
     if (!await events.store.head(subject)) {
       const event = envelope(silo, subject, 'budget.ceiling_set', {
-        scope: 'global', dailyCeilingCents: 4000, ceilingCents: 20000, setBy: 'dev-stack-stub',
+        scope: 'global', dailyCeilingCents: real ? 2000 : 4000,
+        ceilingCents: real ? 2000 : 20000, setBy: 'dev-stack',
       });
       if ((await events.store.append({ event, expectedSequence: 0 })).status !== 'appended') throw new Error('Stub budget seed failed');
     }
@@ -452,7 +461,7 @@ async function up(fresh: boolean) {
     MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
   };
   async function startModels() {
-    const models = modelsEnvironment(modelSettings, directory, managed);
+    const models = modelsEnvironment(modelSettings, directory, managed, real);
     if (secondary) {
       const database = new URL(models['DATABASE_URL']!);
       database.hostname = 'postgres';
@@ -506,7 +515,7 @@ async function up(fresh: boolean) {
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');
   if (!tokenBootstrap && !managed) {
     if (!firstStart) throw new Error('Provider setup switch-on: required');
-    await setupDevProvider(settings);
+    await setupDevProvider(settings, credentialFile);
     if (secondary) await compose('stop', 'models');
     else await stopProcesses(['models']);
     managed = true;
@@ -549,8 +558,9 @@ async function up(fresh: boolean) {
   console.log(`Stack ready: ${origin}/org/integrations (Zitadel sign-in)`);
 }
 async function journey() {
+  const settings = await readEnv('settings');
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
-    { ...base, DEV_STACK_DIR: directory,
+    { ...base, DEV_STACK_DIR: directory, DEV_REAL_PROVIDER: settings['DEV_REAL_PROVIDER'] ?? '0',
       ...(process.env['P4_JOURNEY_ATTEMPT']
         ? { P4_JOURNEY_ATTEMPT: process.env['P4_JOURNEY_ATTEMPT'] } : {}) }, 1_200_000);
   console.log(output.trim());

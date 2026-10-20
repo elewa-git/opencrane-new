@@ -20,6 +20,7 @@ async function preservesFailureBeforeCleanup() {
     `${scripts}/sanitise-evidence.mjs`);
   await writeFile(`${scripts}/claim.sh`, '#!/bin/sh\necho 1\n', { mode: 0o755 });
   const start = `#!/bin/sh
+if [ -n "\${DEV_REAL_PROVIDER_FILE:-}" ]; then exit 2; fi
 mkdir -p "${slot}"
 printf 'Provider setup create: unavailable\\n' > "${slot}/failure.log"
 printf 'See server.log\\n' > "${slot}/last-error.log"
@@ -30,9 +31,19 @@ exit 1
 `;
   await writeFile(`${scripts}/up.sh`, start, { mode: 0o755 });
   await writeFile(`${scripts}/down.sh`, `#!/bin/sh\nrm -rf "${slot}"\n`, { mode: 0o755 });
+  await writeFile(`${home}/model-key`, 'disposable-model-key\n');
+  await writeFile(`${home}/zitadel-key`, 'disposable-zitadel-key\n');
+  const environment = {
+    ...process.env,
+    HOME: home,
+    DEV_REAL_PROVIDER_FILE: '/synthetic-canary',
+    MODEL_KEY_FILE: `${home}/model-key`,
+    ZITADEL_KEY_FILE: `${home}/zitadel-key`,
+  };
+  const options = { env: environment };
 
   try {
-    await assert.rejects(exec(`${scripts}/daily-fresh.sh`, { env: { ...process.env, HOME: home } }));
+    await assert.rejects(exec(`${scripts}/daily-fresh.sh`, options));
     const ledger = `${home}/.opencrane/daily-fresh`;
     const entries = await readdir(ledger);
     const evidence = entries.find((entry) => entry !== 'ledger.md');
@@ -103,10 +114,15 @@ async function sanitisesRetainedLogs(withhold = false) {
   for (const name of ['failure.log', 'last-error.log', 'server.log']) {
     await writeFile(`${slot}/${name}`, content);
   }
-  const environment = { ...process.env, HOME: home,
-    MODEL_KEY_FILE: `${home}/model-key`, ZITADEL_KEY_FILE: `${home}/zitadel-key` };
+  const environment = {
+    ...process.env,
+    HOME: home,
+    MODEL_KEY_FILE: `${home}/model-key`,
+    ZITADEL_KEY_FILE: `${home}/zitadel-key`,
+  };
+  const options = { env: environment };
   try {
-    await assert.rejects(exec(`${scripts}/daily-fresh.sh`, { env: environment }));
+    await assert.rejects(exec(`${scripts}/daily-fresh.sh`, options));
     const ledger = `${home}/.opencrane/daily-fresh`;
     const entries = await readdir(ledger);
     function isEvidence(entry: string) {

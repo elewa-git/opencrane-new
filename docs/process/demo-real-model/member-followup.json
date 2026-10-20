@@ -1,0 +1,13 @@
+{
+  "sha": "7ed1c0e14aed9bb0f1f96e35080ae4f5f7ebfc58",
+  "outcomes": [
+    {
+      "check": "later member through the default",
+      "result": "PASS"
+    },
+    {
+      "check": "scanned supplier PDF total and delivery date",
+      "result": "PASS"
+    }
+  ]
+}
