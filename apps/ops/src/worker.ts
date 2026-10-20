@@ -193,7 +193,8 @@ try {
           stop.abort();
         }
         // Let dispatch start even while custody is slow. Shutdown waits for the current page.
-        const scanning = scanConnections(commandStore, db.db, custody, logger, stop.signal);
+        const scanning = scanConnections(commandStore, db.db, custody, logger,
+          silo, stop.signal);
         connectionScan = scanning.catch(scanFailed);
       }
       if (memoryDirectory) {

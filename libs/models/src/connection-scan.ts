@@ -9,12 +9,12 @@ const scanIntervalMs = 15 * 60 * 1000;
 /** Check private copies during live maintenance. Keep page details inside this loop. */
 export async function scanConnections(store: EventStore, db: Pick<Db, 'lock'>,
   custody: ReturnType<typeof connectionCustody>, logger: Pick<Logger, 'info'>,
-  signal: AbortSignal, intervalMs = scanIntervalMs): Promise<void> {
+  silo: string, signal: AbortSignal, intervalMs = scanIntervalMs): Promise<void> {
   let continuation: string | undefined;
   let previousUnknown = false;
   async function pass() {
     while (!signal.aborted) {
-      const page = await reconcileConnectionPage(store, db, custody, continuation);
+      const page = await reconcileConnectionPage(store, db, custody, silo, continuation);
       if (page.status === 'unknown') {
         if (previousUnknown) {
           continuation = undefined;

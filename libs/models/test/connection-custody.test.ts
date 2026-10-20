@@ -859,7 +859,7 @@ it('retains material after an invalid saved closure', keepsInvalidClosureProof);
 
 
 async function scan(test: Awaited<ReturnType<typeof candidateFixture>>, continuation?: string) {
-  return reconcileConnectionPage(events.store, test.db, test.store.restart(), continuation);
+  return reconcileConnectionPage(events.store, test.db, test.store.restart(), 'test', continuation);
 }
 async function forgetJournal(test: Awaited<ReturnType<typeof candidateFixture>>) {
   await rm(test.store.directory, { recursive: true, force: true });
@@ -941,7 +941,7 @@ async function scanFailure(failure: string) {
       return page;
     }
     vi.spyOn(custody, 'candidates').mockImplementation(failAfterList);
-    expect(await reconcileConnectionPage(events.store, test.db, custody)).toMatchObject({ deleted: 0 });
+    expect(await reconcileConnectionPage(events.store, test.db, custody, 'test')).toMatchObject({ deleted: 0 });
     expect(test.store.deletes).toBe(0);
     return;
   } else {
@@ -1070,7 +1070,7 @@ async function refusesInvalidRecovery(result: 'status' | 'identity') {
     recovery.mockResolvedValue({ status: 'recovered' });
   }
   const removal = vi.spyOn(custody, 'remove');
-  expect(await reconcileConnectionPage(events.store, test.db, custody)).toMatchObject({ deleted: 0 });
+  expect(await reconcileConnectionPage(events.store, test.db, custody, 'test')).toMatchObject({ deleted: 0 });
   expect(removal).not.toHaveBeenCalled();
 }
 it.each(['status', 'identity'] as const)(
@@ -1363,7 +1363,7 @@ async function refusesUnlistedPage(throws: boolean) {
   }
   const listing = vi.spyOn(custody, 'candidates');
   listing.mockImplementation(unavailable);
-  expect(await reconcileConnectionPage(events.store, test.db, custody)).toEqual({ status: 'unknown' });
+  expect(await reconcileConnectionPage(events.store, test.db, custody, 'test')).toEqual({ status: 'unknown' });
   expect(test.store.deletes).toBe(0);
 }
 it.each([false, true])('retains a failed candidate page (throws: %s)', refusesUnlistedPage);
@@ -1482,7 +1482,7 @@ function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, interva
   }
   const logger = { info };
   const done = scanConnections(events.store, test.db, test.store.restart(), logger,
-    stop.signal, intervalMs);
+    'test', stop.signal, intervalMs);
   async function close() {
     stop.abort();
     expect(await done).toBeUndefined();
