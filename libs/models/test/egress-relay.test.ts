@@ -263,3 +263,67 @@ async function preparationKeepsExpiry() {
   expect(setup.records[0]).toMatchObject({ reason: 'expired' });
 }
 it('keeps the original expiry when receipt preparation takes time', preparationKeepsExpiry);
+
+async function watchdogClosure(lateFailure: boolean) {
+  const setup = await fixture();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  onTestFinished(vi.useRealTimers);
+  const held = Promise.withResolvers<void>();
+  let checks = 0;
+  function recheck() {
+    checks++;
+    return held.promise;
+  }
+  const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
+  const client = await setup.dial(await setup.registry.register(request));
+  await once(client, 'data');
+  async function healthy() {}
+  const neighbour = { ...request, permitId: 'healthy', recheck: healthy };
+  const other = await setup.dial(await setup.registry.register(neighbour));
+  await once(other, 'data');
+  vi.setSystemTime(Date.now() - 60_000);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(checks).toBe(1);
+  expect(client.destroyed).toBe(false);
+  const closed = once(client, 'close', { signal: AbortSignal.timeout(1000) });
+  await vi.advanceTimersByTimeAsync(1);
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ permitId: 'permit', reason: 'unavailable' });
+  await closed;
+  if (lateFailure) held.reject(new Error('private-canary'));
+  else held.resolve();
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(checks).toBe(1);
+  expect(setup.records).toHaveLength(1);
+  expect(other.destroyed).toBe(false);
+  expect(setup.counts().connections).toBe(2);
+  setup.registry.closeAll('unavailable');
+  expect(vi.getTimerCount()).toBe(0);
+}
+it.each([false, true])('closes a hung recheck by two seconds; late failure: %s', watchdogClosure);
+
+async function slowSerialChecks() {
+  const setup = await fixture();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  onTestFinished(vi.useRealTimers);
+  const held = Promise.withResolvers<void>();
+  let checks = 0;
+  function recheck() {
+    checks++;
+    return held.promise;
+  }
+  const expiresAt = Date.now() + 4000;
+  await setup.registry.register({ ...destination, permitId: 'permit', expiresAt, recheck });
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(checks).toBe(1);
+  held.resolve();
+  await vi.advanceTimersByTimeAsync(2499);
+  expect(setup.records).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ reason: 'expired' });
+  expect(vi.getTimerCount()).toBe(0);
+}
+it('keeps slow checks serial and successful checks never extend expiry', slowSerialChecks);

@@ -13,6 +13,7 @@ import { decodeJwt } from 'jose';
 import { verifyEgressCapability } from '@opencrane/auth';
 import { failingPublishStore } from '@opencrane/event-store/testing';
 import { history } from '../src/event-history.ts';
+import { BudgetActor } from '../src/actor.ts';
 import { fixture } from './fixture.ts';
 import { egressFixture } from './egress-fixture.ts';
 import { clientHello } from './egress-hello-fixture.ts';
@@ -643,3 +644,101 @@ async function separateReceipts() {
   }
 }
 it('saves a separate receipt for each of two open permits', separateReceipts);
+
+async function dependencyOutage(kind: string) {
+  const test = await setup();
+  const bearer = await test.token();
+  const held = Promise.withResolvers<boolean>();
+  async function duringRelay(socket: import('node:net').Socket) {
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2100) });
+    const started = performance.now();
+    function rejectRead(): never {
+      throw new Error('private-canary');
+    }
+    function holdRead() {
+      return held.promise;
+    }
+    async function unavailablePermission() {
+      return { allowed: false as const, status: 'unavailable' as const,
+        error: new Error('private-canary') };
+    }
+    let restore: (() => void) | undefined;
+    if (kind === 'store') {
+      const spy = vi.spyOn(test.facts.nats.store, 'head').mockImplementation(rejectRead);
+      restore = spy.mockRestore.bind(spy);
+    } else if (kind === 'leader') {
+      const replacement = new BudgetActor(test.facts.nats.store, 'test');
+      await replacement.start();
+    } else if (kind === 'permission') {
+      const spy = vi.spyOn(test.facts.auth, 'check').mockImplementation(unavailablePermission);
+      restore = spy.mockRestore.bind(spy);
+    } else {
+      const implementation = kind === 'iam-hang' ? holdRead : rejectRead;
+      const spy = vi.spyOn(test.facts.auth, 'applied').mockImplementation(implementation);
+      restore = spy.mockRestore.bind(spy);
+    }
+    try {
+      await closed;
+      expect(performance.now() - started).toBeLessThan(2000);
+      expect(socket.destroyed).toBe(true);
+    } finally {
+      restore?.();
+      held.resolve(true);
+    }
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+  expect(await closeObservation(test, bearer)).toMatchObject({
+    outcome: 'unknown', relay: { reason: 'unavailable' } });
+  expect(await test.tunnel(bearer)).toBe(403);
+  expect(test.gateway.connected()).toBe(1);
+}
+it.each(['store', 'iam-rejection', 'iam-hang', 'permission', 'leader'])(
+  'closes a live relay as unavailable after losing %s proof', dependencyOutage);
+
+async function recoversWhileRunning(lostReply: boolean) {
+  const test = await setup();
+  const bearer = await test.token();
+  const subject = `egress-${decodeJwt(bearer).jti!}`;
+  const append = test.facts.nats.store.append.bind(test.facts.nats.store);
+  let attempts = 0;
+  async function loseReply(input: Parameters<typeof append>[0]) {
+    const saved = await append(input);
+    const event = z.object({ subject: z.string() }).parse(input.event);
+    if (event.subject === subject) {
+      attempts++;
+      throw new Error('private-canary');
+    }
+    return saved;
+  }
+  if (lostReply) {
+    const spy = vi.spyOn(test.facts.nats.store, 'append').mockImplementation(loseReply);
+    onTestFinished(spy.mockRestore.bind(spy));
+  }
+  async function duringRelay(socket: import('node:net').Socket) {
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2100) });
+    await test.facts.nats.stop();
+    await closed;
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+  const directory = join(test.gateway.directory, 'egress');
+  async function retained() {
+    return readdir(directory);
+  }
+  await expect.poll(retained).toHaveLength(1);
+  await test.facts.nats.restart();
+  async function observations() {
+    return history(test.facts.nats.store, subject, 'test');
+  }
+  await expect.poll(observations, { timeout: 5000 }).toHaveLength(1);
+  expect(await closeObservation(test, bearer)).toMatchObject({
+    outcome: 'unknown', relay: { reason: 'unavailable' } });
+  await test.gateway.runtime.flush();
+  expect(await observations()).toHaveLength(1);
+  if (lostReply) expect(attempts).toBe(1);
+  expect(await test.tunnel(bearer)).toBe(403);
+  expect(test.gateway.connected()).toBe(1);
+}
+it.each([false, true])('retries retained receipts without restart; lost reply: %s',
+  recoversWhileRunning);
