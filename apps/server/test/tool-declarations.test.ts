@@ -110,6 +110,31 @@ async function enablesExactReview(mode: 'allow' | 'ask') {
 it.each(['allow', 'ask'] as const)('enables declared tools only after exact %s review',
   enablesExactReview);
 
+async function rejectsOmittedStepUp() {
+  const incompleteReview = { action: review.action, consequence: review.consequence,
+    targetArgument: review.targetArgument, fields: review.fields };
+  const invalid = { ...tool,
+    _meta: { ...tool._meta, 'io.opencrane/review': incompleteReview } };
+  const sibling = { ...tool, name: 'sibling' };
+  const saved = await capture([invalid, sibling]);
+  const reviewed = reviewPolicy(saved, 'ask');
+  function matchesOmittedTool(candidate: { name: string }) {
+    return candidate.name === 'read';
+  }
+  const omittedTool = reviewed.tools.find(matchesOmittedTool);
+  // Keep excluded tools blocked: there is no reviewed policy that can enable them.
+  expect.soft(omittedTool?.mode ?? 'block').toBe('block');
+  expect.soft(omittedTool).toBeUndefined();
+  expect.soft(reviewed.tools).toMatchObject([
+    { name: 'sibling', reviewed: true, mode: 'ask' },
+  ]);
+  expect.soft(saved.tools).toHaveLength(1);
+  expect(saved.rejectedTools).toEqual([{ name: 'read',
+    revision: losslessJson(JSON.stringify(invalid)).digest, reason: 'invalid_tool_review' }]);
+}
+it('keeps an omitted stepUp blocked through discovery and exact Ask review with a valid sibling',
+  rejectsOmittedStepUp);
+
 async function holdsMetadataChanges(field: 'cost' | 'review') {
   const sibling = { ...tool, name: 'sibling' };
   const before = await capture([tool, sibling]);

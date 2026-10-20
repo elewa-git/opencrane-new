@@ -1461,6 +1461,50 @@ async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details'
 it.each(['cost', 'expired', 'ask-details', 'allow-details'] as const)(
   'refuses review without current %s evidence', refusesUnavailableReview);
 
+async function refusesAllowAfterIncompleteBlockReview() {
+  const command = await exactReviewCommand();
+  const original = await catalogue.tools('test', 'odoo');
+  function removeDetails(tool: NonNullable<NonNullable<typeof original.catalogue>['tools']>[number]) {
+    return { ...tool, review: undefined };
+  }
+  const declarations = original.catalogue!.tools!.map(removeDetails);
+  const snapshot = { ...original.catalogue!, tools: declarations };
+  await mcp('odoo', 'mcp.server_discovered', snapshot);
+  await runner.run(mcpCatalogue);
+  const discovered = await catalogue.tools('test', 'odoo');
+  function blockChoice(tool: typeof declarations[number]) {
+    return { name: tool.name, revision: tool.revision,
+      reviewDigest: toolReviewDigest(tool), mode: 'block' };
+  }
+  const payload = { ...command, expectedSequence: discovered.sequence,
+    policyRevision: discovered.policyRevision, tools: declarations.map(blockChoice) };
+  const requestHeaders = { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin };
+  const reviewRequest = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
+    headers: requestHeaders, payload };
+  expect((await app.inject(reviewRequest)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+  const reviewed = await catalogue.tools('test', 'odoo');
+  // Reach the command's declaration check with a valid review that replay preserves.
+  expect(reviewed.tools).toMatchObject([
+    { reviewed: true, mode: 'block', costCents: 0 },
+    { reviewed: true, mode: 'block', costCents: 0 },
+  ]);
+  expect(reviewed.reviewRevision).toBe(reviewed.sequence);
+  expect(reviewed.catalogue!.tools![0]!.review).toBeUndefined();
+  const modeCommand = { commandId: 'allow-without-details', expectedSequence: reviewed.sequence,
+    connectionId: 'installed-odoo', toolName: 'read',
+    toolRevision: reviewed.tools[0]!.revision, mode: 'allow' };
+  const modeRequest = { method: 'POST' as const, url: '/api/org/integrations/odoo/tools',
+    headers: requestHeaders, payload: modeCommand };
+  const before = await nats.store.head('mcp-odoo');
+  expect((await app.inject(modeRequest)).statusCode).toBe(409);
+  expect(await nats.store.head('mcp-odoo')).toBe(before);
+  await runner.run(mcpCatalogue);
+  expect(await catalogue.tools('test', 'odoo')).toEqual(reviewed);
+}
+it('refuses an Allow command after a valid Block review without approval details',
+  refusesAllowAfterIncompleteBlockReview);
+
 async function publicationRequest() {
   const review = await exactReviewCommand();
   const request = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
