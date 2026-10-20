@@ -4,8 +4,9 @@ import { hostedImageInstallationSchema } from './hosted-image.ts';
 import { optionalProviderTurnBindingSchema } from './turn-binding.ts';
 import { groupConversationSchema, sharedChildConversationSchema,
   childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
-import { isToolCallText, toolCallFields } from './tool-call.ts';
-export { toolDispatchRecordedDataSchema } from './tool-call.ts';
+import { isToolCallText } from './tool-call.ts';
+import { toolCallFields } from './tool-dispatch.ts';
+export { toolDispatchRecordedDataSchema } from './tool-dispatch.ts';
 import { nativeDelegationBindingSchema, hasDistinctDelegationChild } from './delegation.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md

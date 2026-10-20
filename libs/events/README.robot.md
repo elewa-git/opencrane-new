@@ -136,6 +136,7 @@ Call ids and tool names share `isToolCallText`, exported at
 `@opencrane/events/tool-call`. It accepts 1–200 UTF-16 code units, including
 provider punctuation, and excludes Unicode control, format, surrogate,
 private-use and unassigned characters. This entrypoint has no dependencies.
+The computer image copies it alone; the Zod dispatch schemas live in `tool-dispatch.ts`.
 The computer checks it before saving a report; server event validation uses
 the same check.
 
