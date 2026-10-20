@@ -218,6 +218,81 @@ async function reportsWork() {
 }
 it('distinguishes running, queued and ended work without changing an earlier close', reportsWork);
 
+async function hidesWorkBeforeLateJoin() {
+  const earlierTurn = turnId;
+  await participant('late-member', 'member');
+  const laterTurn = await message();
+  const stopId = await stop();
+  await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
+    conversationId: 'conversation', turnId: earlierTurn, reason: 'budget', stopId });
+  await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
+    conversationId: 'conversation', turnId: laterTurn, reason: 'budget', stopId });
+
+  const response = await read(laterTurn, 'late-member');
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ work: [{ turnId: laterTurn, execution: 'not_started' }] });
+  expect(response.json<{ work: { turnId: string }[] }>().work.map(workTurnId))
+    .not.toContain(earlierTurn);
+}
+function workTurnId(work: { turnId: string }) {
+  return work.turnId;
+}
+it('hides saved Stop work from before a participant joined', hidesWorkBeforeLateJoin);
+
+async function rejectsMalformedCallStatus() {
+  await saveCall(callCases[2]!);
+  await stopSavedCalls();
+  const result = budgetStopStatusSchema.parse((await read()).json());
+  if (result.status !== 'stopped') throw new Error('Expected stopped');
+  const validCall = result.calls[0]!;
+  const invalidCalls = [
+    { ...validCall, reference: '' },
+    { ...validCall, chargedCents: 1.5 },
+    { ...validCall, chargedCents: -1 },
+    { reference: validCall.reference, status: 'released', heldCents: 1 },
+    { ...validCall, extra: true },
+  ];
+  for (const call of invalidCalls) {
+    const candidate = { ...result, calls: [call] };
+    expect(budgetStopStatusSchema.safeParse(candidate).success).toBe(false);
+  }
+}
+it('rejects empty references, invalid cents, wrong status amounts and extra call fields',
+  rejectsMalformedCallStatus);
+
+async function includesChargedCentsForRequester() {
+  const expected = await saveCall(callCases[2]!);
+  await stopSavedCalls();
+  const response = await read();
+  expect(response.json<{ calls: unknown[] }>().calls).toEqual([expected]);
+}
+it('includes charged cents in the requester reply', includesChargedCentsForRequester);
+
+async function routeRejectsStopWithoutTurnId() {
+  const stopId = await stop();
+  await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
+    conversationId: 'conversation', turnId, reason: 'budget', stopId });
+  const original = setup.nats.store.readStream.bind(setup.nats.store);
+  async function* missingTurnId(stream: string, from?: number, deadline?: number) {
+    for await (const row of original(stream, from, deadline)) {
+      if (stream === 'conversation-conversation' &&
+          row.event.type === 'agent.turn_stop_requested') {
+        yield { ...row, event: { ...row.event, data: {
+          conversationId: 'conversation', reason: 'budget', stopId } } };
+        continue;
+      }
+      yield row;
+    }
+  }
+  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(missingTurnId);
+
+  const response = await read();
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+}
+it('refuses a saved Stop row without a turn id through the HTTP route',
+  routeRejectsStopWithoutTurnId);
+
 async function closesWithoutRecord() {
   await start();
   await stop(false);
