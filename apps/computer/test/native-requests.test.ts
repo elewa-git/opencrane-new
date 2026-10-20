@@ -91,3 +91,18 @@ function capturesProductionPatchTool() {
   expect(patch?.offeredTools).toContain('apply_patch');
 }
 it('captures the production patch tool offered by the routed model', capturesProductionPatchTool);
+
+function duplicateDecline(method: string) {
+  const replies: unknown[] = [];
+  function send(reply: unknown) { replies.push(reply); }
+  const report = vi.fn();
+  const handle = nativeRequests(send, report);
+  const request = { id: 47, method, params: { command: 'REFUSED_ACTION_CANARY' } };
+  handle(request);
+  handle(request);
+  expect(replies).toEqual([{ id: 47, result: { decision: 'decline' } }]);
+  expect(JSON.stringify(replies)).not.toContain('REFUSED_ACTION_CANARY');
+  expect(report).toHaveBeenCalledTimes(1);
+}
+it.each(['item/commandExecution/requestApproval', 'item/fileChange/requestApproval'])(
+  'never changes a duplicate %s decline into permission', duplicateDecline);
