@@ -82,3 +82,12 @@ function ignoresNonStringMethod() {
   expect(send).toHaveBeenCalledTimes(1);
 }
 it('ignores a non-string method without consuming its request id', ignoresNonStringMethod);
+
+function capturesProductionPatchTool() {
+  function isPatch(observation: (typeof capture.observations)[number]) {
+    return observation.name === 'file_change';
+  }
+  const patch = capture.observations.find(isPatch);
+  expect(patch?.offeredTools).toContain('apply_patch');
+}
+it('captures the production patch tool offered by the routed model', capturesProductionPatchTool);
