@@ -14,15 +14,23 @@ async function patchNotification(relativePath, oldFactory, newFactory) {
   const source = await readFile(path, 'utf8');
   const oldImport = 'stream-json/jsonl/Parser.js';
   const newImport = 'stream-json/jsonl/parser.js';
-  if (source.includes(newImport) && source.includes(newFactory)) {
-    return;
+  let updatedSource = source;
+  const alreadyPatched = source.includes(newImport) && source.includes(newFactory);
+  if (!alreadyPatched) {
+    if (!source.includes(oldImport) || !source.includes(oldFactory)) {
+      throw new Error(`Minio notification code changed: ${relativePath}`);
+    }
+    const updatedImport = source.replace(oldImport, newImport);
+    updatedSource = updatedImport.replace(oldFactory, newFactory);
   }
-  if (!source.includes(oldImport) || !source.includes(oldFactory)) {
-    throw new Error(`Minio notification code changed: ${relativePath}`);
+  // Identify each changed file, as Minio's Apache-2.0 licence requires.
+  const changeNotice = '// Changed by OpenCrane to use stream-json 3.6.0.\n';
+  if (!updatedSource.startsWith(changeNotice)) {
+    updatedSource = `${changeNotice}${updatedSource}`;
   }
-  const updatedImport = source.replace(oldImport, newImport);
-  const updatedFactory = updatedImport.replace(oldFactory, newFactory);
-  await writeFile(path, updatedFactory);
+  if (updatedSource !== source) {
+    await writeFile(path, updatedSource);
+  }
 }
 
 await patchNotification('dist/esm/notification.mjs',

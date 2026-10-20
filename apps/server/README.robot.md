@@ -8,7 +8,8 @@ The root npm override pins stream-json 3.6.0 under Minio 8.0.7 only. Earlier
 stream-json releases carry the October 2026 advisories. Minio still imports the
 old JSON-lines parser path and calls its old factory. The root `postinstall`
 script, `apps/server/patch-stream-json.mjs`, updates those two uses in Minio's
-ESM and CommonJS builds. It checks the Minio version and expected source text,
+ESM and CommonJS builds. Each changed file carries an OpenCrane change notice.
+It checks the Minio version and expected source text,
 and can run again after `npm prune`. Install with scripts enabled, as the
 package image does. Remove the patch and override when Minio supports the fixed
 parser. `test/minio-notification.test.ts` checks a streamed notification through
