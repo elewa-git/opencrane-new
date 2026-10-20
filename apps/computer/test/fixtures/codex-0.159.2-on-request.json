@@ -1,10 +1,12 @@
 {
-  "sourceSHA": "e46f715584b08273aeb21a3d642ad6bd18f684fe",
-  "imageDigest": "sha256:245c67a5bd7ac1d232afc9b25331dab9cf667f44c75d32eb4b49f32c85190107",
+  "sourceSHA": "16901fa7aca6fea881922925e1af10a55761481e",
+  "imageDigest": "sha256:61d515b0696116ab5a5106c3deb9940565cd7d4c77f787bd5983040077ec0d33",
   "command": "nice -n 10 docker run --rm --network none -v \"$PWD/apps/computer/test:/app/test:ro\" --entrypoint node ocn-p3-5-pr12a --experimental-strip-types /app/test/codex-on-request.mjs",
-  "trim": "Kept native messages and replies verbatim, local call outputs, RPC inputs and results. Omitted repeated model history, tool descriptions, HTTP headers and notifications.",
-  "measuredAt": "2026-10-20T01:52:25.378Z",
+  "trim": "Kept native requests and replies, per-action markers, local tool calls and their next model input, offered tool names, RPCs and generated protocol. Omitted repeated model history, tool descriptions, HTTP headers and notifications.",
+  "measuredAt": "2026-10-20T04:33:05.957Z",
   "version": "codex-cli 0.159.2",
+  "model": "gpt-6.1-sol",
+  "modelCatalogue": "https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/models-manager/models.json",
   "result": "PASS",
   "nativeRequests": [
     {
@@ -13,8 +15,8 @@
         "method": "mcpServer/elicitation/request",
         "id": 0,
         "params": {
-          "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
-          "turnId": "01a15702-8820-7852-a705-72a8b87082ab",
+          "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
+          "turnId": "01a15795-a402-7543-9a3c-d8d4919c4aac",
           "serverName": "oc_aaaaaaaaaa",
           "mode": "form",
           "_meta": {
@@ -41,8 +43,7 @@
           "message": "Native consent is not supported"
         }
       },
-      "repliesPerId": 1,
-      "nextStep": "Codex returned user rejected MCP tool call to the local model, then completed the turn."
+      "repliesPerId": 1
     },
     {
       "stage": "loaded_resume_mcp",
@@ -50,8 +51,8 @@
         "method": "mcpServer/elicitation/request",
         "id": 1,
         "params": {
-          "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
-          "turnId": "01a15702-8db2-7ea3-815f-f113d95d65f0",
+          "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
+          "turnId": "01a15795-ae4e-76a2-ad95-acf657edcc44",
           "serverName": "oc_aaaaaaaaaa",
           "mode": "form",
           "_meta": {
@@ -78,8 +79,7 @@
           "message": "Native consent is not supported"
         }
       },
-      "repliesPerId": 1,
-      "nextStep": "Codex returned user rejected MCP tool call to the local model, then completed the turn."
+      "repliesPerId": 1
     }
   ],
   "observations": [
@@ -89,173 +89,521 @@
       "requests": 1,
       "nextModelInput": [
         {
-          "type": "function_call_output",
-          "id": "fco_01a15702-88c7-77e3-a514-ee4345e9a8bf",
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a15795-a606-79b2-91b6-45dec2839bbb",
           "call_id": "call_mcp",
           "output": [
             {
               "type": "input_text",
-              "text": "Wall time: 0.0117 seconds\nOutput:"
+              "text": "Script completed\nWall time 0.0 seconds\nOutput:\n"
             },
             {
               "type": "input_text",
-              "text": "user rejected MCP tool call"
+              "text": "{\"offeredTool\":\"apply_patch\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"clock__curr_time\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"create_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"exec_command\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"get_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resource_templates\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resources\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_aaaaaaaaaa__read_before\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"read_mcp_resource\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"update_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"view_image\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"write_stdin\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"content\":[{\"type\":\"text\",\"text\":\"user rejected MCP tool call\"}],\"isError\":true}"
             }
           ]
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent",
+        "apply_patch",
+        "clock__curr_time",
         "create_goal",
-        "update_goal"
+        "exec_command",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "mcp__oc_aaaaaaaaaa__read_before",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image",
+        "write_stdin"
       ],
       "localModelCall": {
-        "type": "function_call",
+        "type": "custom_tool_call",
         "id": "fc_mcp",
-        "name": "read_before",
-        "namespace": "mcp__oc_aaaaaaaaaa",
-        "arguments": "{}",
-        "call_id": "call_mcp"
+        "call_id": "call_mcp",
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.mcp__oc_aaaaaaaaaa__read_before({}));"
       }
     },
     {
       "name": "plain_shell",
       "result": "PASS",
       "requests": 0,
+      "marker": "/tmp/native-plain-marker",
+      "markerPresent": true,
       "nextModelInput": [
         {
-          "type": "function_call_output",
-          "id": "fco_01a15702-89c2-7771-af84-5f96851df4b1",
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a15795-a7b3-7a73-a1e1-4c5ca8465b17",
           "call_id": "call_plain_shell",
-          "output": "Chunk ID: 97704b\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"apply_patch\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"clock__curr_time\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"create_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"exec_command\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"get_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resource_templates\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resources\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_aaaaaaaaaa__read_before\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"read_mcp_resource\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"update_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"view_image\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"write_stdin\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"chunk_id\":\"324293\",\"wall_time_seconds\":0.000024688,\"exit_code\":0,\"original_token_count\":25,\"output\":\"/etc/profile: line 4: id: command not found\\n/etc/profile: line 4: [: : integer expression expected\\n\"}"
+            }
+          ]
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent",
+        "apply_patch",
+        "clock__curr_time",
         "create_goal",
-        "update_goal"
+        "exec_command",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "mcp__oc_aaaaaaaaaa__read_before",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image",
+        "write_stdin"
       ],
       "localModelCall": {
-        "type": "function_call",
+        "type": "custom_tool_call",
         "id": "fc_plain_shell",
-        "name": "exec_command",
-        "arguments": "{\"cmd\":\"touch /tmp/native-plain-marker\"}",
-        "call_id": "call_plain_shell"
+        "call_id": "call_plain_shell",
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.exec_command({\"cmd\":\"touch /tmp/native-plain-marker\"}));"
       }
     },
     {
       "name": "escalated_shell",
       "result": "PASS",
       "requests": 0,
+      "marker": "/tmp/native-escalated-marker",
+      "markerPresent": true,
       "nextModelInput": [
         {
-          "type": "function_call_output",
-          "id": "fco_01a15702-8a7e-72d1-995d-e1cdf2411569",
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a15795-a93c-7130-89cd-567e26ae2b9f",
           "call_id": "call_escalated_shell",
-          "output": "Chunk ID: d36f59\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"apply_patch\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"clock__curr_time\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"create_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"exec_command\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"get_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resource_templates\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resources\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_aaaaaaaaaa__read_before\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"read_mcp_resource\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"update_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"view_image\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"write_stdin\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"chunk_id\":\"ce49e8\",\"wall_time_seconds\":0.000066546,\"exit_code\":0,\"original_token_count\":25,\"output\":\"/etc/profile: line 4: id: command not found\\n/etc/profile: line 4: [: : integer expression expected\\n\"}"
+            }
+          ]
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent",
+        "apply_patch",
+        "clock__curr_time",
         "create_goal",
-        "update_goal"
+        "exec_command",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "mcp__oc_aaaaaaaaaa__read_before",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image",
+        "write_stdin"
       ],
       "localModelCall": {
-        "type": "function_call",
+        "type": "custom_tool_call",
         "id": "fc_escalated_shell",
-        "name": "exec_command",
-        "arguments": "{\"cmd\":\"touch /tmp/native-escalated-marker\",\"sandbox_permissions\":\"require_escalated\",\"justification\":\"Local marker fixture\"}",
-        "call_id": "call_escalated_shell"
+        "call_id": "call_escalated_shell",
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.exec_command({\"cmd\":\"touch /tmp/native-escalated-marker\",\"sandbox_permissions\":\"require_escalated\",\"justification\":\"Local marker fixture\"}));"
       }
     },
     {
       "name": "file_write",
       "result": "PASS",
       "requests": 0,
+      "marker": "/tmp/native-write-marker",
+      "markerPresent": true,
       "nextModelInput": [
         {
-          "type": "function_call_output",
-          "id": "fco_01a15702-8b5e-7580-a906-0654b1ef4d7f",
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a15795-aaca-7111-815a-a63da24ac2b9",
           "call_id": "call_file_write",
-          "output": "Chunk ID: 00f2aa\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"apply_patch\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"clock__curr_time\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"create_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"exec_command\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"get_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resource_templates\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resources\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_aaaaaaaaaa__read_before\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"read_mcp_resource\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"update_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"view_image\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"write_stdin\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"chunk_id\":\"c2e015\",\"wall_time_seconds\":0.000026615,\"exit_code\":0,\"original_token_count\":25,\"output\":\"/etc/profile: line 4: id: command not found\\n/etc/profile: line 4: [: : integer expression expected\\n\"}"
+            }
+          ]
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent",
+        "apply_patch",
+        "clock__curr_time",
         "create_goal",
-        "update_goal"
+        "exec_command",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "mcp__oc_aaaaaaaaaa__read_before",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image",
+        "write_stdin"
       ],
       "localModelCall": {
-        "type": "function_call",
+        "type": "custom_tool_call",
         "id": "fc_file_write",
-        "name": "exec_command",
-        "arguments": "{\"cmd\":\"printf fixture > /tmp/native-write-marker\"}",
-        "call_id": "call_file_write"
+        "call_id": "call_file_write",
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.exec_command({\"cmd\":\"printf fixture > /tmp/native-write-marker\"}));"
       }
     },
     {
       "name": "file_change",
       "result": "PASS",
       "requests": 0,
+      "marker": "/tmp/native-file-marker",
+      "markerPresent": true,
       "nextModelInput": [
         {
           "type": "custom_tool_call_output",
-          "id": "ctco_01a15702-8c09-77c3-9032-d8ed53380713",
+          "id": "ctco_01a15795-abfe-74d3-b460-20e255e4499e",
           "call_id": "call_file_change",
-          "output": "unsupported custom tool call: apply_patch"
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 0.0 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"apply_patch\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"clock__curr_time\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"create_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"exec_command\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"get_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resource_templates\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resources\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_aaaaaaaaaa__read_before\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"read_mcp_resource\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"update_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"view_image\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"write_stdin\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{}"
+            }
+          ]
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent",
+        "apply_patch",
+        "clock__curr_time",
         "create_goal",
-        "update_goal"
+        "exec_command",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "mcp__oc_aaaaaaaaaa__read_before",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image",
+        "write_stdin"
       ],
       "localModelCall": {
         "type": "custom_tool_call",
         "id": "fc_file_change",
         "call_id": "call_file_change",
-        "name": "apply_patch",
-        "input": "*** Begin Patch\n*** Add File: /tmp/native-file-marker\n+fixture\n*** End Patch"
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.apply_patch(\"*** Begin Patch\\n*** Add File: /tmp/native-file-marker\\n+fixture\\n*** End Patch\"));"
       }
     },
     {
@@ -265,28 +613,29 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a15702-8cac-7ab3-bf63-746804b54ddc",
+          "id": "fco_01a15795-acea-7641-b603-7a0c7372816f",
           "call_id": "call_user_input",
           "output": "request_user_input is unavailable in Default mode"
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
-        "create_goal",
-        "update_goal"
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent"
       ],
       "localModelCall": {
         "type": "function_call",
         "id": "fc_user_input",
         "name": "request_user_input",
+        "namespace": "functions",
         "arguments": "{\"questions\":[{\"id\":\"fixture\",\"header\":\"Fixture\",\"question\":\"Choose a fixture\",\"options\":[{\"label\":\"One\",\"description\":\"First\"},{\"label\":\"Two\",\"description\":\"Second\"}]}]}",
         "call_id": "call_user_input"
       }
@@ -297,31 +646,101 @@
       "requests": 0,
       "nextModelInput": [
         {
-          "type": "function_call_output",
-          "id": "fco_01a15702-8d57-78a2-b7ad-2101ab8df3c9",
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a15795-adc4-7d83-a201-8a9891c169d7",
           "call_id": "call_permissions",
-          "output": "unsupported call: request_permissions"
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script failed\nWall time 0.0 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"apply_patch\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"clock__curr_time\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"create_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"exec_command\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"get_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resource_templates\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resources\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_aaaaaaaaaa__read_before\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"read_mcp_resource\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"update_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"view_image\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"write_stdin\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "Script error:\nTypeError: tools.request_permissions is not a function\n    at exec_main.mjs:1:82"
+            }
+          ]
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent",
+        "apply_patch",
+        "clock__curr_time",
         "create_goal",
-        "update_goal"
+        "exec_command",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "mcp__oc_aaaaaaaaaa__read_before",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image",
+        "write_stdin"
       ],
       "localModelCall": {
-        "type": "function_call",
+        "type": "custom_tool_call",
         "id": "fc_permissions",
-        "name": "request_permissions",
-        "arguments": "{\"permissions\":{\"network\":{\"enabled\":true}},\"reason\":\"Local fixture\"}",
-        "call_id": "call_permissions"
+        "call_id": "call_permissions",
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.request_permissions({\"permissions\":{\"network\":{\"enabled\":true}},\"reason\":\"Local fixture\"}));"
       }
     },
     {
@@ -330,101 +749,242 @@
       "requests": 1,
       "nextModelInput": [
         {
-          "type": "function_call_output",
-          "id": "fco_01a15702-8e0b-7b90-812c-172eb8856840",
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a15795-aeba-7413-955a-76de19a53c25",
           "call_id": "call_loaded_resume_mcp",
           "output": [
             {
               "type": "input_text",
-              "text": "Wall time: 0.0071 seconds\nOutput:"
+              "text": "Script completed\nWall time 0.0 seconds\nOutput:\n"
             },
             {
               "type": "input_text",
-              "text": "user rejected MCP tool call"
+              "text": "{\"offeredTool\":\"apply_patch\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"clock__curr_time\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"create_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"exec_command\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"get_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resource_templates\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resources\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_aaaaaaaaaa__read_before\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"read_mcp_resource\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"update_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"view_image\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"write_stdin\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"content\":[{\"type\":\"text\",\"text\":\"user rejected MCP tool call\"}],\"isError\":true}"
             }
           ]
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent",
+        "apply_patch",
+        "clock__curr_time",
         "create_goal",
-        "update_goal"
+        "exec_command",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "mcp__oc_aaaaaaaaaa__read_before",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image",
+        "write_stdin"
       ],
       "localModelCall": {
-        "type": "function_call",
+        "type": "custom_tool_call",
         "id": "fc_loaded_resume_mcp",
-        "name": "read_before",
-        "namespace": "mcp__oc_aaaaaaaaaa",
-        "arguments": "{}",
-        "call_id": "call_loaded_resume_mcp"
+        "call_id": "call_loaded_resume_mcp",
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.mcp__oc_aaaaaaaaaa__read_before({}));"
       }
     },
     {
       "name": "loaded_resume_shell",
       "result": "PASS",
       "requests": 0,
+      "marker": "/tmp/native-loaded-marker",
+      "markerPresent": true,
       "nextModelInput": [
         {
-          "type": "function_call_output",
-          "id": "fco_01a15702-8ef8-7590-a7bb-e2508041790f",
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a15795-afd6-7da3-abeb-ee85ee18b0fb",
           "call_id": "call_loaded_resume_shell",
-          "output": "Chunk ID: 44524a\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"apply_patch\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"clock__curr_time\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"create_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"exec_command\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"get_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resource_templates\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"list_mcp_resources\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_aaaaaaaaaa__read_before\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"read_mcp_resource\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"update_goal\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"view_image\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"write_stdin\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"chunk_id\":\"b5e237\",\"wall_time_seconds\":0.000026896,\"exit_code\":0,\"original_token_count\":25,\"output\":\"/etc/profile: line 4: id: command not found\\n/etc/profile: line 4: [: : integer expression expected\\n\"}"
+            }
+          ]
         }
       ],
       "offeredTools": [
-        "exec_command",
-        "write_stdin",
-        "list_mcp_resources",
-        "list_mcp_resource_templates",
-        "read_mcp_resource",
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "mcp__oc_aaaaaaaaaa",
-        "get_goal",
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent",
+        "apply_patch",
+        "clock__curr_time",
         "create_goal",
-        "update_goal"
+        "exec_command",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "mcp__oc_aaaaaaaaaa__read_before",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image",
+        "write_stdin"
       ],
       "localModelCall": {
-        "type": "function_call",
+        "type": "custom_tool_call",
         "id": "fc_loaded_resume_shell",
-        "name": "exec_command",
-        "arguments": "{\"cmd\":\"touch /tmp/native-escalated-marker\",\"sandbox_permissions\":\"require_escalated\",\"justification\":\"Local marker fixture\"}",
-        "call_id": "call_loaded_resume_shell"
+        "call_id": "call_loaded_resume_shell",
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.exec_command({\"cmd\":\"touch /tmp/native-loaded-marker\",\"sandbox_permissions\":\"require_escalated\",\"justification\":\"Local marker fixture\"}));"
       }
     },
     {
       "name": "private_shell",
       "result": "PASS",
       "requests": 0,
+      "marker": "/tmp/native-private-marker",
+      "markerPresent": false,
       "nextModelInput": [
         {
-          "type": "function_call_output",
-          "id": "fco_01a15702-90bf-7143-b5dd-00f8a8e1860f",
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a15795-b1f2-78e1-a39d-1737c27d186a",
           "call_id": "call_private_shell",
-          "output": "unsupported call: exec_command"
+          "output": "code-mode host is disabled"
         }
       ],
       "offeredTools": [
+        "exec",
+        "wait",
         "request_user_input",
-        "view_image",
-        "get_goal",
-        "create_goal",
-        "update_goal"
+        "request_user_input_async",
+        "sleep",
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent"
       ],
       "localModelCall": {
-        "type": "function_call",
+        "type": "custom_tool_call",
         "id": "fc_private_shell",
-        "name": "exec_command",
-        "arguments": "{\"cmd\":\"touch /tmp/native-escalated-marker\",\"sandbox_permissions\":\"require_escalated\",\"justification\":\"Local marker fixture\"}",
-        "call_id": "call_private_shell"
+        "call_id": "call_private_shell",
+        "name": "exec",
+        "namespace": "functions",
+        "input": "for (const tool of ALL_TOOLS) text({ offeredTool: tool.name }); text(await tools.exec_command({\"cmd\":\"touch /tmp/native-private-marker\",\"sandbox_permissions\":\"require_escalated\",\"justification\":\"Local marker fixture\"}));"
       }
     }
   ],
@@ -432,19 +992,21 @@
     "plain": true,
     "escalated": true,
     "written": true,
-    "file": false
+    "file": true
   },
   "loadedResumePolicy": "on-request",
   "limits": [
-    "Shell (plain and escalated) and file writes ran without native approval under the real danger-full-access config.",
+    "Local model stub only; the routed gpt-6.1-sol uses the catalogue bundled in pinned Codex 0.159.2. No paid model call.",
+    "The fixture starts the packaged native JavaScript host through tool-user and its local socket. It is not a fresh install or a gateway Ask journey.",
+    "Plain shell, escalated shell, shell file-write, apply_patch and loaded-resume shell ran without approval. Each action has its own present marker.",
     "No live shell/file decline: NOT RUN. Neither request occurred; no approval was forced.",
-    "apply_patch was not offered. User input was unavailable in Default mode; request_permissions and private exec_command were unsupported.",
+    "Default mode refused user input. request_permissions was absent from the JavaScript tool list. Private code-mode host was disabled and its marker was absent.",
     "Generated protocol below comes from this pinned binary, not from live request messages."
   ],
   "rpc": [
     {
       "stage": "start",
-      "atMs": 128,
+      "atMs": 215,
       "id": 1,
       "method": "initialize",
       "params": {
@@ -459,7 +1021,7 @@
     },
     {
       "stage": "start",
-      "atMs": 726,
+      "atMs": 1061,
       "id": 2,
       "method": "thread/start",
       "params": {
@@ -467,7 +1029,7 @@
         "config": {
           "mcp_servers": {
             "oc_aaaaaaaaaa": {
-              "url": "http://127.0.0.1:37471/before",
+              "url": "http://127.0.0.1:41755/before",
               "bearer_token_env_var": "PROXY_CALLER_TOKEN",
               "tool_timeout_sec": 1200,
               "startup_timeout_sec": 10
@@ -479,11 +1041,11 @@
     },
     {
       "stage": "mcp",
-      "atMs": 764,
+      "atMs": 1109,
       "id": 3,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -496,11 +1058,11 @@
     },
     {
       "stage": "plain_shell",
-      "atMs": 999,
+      "atMs": 1774,
       "id": 4,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -513,11 +1075,11 @@
     },
     {
       "stage": "escalated_shell",
-      "atMs": 1248,
+      "atMs": 2198,
       "id": 5,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -530,11 +1092,11 @@
     },
     {
       "stage": "file_write",
-      "atMs": 1438,
+      "atMs": 2608,
       "id": 6,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -547,11 +1109,11 @@
     },
     {
       "stage": "file_change",
-      "atMs": 1655,
+      "atMs": 2946,
       "id": 7,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -564,11 +1126,11 @@
     },
     {
       "stage": "user_input",
-      "atMs": 1837,
+      "atMs": 3274,
       "id": 8,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -581,11 +1143,11 @@
     },
     {
       "stage": "permissions",
-      "atMs": 2009,
+      "atMs": 3485,
       "id": 9,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -598,20 +1160,20 @@
     },
     {
       "stage": "loaded_resume",
-      "atMs": 2171,
+      "atMs": 3728,
       "id": 10,
       "method": "thread/resume",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2"
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f"
       }
     },
     {
       "stage": "loaded_resume_mcp",
-      "atMs": 2190,
+      "atMs": 3750,
       "id": 11,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -623,11 +1185,11 @@
     },
     {
       "stage": "loaded_resume_shell",
-      "atMs": 2365,
+      "atMs": 3971,
       "id": 12,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
         "input": [
           {
             "type": "text",
@@ -639,7 +1201,7 @@
     },
     {
       "stage": "private",
-      "atMs": 2649,
+      "atMs": 4336,
       "id": 13,
       "method": "initialize",
       "params": {
@@ -654,7 +1216,7 @@
     },
     {
       "stage": "private",
-      "atMs": 2847,
+      "atMs": 4555,
       "id": 14,
       "method": "thread/start",
       "params": {
@@ -665,11 +1227,11 @@
     },
     {
       "stage": "private_shell",
-      "atMs": 2906,
+      "atMs": 4605,
       "id": 15,
       "method": "turn/start",
       "params": {
-        "threadId": "01a15702-9045-7ed1-8813-5cc6de674f25",
+        "threadId": "01a15795-b17d-7e01-9489-57fe8968c246",
         "input": [
           {
             "type": "text",
@@ -683,11 +1245,11 @@
   "rpcResults": [
     {
       "stage": "start",
-      "atMs": 512,
+      "atMs": 804,
       "id": 1,
       "result": {
         "userAgent": "reload_probe/0.159.2 (Debian 12.0.0; x86_64) unknown (reload_probe; 1)",
-        "codexHome": "/tmp/codex-resume-rENJJ5",
+        "codexHome": "/tmp/codex-resume-XtWoOB",
         "platformFamily": "unix",
         "platformOs": "linux"
       },
@@ -695,20 +1257,20 @@
     },
     {
       "stage": "start",
-      "atMs": 763,
+      "atMs": 1108,
       "id": 2,
       "result": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2"
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f"
       },
       "error": null
     },
     {
       "stage": "mcp",
-      "atMs": 779,
+      "atMs": 1145,
       "id": 3,
       "result": {
         "turn": {
-          "id": "01a15702-8820-7852-a705-72a8b87082ab",
+          "id": "01a15795-a402-7543-9a3c-d8d4919c4aac",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -722,11 +1284,11 @@
     },
     {
       "stage": "plain_shell",
-      "atMs": 1017,
+      "atMs": 1798,
       "id": 4,
       "result": {
         "turn": {
-          "id": "01a15702-890b-7c32-80b7-35716cc114c0",
+          "id": "01a15795-a696-7922-9adc-89b54fa894b9",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -740,11 +1302,11 @@
     },
     {
       "stage": "escalated_shell",
-      "atMs": 1259,
+      "atMs": 2228,
       "id": 5,
       "result": {
         "turn": {
-          "id": "01a15702-8a04-7f63-886f-8a985e8ef48a",
+          "id": "01a15795-a844-7141-ac60-518bb95f28f9",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -758,11 +1320,11 @@
     },
     {
       "stage": "file_write",
-      "atMs": 1452,
+      "atMs": 2629,
       "id": 6,
       "result": {
         "turn": {
-          "id": "01a15702-8ac3-72b1-92e6-36d71899d543",
+          "id": "01a15795-a9da-7c02-a77e-bb12740da5e8",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -776,11 +1338,11 @@
     },
     {
       "stage": "file_change",
-      "atMs": 1685,
+      "atMs": 2967,
       "id": 7,
       "result": {
         "turn": {
-          "id": "01a15702-8b9a-7fb2-b701-f3c9984161bb",
+          "id": "01a15795-ab2a-7a41-a9aa-9aad89db0939",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -794,11 +1356,11 @@
     },
     {
       "stage": "user_input",
-      "atMs": 1846,
+      "atMs": 3289,
       "id": 8,
       "result": {
         "turn": {
-          "id": "01a15702-8c51-7d90-bfe5-e27d9701c90c",
+          "id": "01a15795-ac72-7d23-97ee-80f4d8839cac",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -812,11 +1374,11 @@
     },
     {
       "stage": "permissions",
-      "atMs": 2020,
+      "atMs": 3497,
       "id": 9,
       "result": {
         "turn": {
-          "id": "01a15702-8cff-70a3-b49b-54156d0ae3c7",
+          "id": "01a15795-ad44-7a82-99d1-a4b2ab30b013",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -830,20 +1392,20 @@
     },
     {
       "stage": "loaded_resume",
-      "atMs": 2190,
+      "atMs": 3750,
       "id": 10,
       "result": {
-        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2"
+        "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f"
       },
       "error": null
     },
     {
       "stage": "loaded_resume_mcp",
-      "atMs": 2195,
+      "atMs": 3756,
       "id": 11,
       "result": {
         "turn": {
-          "id": "01a15702-8db2-7ea3-815f-f113d95d65f0",
+          "id": "01a15795-ae4e-76a2-ad95-acf657edcc44",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -857,11 +1419,11 @@
     },
     {
       "stage": "loaded_resume_shell",
-      "atMs": 2371,
+      "atMs": 3979,
       "id": 12,
       "result": {
         "turn": {
-          "id": "01a15702-8e61-7891-8475-75aa04f139b7",
+          "id": "01a15795-af2c-7231-b638-99b2baf8eaea",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -875,11 +1437,11 @@
     },
     {
       "stage": "private",
-      "atMs": 2847,
+      "atMs": 4555,
       "id": 13,
       "result": {
         "userAgent": "reload_probe/0.159.2 (Debian 12.0.0; x86_64) unknown (reload_probe; 1)",
-        "codexHome": "/tmp/codex-resume-rENJJ5",
+        "codexHome": "/tmp/codex-resume-XtWoOB",
         "platformFamily": "unix",
         "platformOs": "linux"
       },
@@ -887,20 +1449,20 @@
     },
     {
       "stage": "private",
-      "atMs": 2906,
+      "atMs": 4604,
       "id": 14,
       "result": {
-        "threadId": "01a15702-9045-7ed1-8813-5cc6de674f25"
+        "threadId": "01a15795-b17d-7e01-9489-57fe8968c246"
       },
       "error": null
     },
     {
       "stage": "private_shell",
-      "atMs": 2919,
+      "atMs": 4621,
       "id": 15,
       "result": {
         "turn": {
-          "id": "01a15702-9080-7d03-bcd3-65de45f7a556",
+          "id": "01a15795-b1a4-70e2-88b1-d0ff79ec0c28",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -916,62 +1478,62 @@
   "completedTurns": [
     {
       "stage": "mcp",
-      "atMs": 998,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 1772,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "plain_shell",
-      "atMs": 1248,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 2197,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "escalated_shell",
-      "atMs": 1438,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 2607,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "file_write",
-      "atMs": 1655,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 2946,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "file_change",
-      "atMs": 1837,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 3274,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "user_input",
-      "atMs": 2005,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 3484,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "permissions",
-      "atMs": 2171,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 3728,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "loaded_resume_mcp",
-      "atMs": 2364,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 3970,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "loaded_resume_shell",
-      "atMs": 2598,
-      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+      "atMs": 4254,
+      "threadId": "01a15795-a3d7-75d1-b134-2399910ba58f",
       "status": "completed"
     },
     {
       "stage": "private_shell",
-      "atMs": 3025,
-      "threadId": "01a15702-9045-7ed1-8813-5cc6de674f25",
+      "atMs": 4738,
+      "threadId": "01a15795-b17d-7e01-9489-57fe8968c246",
       "status": "completed"
     }
   ],

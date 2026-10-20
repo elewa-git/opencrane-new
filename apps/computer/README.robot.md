@@ -968,11 +968,15 @@ The closed takeover gate suppresses records, not replies. The app.sock client re
 no server requests to answer. Private sessions keep their unsupported error.
 
 `test/codex-on-request.mjs` uses Codex 0.159.2, the real memory-free config and a local
-stub model. Run it in the built image with `--network none`, as recorded in
+stub endpoint with the routed `gpt-6.1-sol` catalogue metadata bundled in that binary.
+The fixture uses the JavaScript tool interface and the packaged native host.
+Run it in the built image with `--network none`, as recorded in
 [test/fixtures/codex-0.159.2-on-request.json](test/fixtures/codex-0.159.2-on-request.json).
 The capture records actual requests and the next model input, plus generated protocol
 shapes for methods that did not appear. It does not create artificial approval requests.
 Plain and escalated shell ran without asking under `danger-full-access`; file writes
-also needed no approval. A patch tool was not offered. Default mode refused user input;
-permissions and private shell calls were unsupported. Live shell/file decline checks
+and the offered patch tool also ran without approval. Each shell or file action checks
+its own marker, including loaded-resume and private attempts. Default mode refused
+user input; permissions were absent from the JavaScript tool list. The private host
+was disabled and its marker was absent. Live shell/file decline checks
 are NOT RUN because Codex sent neither request. Fresh-install qualification is NOT RUN.

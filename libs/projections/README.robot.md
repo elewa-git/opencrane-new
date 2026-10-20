@@ -775,7 +775,6 @@ Historical links to replaced revisions hide dependent facts transitively. Replay
 superseded decryption and keeps outgoing links from every revision. Rebuild offline
 before serving existing corrected histories; replay itself changes no keys.
 
-
 ## Native request refusal audit records
 
 `agent.native_request_refused` stays in the event log and audit table. The conversation
