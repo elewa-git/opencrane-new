@@ -182,7 +182,7 @@ it.each(['invalid', 'network'])('shows unavailable after a %s reply', async fail
   await vi.waitFor(() => expect(fixture.componentInstance['loading']()).toBe(false));
   fixture.detectChanges();
   expect(rootOf(fixture).textContent).toContain('Stop details unavailable');
-  expect(rootOf(fixture).textContent).not.toContain('Organisation');
+  expect(rootOf(fixture).textContent).toContain('Organisation');
 });
 
 it('ignores an older read and clears details when the conversation changes or access ends', async () => {
@@ -269,3 +269,140 @@ it('tells the reader who can help and when the limit resets', () => {
   expect(root.textContent).toContain('next monthly budget period (UTC)');
   expect(root.querySelector('[role="alert"]')).toBeNull();
 });
+
+
+function savedCalls(): Extract<BudgetStopStatus, { status: 'stopped' }> {
+  const reply = stopped('paying_group', 'monthly', 'ask_admin_or_wait', 20000);
+  reply.calls = [
+    { reference: 'reserved-call', status: 'held', heldCents: 80 },
+    { reference: 'uncertain-' + 'r'.repeat(180), status: 'possibly_sent', heldCents: 40 },
+    { reference: 'zero-charge', status: 'charged', chargedCents: 0 },
+    { reference: 'released-call', status: 'released' },
+    { reference: 'charge-without-amount', status: 'charged' },
+  ];
+  return reply;
+}
+
+function checkStatus(root: HTMLElement): HTMLButtonElement {
+  const button = root.querySelector('button');
+  if (!button || button.textContent?.trim() !== 'Check status') {
+    throw new Error('Missing Check status');
+  }
+  return button;
+}
+
+it('shows every saved call once, in order, with honest status and optional amounts', async () => {
+  const reply = savedCalls();
+  const { fixture } = await mount(reply);
+  const root = rootOf(fixture);
+  const cards = root.querySelectorAll('.budget-call');
+  expect(cards).toHaveLength(5);
+  expect(Array.from(root.querySelectorAll('.budget-call code'), element => element.textContent))
+    .toEqual(reply.calls.map(call => call.reference));
+  expect(cards[0]?.textContent).toContain('Reserved');
+  expect(cards[0]?.textContent).toContain('€0.80');
+  expect(cards[1]?.textContent).toContain('Outcome unknown');
+  expect(cards[1]?.textContent).toContain('may have been sent');
+  expect(cards[1]?.textContent).toContain('€0.40');
+  expect(cards[2]?.textContent).toContain('Recorded charge');
+  expect(cards[2]?.textContent).toContain('€0.00');
+  expect(cards[3]?.textContent).toContain('Reservation released');
+  expect(cards[3]?.textContent).not.toContain('€');
+  expect(cards[4]?.textContent).toContain('Recorded charge');
+  expect(cards[4]?.textContent).not.toContain('€');
+  expect(root.textContent).not.toMatch(/definitely sent|completed|total/iu);
+});
+
+it('shows participant call references and statuses without amounts or totals', async () => {
+  const reply = savedCalls();
+  delete reply.reasons[0]!.limitCents;
+  for (const call of reply.calls) {
+    if ('heldCents' in call) delete call.heldCents;
+    if ('chargedCents' in call) delete call.chargedCents;
+  }
+  const { fixture } = await mount(reply);
+  const root = rootOf(fixture);
+  expect(root.querySelectorAll('.budget-call')).toHaveLength(5);
+  expect(root.textContent).toContain('Outcome unknown');
+  expect(root.textContent).toContain('zero-charge');
+  expect(root.textContent).not.toMatch(/€|total/iu);
+});
+
+it('adds no call card or status action for an empty saved list', async () => {
+  const { fixture } = await mount(stopped('global', 'monthly', 'ask_admin'));
+  expect(rootOf(fixture).querySelector('.budget-calls')).toBeNull();
+  expect(rootOf(fixture).querySelector('button')).toBeNull();
+});
+
+it('checks the original call once while pending and updates without sending work', async () => {
+  const { fixture } = await mount(savedCalls());
+  let finish: ((response: Response) => void) | undefined;
+  const pending = new Promise<Response>(resolve => { finish = resolve; });
+  vi.spyOn(globalThis, 'fetch').mockReturnValue(pending);
+  const button = checkStatus(rootOf(fixture));
+  button.click();
+  fixture.detectChanges();
+  button.click();
+  expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  expect(rootOf(fixture).textContent).toContain('Group monthly limit reached: €200.00.');
+  expect(rootOf(fixture).textContent).toContain('Checking saved status');
+  const changed = savedCalls();
+  changed.calls = [{ reference: 'reserved-call', status: 'charged', chargedCents: 25 }];
+  finish?.(new Response(JSON.stringify(changed)));
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(rootOf(fixture).textContent).toContain('€0.25');
+  expect(rootOf(fixture).textContent).not.toContain('€0.80');
+  expect(rootOf(fixture).querySelectorAll('.budget-call')).toHaveLength(1);
+  for (const [, init] of vi.mocked(globalThis.fetch).mock.calls) {
+    expect(init?.method ?? 'GET').toBe('GET');
+  }
+  expect(vi.mocked(globalThis.fetch).mock.calls[1]?.[0])
+    .toBe('/api/conversations/chat/budget-stops?turnId=message');
+});
+
+it.each(['503', 'network', 'invalid'])('keeps the reason and last call after %s', async failure => {
+  const { fixture } = await mount(savedCalls());
+  if (failure === 'network') {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+  } else {
+    const status = failure === '503' ? 503 : 200;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status }));
+  }
+  checkStatus(rootOf(fixture)).click();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(rootOf(fixture).textContent).toContain('Stop details unavailable');
+  expect(rootOf(fixture).textContent).toContain('Group monthly limit reached: €200.00.');
+  expect(rootOf(fixture).textContent).toContain('Outcome unknown');
+  expect(rootOf(fixture).querySelectorAll('.budget-call')).toHaveLength(5);
+});
+
+it.each([401, 403])('clears saved calls on %s and cannot check them again', async status => {
+  const { fixture } = await mount(savedCalls());
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status }));
+  checkStatus(rootOf(fixture)).click();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(rootOf(fixture).textContent).toContain('Access changed');
+  expect(rootOf(fixture).querySelector('.budget-calls')).toBeNull();
+  expect(rootOf(fixture).querySelector('button')).toBeNull();
+});
+
+it.each(['turnId', 'conversationId', 'denied'] as const)(
+  'discards a pending call read after %s changes', async input => {
+    const { fixture } = await mount(savedCalls());
+    let finish: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>(resolve => { finish = resolve; });
+    vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(pending)
+      .mockResolvedValue(new Response(JSON.stringify({ status: 'not_stopped' })));
+    checkStatus(rootOf(fixture)).click();
+    fixture.componentRef.setInput(input, input === 'denied' ? true : 'another');
+    fixture.detectChanges();
+    finish?.(new Response(JSON.stringify(savedCalls())));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(rootOf(fixture).querySelector('.budget-calls')).toBeNull();
+    expect(rootOf(fixture).textContent).not.toContain('reserved-call');
+  },
+);
