@@ -122,7 +122,7 @@ function savedIdentity(rows: StoredEvent[], stage: ConnectionStage) {
 /** Advance one bounded live scan. Keep the continuation private and retry failed pages unchanged. */
 export async function reconcileConnectionPage(store: EventStore, db: Pick<Db, 'lock'>,
   custody: Custody & Pick<ReturnType<typeof connectionCustody>, 'candidates'>,
-  continuation?: string) {
+  silo: string, continuation?: string) {
   try {
     const page = await custody.candidates(continuation);
     if (page.status !== 'listed') {
@@ -130,6 +130,10 @@ export async function reconcileConnectionPage(store: EventStore, db: Pick<Db, 'l
     }
     let deleted = 0;
     for (const stage of page.stages) {
+      // Keep other silos' copies without consulting this worker's event store or journal.
+      if (stage.siloId !== silo) {
+        continue;
+      }
       const result = await reconcileConnectionStage(store, db, custody, stage);
       if (result.status === 'deleted') {
         deleted += 1;

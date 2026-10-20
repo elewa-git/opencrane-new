@@ -663,8 +663,8 @@ Older key ids stay configured while their generations exist.
 
 The handler uses the normal five retries with exponential backoff, starting at one second.
 After exhaustion it keeps material and the failed job. Operators can retry the original job;
-bounded candidate maintenance can also find retained objects. Automatic startup maintenance
-is deferred. Replay does not register this handler. Live Kubernetes/provider checks: NOT RUN.
+the scheduled scan can also find retained objects without changing the failed job.
+Replay does not register this handler. Live Kubernetes/provider checks: NOT RUN.
 
 ## Hosted MCP admission
 
@@ -679,3 +679,19 @@ namespaces on a claimed, stopped secondary slot. The device, privileged and miss
 validation into an isolated policy. These fixtures are valid for Kubernetes; other
 template rules cannot hide a missing check.
 Quota and network isolation remain for 8b; no runtime start path is connected here.
+
+## Scheduled private connection maintenance
+
+After subscription checks, `startWorkers` starts `scanConnections` without awaiting it.
+The loop receives the configured `SILO_ID` and the same loaded custody object as
+`cleanup-connection`. Unset or missing
+configuration leaves both disabled; malformed configuration still stops startup.
+The worker aborts and waits for the runtime, watcher and scan to settle before closing
+its event store and database. A failed task cannot skip that wait. A rejected scan logs
+fixed text without the error object, sets a failed exit code and aborts the worker.
+The loop's [contract](../../libs/models/README.robot.md#scheduled-connection-scans-p3-8-pr-3f-part-of-49)
+owns timing, continuation retries and safe logging. Worker tests cover configured and
+missing files, changed subscriptions, and dispatch while the first list request hangs.
+Shutdown tests hold that response until after SIGTERM and the runtime has stopped,
+including when the watcher rejects. A test-only module loader injects watcher and scan
+failures. The scan failure test checks automatic shutdown and private error redaction.

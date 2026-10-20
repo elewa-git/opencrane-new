@@ -22,7 +22,7 @@ flowchart LR
   models -->|checks remote HTTPS addresses and certificates; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
-  models -->|stages credentials, scans bounded pages past damaged entries and checks exact removal| custody["Kubernetes<br/>private credentials"]
+  models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store<br/>event log"]
@@ -399,8 +399,7 @@ small page of private credentials. After restart, it can rebuild missing repair 
 from confirmed saved identities. It keeps uncertain stages and changed storage identities.
 Damaged credentials stay in storage while the scan checks healthy neighbours and later pages.
 Older credentials without discovery details stay in storage for individual checks.
-Configured workers clean old copies after a saved revoke or replacement. Automatic
-startup scanning is still planned.
+Configured workers clean old copies after a saved revoke or replacement.
 The event store checks profile changes and admin blocks together when it saves a profile.
 If the block is saved first, the profile save is refused, even if its access check has finished.
 A simultaneous change to another connection can also refuse the save; the caller can retry.
@@ -408,6 +407,13 @@ A simultaneous change to another connection can also refuse the save; the caller
 1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. The models process saves one final send permission. agentgateway then sends the call once to the AI provider.
 2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full amount stays held for review. A later report of an unknown result restores money released before an allowed call was sent.
 3. **An admin or owner changes access or spending.** The change is saved as an [event](../../GLOSSARY.md#event): the server saves tool rules and grants, and the models process saves spending limits. Background workers then update OpenFGA and the spending tables.
+
+### Automatic checks for abandoned connection copies
+
+Configured workers check private token copies at startup and every 15 minutes.
+They remove only copies proven safe to delete, including abandoned saves and copies
+left after failed cleanup jobs. Each pass checks one small page at a time.
+Workers keep copies belonging to other silos without checking or changing them.
 
 ## How to run or test it
 

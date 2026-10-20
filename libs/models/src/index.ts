@@ -81,6 +81,7 @@ export { foldMemoryContext, type MemoryContextState } from './memory-context-fol
 export { LoadedMemoryRefused, prepareLoadedMemory } from './loaded-memory.ts';
 export { connectionCleanupHandler } from './connection-cleanup.ts';
 export { connectionCustodyFromFile } from './connection-custody-file.ts';
+export { scanConnections } from './connection-scan.ts';
 
 export { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-https.ts';
 
