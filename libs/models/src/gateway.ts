@@ -147,6 +147,7 @@ async function recordUsageLine(actor: BudgetActor, line: string) {
   const parsed: unknown = JSON.parse(line);
   const value = observation.parse(parsed);
   if ('toolOutcome' in value) {
+    // Keep remote adapter evidence private to the consumed permit's callback.
     await recordToolObservation(actor, value);
   } else if ('reason' in value) {
     const subject = `gateway-${value.id}`;

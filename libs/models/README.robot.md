@@ -2797,8 +2797,25 @@ Only Host, Content-Type, Accept, Content-Length, MCP version/method/name and the
 schema digest leave the process. Replies must be HTTP 200 JSON, at most 1 MiB and without
 an MCP session; only Content-Type is forwarded. Errors return fixed 502/504 responses.
 The whole HTTPS exchange has a 30-second deadline and never retries or follows redirects.
-After start saving, remote failures leave the outcome unknown. Authenticated adapter
-observations are deferred to 5b. No events are added. Fresh-install qualification: NOT RUN.
+Remote starts carry `adapter: remote_https`. Only the consumed permit's private callback
+can save `adapter_response_received` or `adapter_transport_uncertain`. The recorder checks
+the silo, decision id, start id, connection, generation, record digest and review revision
+against saved history. It uses the existing outcome id and conditional append, then reads
+back a lost save reply. It never repeats the remote call. No public observation route exists.
+Generic gateway evidence cannot settle a marked remote start, even when it arrives first.
+Operator and memory observations keep their existing behaviour.
+
+A complete UTF-8 JSON-RPC response with the matching id and a result or error object proves
+`responded`, not tool success. Duplicate keys and malformed replies remain unknown, as do
+resets, redirects, timeouts and TLS failures. The callback must confirm its evidence before
+returning a checked reply; an unconfirmed save returns an empty 503. Request/reply bytes,
+credentials and addresses never enter this evidence. Missing observations after a crash
+remain unknown; replay never sends. Crash reconciliation and proved remote non-dispatch
+are separate work. Fresh-install qualification: NOT RUN.
+
+`mcp-dispatch.test.ts` uses the recording TLS server, real gateway, NATS and PostgreSQL.
+It checks exact bindings, lost saves, store outages, changed history, forged external
+observations, earlier/later gateway evidence and restart without another send.
 
 ## Native request cost and dispatch (P4-11 PR 2g; Part of #93)
 

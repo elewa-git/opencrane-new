@@ -1,0 +1,1 @@
+Remote tool calls save checked replies against the pass that allowed the call before returning them. Uncertain exchanges stay unknown even when the gateway reports a response. An unconfirmed evidence save returns unavailable and never sends the call again.

@@ -4,7 +4,8 @@ import { hostedImageInstallationSchema } from './hosted-image.ts';
 import { optionalProviderTurnBindingSchema } from './turn-binding.ts';
 import { groupConversationSchema, sharedChildConversationSchema,
   childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
-import { isToolCallText } from './tool-call.ts';
+import { isToolCallText, toolCallFields } from './tool-call.ts';
+export { toolDispatchRecordedDataSchema } from './tool-call.ts';
 import { nativeDelegationBindingSchema, hasDistinctDelegationChild } from './delegation.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
@@ -350,27 +351,11 @@ export const agentCommandRanDataSchema = z
   })
   .strict();
 
-const toolCallFields = {
-  conversationId: z.string().regex(/^[\w-]{1,200}$/u),
-  turnId: z.string().regex(/^[\w-]{1,200}$/u),
-  callId: z.string().refine(isToolCallText),
-  serverId: z.string().regex(/^[\w-]{1,200}$/u),
-  toolName: z.string().refine(isToolCallText),
-};
 export const agentNativeConsentRefusedDataSchema = z.object({
   conversationId: toolCallFields.conversationId, turnId: toolCallFields.turnId,
   nativeRequestId: z.string().refine(isToolCallText),
   serverName: z.string().refine(isToolCallText), serverId: toolCallFields.serverId.optional(),
   reason: z.literal('unsupported_native_consent'),
-}).strict();
-
-export const toolDispatchRecordedDataSchema = z.object({
-  ...toolCallFields, requestId: z.uuid(), logicalRequestId: digestSchema,
-  approvalId: id.optional(), startedAt: z.iso.datetime(), durationMs: z.int().nonnegative(),
-  outcome: z.enum(['not_dispatched', 'responded', 'outcome_unknown']),
-  evidence: z.enum([
-    'connection_refused', 'dispatch_refused', 'response_received', 'transport_uncertain',
-  ]),
 }).strict();
 
 export const agentToolCallStartedDataSchema = z.object(toolCallFields).strict();

@@ -2813,7 +2813,7 @@ async function checksRemoteEvidence(mode: typeof remoteSaveFailures[number]) {
       expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
     }
     const before = remote.received.length;
-    await setup.restart();
+    await setup.restartActor();
     expect((await send(setup, value)).status).toBe(403);
     expect(remote.received).toHaveLength(before);
     expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);

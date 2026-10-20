@@ -9,6 +9,7 @@ const toolDispatchStartedDataSchema = z.strictObject({
   generation: z.int().positive(),
   recordDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   reviewRevision: z.int().positive(),
+  adapter: z.literal('remote_https').optional(),
 });
 
 export const decisionEvents = [

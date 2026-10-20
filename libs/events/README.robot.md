@@ -716,3 +716,14 @@ and outcome (declined, unsupported). It contains no callId, command, path, reaso
 Elicitation uses the unchanged `agent.native_consent_refused` contract. The new record
 grants no access and is excluded from chat display. The bridge reports it only for a
 matching running memory-free turn while the takeover gate remains open.
+
+## Remote tool outcomes
+
+`tool.dispatch_started.adapter` optionally identifies `remote_https`; older records still
+parse. `tool.dispatch_recorded.adapter` is a strict binding containing `decisionId`,
+`startId`, `connectionId`, `generation`, `recordDigest` and `reviewRevision`. The envelope
+supplies the silo. `adapter_response_received` requires this binding and `responded`;
+`adapter_transport_uncertain` requires it and `outcome_unknown`. Generic gateway evidence
+cannot carry the binding. No remote adapter evidence can claim `not_dispatched`.
+The models process validates these references against the consumed permit and saved start.
+Schema validation alone grants no authority to write an observation.
