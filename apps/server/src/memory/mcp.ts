@@ -31,10 +31,6 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
     instance.post('/mcp/memory/server', handle);
     done();
   }
-  function keepBody(_request: FastifyRequest, body: string | Buffer,
-    done: (error: Error | null, value?: unknown) => void) {
-    done(null, body);
-  }
   async function handle(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     try {
@@ -57,10 +53,8 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       if (parsed.request.method === 'tools/list') {
         result = toolList;
       }
-      if (parsed.input?.operation === 'correct' || parsed.input?.operation === 'forget') {
-        await refuseAgentChange(options, context, evidence, parsed.input, config.cookieSecret,
-          rights.confirm, deadline);
-      }
+      await refuseAgentChange(options, context, evidence, parsed.input, config.cookieSecret,
+        rights.confirm, deadline);
       if (parsed.input?.operation === 'remember') {
         const input = parsed.input;
         const writeAuthority = rights.writeAuthority!;
@@ -104,6 +98,11 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
     }
   }
   void app.register(register);
+}
+
+function keepBody(_request: FastifyRequest, body: string | Buffer,
+  done: (error: Error | null, value?: unknown) => void) {
+  done(null, body);
 }
 
 function memoryContextConsumer(generation: string | undefined) {

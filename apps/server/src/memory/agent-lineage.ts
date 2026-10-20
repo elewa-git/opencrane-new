@@ -29,16 +29,7 @@ function checkEvidence(context: MemoryContext, evidence: Evidence, dependencies:
   const keys = dependencies.map(referenceKey);
   const supplied = new Set(keys);
   if (supplied.size !== dependencies.length) throw new MemoryRefused();
-  if (target) {
-    if (context.operation === 'correct') {
-      for (const dependency of dependencies) {
-        // Keep every revision of the target out of its replacement's dependencies.
-        if (dependency.memoryId === target.memoryId) throw new MemoryRefused();
-      }
-      supplied.add(referenceKey(target));
-    }
-    if (!supplied.has(referenceKey(target))) throw new MemoryRefused();
-  }
+  if (target) checkTargetEvidence(context.operation, dependencies, supplied, target);
   if (supplied.size !== state.references.length) {
     throw new MemoryRefused();
   }
@@ -46,6 +37,22 @@ function checkEvidence(context: MemoryContext, evidence: Evidence, dependencies:
     if (reference.scopeId !== context.scopes[0] || !supplied.has(referenceKey(reference))) {
       throw new MemoryRefused();
     }
+  }
+}
+
+function checkTargetEvidence(operation: MemoryContext['operation'], dependencies: Reference[],
+  supplied: Set<string>, target: Reference) {
+  if (operation === 'correct') {
+    for (const dependency of dependencies) {
+      // Keep every revision of the target out of its replacement's dependencies.
+      if (dependency.memoryId === target.memoryId) {
+        throw new MemoryRefused();
+      }
+    }
+    supplied.add(referenceKey(target));
+  }
+  if (!supplied.has(referenceKey(target))) {
+    throw new MemoryRefused();
   }
 }
 
@@ -81,11 +88,11 @@ export function confirmAgentLineage(options: MemoryOptions, context: MemoryConte
   return confirm;
 }
 
-type Change = Extract<NonNullable<ReturnType<typeof parseMemoryRequest>['input']>,
-  { operation: 'correct' | 'forget' }>;
+type Input = ReturnType<typeof parseMemoryRequest>['input'];
 export async function refuseAgentChange(options: MemoryOptions, context: MemoryContext,
-  evidence: Evidence, input: Change, secret: string, confirmRights: () => Promise<unknown>,
+  evidence: Evidence, input: Input, secret: string, confirmRights: () => Promise<unknown>,
   deadline: number) {
+  if (input?.operation !== 'correct' && input?.operation !== 'forget') return;
   const target = { scopeId: input.scopeId, memoryId: input.memoryId,
     revision: input.expectedRevision };
   const loaded = evidence.chat.memoryContext?.references ?? [];
