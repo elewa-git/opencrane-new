@@ -196,6 +196,60 @@ it('keeps a used approval on one line after another poll and moves its status ch
     fixture.destroy();
   });
 
+it('shows the saved use while an approved retry waits for its replacement permit', async () => {
+  let saved = usedCard();
+  function readSavedApproval(): Promise<Response> {
+    return Promise.resolve(response([saved]));
+  }
+  const fixture = await mount(readSavedApproval);
+  saved = { ...saved, state: 'approved' };
+  await fixture.componentInstance['read']('chat');
+  fixture.detectChanges();
+  const line = requiredElement<HTMLElement>(rootOf(fixture), '.approval-terminal');
+  expect(line.textContent).toContain('used once');
+  expect(line.textContent).toContain('no confirmed result');
+  expect(line.textContent).not.toContain('not used yet');
+  const drawer = openTerminalDetails(fixture);
+  expect(drawer.querySelector('.approval-times')?.textContent)
+    .toContain('Used4 Oct 2026, 10:17 UTC');
+  expect(drawer.textContent).not.toMatch(/try again|retry/i);
+  expect(drawer.querySelector('.drawer-actions')).toBeNull();
+  fixture.destroy();
+});
+
+it('uses the first saved use time on the line when usedAt is absent', async () => {
+  const saved = { ...usedCard(), usedAt: undefined };
+  const fixture = await mount(() => Promise.resolve(response([saved])));
+  const line = requiredElement<HTMLElement>(rootOf(fixture), '.terminal-detail');
+  expect(line.textContent).toBe('4 Oct 2026, 10:17 UTC · can’t be reused');
+  fixture.destroy();
+});
+
+it('uses usedAt in the drawer when the saved uses list is empty', async () => {
+  const saved = { ...usedCard(), uses: [] };
+  const fixture = await mount(() => Promise.resolve(response([saved])));
+  const drawer = openTerminalDetails(fixture);
+  expect(drawer.querySelectorAll('.approval-time-row')).toHaveLength(3);
+  expect(drawer.querySelector('.approval-times')?.textContent)
+    .toContain('Used4 Oct 2026, 10:17 UTC');
+  fixture.destroy();
+});
+
+it('omits the use time from a used line when neither saved use time exists', async () => {
+  const saved = { ...usedCard(), usedAt: undefined, uses: [] };
+  const fixture = await mount(() => Promise.resolve(response([saved])));
+  const line = requiredElement<HTMLElement>(rootOf(fixture), '.terminal-detail');
+  expect(line.textContent).toBe('can’t be reused');
+  fixture.destroy();
+});
+
+it('omits the end time from a cancelled line when no end time was saved', async () => {
+  const fixture = await mount(() => Promise.resolve(response([card('cancelled')])));
+  const line = requiredElement<HTMLElement>(rootOf(fixture), '.terminal-detail');
+  expect(line.textContent).toBe('nothing was sent with this approval');
+  fixture.destroy();
+});
+
 it('counts separate uses and gives each saved use its own drawer row', async () => {
   const first = usedCard();
   const saved = { ...first, uses: [
@@ -238,7 +292,7 @@ it('treats a saved first use as use even when the uses list is empty', async () 
   fixture.destroy();
 });
 
-it('does not invent a time when the saved record has none', async () => {
+it('hides the time list when the saved record has no times', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2031-01-01T12:00:00Z'));
   const fixture = await mount(() => Promise.resolve(response([card('denied')])));
@@ -247,6 +301,7 @@ it('does not invent a time when the saved record has none', async () => {
   expect(root.textContent).not.toContain('2031');
   expect(root.textContent).not.toContain('Invalid');
   expect(drawer.querySelectorAll('.approval-time-row')).toHaveLength(0);
+  expect(drawer.querySelector('.approval-times')).toBeNull();
   fixture.destroy();
 });
 

@@ -1448,6 +1448,65 @@ it('does not announce a reconnect that started in the conversation being left', 
   expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
 });
 
+it('removes a used approval and its open drawer on closure despite a late approval reply',
+  async () => {
+    Object.assign(HTMLDialogElement.prototype, {
+      showModal: openPanelDialog,
+      close: closePanelDialog,
+    });
+    const usedAt = '2026-10-04T10:17:00Z';
+    const approval = {
+      approvalId: 'a'.repeat(64), conversationId: 'chat', requesterId: 'me',
+      expiresAt: '2026-10-04T10:32:00Z', state: 'outcome_unknown', stepUp: false,
+      canDecide: false, usedAt, uses: [{ permitId: 'permit-1', usedAt }],
+      review: { action: 'Change the note', tool: 'write', target: 'SO-1042', data: '{}',
+        destination: 'ERP', account: 'No account', consequence: 'Changes the draft.' },
+    };
+    const capture = await createCaptureWorkspace([], [approval]);
+    try {
+      await vi.waitFor(() => expect(capture.root.querySelector('.approval-terminal'))
+        .not.toBeNull());
+      const line = capture.root.querySelector<HTMLButtonElement>('.approval-terminal')!;
+      line.click();
+      capture.fixture.detectChanges();
+      const drawer = capture.root.querySelector('oc-approval-cards dialog[open]');
+      expect(drawer).not.toBeNull();
+      expect(drawer?.textContent).toContain('4 Oct 2026, 10:17 UTC');
+      let releaseRead: ((response: Response) => void) | undefined;
+      function holdApprovalRead(): Promise<Response> {
+        function saveRelease(resolve: (response: Response) => void): void {
+          releaseRead = resolve;
+        }
+        return new Promise<Response>(saveRelease);
+      }
+      vi.mocked(fetch).mockImplementationOnce(holdApprovalRead);
+      drawer?.querySelector<HTMLButtonElement>('.state-action')!.click();
+      expect(releaseRead).toBeDefined();
+      const closedRow = { id: 'closed', position: 1, type: 'conversation.closed',
+        time: '2026-10-04T10:20:00Z', data: {} };
+      sendConversationRow(capture.socket, closedRow);
+      capture.fixture.detectChanges();
+      expect(capture.root.textContent).toContain('This session is closed');
+      expect(capture.root.querySelector('oc-approval-cards')).toBeNull();
+      expect(capture.root.querySelector('.approval-terminal')).toBeNull();
+      expect(capture.root.querySelector('oc-approval-cards dialog')).toBeNull();
+      expect(capture.root.textContent).not.toContain('4 Oct 2026, 10:17 UTC');
+      if (!releaseRead) {
+        throw new Error('The approval status read did not start');
+      }
+      const reply = { cards: [approval], csrf: 'fixture' };
+      releaseRead(new Response(JSON.stringify(reply)));
+      await capture.fixture.whenStable();
+      capture.fixture.detectChanges();
+      expect(capture.root.querySelector('oc-approval-cards')).toBeNull();
+      expect(capture.root.querySelector('.approval-terminal')).toBeNull();
+      expect(capture.root.querySelector('oc-approval-cards dialog')).toBeNull();
+      expect(capture.root.textContent).not.toContain('4 Oct 2026, 10:17 UTC');
+    } finally {
+      capture.fixture.destroy();
+    }
+  });
+
 it('shows Waiting on you without adding another live announcement', async () => {
   const approval = {
     approvalId: 'a'.repeat(64), conversationId: 'chat', requesterId: 'me',
