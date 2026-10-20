@@ -27,7 +27,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, live updates and saved tool status| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, including saved tool hand-offs| nats["NATS<br/>the event log"]
+  server -->|records changes, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations and history with saved and missing tool outcomes| postgres
@@ -94,6 +94,191 @@ Requests to take control of a desktop, starting private tool instances and runni
 nightly memory upkeep remain switched off. Their folder guides explain what can be
 saved and read today. [Chat](src/chat/README.md) also describes the remaining limits
 on starting newly requested side conversations and closing chats through HTTP.
+
+An admin saves one remote tool grant. After a lost reply, they check the original reference.
+The check never resends the change. A draft server's grants cannot publish its tools.
+
+A lost spending-limit reply can be checked by its original command id. Owners and
+admins see the saved amount and stop status. The original caller can still see a
+minimal confirmation after losing that role, while they remain a member.
+The check saves nothing and makes no AI call.
+
+A member can review a child chat from their own group message, then save its first input.
+The requester can retry a saved start failure, up to three attempts. A background worker
+completes missing child creation and first input after a restart or retry.
+It checks the saved request and current permissions each time. These children stay queued;
+they cannot start assistant work yet.
+
+Owners and admins can read whether a saved publication is Applying, Ready, Disabled
+or Unknown. Ready requires matching saved gateway and server receipts. Checking a
+change never sends configuration or calls the gateway. The original command id also
+recovers hosted registration results without confusing them with publication.
+
+When a saved event closes a chat, the server refuses new turn passes and rebuilt
+context. It still acknowledges delayed reports, so another person's chat can keep
+using the same computer connection. An admitted turn stays recorded until cleanup
+can confirm it ended. Public closing and freezing displayed output are not built yet.
+
+A participant can read why a chat turn stopped for spending. Only the person who
+asked for that turn sees its limit and call amounts. The reply distinguishes held,
+charged and released calls, and calls that might have been sent.
+Reading the saved result starts no work.
+Failed reads still check access before reporting that the result is unavailable.
+
+The models process shares a PostgreSQL lock with the preparation worker while
+replacing the gateway file. It delivers the latest saved configuration and checks its
+reply while it holds the budget worker lease. Startup settings supply no tool routes.
+Reviewed tool calls stay unavailable until generation checks are connected.
+
+After saved control intent, the server sends a signed request to stop computer work.
+An idle computer receives it too. Slow chat reads, file uploads and report replay do
+not delay this request. If a turn finishes while the request is being signed, the
+server checks it again before telling the computer to resume reports.
+The server checks the computer's immediate reply and keeps it only for that connection.
+It can then ask the root supervisor to stop executors while reports still wait to resume.
+This does not grant desktop control or save proof that all computer work has stopped.
+
+A child chat can link back to its source only when the reader can still read that
+parent message. Otherwise it returns a restricted result without parent details.
+
+A shared child chat's creator can invite someone after acknowledging that all shared
+history will be visible. The invite gives access only to that child. The creator can
+remove others, and others can leave. Saved removals stop reads and live connections
+before the permissions service catches up.
+
+An owner or admin can register a hosted image and read the result using the original
+command id. The image stays Checking until a valid image check result is recorded.
+Registration does not fetch an image, discover tools or start a process.
+
+Internal child-chat commands review a person’s own group message, save their chosen
+people and assistant, and create the named child. A separate command waits for its
+permissions to apply, then copies only the reviewed message under the child’s own key.
+Repeating a request returns the same saved records. The reviewed start route and recovery
+worker use these commands. They do not start assistant work.
+
+A person continues a shared child chat. The server gives the assistant completed
+exchanges from that child, including replies to other people. It leaves out parent
+history, private sessions, files and unfinished text. A first turn uses only the
+reviewed source message already saved in the child.
+
+A queued message cannot start after an applicable spending stop, even if the limit
+has since risen or the default payer has changed. Admission uses the payer and
+position saved when the message was queued. It checks again after saving the computer
+start and before issuing a turn pass.
+These checks do not change access to read the chat or view the desktop.
+
+The models process checks each configured tool server at startup and before its saved
+list expires. Calls pause when a check fails or finds a change. A changed server stays
+paused until a new review and publication receive a matching gateway receipt while checks
+are fresh. Publication preparation alone never releases the hold. The worker sends the
+latest current configuration; a Ready read is not built yet.
+
+The person who set up nightly memory upkeep can read its blocked and missed history.
+These reads contain dates and fact references, with no saved memory text or new work.
+The same status shows whether the scope is clean or has facts waiting for a future
+night. It shows the next 02:00 UTC boundary for waiting facts.
+
+1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie. If the sign-in details are too large
+   for a browser cookie, it shows a clear error.
+2. **The first owner claims a new installation.** An operator runs the one-time command,
+   which prints a token. The first person signs in and enters that token on the claim page.
+   The server checks it and records them as the owner.
+3. **An admin prepares an invitation.** The server checks the email input. The person
+   is confirmed when they accept; the server does not look them up in Zitadel.
+   An admin can save or renew an email invitation and recover their own saved result.
+   Another admin cannot read that command receipt. Refusal records keep only a
+   hash of the command id, a fixed-length value used to find a saved result. Organisation history checks
+   current access and tells browsers and HTTP caches not to save its replies.
+   The server finds matching emails in its member table and checks their events.
+   Acceptance finds account records in the member table and checks their events.
+   It reads newer events too, so delayed background work cannot hide an active account.
+   It records the signed-in account and keeps concurrent invitations from admitting it twice.
+   If an admin renews the invitation during acceptance, the person must accept the
+   renewed invitation. The old invitation cannot grant its earlier role.
+4. **A person chats with an assistant.** The server sends the turn to that person's
+   computer and passes the assistant's progress back to the browser as it arrives. The
+  person can stop the turn. A personal turn may include a short list of reviewed
+  tools. The gateway checks permission again each time one is used. The chat watcher
+  leaves finished chats alone while another reply is pending. It sends a waiting turn
+  again until the computer accepts it, and
+   sends it again after reconnecting. It retries short service outages so pending
+   messages can still reach the computer. Personal memory-free turns include only tools
+   that have been reviewed, cost nothing and are available to both the person and assistant.
+   Ask tools also need a review describing the action the person will approve.
+   Private team turns stay restricted and do not receive tools.
+   The watcher reuses computer history while it is unchanged. It checks for changes
+   again before sending a turn or file, so new control intent holds waiting work.
+   While a computer has not acknowledged a file, the watcher still sends spending
+   Stops and checks approvals. A slow chat history read delays only that chat’s Stop
+   check. Shutdown waits for unfinished checks. It sends each file once per connection and waits for
+   the receipt before sending that chat’s turn.
+   Open chat pages repeat permission checks when silo or team membership changes.
+   Removing someone from a team closes their private chat with that team's assistant
+   within two seconds. If OpenFGA takes too long to apply another change, the page
+   reconnects after five seconds and resumes receiving messages. The server checks
+   each open chat's feed position every 100 ms and reads chat content only after it
+   changes. Computer state follows lifecycle events and stays in recovery until a
+   new ready event appears. The worker saves this state in the computer read table,
+   so each chat update reads a small record. Sleeping and waking computers show starting.
+5. **A group uses a shared assistant.** An admin chooses its tools and paying group.
+   Each member gets a private chat and a private turn by default. Private turns have
+   no local tools. A member can choose a memory-free turn to use the group's shared
+   computer disk and browser. That turn has no earlier private context. A member who
+   loses spending access can still read and stop their work.
+6. **Two people chat.** The server checks who can read their direct conversation,
+   then returns messages and live updates. Busy chats and slow reads keep working.
+   A removed participant loses access even before the permissions service catches up.
+   A person who joins later sees messages from their latest join onwards.
+   Group creators can edit the people list. Other participants can leave.
+   Lists reuse permission facts within the request and check for changes after each
+   answer from the permissions service.
+7. **An admin adds a tool server.** The server checks the remote address, lists its
+   tools and leaves them blocked until an admin reviews them. Remote discovery uses
+   the public address checks shared by `libs/models`.
+   Published calls require permission for both the person and the assistant. Removing
+   either grant stops new calls and calls waiting to be sent, even while IAM, the
+   permissions service, is still applying the change. Giving the grant again allows
+   calls once the saved content and permission updates are current.
+   A member can read their own private instance and request its stop through HTTP.
+   Reading status never starts it or releases credentials. A missing result stays unknown.
+8. **An assistant asks an AI model for help.** The request goes through agentgateway, the
+   AI gateway. The gateway asks the models process whether the budget allows it, and only
+   then sends it on to the model provider.
+9. **A person watches the assistant's desktop.** The server holds one place while the
+   connection opens and until the session stops. It checks their conversation
+   access and desktop grant. A confirmed member removal or conversation permission denial
+   ends the view straight away, even if another access read is slow. A later invitation
+   on a removed member’s event stream does not restore desktop or file access.
+10. **An admin opens groups or ownership.** The server loads the records, then checks
+    current access before replying. Slow histories can finish. A removal during
+    loading denies the reply; unrelated chat activity does not interrupt it.
+
+11. **A member continues the welcome survey.** The server checks their current
+    membership and saves one step. Reloading returns confirmed answers. Editing
+    an earlier answer clears later current steps. Restarting keeps encrypted history.
+12. **A person opens their conversation list.** The server returns a small page ordered
+    by activity they can see. Recent and Archived follow the person's saved choice.
+    Search checks only visible titles. Continuations refer only to visible chats.
+    Lists that reach the fixed scan limit return an incomplete reply so hidden chats
+    cannot create extra pages. Ordinary late joiners see their join time, including in
+    personal sessions. Group lists also show current participants without earlier
+    creation details. The website loads the first page; paging controls are planned.
+13. **A person archives a chat or marks messages read.** The server saves only that
+    person's choice. Other devices see the same choice after the read tables catch up.
+    A lost reply can be checked with the original request id. Leaving and joining
+    again starts fresh choices. These actions start no assistant work or spending.
+
+The server renews computer passes through authenticated Kubernetes access as root.
+It sends the signing public key with the pass so the computer can check its signature
+and save its identity.
+Desktop and Codex processes cannot replace these passes through HTTP.
+
+The server checks whether each computer can wait for approval before offering Ask
+tools. Older computers receive Allow tools only, so either update order is safe.
+
+The server checks browser connections with a heartbeat every 15 seconds by default.
+Tests can shorten the interval. A missed reply still closes the connection on the
+next heartbeat.
 
 ## How to run or test it
 

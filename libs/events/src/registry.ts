@@ -1,7 +1,7 @@
 import { agentNativeRequestRefusedDataSchema } from './native-request.ts';
 import { approvalCancelledDataSchema } from './approval-cancellation.ts';
 import { childPublicationEvent } from './child-publication.ts';
-import { childRequestEvent, childStartFailedEvent } from './child-request.ts';
+import { childRequestEvents } from './child-request.ts';
 import {
   gatewayConfigurationEvent,
   gatewayObservationEvent,
@@ -74,8 +74,7 @@ const maintenanceRecordedExample: MaintenanceRecord = {
 
 export const eventRegistry: readonly EventDefinition[] = [
   memoryContextEvent,
-  childRequestEvent,
-  childStartFailedEvent,
+  ...childRequestEvents,
   childPublicationEvent,
   event('memory.maintenance_recorded', 'scope',
     'One scope night was claimed or skipped without dispatch.', memoryMaintenanceRecordedDataSchema,

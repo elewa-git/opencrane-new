@@ -750,7 +750,8 @@ configuration, and cannot establish live readiness.
 
 ## Hidden child requests
 
-`conversation.child_requested` and `conversation.child_start_failed` are skipped before
+`conversation.child_requested`, `conversation.child_start_failed` and
+`conversation.child_retry_requested` are skipped before
 the conversation feed is written,
 like `agent.memory_context_recorded`. Rebuild repeats that omission. The separate
 child creation still rebuilds its recorded participants and OpenFGA receipts.
@@ -809,9 +810,10 @@ Rebuild the MCP catalogue on upgrade so earlier publication events gain this pos
 ## Unfinished child requests
 
 `childRequests` is a separate projection filled by the conversations worker. It records
-only silo, parent, intent id/position, child id, first-input id and failed attempt.
-The name `child-requests-v2` and table `child_requests_v2` force an upgrade replay.
-Failure events mark the matching intent; recovery reads only unfailed rows. The matching saved
+only silo, parent, request and intent id/position, child id, first-input id and failure references.
+The name `child-requests-v3` and table `child_requests_v3` force an upgrade replay.
+Failure events mark the matching intent. A retry clears only its named failure at the next
+attempt; recovery reads only unfailed rows. The matching saved
 input removes the candidate. The index supplies candidates, never permission or proof
 that a stage can run. It does not write a conversation feed row or contain source text.
 Stop the conversations worker and server readers before `ProjectionRunner.rebuild(childRequests)`.

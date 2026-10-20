@@ -38,7 +38,7 @@ const example: ChildRequest = { conversationId: 'parent', sourceMessageId: 'sour
   sourcePosition: 2, requestId: 'request', childConversationId: 'child', firstInputId: 'input',
   createdBy: 'alice', assistantId: 'assistant', payingGroupId: 'team', allowanceBoundCents: 1000,
   initialJoins: [{ participantId: 'alice', parentJoinEventId: 'join', parentJoinPosition: 1 }] };
-export const childRequestEvent = event('conversation.child_requested', 'conversation',
+const childRequestEvent = event('conversation.child_requested', 'conversation',
   'The server saved a reviewed child request without copying source text.',
   childRequestedDataSchema, example);
 
@@ -60,6 +60,26 @@ export const childStartFailedEventSchema = failedEnvelope.refine(validFailureWri
 const failureExample = { conversationId: 'parent', requestId: 'request',
   childConversationId: 'child', intentEventId: 'intent', attempt: 1,
   stage: 'create', reason: 'access_refused' } as const;
-export const childStartFailedEvent = event('conversation.child_start_failed', 'conversation',
+const childStartFailedEvent = event('conversation.child_start_failed', 'conversation',
   'The server saved a proven refusal before a child could start.',
   childStartFailedDataSchema, failureExample);
+
+export const childRetryRequestedDataSchema = z.strictObject({
+  conversationId: chatIdSchema, requestId: chatIdSchema, retryId: chatIdSchema,
+  failureEventId: chatIdSchema, attempt: z.int().min(2).max(3),
+});
+const retryEnvelope = eventEnvelopeSchema(childRetryRequestedDataSchema);
+function validRetryWriter(saved: z.infer<typeof retryEnvelope>) {
+  return saved.type === 'conversation.child_retry_requested' &&
+    saved.subject === `conversation-${saved.data.conversationId}` &&
+    saved.source === 'opencrane-server' && saved.report === undefined &&
+    saved.commandId === saved.id && saved.principal?.kind === 'human';
+}
+export const childRetryRequestedEventSchema = retryEnvelope.refine(validRetryWriter);
+const retryExample = { conversationId: 'parent', requestId: 'request', retryId: 'retry',
+  failureEventId: 'failure', attempt: 2 };
+const childRetryRequestedEvent = event('conversation.child_retry_requested', 'conversation',
+  'The requester asked to resume a saved child failure with the original choices.',
+  childRetryRequestedDataSchema, retryExample);
+
+export const childRequestEvents = [childRequestEvent, childStartFailedEvent, childRetryRequestedEvent];

@@ -134,9 +134,18 @@ An unapplied access receipt returns 425 `access_applying`; an outage returns 503
 POST can complete them. The server also resumes missing creation and first input from
 saved intents after restart, with the original choices and current access checks.
 A proven refusal saves `conversation.child_start_failed`, even after parent close.
-Recovery stops and the original start POST cannot resume that request. An outage or
+Recovery stops until an accepted retry; the original start POST alone cannot resume it. An outage or
 applying access stays queued and retries with backoff without saving a failure.
-Public retry is the next part; this part records attempt 1 and accepts event attempts 1–3.
+`POST /api/conversations/:parent/children/:requestId/retry` accepts exactly
+`{retryId, failureEventId}`. Only the original requester can retry, with a visible source,
+open parent and current assistant and payer rights. History loads before the short write check.
+The 202 receipt is `{conversationId, requestId, retryId, failureEventId, attempt}`.
+The event id derives from silo, parent, request and retry id. Same id and body returns
+that receipt; changed reuse returns 409. Another retry id for the current failure returns
+the first receipt. Missing failure, stale failure and failed attempt 3 return 409.
+Unknown requests and another requester's ids both return 403 `refused` without details.
+Accepted attempts 2 and 3 resume only missing stages with original ids and choices.
+Applying access and outages remain retryable; neither saves a permanent refusal.
 
 `GET /api/conversations/:parent/children/:requestId` checks current parent read access
 once after loading history. It returns `{state: 'unknown'}` for missing ids and another
@@ -145,7 +154,7 @@ person's ids alike. The requester receives `{requestId, state: 'queued'}` and
 A saved failure returns `{state: 'failed', requestId, stage, reason, attempt, failureEventId}`.
 Stages are `create` or `first_input`; reasons are `access_refused`, `conversation_closed`
 or `record_changed`. This reply contains no child id, source text or audience.
-Failure records never appear in chat feeds or message history.
+Failure and retry records never appear in chat feeds or message history.
 All replies disable caching. New children stay held before delivery, computer resume,
 start admission and token issue. They reserve and spend zero cents. Activation and
 turn admission are not available through these routes yet.

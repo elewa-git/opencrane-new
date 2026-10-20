@@ -1,10 +1,12 @@
-import { childStartFailure } from './child-failure.ts';
+import { childStartFailure, childStartState } from './child-failure.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
+import { childRetryInputSchema } from '@opencrane/protocol';
 import { authorityFence, groupMembership } from '@opencrane/models';
 import { readEventAt, type StoredEvent } from '@opencrane/event-store';
 import { chatIdSchema, childRequestedDataSchema, childRequestedEventSchema,
+  childRetryRequestedEventSchema, childRetryRequestedDataSchema,
   conversationCreatedDataSchema, messagePostedDataSchema, type ChildRequest }
   from '@opencrane/events';
 import { chatHistory, ChatConflict } from './commands.ts';
@@ -59,7 +61,7 @@ async function load(options: Options, memberId: string, value: unknown) {
   }
   requireOwnSource(source, input, memberId);
   const failed = childStartFailure(rows, intentId) !== undefined;
-  return { input, source, intent, sequence, failed };
+  return { input, source, intent, sequence, failed, rows };
 }
 function requireOwnSource(source: StoredEvent | undefined, input: Input, memberId: string)
   : asserts source is StoredEvent {
@@ -287,4 +289,74 @@ export async function addChildFirstInput(options: Options, memberId: string, val
   }
   return save(options, memberId, firstInputId, subject, 'message.posted', data,
     creation.sequence, fresh, verifyInput);
+}
+
+export async function retryChildRequest(options: Options, memberId: string,
+  conversationId: string, requestId: string, value: unknown) {
+  try {
+    return await saveRetry(options, memberId, conversationId, requestId, value);
+  } catch (error) {
+    if (!(error instanceof ChildRequestRace)) throw error;
+    return saveRetry(options, memberId, conversationId, requestId, value);
+  }
+}
+async function saveRetry(options: Options, memberId: string,
+  conversationId: string, requestId: string, value: unknown) {
+  const retry = childRetryInputSchema.parse(value);
+  const intent = await retryIntent(options, memberId, conversationId, requestId);
+  function participantId(join: ChildRequest['initialJoins'][number]) {
+    return join.participantId;
+  }
+  const participantIds = intent.initialJoins.map(participantId);
+  const input = { conversationId, requestId, participantIds,
+    sourceMessageId: intent.sourceMessageId, assistantId: intent.assistantId,
+    payingGroupId: intent.payingGroupId, allowanceBoundCents: intent.allowanceBoundCents };
+  const loaded = await load(options, memberId, input);
+  const saved = savedIntent(options, memberId, loaded);
+  const retrying = { ...loaded, failed: false };
+  const checked = await check(options, memberId, retrying, [memberId]);
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([options.silo, conversationId, requestId, retry.retryId]));
+  const id = `child-retry-${hash.digest('hex')}`;
+  const subject = `conversation-${conversationId}`;
+  let previous: StoredEvent | undefined;
+  for (const row of loaded.rows) {
+    if (row.event.type !== 'conversation.child_retry_requested') continue;
+    const event = childRetryRequestedEventSchema.parse(row.event);
+    if (event.data.requestId !== requestId) continue;
+    if (event.data.retryId === retry.retryId) {
+      const data = { ...event.data, ...retry, conversationId, requestId };
+      const expected = { ...event, id, commandId: id, data, subject, silo: options.silo,
+        principal: { kind: 'human' as const, id: memberId } };
+      verifySaved(row, expected);
+      return data;
+    }
+    if (event.data.failureEventId === retry.failureEventId) previous = row;
+  }
+  const current = childStartState(loaded.rows, saved.row.event.id);
+  const failed = current.failure;
+  if (previous && !failed) {
+    const receipt = childRetryRequestedDataSchema.parse(previous.event.data);
+    if (receipt.attempt === current.attempt) return receipt;
+  }
+  if (!failed || failed.id !== retry.failureEventId || failed.data.attempt >= 3) {
+    throw new ChildRequestChanged('Child retry unavailable');
+  }
+  const data = { conversationId, requestId, ...retry, attempt: failed.data.attempt + 1 };
+  const receipt = await save(options, memberId, id, subject, 'conversation.child_retry_requested',
+    data, loaded.sequence, checked.fresh);
+  return childRetryRequestedDataSchema.parse(receipt.event.data);
+}
+
+async function retryIntent(options: Options, memberId: string,
+  conversationId: string, requestId: string) {
+  const rows = await chatHistory(options.store, options.silo, conversationId);
+  let intent: ChildRequest | undefined;
+  for (const row of rows) {
+    if (row.event.type !== 'conversation.child_requested') continue;
+    const event = childRequestedEventSchema.parse(row.event);
+    if (event.data.requestId === requestId) intent = event.data;
+  }
+  if (!intent || intent.createdBy !== memberId) refused();
+  return intent;
 }

@@ -1,0 +1,1 @@
+- Requesters can retry a saved child-chat start failure up to three attempts, keeping the original child and message. Children remain held before turns and spending.

@@ -120,3 +120,6 @@ export { approvalCancelReasonSchema, approvalCancelledDataSchema }
 export { approvalUsedDataSchema } from './data.ts';
 
 export { agentNativeRequestRefusedDataSchema } from './native-request.ts';
+
+export { childRetryRequestedDataSchema, childRetryRequestedEventSchema }
+  from './child-request.ts';
