@@ -3279,3 +3279,14 @@ state plus a prepared `invalidation` event without appending. After the server h
 checked ownership and write authority, `decideApproval` confirms access and saves
 that event with the checked sequence and deadline. A refused command saves nothing.
 The command never reloads full conversation history inside that short check.
+
+## Agent correction and forget decisions (Part of #97)
+
+Strict `correct` and `forget` inputs use the existing signed memory route and original
+expiry. Correct uses the HTTP replacement fields plus scopeId, memoryId, dependsOn
+and recallProof. Forget uses scopeId, memoryId, commandId, expectedRevision and recallProof.
+Both require the requester's person scope, saved requester/assistant read AND write
+grants, both current OpenFGA permissions and the selected tool's reviewed zero-cost Allow.
+Ask returns `memory_tool_configuration` without an approval. Block and missing tools deny.
+The fixed refusal allowlist also contains `agent_person_scope_only` and
+`memory_tool_unavailable`; decision.ts gains no lines. Native admission is unchanged.

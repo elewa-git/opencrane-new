@@ -20,15 +20,17 @@ export type MemoryDispatch = z.infer<typeof dispatchSchema>;
 const claimsSchema = z.object({ silo: identifier, requester: identifier, assistant: identifier,
   computer: identifier, generation: z.int().positive(), conversation: identifier,
   turn: identifier, thread: identifier,
-  operation: z.enum(['recall', 'remember', 'server/discover', 'tools/list']),
+  operation: z.enum(['recall', 'remember', 'correct', 'forget', 'server/discover', 'tools/list']),
   scopes: z.array(digest).max(1), contentAccess: z.literal('private'),
   bodyDigest: digest, callId: z.string().min(1).max(200), requestId: z.uuid(),
   dispatch: dispatchSchema, contextPosition: z.int().nonnegative(), exp: z.number(), iat: z.number() });
 export type MemoryContext = z.infer<typeof claimsSchema>;
 
-export class MemoryPersonScopeOnly extends Error {
-  constructor() {
-    super('agent_person_scope_only: Agents can save facts only in the requester’s person scope.');
+const refusalCode = z.enum(['agent_person_scope_only', 'memory_tool_configuration',
+  'memory_tool_unavailable']);
+export class MemoryToolRefused extends Error {
+  constructor(code: z.infer<typeof refusalCode>) {
+    super(refusalCode.parse(code));
   }
 }
 
@@ -65,7 +67,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
     const authority = writeAuthority ?? await decisionAuthorityFence(store, performance.now(), [],
       claims.requester, claims.assistant, undefined, checkDeadline);
     // Keep the original write check so removing and restoring a grant still refuses the write.
-    if (parsed.input?.operation === 'remember') {
+    if (parsed.input && parsed.input.operation !== 'recall') {
       writeAuthority = authority;
     }
     async function confirmAuthority() {
@@ -80,6 +82,9 @@ export async function memoryRights(store: EventStore, binding: Binding,
     const fresh = Object.assign(confirmAuthority, snapshot);
     fresh.include('mcp-memory');
     const policy = await memoryToolPolicy(store, binding.silo, parsed, checkDeadline);
+    if (policy.outcome === 'ask') {
+      throw new MemoryToolRefused('memory_tool_configuration');
+    }
     if (policy.outcome !== 'allow') {
       throw new Error('Memory tool policy refused');
     }
@@ -97,19 +102,22 @@ export async function memoryRights(store: EventStore, binding: Binding,
       activity.conversation);
     // Keep discovery free of fact access. Each recall checks its selected scope separately.
     if (parsed.input) {
-      let resourceType = 'memory_read';
-      if (parsed.input.operation === 'remember') {
+      let resourceTypes = ['memory_read'];
+      if (parsed.input.operation !== 'recall') {
         // Limit agent writes to the requester, even when shared sources and grants are valid.
         if (scope.scopeKind !== 'person' || scope.ownerId !== claims.requester) {
-          throw new MemoryPersonScopeOnly();
+          throw new MemoryToolRefused('agent_person_scope_only');
         }
-        resourceType = 'memory_write';
+        resourceTypes = ['memory_read', 'memory_write'];
+        if (parsed.input.operation === 'remember') resourceTypes = ['memory_write'];
       }
-      await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,
-        fresh, selected.requesterGroup);
-      contextDigest = await currentAuthority(store, binding, claims.requester,
-        claims.assistant, claims.conversation, resourceType, scope.scopeId, fresh,
-        activity.conversation);
+      for (const resourceType of resourceTypes) {
+        await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,
+          fresh, selected.requesterGroup);
+        contextDigest = await currentAuthority(store, binding, claims.requester,
+          claims.assistant, claims.conversation, resourceType, scope.scopeId, fresh,
+          activity.conversation);
+      }
     }
     await fresh();
     return { scope, contextDigest, contextPosition: fresh.head, canRemember, policy };
@@ -226,7 +234,12 @@ async function memoryToolPolicy(store: EventStore, silo: string,
   const request = { jsonrpc: '2.0', id: parsed.request.id, method: 'tools/call', params: {
     name: toolName, arguments: parsed.input ?? {}, _meta: parsed.request.params._meta } };
   const call = parseMcpCall(JSON.stringify(request));
-  const headers = { ...parsed.headers, 'mcp-method': 'tools/call', 'mcp-name': toolName };
+  const headers: IncomingHttpHeaders = { ...parsed.headers,
+    'mcp-method': 'tools/call', 'mcp-name': toolName };
+  if (toolName === 'correct' || toolName === 'forget') {
+    // Report Ask as a configuration refusal even when the caller offered Allow.
+    delete headers['x-opencrane-tool-mode'];
+  }
   return mcpPolicy(store, silo, 'memory', 'server', call, headers, deadline);
 }
 
@@ -291,7 +304,8 @@ export function prepareMemorySend(payload: Awaited<ReturnType<typeof prepareMemo
     return sign(claims, expiresAt);
   }
   const operation = payload.operation;
-  const method = operation === 'recall' || operation === 'remember' ? 'tools/call' : operation;
+  const method = operation === 'server/discover' || operation === 'tools/list'
+    ? operation : 'tools/call';
   return { method, sign: signContext };
 }
 

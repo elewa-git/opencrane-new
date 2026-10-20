@@ -4473,3 +4473,14 @@ requester and participation position, loads turn activity, then starts the short
 write check. `currentAuthority` and the final access confirmation precede the save.
 Foreign ids and removal during history loading leave the approval stream unchanged.
 The save uses the original approval position and the write check's deadline.
+
+## Disabled agent correction and forget (Part of #97)
+
+The backend checks the signed target against the turn identity and saved input generation,
+the loaded references and current scope rows. Correct requires all loaded references except
+its target as dependencies; no revision of that target may be a dependency. Forget also
+refuses mixed-scope input. Proofs and errors contain no fact text. After all checks,
+HTTP 403 returns only `status: refused` and `reason: memory_tool_unavailable`.
+No fact append, key or journal file is created. Tools/list still advertises recall alone.
+P4-13 row 6 (#95) owns activation. Next for #97 is row 3: output and process invalidation.
+The remaining #497 guards belong to #302. Fresh-install qualification: NOT RUN.

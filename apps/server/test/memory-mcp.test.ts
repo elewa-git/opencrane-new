@@ -950,10 +950,10 @@ async function grantWrite(granteeKind: string) {
 function independentFact(fact: { memoryId: string }) {
   return fact.memoryId.startsWith('fact_');
 }
-async function recalledRemember(commandId: string, query = 'deliver', limit = 20) {
+async function recalledRemember(commandId: string, query = 'deliver') {
   await grantWrite('member');
   await grantWrite('assistant');
-  const recallArguments = { ...call.params.arguments, query, limit };
+  const recallArguments = { ...call.params.arguments, query };
   const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
   const response = await setup.call(headers, selectedCall, route);
   expect(response.status, response.text).toBe(200);
@@ -2058,6 +2058,16 @@ async function missingLoadedEvidence(stage: string) {
 it.each(['absent', 'prepared', 'empty'])(
   'refuses valid personal proofs with %s loaded evidence', missingLoadedEvidence);
 
+async function loadChangeFact(query: string, callId: string) {
+  const body = { ...call, params: { ...call.params,
+    arguments: { scopeId, query, limit: 1 }, _meta: { ...metadata, callId } } };
+  const token = await signedRecall(setup, {}, body);
+  const requestHeaders = { ...headers, 'x-memory-context': token };
+  const response = await app.inject({ method: 'POST', url: route,
+    headers: requestHeaders, payload: body });
+  expect(response.statusCode, response.body).toBe(200);
+  return recallProofSchema.parse(response.json()).result.structuredContent;
+}
 async function changeRequest(operation: 'correct' | 'forget') {
   const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
@@ -2066,8 +2076,10 @@ async function changeRequest(operation: 'correct' | 'forget') {
       mode: 'allow', setBy: 'alice' });
   }
   await publishMemory(setup);
-  const remembered = await recalledRemember('change', 'deliver', 2);
-  const { recallProof } = remembered.params.arguments;
+  await grantWrite('member');
+  await grantWrite('assistant');
+  const { recallProof } = await loadChangeFact('exactly', 'target');
+  await loadChangeFact('deliver', 'dependency');
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const dependsOn = chat.memoryContext!.references;
   const target = dependsOn[0]!;
@@ -2113,6 +2125,12 @@ async function unavailableChange(operation: 'correct' | 'forget') {
   expect(JSON.parse(gateway.text)).toEqual(response.json());
   expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(position);
   expect(readdirSync(directory)).toEqual(files);
+  const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
+  const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
+  const listed = await setup.call(discoveryHeaders, discovery, route);
+  expect(listed.status, listed.text).toBe(200);
+  expect(listed.text).toContain('recall');
+  expect(listed.text).not.toMatch(/correct|forget/u);
 }
 it.each(['forget', 'correct'] as const)(
   'checks %s completely but keeps it switched off without files or events', unavailableChange);
@@ -2153,6 +2171,7 @@ async function changePolicy(value: 'ask' | 'block') {
     mode: value, setBy: 'alice' });
   await publishMemory(setup);
   const position = await setup.nats.store.head('conversation-conversation');
+  const appends = vi.spyOn(setup.nats.store, 'append');
   let reason: string | undefined;
   if (value === 'ask') reason = 'memory_tool_configuration';
   await refusedChange(request, reason);
@@ -2160,6 +2179,11 @@ async function changePolicy(value: 'ask' | 'block') {
   expect(response.status).toBe(403);
   if (reason) expect(response.text).toContain(reason);
   expect(await setup.nats.store.head('conversation-conversation')).toBe(position);
+  for (const [command] of appends.mock.calls) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    expect(event.type).not.toBe('tool.approval_requested');
+  }
+  appends.mockRestore();
 }
 it.each(['ask', 'block'] as const)('checks correct policy independently of recall: %s', changePolicy);
 
@@ -2194,12 +2218,15 @@ async function changedTargetProof(change: string) {
   const context = await verifyMemoryContext(token, setup.identity, parsed);
   let generation = saved.inputGeneration;
   let memoryId = String(input['memoryId']);
-  let revision = 1;
+  const revision = 1;
   if (change === 'turn') context.turn = 'other-turn';
   if (change === 'computer') context.generation = 2;
   if (change === 'input') generation = 'other-input';
-  if (change === 'old') revision = 2;
-  if (change === 'missing') memoryId = 'fact_20';
+  if (change === 'old') input['expectedRevision'] = 2;
+  if (change === 'missing') {
+    const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+    memoryId = chat.memoryContext!.references[1]!.memoryId;
+  }
   if (change === 'unloaded') {
     memoryId = 'fact_20';
     input['memoryId'] = memoryId;
@@ -2218,7 +2245,7 @@ async function correctionDependencies(change: 'self' | 'selective') {
   const dependencies = z.array(z.object({ scopeId: z.string(), memoryId: z.string(),
     revision: z.number() })).parse(input['dependsOn']);
   if (change === 'self') {
-    dependencies.push({ scopeId, memoryId: String(input['memoryId']), revision: 2 });
+    dependencies.push({ scopeId, memoryId: String(input['memoryId']), revision: 1 });
   } else {
     dependencies.pop();
   }
@@ -2259,3 +2286,15 @@ async function strictChangeInputs(operation: 'correct' | 'forget') {
   expect(parse).toThrow();
 }
 it.each(['correct', 'forget'] as const)('keeps %s inputs strict', strictChangeInputs);
+async function missingChangeTool() {
+  const request = await changeRequest('correct');
+  const catalogue = catalogueEvidence([recallTool, forgetTool]);
+  await setup.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
+    connectionId: 'server', accountMode: 'none', ...catalogue });
+  await reviewCatalogue(setup, 'memory');
+  await mode(setup, 'allow');
+  await publishMemory(setup);
+  request.catalogue = catalogue;
+  await refusedChange(request);
+}
+it('denies correct when the reviewed catalogue has no correct tool', missingChangeTool);

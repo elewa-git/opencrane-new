@@ -27,7 +27,7 @@ import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnToo
 import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims }
   from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
-import { MemoryPersonScopeOnly, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
+import { MemoryToolRefused, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
@@ -41,7 +41,7 @@ import { requestReservationCents, ModelRequestRefused as RequestRefused, data, m
 
 function decisionError(error: unknown) {
   if (error instanceof BudgetRefused || error instanceof RequestRefused ||
-      error instanceof LoadedMemoryRefused || error instanceof MemoryPersonScopeOnly ||
+      error instanceof LoadedMemoryRefused || error instanceof MemoryToolRefused ||
       error instanceof PayingGroupRefused ||
       error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled) {
     return error.message;

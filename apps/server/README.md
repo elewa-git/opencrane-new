@@ -59,6 +59,11 @@ flowchart LR
 The [AI gateway](../../GLOSSARY.md#agentgateway-ai-gateway) sends model and tool calls
 only after the models process allows them.
 
+Agent correction and forget requests need a signed proof of a loaded, current personal fact.
+A correction names every other loaded fact as a dependency, with no revision of its own target.
+Both operations remain disabled after these checks and create no fact, key or command file.
+Discovery still lists recall alone.
+
 ## What it is responsible for
 
 - Signs people in and keeps their browser session.

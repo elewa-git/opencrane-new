@@ -29,7 +29,7 @@ to handle AI calls.
 flowchart LR
   models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval details and takeover cancellation, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image checks, control, provider choice and spending"]
-  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -137,6 +137,10 @@ for both Allow and Ask. Admin review locks those values before a tool can be ena
 Spending call records can be read in small pages, filtered by their saved payer and
 assistant. They keep the original date, held money and recorded settlement after
 rollover or replay. Reading these records never permits spending.
+
+An agent's correction or forget request needs both read and write permission and that
+tool's reviewed Allow rule. Ask returns a configuration refusal without opening an approval.
+The backend checks the target proof, then refuses the operation because it is still disabled.
 
 ## What it is responsible for
 
