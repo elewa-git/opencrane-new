@@ -25,7 +25,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store<br/>event log"]
+  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -67,7 +67,11 @@ A configuration saved afterwards does not stop a call using the still acknowledg
 Published remote tools can use their saved HTTPS address when the server promises to
 refuse calls for a changed tool list. DNS checks happen before saving a start; TLS opens
 after the final send checks. Replies are bounded and carry no upstream cookies or redirects.
-A remote failure after saving a start leaves the outcome unknown.
+The dispatcher saves a checked remote reply against the pass that allowed the call before
+returning it. This proves a reply arrived, even when that reply reports a tool error.
+A remote failure after saving a start leaves the outcome unknown. Gateway replies cannot
+settle these calls. If saving the evidence cannot be confirmed, the reply is unavailable
+and the call is never sent again.
 Legacy publications keep their admission check.
 It checks the small access streams within two seconds.
 Built-in memory uses the same send check. Its signed context also identifies the one-use

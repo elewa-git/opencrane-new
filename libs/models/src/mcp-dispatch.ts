@@ -1,5 +1,6 @@
 import { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-https.ts';
-import { recordToolObservation } from './tool-dispatch.ts';
+import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -56,6 +57,10 @@ interface Permit {
   accessDeadline: number;
   confirmAccess: () => Promise<void>;
 }
+type RemoteObserver = (outcome: 'responded' | 'outcome_unknown') => Promise<void>;
+const remoteErrorSchema = z.strictObject({
+  code: z.int(), message: z.string(), data: z.unknown().optional(),
+});
 
 function digest(body: string) {
   const hash = createHash('sha256');
@@ -214,8 +219,9 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     }
+    let observe: RemoteObserver | undefined;
     try {
-      await recordStarted(permit, deadline);
+      observe = await recordStarted(permit, deadline);
       if (permit.gatewayBinding) {
         await permit.confirmAccess();
       }
@@ -236,7 +242,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       throw error;
     }
     if (target) {
-      await forwardRemote(target, permit, body, res, options?.remoteNetwork ?? {});
+      await forwardRemote(target, permit, body, res, options?.remoteNetwork ?? {}, observe!);
       return;
     }
     forward(route, permit, body, res, memoryContext);
@@ -272,7 +278,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     }
     const payload = { requestId: permit.requestId, serverId: permit.route.serverId,
       connectionId: permit.route.connectionId, generation: binding.generation,
-      recordDigest: binding.recordDigest, reviewRevision: permit.reviewRevision };
+      recordDigest: binding.recordDigest, reviewRevision: permit.reviewRevision,
+      ...(permit.route.locator ? { adapter: 'remote_https' } : {}) };
     const eventId = `${permit.requestId}:tool-dispatch-started`;
     const event = envelope(silo, subject, 'tool.dispatch_started', payload, eventId);
     // Consume once in this process. Never recover a failed save reply by sending later.
@@ -281,6 +288,19 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     if (result.status !== 'appended') {
       throw new Error('Tool dispatch start unavailable');
     }
+    const startedAt = performance.now();
+    const adapter = { silo: permit.silo, decisionId: permit.budget.decisionId,
+      startId: event.id, connectionId: payload.connectionId, generation: payload.generation,
+      recordDigest: payload.recordDigest, reviewRevision: payload.reviewRevision! };
+    async function observe(outcome: 'responded' | 'outcome_unknown') {
+      const evidence = outcome === 'responded'
+        ? 'adapter_response_received' : 'adapter_transport_uncertain';
+      const observation = { id: permit.requestId, toolOutcome: outcome, evidence,
+        observedAt: new Date().toISOString(),
+        durationMs: Math.ceil(performance.now() - startedAt) } as const;
+      await recordAdapterObservation(actor, adapter, observation);
+    }
+    return observe;
   }
 
   function requireCurrentRoute(permit: Permit) {
@@ -393,7 +413,7 @@ function forward(route: Route, permit: Permit, body: string, res: ServerResponse
 }
 
 async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, permit: Permit,
-  raw: string, res: ServerResponse, network: RemoteNetwork) {
+  raw: string, res: ServerResponse, network: RemoteNetwork, observe: RemoteObserver) {
   const controller = new AbortController();
   function timedOut() { controller.abort(); }
   const timer = setTimeout(timedOut, 30_000);
@@ -401,15 +421,50 @@ async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, 
     accept: 'application/json', 'content-length': String(Buffer.byteLength(raw)),
     'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
     'mcp-name': permit.toolName, 'x-opencrane-mcp-revision': permit.schemaDigest };
+  let reply: Awaited<ReturnType<typeof exchangeRemote>> | undefined;
   try {
-    const reply = await exchangeRemote(target, raw, headers, network,
+    const received = await exchangeRemote(target, raw, headers, network,
       controller.signal, 1024 * 1024);
+    requireRemoteReply(received.data, raw);
+    reply = received;
+  } catch {
+    // Keep every failed exchange unknown, including refusal before confirmed receipt.
+  } finally { clearTimeout(timer); }
+  try {
+    await observe(reply ? 'responded' : 'outcome_unknown');
+  } catch {
+    res.writeHead(503);
+    res.end();
+    return;
+  }
+  if (reply) {
     res.writeHead(200, { 'content-type': reply.contentType });
     res.end(reply.data);
-  } catch {
-    res.writeHead(controller.signal.aborted ? 504 : 502);
-    res.end();
-  } finally { clearTimeout(timer); }
+    return;
+  }
+  res.writeHead(controller.signal.aborted ? 504 : 502);
+  res.end();
+}
+
+function requireRemoteReply(data: Buffer, raw: string) {
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(data);
+  const reply = losslessJson(text).value;
+  const sent = losslessJson(raw).value;
+  if (!(reply instanceof Map) || !(sent instanceof Map) ||
+      reply.size !== 3 || reply.get('jsonrpc')?.value !== '2.0' ||
+      reply.get('id')?.canonical !== sent.get('id')?.canonical) {
+    throw new Error('Remote reply unavailable');
+  }
+  const result = reply.get('result');
+  const error = reply.get('error');
+  if (Boolean(result) === Boolean(error) ||
+      (result ?? error)?.kind !== 'object') {
+    throw new Error('Remote reply unavailable');
+  }
+  if (error) {
+    const parsedError: unknown = JSON.parse(error.canonical);
+    remoteErrorSchema.parse(parsedError);
+  }
 }
 
 function requireRemoteRevision(saved: string | undefined) {

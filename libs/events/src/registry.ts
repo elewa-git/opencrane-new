@@ -319,7 +319,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     }),
 
   // Tools, approvals and effects
-  event('tool.dispatch_recorded', 'decision', 'The gateway or models process recorded a tool dispatch outcome.',
+  event('tool.dispatch_recorded', 'decision', 'The gateway or models process recorded a tool outcome, with permit-bound remote evidence.',
     data.toolDispatchRecordedDataSchema, {
       conversationId: 'conv_1', turnId: 'turn_1', callId: 'call_1',
       serverId: 'mcp_1', toolName: 'write', requestId: '00000000-0000-4000-8000-000000000001',

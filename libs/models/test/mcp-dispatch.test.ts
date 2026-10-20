@@ -1,6 +1,6 @@
 import { remoteFixture } from './support/remote-mcp.ts';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { losslessJson } from '@opencrane/events/lossless-json';
@@ -10,7 +10,7 @@ import { mcpConfigurationObservationSchema } from '@opencrane/events';
 import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
-import { recordToolObservation } from '../src/tool-dispatch.ts';
+import { recordAdapterObservation, recordToolObservation, toolObservation } from '../src/tool-dispatch.ts';
 import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
 import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
@@ -2621,3 +2621,366 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   expect(setup.received()).toBe(0);
 }
 it.each(remoteGuards)('guards published HTTPS tool calls: %s', guardsRemoteCall);
+
+async function remoteOutcomeFixture() {
+  const context = await publishedFixture('allow', true);
+  const remote = await remoteFixture();
+  onTestFinished(remote.close);
+  context.setup.dispatchOptions.routes.length = 0;
+  context.setup.dispatchOptions.remoteNetwork = remote.network;
+  remote.revision(catalogue.schemaDigest);
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(context.setup, headers);
+  const encoded = value.split('.')[0]!;
+  const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
+  const { requestId } = z.object({ requestId: z.uuid() }).parse(decoded);
+  const subject = `decision-${requestId}`;
+  return { ...context, remote, value, requestId, subject };
+}
+
+async function adapterRecorderFixture() {
+  const context = await remoteOutcomeFixture();
+  const { setup, requestId, subject, record } = context;
+  const decisions = await history(setup.nats.store, subject, 'test');
+  const startId = `${requestId}:tool-dispatch-started`;
+  const binding = {
+    silo: 'test',
+    decisionId: decisions[0]!.event.id,
+    startId,
+    connectionId: 'installed',
+    generation: record.generation,
+    recordDigest: record.recordDigest,
+    reviewRevision: record.members[0]!.entry.reviewRevision,
+  };
+  const startData = {
+    requestId,
+    serverId: 'fixture',
+    connectionId: binding.connectionId,
+    generation: binding.generation,
+    recordDigest: binding.recordDigest,
+    reviewRevision: binding.reviewRevision,
+    adapter: 'remote_https',
+  };
+  const start = envelope('test', subject, 'tool.dispatch_started', startData, startId);
+  // Seed a saved start so callbacks can be tested without sending an HTTP request.
+  const events = [start];
+  await setup.nats.seed(events);
+  const observation = {
+    id: requestId,
+    toolOutcome: 'responded' as const,
+    evidence: 'adapter_response_received' as const,
+    observedAt: new Date().toISOString(),
+    durationMs: 1,
+  };
+  return { ...context, binding, observation };
+}
+
+async function repeatsIdenticalAdapterCallback() {
+  const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
+  await recordAdapterObservation(setup.actor, binding, observation);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  try {
+    await recordAdapterObservation(setup.actor, binding, observation);
+    expect(writer).not.toHaveBeenCalled();
+    expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+    expect(remote.received).toHaveLength(0);
+    expect(remote.connections()).toBe(0);
+    expect(setup.received()).toBe(0);
+  } finally {
+    writer.mockRestore();
+  }
+}
+it('adds nothing for an identical direct adapter callback', repeatsIdenticalAdapterCallback);
+
+async function refusesForeignAdapterCallback() {
+  const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(2);
+  const foreignBinding = { ...binding, silo: 'other' };
+  const recording = recordAdapterObservation(setup.actor, foreignBinding, observation);
+  await expect(recording).rejects.toThrow('Tool dispatch evidence unavailable');
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  expect(remote.received).toHaveLength(0);
+  expect(remote.connections()).toBe(0);
+  expect(setup.received()).toBe(0);
+}
+it('refuses a direct adapter callback from a foreign silo', refusesForeignAdapterCallback);
+
+async function refusesChangedAdapterCallback() {
+  const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
+  const uncertain = {
+    ...observation,
+    toolOutcome: 'outcome_unknown' as const,
+    evidence: 'adapter_transport_uncertain' as const,
+  };
+  await recordAdapterObservation(setup.actor, binding, uncertain);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  expect(rows[2]!.event.data).toMatchObject({
+    outcome: 'outcome_unknown',
+    evidence: 'adapter_transport_uncertain',
+  });
+  const recording = recordAdapterObservation(setup.actor, binding, observation);
+  await expect(recording).rejects.toThrow('Tool dispatch evidence unavailable');
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  expect(remote.received).toHaveLength(0);
+  expect(remote.connections()).toBe(0);
+  expect(setup.received()).toBe(0);
+}
+it('refuses a direct responded callback after a saved unknown outcome', refusesChangedAdapterCallback);
+
+async function refusesConflictingAdapterReadback() {
+  const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
+  const uncertain = {
+    ...observation,
+    toolOutcome: 'outcome_unknown' as const,
+    evidence: 'adapter_transport_uncertain' as const,
+  };
+  await recordAdapterObservation(setup.actor, binding, uncertain);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+  let reads = 0;
+  async function* staleFirstRead(...args: Parameters<typeof readStream>) {
+    if (args[0] === subject) reads += 1;
+    for await (const row of readStream(...args)) {
+      // Model an initial read that finished before another callback saved its outcome.
+      if (args[0] === subject && reads === 1 && row.event.type === 'tool.dispatch_recorded') {
+        continue;
+      }
+      yield row;
+    }
+  }
+  function lostSaveReply(): Promise<never> {
+    const error = new Error('Save reply lost');
+    return Promise.reject(error);
+  }
+  const reader = vi.spyOn(setup.nats.store, 'readStream');
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  reader.mockImplementation(staleFirstRead);
+  writer.mockImplementation(lostSaveReply);
+  try {
+    const recording = recordAdapterObservation(setup.actor, binding, observation);
+    await expect(recording).rejects.toThrow('Tool dispatch evidence unavailable');
+    expect(writer).toHaveBeenCalledTimes(1);
+    expect(reads).toBe(2);
+  } finally {
+    reader.mockRestore();
+    writer.mockRestore();
+  }
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  expect(remote.received).toHaveLength(0);
+  expect(remote.connections()).toBe(0);
+  expect(setup.received()).toBe(0);
+}
+it('refuses conflicting saved evidence on direct adapter callback readback',
+  refusesConflictingAdapterReadback);
+
+async function savesRemoteResponse(mode: 'result' | 'tool_error' | 'rpc_error') {
+  const { setup, remote, value, requestId, subject, record } = await remoteOutcomeFixture();
+  function toolError() { return { isError: true, content: [] }; }
+  function rpcError() {
+    return '{"jsonrpc":"2.0","id":REQUEST_ID,"error":{"code":-32603,"message":"REPLY_CANARY"}}';
+  }
+  if (mode === 'tool_error') remote.respond(toolError);
+  if (mode === 'rpc_error') remote.respond(rpcError);
+  const response = await send(setup, value);
+  expect(response.status).toBe(200);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  expect(rows[2]!.event).toMatchObject({ type: 'tool.dispatch_recorded', silo: 'test',
+    data: { requestId, outcome: 'responded', evidence: 'adapter_response_received',
+      adapter: { decisionId: rows[0]!.event.id, startId: rows[1]!.event.id,
+        connectionId: 'installed', generation: record.generation,
+        recordDigest: record.recordDigest, reviewRevision: record.members[0]!.entry.reviewRevision } } });
+  expect((await send(setup, value)).status).toBe(403);
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  expect(remote.received).toHaveLength(1);
+  expect(JSON.stringify(rows)).not.toMatch(/REPLY_CANARY|mcp.example.test/u);
+}
+it.each(['result', 'tool_error', 'rpc_error'] as const)(
+  'saves a checked remote response against its consumed permit once: %s', savesRemoteResponse);
+
+const remoteFailures = ['reset', 'timeout', 'redirect', 'invalid_json', 'wrong_id',
+  'duplicate_key', 'invalid_error', 'gateway_502', 'gateway_refused'] as const;
+async function keepsRemoteFailureUnknown(mode: typeof remoteFailures[number]) {
+  const context = await remoteOutcomeFixture();
+  const { setup, remote, value, requestId, subject } = context;
+  function invalidReply() { return 'INVALID_REPLY_CANARY'; }
+  function wrongId() { return '{"jsonrpc":"2.0","id":"other","result":{}}'; }
+  function invalidError() {
+    return '{"jsonrpc":"2.0","id":REQUEST_ID,"error":{}}';
+  }
+  function duplicateKey() {
+    return '{"jsonrpc":"2.0","id":REQUEST_ID,"result":{},"result":{}}';
+  }
+  function noReply() { return undefined; }
+  if (mode === 'reset') remote.reset();
+  if (mode === 'redirect') remote.status(307);
+  if (mode === 'invalid_json') remote.respond(invalidReply);
+  if (mode === 'wrong_id') remote.respond(wrongId);
+  if (mode === 'duplicate_key') remote.respond(duplicateKey);
+  if (mode === 'invalid_error') remote.respond(invalidError);
+  if (mode.startsWith('gateway_')) remote.status(502);
+  const timer = globalThis.setTimeout;
+  let expire: (() => void) | undefined;
+  function captureDeadline(callback: (...args: unknown[]) => void, delay?: number,
+    ...args: unknown[]) {
+    if (delay === 30_000) {
+      expire = callback;
+      return timer(function heldDeadline() {}, 60_000);
+    }
+    return timer(callback, delay, ...args);
+  }
+  if (mode === 'timeout') {
+    remote.respond(noReply);
+    const replacement = Object.assign(captureDeadline, timer);
+    const timerSpy = vi.spyOn(globalThis, 'setTimeout');
+    timerSpy.mockImplementation(replacement);
+  }
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let gatewayRecorded = false;
+  async function gatewayFirst(command: AppendCommand) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'tool.dispatch_recorded' && mode.startsWith('gateway_') && !gatewayRecorded) {
+      gatewayRecorded = true;
+      let suffix = 'http.status=502';
+      if (mode === 'gateway_refused') {
+        suffix = 'error="upstream call failed: Connect: Connection refused (os error 111)"';
+      }
+      const line = `${new Date().toISOString()} route=default/mcp-fixture ` +
+        `toolRequestId="${requestId}" duration=1ms ${suffix}`;
+      await recordToolObservation(setup.actor, toolObservation(line)!);
+    }
+    return append(command);
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  writer.mockImplementation(gatewayFirst);
+  try {
+    const sending = send(setup, value);
+    if (mode === 'timeout') {
+      function received() { return remote.received.length; }
+      await expect.poll(received).toBe(1);
+      expect(expire).toBeDefined();
+      expire!();
+    }
+    const response = await sending;
+    expect(response.status).toBe(mode === 'timeout' ? 504 : 502);
+    expect(await response.text()).toBe('');
+    const rows = await history(setup.nats.store, subject, 'test');
+    expect(rows).toHaveLength(3);
+    expect(rows[2]!.event.data).toMatchObject({ outcome: 'outcome_unknown',
+      evidence: 'adapter_transport_uncertain' });
+    const success = { id: requestId, toolOutcome: 'responded' as const,
+      evidence: 'response_received' as const, observedAt: new Date().toISOString(), durationMs: 1 };
+    await recordToolObservation(setup.actor, success);
+    expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+    expect(JSON.stringify(rows)).not.toMatch(/not_dispatched|INVALID_REPLY_CANARY|mcp.example.test/u);
+    expect((await send(setup, value)).status).toBe(403);
+    expect(remote.received).toHaveLength(1);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(remoteFailures)('keeps remote adapter failure unknown: %s', keepsRemoteFailureUnknown);
+
+const remoteSaveFailures = ['lost_reply', 'outage', 'lost_start', 'decision', 'silo',
+  'start', 'generation', 'forged'] as const;
+async function checksRemoteEvidence(mode: typeof remoteSaveFailures[number]) {
+  const { setup, remote, value, requestId, subject } = await remoteOutcomeFixture();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+  async function save(command: AppendCommand) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'tool.dispatch_recorded' && mode === 'outage') {
+      throw new Error('Store unavailable');
+    }
+    const result = await append(command);
+    if ((event.type === 'tool.dispatch_recorded' && mode === 'lost_reply') ||
+        (event.type === 'tool.dispatch_started' && mode === 'lost_start')) {
+      throw new Error('Save reply lost');
+    }
+    return result;
+  }
+  async function* changedHistory(...args: Parameters<typeof readStream>) {
+    for await (const row of readStream(...args)) {
+      const copy = structuredClone(row);
+      if (args[0] === subject && remote.received.length > 0) {
+        if (mode === 'silo') copy.event.silo = 'other';
+        if (mode === 'decision' && copy.event.type === 'decision.recorded') {
+          copy.event.id = 'foreign-decision';
+        }
+        if (copy.event.type === 'tool.dispatch_started') {
+          if (mode === 'start') copy.event.id = 'foreign-start';
+          if (mode === 'generation') {
+            const data = z.record(z.string(), z.unknown()).parse(copy.event.data);
+            copy.event.data = { ...data, generation: 99 };
+          }
+        }
+      }
+      yield copy;
+    }
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  const reader = vi.spyOn(setup.nats.store, 'readStream');
+  writer.mockImplementation(save);
+  reader.mockImplementation(changedHistory);
+  try {
+    if (mode === 'forged') {
+      const forged = { id: requestId, toolOutcome: 'responded',
+        evidence: 'adapter_response_received', observedAt: new Date().toISOString(), durationMs: 0 };
+      await writeFile(setup.options.usageFile, `${JSON.stringify(forged)}\n`);
+      await expect(ingestUsage(setup.actor, setup.options.usageFile)).rejects.toThrow();
+      expect(await history(setup.nats.store, subject, 'test')).toHaveLength(1);
+    }
+    const response = await send(setup, value);
+    let expected = 503;
+    if (mode === 'lost_reply' || mode === 'forged') expected = 200;
+    if (mode === 'lost_start') expected = 403;
+    expect(response.status).toBe(expected);
+    writer.mockRestore();
+    reader.mockRestore();
+    const rows = await history(setup.nats.store, subject, 'test');
+    expect(rows).toHaveLength(expected === 200 ? 3 : 2);
+    expect(JSON.stringify(rows)).not.toContain('not_dispatched');
+    if (mode === 'lost_start') {
+      expect(remote.connections()).toBe(0);
+      const generic = { id: requestId, toolOutcome: 'not_dispatched' as const,
+        evidence: 'connection_refused' as const, observedAt: new Date().toISOString(), durationMs: 0 };
+      await recordToolObservation(setup.actor, generic);
+      expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+    }
+    const before = remote.received.length;
+    await setup.restartActor();
+    expect((await send(setup, value)).status).toBe(403);
+    expect(remote.received).toHaveLength(before);
+    expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(remoteSaveFailures)('checks remote adapter evidence without resending: %s', checksRemoteEvidence);
+
+async function keepsGenericEvidence(serverId: string, refused: boolean) {
+  const setup = await fixture();
+  onTestFinished(setup.close.bind(setup));
+  const requestId = '00000000-0000-4000-8000-000000000001';
+  const subject = `decision-${requestId}`;
+  const decision = { requestId, route: 'mcp', outcome: 'allow', reason: 'allowed',
+    contextDigest: 'a'.repeat(64), logicalRequestId: 'b'.repeat(64),
+    conversationId: 'conversation', turnId: 'dispatch', callId: 'call', serverId, toolName: 'write' };
+  await setup.append(subject, 'decision.recorded', decision);
+  const observation = { id: requestId, observedAt: new Date().toISOString(), durationMs: 1,
+    toolOutcome: refused ? 'not_dispatched' as const : 'responded' as const,
+    evidence: refused ? 'connection_refused' as const : 'response_received' as const };
+  await recordToolObservation(setup.actor, observation);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(2);
+  expect(rows[1]!.event.data).toMatchObject({ outcome: observation.toolOutcome,
+    evidence: observation.evidence });
+  expect(rows[1]!.event.data).not.toHaveProperty('adapter');
+}
+it.each([['fixture', false], ['fixture', true], ['memory', false], ['memory', true]] as const)(
+  'keeps generic gateway evidence for %s (refused %s)', keepsGenericEvidence);
