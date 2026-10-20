@@ -167,9 +167,15 @@ async function waitsForSeededDefault(loseReply = false, absent = false) {
     await closed;
   }
 }
-function seededDefaultTest() { return waitsForSeededDefault(); }
-function lostReplyTest() { return waitsForSeededDefault(true); }
-function absentReceiptTest() { return waitsForSeededDefault(true, true); }
+function seededDefaultTest() {
+  return waitsForSeededDefault();
+}
+function lostReplyTest() {
+  return waitsForSeededDefault(true);
+}
+function absentReceiptTest() {
+  return waitsForSeededDefault(true, true);
+}
 
 test('waits for the first provider binding before explicitly selecting the default', seededDefaultTest);
 test('a lost save reply is recovered by reading its original receipt', lostReplyTest);

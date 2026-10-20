@@ -1,0 +1,13 @@
+{
+  "sha": "e649c49b22529c6a1d965a4e4ab82c5a023e1ecb",
+  "outcomes": [
+    {
+      "check": "owner streamed reply and reload",
+      "result": "PASS"
+    },
+    {
+      "check": "Stop and reload",
+      "result": "FAIL"
+    }
+  ]
+}
