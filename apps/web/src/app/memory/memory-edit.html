@@ -1,0 +1,42 @@
+@if (enabled()) {
+  <button type="button" class="edit-open" (click)="open($event)">Edit</button>
+}
+@if (state() !== 'closed' && state() !== 'accepted') {
+<oc-modal-sheet [open]="state() !== 'closed' && state() !== 'accepted'" title="Edit fact"
+  [backLabel]="state() === 'sending' || state() === 'unknown' ? '' : 'Cancel'"
+  [dismissDisabled]="state() === 'sending' || state() === 'unknown' || state() === 'reading'"
+  [returnFocusTo]="opener" (closed)="cancel()">
+  <p>Only you · Your memory</p>
+  @if (state() === 'editing') {
+    <p>Current revision r{{ fact().revision }} · {{ fact().savedAt | date:'d MMM yyyy, HH:mm':'UTC' }} UTC</p>
+    <label>Fact<textarea rows="5" [value]="draft()" (input)="textChanged($event)"
+      aria-describedby="edit-error" [attr.aria-invalid]="validation() ? 'true' : null"></textarea></label>
+    <h3>Preview</h3><p class="preview">{{ draft() }}</p>
+    <p>Replaces r{{ fact().revision }} in your memory</p>
+    <p id="edit-error" role="alert">{{ validation() || error() }}</p>
+  } @else if (state() === 'conflict') {
+    <p role="status">This fact changed before your edit was saved</p>
+  } @else if (state() === 'unknown') {
+    <p role="status">Outcome unknown</p>
+  } @else if (state() === 'missing') {
+    <p role="status">This fact was forgotten. Your edit wasn’t applied.</p>
+  } @else { <p role="status">Checking memory…</p> }
+  <div overlayFooter class="edit-actions">
+    @if (state() === 'editing') {
+      <button type="button" class="save" [disabled]="!!validation()" (click)="save()">
+        Save correction</button>
+      <button type="button" (click)="cancel()">Cancel</button>
+    } @else if (state() === 'conflict') {
+      <button type="button" (click)="refresh()">Refresh and review</button>
+    } @else if (state() === 'unknown') {
+      <button type="button" (click)="checkStatus()">Check status</button>
+    }
+  </div>
+</oc-modal-sheet>
+}
+@if (receipt(); as saved) {
+  <div class="edit-receipt" role="status">
+    <strong>Corrected in your memory · r{{ saved.revision }}</strong>
+    <p>{{ saved.acceptedAt | date:'d MMM yyyy, HH:mm':'UTC' }} UTC</p><p>Old revision cleanup: {{ saved.cleanupStatus }}</p>
+  </div>
+}

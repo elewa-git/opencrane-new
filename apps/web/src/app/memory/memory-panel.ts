@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, signal,
   type OnDestroy, type OnInit, type SimpleChanges } from '@angular/core';
+import { MemoryEdit } from './memory-edit';
+import type { DetailRead } from './memory-panel-reads';
 import { Overlay } from '../ui/overlay';
 import { canReadScope, isObject, isPage, isScopes,
   type Fact,
@@ -24,7 +26,7 @@ type StoreCommand = { generation: number; scopeId: string; commandId: string;
 
 @Component({
   selector: 'oc-memory-panel',
-  imports: [Overlay, MemoryForget],
+  imports: [Overlay, MemoryForget, MemoryEdit],
   templateUrl: './memory-panel.html',
   styleUrl: './memory-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,6 +41,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   protected readonly sources = signal<Source[]>([]);
   protected readonly selectedScope = signal('');
   protected readonly selectedFact = signal<Fact | undefined>(undefined);
+  protected readonly detailCanCorrect = signal(false);
   protected readonly detailCanForget = signal(false);
   protected readonly forgetTargets = signal<ForgetTarget[]>([]);
   protected readonly state = signal<ScreenState>('loading');
@@ -66,24 +69,34 @@ export class MemoryPanel implements OnInit, OnDestroy {
 
   ngOnInit(): void { void this.loadScopes(); }
 
-  ngOnDestroy(): void {
-    this.generation += 1;
-    this.forgetTargets.set([]);
-    this.scopeRequestId += 1;
-    this.scopeController?.abort();
-    this.listController?.abort();
-    this.detailController?.abort();
-    this.scopes.set([]);
-    this.facts.set([]);
-    this.sources.set([]);
-    this.selectedScope.set('');
-    this.selectedFact.set(undefined);
-    this.detailOpener = undefined;
-    this.query.set('');
-    this.cursor.set(null);
-    this.nextCursor.set(null);
-    this.detailState.set('');
-    this.clearStoreState();
+  ngOnDestroy(): void { this.revoke(); }
+
+  protected detailLoaded(result: DetailRead, changed = false): void {
+    if (result.kind === 'access') { this.revoke(); return; }
+    if (result.kind === 'ok') {
+      if (changed) {
+        this.listController?.abort();
+        this.listRequestId += 1;
+      }
+      const fact = result.detail.fact;
+      const index = factIndex(fact.memoryId, this.facts());
+      const facts = [...this.facts()];
+      if (index >= 0) facts[index] = fact;
+      this.facts.set(facts);
+      this.selectedFact.set(fact);
+      this.sources.set(result.detail.sources);
+      this.detailCanCorrect.set(result.detail.canCorrect === true);
+      this.detailCanForget.set(result.detail.canForget && this.currentScopeKind() === 'person');
+      this.detailState.set('ready');
+    } else if (result.kind === 'missing') {
+      const fact = this.selectedFact();
+      if (fact && result.reason === 'forgotten') {
+        this.hideForgottenFact(fact.memoryId);
+        this.selectedFact.set({ ...fact, text: '' });
+      }
+      this.detailCanCorrect.set(false);
+      this.detailState.set('missing');
+    } else this.detailState.set('unavailable');
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -153,6 +166,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
     const generation = this.generation;
     this.detailController = controller;
     this.selectedFact.set(fact);
+    this.detailCanCorrect.set(false);
     this.detailCanForget.set(false);
     this.sources.set([]);
     this.detailState.set('');
@@ -160,20 +174,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
     const reply = await readJson(url, controller.signal);
     if (!isCurrentDetailRead(controller, generation, this.generation)) return;
     const result = detailResult(reply);
-    if (result.kind === 'access') { this.revoke(); return; }
-    if (result.kind === 'missing') {
-      if (result.reason === 'forgotten') {
-        this.hideForgottenFact(fact.memoryId);
-        this.selectedFact.set({ ...fact, text: '' });
-      }
-      this.detailState.set('missing');
-      return;
-    }
-    if (result.kind !== 'ok') { this.detailState.set('unavailable'); return; }
-    this.selectedFact.set(result.detail.fact);
-    this.detailCanForget.set(result.detail.canForget && this.currentScopeKind() === 'person');
-    this.sources.set(result.detail.sources);
-    this.detailState.set('ready');
+    this.detailLoaded(result);
   }
 
   protected closeDetail(): void {
@@ -211,6 +212,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.facts.set(remainingFacts);
     this.listState.set(remainingFacts.length ? 'ready' : 'empty');
     this.sources.set([]);
+    this.detailCanCorrect.set(false);
     this.detailCanForget.set(false);
   }
 

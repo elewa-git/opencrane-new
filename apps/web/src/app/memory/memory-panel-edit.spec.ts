@@ -1,5 +1,8 @@
+import { By } from '@angular/platform-browser';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
+import { MemoryEdit } from './memory-edit';
+import { isObject } from './memory-panel-data';
 import { MemoryPanel } from './memory-panel';
 
 const fact = { memoryId: 'one', revision: 7, text: 'Private original text', kind: 'preference',
@@ -46,15 +49,22 @@ function input(value: string): void {
   field.dispatchEvent(new Event('input'));
   fixture.detectChanges();
 }
+function saveDraft(): void {
+  click('Edit');
+  input('My draft');
+  click('Save correction');
+}
 async function settled(): Promise<void> {
-  await fixture.whenStable();
-  fixture.detectChanges();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).not.toMatch(/Checking memory…|Loading memory…|Searching memory…/);
+  });
 }
 async function setup(kind = 'person', body: unknown = detail): Promise<void> {
   calls = [];
-  post = async () => response(200, accepted);
-  status = async () => response(200, accepted);
-  latest = async () => response(200, { ...detail, fact: updated });
+  post = () => Promise.resolve(response(200, accepted));
+  status = () => Promise.resolve(response(200, accepted));
+  latest = () => Promise.resolve(response(200, { ...detail, fact: updated }));
   let reads = 0;
   async function fetchReply(url: string, init?: RequestInit): Promise<Response> {
     calls.push({ url, init });
@@ -64,7 +74,7 @@ async function setup(kind = 'person', body: unknown = detail): Promise<void> {
       { scopeId: 'other', scopeKind: 'person', ownerId: 'me', canRead: true,
         audience: { kind: 'person', ownerId: 'me' } },
     ] });
-    if (url.includes('/facts?')) return response(200, { facts: [fact], returnedCount: 1,
+    if (url.includes('/facts?')) return response(200, { facts: [{ ...fact, revision: 3 }], returnedCount: 1,
       nextCursor: null });
     if (url.endsWith('/correct')) return post();
     if (url.includes('/changes/')) return status();
@@ -77,10 +87,18 @@ async function setup(kind = 'person', body: unknown = detail): Promise<void> {
   fixture = TestBed.createComponent(MemoryPanel);
   fixture.componentRef.setInput('requesterId', 'first');
   fixture.detectChanges();
-  await settled();
-  root = fixture.nativeElement as HTMLElement;
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Missing panel');
+  root = element;
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.querySelector('button.fact')).not.toBeNull();
+  });
   root.querySelector<HTMLButtonElement>('button.fact')?.click();
-  await settled();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toMatch(/Revision|no longer available/);
+  });
 }
 function matching(suffix: string) { return calls.filter(matchesSuffix.bind(null, suffix)); }
 function matchesSuffix(suffix: string, call: { url: string }): boolean {
@@ -106,7 +124,9 @@ it('validates bytes and controls; Cancel and Escape send nothing and refocus Edi
   await setup();
   const opener = buttons('Edit')[0];
   if (!opener) throw new Error('Missing Edit');
-  vi.spyOn(opener, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
+  const rects = opener.getClientRects();
+  Object.defineProperty(rects, 'length', { value: 1 });
+  vi.spyOn(opener, 'getClientRects').mockReturnValue(rects);
   click('Edit');
   expect(root.textContent).toContain('Current revision r7');
   expect(root.textContent).toContain('Replaces r7 in your memory');
@@ -143,29 +163,38 @@ it('sends one immutable command, locks dismissal, and refreshes once after accep
   fixture.detectChanges();
   expect(sheet?.open).toBe(true);
   expect(matching('/correct')).toHaveLength(1);
-  const payload: unknown = JSON.parse(String(matching('/correct')[0]?.init?.body));
-  expect(payload).toEqual({ commandId: expect.stringMatching(/^mem_[\da-f-]+$/),
+  const payload: unknown = JSON.parse(postBody(0));
+  expect(commandId()).toMatch(/^mem_[\da-f-]+$/);
+  expect(payload).toMatchObject({
     expectedRevision: 7, text: 'My draft', kind: fact.kind, pinned: true, expiresAt: fact.expiresAt });
   pending.resolve(response(200, accepted));
   await settled();
   expect(root.textContent).toContain('Corrected in your memory · r8');
   expect(matching('/facts/one')).toHaveLength(2);
   expect(root.querySelector('.results')?.textContent).toContain(updated.text);
+  expect(root.querySelector('button.fact')?.textContent).toContain('r8');
   expect(root.querySelector('.detail-text')?.textContent).toBe(updated.text);
   expect(root.querySelector('.fact-context')?.textContent).toContain('8');
   expect(root.querySelector('.edit-receipt')?.textContent).not.toContain('My draft');
+  const editor: unknown = fixture.debugElement.query(By.directive(MemoryEdit))?.componentInstance;
+  if (!(editor instanceof MemoryEdit)) throw new Error('Missing editor');
+  await editor['applyBody']({ outcome: 'unknown' });
+  await editor['applyBody']({ outcome: 'conflict' });
+  fixture.detectChanges();
+  expect(root.textContent).toContain('Corrected in your memory · r8');
+  expect(root.querySelector('oc-memory-edit dialog[open]')).toBeNull();
   noPrivateAnnouncements();
   expect(location.href).toBe(address);
   expect(localStorage.length + sessionStorage.length).toBe(0);
 });
 
-it.each([409, 200])('reviews a %s conflict once and saves the retained draft as a new command', async code => {
+it.each(['post', 'status'])('reviews a %s conflict and saves a new command', async source => {
   await setup();
-  post = async () => response(code, { outcome: 'conflict' });
-  click('Edit');
-  input('My draft');
-  click('Save correction');
+  post = () => Promise.resolve(response(source === 'post' ? 409 : 503, {}));
+  status = () => Promise.resolve(response(200, { outcome: 'conflict' }));
+  saveDraft();
   await settled();
+  if (source === 'status') { click('Check status'); await settled(); }
   expect(root.textContent).toContain('This fact changed before your edit was saved');
   expect(matching('/correct')).toHaveLength(1);
   click('Refresh and review');
@@ -175,17 +204,17 @@ it.each([409, 200])('reviews a %s conflict once and saves the retained draft as 
   expect(root.textContent).toContain('Current revision r8');
   click('Save correction');
   await settled();
-  const first = matching('/correct')[0]?.init?.body;
-  const second = matching('/correct')[1]?.init?.body;
+  const first = postBody(0);
+  const second = postBody(1);
   expect(second).not.toBe(first);
-  expect(String(second)).toContain('"expectedRevision":8');
+  expect(second).toContain('"expectedRevision":8');
 });
 
 it.each(['lost', '503', 'unknown'])('recovers %s only with serial status reads of the same command', async failure => {
   await setup();
-  post = async () => {
-    if (failure === 'lost') throw new Error('Lost');
-    return response(failure === '503' ? 503 : 200, { outcome: 'unknown' });
+  post = () => {
+    if (failure === 'lost') return Promise.reject(new Error('Lost'));
+    return Promise.resolve(response(failure === '503' ? 503 : 200, { outcome: 'unknown' }));
   };
   click('Edit');
   click('Save correction');
@@ -210,33 +239,35 @@ it.each(['lost', '503', 'unknown'])('recovers %s only with serial status reads o
   expect(matching('/correct')).toHaveLength(1);
 });
 function isStatus(call: { url: string }): boolean { return call.url.includes('/changes/'); }
+function postBody(index: number): string {
+  const body = matching('/correct')[index]?.init?.body;
+  if (typeof body !== 'string') throw new Error('Missing body');
+  return body;
+}
 function commandId(): string {
-  const body: unknown = JSON.parse(String(matching('/correct')[0]?.init?.body));
-  return (body as { commandId: string }).commandId;
+  const body: unknown = JSON.parse(postBody(0));
+  if (!isObject(body) || typeof body['commandId'] !== 'string') throw new Error('Missing command');
+  return body['commandId'];
 }
 
 it.each([401, 403, 404, 'forgotten'] as const)('clears all protected text after %s', async outcome => {
   await setup();
-  post = async () => response(outcome === 'forgotten' ? 409 : outcome, {});
-  latest = async () => response(200, { status: 'unavailable', reason: 'forgotten' });
-  click('Edit');
-  input('My draft');
-  click('Save correction');
+  post = () => Promise.resolve(response(outcome === 'forgotten' ? 409 : outcome, {}));
+  latest = () => Promise.resolve(response(200, { status: 'unavailable', reason: 'forgotten' }));
+  saveDraft();
   await settled();
   if (outcome === 'forgotten') { click('Refresh and review'); await settled(); }
   expect(root.textContent).not.toMatch(/Private original text|My draft/);
-  for (const field of root.querySelectorAll('input, textarea')) {
-    expect((field as HTMLInputElement).value).not.toMatch(/Private original text|My draft/);
+  for (const field of root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) {
+    expect(field.value).not.toMatch(/Private original text|My draft/);
   }
   noPrivateAnnouncements();
 });
 
 it('returns a rejected validation to editing', async () => {
   await setup();
-  post = async () => response(422, {});
-  click('Edit');
-  input('My draft');
-  click('Save correction');
+  post = () => Promise.resolve(response(422, {}));
+  saveDraft();
   await settled();
   expect(root.textContent).toContain('Nothing was saved');
   expect(root.querySelector('textarea')?.value).toBe('My draft');
@@ -247,9 +278,7 @@ it.each(['requester', 'scope'])('ignores late replies after %s changes', async c
   await setup();
   const pending = deferred();
   post = () => pending.promise;
-  click('Edit');
-  input('My draft');
-  click('Save correction');
+  saveDraft();
   if (change === 'requester') fixture.componentRef.setInput('requesterId', 'second');
   else void fixture.componentInstance['chooseScope']('other');
   fixture.detectChanges();
@@ -258,4 +287,16 @@ it.each(['requester', 'scope'])('ignores late replies after %s changes', async c
   expect(root.textContent).not.toContain('Corrected in your memory');
   expect(root.textContent).not.toContain('My draft');
   expect(matching('/facts/one')).toHaveLength(1);
+});
+
+it('resizes the phone sheet when the keyboard reduces the visible height', async () => {
+  const viewport = Object.assign(new EventTarget(), { height: 844 });
+  vi.stubGlobal('visualViewport', viewport);
+  await setup();
+  click('Edit');
+  viewport.height = 420;
+  viewport.dispatchEvent(new Event('resize'));
+  fixture.detectChanges();
+  const editor = root.querySelector<HTMLElement>('oc-memory-edit');
+  expect(editor?.style.getPropertyValue('--oc-sheet-height')).toBe('420px');
 });
