@@ -192,6 +192,8 @@ async function reportsNativeRefusal(...test: string[]) {
   const [mode, method, requestKind, outcome] = test;
 
   const setup = await fixture(mode);
+  const stdout = vi.spyOn(process.stdout, 'write');
+  const stderr = vi.spyOn(process.stderr, 'write');
   try {
     const request = { id: 19, method, params: {
       threadId: 'thread', turnId: 'codex-turn', command: 'PRIVATE_NATIVE_MARKER',
@@ -214,11 +216,17 @@ async function reportsNativeRefusal(...test: string[]) {
       expect(setup.reloadAll().at(-1)).toEqual(setup.reports.at(-1));
       expect(JSON.stringify(setup.reloadAll())).not.toContain('PRIVATE_NATIVE_MARKER');
     } else expect(setup.reports).toHaveLength(1);
+    expect(JSON.stringify(stdout.mock.calls)).not.toContain('PRIVATE_NATIVE_MARKER');
+    expect(JSON.stringify(stderr.mock.calls)).not.toContain('PRIVATE_NATIVE_MARKER');
     setup.finish();
     const count = setup.reports.length;
     setup.runner.complete(request);
     expect(setup.reports).toHaveLength(count);
-  } finally { setup.close(); }
+  } finally {
+    stdout.mockRestore();
+    stderr.mockRestore();
+    setup.close();
+  }
 }
 const nativeCases = [
   ['memory_free', 'item/commandExecution/requestApproval', 'shell', 'declined'],
