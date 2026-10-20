@@ -1,9 +1,9 @@
 {
-  "sourceSHA": "c1917332fa159be4d4df4373da9fb26b49be9447",
-  "imageDigest": "sha256:8d8f55325657634a8a0ada3b61639d21609314d25c64c9424840ed1b56e0f91a",
+  "sourceSHA": "e46f715584b08273aeb21a3d642ad6bd18f684fe",
+  "imageDigest": "sha256:245c67a5bd7ac1d232afc9b25331dab9cf667f44c75d32eb4b49f32c85190107",
   "command": "nice -n 10 docker run --rm --network none -v \"$PWD/apps/computer/test:/app/test:ro\" --entrypoint node ocn-p3-5-pr12a --experimental-strip-types /app/test/codex-on-request.mjs",
   "trim": "Kept native messages and replies verbatim, local call outputs, RPC inputs and results. Omitted repeated model history, tool descriptions, HTTP headers and notifications.",
-  "measuredAt": "2026-10-20T01:41:46.865Z",
+  "measuredAt": "2026-10-20T01:52:25.378Z",
   "version": "codex-cli 0.159.2",
   "result": "PASS",
   "nativeRequests": [
@@ -13,8 +13,8 @@
         "method": "mcpServer/elicitation/request",
         "id": 0,
         "params": {
-          "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
-          "turnId": "01a156f8-cae3-7b10-949c-d54e85cc61a5",
+          "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+          "turnId": "01a15702-8820-7852-a705-72a8b87082ab",
           "serverName": "oc_aaaaaaaaaa",
           "mode": "form",
           "_meta": {
@@ -50,8 +50,8 @@
         "method": "mcpServer/elicitation/request",
         "id": 1,
         "params": {
-          "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
-          "turnId": "01a156f8-d18e-7863-9f23-517a8b11d250",
+          "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
+          "turnId": "01a15702-8db2-7ea3-815f-f113d95d65f0",
           "serverName": "oc_aaaaaaaaaa",
           "mode": "form",
           "_meta": {
@@ -90,12 +90,12 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-cbd8-7450-9c93-2792752f90d4",
+          "id": "fco_01a15702-88c7-77e3-a514-ee4345e9a8bf",
           "call_id": "call_mcp",
           "output": [
             {
               "type": "input_text",
-              "text": "Wall time: 0.0098 seconds\nOutput:"
+              "text": "Wall time: 0.0117 seconds\nOutput:"
             },
             {
               "type": "input_text",
@@ -133,9 +133,9 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-cd08-78a0-81dd-726458ed45c7",
+          "id": "fco_01a15702-89c2-7771-af84-5f96851df4b1",
           "call_id": "call_plain_shell",
-          "output": "Chunk ID: 7c567e\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
+          "output": "Chunk ID: 97704b\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
         }
       ],
       "offeredTools": [
@@ -166,9 +166,9 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-cde3-7732-b0bd-1b9b4af476db",
+          "id": "fco_01a15702-8a7e-72d1-995d-e1cdf2411569",
           "call_id": "call_escalated_shell",
-          "output": "Chunk ID: 821075\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
+          "output": "Chunk ID: d36f59\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
         }
       ],
       "offeredTools": [
@@ -199,9 +199,9 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-ced7-7482-a3c3-ab58e972efcd",
+          "id": "fco_01a15702-8b5e-7580-a906-0654b1ef4d7f",
           "call_id": "call_file_write",
-          "output": "Chunk ID: 352597\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
+          "output": "Chunk ID: 00f2aa\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
         }
       ],
       "offeredTools": [
@@ -232,7 +232,7 @@
       "nextModelInput": [
         {
           "type": "custom_tool_call_output",
-          "id": "ctco_01a156f8-cf96-72f0-846b-0d71a482f09b",
+          "id": "ctco_01a15702-8c09-77c3-9032-d8ed53380713",
           "call_id": "call_file_change",
           "output": "unsupported custom tool call: apply_patch"
         }
@@ -265,7 +265,7 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-d047-7173-9fd6-94a9f9079e20",
+          "id": "fco_01a15702-8cac-7ab3-bf63-746804b54ddc",
           "call_id": "call_user_input",
           "output": "request_user_input is unavailable in Default mode"
         }
@@ -298,7 +298,7 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-d118-76c1-be67-f388c00385dd",
+          "id": "fco_01a15702-8d57-78a2-b7ad-2101ab8df3c9",
           "call_id": "call_permissions",
           "output": "unsupported call: request_permissions"
         }
@@ -331,12 +331,12 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-d1fa-7320-a5cf-c2bf10b48024",
+          "id": "fco_01a15702-8e0b-7b90-812c-172eb8856840",
           "call_id": "call_loaded_resume_mcp",
           "output": [
             {
               "type": "input_text",
-              "text": "Wall time: 0.0126 seconds\nOutput:"
+              "text": "Wall time: 0.0071 seconds\nOutput:"
             },
             {
               "type": "input_text",
@@ -374,9 +374,9 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-d2c3-71b2-928d-e74da9a1e1dc",
+          "id": "fco_01a15702-8ef8-7590-a7bb-e2508041790f",
           "call_id": "call_loaded_resume_shell",
-          "output": "Chunk ID: 310d9e\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
+          "output": "Chunk ID: 44524a\nWall time: 0.0000 seconds\nProcess exited with code 0\nOriginal token count: 25\nOutput:\n/etc/profile: line 4: id: command not found\n/etc/profile: line 4: [: : integer expression expected\n"
         }
       ],
       "offeredTools": [
@@ -407,7 +407,7 @@
       "nextModelInput": [
         {
           "type": "function_call_output",
-          "id": "fco_01a156f8-d4d4-7de2-ae46-091a8c1b5b28",
+          "id": "fco_01a15702-90bf-7143-b5dd-00f8a8e1860f",
           "call_id": "call_private_shell",
           "output": "unsupported call: exec_command"
         }
@@ -444,7 +444,7 @@
   "rpc": [
     {
       "stage": "start",
-      "atMs": 228,
+      "atMs": 128,
       "id": 1,
       "method": "initialize",
       "params": {
@@ -459,7 +459,7 @@
     },
     {
       "stage": "start",
-      "atMs": 962,
+      "atMs": 726,
       "id": 2,
       "method": "thread/start",
       "params": {
@@ -467,7 +467,7 @@
         "config": {
           "mcp_servers": {
             "oc_aaaaaaaaaa": {
-              "url": "http://127.0.0.1:37103/before",
+              "url": "http://127.0.0.1:37471/before",
               "bearer_token_env_var": "PROXY_CALLER_TOKEN",
               "tool_timeout_sec": 1200,
               "startup_timeout_sec": 10
@@ -479,11 +479,11 @@
     },
     {
       "stage": "mcp",
-      "atMs": 1003,
+      "atMs": 764,
       "id": 3,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -496,11 +496,11 @@
     },
     {
       "stage": "plain_shell",
-      "atMs": 1346,
+      "atMs": 999,
       "id": 4,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -513,11 +513,11 @@
     },
     {
       "stage": "escalated_shell",
-      "atMs": 1634,
+      "atMs": 1248,
       "id": 5,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -530,11 +530,11 @@
     },
     {
       "stage": "file_write",
-      "atMs": 1834,
+      "atMs": 1438,
       "id": 6,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -547,11 +547,11 @@
     },
     {
       "stage": "file_change",
-      "atMs": 2101,
+      "atMs": 1655,
       "id": 7,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -564,11 +564,11 @@
     },
     {
       "stage": "user_input",
-      "atMs": 2286,
+      "atMs": 1837,
       "id": 8,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -581,11 +581,11 @@
     },
     {
       "stage": "permissions",
-      "atMs": 2481,
+      "atMs": 2009,
       "id": 9,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -598,20 +598,20 @@
     },
     {
       "stage": "loaded_resume",
-      "atMs": 2677,
+      "atMs": 2171,
       "id": 10,
       "method": "thread/resume",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163"
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2"
       }
     },
     {
       "stage": "loaded_resume_mcp",
-      "atMs": 2716,
+      "atMs": 2190,
       "id": 11,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -623,11 +623,11 @@
     },
     {
       "stage": "loaded_resume_shell",
-      "atMs": 2886,
+      "atMs": 2365,
       "id": 12,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
         "input": [
           {
             "type": "text",
@@ -639,7 +639,7 @@
     },
     {
       "stage": "private",
-      "atMs": 3145,
+      "atMs": 2649,
       "id": 13,
       "method": "initialize",
       "params": {
@@ -654,7 +654,7 @@
     },
     {
       "stage": "private",
-      "atMs": 3428,
+      "atMs": 2847,
       "id": 14,
       "method": "thread/start",
       "params": {
@@ -665,11 +665,11 @@
     },
     {
       "stage": "private_shell",
-      "atMs": 3487,
+      "atMs": 2906,
       "id": 15,
       "method": "turn/start",
       "params": {
-        "threadId": "01a156f8-d45b-7961-ac47-547299810be4",
+        "threadId": "01a15702-9045-7ed1-8813-5cc6de674f25",
         "input": [
           {
             "type": "text",
@@ -683,11 +683,11 @@
   "rpcResults": [
     {
       "stage": "start",
-      "atMs": 708,
+      "atMs": 512,
       "id": 1,
       "result": {
         "userAgent": "reload_probe/0.159.2 (Debian 12.0.0; x86_64) unknown (reload_probe; 1)",
-        "codexHome": "/tmp/codex-resume-aM10s5",
+        "codexHome": "/tmp/codex-resume-rENJJ5",
         "platformFamily": "unix",
         "platformOs": "linux"
       },
@@ -695,20 +695,20 @@
     },
     {
       "stage": "start",
-      "atMs": 1002,
+      "atMs": 763,
       "id": 2,
       "result": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163"
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2"
       },
       "error": null
     },
     {
       "stage": "mcp",
-      "atMs": 1032,
+      "atMs": 779,
       "id": 3,
       "result": {
         "turn": {
-          "id": "01a156f8-cae3-7b10-949c-d54e85cc61a5",
+          "id": "01a15702-8820-7852-a705-72a8b87082ab",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -722,11 +722,11 @@
     },
     {
       "stage": "plain_shell",
-      "atMs": 1357,
+      "atMs": 1017,
       "id": 4,
       "result": {
         "turn": {
-          "id": "01a156f8-cc34-7852-91c1-529fbc639063",
+          "id": "01a15702-890b-7c32-80b7-35716cc114c0",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -740,11 +740,11 @@
     },
     {
       "stage": "escalated_shell",
-      "atMs": 1644,
+      "atMs": 1259,
       "id": 5,
       "result": {
         "turn": {
-          "id": "01a156f8-cd54-7a02-8f50-597d65411fe5",
+          "id": "01a15702-8a04-7f63-886f-8a985e8ef48a",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -758,11 +758,11 @@
     },
     {
       "stage": "file_write",
-      "atMs": 1854,
+      "atMs": 1452,
       "id": 6,
       "result": {
         "turn": {
-          "id": "01a156f8-ce1d-7931-b44d-53c4c179b25e",
+          "id": "01a15702-8ac3-72b1-92e6-36d71899d543",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -776,11 +776,11 @@
     },
     {
       "stage": "file_change",
-      "atMs": 2126,
+      "atMs": 1685,
       "id": 7,
       "result": {
         "turn": {
-          "id": "01a156f8-cf29-7f12-84ef-bc627ed19a45",
+          "id": "01a15702-8b9a-7fb2-b701-f3c9984161bb",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -794,11 +794,11 @@
     },
     {
       "stage": "user_input",
-      "atMs": 2299,
+      "atMs": 1846,
       "id": 8,
       "result": {
         "turn": {
-          "id": "01a156f8-cfe2-76e2-bcc7-03c68ce51cc6",
+          "id": "01a15702-8c51-7d90-bfe5-e27d9701c90c",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -812,11 +812,11 @@
     },
     {
       "stage": "permissions",
-      "atMs": 2499,
+      "atMs": 2020,
       "id": 9,
       "result": {
         "turn": {
-          "id": "01a156f8-d0a5-79d2-b58d-16f7a291b696",
+          "id": "01a15702-8cff-70a3-b49b-54156d0ae3c7",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -830,20 +830,20 @@
     },
     {
       "stage": "loaded_resume",
-      "atMs": 2716,
+      "atMs": 2190,
       "id": 10,
       "result": {
-        "threadId": "01a156f8-caba-7023-829f-cf75cfab8163"
+        "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2"
       },
       "error": null
     },
     {
       "stage": "loaded_resume_mcp",
-      "atMs": 2720,
+      "atMs": 2195,
       "id": 11,
       "result": {
         "turn": {
-          "id": "01a156f8-d18e-7863-9f23-517a8b11d250",
+          "id": "01a15702-8db2-7ea3-815f-f113d95d65f0",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -857,11 +857,11 @@
     },
     {
       "stage": "loaded_resume_shell",
-      "atMs": 2894,
+      "atMs": 2371,
       "id": 12,
       "result": {
         "turn": {
-          "id": "01a156f8-d23a-7351-961b-0b33d29fee68",
+          "id": "01a15702-8e61-7891-8475-75aa04f139b7",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -875,11 +875,11 @@
     },
     {
       "stage": "private",
-      "atMs": 3428,
+      "atMs": 2847,
       "id": 13,
       "result": {
         "userAgent": "reload_probe/0.159.2 (Debian 12.0.0; x86_64) unknown (reload_probe; 1)",
-        "codexHome": "/tmp/codex-resume-aM10s5",
+        "codexHome": "/tmp/codex-resume-rENJJ5",
         "platformFamily": "unix",
         "platformOs": "linux"
       },
@@ -887,20 +887,20 @@
     },
     {
       "stage": "private",
-      "atMs": 3487,
+      "atMs": 2906,
       "id": 14,
       "result": {
-        "threadId": "01a156f8-d45b-7961-ac47-547299810be4"
+        "threadId": "01a15702-9045-7ed1-8813-5cc6de674f25"
       },
       "error": null
     },
     {
       "stage": "private_shell",
-      "atMs": 3500,
+      "atMs": 2919,
       "id": 15,
       "result": {
         "turn": {
-          "id": "01a156f8-d492-77e1-ae4a-6abc6cbcbec4",
+          "id": "01a15702-9080-7d03-bcd3-65de45f7a556",
           "items": [],
           "itemsView": "notLoaded",
           "status": "inProgress",
@@ -916,62 +916,62 @@
   "completedTurns": [
     {
       "stage": "mcp",
-      "atMs": 1345,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 998,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "plain_shell",
-      "atMs": 1633,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 1248,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "escalated_shell",
-      "atMs": 1834,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 1438,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "file_write",
-      "atMs": 2101,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 1655,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "file_change",
-      "atMs": 2285,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 1837,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "user_input",
-      "atMs": 2480,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 2005,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "permissions",
-      "atMs": 2677,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 2171,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "loaded_resume_mcp",
-      "atMs": 2886,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 2364,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "loaded_resume_shell",
-      "atMs": 3098,
-      "threadId": "01a156f8-caba-7023-829f-cf75cfab8163",
+      "atMs": 2598,
+      "threadId": "01a15702-8801-7db3-a20a-13abfb1115f2",
       "status": "completed"
     },
     {
       "stage": "private_shell",
-      "atMs": 3596,
-      "threadId": "01a156f8-d45b-7961-ac47-547299810be4",
+      "atMs": 3025,
+      "threadId": "01a15702-9045-7ed1-8813-5cc6de674f25",
       "status": "completed"
     }
   ],
