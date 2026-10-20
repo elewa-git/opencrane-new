@@ -1731,6 +1731,9 @@ the model-only checkpoint is never used. Failed reads return 503; missing histor
 404 `unknown`, which never proves a retry safe. Replies use `cache-control: no-store`.
 
 `test/integration-access.test.ts` uses disposable NATS, PostgreSQL and OpenFGA.
+It checks admin access before grant history is read, after target preparation and on
+repeated commands. Caller demotion during the final position checks saves no grant.
+Separate receipt cases change only the silo, principal kind or principal id.
 This is the first part of #45 row 7: HTTP commands, original receipts and inventory replay.
 The real gateway intersection/revocation matrix remains NOT RUN for this part.
 Bounded access/candidate reads and screens follow in row 8; #105 owns group editing.

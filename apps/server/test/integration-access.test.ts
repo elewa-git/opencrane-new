@@ -25,7 +25,8 @@ let counter = 0;
 async function append(stream: string, type: string, data: unknown, silo = 'acme') {
   const record = { ...event(`access-fixture-${++counter}`, stream, type), silo, data };
   const expectedSequence = await nats.store.head(stream);
-  const result = await nats.store.append({ event: record, expectedSequence });
+  const command = { event: record, expectedSequence };
+  const result = await nats.store.append(command);
   expect(result.status).toBe('appended');
   if (silo === 'acme' && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, database);
@@ -89,11 +90,15 @@ async function command(granteeKind = 'member', granteeId = 'bob', action = 'gran
 
 function post(payload: Record<string, unknown>, actor = 'owner', origin = 'https://app.example.test',
   url = path) {
-  return app.inject({ method: 'POST', url, headers: headers(actor, origin), payload });
+  const requestHeaders = headers(actor, origin);
+  const request = { method: 'POST' as const, url, headers: requestHeaders, payload };
+  return app.inject(request);
 }
 
 function get(commandId: string, actor = 'owner') {
-  return app.inject({ method: 'GET', url: `${path}/${commandId}`, headers: headers(actor) });
+  const requestHeaders = headers(actor);
+  const request = { method: 'GET' as const, url: `${path}/${commandId}`, headers: requestHeaders };
+  return app.inject(request);
 }
 
 async function savesOneGrantAndOriginalReceipt() {
@@ -108,16 +113,24 @@ async function savesOneGrantAndOriginalReceipt() {
     expect(saved.json()).toEqual(receipt);
     expect(original.event.data).toEqual({ resourceType: 'mcp_server', resourceId: 'fixture',
       granteeKind: kind, granteeId: id, grantedBy: 'owner' });
-    expect((await post(input)).json()).toEqual(receipt);
-    expect((await get(input.commandId)).json()).toMatchObject({
+    const repeated = await post(input);
+    const repeatedReceipt = repeated.json<unknown>();
+    expect(repeatedReceipt).toEqual(receipt);
+    const pending = await get(input.commandId);
+    const pendingChange = pending.json<unknown>();
+    const expectedPendingChange = {
       ...receipt, projection: { content: 'applying', iam: 'applying' },
-    });
+    };
+    expect(pendingChange).toMatchObject(expectedPendingChange);
     await runner.run(members);
     await auth.handler.handle(original.event, database);
-    expect((await get(input.commandId)).json()).toEqual({
+    const current = await get(input.commandId);
+    const currentChange = current.json<unknown>();
+    const expectedCurrentChange = {
       ...receipt, currentSequence: original.sequence,
       projection: { content: 'current', iam: 'current' },
-    });
+    };
+    expect(currentChange).toEqual(expectedCurrentChange);
     expect(await nats.store.head(subject)).toBe(original.sequence);
   }
 }
@@ -126,17 +139,25 @@ it('saves one typed grant and returns its original receipt and separate progress
 
 async function refusesUntrustedChanges() {
   const input = await command();
+  const staleInput = { ...input, expectedSequence: 0 };
+  const extraFieldInput = { ...input, secret: 'synthetic-canary' };
+  const wrongKindInput = { ...input, granteeKind: 'team', granteeId: 'bob' };
+  const missingAssistantInput = { ...input, granteeKind: 'assistant', granteeId: 'missing' };
+  const missingServerPath = path.replace('fixture', 'missing');
   const attempts = [
     post(input, 'bob'), post(input, 'owner', 'https://other.example.test'),
-    post({ ...input, expectedSequence: 0 }), post({ ...input, secret: 'synthetic-canary' }),
-    post({ ...input, granteeKind: 'team', granteeId: 'bob' }),
-    post({ ...input, granteeKind: 'assistant', granteeId: 'missing' }),
-    post(input, 'owner', 'https://app.example.test', path.replace('fixture', 'missing')),
+    post(staleInput), post(extraFieldInput), post(wrongKindInput), post(missingAssistantInput),
+    post(input, 'owner', 'https://app.example.test', missingServerPath),
   ];
   const responses = await Promise.all(attempts);
-  expect(responses.map(statusCode)).toEqual([403, 403, 409, 400, 409, 409, 409]);
-  expect((await get(input.commandId, 'bob')).statusCode).toBe(403);
-  expect((await get(input.commandId)).json()).toEqual({ status: 'unknown' });
+  const statusCodes = responses.map(statusCode);
+  expect(statusCodes).toEqual([403, 403, 409, 400, 409, 409, 409]);
+  const refused = await get(input.commandId, 'bob');
+  expect(refused.statusCode).toBe(403);
+  const missing = await get(input.commandId);
+  const missingChange = missing.json<unknown>();
+  const expectedMissingChange = { status: 'unknown' };
+  expect(missingChange).toEqual(expectedMissingChange);
   expect(await nats.store.head(subject)).toBe(input.expectedSequence);
 }
 function statusCode(response: { statusCode: number }) {
@@ -156,7 +177,9 @@ async function refusesInactiveAndForeignTargets() {
     assistantId: 'inactive', active: false, changedFields: ['active'], changedBy: 'owner',
   });
   for (const [kind, id] of [['member', 'left'], ['assistant', 'inactive']]) {
-    expect((await post(await command(kind, id))).statusCode).toBe(409);
+    const input = await command(kind, id);
+    const response = await post(input);
+    expect(response.statusCode).toBe(409);
   }
   for (const [kind, data] of [
     ['member', { memberId: 'foreign', role: 'member', email: 'foreign@example.test',
@@ -166,7 +189,9 @@ async function refusesInactiveAndForeignTargets() {
   ] as const) {
     const type = kind === 'member' ? 'member.joined' : `${kind}.created`;
     await append(`${kind}-foreign`, type, data, 'other');
-    expect((await post(await command(kind, 'foreign'))).statusCode).toBe(409);
+    const input = await command(kind, 'foreign');
+    const response = await post(input);
+    expect(response.statusCode).toBe(409);
   }
   for (const serverId of ['foreign', 'inactive']) {
     const silo = serverId === 'foreign' ? 'other' : 'acme';
@@ -176,9 +201,10 @@ async function refusesInactiveAndForeignTargets() {
     if (serverId === 'inactive') {
       await append(`mcp-${serverId}`, 'mcp.server_unpublished', { serverId, unpublishedBy: 'owner' });
     }
-    const input = { ...await command(), expectedSequence: 0 };
-    const response = await post(input, 'owner', 'https://app.example.test',
-      path.replace('fixture', serverId));
+    const prepared = await command();
+    const input = { ...prepared, expectedSequence: 0 };
+    const serverPath = path.replace('fixture', serverId);
+    const response = await post(input, 'owner', 'https://app.example.test', serverPath);
     expect([403, 409]).toContain(response.statusCode);
     expect(await nats.store.head(grantStream('mcp_server', serverId))).toBe(0);
   }
@@ -193,9 +219,16 @@ async function originalCannotBeChanged() {
   const before = await nats.store.head(subject);
   const changes = [{ ...input, action: 'revoke' }, { ...input, granteeId: 'owner' },
     { ...input, granteeKind: 'team' }, { ...input, expectedSequence: before }];
-  for (const changed of changes) expect((await post(changed)).statusCode).toBe(409);
-  expect((await post(input, 'admin')).statusCode).toBe(409);
-  expect((await post(input)).json()).toEqual(saved.json());
+  for (const changed of changes) {
+    const response = await post(changed);
+    expect(response.statusCode).toBe(409);
+  }
+  const changedActor = await post(input, 'admin');
+  expect(changedActor.statusCode).toBe(409);
+  const repeated = await post(input);
+  const repeatedReceipt = repeated.json<unknown>();
+  const originalReceipt = saved.json<unknown>();
+  expect(repeatedReceipt).toEqual(originalReceipt);
   expect(await nats.store.head(subject)).toBe(before);
 }
 it('binds the original receipt to its actor, payload and expected position', originalCannotBeChanged);
@@ -207,7 +240,9 @@ async function recoverLostReplyAndConflict() {
     nats.store.append = async function uncertainAppend(command) {
       const record = { ...event(`interleaved-${outcome}`, 'team-sales', 'team.member_added'),
         silo: 'acme', data: { teamId: 'sales', memberId: 'bob', addedBy: 'owner' } };
-      await appendCommand({ event: record, expectedSequence: await nats.store.head('team-sales') });
+      const teamPosition = await nats.store.head('team-sales');
+      const teamChange = { event: record, expectedSequence: teamPosition };
+      await appendCommand(teamChange);
       await appendCommand(command);
       if (outcome === 'lost') throw new Error('synthetic-canary');
       return { status: 'conflict' };
@@ -228,15 +263,20 @@ async function recoverLostReplyAndConflict() {
     const record = { ...event('competing-grant', subject, 'grant.given'), silo: 'acme',
       data: { resourceType: 'mcp_server', resourceId: 'fixture', granteeId: 'sales',
         granteeKind: 'team', grantedBy: 'owner' } };
-    await appendCommand({ event: record, expectedSequence: input.expectedSequence });
+    const competingCommand = { event: record, expectedSequence: input.expectedSequence };
+    await appendCommand(competingCommand);
     return appendCommand(command);
   };
   try {
-    expect((await post(input)).statusCode).toBe(409);
+    const response = await post(input);
+    expect(response.statusCode).toBe(409);
   } finally {
     nats.store.append = appendCommand;
   }
-  expect((await get(input.commandId)).json()).toEqual({ status: 'unknown' });
+  const missing = await get(input.commandId);
+  const missingChange = missing.json<unknown>();
+  const expectedMissingChange = { status: 'unknown' };
+  expect(missingChange).toEqual(expectedMissingChange);
   const rows = await history(nats.store, subject, 'acme');
   expect(rows.at(-1)!.event.id).toBe('competing-grant');
 }
@@ -251,7 +291,10 @@ async function missingEvidenceStaysUnknownOrApplying() {
     yield* read(stream, from, deadline);
   };
   try {
-    expect((await post(input)).json()).toEqual({ status: 'unknown' });
+    const response = await post(input);
+    const change = response.json<unknown>();
+    const expectedChange = { status: 'unknown' };
+    expect(change).toEqual(expectedChange);
   } finally {
     nats.store.readStream = read;
   }
@@ -262,16 +305,21 @@ async function missingEvidenceStaysUnknownOrApplying() {
   await database.query('DELETE FROM projection_events WHERE projection = $1', ['members']);
   await database.query(`INSERT INTO projection_checkpoints VALUES ('model-access', $1)
     ON CONFLICT (name) DO UPDATE SET sequence = $1`, [before]);
-  expect((await get(input.commandId)).json()).toMatchObject({
-    projection: { content: 'applying', iam: 'applying' },
-  });
+  const pending = await get(input.commandId);
+  const pendingChange = pending.json<unknown>();
+  const expectedPendingChange = { projection: { content: 'applying', iam: 'applying' } };
+  expect(pendingChange).toMatchObject(expectedPendingChange);
   const logger = createLogger('access-replay-test', { level: 'silent' });
   await rebuildMemberProjection(database, nats.reader, logger);
-  expect((await get(input.commandId)).json()).toMatchObject({
-    projection: { content: 'current', iam: 'applying' },
-  });
+  const rebuilt = await get(input.commandId);
+  const rebuiltChange = rebuilt.json<unknown>();
+  const expectedRebuiltChange = { projection: { content: 'current', iam: 'applying' } };
+  expect(rebuiltChange).toMatchObject(expectedRebuiltChange);
   expect(await nats.store.head(subject)).toBe(before);
-  expect((await get('never-saved')).json()).toEqual({ status: 'unknown' });
+  const missing = await get('never-saved');
+  const missingChange = missing.json<unknown>();
+  const expectedMissingChange = { status: 'unknown' };
+  expect(missingChange).toEqual(expectedMissingChange);
 }
 it('keeps missing evidence unknown or applying and rebuilds inventory without new events',
   missingEvidenceStaysUnknownOrApplying);
@@ -287,60 +335,21 @@ async function revokeDepartedTargetsAndLegacyGrant() {
     resourceType: 'mcp_server', resourceId: 'fixture', granteeId: 'bob', revokedBy: 'owner',
   });
   const input = await command();
-  expect((await post(input)).statusCode).toBe(200);
+  const saved = await post(input);
+  expect(saved.statusCode).toBe(200);
 }
 it('allows departed targets to be revoked and reads kindless historical revokes',
   revokeDepartedTargetsAndLegacyGrant);
 
 async function refusesMalformedJsonWithoutEcho() {
-  const response = await app.inject({ method: 'POST', url: path,
-    headers: { ...headers(), 'content-type': 'application/json' },
-    payload: '{"synthetic-canary":invalid}' });
+  const requestHeaders = { ...headers(), 'content-type': 'application/json' };
+  const request = { method: 'POST' as const, url: path, headers: requestHeaders,
+    payload: '{"synthetic-canary":invalid}' };
+  const response = await app.inject(request);
   expect(response.statusCode).toBe(400);
   expect(response.body).not.toContain('synthetic-canary');
 }
 it('does not echo malformed input in errors', refusesMalformedJsonWithoutEcho);
-
-async function historyPrecedesCheckAndTargetChangeRefuses() {
-  const read = nats.store.readStream.bind(nats.store);
-  const head = nats.store.head.bind(nats.store);
-  let checking = false;
-  let changed = false;
-  nats.store.readStream = async function* observeHistory(stream, from, deadline) {
-    if ([subject, 'mcp-fixture', 'member-bob'].includes(stream) && from === 1) {
-      expect(checking).toBe(false);
-      expect((deadline ?? 0) - performance.now()).toBeGreaterThan(2000);
-    }
-    yield* read(stream, from, deadline);
-  };
-  nats.store.head = async function changeDuringCheck(stream, deadline) {
-    if (stream === undefined && deadline !== undefined) {
-      checking = true;
-      expect(deadline - performance.now()).toBeLessThanOrEqual(2000);
-      if (!changed) {
-        changed = true;
-        const record = { ...event('target-changed', 'member-bob', 'member.removed'),
-          silo: 'acme', data: { memberId: 'bob', removedBy: 'owner' } };
-        await nats.store.append({ event: record, expectedSequence: await head('member-bob'),
-          historyChecked: true });
-      }
-    }
-    return head(stream, deadline);
-  };
-  try {
-    const input = await command();
-    const response = await post(input);
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({ status: 'refused', reason: 'target_changed' });
-    expect(await head(subject)).toBe(input.expectedSequence);
-  } finally {
-    nats.store.readStream = read;
-    nats.store.head = head;
-  }
-}
-it('reads histories before the short check and refuses a target changed during it',
-  historyPrecedesCheckAndTargetChangeRefuses);
-
 
 async function refusesNonAdminBeforeGrantHistory() {
   const input = await command('team', 'sales');
@@ -474,6 +483,9 @@ async function refusesChangedReceiptIdentity(_name: string, identity: ReceiptIde
   const receiptSubject = grantStream('mcp_server', serverId);
   const appendCommand = nats.store.append.bind(nats.store);
   nats.store.append = async function appendWithChangedIdentity(command) {
+    if (typeof command.event !== 'object' || command.event === null) {
+      throw new Error('Expected a grant event object');
+    }
     const changedEvent = { ...command.event, ...identity };
     const changedCommand = { ...command, event: changedEvent };
     return appendCommand(changedCommand);
@@ -500,3 +512,45 @@ async function refusesChangedReceiptIdentity(_name: string, identity: ReceiptIde
 }
 it.each(receiptIdentities)('refuses an original receipt with a different %s only',
   refusesChangedReceiptIdentity);
+
+async function historyPrecedesCheckAndTargetChangeRefuses() {
+  const read = nats.store.readStream.bind(nats.store);
+  const head = nats.store.head.bind(nats.store);
+  let checking = false;
+  let changed = false;
+  nats.store.readStream = async function* observeHistory(stream, from, deadline) {
+    if ([subject, 'mcp-fixture', 'member-bob'].includes(stream) && from === 1) {
+      expect(checking).toBe(false);
+      expect((deadline ?? 0) - performance.now()).toBeGreaterThan(2000);
+    }
+    yield* read(stream, from, deadline);
+  };
+  nats.store.head = async function changeDuringCheck(stream, deadline) {
+    if (stream === undefined && deadline !== undefined) {
+      checking = true;
+      expect(deadline - performance.now()).toBeLessThanOrEqual(2000);
+      if (!changed) {
+        changed = true;
+        const record = { ...event('target-changed', 'member-bob', 'member.removed'),
+          silo: 'acme', data: { memberId: 'bob', removedBy: 'owner' } };
+        const memberPosition = await head('member-bob');
+        const memberChange = { event: record, expectedSequence: memberPosition,
+          historyChecked: true as const };
+        await nats.store.append(memberChange);
+      }
+    }
+    return head(stream, deadline);
+  };
+  try {
+    const input = await command();
+    const response = await post(input);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'refused', reason: 'target_changed' });
+    expect(await head(subject)).toBe(input.expectedSequence);
+  } finally {
+    nats.store.readStream = read;
+    nats.store.head = head;
+  }
+}
+it('reads histories before the short check and refuses a target changed during it',
+  historyPrecedesCheckAndTargetChangeRefuses);

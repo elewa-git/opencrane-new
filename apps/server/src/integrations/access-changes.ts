@@ -11,11 +11,16 @@ import { modelAccessCommandSchema, modelAccessReceiptSchema, modelAccessChangeSc
 import type { GroupOptions as ModelAccessOptions } from '../members/group-routes.ts';
 import { ChangeUnknown, TargetConflict } from '../models/access-changes.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const identifierSchema = z.string();
+const id = identifierSchema.regex(/^[\w-]{1,200}$/u);
 const parameters = z.strictObject({ serverId: id });
 const changeParameters = parameters.extend({ commandId: id });
-const receiptSchema = modelAccessReceiptSchema.omit({ modelId: true }).extend({ serverId: id });
-const changeSchema = modelAccessChangeSchema.omit({ modelId: true }).extend({ serverId: id });
+const modelIdField = { modelId: true } as const;
+const serverIdField = { serverId: id };
+const receiptWithoutModel = modelAccessReceiptSchema.omit(modelIdField);
+const receiptSchema = receiptWithoutModel.extend(serverIdField);
+const changeWithoutModel = modelAccessChangeSchema.omit(modelIdField);
+const changeSchema = changeWithoutModel.extend(serverIdField);
 type AccessCommand = z.infer<typeof modelAccessCommandSchema>;
 
 function receipt(row: StoredEvent, serverId: string) {
@@ -179,7 +184,11 @@ export async function readToolAccessChange(request: FastifyRequest, reply: Fasti
     return row.event.commandId === commandId;
   }
   const original = rows.find(matchesCommand);
-  if (!original) return reply.code(404).send({ status: 'unknown' });
+  if (!original) {
+    const response = { status: 'unknown' };
+    reply.code(404);
+    return reply.send(response);
+  }
   // Confirm this event in the generic inventory worker, never the model-only checkpoint.
   const content = await options.db.query(
     'SELECT event_id FROM projection_events WHERE projection = $1 AND event_id = $2',
@@ -189,5 +198,6 @@ export async function readToolAccessChange(request: FastifyRequest, reply: Fasti
     iam: applied ? 'current' : 'applying' };
   const response = { ...receipt(original, serverId), projection,
     currentSequence: rows.at(-1)?.sequence ?? 0 };
-  return reply.send(changeSchema.parse(response));
+  const validatedResponse = changeSchema.parse(response);
+  return reply.send(validatedResponse);
 }
