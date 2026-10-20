@@ -491,11 +491,6 @@ tools. Older computers receive Allow tools only, so either update order is safe.
 
 ## How to run or test it
 
-The root dependency install applies a small compatibility patch so Minio can use
-the fixed JSON parser. The install needs npm scripts enabled. The
-[dependency notes](README.robot.md#minio-dependency-compatibility) explain when
-the patch can be removed.
-
 ```sh
 npm start -w apps/server
 npm run models -w apps/server

@@ -75,8 +75,7 @@
     "visual:screen-p4-6-read": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-6-read.mjs",
     "visual:screen-p3-14-stop": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-14-stop.mjs",
     "visual:screen-p3-5-facts": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-5-facts.mjs",
-    "visual:screen-p3-5-times": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-5-times.mjs",
-    "postinstall": "node apps/server/patch-stream-json.mjs"
+    "visual:screen-p3-5-times": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-5-times.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -97,9 +96,6 @@
     },
     "decode-uri-component": "0.5.0",
     "@modelcontextprotocol/sdk": "1.31.0",
-    "piscina": "5.3.2",
-    "minio@8.0.7": {
-      "stream-json": "3.6.0"
-    }
+    "piscina": "5.3.2"
   }
 }

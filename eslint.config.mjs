@@ -75,7 +75,6 @@ export default tseslint.config(
     // package tsconfig, so they get no type-aware rules.
     files: [
       'scripts/**/*.mjs', 'docs/process/**/*.mjs', 'apps/computer/test/*.mjs',
-      'apps/server/patch-stream-json.mjs',
       '*.mjs', '*.cjs', 'vitest.config.ts',
     ],
     extends: [tseslint.configs.disableTypeChecked],
