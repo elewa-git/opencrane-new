@@ -51,7 +51,7 @@ async function supplier(page: Page, origin: string) {
   const choosing = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Upload from computer', exact: true }).click();
   const chooser = await choosing;
-  const buffer = uploadPdf('Supplier quote: EUR 1234.56. Delivery: 17 November 2026.');
+  const buffer = uploadPdf('EUR 1234.56; due 17 November 2026');
   await chooser.setFiles({ name: 'supplier.pdf', mimeType: 'application/pdf', buffer });
   await page.locator('.upload-status').filter({ hasText: 'Ready' }).waitFor();
   await answer(page, 'Read the attached supplier quote. What is the total in euros and the ' +
