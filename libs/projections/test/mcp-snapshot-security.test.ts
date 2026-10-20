@@ -12,7 +12,9 @@ const definition = '{"inputSchema":{"type":"object"},"name":"read"}';
 const revision = createHash('sha256').update(definition).digest('hex');
 const revisionList = JSON.stringify([{ name: 'read', revision }]);
 const schemaDigest = createHash('sha256').update(revisionList).digest('hex');
-const tool = { name: 'read', revision, reviewed: true, definition, costCents: 0 };
+const review = { action: 'Read a record', consequence: 'Show the record',
+  targetArgument: 'id', fields: ['id'], stepUp: false };
+const tool = { review, name: 'read', revision, reviewed: true, definition, costCents: 0 };
 const catalogue = { serverId: 'fixture', toolCount: 1, schemaDigest,
   checkedAt, expiresAt, connectionId: 'installed', accountMode: 'none', tools: [tool] };
 

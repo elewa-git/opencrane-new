@@ -129,11 +129,35 @@ function applyReview(next: ToolPolicy, state: ToolPolicy, event: EventEnvelope):
   const tools = reviewedToolChoices(state, review, Date.parse(event.time));
   const principalMatchesReviewer = event.principal?.kind === 'human' &&
     event.principal.id === review.reviewedBy;
+  if (!tools && principalMatchesReviewer) {
+    const blocked = blockedLegacyReview(state, review, Date.parse(event.time));
+    if (blocked) {
+      return { ...next, tools: blocked, reviewRevision: undefined, published: false };
+    }
+  }
   if (!tools || !principalMatchesReviewer) {
     throw new Error('Tool review does not match the saved catalogue');
   }
   return { ...next, tools, reviewRevision: next.sequence,
     published: keepsPublication(state, tools) };
+}
+
+function blockedLegacyReview(state: ToolPolicy, review: Review, now: number) {
+  function blockIncompleteChoice(choice: Review['tools'][number]) {
+    function matchesName(tool: { name: string }) {
+      return tool.name === choice.name;
+    }
+    const declaration = state.catalogue?.tools?.find(matchesName);
+    if (choice.mode === 'allow' && declaration?.costCents === 0 && !declaration.review) {
+      return { ...choice, mode: 'block' as const };
+    }
+    return choice;
+  }
+  // Keep older Allow reviews readable and their tools blocked.
+  const choices = review.tools.map(blockIncompleteChoice);
+  const blockedReview = { ...review, tools: choices };
+  const tools = reviewedToolChoices(state, blockedReview, now);
+  return tools?.map(blockTool) ?? null;
 }
 
 function requiresStartupReview(data: Record<string, unknown>) {
@@ -195,7 +219,7 @@ function applyMode(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy
   const mode = z.enum(['allow', 'ask', 'block']).parse(data['mode']);
   const declaration = state.catalogue?.tools?.find(matchesName);
   if (mode !== 'block' && (selected.costCents !== 0 ||
-      (mode === 'ask' && !declaration?.review))) {
+      !declaration?.review)) {
     return state.tools;
   }
   function setMode(tool: ToolPolicy['tools'][number]) {
@@ -345,7 +369,7 @@ function matchesChoice(tool: ToolPolicy['tools'][number],
   if (choice.mode !== 'block' && declaration.costCents !== 0) {
     return false;
   }
-  if (choice.mode === 'ask' && !declaration.review) {
+  if (choice.mode !== 'block' && !declaration.review) {
     return false;
   }
   return true;

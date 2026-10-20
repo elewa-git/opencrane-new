@@ -93,7 +93,7 @@ it('persists valid output schemas and safe per-tool rejections across HTTPS page
 
 it.each([
   ['mixed_dns', 'unsafe_address'], ['rebinding', 'unsafe_address'], ['redirect', 'redirect_refused'], ['invalid_tls', 'network_refused'],
-  ['protected', 'connection_required'], ['legacy', 'protocol_refused'], ['missing_metadata', 'protocol_refused'],
+  ['protected', 'connection_required'], ['forbidden', 'connection_required'], ['legacy', 'protocol_refused'], ['missing_metadata', 'protocol_refused'],
   ['duplicate_tools', 'duplicate_tools'], ['cursor_loop', 'pagination_limit'],
   ['too_many_tools', 'protocol_refused'], ['large_response', 'response_limit'], ['timeout', 'discovery_timeout'],
   ['duplicate_keys', 'protocol_refused'], ['session', 'protocol_refused'], ['page_limit', 'pagination_limit'], ['inventory_limit', 'inventory_limit'], ['metadata_limit', 'inventory_limit'],
@@ -104,6 +104,9 @@ it.each([
   if (mode === 'redirect') remote.status(302);
   if (mode === 'invalid_tls') remote.untrust();
   if (mode === 'protected') remote.status(401);
+  if (mode === 'forbidden') {
+    remote.status(403);
+  }
   const full = { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {} }, _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1' } }, ttlMs: 1000, cacheScope: 'public' };
   const tool = { name: 'read', inputSchema: { type: 'object' } };
   if (mode === 'legacy') remote.respond(() => ({ ...full, supportedVersions: ['2025-06-18'] }));
@@ -124,7 +127,9 @@ it.each([
   const worker = installWorker(app, nats.store, 'test', { ...remote.network, deadlineMs: 2000 });
   const change = await registerRemote(nats.store, 'test', 'admin', { locator: 'https://mcp.example.test/mcp' });
   await worker.discover(change.serverId);
-  expect(await discoveryStatus(nats.store, 'test', change.serverId)).toMatchObject({ state: mode === 'protected' ? 'needs_input' : 'failed', reason });
+  const protectedServer = mode === 'protected' || mode === 'forbidden';
+  const state = protectedServer ? 'needs_input' : 'failed';
+  expect(await discoveryStatus(nats.store, 'test', change.serverId)).toMatchObject({ state, reason });
   if (mode === 'page_limit') expect(remote.calls).toHaveLength(11);
   if (mode === 'mixed_dns') expect(remote.calls).toHaveLength(0);
   if (mode === 'rebinding') expect(remote.calls.map(c => c.method)).toEqual(['server/discover']);

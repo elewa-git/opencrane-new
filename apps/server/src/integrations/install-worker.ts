@@ -57,7 +57,12 @@ export function installWorker(app: FastifyInstance, store: EventStore, silo: str
         return response.json<{ resultJson: string }>().resultJson;
       });
       const inventory = await Promise.race([run(), deadline]);
-      const result = await store.append({ event: envelope(silo, `mcp-${serverId}`, 'mcp.server_discovered', { serverId, ...inventory }, `${rows[0].event.id}-discovery`), expectedSequence: rows[0].sequence });
+      // Keep the credential-free connection stable across worker retries and replay.
+      const data = { serverId, ...inventory,
+        connectionId: `installed-${serverId}`, accountMode: 'none' };
+      const discovered = envelope(silo, `mcp-${serverId}`, 'mcp.server_discovered', data,
+        `${rows[0].event.id}-discovery`);
+      const result = await store.append({ event: discovered, expectedSequence: rows[0].sequence });
       if (result.status !== 'appended' && result.status !== 'conflict') throw new Error('Discovery append unavailable');
     } catch (error) {
       if (error instanceof Error && error.message === 'Discovery append unavailable') throw error;

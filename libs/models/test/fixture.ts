@@ -401,7 +401,9 @@ export function toolEvidence(tool: Omit<CatalogueTool, 'revision' | 'definition'
   const definition = { name: tool.name, inputSchema: { type: 'object' }, annotations };
   const encoded = JSON.stringify(definition);
   const parsed = losslessJson(encoded);
-  return { ...tool, definition: parsed.canonical, revision: parsed.digest };
+  const review = { action: 'Use the fixture tool', consequence: 'Return the fixture result',
+    targetArgument: 'id', fields: ['id'], stepUp: false };
+  return { review, ...tool, definition: parsed.canonical, revision: parsed.digest };
 }
 
 export function catalogueEvidence(tools: CatalogueTool[]) {

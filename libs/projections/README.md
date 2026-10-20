@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables, including closed assistant chats for cleanup, bounded lists and join times| pg["PostgreSQL<br/>database"]
   projections -->|keeps native refusal audits and child requests outside feeds; saves public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
@@ -66,6 +66,8 @@ that owner.
 Rebuilding it starts no process and releases no credentials. Its worker is not enabled yet.
 
 The tool catalogue keeps exact tool definitions and their check and expiry dates.
+Allow and Ask both require a declared zero cost and approval details. The admin’s
+review locks those saved values; changing them requires another review.
 It retains both lists after a change, so the earlier list can still be read.
 A server without a fresh check is shown as unavailable. Saved definitions must
 match their hashes before review choices are kept. A hash is a fixed-length value

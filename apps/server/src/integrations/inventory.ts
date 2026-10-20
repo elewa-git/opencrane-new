@@ -1,9 +1,14 @@
 import { z } from 'zod';
+import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { Ajv } from 'ajv';
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { losslessJson } from '@opencrane/events/lossless-json';
+import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { version } from './remote.ts';
+
+const discoveredTool = mcpServerDiscoveredDataSchema.shape.tools.unwrap().element;
+const costDeclaration = discoveredTool.shape.costCents.unwrap();
+const reviewDeclaration = discoveredTool.shape.review.unwrap();
 
 const text = z.string().min(1).max(200);
 const cache = { resultType: z.literal('complete'), ttlMs: z.int().nonnegative(), cacheScope: z.enum(['public', 'private']) };
@@ -51,7 +56,7 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
       bytes += Buffer.byteLength(json.canonical);
       // Leave room in the event store's 1 MiB envelope for metadata and digests.
       if (bytes > 512 * 1024 || Buffer.byteLength(json.canonical) > 32 * 1024) throw new Error('inventory_limit');
-      const checked = validateTool(rawTool);
+      const checked = validateTool(rawTool, json);
       if (!checked.success) {
         rejectedTools.push({ ...checked.rejection, revision: json.digest });
         continue;
@@ -62,7 +67,7 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
       const { readOnlyHint, destructiveHint } = definition.annotations ?? {};
       tools.push({ name: definition.name, revision: json.digest, reviewed: false,
         readOnly: readOnlyHint === true, destructive: destructiveHint === true,
-        definition: json.canonical });
+        definition: json.canonical, ...checked.declarations });
     }
     cursor = result.nextCursor;
     if (!cursor) {
@@ -81,12 +86,46 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
   throw new Error('pagination_limit');
 }
 
-function validateTool(raw: unknown) {
+function validateTool(raw: unknown, original: JsonValue) {
   const checked = tool.safeParse(raw);
   const reason = checked.success ? schemaRejection(checked.data) : declarationRejection(checked.error);
-  if (checked.success && !reason) return { success: true as const, definition: checked.data };
+  if (checked.success && !reason) {
+    const declarations = declaredEvidence(original, checked.data._meta);
+    if (typeof declarations !== 'string') {
+      return { success: true as const, definition: checked.data, declarations };
+    }
+    return { success: false as const,
+      rejection: { name: checked.data.name, reason: declarations } };
+  }
   const name = z.object({ name: toolName }).safeParse(raw);
   return { success: false as const, rejection: { ...(name.success ? { name: name.data.name } : {}), reason: reason! } };
+}
+
+function declaredEvidence(original: JsonValue, metadata: Record<string, unknown> = {}) {
+  const declarations: { costCents?: number; review?: z.infer<typeof reviewDeclaration> } = {};
+  if (Object.hasOwn(metadata, 'io.opencrane/costCents')) {
+    const cost = costDeclaration.safeParse(metadata['io.opencrane/costCents']);
+    if (!cost.success || !declaresExactZero(original)) {
+      return 'invalid_tool_cost';
+    }
+    declarations.costCents = cost.data;
+  }
+  if (Object.hasOwn(metadata, 'io.opencrane/review')) {
+    const review = reviewDeclaration.safeParse(metadata['io.opencrane/review']);
+    if (!review.success) {
+      return 'invalid_tool_review';
+    }
+    declarations.review = review.data;
+  }
+  return declarations;
+}
+
+function declaresExactZero(original: JsonValue): boolean {
+  const metadata = original.value instanceof Map ? original.value.get('_meta') : undefined;
+  const fields = metadata?.value;
+  const cost = fields instanceof Map ? fields.get('io.opencrane/costCents') : undefined;
+  // Refuse nonzero numbers that JSON.parse rounds down to zero.
+  return cost?.kind === 'number' && /^-?0(?:\.0+)?(?:[eE][+-]?\d+)?$/u.test(cost.canonical);
 }
 
 function declarationRejection(error: z.ZodError) {

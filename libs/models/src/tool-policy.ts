@@ -111,7 +111,7 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
   const tool = state.tools.find(matchesName);
   const declaration = state.catalogue?.tools?.find(matchesName);
   const safeChoice = command.mode === 'block' || (tool?.costCents === 0 &&
-    (command.mode !== 'ask' || declaration?.review !== undefined));
+    declaration?.review !== undefined);
   const valid = state.sequence === command.expectedSequence &&
     state.connectionId === command.connectionId && tool?.reviewed === true &&
     tool.revision === command.toolRevision && safeChoice;

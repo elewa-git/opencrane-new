@@ -40,7 +40,9 @@ async function fixture() {
     const definition = JSON.stringify({ name, description: 'CATALOGUE-CANARY',
       inputSchema: { type: 'object' } });
     return { name, definition, revision: losslessJson(definition).digest,
-      reviewed: false, costCents: 0 as const };
+      reviewed: false, costCents: 0 as const,
+      review: { action: 'Read a record', consequence: 'Show the record',
+        targetArgument: 'id', fields: ['id'], stepUp: false } };
   }
   const tools = ['read', 'delete'].map(declaration);
   const now = Date.now();

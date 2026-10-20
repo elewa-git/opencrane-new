@@ -88,9 +88,17 @@ async function requiresDeclarations(missing: 'cost' | 'review', mode: 'allow' | 
   delete declared[`io.opencrane/${missing === 'cost' ? 'costCents' : 'review'}`];
   const saved = await capture([{ ...tool, _meta: declared }]);
   expect(saved.tools).toHaveLength(1);
-  if (missing === 'cost') expect(saved.tools![0]).not.toHaveProperty('costCents');
-  function attemptReview() { return reviewPolicy(saved, mode); }
-  expect(attemptReview).toThrow('Tool review does not match the saved catalogue');
+  if (missing === 'cost') {
+    expect(saved.tools![0]).not.toHaveProperty('costCents');
+  }
+  function attemptReview() {
+    return reviewPolicy(saved, mode);
+  }
+  if (missing === 'review' && mode === 'allow') {
+    expect(attemptReview().tools[0]).toMatchObject({ reviewed: false, mode: 'block' });
+  } else {
+    expect(attemptReview).toThrow('Tool review does not match the saved catalogue');
+  }
 }
 it.each([['cost', 'allow'], ['cost', 'ask'], ['review', 'allow'], ['review', 'ask']] as const)(
   'keeps missing %s blocked even after exact %s review', requiresDeclarations);
@@ -107,8 +115,11 @@ async function holdsMetadataChanges(field: 'cost' | 'review') {
   const before = await capture([tool, sibling]);
   const reviewed = reviewPolicy(before, 'allow');
   const changedMeta: Record<string, unknown> = { ...tool._meta };
-  if (field === 'cost') delete changedMeta['io.opencrane/costCents'];
-  else changedMeta['io.opencrane/review'] = { ...review, consequence: 'Show another record' };
+  if (field === 'cost') {
+    delete changedMeta['io.opencrane/costCents'];
+  } else {
+    changedMeta['io.opencrane/review'] = { ...review, consequence: 'Show another record' };
+  }
   const after = await capture([{ ...tool, _meta: changedMeta }, sibling]);
   expect(after.schemaDigest).not.toBe(before.schemaDigest);
   const changed = event('mcp.tools_changed', { serverId: 'fixture',
@@ -137,3 +148,39 @@ async function preservesUnchangedReview() {
 }
 it('preserves review on an unchanged check and blocks incomplete legacy records',
   preservesUnchangedReview);
+
+async function rejectsRoundedCost(lexeme: string) {
+  const encoded = JSON.stringify({ ...metadata, tools: [tool] });
+  const raw = encoded.replace('"io.opencrane/costCents":0', `"io.opencrane/costCents":${lexeme}`);
+  function call(method: string) {
+    return Promise.resolve(method === 'server/discover' ? JSON.stringify(discovery) : raw);
+  }
+  const saved = await discoverInventory(call);
+  expect(saved.tools).toEqual([]);
+  expect(saved.rejectedTools).toMatchObject([{ name: 'read', reason: 'invalid_tool_cost' }]);
+}
+it.each(['1e-400', '-1e-400'])(
+  'does not turn the nonzero cost %s into zero through JSON number rounding', rejectsRoundedCost);
+
+async function refusesModeWithoutDetails() {
+  const saved = await capture([tool]);
+  const reviewed = reviewPolicy(saved, 'allow');
+  const incomplete = { ...saved, tools: [{ ...saved.tools![0]!, review: undefined }] };
+  const state = { ...reviewed, catalogue: incomplete,
+    tools: [{ ...reviewed.tools[0]!, mode: 'block' as const }] };
+  const mode = event('mcp.tool_mode_set', { serverId: 'fixture', connectionId: state.connectionId,
+    toolName: 'read', toolRevision: state.tools[0]!.revision, mode: 'allow', setBy: 'admin' });
+  expect(applyToolPolicy(state, mode, 3).tools[0]?.mode).toBe('block');
+}
+it('keeps an incomplete older review blocked when Allow is requested', refusesModeWithoutDetails);
+
+async function replaysIncompleteAllowReview() {
+  const complete = await capture([{ ...tool, _meta: undefined }]);
+  const declaration = { ...complete.tools![0]!, costCents: 0, review: undefined };
+  const older = { ...complete, tools: [declaration] };
+  const blocked = reviewPolicy(older, 'allow');
+  expect(blocked.tools[0]).toMatchObject({ reviewed: false, mode: 'block' });
+  expect(blocked.reviewRevision).toBeUndefined();
+  expect(blocked.published).toBe(false);
+}
+it('replays an older Allow review without approval details as blocked', replaysIncompleteAllowReview);

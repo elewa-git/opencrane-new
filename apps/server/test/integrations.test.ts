@@ -536,11 +536,13 @@ async function prepareReviewedOdooCatalogue(reviewed = true) {
   const readDefinition = losslessJson(
     '{"name":"read","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}');
   const writeDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
+  const review = { action: 'Use a record', consequence: 'Return the saved record',
+    targetArgument: 'id', fields: ['id'], stepUp: false };
   const tools = [
     { name: 'read', revision: readDefinition.digest, definition: readDefinition.canonical,
-      reviewed: true, readOnly: true, costCents: 0 },
+      reviewed: true, readOnly: true, costCents: 0, review },
     { name: 'write', revision: writeDefinition.digest, definition: writeDefinition.canonical,
-      reviewed: true, readOnly: false, costCents: 0 },
+      reviewed: true, readOnly: false, costCents: 0, review },
   ];
   const checkedAt = new Date().toISOString();
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
@@ -550,7 +552,7 @@ async function prepareReviewedOdooCatalogue(reviewed = true) {
   if (reviewed) {
     const state = await catalogue.tools('test', 'odoo');
     function choice(tool: typeof tools[number]) {
-      const evidence = { costCents: tool.costCents, review: null };
+      const evidence = { costCents: tool.costCents, review: tool.review };
       return { name: tool.name, revision: tool.revision,
         reviewDigest: losslessJson(JSON.stringify(evidence)).digest, mode: 'block' };
     }
@@ -915,7 +917,12 @@ it('projects protected discovery as Needs input and replays inventory without an
       await runner.rebuild(mcpCatalogue);
       expect(await catalogue.rows('test')).toEqual(rows);
       expect(remote.calls).toHaveLength(count);
-      if (path === 'public') expect(await catalogue.tools('test', serverId)).toMatchObject({ published: false, connectionId: null, tools: [{ mode: 'block', reviewed: false }, { mode: 'block', reviewed: false }] });
+      if (path === 'public') {
+        const policy = await catalogue.tools('test', serverId);
+        expect(policy).toMatchObject({ published: false,
+          connectionId: `installed-${serverId}`, accountMode: 'none',
+          tools: [{ mode: 'block', reviewed: false }, { mode: 'block', reviewed: false }] });
+      }
     }
   } finally { await remote.close(); }
 });
@@ -1413,14 +1420,20 @@ const invalidReviews = ['hash', 'definition', 'review', 'stale', 'revision', 'co
   'account', 'incomplete', 'forged-admin', 'member', 'foreign', 'origin'];
 it.each(invalidReviews)('refuses %s review input without changing the stream', refusesInexactReview);
 
-async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details') {
+async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details' | 'allow-details') {
   const command = await exactReviewCommand();
   const state = await catalogue.tools('test', 'odoo');
   const snapshot = state.catalogue!;
   function removeCost(tool: NonNullable<typeof snapshot.tools>[number]) {
     return { ...tool, costCents: undefined };
   }
+  function removeReview(tool: NonNullable<typeof snapshot.tools>[number]) {
+    return { ...tool, review: undefined };
+  }
   let saved = snapshot;
+  if (kind === 'ask-details' || kind === 'allow-details') {
+    saved = { ...snapshot, tools: snapshot.tools!.map(removeReview) };
+  }
   if (kind === 'cost') {
     saved = { ...snapshot, tools: snapshot.tools!.map(removeCost) };
   }
@@ -1445,7 +1458,7 @@ async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details'
   expect((await app.inject(request)).statusCode).toBe(409);
   expect(await nats.store.head('mcp-odoo')).toBe(before);
 }
-it.each(['cost', 'expired', 'ask-details'] as const)(
+it.each(['cost', 'expired', 'ask-details', 'allow-details'] as const)(
   'refuses review without current %s evidence', refusesUnavailableReview);
 
 async function publicationRequest() {
