@@ -1,0 +1,258 @@
+{
+  "sourceCommit": "9ab903795c071e3d7ec43903837c296c6ffc70ac",
+  "image": "sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+  "stopResult": "PASS",
+  "settlementResult": "FAIL: neither hold settled or released. Each dispatched call retained 16 cents because final usage was missing, as the existing money rules require.",
+  "checks": [
+    {
+      "label": "new",
+      "width": 390,
+      "conversationId": "e44cf5b2-df48-4e73-8790-0686093ff529",
+      "turnId": "55f06066-039c-4ca0-bb11-0407289931a6",
+      "ended": true,
+      "stopMs": 2056,
+      "partial": "Hello ",
+      "reloadedPartial": "Hello ",
+      "stopping": 0,
+      "screenshot": "new-390.png",
+      "reports": [
+        {
+          "type": "agent.turn_started",
+          "subject": "conversation-e44cf5b2-df48-4e73-8790-0686093ff529",
+          "data": {
+            "turnId": "55f06066-039c-4ca0-bb11-0407289931a6",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "computer.turn_started",
+          "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "data": {
+            "turnId": "55f06066-039c-4ca0-bb11-0407289931a6",
+            "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "budget.reserved",
+          "subject": "budget-dev",
+          "data": {
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "decision.recorded",
+          "subject": "decision-f830d8a0-ee29-4f0e-aa9c-2531bc7f27c6",
+          "data": {
+            "turnId": "55f06066-039c-4ca0-bb11-0407289931a6",
+            "reason": "model_allowed",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "budget.call_dispatch_admitted",
+          "subject": "budget-dev",
+          "data": {}
+        },
+        {
+          "type": "agent.message_delta",
+          "subject": "conversation-e44cf5b2-df48-4e73-8790-0686093ff529",
+          "data": {
+            "turnId": "55f06066-039c-4ca0-bb11-0407289931a6"
+          }
+        },
+        {
+          "type": "agent.turn_stop_requested",
+          "subject": "conversation-e44cf5b2-df48-4e73-8790-0686093ff529",
+          "data": {
+            "turnId": "55f06066-039c-4ca0-bb11-0407289931a6"
+          }
+        },
+        {
+          "type": "agent.turn_failed",
+          "subject": "conversation-e44cf5b2-df48-4e73-8790-0686093ff529",
+          "data": {
+            "turnId": "55f06066-039c-4ca0-bb11-0407289931a6",
+            "reason": "bridge_interrupted"
+          }
+        },
+        {
+          "type": "computer.turn_closed",
+          "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "data": {
+            "turnId": "55f06066-039c-4ca0-bb11-0407289931a6",
+            "status": "failed",
+            "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        }
+      ],
+      "money": [
+        {
+          "type": "budget.reserved",
+          "reservationId": "e72aab7f-788e-4a68-a127-a0356879b287",
+          "permitId": "e72aab7f-788e-4a68-a127-a0356879b287",
+          "amountCents": 16
+        },
+        {
+          "type": "budget.call_dispatch_admitted",
+          "reservationId": "e72aab7f-788e-4a68-a127-a0356879b287"
+        },
+        {
+          "type": "effect.uncertain",
+          "permitId": "e72aab7f-788e-4a68-a127-a0356879b287",
+          "reason": "missing_usage"
+        }
+      ],
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+      "bridgeEndReport": {
+        "conversationId": "e44cf5b2-df48-4e73-8790-0686093ff529",
+        "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "turnId": "55f06066-039c-4ca0-bb11-0407289931a6",
+        "type": "agent.turn_failed",
+        "previousSequence": 57,
+        "sequence": 58,
+        "requesterId": "zitadel-member"
+      },
+      "finalMoneySnapshot": [
+        {
+          "type": "budget.reserved",
+          "amountCents": 16,
+          "permitId": "e72aab7f-788e-4a68-a127-a0356879b287",
+          "reservationId": "e72aab7f-788e-4a68-a127-a0356879b287"
+        },
+        {
+          "type": "effect.uncertain",
+          "reason": "missing_usage",
+          "permitId": "e72aab7f-788e-4a68-a127-a0356879b287"
+        }
+      ],
+      "finalMoneySnapshotAt": "2026-10-20T19:48:21.701518+00:00"
+    },
+    {
+      "label": "new",
+      "width": 1280,
+      "conversationId": "be3d1555-7a5d-491b-80f0-d1a48d4f1329",
+      "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a",
+      "ended": true,
+      "stopMs": 2156,
+      "partial": "Hello ",
+      "reloadedPartial": "Hello ",
+      "stopping": 0,
+      "screenshot": "new-1280.png",
+      "reports": [
+        {
+          "type": "agent.turn_started",
+          "subject": "conversation-be3d1555-7a5d-491b-80f0-d1a48d4f1329",
+          "data": {
+            "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "computer.turn_started",
+          "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "data": {
+            "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a",
+            "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "budget.reserved",
+          "subject": "budget-dev",
+          "data": {
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "decision.recorded",
+          "subject": "decision-17565b8c-63dd-46a4-ab7e-dc9cfef31607",
+          "data": {
+            "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a",
+            "reason": "model_allowed",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "budget.call_dispatch_admitted",
+          "subject": "budget-dev",
+          "data": {}
+        },
+        {
+          "type": "agent.message_delta",
+          "subject": "conversation-be3d1555-7a5d-491b-80f0-d1a48d4f1329",
+          "data": {
+            "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a"
+          }
+        },
+        {
+          "type": "agent.turn_stop_requested",
+          "subject": "conversation-be3d1555-7a5d-491b-80f0-d1a48d4f1329",
+          "data": {
+            "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a"
+          }
+        },
+        {
+          "type": "agent.turn_failed",
+          "subject": "conversation-be3d1555-7a5d-491b-80f0-d1a48d4f1329",
+          "data": {
+            "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a",
+            "reason": "bridge_interrupted"
+          }
+        },
+        {
+          "type": "computer.turn_closed",
+          "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "data": {
+            "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a",
+            "status": "failed",
+            "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        }
+      ],
+      "money": [
+        {
+          "type": "budget.reserved",
+          "reservationId": "c827d4f4-c231-416a-9f71-9039a12edb2d",
+          "permitId": "c827d4f4-c231-416a-9f71-9039a12edb2d",
+          "amountCents": 16
+        },
+        {
+          "type": "budget.call_dispatch_admitted",
+          "reservationId": "c827d4f4-c231-416a-9f71-9039a12edb2d"
+        },
+        {
+          "type": "effect.uncertain",
+          "permitId": "c827d4f4-c231-416a-9f71-9039a12edb2d",
+          "reason": "missing_usage"
+        }
+      ],
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+      "bridgeEndReport": {
+        "conversationId": "be3d1555-7a5d-491b-80f0-d1a48d4f1329",
+        "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "turnId": "aa74c64c-798c-49aa-91b4-ffa27f79021a",
+        "type": "agent.turn_failed",
+        "previousSequence": 60,
+        "sequence": 61,
+        "requesterId": "zitadel-member"
+      },
+      "finalMoneySnapshot": [
+        {
+          "type": "budget.reserved",
+          "amountCents": 16,
+          "permitId": "c827d4f4-c231-416a-9f71-9039a12edb2d",
+          "reservationId": "c827d4f4-c231-416a-9f71-9039a12edb2d"
+        },
+        {
+          "type": "effect.uncertain",
+          "reason": "missing_usage",
+          "permitId": "c827d4f4-c231-416a-9f71-9039a12edb2d"
+        }
+      ],
+      "finalMoneySnapshotAt": "2026-10-20T19:48:21.702209+00:00"
+    }
+  ]
+}
