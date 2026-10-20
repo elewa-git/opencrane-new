@@ -2621,3 +2621,37 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   expect(setup.received()).toBe(0);
 }
 it.each(remoteGuards)('guards published HTTPS tool calls: %s', guardsRemoteCall);
+
+async function remoteOutcomeFixture() {
+  const context = await publishedFixture('allow', true);
+  const remote = await remoteFixture();
+  onTestFinished(remote.close);
+  context.setup.dispatchOptions.routes.length = 0;
+  context.setup.dispatchOptions.remoteNetwork = remote.network;
+  remote.revision(catalogue.schemaDigest);
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(context.setup, headers);
+  const encoded = value.split('.')[0]!;
+  const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
+  const { requestId } = z.object({ requestId: z.uuid() }).parse(decoded);
+  const subject = `decision-${requestId}`;
+  return { ...context, remote, value, requestId, subject };
+}
+
+async function savesRemoteResponse() {
+  const { setup, remote, value, requestId, subject, record } = await remoteOutcomeFixture();
+  const response = await send(setup, value);
+  expect(response.status).toBe(200);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  expect(rows[2]!.event).toMatchObject({ type: 'tool.dispatch_recorded', silo: 'test',
+    data: { requestId, outcome: 'responded', evidence: 'adapter_response_received',
+      adapter: { decisionId: rows[0]!.event.id, startId: rows[1]!.event.id,
+        connectionId: 'installed', generation: record.generation,
+        recordDigest: record.recordDigest, reviewRevision: record.members[0]!.entry.reviewRevision } } });
+  expect((await send(setup, value)).status).toBe(403);
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  expect(remote.received).toHaveLength(1);
+  expect(JSON.stringify(rows)).not.toContain('mcp.example.test');
+}
+it('saves a checked remote response against its consumed permit once', savesRemoteResponse);
