@@ -658,12 +658,18 @@ async function dependencyOutage(kind: string) {
     function holdRead() {
       return held.promise;
     }
-    async function unavailablePermission() {
-      return { allowed: false as const, status: 'unavailable' as const,
+    function unavailablePermission() {
+      const result = { allowed: false as const, status: 'unavailable' as const,
         error: new Error('private-canary') };
+      return Promise.resolve(result);
     }
     let restore: (() => void) | undefined;
-    if (kind === 'store') {
+    if (kind === 'store-read') {
+      await test.facts.append('assistant-assistant', 'assistant.settings_changed',
+        { assistantId: 'assistant', changedBy: 'alice', changedFields: ['model'] });
+      const spy = vi.spyOn(test.facts.nats.store, 'readStream').mockImplementation(rejectRead);
+      restore = spy.mockRestore.bind(spy);
+    } else if (kind === 'store') {
       const spy = vi.spyOn(test.facts.nats.store, 'head').mockImplementation(rejectRead);
       restore = spy.mockRestore.bind(spy);
     } else if (kind === 'leader') {
@@ -693,7 +699,7 @@ async function dependencyOutage(kind: string) {
   expect(await test.tunnel(bearer)).toBe(403);
   expect(test.gateway.connected()).toBe(1);
 }
-it.each(['store', 'iam-rejection', 'iam-hang', 'permission', 'leader'])(
+it.each(['store', 'store-read', 'iam-rejection', 'iam-hang', 'permission', 'leader'])(
   'closes a live relay as unavailable after losing %s proof', dependencyOutage);
 
 async function recoversWhileRunning(lostReply: boolean) {
@@ -727,6 +733,7 @@ async function recoversWhileRunning(lostReply: boolean) {
     return readdir(directory);
   }
   await expect.poll(retained).toHaveLength(1);
+  await test.gateway.runtime.flush();
   await test.facts.nats.restart();
   async function observations() {
     return history(test.facts.nats.store, subject, 'test');
@@ -742,3 +749,145 @@ async function recoversWhileRunning(lostReply: boolean) {
 }
 it.each([false, true])('retries retained receipts without restart; lost reply: %s',
   recoversWhileRunning);
+
+async function boundedShutdown(recover: boolean) {
+  const test = await setup();
+  const bearer = await test.token();
+  const subject = `egress-${decodeJwt(bearer).jti!}`;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const read = test.facts.nats.store.readStream.bind(test.facts.nats.store);
+  let reads = 0;
+  async function* holdReceipt(...args: Parameters<typeof read>) {
+    if (args[0] === subject) {
+      reads++;
+      entered.resolve();
+      await release.promise;
+    }
+    yield* read(...args);
+  }
+  const spy = vi.spyOn(test.facts.nats.store, 'readStream').mockImplementation(holdReceipt);
+  onTestFinished(spy.mockRestore.bind(spy));
+  expect(await test.tunnel(bearer)).toBe(200);
+  await entered.promise;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  function restoreClock() {
+    vi.useRealTimers();
+    release.resolve();
+  }
+  onTestFinished(restoreClock);
+  let stopped = false;
+  function stopFinished() {
+    stopped = true;
+  }
+  const closing = test.gateway.runtime.close().then(stopFinished);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(stopped).toBe(false);
+  expect(reads).toBe(1);
+  if (recover) release.resolve();
+  else await vi.advanceTimersByTimeAsync(1);
+  await closing;
+  expect(stopped).toBe(true);
+  expect(vi.getTimerCount()).toBe(0);
+  restoreClock();
+  await test.gateway.runtime.flush();
+  spy.mockRestore();
+  const rows = await history(test.facts.nats.store, subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(test.gateway.connected()).toBe(1);
+}
+it.each([false, true])('bounds shutdown while a receipt waits; recovery: %s', boundedShutdown);
+
+async function shutdownWaitsForRecheck() {
+  const test = await setup();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function recheck() {
+    entered.resolve();
+    await release.promise;
+  }
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  function restoreClock() {
+    vi.useRealTimers();
+    release.resolve();
+  }
+  onTestFinished(restoreClock);
+  const request = { ...destination, permitId: randomUUID(), expiresAt: Date.now() + 60_000,
+    recheck };
+  await test.gateway.registry.register(request);
+  await vi.advanceTimersByTimeAsync(500);
+  await entered.promise;
+  test.gateway.registry.closeAll('unavailable');
+  let stopped = false;
+  function stopFinished() {
+    stopped = true;
+  }
+  const closing = test.gateway.runtime.close().then(stopFinished);
+  await test.gateway.runtime.flush();
+  expect(stopped).toBe(false);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(stopped).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  await closing;
+  expect(vi.getTimerCount()).toBe(0);
+  release.resolve();
+  restoreClock();
+}
+it('waits at most two seconds for a recheck after an earlier shutdown signal',
+  shutdownWaitsForRecheck);
+
+async function shutdownIncludesNewReceipts() {
+  const test = await setup();
+  const first = randomUUID();
+  const second = randomUUID();
+  const firstEntered = Promise.withResolvers<void>();
+  const secondEntered = Promise.withResolvers<void>();
+  const firstRelease = Promise.withResolvers<void>();
+  const secondRelease = Promise.withResolvers<void>();
+  const read = test.facts.nats.store.readStream.bind(test.facts.nats.store);
+  async function* holdReceipt(...args: Parameters<typeof read>) {
+    if (args[0] === `egress-${first}`) {
+      firstEntered.resolve();
+      await firstRelease.promise;
+    }
+    if (args[0] === `egress-${second}`) {
+      secondEntered.resolve();
+      await secondRelease.promise;
+    }
+    yield* read(...args);
+  }
+  const spy = vi.spyOn(test.facts.nats.store, 'readStream').mockImplementation(holdReceipt);
+  function cleanup() {
+    vi.useRealTimers();
+    firstRelease.resolve();
+    secondRelease.resolve();
+    spy.mockRestore();
+  }
+  onTestFinished(cleanup);
+  const request = { ...destination, expiresAt: Date.now() + 60_000 };
+  await test.gateway.registry.register({ ...request, permitId: first });
+  test.gateway.registry.closePermit(first);
+  await firstEntered.promise;
+  const earlier = test.gateway.runtime.flush();
+  await test.gateway.registry.register({ ...request, permitId: second });
+  let stopped = false;
+  function stopFinished() {
+    stopped = true;
+  }
+  const closing = test.gateway.runtime.close().then(stopFinished);
+  await secondEntered.promise;
+  firstRelease.resolve();
+  await earlier;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(stopped).toBe(false);
+  vi.useRealTimers();
+  secondRelease.resolve();
+  await closing;
+  const rows = await history(test.facts.nats.store, `egress-${second}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(test.gateway.connected()).toBe(0);
+}
+it('joins receipts created after an earlier retry batch when shutting down',
+  shutdownIncludesNewReceipts);

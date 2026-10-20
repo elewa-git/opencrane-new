@@ -93,7 +93,7 @@ keep their relay checks without adding receipt file and event writes.
 Own checks are in [the relay receipt](../../docs/process/p3-20-pr2c-relays.md).
 
 NOT BUILT: checked-set fallback. Startup wiring is described below.
-Capabilities and admission rules are described below. Watchdogs remain later work.
+Capabilities, admission rules and outage watchdogs are described below.
 Durable closure receipts are described below.
 CONNECT stays off at startup. Fresh-install egress qualification remains NOT RUN.
 Own checks are recorded in [the receipt](../../docs/process/p3-20-pr2b-guard.md).
@@ -123,7 +123,7 @@ append. The event parser requires the silo-derived id, stream and system/models 
 This is application validation; separate process NATS credentials remain #432.
 
 Tests use the pinned gateway, recording upstream, real NATS and PostgreSQL audit replay.
-Automatic outage detection and native enablement remain later parts. Admission,
+Native enablement remains a later part. Outage detection, admission,
 capability binding, revocation checks and restart scanning are described below. The authorised original-receipt API
 is deferred to keep this part below about 600 changed lines. The existing audit table
 rebuilds receipt ids and outcomes; richer safe connection detail reads are still deferred.
@@ -156,7 +156,7 @@ It also verifies tokens strictly; the gateway JWT check alone permits clock skew
 The fixture is not a production capability issuer or policy reader. Its optional
 relay registry tests the socket checks and closure described above.
 
-Remaining PR 2 work: authorised receipt reads, outage watchdogs and open receipts. Durable close/outage receipts
+Remaining PR 2 work: authorised receipt reads and open receipts. Durable close/outage receipts
 are described above. The binary removes raw Host before extAuthz;
 authority/Host disagreement still needs proof or the accepted broker fallback.
 The first routing-only receipt did not cover DNS or TLS checks. Open-tunnel expiry
@@ -2721,7 +2721,7 @@ keeps its original expiry; it never renews a permit.
 
 Tests use real NATS, PostgreSQL, OpenFGA and the pinned gateway with a recording
 upstream. The initial failing test is in commit `98ba6b80`.
-Authorised receipt reads, outage watchdogs and live qualification remain deferred. CONNECT and command-worker networking stay off.
+Authorised receipt reads, crash recovery and live qualification remain deferred. CONNECT and command-worker networking stay off.
 
 ## Automatic connection cleanup
 
@@ -2949,7 +2949,7 @@ expected assertion. The guards are restored for the passing runs.
 `startEgress` creates `MODEL_STATE_DIR/egress` with mode 0700 and refuses an existing
 non-directory or wider permissions with `egress_directory_refused`. Each retained
 close record is checked against its silo-derived filename and existing receipt checks,
-then retried once. Invalid files stay in place and produce only `egress_receipt_refused`.
+then retried once and kept for normal running retries when pending. Invalid files stay in place and produce only `egress_receipt_refused`.
 Registration prepares one receipt before listening. Closing captures the record through
 that receipt. Shutdown closes all relays as unavailable and waits up to two seconds
 for receipt saves. Restart scans evidence only; it never registers a relay.
@@ -2964,18 +2964,34 @@ Harmless settings changes and unrelated assistants' stops leave the relay open.
 Team membership receipts are required only for the requester. Another member's pending
 addition or removal leaves the relay open. Team-wide events still require their receipts.
 
-Scope cutoff: items 1–2 only. The next part must add an independent outage watchdog,
-classify unavailable dependencies separately from revocation, check actor availability,
-and retry pending receipts after recovery without restarting. A stalled check currently
-waits for its dependency; its deadline alone cannot guarantee two-second outage closure.
-Crash markers and the authorised receipt read follow in 2g. No live egress capability is
-claimed: `models-main.ts` still supplies no `egressDecisionUrl`, so CONNECT stays off.
+An independent monotonic watchdog closes an affected relay as unavailable when proof
+reaches 1,900 ms old, leaving 100 ms for socket teardown within two seconds,
+including while a recheck is stuck. Successful checks date
+proof from the start of their reads. They never extend permit expiry or reopen a closed
+relay. Typed recheck failures distinguish proved revocations and spending stops from
+store, IAM and current budget-writer failures. `BudgetActor.requireCurrent` checks the
+budget stream position between actor commands, without writing or replaying history.
+A replacement writer or a failed actor invalidates proof. Process leader-lock loss also
+uses the existing shutdown path.
+
+Startup retries pending receipts every second. Each receipt joins its existing save;
+store reads and append retain their one-second deadlines. Routine batches do not overlap.
+Shutdown joins every current receipt's save, including those added during an earlier batch.
+Exact saved-event checks handle a lost append reply without a duplicate event or socket.
+Shutdown stops retries, closes listeners and sockets, clears relay timers, and waits up
+to two seconds for saves and active rechecks, including after an earlier shutdown signal.
+A hung dependency may finish later; it cannot reopen a relay.
+
+Scope cutoff for PR 2g: crash markers, crash reconciliation and authorised receipt reads
+remain for the next part. No crash proves zero bytes. No live egress capability is claimed:
+`models-main.ts` still supplies no `egressDecisionUrl`, so CONNECT stays off.
 
 Own checks use real NATS, PostgreSQL, OpenFGA and the pinned gateway. Tests cover each
 of the three destination revocations, member removal, assistant inactivity, ended turns,
 conversation closure, changed generation, spending stops, harmless updates, narrow reads,
 private directories, retained-file refusal, restart deduplication and permit reuse.
-Fresh-install qualification and the deferred outage watchdog: NOT RUN.
+Fresh-install qualification: NOT RUN. Outage tests use recording sockets, fake clocks,
+barriers and disposable NATS, PostgreSQL, OpenFGA and gateway fixtures.
 
 ## Scheduled connection scans (P3-8 PR 3f; Part of #49)
 

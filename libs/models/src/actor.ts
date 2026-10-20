@@ -175,6 +175,16 @@ export class BudgetActor {
       rootId, this.now, this.append.bind(this));
     return this.serial(check);
   }
+  requireCurrent(deadline: number) {
+    const check = async () => {
+      const position = await this.store.head(`budget-${this.silo}`, deadline);
+      if (position !== this.sequence || performance.now() >= deadline) {
+        throw new Error('Budget writer unavailable');
+      }
+    };
+    // Check between commands so our own pending append cannot look like a replacement writer.
+    return this.serial(check);
+  }
   admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number,
     rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>) {
     const parsed = budgetCallDispatchAdmittedDataSchema.parse(raw);

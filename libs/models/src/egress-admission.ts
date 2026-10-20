@@ -7,15 +7,16 @@ import { egressDestinationDataSchema, egressObservationId, legacyMemberRole }
   from '@opencrane/events';
 import { egressGrantStream } from '@opencrane/projections';
 import { egressHistory } from './egress-history.ts';
-import { requireBudget } from './budget-refusal.ts';
+import { BudgetRefused, requireBudget } from './budget-refusal.ts';
 import { BudgetActor, envelope } from './actor.ts';
 import { authorityFence, isAuthorityChanged } from './authority.ts';
 import { approvalActivity, requireActiveConversationTurn } from './decision-activity.ts';
 import { data, priceTableId } from './state.ts';
 import { turnRootBinding } from './root-budget.ts';
-import type { EgressRelayRegistry } from './egress-relay.ts';
+import { EgressRecheckFailure, type EgressRelayRegistry } from './egress-relay.ts';
 
-class MissingRule extends Error {}
+class Revoked extends Error {}
+class MissingRule extends Revoked {}
 type Activity = Awaited<ReturnType<typeof approvalActivity>>;
 type Read = ReturnType<typeof egressHistory>['read'];
 type Fresh = Awaited<ReturnType<typeof authorityFence>>;
@@ -65,7 +66,7 @@ async function checkTeam(binding: Binding, requester: string, fields: Record<str
       change.event.type === 'team.member_removed';
     // Ignore other members' membership receipts. Keep all team-wide authority checks.
     if (membershipChange && data(change.event)['memberId'] !== requester) continue;
-    if (!await auth.applied(change.event.id)) throw new Error('Egress refused');
+    if (!await auth.applied(change.event.id)) throw new Revoked('Egress refused');
   }
 }
 
@@ -78,10 +79,10 @@ async function checkMember(actor: BudgetActor, binding: Binding, claims: EgressC
     const role = legacyMemberRole(row.event);
     if (role !== undefined) {
       member = role !== '';
-      if (!await auth.applied(row.event.id)) throw new Error('Egress refused');
+      if (!await auth.applied(row.event.id)) throw new Revoked('Egress refused');
     }
   }
-  if (!member) throw new Error('Egress refused');
+  if (!member) throw new Revoked('Egress refused');
 }
 
 async function checkAccess(actor: BudgetActor, binding: Binding, claims: EgressCapability,
@@ -94,24 +95,25 @@ async function checkAccess(actor: BudgetActor, binding: Binding, claims: EgressC
     const fields = data(row.event);
     if (row.event.type === 'assistant.created') {
       active = true;
-      if (!await auth.applied(row.event.id)) throw new Error('Egress refused');
+      if (!await auth.applied(row.event.id)) throw new Revoked('Egress refused');
       await checkTeam(binding, claims.requester, fields, fresh, read);
     }
     if (row.event.type === 'assistant.settings_changed' && typeof fields['active'] === 'boolean') {
       active = fields['active'];
     }
   }
-  if (!active) throw new Error('Egress refused');
+  if (!active) throw new Revoked('Egress refused');
   for (const row of activity.conversation) {
     if (['conversation.created', 'participant.added', 'participant.removed'].includes(row.event.type)) {
-      if (!await auth.applied(row.event.id)) throw new Error('Egress refused');
+      if (!await auth.applied(row.event.id)) throw new Revoked('Egress refused');
     }
   }
   const permissions = await Promise.all([auth.check(claims.requester, 'member'),
     auth.actsFor(claims.requester, claims.assistant),
     auth.conversation(claims.requester, claims.conversation, 'post')]);
   for (const permission of permissions) {
-    if (!permission.allowed) throw new Error('Egress refused');
+    if (permission.status === 'unavailable') throw new Error('Egress unavailable');
+    if (!permission.allowed) throw new Revoked('Egress refused');
   }
 }
 
@@ -228,14 +230,20 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
       }
     }
     await confirmRegistration();
-    async function recheck() {
+    async function checkCurrent() {
       const subjects = [...access.positions.keys()];
       const started = performance.now();
       for (;;) {
         const current = await authorityFence(actor.store, started, subjects);
-        await activity.confirm(current.deadline, false);
+        try {
+          await activity.confirm(current.deadline, false);
+        } catch (error) {
+          if (isAuthorityChanged(error)) throw new Revoked('Egress refused', { cause: error });
+          throw error;
+        }
         await checkAccess(actor, binding, checked, activity, current, access.read);
         await checkRules(actor, checked, current, access.read);
+        await actor.requireCurrent(current.deadline);
         requireBudget(actor.state, modelCall, actor.now(), work.admittedAt);
         try {
           await current();
@@ -244,6 +252,14 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
           // Recheck a concurrent change without extending the original deadline.
           if (!isAuthorityChanged(error)) throw error;
         }
+      }
+    }
+    async function recheck() {
+      try {
+        await checkCurrent();
+      } catch (error) {
+        const revoked = error instanceof Revoked || error instanceof BudgetRefused;
+        throw new EgressRecheckFailure(revoked ? 'revoked' : 'unavailable', error);
       }
     }
     const registration = { recheck, confirm: confirmRegistration, permitId: requestId, host: checked.host, port: checked.port,

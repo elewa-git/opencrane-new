@@ -2,6 +2,7 @@ import { once } from 'node:events';
 import { connect, createServer, Socket } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it, onTestFinished, vi } from 'vitest';
+import { egressCloseSchema } from '@opencrane/events';
 import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay.ts';
 import { clientHello } from './egress-hello-fixture.ts';
 
@@ -268,7 +269,7 @@ async function watchdogClosure(lateFailure: boolean) {
   const setup = await fixture();
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'performance', 'Date'] });
-  onTestFinished(vi.useRealTimers);
+  onTestFinished(restoreClock);
   const held = Promise.withResolvers<void>();
   let checks = 0;
   function recheck() {
@@ -283,13 +284,14 @@ async function watchdogClosure(lateFailure: boolean) {
   const other = await setup.dial(await setup.registry.register(neighbour));
   await once(other, 'data');
   vi.setSystemTime(Date.now() - 60_000);
-  await vi.advanceTimersByTimeAsync(1999);
+  await vi.advanceTimersByTimeAsync(1500);
   expect(checks).toBe(1);
   expect(client.destroyed).toBe(false);
   const closed = once(client, 'close', { signal: AbortSignal.timeout(1000) });
-  await vi.advanceTimersByTimeAsync(1);
+  await vi.advanceTimersByTimeAsync(500);
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ permitId: 'permit', reason: 'unavailable' });
+  expect(egressCloseSchema.safeParse(setup.records[0]).success).toBe(true);
   await closed;
   if (lateFailure) held.reject(new Error('private-canary'));
   else held.resolve();
@@ -307,7 +309,7 @@ async function slowSerialChecks() {
   const setup = await fixture();
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'performance', 'Date'] });
-  onTestFinished(vi.useRealTimers);
+  onTestFinished(restoreClock);
   const held = Promise.withResolvers<void>();
   let checks = 0;
   function recheck() {
@@ -327,3 +329,32 @@ async function slowSerialChecks() {
   expect(vi.getTimerCount()).toBe(0);
 }
 it('keeps slow checks serial and successful checks never extend expiry', slowSerialChecks);
+
+function restoreClock() {
+  vi.useRealTimers();
+}
+
+async function lateCheckAfterRevocation() {
+  const setup = await fixture();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  onTestFinished(restoreClock);
+  const held = Promise.withResolvers<void>();
+  function recheck() {
+    return held.promise;
+  }
+  const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
+  await setup.registry.register(request);
+  await vi.advanceTimersByTimeAsync(500);
+  setup.registry.closePermit('permit');
+  held.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ reason: 'revoked' });
+  // Keep only the expiry timer that reserves the used listener's port.
+  expect(vi.getTimerCount()).toBe(1);
+  setup.registry.closeAll();
+  expect(vi.getTimerCount()).toBe(0);
+}
+it('does not restart the watchdog after a closed relay receives a late success',
+  lateCheckAfterRevocation);

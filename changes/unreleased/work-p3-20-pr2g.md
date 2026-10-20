@@ -1,0 +1,1 @@
+- Close private egress relays within two seconds when storage, permissions or current spending proof is lost, including stalled checks. Retry pending closure receipts after storage recovers without reopening connections. Outside networking stays off; crash recovery and receipt reads remain pending.
