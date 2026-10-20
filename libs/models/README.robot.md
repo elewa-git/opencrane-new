@@ -2816,6 +2816,11 @@ are separate work. Fresh-install qualification: NOT RUN.
 `mcp-dispatch.test.ts` uses the recording TLS server, real gateway, NATS and PostgreSQL.
 It checks exact bindings, lost saves, store outages, changed history, forged external
 observations, earlier/later gateway evidence and restart without another send.
+Direct recorder tests seed a saved start without sending a request. They check that
+identical callbacks add nothing, foreign silos are refused, a later response cannot
+confirm a saved unknown outcome, and conflicting saved evidence is refused after a
+lost save reply. Each checks unchanged history and no upstream request. Removing
+each corresponding guard makes its test fail.
 
 ## Native request cost and dispatch (P4-11 PR 2g; Part of #93)
 
