@@ -2055,3 +2055,65 @@ async function missingLoadedEvidence(stage: string) {
 }
 it.each(['absent', 'prepared', 'empty'])(
   'refuses valid personal proofs with %s loaded evidence', missingLoadedEvidence);
+
+const forgetTool = toolEvidence({ name: 'forget', reviewed: true, costCents: 0 });
+const correctTool = toolEvidence({ name: 'correct', reviewed: true, costCents: 0 });
+async function changeRequest(operation: 'correct' | 'forget') {
+  const catalogue = catalogueEvidence([recallTool, rememberTool, forgetTool, correctTool]);
+  await setup.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
+    connectionId: 'server', accountMode: 'none', ...catalogue });
+  await reviewCatalogue(setup, 'memory');
+  for (const tool of [recallTool, forgetTool, correctTool]) {
+    await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
+      connectionId: 'server', toolName: tool.name, toolRevision: tool.revision,
+      mode: 'allow', setBy: 'alice' });
+  }
+  await publishMemory(setup);
+  const remembered = await loadedWrite();
+  const { recallProof, dependsOn } = remembered.params.arguments;
+  const target = dependsOn[0]!;
+  const input: Record<string, unknown> = { scopeId, memoryId: target.memoryId,
+    commandId: 'change', expectedRevision: target.revision, recallProof };
+  if (operation === 'correct') {
+    const dependencies = dependsOn.slice(1);
+    Object.assign(input, { text: 'Replacement private canary', kind: 'fact', pinned: false,
+      expiresAt: null, dependsOn: dependencies });
+  }
+  const body = { ...call, params: { ...call.params, name: operation, arguments: input } };
+  const requestHeaders = { ...headers, 'mcp-name': operation };
+  return { body, requestHeaders, catalogue };
+}
+type ChangeRequest = Awaited<ReturnType<typeof changeRequest>>;
+async function changeToken(request: ChangeRequest, overrides = {}) {
+  const parsed = parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
+  const dispatch = await memoryBinding(setup);
+  dispatch.schemaDigest = request.catalogue.schemaDigest;
+  const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
+    computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
+    thread: 'thread', operation: request.body.params.name,
+    scopes: [request.body.params.arguments['scopeId']], contentAccess: 'private',
+    bodyDigest: parsed.bodyDigest, callId: metadata.callId, requestId: randomUUID(),
+    contextPosition: 0, dispatch, ...overrides };
+  return setup.tokens.memoryContext(claims, Date.now() + 2000);
+}
+async function sendChange(request: ChangeRequest, token?: string) {
+  const signed = token ?? await changeToken(request);
+  const requestHeaders = { ...request.requestHeaders, 'x-memory-context': signed };
+  return app.inject({ method: 'POST', url: route, headers: requestHeaders, payload: request.body });
+}
+async function unavailableChange(operation: 'correct' | 'forget') {
+  const request = await changeRequest(operation);
+  const position = await setup.nats.store.head(`scope-${scopeId}`);
+  const directory = dirname(setup.options.configFile);
+  const files = readdirSync(directory);
+  const response = await sendChange(request);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+  const gateway = await setup.call(request.requestHeaders, request.body, route);
+  expect(gateway.status, gateway.text).toBe(403);
+  expect(JSON.parse(gateway.text)).toEqual(response.json());
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(position);
+  expect(readdirSync(directory)).toEqual(files);
+}
+it.each(['forget', 'correct'] as const)(
+  'checks %s completely but keeps it switched off without files or events', unavailableChange);
