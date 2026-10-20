@@ -315,3 +315,12 @@ async function staleReview() {
   }
 }
 it('requires a review of the current catalogue after rediscovery and legacy publication', staleReview);
+
+async function wrongClearConnection() {
+  const test = await fixture();
+  const clear = { action: 'clear', serverId: 'server', connectionId: 'other',
+    expectedSequence: 0, changeRef: 'clear' };
+  await expect(test.select(clear)).rejects.toThrow();
+  expect(await nats.store.head(test.subject)).toBe(0);
+}
+it('refuses a clear naming a different installed connection', wrongClearConnection);
