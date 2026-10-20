@@ -36,15 +36,8 @@ export function itemReport(input: Turn, params: Record<string, unknown>, method:
     if (data) return { type: 'agent.native_consent_refused', data };
     return;
   }
-  if (requestId !== undefined && typeof method === 'string') {
-    if (input.executionMode === 'restricted' || !codexTurnId ||
-        params['turnId'] !== codexTurnId) return;
-    if (typeof requestId !== 'string' && !Number.isSafeInteger(requestId)) return;
-    const nativeRequestId = String(requestId);
-    if (!isToolCallText(nativeRequestId)) return;
-    const data = { nativeRequestId, ...nativeRefusal(method) };
-    return { type: 'agent.native_request_refused', data };
-  }
+  const nativeData = nativeRequestReport(input, params, method, requestId, codexTurnId);
+  if (nativeData) return { type: 'agent.native_request_refused', data: nativeData };
   if (method !== 'item/started' && method !== 'item/completed') return;
   const item = record(params['item']);
   const finished = method === 'item/completed';
@@ -88,4 +81,16 @@ function nativeConsentReport(input: Turn, params: Record<string, unknown>,
     reason: 'unsupported_native_consent' };
   if (server) data.serverId = server.serverId;
   return data;
+}
+
+function nativeRequestReport(input: Turn, params: Record<string, unknown>, method: unknown,
+  requestId: unknown, codexTurnId: string | undefined) {
+  if (requestId === undefined || typeof method !== 'string') return;
+  if (input.executionMode === 'restricted' || !codexTurnId ||
+      params['turnId'] !== codexTurnId) return;
+  if (typeof requestId !== 'string' &&
+      (typeof requestId !== 'number' || !Number.isSafeInteger(requestId))) return;
+  const nativeRequestId = String(requestId);
+  if (!isToolCallText(nativeRequestId)) return;
+  return { nativeRequestId, ...nativeRefusal(method) };
 }

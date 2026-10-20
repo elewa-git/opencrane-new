@@ -283,6 +283,23 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
 }
 
 function readToolDetails(value: Record<string, unknown>, report: BridgeReport) {
+  readNativeDetails(value, report);
+  const callId = optionalString(value, 'callId');
+  const serverId = optionalString(value, 'serverId');
+  const toolName = optionalString(value, 'toolName');
+  const durationMs = optionalNumber(value, 'durationMs');
+  const status = value['status'];
+  if (callId !== undefined) report.callId = callId;
+  if (serverId !== undefined) report.serverId = serverId;
+  if (toolName !== undefined) report.toolName = toolName;
+  if (durationMs !== undefined) report.durationMs = durationMs;
+  if (status !== undefined) {
+    if (status !== 'completed' && status !== 'failed') throw new Error('Invalid tool status');
+    report.status = status;
+  }
+}
+
+function readNativeDetails(value: Record<string, unknown>, report: BridgeReport) {
   const requestKind = value['requestKind'];
   if (requestKind !== undefined) {
     if (requestKind !== 'shell' && requestKind !== 'file_change' && requestKind !== 'permissions'
@@ -298,17 +315,4 @@ function readToolDetails(value: Record<string, unknown>, report: BridgeReport) {
   const serverName = optionalString(value, 'serverName');
   if (nativeRequestId !== undefined) report.nativeRequestId = nativeRequestId;
   if (serverName !== undefined) report.serverName = serverName;
-  const callId = optionalString(value, 'callId');
-  const serverId = optionalString(value, 'serverId');
-  const toolName = optionalString(value, 'toolName');
-  const durationMs = optionalNumber(value, 'durationMs');
-  const status = value['status'];
-  if (callId !== undefined) report.callId = callId;
-  if (serverId !== undefined) report.serverId = serverId;
-  if (toolName !== undefined) report.toolName = toolName;
-  if (durationMs !== undefined) report.durationMs = durationMs;
-  if (status !== undefined) {
-    if (status !== 'completed' && status !== 'failed') throw new Error('Invalid tool status');
-    report.status = status;
-  }
 }
