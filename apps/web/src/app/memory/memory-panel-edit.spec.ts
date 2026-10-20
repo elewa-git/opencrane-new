@@ -74,7 +74,8 @@ async function setup(kind = 'person', body: unknown = detail): Promise<void> {
       { scopeId: 'other', scopeKind: 'person', ownerId: 'me', canRead: true,
         audience: { kind: 'person', ownerId: 'me' } },
     ] });
-    if (url.includes('/facts?')) return response(200, { facts: [{ ...fact, revision: 3 }], returnedCount: 1,
+    if (url.includes('/facts?')) return response(200, { facts: [{ ...fact, revision: 3, kind: 'fact', pinned: false, expiresAt: null }],
+      returnedCount: 1,
       nextCursor: null });
     if (url.endsWith('/correct')) return post();
     if (url.includes('/changes/')) return status();
@@ -202,12 +203,12 @@ it.each(['post', 'status'])('reviews a %s conflict and saves a new command', asy
   expect(matching('/facts/one')).toHaveLength(2);
   expect(root.querySelector('textarea')?.value).toBe('My draft');
   expect(root.textContent).toContain('Current revision r8');
+  expect(matching('/correct')).toHaveLength(1);
   click('Save correction');
   await settled();
-  const first = postBody(0);
-  const second = postBody(1);
-  expect(second).not.toBe(first);
-  expect(second).toContain('"expectedRevision":8');
+  expect(matching('/correct')).toHaveLength(2);
+  expect(commandId(1)).not.toBe(commandId());
+  expect(postBody(1)).toContain('"expectedRevision":8');
 });
 
 it.each(['lost', '503', 'unknown'])('recovers %s only with serial status reads of the same command', async failure => {
@@ -229,7 +230,7 @@ it.each(['lost', '503', 'unknown'])('recovers %s only with serial status reads o
   check?.click();
   fixture.detectChanges();
   expect(calls.filter(isStatus)).toHaveLength(1);
-  expect(calls.find(isStatus)?.url).toContain(commandId());
+  expect(calls.find(isStatus)?.url).toBe(`/api/memory/scope/changes/${commandId()}`);
   pending.resolve(response(200, accepted));
   await settled();
   check?.click();
@@ -244,8 +245,8 @@ function postBody(index: number): string {
   if (typeof body !== 'string') throw new Error('Missing body');
   return body;
 }
-function commandId(): string {
-  const body: unknown = JSON.parse(postBody(0));
+function commandId(index = 0): string {
+  const body: unknown = JSON.parse(postBody(index));
   if (!isObject(body) || typeof body['commandId'] !== 'string') throw new Error('Missing command');
   return body['commandId'];
 }
