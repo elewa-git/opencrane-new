@@ -36,6 +36,7 @@ export async function remoteFixture(wrongHostname = false) {
     ? { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {} }, _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1.0' } }, ttlMs: 1000, cacheScope: 'public' }
     : { resultType: 'complete', ttlMs: 1000, cacheScope: 'public', tools: [{ name: cursor ? 'write' : 'read', inputSchema: { type: 'object', properties: { id: { type: 'integer' } } }, annotations: { readOnlyHint: !cursor } }], ...(cursor ? {} : { nextCursor: 'page-2' }) };
   let status = 200;
+  let reset = false;
   const server = createServer({ key: await readFile(`${directory}/key`), cert: serverCert }, (req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -43,6 +44,7 @@ export async function remoteFixture(wrongHostname = false) {
       const raw = Buffer.concat(chunks);
       const hostname = z.string().parse(Reflect.get(req.socket, 'servername'));
       received.push({ raw, headers: req.headers, hostname });
+      if (reset) { res.destroy(); return; }
       if (revision !== undefined && req.headers['x-opencrane-mcp-revision'] !== revision) {
         res.writeHead(409); res.end(); return;
       }
@@ -94,6 +96,7 @@ export async function remoteFixture(wrongHostname = false) {
     },
   };
   return { network, calls, pinned, received, pooling,
+    reset: () => { reset = true; },
     dnsCalls: () => dnsCalls, connections: () => connections,
     revision: (value: string) => { revision = value; },
     replyFields: (value: Record<string, string>) => { replyFields = value; }, setAnswers: (value: string[]) => { answers = value; }, rebind: () => { rebinding = true; dnsCalls = 0; },
