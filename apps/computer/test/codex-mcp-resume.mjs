@@ -622,7 +622,10 @@ plugins = false
   if (wireMode) config = productionConfig('probe-model');
   if (onRequest) {
     const { memoryFreeConfig } = await import('../src/codex-config.ts');
-    config = memoryFreeConfig('probe-model');
+    config = memoryFreeConfig('gpt-6.1-sol');
+    capture.model = 'gpt-6.1-sol';
+    capture.modelCatalogue = 'https://github.com/openai/codex/blob/rust-v0.159.2/' +
+      'codex-rs/models-manager/models.json';
   }
   const configPath = join(probeHome, 'config.toml');
   writeFileSync(configPath, config);
@@ -966,6 +969,10 @@ async function captureNativeRequests(config, configPath) {
     ['permissions', 'request_permissions', { permissions: { network: { enabled: true } },
       reason: 'Local fixture' }],
   ];
+  const actionMarkers = { plain_shell: '/tmp/native-plain-marker',
+    escalated_shell: '/tmp/native-escalated-marker', file_write: '/tmp/native-write-marker',
+    file_change: '/tmp/native-file-marker', loaded_resume_shell: '/tmp/native-loaded-marker',
+    private_shell: '/tmp/native-private-marker' };
   async function runCase(test, target = thread, overrides = { approvalPolicy: 'on-request' }) {
     const [name, tool, args] = test;
     stage = name;
@@ -983,34 +990,43 @@ async function captureNativeRequests(config, configPath) {
     await activeClient.turn(target, name, overrides);
     const requests = [];
     for (const entry of capture.nativeRequests) if (entry.stage === name) requests.push(entry);
-    capture.checks.push({ name, result: 'PASS', requests: requests.length });
+    const check = { name, result: 'PASS', requests: requests.length };
+    const marker = actionMarkers[name];
+    if (marker) {
+      check.marker = marker;
+      check.markerPresent = existsSync(marker);
+      for (const entry of requests) {
+        if (entry.reply?.result?.decision === 'decline') {
+          assert.equal(check.markerPresent, false, `${name} ran after decline`);
+        }
+      }
+    }
+    capture.checks.push(check);
   }
   for (const test of cases) await runCase(test);
   stage = 'loaded_resume';
   const resumed = await activeClient.rpc('thread/resume', { threadId: thread });
   capture.loadedResumePolicy = resumed.approvalPolicy;
   await runCase(['loaded_resume_mcp', null, null], thread, {});
-  await runCase(['loaded_resume_shell', ...cases[2].slice(1)], thread, {});
+  await runCase(['loaded_resume_shell', 'exec_command', {
+    cmd: 'touch /tmp/native-loaded-marker', sandbox_permissions: 'require_escalated',
+    justification: 'Local marker fixture',
+  }], thread, {});
   capture.markers = { plain: existsSync('/tmp/native-plain-marker'),
     escalated: existsSync('/tmp/native-escalated-marker'),
     written: existsSync('/tmp/native-write-marker'), file: existsSync('/tmp/native-file-marker') };
-  for (const entry of capture.nativeRequests) {
-    if (entry.message.method === 'item/commandExecution/requestApproval') {
-      assert.equal(capture.markers.escalated, false);
-    }
-    if (entry.message.method === 'item/fileChange/requestApproval') {
-      assert.equal(capture.markers.file, false);
-    }
-  }
   await activeClient.close();
   stage = 'private';
   const { privateConfig } = await import('../src/codex-config.ts');
-  writeFileSync(configPath, privateConfig('probe-model'));
+  writeFileSync(configPath, privateConfig('gpt-6.1-sol'));
   activeClient = startClient();
   await activeClient.initialise();
   stage = 'private';
   const privateThread = await activeClient.rpc('thread/start', {
     cwd: '/tmp', ephemeral: true, approvalPolicy: 'never',
   });
-  await runCase(['private_shell', ...cases[2].slice(1)], privateThread.thread.id, {});
+  await runCase(['private_shell', 'exec_command', {
+    cmd: 'touch /tmp/native-private-marker', sandbox_permissions: 'require_escalated',
+    justification: 'Local marker fixture',
+  }], privateThread.thread.id, {});
 }
