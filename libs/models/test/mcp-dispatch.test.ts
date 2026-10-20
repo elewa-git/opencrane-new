@@ -2642,7 +2642,7 @@ async function savesRemoteResponse(mode: 'result' | 'tool_error' | 'rpc_error') 
   const { setup, remote, value, requestId, subject, record } = await remoteOutcomeFixture();
   function toolError() { return { isError: true, content: [] }; }
   function rpcError() {
-    return '{"jsonrpc":"2.0","id":"REQUEST_ID","error":{"code":-32603,"message":"REPLY_CANARY"}}';
+    return '{"jsonrpc":"2.0","id":REQUEST_ID,"error":{"code":-32603,"message":"REPLY_CANARY"}}';
   }
   if (mode === 'tool_error') remote.respond(toolError);
   if (mode === 'rpc_error') remote.respond(rpcError);
@@ -2664,14 +2664,17 @@ it.each(['result', 'tool_error', 'rpc_error'] as const)(
   'saves a checked remote response against its consumed permit once: %s', savesRemoteResponse);
 
 const remoteFailures = ['reset', 'timeout', 'redirect', 'invalid_json', 'wrong_id',
-  'duplicate_key', 'gateway_502', 'gateway_refused'] as const;
+  'duplicate_key', 'invalid_error', 'gateway_502', 'gateway_refused'] as const;
 async function keepsRemoteFailureUnknown(mode: typeof remoteFailures[number]) {
   const context = await remoteOutcomeFixture();
   const { setup, remote, value, requestId, subject } = context;
   function invalidReply() { return 'INVALID_REPLY_CANARY'; }
   function wrongId() { return '{"jsonrpc":"2.0","id":"other","result":{}}'; }
+  function invalidError() {
+    return '{"jsonrpc":"2.0","id":REQUEST_ID,"error":{}}';
+  }
   function duplicateKey() {
-    return '{"jsonrpc":"2.0","id":"REQUEST_ID","result":{},"result":{}}';
+    return '{"jsonrpc":"2.0","id":REQUEST_ID,"result":{},"result":{}}';
   }
   function noReply() { return undefined; }
   if (mode === 'reset') remote.reset();
@@ -2679,6 +2682,7 @@ async function keepsRemoteFailureUnknown(mode: typeof remoteFailures[number]) {
   if (mode === 'invalid_json') remote.respond(invalidReply);
   if (mode === 'wrong_id') remote.respond(wrongId);
   if (mode === 'duplicate_key') remote.respond(duplicateKey);
+  if (mode === 'invalid_error') remote.respond(invalidError);
   if (mode.startsWith('gateway_')) remote.status(502);
   const timer = globalThis.setTimeout;
   let expire: (() => void) | undefined;
@@ -2692,7 +2696,9 @@ async function keepsRemoteFailureUnknown(mode: typeof remoteFailures[number]) {
   }
   if (mode === 'timeout') {
     remote.respond(noReply);
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation(Object.assign(captureDeadline, timer));
+    const replacement = Object.assign(captureDeadline, timer);
+    const timerSpy = vi.spyOn(globalThis, 'setTimeout');
+    timerSpy.mockImplementation(replacement);
   }
   const append = setup.nats.store.append.bind(setup.nats.store);
   let gatewayRecorded = false;
@@ -2710,7 +2716,8 @@ async function keepsRemoteFailureUnknown(mode: typeof remoteFailures[number]) {
     }
     return append(command);
   }
-  vi.spyOn(setup.nats.store, 'append').mockImplementation(gatewayFirst);
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  writer.mockImplementation(gatewayFirst);
   try {
     const sending = send(setup, value);
     if (mode === 'timeout') {
@@ -2776,8 +2783,10 @@ async function checksRemoteEvidence(mode: typeof remoteSaveFailures[number]) {
       yield copy;
     }
   }
-  const writer = vi.spyOn(setup.nats.store, 'append').mockImplementation(save);
-  const reader = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(changedHistory);
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  const reader = vi.spyOn(setup.nats.store, 'readStream');
+  writer.mockImplementation(save);
+  reader.mockImplementation(changedHistory);
   try {
     if (mode === 'forged') {
       const forged = { id: requestId, toolOutcome: 'responded',
