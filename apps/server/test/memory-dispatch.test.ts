@@ -1747,3 +1747,39 @@ async function sanitisesMemoryPreparationError() {
   }
 }
 it('returns only the fixed refusal when memory preparation fails', sanitisesMemoryPreparationError);
+
+async function correctionAfterLoadedAppend() {
+  await seedRecallFact();
+  const bridge = await renewalBridge();
+  expect(await bridge.exchange(1)).toHaveProperty('token');
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let changed = false;
+  async function correctAfterAppend(command: Parameters<typeof append>[0]) {
+    const saved = await append(command);
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.action === 'loaded') {
+      await changeLoadedMemory('correct');
+      changed = true;
+    }
+    return saved;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(correctAfterAppend);
+  try {
+    const response = await directRecall('correct-after-load');
+    expect(changed).toBe(true);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    const refused = { type: 'ack', sequence: 2, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(2)).toEqual(refused);
+    expect(await bridge.exchange(2)).toEqual(refused);
+    const decision = await setup.call();
+    expect(decision.status).toBe(403);
+    expect(decision.text).toContain('memory_context_unavailable');
+    expect(setup.received()).toBe(0);
+  } finally {
+    spy.mockRestore();
+    await bridge.close();
+  }
+}
+it('withholds recall corrected after its loaded append and refuses renewal and decision',
+  correctionAfterLoadedAppend);

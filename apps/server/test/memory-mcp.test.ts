@@ -2117,3 +2117,133 @@ async function unavailableChange(operation: 'correct' | 'forget') {
 }
 it.each(['forget', 'correct'] as const)(
   'checks %s completely but keeps it switched off without files or events', unavailableChange);
+
+async function refusedChange(request: ChangeRequest, reason?: string) {
+  const response = await sendChange(request);
+  expect(response.statusCode).toBe(403);
+  const expected: Record<string, string> = { status: 'refused' };
+  if (reason) expected['reason'] = reason;
+  expect(response.json()).toEqual(expected);
+}
+async function changeGrant(resourceType: string, granteeKind: string, recorded: boolean) {
+  const request = await changeRequest('forget');
+  const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+  const subject = grantStream(resourceType, scopeId);
+  const data = { resourceType, resourceId: scopeId, granteeKind, granteeId, revokedBy: 'alice' };
+  if (recorded) {
+    // Leave OpenFGA allowed to prove that the saved grant is checked separately.
+    await setup.append(subject, 'grant.revoked', data);
+  } else {
+    const event = envelope('test', subject, 'grant.revoked', data);
+    await setup.auth.handler.handle(event, setup.db);
+  }
+  await refusedChange(request);
+}
+const changeGrants = [
+  ['memory_read', 'member', true], ['memory_read', 'assistant', true],
+  ['memory_write', 'member', true], ['memory_write', 'assistant', true],
+  ['memory_read', 'member', false], ['memory_read', 'assistant', false],
+  ['memory_write', 'member', false], ['memory_write', 'assistant', false],
+] as const;
+it.each(changeGrants)('checks %s for %s (recorded=%s) before forget', changeGrant);
+
+async function changePolicy(value: 'ask' | 'block') {
+  const request = await changeRequest('correct');
+  await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
+    connectionId: 'server', toolName: 'correct', toolRevision: correctTool.revision,
+    mode: value, setBy: 'alice' });
+  await publishMemory(setup);
+  const position = await setup.nats.store.head('conversation-conversation');
+  let reason: string | undefined;
+  if (value === 'ask') reason = 'memory_tool_configuration';
+  await refusedChange(request, reason);
+  const response = await setup.call(request.requestHeaders, request.body, route);
+  expect(response.status).toBe(403);
+  if (reason) expect(response.text).toContain(reason);
+  expect(await setup.nats.store.head('conversation-conversation')).toBe(position);
+}
+it.each(['ask', 'block'] as const)('checks correct policy independently of recall: %s', changePolicy);
+
+async function changeScope(kind: 'group' | 'assistant_notes', loaded: boolean) {
+  await close();
+  await prepare(true);
+  await renewGatewayCredentials();
+  const request = await changeRequest('forget');
+  const owner = kind === 'group' ? 'sales' : 'assistant';
+  const otherScope = memoryScopeId('test', kind, owner);
+  if (loaded) {
+    const saved = await contextRecord();
+    await seedEvidence({ ...saved, action: 'loaded', delivery: 'recall',
+      callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64), byteCount: 1,
+      additions: [{ scopeId: otherScope, memoryId: 'other', revision: 1 }],
+      scopePositions: [{ scopeId: otherScope, position: 0 }] });
+    await refusedChange(request);
+  } else {
+    request.body.params.arguments['scopeId'] = otherScope;
+    await refusedChange(request, 'agent_person_scope_only');
+  }
+}
+it.each([['group', false], ['assistant_notes', false], ['group', true]] as const)(
+  'refuses %s scope (already loaded=%s) for forget', changeScope);
+
+async function changedTargetProof(change: string) {
+  const request = await changeRequest('forget');
+  const input = request.body.params.arguments;
+  const saved = await contextRecord();
+  const token = await changeToken(request);
+  const parsed = parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
+  const context = await verifyMemoryContext(token, setup.identity, parsed);
+  let generation = saved.inputGeneration;
+  let memoryId = String(input['memoryId']);
+  let revision = 1;
+  if (change === 'turn') context.turn = 'other-turn';
+  if (change === 'computer') context.generation = 2;
+  if (change === 'input') generation = 'other-input';
+  if (change === 'old') revision = 2;
+  if (change === 'missing') memoryId = 'fact_20';
+  if (change === 'unloaded') {
+    memoryId = 'fact_20';
+    input['memoryId'] = memoryId;
+  }
+  const { recallProof } = await import('../src/memory/recall-proof.ts');
+  input['recallProof'] = recallProof(testAuthConfig().cookieSecret, context,
+    [{ memoryId, revision }], generation);
+  await refusedChange(request);
+}
+it.each(['turn', 'computer', 'input', 'old', 'missing', 'unloaded'])(
+  'refuses a target proof with %s evidence', changedTargetProof);
+
+async function correctionDependencies(change: 'self' | 'selective') {
+  const request = await changeRequest('correct');
+  const input = request.body.params.arguments;
+  const dependencies = z.array(z.object({ scopeId: z.string(), memoryId: z.string(),
+    revision: z.number() })).parse(input['dependsOn']);
+  if (change === 'self') {
+    dependencies.push({ scopeId, memoryId: String(input['memoryId']), revision: 2 });
+  } else {
+    dependencies.pop();
+  }
+  input['dependsOn'] = dependencies;
+  await refusedChange(request);
+}
+it.each(['self', 'selective'] as const)(
+  'refuses %s correction dependencies', correctionDependencies);
+
+async function changedBeforeBackend() {
+  const request = await changeRequest('forget');
+  const token = await changeToken(request);
+  await setup.append(`scope-${scopeId}`, 'memory.corrected', { scopeId,
+    memoryId: request.body.params.arguments['memoryId'],
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:2' });
+  const response = await sendChange(request, token);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses a human correction saved after signing and before the backend check',
+  changedBeforeBackend);
+async function wrongChangeOperation() {
+  const request = await changeRequest('correct');
+  const token = await changeToken(request, { operation: 'forget' });
+  const response = await sendChange(request, token);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses a forget pass with a correct body', wrongChangeOperation);
