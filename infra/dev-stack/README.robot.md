@@ -729,6 +729,17 @@ The rest of the host certificate directory is not mounted.
 Node uses bundled roots and could connect even when the gateway had no trusted roots.
 Missing, empty or invalid files fail with a fixed preparation error.
 
+The Compose test resolves both owner and secondary configuration without starting
+containers. It checks the exact certificate source, destination and read-only setting,
+and refuses certificate mounts on other services. Startup tests use a temporary home
+and replacement system commands. They check real-mode eligibility and saved-mode changes
+before setup can run. The secondary models test omits required settings so neither
+the stand-in nor the models service can start.
+
+Every child in `daily-fresh.test.ts` receives disposable model and Zitadel key paths.
+The isolation test supplies synthetic inherited keys whose values match expected log
+text. Reading either key changes that text during sanitisation and fails the test.
+
 Setup still uses the product reachability check, exact consented quote, registry models,
 explicit default, drain and switch-on. A lost write response permits only a GET of the
 original command receipt. Recovery requires the expected operation. An absent or unknown
