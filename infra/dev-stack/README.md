@@ -22,7 +22,7 @@ flowchart LR
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
   stack -->|checks spending, uploads, provider access, rehearsals at both widths, tools and group access loss| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
-  stack -->|checks computer and hosted tool rules in the cluster| devbox
+  stack -->|checks tool limits, connections and computer rules| devbox
 ```
 
 ## What it is responsible for
@@ -39,6 +39,10 @@ available, it checks the exact file count and waits for workspace delivery.
 Separate admission rules check hosted tool images and container settings. Their tests
 also check resource changes made through the Pod resize endpoint. Their tests
 use temporary namespaces on a claimed spare stack. Startup does not install them yet.
+Separate admission rules check hosted tool images and container settings. A quota limits their total
+CPU, memory and Pod count. Network rules allow only the named gateway and reviewed
+upstream addresses and ports. Tests check these rules and Pod resize requests in
+temporary namespaces on a claimed spare stack. Startup does not install them yet.
 
 - Start and stop the local services and OpenCrane processes.
   Wait for the website to answer before starting browser checks.

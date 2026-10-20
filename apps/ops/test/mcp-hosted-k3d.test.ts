@@ -77,7 +77,7 @@ async function setup() {
   const owner = join(homedir(), '.config/opencrane', `dev-stack-${slot}`, 'stack-owner');
   expect(readFileSync(owner, 'utf8')).toContain(`worktree=${resolve('.')}\n`);
   approved = JSON.parse(readFileSync('apps/ops/mcp-hosted-template.json', 'utf8')) as unknown;
-  namespace = `opencrane-dev-${slot}-mcp-${randomUUID().slice(0, 8)}`;
+  namespace = `opencrane-dev-${slot}-${randomUUID().slice(0, 8)}-mcp`;
   otherNamespace = `opencrane-dev-${slot}-mcp-${randomUUID().slice(0, 8)}`;
   const computer: unknown = JSON.parse(readFileSync('apps/computer/sandbox-template.json', 'utf8'));
   const image = String(field(computer, 'spec.podTemplate.spec.containers.0.image'));
@@ -224,9 +224,10 @@ function permissions() {
     expect(request).toThrow('forbidden');
   }
   for (const resource of ['resourcequota/mcp-limit', 'networkpolicy/mcp-egress']) {
+    const patchBody = { metadata: { labels: { changed: 'yes' } } };
     function patch() {
       kube(['patch', resource, '--type=merge', '--dry-run=server',
-        '-p', JSON.stringify({ metadata: { labels: { changed: 'yes' } } })], undefined, true);
+        '-p', JSON.stringify(patchBody)], undefined, true);
     }
     expect(patch).toThrow('forbidden');
   }
@@ -420,7 +421,10 @@ function quotaPod(name: string) {
 function quota() {
   const names = ['quota-one', 'quota-two', 'quota-three', 'quota-four', 'quota-five'];
   try {
-    for (const name of names.slice(0, 4)) kube(['create', '-f', '-'], quotaPod(name));
+    const admittedNames = names.slice(0, 4);
+    for (const name of admittedNames) {
+      kube(['create', '-f', '-'], quotaPod(name));
+    }
     function fifth() {
       kube(['create', '-f', '-'], quotaPod('quota-five'));
     }
@@ -526,7 +530,9 @@ async function network() {
   const target = `${namespace}-net-mcp`;
   const gatewayNamespace = `${namespace}-net-gateway`;
   const upstreamNamespace = `${namespace}-net`;
-  for (const name of [target, gatewayNamespace, upstreamNamespace]) createNamespace(name);
+  for (const name of [target, gatewayNamespace, upstreamNamespace]) {
+    createNamespace(name);
+  }
   const hosted = listenerPod(target, 'mcp', 'mcp');
   metadataSource = hosted;
   const gateway = listenerPod(gatewayNamespace, 'gateway', 'opencrane-gateway');
@@ -535,7 +541,9 @@ async function network() {
   const computer = listenerPod(upstreamNamespace, 'computer', 'computer');
   const upstream = listenerPod(upstreamNamespace, 'upstream', 'upstream');
   const arbitrary = listenerPod(upstreamNamespace, 'arbitrary', 'arbitrary');
-  for (const peer of [hosted, gateway, wrongPod, foreign, computer, upstream, arbitrary]) await ready(peer);
+  for (const peer of [hosted, gateway, wrongPod, foreign, computer, upstream, arbitrary]) {
+    await ready(peer);
+  }
   command('node', ['infra/dev-stack/mcp-resources.mjs', target, '8080',
     `${upstream.address}:8080`]);
   const ingress = [

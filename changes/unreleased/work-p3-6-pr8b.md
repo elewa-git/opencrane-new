@@ -1,0 +1,1 @@
+- Bound disposable hosted tool namespaces to four Pods and fixed CPU and memory totals. Allow connections only from the named gateway and to reviewed upstream IP addresses and ports. Product startup and hosted calls remain unavailable.

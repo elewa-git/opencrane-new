@@ -52,8 +52,9 @@ flowchart LR
 ## Processes it handles
 
 A reviewed template defines how hosted tools may run. Separate Kubernetes rules check
-the image and settings and limit who may create or scale a tool. Starting hosted tools
-through the application remains unavailable.
+the image and settings and limit who may create or scale a tool. The disposable
+cluster tests also check total resource limits and which connections are allowed.
+Starting hosted tools through the application remains unavailable.
 
 When private connection custody is configured, the dispatcher cleans old personal
 connection copies after saved revocations or replacements. Failed cleanup is retried.

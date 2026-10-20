@@ -1053,8 +1053,7 @@ still block switch-on. Twice-fresh qualification remains NOT RUN for PR 5e.
 Pod and scale policies with fail-closed image parameters. Apply
 `mcp-lifecycle-rbac.yaml` in that namespace for lifecycle rights. The caller must
 provision `mcp-approved-images`; the lifecycle identity cannot edit it or any policy.
-These files are not installed by `up.sh` yet. Part 8b adds quota, network policies
-and secondary startup installation. See the [test contract](../../apps/ops/README.robot.md#hosted-mcp-admission).
+These files are not installed by `up.sh` yet. See the [test contract](../../apps/ops/README.robot.md#hosted-mcp-admission).
 
 Pod admission includes `pods/resize` for hosted tools and computers. Computer Pod
 resource requests and limits must match the checked sandbox template. The hosted
@@ -1307,3 +1306,20 @@ nice -n 10 node --experimental-strip-types --test \
 ```
 
 These fixtures make no paid calls and start no stack. Live qualification remains NOT RUN.
+`node infra/dev-stack/mcp-resources.mjs <silo>-mcp [port [IPv4:port ...]]`
+installs the namespace quota and two NetworkPolicies. The quota permits four Pods,
+requests of 400m CPU / 1 GiB memory, and limits of 4 CPUs / 2 GiB memory. It selects
+all Pods, as do both policies. With no port or bindings, all ingress and egress
+are denied. A declared TCP port permits ingress only from `<silo>-gateway` Pods
+labelled `app=opencrane-gateway`. Both selectors must match. Each upstream binding
+permits only that IPv4 address and TCP port. There is no DNS allowance. Hostnames,
+CIDRs, loopback, link-local, unspecified and multicast addresses are rejected.
+The operator must review each binding; private addresses require an explicit
+in-silo upstream binding. Never bind a control-plane or another silo's address.
+The lifecycle ServiceAccount cannot patch these resources or image parameters.
+
+Only the disposable hosted-MCP fixture installs these resources today. General
+lifecycle and secondary startup installation remain deferred until their owning
+startup exists. Hosted dispatch and product deployment stay unavailable.
+The [connection receipt](../../docs/process/p3-6-pr8b/receipt.md) records live
+connections, policy-removal controls and conditions that could not be qualified.
