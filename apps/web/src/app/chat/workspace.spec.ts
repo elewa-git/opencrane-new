@@ -1450,10 +1450,8 @@ it('does not announce a reconnect that started in the conversation being left', 
 
 it('removes a used approval and its open drawer on closure despite a late approval reply',
   async () => {
-    Object.assign(HTMLDialogElement.prototype, {
-      showModal: openPanelDialog,
-      close: closePanelDialog,
-    });
+    const dialogMethods = { showModal: openPanelDialog, close: closePanelDialog };
+    Object.assign(HTMLDialogElement.prototype, dialogMethods);
     const usedAt = '2026-10-04T10:17:00Z';
     const approval = {
       approvalId: 'a'.repeat(64), conversationId: 'chat', requesterId: 'me',

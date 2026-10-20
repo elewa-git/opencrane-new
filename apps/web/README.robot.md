@@ -60,8 +60,10 @@ left for a later part; the page uses generic person and assistant names.
 Finished chat approvals show saved decision, use, expiry and end times. A used
 approval stays one collapsed line; its uncertain result and Check status action
 are in the drawer. The drawer lists requested, decided, each used, and ended
-times when the server has them. Expiry uses the original expiry time on the line
-and labels the saved end time “Expiry recorded”. Cancelled cards show the saved
+times when the server has them. An approved retry keeps the saved uses visible while
+its replacement permit waits to be used. Closing a session removes approval cards
+and any open approval drawer; late replies cannot put them back. Expiry uses the
+original expiry time on the line and labels the saved end time “Expiry recorded”. Cancelled cards show the saved
 fixed reason when present, or say that the record does not give one. A removed
 tool grant uses a lock glyph without claiming whose grant it was. A cancelled
 card whose turn stopped keeps its “Can't continue” review. The screen never

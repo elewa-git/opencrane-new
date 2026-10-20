@@ -250,6 +250,10 @@ it('omits the end time from a cancelled line when no end time was saved', async 
   fixture.destroy();
 });
 
+function isUseTimeRow(row: Element): boolean {
+  return row.querySelector('dt')?.textContent === 'Used';
+}
+
 it('counts separate uses and gives each saved use its own drawer row', async () => {
   const first = usedCard();
   const saved = { ...first, uses: [
@@ -262,8 +266,8 @@ it('counts separate uses and gives each saved use its own drawer row', async () 
   expect(line.textContent).toContain('used 2 times');
   expect(line.textContent).not.toContain('once');
   const drawer = openTerminalDetails(fixture);
-  const uses = [...drawer.querySelectorAll('.approval-time-row')]
-    .filter(row => row.textContent?.includes('Used'));
+  const timeRows = [...drawer.querySelectorAll('.approval-time-row')];
+  const uses = timeRows.filter(isUseTimeRow);
   expect(uses).toHaveLength(2);
   expect(uses[0]?.textContent).toContain('10:17 UTC');
   expect(uses[1]?.textContent).toContain('10:18 UTC');

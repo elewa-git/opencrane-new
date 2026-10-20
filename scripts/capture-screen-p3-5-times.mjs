@@ -41,8 +41,12 @@ function cardsFor(scene) {
     return [{ ...baseCard, state: 'outcome_unknown', decidedAt, usedAt,
       uses: [{ permitId: 'permit-1', usedAt }] }];
   }
-  if (scene === 'WRK-17') return [{ ...baseCard, state: 'denied', decidedAt, endedAt }];
-  if (scene === 'WRK-18') return [{ ...baseCard, state: 'expired', endedAt }];
+  if (scene === 'WRK-17') {
+    return [{ ...baseCard, state: 'denied', decidedAt, endedAt }];
+  }
+  if (scene === 'WRK-18') {
+    return [{ ...baseCard, state: 'expired', endedAt }];
+  }
   if (scene === 'WRK-19') {
     return [{ ...baseCard, state: 'cancelled', endedAt, cancelReason: 'new_message' }];
   }
@@ -66,26 +70,30 @@ function holdSocket(socket) {
 async function serve(scene, route) {
   const url = new URL(route.request().url());
   if (url.pathname === '/auth/me') {
-    await route.fulfill({ json: { authenticated: true, user: { name: 'Alex' } } });
+    const reply = { json: { authenticated: true, user: { name: 'Alex' } } };
+    await route.fulfill(reply);
     return;
   }
   if (url.pathname === '/api/chat') {
-    await route.fulfill({ json: { memberId: 'me', assistantId: 'assistant' } });
+    const reply = { json: { memberId: 'me', assistantId: 'assistant' } };
+    await route.fulfill(reply);
     return;
   }
   if (url.pathname === '/api/conversations') {
-    await route.fulfill({ json: { rows: [conversation], nextCursor: null } });
+    const reply = { json: { rows: [conversation], nextCursor: null } };
+    await route.fulfill(reply);
     return;
   }
   if (url.pathname.endsWith('/approvals')) {
-    await route.fulfill({ json: { cards: cardsFor(scene), csrf: 'fixture' } });
+    const reply = { json: { cards: cardsFor(scene), csrf: 'fixture' } };
+    await route.fulfill(reply);
     return;
   }
   if (url.pathname.endsWith('/messages')) {
     const since = Number(url.searchParams.get('since') ?? 0);
     const rows = [message, turnCompleted].filter(rowAfterPosition.bind(null, since));
-    await route.fulfill({ json: { rows, position: 2, generation: 1,
-      computerState: 'ready' } });
+    const reply = { json: { rows, position: 2, generation: 1, computerState: 'ready' } };
+    await route.fulfill(reply);
     return;
   }
   if (url.pathname.startsWith('/api/')) {
@@ -98,7 +106,9 @@ function smallTargets(controls) {
   const small = [];
   for (const control of controls) {
     const bounds = control.getBoundingClientRect();
-    if (bounds.width < 44 || bounds.height < 44) small.push(control.outerHTML.slice(0, 100));
+    if (bounds.width < 44 || bounds.height < 44) {
+      small.push(control.outerHTML.slice(0, 100));
+    }
   }
   return small;
 }
@@ -108,8 +118,8 @@ function isFocused(element) {
 }
 
 async function capture(browser, scene, width) {
-  const page = await browser.newPage({ viewport: { width, height: 844 },
-    reducedMotion: 'reduce' });
+  const pageOptions = { viewport: { width, height: 844 }, reducedMotion: 'reduce' };
+  const page = await browser.newPage(pageOptions);
   await page.route('**/*', serve.bind(null, scene));
   await page.routeWebSocket('**/ws', holdSocket);
   try {
@@ -126,7 +136,8 @@ async function capture(browser, scene, width) {
     const composer = await page.locator('.composer-dock').boundingBox();
     assert(composer && composer.y + composer.height >= 800,
       `${scene} composer stays at the foot of the screen`);
-    await page.screenshot({ path: `${output}/${scene}-${width}.png`, fullPage: true });
+    const screenshotOptions = { path: `${output}/${scene}-${width}.png`, fullPage: true };
+    await page.screenshot(screenshotOptions);
     if (scene === 'WRK-16' && width === 390) {
       await lines.first().click();
       const drawer = page.locator('oc-approval-cards oc-hinge-drawer dialog');
@@ -136,7 +147,8 @@ async function capture(browser, scene, width) {
       assert(await page.evaluate(pageHasNoOverflow), 'Approval details fit the phone');
       assert.deepEqual(await drawer.locator('button:visible').evaluateAll(smallTargets), [],
         'Phone details controls meet 44px');
-      await page.screenshot({ path: `${output}/WRK-16-details-390.png` });
+      const detailScreenshotOptions = { path: `${output}/WRK-16-details-390.png` };
+      await page.screenshot(detailScreenshotOptions);
       await drawer.getByRole('button', { name: 'Back', exact: true }).click();
       assert(await lines.first().evaluate(isFocused), 'Back returns focus to the approval');
     }
@@ -146,7 +158,8 @@ async function capture(browser, scene, width) {
 }
 
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browserOptions = { headless: true };
+const browser = await chromium.launch(browserOptions);
 try {
   for (const width of [1280, 390]) {
     for (const scene of ['WRK-16', 'WRK-17', 'WRK-18', 'WRK-19', 'WRK-20']) {

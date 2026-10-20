@@ -172,7 +172,7 @@
             Reconnected at {{ time(chat.reconnectedAt()!) }}. You're caught up.
           </div>
         }
-        @if (chat.selected() && !chat.denied()) {
+        @if (chat.selected() && !chat.denied() && !isClosedConversation()) {
           <oc-approval-cards [conversationId]="chat.selected()" [viewerId]="chat.memberId()"
             [stoppedTurnIds]="stoppedTurnIds()"
             (waitingOnViewer)="approvalWaiting.set($event)" />
