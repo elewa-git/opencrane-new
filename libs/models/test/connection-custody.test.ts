@@ -1,3 +1,4 @@
+import { scanConnections } from '../src/connection-scan.ts';
 import { connectionRevokedDataSchema } from '@opencrane/events';
 import { HandlerRuntime } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
@@ -12,7 +13,7 @@ import { mkdtemp, rm, readdir, readFile, stat, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { databases } from '@opencrane/authz/testing';
+import { databases, until } from '@opencrane/authz/testing';
 import { type Db, type Query, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
@@ -1443,3 +1444,52 @@ async function refusesIneffectiveSavedRevocation() {
 }
 it('retains material when a saved revoke did not target the current revision',
   refusesIneffectiveSavedRevocation);
+
+function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, intervalMs = 900_000) {
+  const stop = new AbortController();
+  const records: { counts: unknown; message: unknown }[] = [];
+  function info(counts: unknown, message: unknown) {
+    records.push({ counts, message });
+  }
+  const logger = { info };
+  const done = scanConnections(events.store, test.db, test.store.restart(), logger,
+    stop.signal, intervalMs);
+  async function close() {
+    stop.abort();
+    expect(await done).toBeUndefined();
+  }
+  return { stop, done, records, close };
+}
+
+async function startupRemovesAbandonedRotation() {
+  const test = await cleanupFixture();
+  const rows = await history(events.store, test.subject, 'test');
+  const rotation = { ...test.input, generation: 2, operationId: 'abandoned-rotation',
+    expectedSequence: rows[0]!.sequence };
+  const saved = await test.store.custody.stage(rotation, material);
+  const first = runningScan(test);
+  try {
+    await until(() => first.records.length === 1);
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    await first.close();
+  }
+  await test.revoke();
+  const now = vi.spyOn(Date, 'now');
+  now.mockReturnValue(rotation.appendUntil + 1);
+  const restarted = runningScan(test);
+  try {
+    await until(() => restarted.records.length === 1);
+    expect(test.store.secrets.has(saved.identity!.reference)).toBe(false);
+    expect(test.store.deletes).toBe(2);
+    expect(test.store.preconditions).toEqual({ uid: 'uid-original', resourceVersion: '1' });
+    expect(restarted.records).toEqual([
+      { counts: { examined: 2, deleted: 2 }, message: 'Connection custody page scanned' },
+    ]);
+  } finally {
+    await restarted.close();
+    now.mockRestore();
+  }
+}
+it('startup scan removes an unsaved rotation after revoke and restart',
+  startupRemovesAbandonedRotation);
