@@ -155,6 +155,190 @@ it('keeps a separately recorded approval outcome when its turn has a budget stop
   fixture.destroy();
 });
 
+const decisionTime = '2026-10-04T10:16:00Z';
+const firstUseTime = '2026-10-04T10:17:00Z';
+const secondUseTime = '2026-10-04T10:18:00Z';
+const endTime = '2026-10-04T10:19:00Z';
+
+function usedCard(): ApprovalCard {
+  return {
+    ...card('outcome_unknown'), requestedAt: '2026-10-04T10:14:00Z',
+    decidedAt: decisionTime, usedAt: firstUseTime,
+    uses: [{ permitId: 'permit-1', usedAt: firstUseTime }],
+  };
+}
+
+function openTerminalDetails(fixture: ComponentFixture<ApprovalCards>): HTMLElement {
+  const root = rootOf(fixture);
+  requiredElement<HTMLButtonElement>(root, '.approval-terminal').click();
+  fixture.detectChanges();
+  return requiredElement<HTMLElement>(root, 'oc-hinge-drawer dialog');
+}
+
+it('keeps a used approval on one line after another poll and moves its status check into details',
+  async () => {
+    const saved = usedCard();
+    const fixture = await mount(() => Promise.resolve(response([saved])));
+    const root = rootOf(fixture);
+    expect(root.querySelectorAll('.approval-terminal')).toHaveLength(1);
+    expect(root.querySelector('.terminal-wrap article')).toBeNull();
+    expect(root.querySelector('.unknown-notice')).toBeNull();
+    expect(root.querySelector('.approval-terminal')?.textContent).toContain('used once');
+    expect(root.querySelector('.approval-terminal')?.textContent).toContain('can’t be reused');
+    expect(root.querySelector('.approval-terminal')?.textContent).toContain('4 Oct 2026, 10:17 UTC');
+    await fixture.componentInstance['read']('chat');
+    fixture.detectChanges();
+    expect(root.querySelectorAll('.approval-terminal')).toHaveLength(1);
+    expect(root.querySelector('.unknown-notice')).toBeNull();
+    const drawer = openTerminalDetails(fixture);
+    expect(drawer.textContent).toContain('Result not confirmed');
+    expect(drawer.textContent).toContain('Check status');
+    fixture.destroy();
+  });
+
+it('counts separate uses and gives each saved use its own drawer row', async () => {
+  const first = usedCard();
+  const saved = { ...first, uses: [
+    { permitId: 'permit-1', usedAt: firstUseTime },
+    { permitId: 'permit-2', usedAt: secondUseTime },
+  ] };
+  const fixture = await mount(() => Promise.resolve(response([saved])));
+  const root = rootOf(fixture);
+  const line = requiredElement<HTMLElement>(root, '.approval-terminal');
+  expect(line.textContent).toContain('used 2 times');
+  expect(line.textContent).not.toContain('once');
+  const drawer = openTerminalDetails(fixture);
+  const uses = [...drawer.querySelectorAll('.approval-time-row')]
+    .filter(row => row.textContent?.includes('Used'));
+  expect(uses).toHaveLength(2);
+  expect(uses[0]?.textContent).toContain('10:17 UTC');
+  expect(uses[1]?.textContent).toContain('10:18 UTC');
+  fixture.destroy();
+});
+
+it.each(['cancelled', 'expired'] as const)(
+  'does not say nothing was sent when a %s approval has a saved use', async state => {
+    const saved = { ...usedCard(), state, endedAt: endTime };
+    const fixture = await mount(() => Promise.resolve(response([saved])));
+    const root = rootOf(fixture);
+    expect(root.textContent).not.toContain('nothing was sent');
+    expect(root.textContent).toContain('used');
+    expect(root.textContent).toContain('no confirmed result');
+    fixture.destroy();
+  },
+);
+
+it('does not invent a time when the saved record has none', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2031-01-01T12:00:00Z'));
+  const fixture = await mount(() => Promise.resolve(response([card('denied')])));
+  const root = rootOf(fixture);
+  const drawer = openTerminalDetails(fixture);
+  expect(root.textContent).not.toContain('2031');
+  expect(root.textContent).not.toContain('Invalid');
+  expect(drawer.querySelectorAll('.approval-time-row')).toHaveLength(0);
+  fixture.destroy();
+});
+
+it('shows a denial decision time and the recorded expiry time', async () => {
+  const denied = { ...card('denied'), decidedAt: decisionTime };
+  const expired = { ...card('expired', true, 'b'.repeat(64)), endedAt: endTime };
+  const fixture = await mount(() => Promise.resolve(response([denied, expired])));
+  const root = rootOf(fixture);
+  const denial = requiredElement<HTMLElement>(root, `[data-approval="${approvalId}"]`);
+  expect(denial.textContent).toContain('4 Oct 2026, 10:16 UTC');
+  expect(root.textContent).toContain('4 Oct 2026, 10:32 UTC');
+  requiredElement<HTMLButtonElement>(denial, '.approval-terminal').click();
+  expect(root.textContent).toContain('Decided');
+  fixture.destroy();
+});
+
+it('shows expiry and its recorded end as distinct drawer times', async () => {
+  const saved = { ...card('expired'), requestedAt: decisionTime, endedAt: endTime };
+  const fixture = await mount(() => Promise.resolve(response([saved])));
+  const drawer = openTerminalDetails(fixture);
+  expect(drawer.textContent).toContain('Expiry recorded');
+  expect(drawer.textContent).toContain('10:19 UTC');
+  fixture.destroy();
+});
+
+const reasonCases: [NonNullable<ApprovalCard['cancelReason']>, string, string][] = [
+  ['turn_ended', 'Cancelled: turn ended', 'dash'],
+  ['turn_stopped', 'Cancelled: turn stopped', 'dash'],
+  ['new_message', 'Cancelled: new message', 'dash'],
+  ['new_turn', 'Cancelled: new turn', 'dash'],
+  ['conversation_closed', 'Cancelled: conversation closed', 'dash'],
+  ['unpublished', 'No longer valid: tool unpublished', 'failed'],
+  ['connection_changed', 'No longer valid: connection changed', 'failed'],
+  ['policy_changed', 'No longer valid: policy changed', 'failed'],
+  ['grant_revoked', 'No longer valid: a tool grant was revoked', 'closed'],
+  ['schema_changed', 'No longer valid: tool schema changed', 'failed'],
+  ['profile_changed', 'No longer valid: profile changed', 'failed'],
+];
+
+it.each(reasonCases)('shows the saved reason %s with its glyph', async (reason, words, glyph) => {
+  const saved = { ...card('cancelled'), cancelReason: reason, endedAt: endTime };
+  const fixture = await mount(() => Promise.resolve(response([saved])));
+  const root = rootOf(fixture);
+  const line = requiredElement<HTMLElement>(root, '.approval-terminal');
+  expect(line.textContent).toContain(words);
+  expect(line.querySelector('.terminal-glyph')?.getAttribute('data-glyph')).toBe(glyph);
+  expect(line.textContent).not.toContain('your grant');
+  const drawer = openTerminalDetails(fixture);
+  expect(drawer.textContent).toContain(words);
+  fixture.destroy();
+});
+
+it('shows plain Cancelled and an honest missing reason for an older record', async () => {
+  const fixture = await mount(() => Promise.resolve(response([card('cancelled')])));
+  const root = rootOf(fixture);
+  const line = requiredElement<HTMLElement>(root, '.approval-terminal');
+  expect(line.querySelector('strong')?.textContent).toBe('Cancelled');
+  const drawer = openTerminalDetails(fixture);
+  expect(drawer.textContent).toContain('The saved record does not say why');
+  expect(root.textContent).not.toContain('Exact reason: Not available yet');
+  fixture.destroy();
+});
+
+it('never puts requesterId in a finished card or its drawer', async () => {
+  const saved = { ...usedCard(), requesterId: 'private-member-id-729' };
+  const fixture = await mount(() => Promise.resolve(response([saved])));
+  const root = rootOf(fixture);
+  openTerminalDetails(fixture);
+  expect(root.innerHTML).not.toContain('private-member-id-729');
+  fixture.destroy();
+});
+
+it.each([401, 403])('clears an open drawer on %s and ignores a late older reply',
+  async deniedStatus => {
+    let releaseOlderRead: ((value: Response) => void) | undefined;
+    let readCount = 0;
+    const initial = usedCard();
+    const fixture = await mount(() => {
+      readCount += 1;
+      if (readCount === 1) return Promise.resolve(response([initial]));
+      if (readCount === 2) {
+        return new Promise<Response>(resolve => { releaseOlderRead = resolve; });
+      }
+      return Promise.resolve(response([], deniedStatus));
+    });
+    const root = rootOf(fixture);
+    openTerminalDetails(fixture);
+    const olderRead = fixture.componentInstance['read']('chat', undefined, 'check');
+    await vi.waitFor(() => expect(readCount).toBe(2));
+    await fixture.componentInstance['read']('chat', undefined, 'check');
+    fixture.detectChanges();
+    expect(root.querySelector('.approval-terminal')).toBeNull();
+    expect(root.querySelector('oc-hinge-drawer')).toBeNull();
+    if (!releaseOlderRead) throw new Error('The older read did not start');
+    releaseOlderRead(response([initial]));
+    await olderRead;
+    fixture.detectChanges();
+    expect(root.querySelector('.approval-terminal')).toBeNull();
+    expect(root.querySelector('oc-hinge-drawer')).toBeNull();
+    fixture.destroy();
+  });
+
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
   configurable: true,
   writable: true,
