@@ -769,9 +769,18 @@ The caller must own the stack directory. Owner use additionally requires `--owne
 
 `demo-up.sh` requires an explicit secondary id and `DEV_REAL_PROVIDER_FILE` path.
 It claims through `claim.sh`, checks the returned id, sets `COMPUTER_IDLE_MS=14400000`,
-runs fresh startup and seeds. Failure calls `down.sh` for that claim; success keeps it.
+runs fresh startup and seeds. A mismatched, owner or invalid claim stops before startup
+or cleanup. Once startup is attempted, startup or seed failure calls `down.sh` for that
+secondary; success keeps it.
 It inherits the full startup journey and makes no claim about three-minute duration.
 The [owner runbook](../../docs/process/demo/README.md) marks the current owner-mode
 refusal and unfinished PDF, ceiling and smoke work. This is the first split of #32
 P2-7 PR 2. The seed does not rename existing members or make cloud identity changes.
 Tests use `nice -n 10 node --experimental-strip-types --test infra/dev-stack/demo-*.test.ts`.
+
+The launcher tests record startup and cleanup without starting services. They check
+that an existing slot survives a request for the other id, unsafe claims cannot reach
+startup or cleanup, seed failure removes only the started secondary, and no synthetic
+credential value appears in output. The CLI tests use real configuration and session
+code with disposable settings and an HTTP fixture. They check id validation before
+configuration loads, worktree ownership and the fixed secondary origins.

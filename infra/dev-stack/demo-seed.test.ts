@@ -30,7 +30,9 @@ async function recordingApi() {
     }
     assert.equal(request.headers.origin, origin);
     let raw = '';
-    for await (const chunk of request) raw += String(chunk);
+    for await (const chunk of request) {
+      raw += String(chunk);
+    }
     const body = JSON.parse(raw) as Record<string, unknown>;
     writes.push(body);
     const receipt = { status: 'appended', sequence: writes.length, changeId: 'fixture',
@@ -54,7 +56,9 @@ async function recordingApi() {
   assert(address && typeof address !== 'string');
   const origin = `http://127.0.0.1:${address.port}`;
   function stop(resolve: () => void) {
-    function done() { resolve(); }
+    function done() {
+      resolve();
+    }
     server.close(done);
   }
   async function close() {
@@ -62,9 +66,22 @@ async function recordingApi() {
     await new Promise<void>(stop);
     await rm(directory, { recursive: true, force: true });
   }
-  return { writes, options: { origin, cookie: 'synthetic-session', directory }, close,
-    loseReply() { loseReply = true; }, hideReceipt() { hideReceipt = true; },
-    missingMember() { memberMissing = true; } };
+  function loseNextReplies() {
+    loseReply = true;
+  }
+  function hideSavedReceipts() {
+    hideReceipt = true;
+  }
+  function removeMember() {
+    memberMissing = true;
+  }
+  const options = { origin, cookie: 'synthetic-session', directory };
+  return {
+    writes, options, close,
+    loseReply: loseNextReplies,
+    hideReceipt: hideSavedReceipts,
+    missingMember: removeMember,
+  };
 }
 
 async function repeatsWithoutCreatingMore() {
@@ -83,7 +100,9 @@ async function repeatsWithoutCreatingMore() {
     await fixture.close();
   }
 }
-function readName(command: Record<string, unknown>) { return command['name']; }
+function readName(command: Record<string, unknown>) {
+  return command['name'];
+}
 
 async function reconcilesLostReplies() {
   const fixture = await recordingApi();
@@ -123,13 +142,17 @@ async function refusesMissingPeople() {
 
 function refusesOwnerAndMissingIds() {
   for (const id of [undefined, '', 'owner', '3']) {
-    function reject() { demoStackId(id); }
+    function reject() {
+      demoStackId(id);
+    }
     assert.throws(reject);
   }
   assert.equal(demoStackId('1'), '1');
   assert.equal(demoStackId('2'), '2');
   assert.equal(demoStackId('owner', true), 'owner');
-  function rejectMissing() { demoStackId(undefined, true); }
+  function rejectMissing() {
+    demoStackId(undefined, true);
+  }
   assert.throws(rejectMissing);
 }
 

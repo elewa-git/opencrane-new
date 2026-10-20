@@ -1,1 +1,2 @@
 - Rehearsals can reuse two named demo groups and a shared assistant through product APIs. A guarded secondary launcher prints bookmarks; the owner guide records the remaining refresh prerequisites. PDF seeding and the timed smoke remain unfinished.
+- A demo request for another slot leaves the existing rehearsal intact. The owner refresh guide explains all data removed by `--fresh` before its commands.

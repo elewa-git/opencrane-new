@@ -84,7 +84,8 @@ and call checks are being connected.
    their test limits even if a browser step fails.
 3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.
    Its services use separate data and ports, and `down.sh --id` removes that stack and
-   releases its id.
+   releases its id. The demo launcher checks that the returned id matches the requested
+   slot before startup or cleanup. A failed request for another id keeps the existing stack.
 4. **The daily check runs.** A user timer updates a detached checkout of `main`, then starts
    `up.sh --fresh` in a claimed spare stack. The local model stub keeps it free of paid model
    calls. Saved failure logs have known secrets and credential patterns removed.

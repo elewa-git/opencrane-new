@@ -35,7 +35,8 @@ It does not invent replacement identities or overwrite a company limit.
 A secondary start claims a spare stack and runs the existing fresh startup checks.
 It uses `DEV_REAL_PROVIDER_FILE`, the path of a private OpenAI key file, and keeps
 computers awake for four hours. It then seeds and prints bookmarks. A failure removes
-only the claimed secondary; a successful rehearsal keeps it until explicit cleanup.
+only the secondary whose startup this run attempted. A mismatched claim stops before
+startup or cleanup; a successful rehearsal keeps the stack until explicit cleanup.
 
 The seed remembers attempted command ids in private `demo-requests` files. These are
 request records, not business state. Reruns read the server's original receipts and
@@ -81,6 +82,11 @@ The first command stops existing services from their existing checkout. Keeping 
 checkout path avoids transferring its ownership marker. Replace the SHA placeholder
 with the full 40-character merged SHA from the fresh-install receipt before proceeding.
 
+`--fresh` wipes the owner's conversations, uploaded files, budgets, local service data
+and computer disks, and replaces generated service credentials. Existing cloud sign-in
+accounts survive. It is not an upgrade that preserves data. The explicit owner seed
+uses product APIs; it does not change the existing owner bootstrap.
+
 ```sh
 # OWNER-RUN ONLY, after every prerequisite above is satisfied.
 cd /home/jente/dev/opencrane-new
@@ -97,11 +103,6 @@ export COMPUTER_IDLE_MS=14400000
 infra/dev-stack/up.sh --id owner --fresh
 DEV_STACK_ID=owner node --experimental-strip-types infra/dev-stack/demo-seed-run.ts --owner-run
 ```
-
-`--fresh` wipes the owner's conversations, uploaded files, budgets, local service data
-and computer disks, and replaces generated service credentials. Existing cloud sign-in
-accounts survive. It is not an upgrade that preserves data. The explicit owner seed
-uses product APIs; it does not change the existing owner bootstrap.
 
 ### OWNER-RUN: demo morning
 
