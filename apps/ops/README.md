@@ -17,7 +17,7 @@ flowchart LR
   ops -->|destroys forgotten and superseded memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables, unfinished child requests and jobs; locks gateway preparation; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|updates computers, delivers passes and keys, defines hosted tool settings, stops private tools and cleans old connection copies| kube["Kubernetes<br/>computer manager"]
+  ops -->|updates computers, delivers passes and keys, defines hosted tool settings, stops private tools and scans old connection copies at startup and every 15 minutes| kube["Kubernetes<br/>computer manager"]
 ```
 
 ## What it is responsible for
@@ -56,6 +56,9 @@ through the application remains unavailable.
 
 When private connection custody is configured, the dispatcher cleans old personal
 connection copies after saved revocations or replacements. Failed cleanup is retried.
+It also checks abandoned copies at startup and every 15 minutes. Slow storage does not
+hold up event handling. Missing custody disables both jobs and scans with a warning;
+invalid configuration stops startup.
 
 A saved memory correction keeps the new revision and removes old revision keys and
 facts derived from them. Cleanup retries and restart recovery use the saved change.

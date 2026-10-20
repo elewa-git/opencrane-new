@@ -1,0 +1,1 @@
+- Check private connection copies at worker startup and every 15 minutes. Remove abandoned or revoked copies only after checking their exact identity and saved history, including copies left after cleanup retries run out. Keep current and uncertain copies. Live qualification remains outstanding.

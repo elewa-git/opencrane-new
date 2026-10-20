@@ -268,8 +268,16 @@ class ConnectionCustody {
             || !sameIdentity(pending, expected)) {
           return { status: 'conflict' };
         }
-        // Check removal without adopting a changed version or sending another DELETE.
-        return await this.confirmRemoval(expected.reference);
+        const result = await this.confirmRemoval(expected.reference);
+        if (result.status === 'deleted') {
+          return result;
+        }
+        // Retry a failed send only while the original object is still unchanged.
+        // Keep changed versions, including objects waiting for finalisers.
+        const observed = await this.recover(checked, expected);
+        if (observed.status !== 'recovered') {
+          return result;
+        }
       }
       const observed = await this.recover(checked, expected);
       if (observed.status !== 'recovered') {

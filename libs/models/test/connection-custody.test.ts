@@ -5,6 +5,7 @@ import { createLogger } from '@opencrane/observability';
 import { connectionCustodyFromFile } from '../src/connection-custody-file.ts';
 import { createEventStore } from '@opencrane/event-store';
 import { connectionCleanupHandler } from '../src/connection-cleanup.ts';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -67,6 +68,14 @@ async function fixture() {
   let failRemovalRead = false;
   let unavailable = false;
   let preconditions: unknown;
+  const listings: string[] = [];
+  const removals: { name: string; preconditions: unknown }[] = [];
+  let listAction: (() => Promise<void>) | undefined;
+  let listFailures = 0;
+  let deleteFailure = false;
+  let deleteAttempts = 0;
+  let activeLists = 0;
+  let maximumLists = 0;
   async function handle(request: IncomingMessage, response: ServerResponse) {
     if (unavailable || (readsUnavailable && request.method === 'GET')) {
       response.writeHead(503).end(material);
@@ -74,6 +83,16 @@ async function fixture() {
     }
     const url = new URL(request.url!, 'http://localhost');
     if (request.method === 'GET' && url.pathname.endsWith('/secrets')) {
+      listings.push(url.searchParams.get('continue') ?? '');
+      activeLists += 1;
+      maximumLists = Math.max(maximumLists, activeLists);
+      await listAction?.();
+      activeLists -= 1;
+      if (listFailures > 0) {
+        listFailures -= 1;
+        response.writeHead(503).end(material);
+        return;
+      }
       const limit = Number(url.searchParams.get('limit'));
       expect(url.searchParams.get('labelSelector')).toBe(
         'app.kubernetes.io/managed-by=opencrane-server');
@@ -130,6 +149,12 @@ async function fixture() {
     if (request.method === 'DELETE') {
       const raw: unknown = JSON.parse(body);
       preconditions = deleteSchema.parse(raw).preconditions;
+      deleteAttempts += 1;
+      if (deleteFailure) {
+        response.writeHead(503).end(material);
+        return;
+      }
+      removals.push({ name: secret!.metadata.name, preconditions });
       if (changeOnDelete) {
         secret!.metadata.resourceVersion = '2';
         response.writeHead(409).end(material);
@@ -173,7 +198,11 @@ async function fixture() {
     return connectionCustody(`http://127.0.0.1:${port}`, 'custody', keyring, directory);
   }
   const custody = restart();
-  return { custody, restart, directory, pages, secrets, apiUrl: `http://127.0.0.1:${port}`,
+  return { custody, restart, directory, pages, secrets, listings, removals,
+    get maximumLists() { return maximumLists; }, get deleteAttempts() { return deleteAttempts; },
+    onList(action: () => Promise<void>) { listAction = action; },
+    failLists(count: number) { listFailures = count; },
+    failDeletes(failed: boolean) { deleteFailure = failed; }, apiUrl: `http://127.0.0.1:${port}`,
     get secret() { return secret!; }, get creates() { return creates; },
     get deletes() { return deletes; }, get preconditions() { return preconditions; },
     loseCreate() { loseCreate = true; }, changeOnDelete() { changeOnDelete = true; },
@@ -1448,7 +1477,7 @@ it('retains material when a saved revoke did not target the current revision',
 function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, intervalMs = 900_000) {
   const stop = new AbortController();
   const records: { counts: unknown; message: unknown }[] = [];
-  function info(counts: unknown, message: unknown) {
+  function info(counts: unknown, message?: unknown) {
     records.push({ counts, message });
   }
   const logger = { info };
@@ -1458,7 +1487,13 @@ function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, interva
     stop.abort();
     expect(await done).toBeUndefined();
   }
-  return { stop, done, records, close };
+  async function pages(count = 1) {
+    function ready() {
+      return records.length >= count;
+    }
+    await until(ready);
+  }
+  return { stop, done, records, close, pages };
 }
 
 async function startupRemovesAbandonedRotation() {
@@ -1469,7 +1504,7 @@ async function startupRemovesAbandonedRotation() {
   const saved = await test.store.custody.stage(rotation, material);
   const first = runningScan(test);
   try {
-    await until(() => first.records.length === 1);
+    await first.pages();
     expect(test.store.deletes).toBe(0);
   } finally {
     await first.close();
@@ -1479,7 +1514,7 @@ async function startupRemovesAbandonedRotation() {
   now.mockReturnValue(rotation.appendUntil + 1);
   const restarted = runningScan(test);
   try {
-    await until(() => restarted.records.length === 1);
+    await restarted.pages();
     expect(test.store.secrets.has(saved.identity!.reference)).toBe(false);
     expect(test.store.deletes).toBe(2);
     expect(test.store.preconditions).toEqual({ uid: 'uid-original', resourceVersion: '1' });
@@ -1493,3 +1528,199 @@ async function startupRemovesAbandonedRotation() {
 }
 it('startup scan removes an unsaved rotation after revoke and restart',
   startupRemovesAbandonedRotation);
+
+async function intervalCleansExhaustedReaction() {
+  const test = await cleanupFixture();
+  const isolated = await databases();
+  test.db = pgDb(isolated.queue);
+  const event = await test.revoke();
+  test.store.failDeletes(true);
+  const handler = test.handler();
+  const logger = createLogger('scan-exhaustion-test');
+  const runtime = new HandlerRuntime({ db: test.db, logger, silo: 'test',
+    handlers: [handler], retryDelay: 0 });
+  async function enqueue(tx: Query) {
+    await runtime.enqueue(handler, event, tx);
+  }
+  async function exhausted() {
+    return (await runtime.deadLetters(handler.name)).length === 1;
+  }
+  let scan: ReturnType<typeof runningScan> | undefined;
+  try {
+    await runtime.start();
+    await test.db.transaction(enqueue);
+    await runtime.work(2);
+    await until(exhausted, 80_000);
+    expect(test.store.deleteAttempts).toBe(6);
+    const failed = await runtime.deadLetters(handler.name);
+    expect(JSON.stringify(failed)).not.toContain(material);
+    scan = runningScan(test, 100);
+    await scan.pages();
+    expect(test.store.deletes).toBe(0);
+    test.store.failDeletes(false);
+    function deleted() {
+      return test.store.deletes === 1;
+    }
+    await until(deleted);
+    await scan.close();
+    expect(scan.records.length).toBeGreaterThan(1);
+    expect(test.store.deletes).toBe(1);
+    expect(await runtime.deadLetters(handler.name)).toEqual(failed);
+  } finally {
+    await scan?.close();
+    await runtime.stop();
+    await isolated.close();
+  }
+}
+it('interval scan removes copies after every reaction retry fails and keeps the failed job',
+  intervalCleansExhaustedReaction, 90_000);
+
+async function pagedScan(restart: boolean) {
+  const test = await candidateFixture();
+  for (let index = 1; index < 53; index += 1) {
+    const candidate = { ...test.input, generation: index + 1, operationId: `scan-${index}` };
+    await test.store.custody.stage(candidate, material);
+  }
+  await test.invalidate();
+  const names = [...test.store.secrets.keys()];
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function pauseSecondPage() {
+    if (test.store.listings.length === 2 && restart) {
+      entered.resolve();
+      await release.promise;
+    }
+  }
+  test.store.onList(pauseSecondPage);
+  const scan = runningScan(test);
+  try {
+    if (restart) {
+      await entered.promise;
+      scan.stop.abort();
+      release.resolve();
+      await scan.close();
+      expect(test.store.listings).toHaveLength(2);
+      const resumed = runningScan(test);
+      try {
+        function deleted() {
+          return test.store.deletes === 53;
+        }
+        await until(deleted);
+      } finally {
+        await resumed.close();
+      }
+    } else {
+      await scan.pages(3);
+      expect(scan.records).toEqual([
+        { counts: { examined: 25, deleted: 25 }, message: 'Connection custody page scanned' },
+        { counts: { examined: 25, deleted: 25 }, message: 'Connection custody page scanned' },
+        { counts: { examined: 3, deleted: 3 }, message: 'Connection custody page scanned' },
+      ]);
+      expect(test.store.pages).toEqual([25, 25, 3]);
+    }
+  } finally {
+    release.resolve();
+    await scan.close();
+  }
+  expect(test.store.removals).toHaveLength(53);
+  for (const name of names) {
+    function matches(removal: { name: string }) {
+      return removal.name === name;
+    }
+    const matching = test.store.removals.filter(matches);
+    expect(matching).toEqual([{ name, preconditions: { uid: 'uid-original', resourceVersion: '1' } }]);
+  }
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event.type).toBe('connection.revoked');
+}
+it.each([false, true])('scan examines all 53 candidates, with mid-page restart: %s', pagedScan);
+
+async function slowAndUnknownPages() {
+  const test = await candidateFixture();
+  for (let index = 1; index < 26; index += 1) {
+    const candidate = { ...test.input, generation: index + 1, operationId: `retry-${index}` };
+    await test.store.custody.stage(candidate, material);
+  }
+  await test.invalidate();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function controlPages() {
+    const count = test.store.listings.length;
+    if (count === 1) {
+      entered.resolve();
+      await release.promise;
+    }
+    if (count === 2) {
+      test.store.failLists(2);
+    }
+  }
+  test.store.onList(controlPages);
+  const scan = runningScan(test, 50);
+  try {
+    await entered.promise;
+    await delay(160);
+    expect(test.store.listings).toEqual(['']);
+    expect(test.store.maximumLists).toBe(1);
+    release.resolve();
+    function deleted() {
+      return test.store.deletes === 26;
+    }
+    await until(deleted);
+    await scan.close();
+    const requests = test.store.listings;
+    expect(requests[1]).toBeTruthy();
+    expect(requests.slice(0, 4)).toEqual(['', requests[1], requests[1], '']);
+    const stoppedCount = requests.length;
+    await delay(160);
+    expect(requests).toHaveLength(stoppedCount);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(1);
+    const output = JSON.stringify({ records: scan.records, events: rows });
+    expect(output).not.toContain(requests[1]);
+    expect(output).not.toContain(material);
+    expect(output).not.toContain('secret:');
+    expect(output).not.toContain('credential.released');
+  } finally {
+    release.resolve();
+    await scan.close();
+  }
+}
+it('scan serialises slow pages, retries unknown pages unchanged and resets expired continuations',
+  slowAndUnknownPages);
+
+async function scanRetainsCurrentUnknownAndLate() {
+  const test = await candidateFixture(Date.now() + 60_000);
+  const uncertain = { ...test.input, profileId: 'uncertain', operationId: 'uncertain' };
+  const unknown = await test.store.custody.stage(uncertain, material);
+  await test.activate();
+  const rows = await history(events.store, test.subject, 'test');
+  const data = foldConnection(rows).data!;
+  const revoked = envelope('test', 'connection-member-a-server-a-uncertain', 'connection.revoked',
+    { userId: uncertain.userId, serverId: uncertain.serverId, profile: uncertain.profileId,
+      revokedBy: uncertain.userId });
+  await events.seed([revoked]);
+  const late = { ...test.input, profileId: 'late', operationId: 'late' };
+  const staged = await test.store.custody.stage(late, material);
+  async function saveDuringList() {
+    const event = { ...rows[0]!.event, id: late.operationId,
+      subject: 'connection-member-a-server-a-late', data: { ...data, profile: 'late',
+        secretRef: `secret:${staged.identity!.reference}`,
+        activation: { ...data.activation, operationId: late.operationId } } };
+    await events.seed([event]);
+  }
+  test.store.onList(saveDuringList);
+  const scan = runningScan(test);
+  try {
+    await scan.pages();
+    expect(scan.records[0]?.counts).toEqual({ examined: 3, deleted: 0 });
+    expect(test.store.deletes).toBe(0);
+    for (const identity of [unknown.identity!, staged.identity!]) {
+      expect(test.store.secrets.has(identity.reference)).toBe(true);
+    }
+  } finally {
+    await scan.close();
+  }
+}
+it('scan keeps current and uncertain generations and an activation saved during its pass',
+  scanRetainsCurrentUnknownAndLate);

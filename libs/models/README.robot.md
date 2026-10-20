@@ -1593,10 +1593,10 @@ The journal stores no material or verifier and cannot activate a connection. Del
 checks stored contents and sends both UID/version preconditions. It saves the exact
 identity for the deletion check before DELETE. `deleted` requires a later GET returning
 404. A finaliser can leave the token readable after a successful DELETE; that returns
-`unknown`. After restart, a pending deletion only checks absence. It never repeats DELETE
-or adopts the version changed by a finaliser. A failed request also leaves deletion
-unresolved; a later absence check can finish it. Conflicts and unknown outcomes retain
-material. A 404 never proves failed activation. The candidate reconciler described below requires
+`unknown`. After restart, a pending deletion checks absence first. If the original object
+is still present and its exact identity and bindings verify again, DELETE can retry with
+the original preconditions. A changed version, including a finaliser change, is never
+adopted. Conflicts and unknown outcomes retain material. A 404 never proves failed activation. The candidate reconciler described below requires
 a conflicting profile event to prevent late appends before cleanup. No routes, event writes or material releases are registered.
 
 Checks adapt OC1 commit `10abd0ef6`, `kubernetes-mcp-connection-secret-store.ts` and
@@ -2591,8 +2591,8 @@ Callers retain that continuation between pages and start a new pass after the la
 Malformed objects or stage annotations stay in storage and are excluded from the
 examined count. Healthy neighbours are still checked and the continuation is preserved.
 An unknown page result must be retried with the same continuation. An expired Kubernetes
-continuation requires a new pass; duplicate checks are harmless. No timer, command,
-HTTP route or replay path calls this entry point yet. Automatic startup scanning remains deferred.
+continuation requires a new pass; duplicate checks are harmless. `scanConnections` calls
+this entry point during live maintenance. Commands, HTTP routes and replay never call it.
 
 New stages carry their complete stage details in a private Secret annotation. The
 existing HMAC check verifies these details before using them to find the profile.
@@ -2609,9 +2609,9 @@ Tests use real NATS, PostgreSQL locks and synthetic HTTP custody. They cover res
 late activation, missing and corrupt records, revoke and rotation, changed UID/version,
 store/list/read/lock failure, non-personal candidates, duplicate scans, bounded pages
 while earlier pages are deleted, response limits and replay without external work.
-Automatic reactions and active credential injection coordination are deferred to the
-next part. Credentialed routes remain closed. Live Kubernetes/provider and fresh-install
-qualification: NOT RUN. No dependency, event field or API field was added.
+Automatic reactions and scanning use this reconciler. Active credential injection
+coordination remains outstanding. Credentialed routes remain closed. Live Kubernetes/provider
+and fresh-install qualification: NOT RUN. No dependency, event field or API field was added.
 
 ## Saved approval dates and cancellation reasons
 
@@ -2689,8 +2689,8 @@ read or lock fails. Merely checking the lock and releasing it before injection i
 No broker or injection path exists in this change. Both personal dispatch gates stay closed.
 
 Retained material causes a fixed error and the existing queue retries. Exhaustion leaves
-material and the failed job intact. `reconcileConnectionPage` remains available for bounded
-maintenance; automatic startup scanning is deferred to keep this change small.
+material and the failed job intact. The automatic scan can retry removal independently;
+it leaves the failed job intact for operator inspection.
 Live Kubernetes, fresh-install and provider qualification: NOT RUN.
 
 ## Spending choices at save (P4-26 PR 3, first part; Part of #108)
@@ -2861,3 +2861,18 @@ of the three destination revocations, member removal, assistant inactivity, ende
 conversation closure, changed generation, spending stops, harmless updates, narrow reads,
 private directories, retained-file refusal, restart deduplication and permit reuse.
 Fresh-install qualification and the deferred outage watchdog: NOT RUN.
+
+## Scheduled connection scans (P3-8 PR 3f; Part of #49)
+
+`scanConnections` runs one pass at startup, then on a fixed 15-minute timer. Tests pass
+shorter intervals. Pages run sequentially to the end; ticks during work are skipped.
+An unknown page waits for the next tick with the same private continuation. A second
+unknown page discards that continuation and the next tick starts from the first page.
+Abort stops further list requests and waits for the current bounded page to finish.
+Logs contain fixed text and examined/deleted counts only; the loop returns no page data.
+The worker shares custody with the cleanup reaction and starts scanning only after
+subscription checks. Replay never starts the loop. No new setting or event is needed.
+Tests use real NATS/PostgreSQL and HTTP custody, including exhausted retries, restart,
+late activation, pagination, slow/unknown pages and dispatch during a hanging list.
+Row 3 is complete apart from live qualification. Live Kubernetes, provider and
+fresh-install qualification: NOT RUN. Next for #49 is row 4, company opt-in and selection.

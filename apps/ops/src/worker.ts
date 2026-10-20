@@ -1,4 +1,5 @@
-import { connectionCleanupHandler, connectionCustodyFromFile, budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
+import { scanConnections, connectionCleanupHandler, connectionCustodyFromFile,
+  budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
   providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
@@ -72,6 +73,7 @@ const store = await createEventStore(connection);
 let runtime: HandlerRuntime | undefined;
 let commands: Awaited<ReturnType<typeof connectEventStore>> | undefined;
 let watcher: Promise<void> | undefined;
+let connectionScan: Promise<void> | undefined;
 async function runProjectionWorker(projection: Projection) {
   const runner = new ProjectionRunner(db.db, store, logger);
   // Hold the database lock while creating shared tables. Other workers may start together.
@@ -146,9 +148,10 @@ try {
       available.push(personalKeyHandler(commands.store, keys));
     }
     const custodyFile = process.env['CONNECTION_CUSTODY_FILE']?.trim();
+    let custody: Awaited<ReturnType<typeof connectionCustodyFromFile>>;
     let connectionCleanupAvailable = false;
     if (custodyFile) {
-      const custody = await connectionCustodyFromFile(custodyFile);
+      custody = await connectionCustodyFromFile(custodyFile);
       if (custody) {
         available.push(connectionCleanupHandler(commands.store, db.db, custody, silo));
         connectionCleanupAvailable = true;
@@ -183,6 +186,16 @@ try {
     const dispatcherRuntime = runtime;
     const commandStore = commands.store;
     async function startWorkers() {
+      if (custody) {
+        function scanFailed() {
+          logger.error('Connection custody scan failed');
+          process.exitCode = 1;
+          stop.abort();
+        }
+        // Let dispatch start even while custody is slow. Shutdown waits for the current page.
+        const scanning = scanConnections(commandStore, db.db, custody, logger, stop.signal);
+        connectionScan = scanning.catch(scanFailed);
+      }
       if (memoryDirectory) {
         const saved = await db.db.query<{ sequence: string }>(
           'SELECT sequence FROM handler_dispatcher WHERE id=1',
@@ -226,6 +239,7 @@ try {
   stop.abort();
   await runtime?.stop();
   await watcher;
+  await connectionScan;
   await commands?.close();
   await connection.close();
   await db.close();
