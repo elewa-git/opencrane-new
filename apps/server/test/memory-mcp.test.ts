@@ -43,7 +43,9 @@ const rememberDeclaration = { name: 'remember', reviewed: true, costCents: 0,
   review: rememberReview };
 const recallTool = toolEvidence(recallDeclaration);
 const rememberTool = toolEvidence(rememberDeclaration);
-const memoryCatalogue = catalogueEvidence([recallTool, rememberTool]);
+const forgetTool = toolEvidence({ name: 'forget', reviewed: true, costCents: 0 });
+const correctTool = toolEvidence({ name: 'correct', reviewed: true, costCents: 0 });
+const memoryCatalogue = catalogueEvidence([recallTool, rememberTool, forgetTool, correctTool]);
 const metadata = { threadId: 'thread', callId: 'memory-call',
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
   'io.modelcontextprotocol/clientCapabilities': {} };
@@ -948,10 +950,10 @@ async function grantWrite(granteeKind: string) {
 function independentFact(fact: { memoryId: string }) {
   return fact.memoryId.startsWith('fact_');
 }
-async function recalledRemember(commandId: string, query = 'deliver') {
+async function recalledRemember(commandId: string, query = 'deliver', limit = 20) {
   await grantWrite('member');
   await grantWrite('assistant');
-  const recallArguments = { ...call.params.arguments, query };
+  const recallArguments = { ...call.params.arguments, query, limit };
   const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
   const response = await setup.call(headers, selectedCall, route);
   expect(response.status, response.text).toBe(200);
@@ -2056,21 +2058,18 @@ async function missingLoadedEvidence(stage: string) {
 it.each(['absent', 'prepared', 'empty'])(
   'refuses valid personal proofs with %s loaded evidence', missingLoadedEvidence);
 
-const forgetTool = toolEvidence({ name: 'forget', reviewed: true, costCents: 0 });
-const correctTool = toolEvidence({ name: 'correct', reviewed: true, costCents: 0 });
 async function changeRequest(operation: 'correct' | 'forget') {
-  const catalogue = catalogueEvidence([recallTool, rememberTool, forgetTool, correctTool]);
-  await setup.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
-    connectionId: 'server', accountMode: 'none', ...catalogue });
-  await reviewCatalogue(setup, 'memory');
+  const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
     await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
       connectionId: 'server', toolName: tool.name, toolRevision: tool.revision,
       mode: 'allow', setBy: 'alice' });
   }
   await publishMemory(setup);
-  const remembered = await loadedWrite();
-  const { recallProof, dependsOn } = remembered.params.arguments;
+  const remembered = await recalledRemember('change', 'deliver', 2);
+  const { recallProof } = remembered.params.arguments;
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  const dependsOn = chat.memoryContext!.references;
   const target = dependsOn[0]!;
   const input: Record<string, unknown> = { scopeId, memoryId: target.memoryId,
     commandId: 'change', expectedRevision: target.revision, recallProof };
@@ -2247,3 +2246,16 @@ async function wrongChangeOperation() {
   expect(response.json()).toEqual({ status: 'refused' });
 }
 it('refuses a forget pass with a correct body', wrongChangeOperation);
+async function strictChangeInputs(operation: 'correct' | 'forget') {
+  const request = await changeRequest(operation);
+  const input = request.body.params.arguments;
+  input['unexpected'] = true;
+  function parse() {
+    return parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
+  }
+  expect(parse).toThrow();
+  delete input['unexpected'];
+  input['expectedRevision'] = 1.5;
+  expect(parse).toThrow();
+}
+it.each(['correct', 'forget'] as const)('keeps %s inputs strict', strictChangeInputs);
