@@ -238,9 +238,15 @@ try {
   }
 } finally {
   stop.abort();
-  await runtime?.stop();
-  await watcher;
-  await connectionScan;
+  // Drain every background task before closing storage, even when another task failed.
+  const tasks = await Promise.allSettled([runtime?.stop(), watcher, connectionScan]);
+  for (const task of tasks) {
+    if (task.status === 'rejected') {
+      logger.error('Worker background task failed during shutdown');
+      process.exitCode = 1;
+      break;
+    }
+  }
   await commands?.close();
   await connection.close();
   await db.close();
