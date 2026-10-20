@@ -8,7 +8,9 @@ import { version } from './remote.ts';
 
 const discoveredTool = mcpServerDiscoveredDataSchema.shape.tools.unwrap().element;
 const costDeclaration = discoveredTool.shape.costCents.unwrap();
-const reviewDeclaration = discoveredTool.shape.review.unwrap();
+const savedReviewDeclaration = discoveredTool.shape.review.unwrap();
+// Require the server to declare stepUp; only saved legacy events may use its default.
+const reviewDeclaration = savedReviewDeclaration.extend({ stepUp: z.boolean() });
 
 const text = z.string().min(1).max(200);
 const cache = { resultType: z.literal('complete'), ttlMs: z.int().nonnegative(), cacheScope: z.enum(['public', 'private']) };

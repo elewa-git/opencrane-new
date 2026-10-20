@@ -1148,7 +1148,8 @@ checks belong to the later call path; discovery never invokes tools.
 Discovery reads `_meta['io.opencrane/costCents']` and `_meta['io.opencrane/review']`
 with the discovered-tool event validators. Cost must be exactly zero, including before
 JSON number rounding. Review details use the existing strict action, consequence,
-targetArgument, fields and stepUp schema. Missing declarations stay absent; hints and
+targetArgument, fields and stepUp schema. Discovery requires an explicit boolean stepUp;
+only saved legacy events retain the false default. Missing declarations stay absent; hints and
 admin choices never supply them. Malformed declarations exclude only that tool with
 `invalid_tool_cost` or `invalid_tool_review`, without validation errors or rejected values.
 The original lossless definition and digest include the declarations. Metadata changes

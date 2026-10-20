@@ -21,13 +21,14 @@ flowchart LR
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
-  server -->|captures tool lists, declared free costs and approval details through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
+  server -->|captures tool lists, declared free costs and complete approval details through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records refused turn decisions| nats
 ```
 
 Tool discovery records the exact definitions and how long the check remains valid.
-It saves each tool’s declared zero cost and approval details. An admin must review
+It saves each tool’s declared zero cost and approval details, including whether approval
+needs recent sign-in. A tool with incomplete details is excluded. An admin must review
 both before enabling any tool, including reads. Missing declarations keep it blocked.
 Successful discovery without credentials saves a stable connection reference;
 it does not create a personal or company account.
