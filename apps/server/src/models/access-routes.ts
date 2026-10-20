@@ -1,4 +1,5 @@
 import { writeEgress, readEgressChange } from '../egress/changes.ts';
+import { writeToolAccess, readToolAccessChange } from '../integrations/access-changes.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
@@ -33,6 +34,15 @@ export function registerModelAccessRoutes(app: FastifyInstance, config: AuthConf
   app.get('/api/org/models/:modelId/access/changes/:commandId', handleChange);
   app.post('/api/org/egress/destinations', { bodyLimit: 2048 }, handleEgressWrite);
   app.get('/api/org/egress/destinations/changes/:commandId', handleEgressChange);
+  app.post('/api/org/integrations/:serverId/access/changes', { bodyLimit: 2048 }, handleToolWrite);
+  app.get('/api/org/integrations/:serverId/access/changes/:commandId', handleToolChange);
+
+  async function handleToolWrite(request: FastifyRequest, reply: FastifyReply) {
+    return handleRead(request, reply, writeToolAccess);
+  }
+  async function handleToolChange(request: FastifyRequest, reply: FastifyReply) {
+    return handleRead(request, reply, readToolAccessChange);
+  }
 
   async function handleEgressWrite(request: FastifyRequest, reply: FastifyReply) {
     return handleRead(request, reply, writeEgress);

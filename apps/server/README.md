@@ -13,7 +13,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model grants, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model and remote tool grants, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
   server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops, turn decisions and relay closures| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
@@ -284,6 +284,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
   Admins can remove a departed person's grant. An empty revoke saves no change.
   Provider choices and configured uses say “Not available yet” until those records exist.
 - Lets admins create a group assistant with selected tools and a fixed paying group.
+- Lets owners and admins give or revoke remote tool access for one person, group or assistant.
+  Each change has its own saved reference and separate table and permission progress.
 - Keeps each member's group chat private while they share the assistant's computer.
 - Provides the one-time command used to claim a new installation.
 
@@ -315,6 +317,9 @@ the fact immediately and reports whether cleanup is pending, unavailable or fini
 A lost reply can be checked after restart with current rights, without another change.
 
 ## Processes it handles
+
+An admin saves one remote tool grant. After a lost reply, they check the original reference.
+The check never resends the change. A draft server's grants cannot publish its tools.
 
 A lost spending-limit reply can be checked by its original command id. Owners and
 admins see the saved amount and stop status. The original caller can still see a

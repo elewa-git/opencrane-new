@@ -1,0 +1,1 @@
+- Owners and admins can give or revoke remote tool access for a person, group or assistant and check the original saved change after a lost reply. Separate table and permission progress stays Applying until confirmed.
