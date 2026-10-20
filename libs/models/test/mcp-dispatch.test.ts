@@ -10,7 +10,7 @@ import { mcpConfigurationObservationSchema } from '@opencrane/events';
 import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
-import { recordToolObservation, toolObservation } from '../src/tool-dispatch.ts';
+import { recordAdapterObservation, recordToolObservation, toolObservation } from '../src/tool-dispatch.ts';
 import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
 import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
@@ -2637,6 +2637,145 @@ async function remoteOutcomeFixture() {
   const subject = `decision-${requestId}`;
   return { ...context, remote, value, requestId, subject };
 }
+
+async function adapterRecorderFixture() {
+  const context = await remoteOutcomeFixture();
+  const { setup, requestId, subject, record } = context;
+  const decisions = await history(setup.nats.store, subject, 'test');
+  const startId = `${requestId}:tool-dispatch-started`;
+  const binding = {
+    silo: 'test',
+    decisionId: decisions[0]!.event.id,
+    startId,
+    connectionId: 'installed',
+    generation: record.generation,
+    recordDigest: record.recordDigest,
+    reviewRevision: record.members[0]!.entry.reviewRevision,
+  };
+  const startData = {
+    requestId,
+    serverId: 'fixture',
+    connectionId: binding.connectionId,
+    generation: binding.generation,
+    recordDigest: binding.recordDigest,
+    reviewRevision: binding.reviewRevision,
+    adapter: 'remote_https',
+  };
+  const start = envelope('test', subject, 'tool.dispatch_started', startData, startId);
+  // Seed a saved start so callbacks can be tested without sending an HTTP request.
+  const events = [start];
+  await setup.nats.seed(events);
+  const observation = {
+    id: requestId,
+    toolOutcome: 'responded' as const,
+    evidence: 'adapter_response_received' as const,
+    observedAt: new Date().toISOString(),
+    durationMs: 1,
+  };
+  return { ...context, binding, observation };
+}
+
+async function repeatsIdenticalAdapterCallback() {
+  const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
+  await recordAdapterObservation(setup.actor, binding, observation);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  try {
+    await recordAdapterObservation(setup.actor, binding, observation);
+    expect(writer).not.toHaveBeenCalled();
+    expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+    expect(remote.received).toHaveLength(0);
+    expect(remote.connections()).toBe(0);
+    expect(setup.received()).toBe(0);
+  } finally {
+    writer.mockRestore();
+  }
+}
+it('adds nothing for an identical direct adapter callback', repeatsIdenticalAdapterCallback);
+
+async function refusesForeignAdapterCallback() {
+  const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(2);
+  const foreignBinding = { ...binding, silo: 'other' };
+  const recording = recordAdapterObservation(setup.actor, foreignBinding, observation);
+  await expect(recording).rejects.toThrow('Tool dispatch evidence unavailable');
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  expect(remote.received).toHaveLength(0);
+  expect(remote.connections()).toBe(0);
+  expect(setup.received()).toBe(0);
+}
+it('refuses a direct adapter callback from a foreign silo', refusesForeignAdapterCallback);
+
+async function refusesChangedAdapterCallback() {
+  const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
+  const uncertain = {
+    ...observation,
+    toolOutcome: 'outcome_unknown' as const,
+    evidence: 'adapter_transport_uncertain' as const,
+  };
+  await recordAdapterObservation(setup.actor, binding, uncertain);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  expect(rows[2]!.event.data).toMatchObject({
+    outcome: 'outcome_unknown',
+    evidence: 'adapter_transport_uncertain',
+  });
+  const recording = recordAdapterObservation(setup.actor, binding, observation);
+  await expect(recording).rejects.toThrow('Tool dispatch evidence unavailable');
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  expect(remote.received).toHaveLength(0);
+  expect(remote.connections()).toBe(0);
+  expect(setup.received()).toBe(0);
+}
+it('refuses a direct responded callback after a saved unknown outcome', refusesChangedAdapterCallback);
+
+async function refusesConflictingAdapterReadback() {
+  const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
+  const uncertain = {
+    ...observation,
+    toolOutcome: 'outcome_unknown' as const,
+    evidence: 'adapter_transport_uncertain' as const,
+  };
+  await recordAdapterObservation(setup.actor, binding, uncertain);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+  let reads = 0;
+  async function* staleFirstRead(...args: Parameters<typeof readStream>) {
+    if (args[0] === subject) reads += 1;
+    for await (const row of readStream(...args)) {
+      // Model an initial read that finished before another callback saved its outcome.
+      if (args[0] === subject && reads === 1 && row.event.type === 'tool.dispatch_recorded') {
+        continue;
+      }
+      yield row;
+    }
+  }
+  async function lostSaveReply() {
+    throw new Error('Save reply lost');
+  }
+  const reader = vi.spyOn(setup.nats.store, 'readStream');
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  reader.mockImplementation(staleFirstRead);
+  writer.mockImplementation(lostSaveReply);
+  try {
+    const recording = recordAdapterObservation(setup.actor, binding, observation);
+    await expect(recording).rejects.toThrow('Tool dispatch evidence unavailable');
+    expect(writer).toHaveBeenCalledTimes(1);
+    expect(reads).toBe(2);
+  } finally {
+    reader.mockRestore();
+    writer.mockRestore();
+  }
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  expect(remote.received).toHaveLength(0);
+  expect(remote.connections()).toBe(0);
+  expect(setup.received()).toBe(0);
+}
+it('refuses conflicting saved evidence on direct adapter callback readback',
+  refusesConflictingAdapterReadback);
 
 async function savesRemoteResponse(mode: 'result' | 'tool_error' | 'rpc_error') {
   const { setup, remote, value, requestId, subject, record } = await remoteOutcomeFixture();
