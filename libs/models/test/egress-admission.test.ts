@@ -1,7 +1,9 @@
 import { Server } from 'node:net';
 import { once } from 'node:events';
-import { chmod, copyFile, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, readFile, readdir, stat, writeFile, rename, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { recoverEgressReceipt } from '../src/egress-receipt.ts';
+import { parseEventByType } from '@opencrane/events';
 import { startEgress } from '../src/egress-startup.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, it, onTestFinished, vi } from 'vitest';
@@ -509,3 +511,135 @@ function refusedDirectory() {
   throw new Error('Unexpected log');
 }
 it('creates a private receipt directory and refuses existing wider access', privateDirectory);
+
+async function unrelatedTeamRemoval() {
+  const test = await setup(undefined, 'missing', true);
+  await test.facts.append('team-sales', 'team.member_added',
+    { teamId: 'sales', memberId: 'bob', addedBy: 'alice' });
+  const bearer = await test.token();
+  const checked = Promise.withResolvers<boolean>();
+  let removalSaved = false;
+  const register = test.gateway.registry.register.bind(test.gateway.registry);
+  async function trackRegistration(input: Parameters<typeof register>[0]) {
+    async function recheck() {
+      const checksRemoval = removalSaved;
+      try {
+        await input.recheck!();
+        if (checksRemoval) checked.resolve(true);
+      } catch (error) {
+        if (checksRemoval) checked.resolve(false);
+        throw error;
+      }
+    }
+    return register({ ...input, recheck });
+  }
+  const tracked = vi.spyOn(test.gateway.registry, 'register').mockImplementation(trackRegistration);
+  onTestFinished(tracked.mockRestore.bind(tracked));
+  async function duringRelay(socket: import('node:net').Socket) {
+    // Hold the IAM receipt by saving the removal without running its projection handler.
+    const bob = await test.facts.append('team-sales', 'team.member_removed',
+      { teamId: 'sales', memberId: 'bob', removedBy: 'alice' });
+    removalSaved = true;
+    expect(await test.facts.auth.applied(bob.id)).toBe(false);
+    expect(await checked.promise).toBe(true);
+    expect(socket.destroyed).toBe(false);
+    expect(test.gateway.activeConnections()).toBe(1);
+    await test.gateway.runtime.flush();
+    const rows = await history(test.facts.nats.store, `egress-${decodeJwt(bearer).jti!}`, 'test');
+    expect(rows).toHaveLength(0);
+    expect(await test.facts.auth.applied(bob.id)).toBe(false);
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2000) });
+    const started = performance.now();
+    await test.facts.append('team-sales', 'team.member_removed',
+      { teamId: 'sales', memberId: 'alice', removedBy: 'alice' });
+    await closed;
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(socket.destroyed).toBe(true);
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+  expect(await closeObservation(test, bearer)).toMatchObject({ relay: { reason: 'revoked' } });
+}
+it('keeps Alice open while Bob removal awaits IAM, then closes on Alice removal',
+  unrelatedTeamRemoval);
+
+async function invalidDirectory(kind: string) {
+  const test = await setup();
+  await test.gateway.runtime.close();
+  const directory = join(test.gateway.directory, 'egress');
+  const original = join(test.gateway.directory, 'original');
+  await rename(directory, original);
+  if (kind === 'symlink') {
+    await symlink(original, directory);
+  } else {
+    await writeFile(directory, 'private-path-canary', { mode: 0o700 });
+  }
+  await expect(startEgress(test.facts.nats.store, 'test', test.gateway.directory,
+    refusedDirectory)).rejects.toThrow(/^egress_directory_refused$/u);
+}
+it.each(['symlink', 'file'])('refuses an evidence directory that is a %s with fixed text',
+  invalidDirectory);
+
+async function invalidRecoveredBinding(field: string) {
+  const test = await setup();
+  const bearer = await test.token();
+  expect(await test.tunnel(bearer)).toBe(200);
+  await closeObservation(test, bearer);
+  await test.gateway.runtime.close();
+  const directory = join(test.gateway.directory, 'egress');
+  const files = await readdir(directory);
+  expect(files).toHaveLength(1);
+  const file = join(directory, files[0]!);
+  const raw: unknown = JSON.parse(await readFile(file, 'utf8'));
+  const record = z.object({ data: z.record(z.string(), z.unknown()) }).passthrough().parse(raw);
+  if (field === 'requestId') {
+    record.data['requestId'] = 'other-request';
+    record['subject'] = 'egress-other-request';
+  } else {
+    record.data['channel'] = 'desktop';
+  }
+  expect(parseEventByType(record).success).toBe(true);
+  const bytes = JSON.stringify(record);
+  await writeFile(file, bytes);
+  await expect(recoverEgressReceipt(test.facts.nats.store, 'test', directory, files[0]!))
+    .rejects.toThrow(/^egress_receipt_refused$/u);
+  expect(await readFile(file, 'utf8')).toBe(bytes);
+  const rows = await history(test.facts.nats.store, `egress-${decodeJwt(bearer).jti!}`, 'test');
+  expect(rows).toHaveLength(1);
+}
+it.each(['requestId', 'channel'])('refuses and keeps recovered evidence with a changed %s',
+  invalidRecoveredBinding);
+
+async function separateReceipts() {
+  const test = await setup();
+  const first = await test.token();
+  const second = await test.token();
+  const firstOpen = Promise.withResolvers<void>();
+  const secondOpen = Promise.withResolvers<void>();
+  async function firstRelay(socket: import('node:net').Socket) {
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2000) });
+    firstOpen.resolve();
+    await closed;
+  }
+  async function secondRelay(socket: import('node:net').Socket) {
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2000) });
+    secondOpen.resolve();
+    await closed;
+  }
+  const firstTunnel = test.gateway.tunnel(first, 'registry.npmjs.org:443', clientHello(), firstRelay);
+  await firstOpen.promise;
+  const secondTunnel = test.gateway.tunnel(second, 'registry.npmjs.org:443', clientHello(), secondRelay);
+  await secondOpen.promise;
+  expect(test.gateway.activeConnections()).toBe(2);
+  await test.gateway.runtime.close();
+  expect(await Promise.all([firstTunnel, secondTunnel])).toEqual([200, 200]);
+  await test.gateway.runtime.flush();
+  for (const bearer of [first, second]) {
+    const permitId = decodeJwt(bearer).jti!;
+    const rows = await history(test.facts.nats.store, `egress-${permitId}`, 'test');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.event.data).toMatchObject({ requestId: permitId, permitId,
+      channel: 'command', relay: { permitId, reason: 'unavailable' } });
+  }
+}
+it('saves a separate receipt for each of two open permits', separateReceipts);
