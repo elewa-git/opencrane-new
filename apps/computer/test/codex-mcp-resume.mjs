@@ -1029,8 +1029,10 @@ async function captureNativeRequests(config, configPath) {
       check.marker = marker;
       check.markerPresent = existsSync(marker);
       for (const entry of requests) {
-        if (entry.reply?.result?.decision === 'decline') {
-          assert.equal(check.markerPresent, false, `${name} ran after decline`);
+        const method = entry.message.method;
+        if (method === 'item/commandExecution/requestApproval' ||
+            method === 'item/fileChange/requestApproval') {
+          assert.equal(check.markerPresent, false, `${name} ran after a refused approval`);
         }
       }
     }
