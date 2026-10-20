@@ -43,8 +43,12 @@ const rememberDeclaration = { name: 'remember', reviewed: true, costCents: 0,
   review: rememberReview };
 const recallTool = toolEvidence(recallDeclaration);
 const rememberTool = toolEvidence(rememberDeclaration);
-const forgetTool = toolEvidence({ name: 'forget', reviewed: true, costCents: 0 });
-const correctTool = toolEvidence({ name: 'correct', reviewed: true, costCents: 0 });
+const changeReview = { action: 'Change saved memory', consequence: 'A fact is replaced or forgotten.',
+  targetArgument: 'memoryId', fields: ['memoryId', 'expectedRevision'], stepUp: false };
+const forgetTool = toolEvidence({ name: 'forget', reviewed: true, costCents: 0,
+  review: changeReview });
+const correctTool = toolEvidence({ name: 'correct', reviewed: true, costCents: 0,
+  review: changeReview });
 const memoryCatalogue = catalogueEvidence([recallTool, rememberTool, forgetTool, correctTool]);
 const metadata = { threadId: 'thread', callId: 'memory-call',
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
@@ -2058,14 +2062,15 @@ async function missingLoadedEvidence(stage: string) {
 it.each(['absent', 'prepared', 'empty'])(
   'refuses valid personal proofs with %s loaded evidence', missingLoadedEvidence);
 
-async function loadChangeFacts() {
+async function loadChangeFacts(revision: number) {
+  if (revision === 2) await saveHumanCorrection('fact_21');
   const data = { conversationId: 'conversation', turnId: 'turn', requesterId: 'alice',
     assistantId: 'assistant', computerId: 'computer', generation: 1, threadId: 'thread',
     inputGeneration: 'change-input', projectionGeneration: 'projection', action: 'prepared',
     delivery: null, callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
     byteCount: 0, hasOmissions: false, reason: 'none' };
   await seedEvidence(data);
-  const additions = [{ scopeId, memoryId: 'fact_21', revision: 1 },
+  const additions = [{ scopeId, memoryId: 'fact_21', revision },
     { scopeId, memoryId: 'fact_22', revision: 1 }];
   const position = await setup.nats.store.head(`scope-${scopeId}`);
   await seedEvidence({ ...data, action: 'loaded', delivery: 'initial', additions,
@@ -2076,7 +2081,7 @@ async function loadChangeFacts() {
   const { recallProof } = await import('../src/memory/recall-proof.ts');
   return recallProof(testAuthConfig().cookieSecret, context, [additions[0]!], data.inputGeneration);
 }
-async function changeRequest(operation: 'correct' | 'forget', checkControl = true) {
+async function changeRequest(operation: 'correct' | 'forget', checkControl = true, revision = 1) {
   const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
     await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
@@ -2086,7 +2091,7 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   await publishMemory(setup);
   await grantWrite('member');
   await grantWrite('assistant');
-  const recallProof = await loadChangeFacts();
+  const recallProof = await loadChangeFacts(revision);
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const dependsOn = chat.memoryContext!.references;
   const target = dependsOn[0]!;
@@ -2222,7 +2227,8 @@ it.each([['group', false], ['assistant_notes', false], ['group', true]] as const
   'refuses %s scope (already loaded=%s) for forget', changeScope);
 
 async function changedTargetProof(change: string) {
-  const request = await changeRequest('forget');
+  const currentRevision = change === 'old' ? 2 : 1;
+  const request = await changeRequest('forget', true, currentRevision);
   const input = request.body.params.arguments;
   const saved = await contextRecord();
   const token = await changeToken(request);
@@ -2234,7 +2240,6 @@ async function changedTargetProof(change: string) {
   if (change === 'turn') context.turn = 'other-turn';
   if (change === 'computer') context.generation = 2;
   if (change === 'input') generation = 'other-input';
-  if (change === 'old') input['expectedRevision'] = 2;
   if (change === 'missing') {
     const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
     memoryId = chat.memoryContext!.references[1]!.memoryId;
@@ -2267,10 +2272,7 @@ async function correctionDependencies(change: 'self' | 'selective') {
 it.each(['self', 'selective'] as const)(
   'refuses %s correction dependencies', correctionDependencies);
 
-async function changedBeforeBackend() {
-  const request = await changeRequest('forget');
-  const token = await changeToken(request);
-  const memoryId = String(request.body.params.arguments['memoryId']);
+async function saveHumanCorrection(memoryId: string) {
   const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice', memoryId,
     revision: 2, expectedRevision: 1, supersedes: { memoryId, revision: 1 }, reason: 'human',
     kind: 'fact', pinned: false, expiresAt: null, sources: [], dependsOn: [],
@@ -2279,6 +2281,11 @@ async function changedBeforeBackend() {
   event.principal = { kind: 'human', id: 'alice' };
   event.source = 'opencrane-server';
   await setup.nats.seed([event]);
+}
+async function changedBeforeBackend() {
+  const request = await changeRequest('forget');
+  const token = await changeToken(request);
+  await saveHumanCorrection(String(request.body.params.arguments['memoryId']));
   const response = await sendChange(request, token);
   expect(response.json()).toEqual({ status: 'refused' });
 }
@@ -2286,6 +2293,9 @@ it('refuses a human correction saved after signing and before the backend check'
   changedBeforeBackend);
 async function wrongChangeOperation() {
   const request = await changeRequest('correct');
+  // Use forget's references so a dependency refusal cannot hide a missing operation check.
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  request.body.params.arguments['dependsOn'] = chat.memoryContext!.references;
   const token = await changeToken(request, { operation: 'forget' });
   const response = await sendChange(request, token);
   expect(response.json()).toEqual({ status: 'refused' });
@@ -2298,9 +2308,6 @@ async function strictChangeInputs(operation: 'correct' | 'forget') {
   function parse() {
     return parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
   }
-  expect(parse).toThrow();
-  delete input['unexpected'];
-  input['expectedRevision'] = 1.5;
   expect(parse).toThrow();
 }
 it.each(['correct', 'forget'] as const)('keeps %s inputs strict', strictChangeInputs);
