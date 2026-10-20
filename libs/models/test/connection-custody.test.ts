@@ -1474,7 +1474,7 @@ async function refusesIneffectiveSavedRevocation() {
 it('retains material when a saved revoke did not target the current revision',
   refusesIneffectiveSavedRevocation);
 
-function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, intervalMs = 900_000) {
+function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, intervalMs?: number) {
   const stop = new AbortController();
   const records: { counts: unknown; message: unknown }[] = [];
   function info(counts: unknown, message?: unknown) {
@@ -1768,3 +1768,56 @@ async function keepsForeignCurrentCopy() {
   }
 }
 it('scan keeps and counts a foreign current copy on a mixed custody page', keepsForeignCurrentCopy);
+
+async function scansEveryFifteenMinutesByDefault() {
+  const test = await candidateFixture();
+  await test.invalidate();
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  const scan = runningScan(test);
+  try {
+    await scan.pages();
+    expect(test.store.listings).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(899_999);
+    await delay(50);
+    expect(test.store.listings).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await scan.pages(2);
+    expect(test.store.listings).toHaveLength(2);
+  } finally {
+    await scan.close();
+    vi.useRealTimers();
+  }
+}
+it('scan defaults to exactly fifteen minutes between passes', scansEveryFifteenMinutesByDefault);
+
+async function clearsUnknownAfterSuccess() {
+  const test = await candidateFixture();
+  for (let index = 1; index < 26; index += 1) {
+    const candidate = { ...test.input, generation: index + 1, operationId: `reset-${index}` };
+    await test.store.custody.stage(candidate, material);
+  }
+  await test.invalidate();
+  function failSeparatePages() {
+    const count = test.store.listings.length;
+    if (count === 1 || count === 3) {
+      test.store.failLists(1);
+    }
+    return Promise.resolve();
+  }
+  test.store.onList(failSeparatePages);
+  const scan = runningScan(test, 50);
+  try {
+    function deleted() {
+      return test.store.deletes === 26;
+    }
+    await until(deleted);
+    await scan.close();
+    const requests = test.store.listings;
+    expect(requests[2]).toBeTruthy();
+    expect(requests.slice(0, 4)).toEqual(['', '', requests[2], requests[2]]);
+    expect(test.store.maximumLists).toBe(1);
+  } finally {
+    await scan.close();
+  }
+}
+it('scan clears consecutive unknown state after a successful page', clearsUnknownAfterSuccess);

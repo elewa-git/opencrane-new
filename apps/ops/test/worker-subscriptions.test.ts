@@ -15,6 +15,13 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
   const configured = !scenario.includes('missing');
   const hanging = scenario.includes('hanging');
   const watcherFailure = scenario === 'hanging watcher failure';
+  const scanFailure = scenario === 'scan failure';
+  let fault = '';
+  if (watcherFailure) {
+    fault = 'watcher';
+  } else if (scanFailure) {
+    fault = 'scan';
+  }
   const held = Promise.withResolvers<void>();
   let lists = 0;
   let listClosed = false;
@@ -66,7 +73,7 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
     KUBE_NAMESPACE: 'test', TOKEN_SIGNING_KEY_FILE: `${directory}/key.pem`,
     TOKEN_ISSUER: 'https://test.example', LOG_LEVEL: 'info',
     CONNECTION_CUSTODY_FILE: `${directory}/custody.json`,
-    WORKER_TEST_FAULT: watcherFailure ? 'watcher' : '',
+    WORKER_TEST_FAULT: fault,
     PATH: `${directory}:${process.env['PATH'] ?? ''}` };
   if (configured) {
     const config = { apiUrl: `http://127.0.0.1:${address.port}`, namespace: 'custody',
@@ -86,7 +93,7 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
   await nats.seed([event]);
   const filename = new URL('../src/worker.ts', import.meta.url);
   const execArgv = ['--experimental-strip-types'];
-  if (hanging) {
+  if (hanging || scanFailure) {
     const faults = new URL('./support/worker-faults.ts', import.meta.url);
     execArgv.push('--experimental-test-module-mocks', '--import', faults.href);
   }
@@ -96,12 +103,16 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
   const exited = once(child, 'exit');
   const watcherReady = Promise.withResolvers<void>();
   const runtimeStopped = Promise.withResolvers<void>();
+  const scanReady = Promise.withResolvers<void>();
   function received(message: unknown) {
     if (message === 'watcher-ready') {
       watcherReady.resolve();
     }
     if (message === 'runtime-stopped') {
       runtimeStopped.resolve();
+    }
+    if (message === 'scan-ready') {
+      scanReady.resolve();
     }
   }
   child.on('message', received);
@@ -124,6 +135,20 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
       return Number(checkpoint.rows[0]?.sequence) === 1;
     }
     await until(started);
+    if (scanFailure) {
+      await scanReady.promise;
+      child.send('reject-scan');
+      function stoppedAfterFailure() {
+        return child.exitCode !== null;
+      }
+      await until(stoppedAfterFailure);
+      expect(child.exitCode).toBe(1);
+      expect(child.signalCode).toBeNull();
+      expect(output).toContain('Connection custody scan failed');
+      expect(output).not.toContain('synthetic-private-scan-response');
+      expect(lists).toBe(0);
+      return;
+    }
     if (!configured) {
       expect(output).toContain('Connection cleanup disabled: custody file is missing');
       expect(output).not.toContain('cleanup-connection');
@@ -183,5 +208,6 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
 it.skipIf(!process.env['PG_TEST_URL']).each([
   'missing changed', 'configured changed', 'missing ready', 'configured ready', 'hanging',
   'hanging watcher failure',
+  'scan failure',
 ])('worker starts custody scanning only after subscriptions agree: %s',
   workerWaitsBeforeStartingReactions);

@@ -2,6 +2,7 @@ import { once } from 'node:events';
 import { mock } from 'node:test';
 import * as lifecycle from '../../src/lifecycle.ts';
 import * as handlers from '@opencrane/handlers';
+import * as models from '@opencrane/models';
 
 async function failedWatcher(): Promise<void> {
   process.send?.('watcher-ready');
@@ -12,6 +13,17 @@ async function failedWatcher(): Promise<void> {
 if (process.env['WORKER_TEST_FAULT'] === 'watcher') {
   const lifecycleExports = { ...lifecycle, watchComputers: failedWatcher };
   mock.module('../../src/lifecycle.ts', { namedExports: lifecycleExports });
+}
+
+async function failedScan(): Promise<void> {
+  process.send?.('scan-ready');
+  await once(process, 'message');
+  throw new Error('synthetic-private-scan-response');
+}
+
+if (process.env['WORKER_TEST_FAULT'] === 'scan') {
+  const modelExports = { ...models, scanConnections: failedScan };
+  mock.module('@opencrane/models', { namedExports: modelExports });
 }
 
 class ObservedRuntime extends handlers.HandlerRuntime {
