@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { randomUUID } from 'node:crypto';
 import { readStreamSummary, type EventStore } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
 import { computerTurnStartedDataSchema } from '@opencrane/events';
@@ -10,6 +11,7 @@ import type { parseTurnToken } from './decision-turn-token.ts';
 import type { BudgetActor } from './actor.ts';
 import { priceTableId, requestReservationCents } from './state.ts';
 import { requestSchema } from './model-request.ts';
+import { grantModelCall } from './call-retry.ts';
 
 type Computer = { assistant: string; computer: string; generation: number };
 type SignedTurn = ReturnType<typeof parseTurnToken>;
@@ -97,10 +99,11 @@ async function prepareNativeCall(store: EventStore, access: Binding, computer: C
   return { binding, fresh };
 }
 
-/** Hold a server-computed call bound without issuing a token or permission to send. */
+/** Recover one internal call's hold and decision, then admit its send once. */
 export async function reserveNativeCall(actor: BudgetActor, store: EventStore, access: Binding,
   computer: Computer, turn: SignedTurn, computerSequence: number, started: number,
-  deadline: number, raw: string) {
+  deadline: number, raw: string, callId: string,
+  allow: (reservationId: string, requestId: string) => Promise<string>) {
   if (actor.silo !== access.silo) {
     throw new Error('Descendant claim refused');
   }
@@ -116,9 +119,11 @@ export async function reserveNativeCall(actor: BudgetActor, store: EventStore, a
     generation: binding.generation, assistantId: binding.assistantId,
     requesterId: binding.requesterId, conversationId: binding.conversationId,
     turnId: binding.turnId, threadId: binding.threadId, payingGroupId: binding.payingGroupId,
-    contextDigest: binding.delegationId };
+    contextDigest: binding.delegationId, requestId: randomUUID() };
   const rootTurn = { turnId: binding.rootTurnId, threadId: binding.rootThreadId };
-  return actor.reserve(call, amountCents, fresh, undefined, binding.rootId, undefined, rootTurn);
+  // Accept identity only from an internal verified call. Bridge delivery remains disabled.
+  const native = { callId, rootId: binding.rootId, rootTurn };
+  return grantModelCall(actor, call, amountCents, raw, fresh, undefined, allow, native);
 }
 
 function nativeRequest(raw: string) {

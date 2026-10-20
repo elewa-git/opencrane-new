@@ -26,7 +26,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|shares spending choice checks between listing and saving, checks installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, proof that a remote call was not sent, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, read tables and database test helper"]
+  models -->|shares spending choice checks between listing and saving, checks installation payer limits, native request cost and recovery, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, proof that a remote call was not sent, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, read tables and database test helper"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -144,7 +144,7 @@ Model calls find their root from the verified turn. Model, tool and memory calls
 check that root before granting permission and again before admitting a send.
 A stopped root refuses an old pass and releases a proven unsent hold at zero.
 Already admitted calls may still send. They keep their holds until usage or other evidence arrives.
-Retrying a model request does not yet recover an earlier hold.
+Retrying an unchanged model call can recover its original unsent hold and saved decision.
 
 - Share public address checks with the server’s remote tool discovery. Test a socket
   check that accepts one visible TLS hostname and public DNS answers before connecting.
@@ -383,9 +383,11 @@ A call that passes these checks still returns a fixed refusal before reading the
 request body or holding money.
 An internal hold operation lets checked children share that allowance. It keeps each
 child’s own turn on its hold and stops the root when a new hold cannot fit. It computes
-the amount from the checked request body. Dispatch checks the saved root turn and
-records one permission to send. A lost reply cannot grant another send. A refused
-unsent call releases its hold at zero; uncertain calls keep their money. Settling
+the amount from the checked request body. An unchanged internal call recovers its
+original hold and decision after a restart or lost save reply. Changed request bytes,
+model, payer, prices, delegation or computer generation refuse recovery. Dispatch
+checks the saved root turn and records one permission to send. A lost reply cannot
+grant another send. A refused unsent call releases its hold at zero. Settling
 a call returns its unused capacity; an uncertain call keeps its money held.
 No request route uses this operation yet. Native execution remains disabled.
 

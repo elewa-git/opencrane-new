@@ -1,0 +1,1 @@
+- Recover one internal native model call's original spending hold and decision after a lost save reply or writer restart. Refuse changed requests and admit a send at most once. Native execution remains disabled.

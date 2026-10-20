@@ -8,6 +8,7 @@ import { createEventStore } from '@opencrane/event-store';
 import { BudgetActor, admitDescendant, descendantId, envelope, history, priceTableId,
   startDecision, requestReservationCents } from '../src/index.ts';
 import { reserveNativeCall } from '../src/native-call-check.ts';
+import { grantModelCall } from '../src/call-retry.ts';
 import { parseTurnToken } from '../src/decision-turn-token.ts';
 import { rootTotals } from '../src/root-budget.ts';
 import { fixture } from './fixture.ts';
@@ -75,13 +76,32 @@ function claims(context: Context, binding: ReturnType<typeof child>) {
 }
 async function reserve(context: Context, binding: ReturnType<typeof child>, cents: number | string,
   store = context.nats.store, actor = context.actor) {
+  let held: string | undefined;
+  function pauseBeforeDecision(reservationId: string): Promise<string> {
+    held = reservationId;
+    throw new Error('Decision not yet saved');
+  }
+  try {
+    await nativeGrant(context, binding, cents, `call-${binding.turnId}-${cents}`,
+      pauseBeforeDecision, store, actor);
+    throw new Error('Dispatch must wait for a decision');
+  } catch (error) {
+    if (held === undefined) throw error;
+    expect(error).toMatchObject({ message: 'Model call retry refused' });
+    return held;
+  }
+}
+async function nativeGrant(context: Context, binding: ReturnType<typeof child>,
+  cents: number | string, callId: string,
+  allow: (reservationId: string, requestId: string) => Promise<string>,
+  store = context.nats.store, actor = context.actor) {
   const raw = typeof cents === 'string' ? cents : JSON.stringify(bodyForCents(cents));
   const checked = await context.credentials.check(context.headers);
   const turn = parseTurnToken(claims(context, binding));
   const computer = { assistant: 'assistant', computer: 'computer', generation: 1 };
   const started = performance.now();
   return reserveNativeCall(actor, store, context.binding, computer, turn,
-    checked.sequence, started, started + 2000, raw);
+    checked.sequence, started, started + 10_000, raw, callId, allow);
 }
 async function refusedRoute(context: Context, binding: ReturnType<typeof child>, url: string,
   expected: string) {
@@ -326,8 +346,9 @@ function dispatch(context: Context, id: string) {
   function matches(row: Context['actor']['state']['reservations'][number]) {
     return row.id === id;
   }
-  return { callId: id, decisionId: id, reservationId: id, rootId: context.root.rootId,
-    bodyDigest: '0'.repeat(64), modelCall: hold!.call };
+  return { callId: hold!.call.requestId ?? id, decisionId: id, reservationId: id,
+    rootId: context.root.rootId, bodyDigest: hold!.bodyDigest ?? '0'.repeat(64),
+    modelCall: hold!.call };
 }
 async function checksNativeDispatch(change: string) {
   const context = await setup();
@@ -528,7 +549,7 @@ async function recoversNativeRootTurn() {
       context.root.rootId, retry, rootTurn)).toBe(id);
     expect(context.actor.state.reservations).toHaveLength(1);
     expect(context.actor.state.reservations[0]?.call.requestId).toBe('original');
-    const changed = { ...dispatch(context, id), callId: 'original' };
+    const changed = { ...dispatch(context, id), callId: 'original', bodyDigest: '0'.repeat(64) };
     await expect(context.actor.admitDispatch(changed, fresh, undefined, rootTurn))
       .rejects.toThrow('Reservation binding changed');
     expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(1);
@@ -567,8 +588,16 @@ async function recoversNativeHold() {
     const original = context.actor.state.reservations[0]!;
     expect(await reserve(context, binding, 110)).toBe(original.id);
     expect(context.actor.state.reservations).toHaveLength(1);
-    expect(context.actor.state.reservations[0]).toMatchObject({
-      amountCents: 110, call: { requestId: expect.any(String) } });
+    expect(context.actor.state.reservations[0]?.amountCents).toBe(110);
+    expect(typeof original.call.requestId).toBe('string');
+    expect(original.call.requestId).not.toBe('');
+    const allow = allowNative(context, binding);
+    const granted = await nativeGrant(context, binding, 110,
+      `call-${binding.turnId}-110`, allow);
+    expect(granted).toEqual({ reservationId: original.id, requestId: original.call.requestId });
+    expect(context.actor.state.reservations).toHaveLength(1);
+    expect(context.actor.state.dispatches).toHaveLength(1);
+    expect(context.actor.state.dispatches[0]?.callId).toBe(original.call.requestId);
   } finally {
     vi.restoreAllMocks();
     await close(context);
@@ -576,3 +605,221 @@ async function recoversNativeHold() {
 }
 it('recovers one native hold and its original ids after a lost append reply and writer restart',
   recoversNativeHold);
+
+function allowNative(context: Context, binding: ReturnType<typeof child>) {
+  async function allow(reservationId: string, requestId: string) {
+    const payload = { requestId, route: 'model', outcome: 'allow', reason: 'model_allowed',
+      contextDigest: binding.delegationId, permitId: reservationId };
+    const event = envelope('test', `decision-${requestId}`, 'decision.recorded', payload);
+    const command = { event, expectedSequence: 0, historyChecked: true as const };
+    const result = await context.store.append(command);
+    if (result.status !== 'appended') throw new Error('Decision save unavailable');
+    return event.id;
+  }
+  return allow;
+}
+async function recoversNativeDecision(failure: string) {
+  const context = await setup();
+  try {
+    const binding = child(context, 'decision');
+    await admit(context, binding);
+    const allow = allowNative(context, binding);
+    const append = context.store.append.bind(context.store);
+    let savedDecision: string | undefined;
+    async function loseDecisionReply(command: Parameters<typeof append>[0]) {
+      const result = await append(command);
+      const event = z.object({ type: z.string(), id: z.string() }).parse(command.event);
+      if (event.type === 'decision.recorded') {
+        savedDecision = event.id;
+        throw new Error('Lost decision reply');
+      }
+      return result;
+    }
+    vi.spyOn(context.store, 'append').mockImplementation(loseDecisionReply);
+    const read = context.actor.store.readStream.bind(context.actor.store);
+    async function* unknownDecision(...args: Parameters<typeof read>) {
+      if (savedDecision && args[0].startsWith('decision-')) {
+        throw new Error('Decision read unavailable');
+      }
+      yield* read(...args);
+    }
+    if (failure === 'unknown read') {
+      vi.spyOn(context.actor.store, 'readStream').mockImplementation(unknownDecision);
+      await expect(nativeGrant(context, binding, 110, 'verified-call', allow))
+        .rejects.toThrow(/^Model call retry refused$/u);
+      expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(110);
+      expect(context.actor.state.dispatches).toHaveLength(0);
+      vi.restoreAllMocks();
+      await context.restartActor();
+    }
+    const granted = await nativeGrant(context, binding, 110, 'verified-call', allow);
+    expect(context.actor.state.reservations).toHaveLength(1);
+    expect(context.actor.state.dispatches).toMatchObject([
+      { reservationId: granted.reservationId, callId: granted.requestId,
+        decisionId: savedDecision, rootId: context.root.rootId },
+    ]);
+    const decisions = await history(context.store, `decision-${granted.requestId}`, 'test');
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.event.id).toBe(savedDecision);
+    const position = await context.store.head();
+    await expect(nativeGrant(context, binding, 110, 'verified-call', allow)).rejects.toThrow();
+    expect(await context.store.head()).toBe(position);
+    expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(110);
+    expect(context.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await close(context);
+  }
+}
+it.each(['lost reply', 'unknown read'])('recovers the exact native allow after %s',
+  recoversNativeDecision);
+
+async function refusesChangedNativeRetry(field: string) {
+  const context = await setup();
+  try {
+    const binding = child(context, 'changed');
+    await admit(context, binding);
+    const raw = JSON.stringify(bodyForCents(110));
+    const id = await reserve(context, binding, raw);
+    const saved = context.actor.state.reservations[0]!;
+    const call = { ...saved.call, requestId: 'replacement' };
+    let changedRaw = raw;
+    if (field === 'body') changedRaw += ' ';
+    else if (field === 'generation') call.generation = 2;
+    else Reflect.set(call, field, 'changed');
+    const native = { callId: `call-${binding.turnId}-${raw}`,
+      rootId: context.root.rootId, rootTurn };
+    const allow = allowNative(context, binding);
+    const position = await context.store.head();
+    await expect(grantModelCall(context.actor, call, 110, changedRaw, fresh,
+      undefined, allow, native)).rejects.toThrow(/^Model call retry refused$/u);
+    expect(await context.store.head()).toBe(position);
+    expect(context.actor.state.reservations).toHaveLength(1);
+    expect(saved).toMatchObject({ id, amountCents: 110 });
+    expect(saved.settledCents).toBeUndefined();
+    expect(context.actor.state.dispatches).toHaveLength(0);
+    // Also refuse an unverified native claim before it can release the saved hold.
+    const changed = { ...binding, threadId: 'foreign' };
+    await expect(nativeGrant(context, changed, raw, native.callId, allow)).rejects.toThrow();
+    expect(await context.store.head()).toBe(position);
+  } finally {
+    await close(context);
+  }
+}
+it.each(['body', 'payingGroupId', 'priceTableId', 'model', 'contextDigest', 'generation'])(
+  'refuses native retry with changed %s without replacement or release', refusesChangedNativeRetry);
+
+async function racesNativeRecovery() {
+  const context = await setup();
+  try {
+    const binding = child(context, 'race');
+    await admit(context, binding);
+    const id = await reserve(context, binding, 110);
+    const original = context.actor.state.reservations[0]!;
+    const ready = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const allow = allowNative(context, binding);
+    let arrivals = 0;
+    async function pausedAllow(reservationId: string, requestId: string) {
+      arrivals++;
+      if (arrivals === 2) ready.resolve();
+      await release.promise;
+      return allow(reservationId, requestId);
+    }
+    async function leader() {
+      const actor = new BudgetActor(context.store, 'test', context.actor.now);
+      await actor.start();
+      const callId = `call-${binding.turnId}-110`;
+      const first = nativeGrant(context, binding, 110, callId, pausedAllow, context.store, actor);
+      const second = nativeGrant(context, binding, 110, callId, pausedAllow,
+        context.nats.store, actor);
+      const replies = Promise.allSettled([first, second]);
+      await ready.promise;
+      let otherStarted = false;
+      function otherLeader() {
+        otherStarted = true;
+        return Promise.resolve();
+      }
+      await expect(context.db.lock!('budget-leader:test', otherLeader, { timeoutMs: 30 }))
+        .rejects.toThrow();
+      expect(otherStarted).toBe(false);
+      release.resolve();
+      const results = await replies;
+      function succeeded(result: typeof results[number]) {
+        return result.status === 'fulfilled';
+      }
+      expect(results.filter(succeeded)).toEqual([
+        { status: 'fulfilled', value: { reservationId: id, requestId: original.call.requestId } },
+      ]);
+      expect(actor.state.reservations).toHaveLength(1);
+      expect(actor.state.dispatches).toHaveLength(1);
+      const decisions = await history(context.store, `decision-${original.call.requestId}`, 'test');
+      expect(decisions).toHaveLength(1);
+      expect(actor.state.dispatches[0]?.decisionId).toBe(decisions[0]?.event.id);
+      await expect(nativeGrant(context, binding, 110, callId, allow)).rejects.toThrow();
+      expect(context.received()).toBe(0);
+    }
+    await context.db.lock!('budget-leader:test', leader);
+  } finally {
+    await close(context);
+  }
+}
+it('reloads one leased writer and admits only one competing native retry', racesNativeRecovery);
+
+async function refusesNativeDispatchAfterDecision(change: string) {
+  const context = await setup();
+  try {
+    const binding = child(context, 'after-decision');
+    await admit(context, binding);
+    const allow = allowNative(context, binding);
+    async function saveThenChange(reservationId: string, requestId: string) {
+      const decisionId = await allow(reservationId, requestId);
+      if (change === 'stop') {
+        const stop = { conversationId: 'conversation', turnId: start.turnId, requestedBy: 'alice' };
+        await context.append('conversation-conversation', 'agent.turn_stop_requested', stop);
+        const position = await context.store.head('conversation-conversation');
+        await context.actor.stopRoot(context.root.rootId, 'requester_stop',
+          'conversation-conversation', position);
+      } else if (change === 'deadline') {
+        vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 2001);
+      }
+      return decisionId;
+    }
+    const append = context.actor.store.append.bind(context.actor.store);
+    async function lostAdmission(command: Parameters<typeof append>[0]) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'budget.call_dispatch_admitted') {
+        return { status: 'unavailable' as const, cause: new Error('Lost admission reply') };
+      }
+      return result;
+    }
+    if (change === 'lost admission') {
+      vi.spyOn(context.actor.store, 'append').mockImplementation(lostAdmission);
+    }
+    await expect(nativeGrant(context, binding, 110, 'verified-call', saveThenChange))
+      .rejects.toThrow(/^Model call retry refused$/u);
+    vi.restoreAllMocks();
+    await context.restartActor();
+    const saved = context.actor.state.reservations[0]!;
+    const position = await context.store.head();
+    await expect(nativeGrant(context, binding, 110, 'verified-call', allow)).rejects.toThrow();
+    expect(await context.store.head()).toBe(position);
+    expect(context.actor.state.reservations).toHaveLength(1);
+    if (change === 'lost admission') {
+      expect(saved.settledCents).toBeUndefined();
+      expect(context.actor.state.dispatches).toHaveLength(1);
+      expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(110);
+    } else {
+      expect(saved.settledCents).toBe(0);
+      expect(context.actor.state.dispatches).toHaveLength(0);
+    }
+    expect(context.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await close(context);
+  }
+}
+it.each(['stop', 'deadline', 'lost admission'])(
+  'refuses native dispatch after %s and retains only potentially sent work',
+  refusesNativeDispatchAfterDecision);

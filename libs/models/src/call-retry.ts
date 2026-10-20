@@ -6,12 +6,18 @@ import type { BudgetActor } from './actor.ts';
 import { CallRetryRefused, turnRootId } from './root-budget.ts';
 import type { ModelCall } from './state.ts';
 
+type NativeCall = {
+  callId: string;
+  rootId: string;
+  rootTurn: Pick<ModelCall, 'turnId' | 'threadId'>;
+};
+
 export async function grantModelCall(actor: BudgetActor,
   call: ModelCall & { requestId: string }, amountCents: number,
-  raw: string, fresh: () => Promise<void>, admittedAt: number,
-  allow: (reservationId: string, requestId: string) => Promise<string>) {
+  raw: string, fresh: () => Promise<void>, admittedAt: number | undefined,
+  allow: (reservationId: string, requestId: string) => Promise<string>, native?: NativeCall) {
   // Use the verified turn binding; caller headers cannot choose a root.
-  const rootId = turnRootId(actor.state, call.conversationId, call.turnId);
+  const rootId = native?.rootId ?? turnRootId(actor.state, call.conversationId, call.turnId);
   const bodyHash = createHash('sha256');
   bodyHash.update(raw);
   const bodyDigest = bodyHash.digest('hex');
@@ -31,10 +37,16 @@ export async function grantModelCall(actor: BudgetActor,
   }
   try {
     const retryHash = createHash('sha256');
-    retryHash.update(JSON.stringify([actor.silo, rootId, call.computerId, call.generation,
-      call.conversationId, call.turnId, call.threadId, bodyDigest]));
+    let identity = [actor.silo, rootId, call.computerId, call.generation,
+      call.conversationId, call.turnId, call.threadId, bodyDigest];
+    if (native) {
+      // Keep changed bytes or bindings on the same call so the actor refuses replacement holds.
+      identity = [actor.silo, 'native', native.callId];
+    }
+    retryHash.update(JSON.stringify(identity));
     const retry = { retryDigest: retryHash.digest('hex'), bodyDigest };
-    const reservationId = await actor.reserve(call, amountCents, fresh, admittedAt, rootId, retry);
+    const reservationId = await actor.reserve(call, amountCents, fresh, admittedAt,
+      rootId, retry, native?.rootTurn);
     function matchesReservation(saved: Reservation) {
       return saved.id === reservationId;
     }
@@ -43,7 +55,7 @@ export async function grantModelCall(actor: BudgetActor,
     const decisionId = await recoverDecision(actor, saved, allow);
     const dispatch = { callId: requestId, decisionId, bodyDigest,
       reservationId, modelCall: saved.call, rootId };
-    await actor.admitDispatch(dispatch, fresh, admittedAt);
+    await actor.admitDispatch(dispatch, fresh, admittedAt, native?.rootTurn);
     return { reservationId, requestId };
   } catch {
     // Keep an uncertain hold and its original decision available for a later retry.
