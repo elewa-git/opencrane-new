@@ -316,3 +316,14 @@ retry delivery and fresh-install qualification remain outside this change.
 
 `childRequestStatusSchema` also accepts strict requester-only failed status with
 stage, reason, attempt 1–3 and failureEventId. The server checks access before returning it.
+
+## Named spending choices
+
+`budgetChoicesQuerySchema` accepts only `kind: paying_group | assistant`, optional
+opaque-id `after` and `limit` (default 20, maximum 50).
+`budgetChoicesResponseSchema` strictly checks `status: current | applying`, up to
+50 rows and nullable `next`. Each strict row carries `id`, `displayName`, positive
+resource `sequence` and a strict `cap`: `set` with non-negative safe integer
+`ceilingCents`, `not_configured`, or `unavailable`. It accepts no totals.
+See the [server contract](../../apps/server/README.robot.md#named-spending-choices)
+for filtering, loading and access checks.

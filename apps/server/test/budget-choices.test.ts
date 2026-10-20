@@ -44,8 +44,8 @@ async function project() {
 function memberId(_silo: string, _issuer: string, sub: string) {
   return Promise.resolve(sub);
 }
-function noRows() {
-  return Promise.resolve([]);
+function noCatalogue(): Promise<never> {
+  return Promise.reject(new Error('Spending choices must not load tools'));
 }
 async function initialise() {
   nats = await natsFixture();
@@ -59,7 +59,7 @@ async function initialise() {
     await runner.initialise(projection);
   }
   options = { silo: 'acme', binding, store: nats.store, modelDb: database,
-    feed: { memberId }, catalogue: { rows: noRows, tools: noRows } };
+    feed: { memberId }, catalogue: { rows: noCatalogue, tools: noCatalogue } };
   const auth = memberAuthorisation(binding);
   for (const [id, role] of [['owner', 'owner'], ['admin', 'admin'],
     ['member', 'member'], ['removed', 'admin'], ['denied', 'admin']] as const) {

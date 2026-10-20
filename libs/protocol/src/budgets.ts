@@ -16,6 +16,25 @@ export const budgetSummarySchema = z.object({
 });
 export type BudgetSummary = z.infer<typeof budgetSummarySchema>;
 
+export const budgetChoicesQuerySchema = z.object({
+  kind: z.enum(['paying_group', 'assistant']),
+  after: id.optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+}).strict();
+const budgetChoiceCap = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('set'), ceilingCents: cents }).strict(),
+  z.object({ status: z.literal('not_configured') }).strict(),
+  z.object({ status: z.literal('unavailable') }).strict(),
+]);
+export const budgetChoicesResponseSchema = z.object({
+  status: z.enum(['current', 'applying']),
+  rows: z.array(z.object({
+    id, displayName: z.string().min(1).max(200),
+    sequence: z.int().positive(), cap: budgetChoiceCap,
+  }).strict()).max(50),
+  next: id.nullable(),
+}).strict();
+
 const stopReason = z.object({
   scope: z.enum(['global', 'paying_group', 'assistant']),
   period: z.enum(['daily', 'monthly']),

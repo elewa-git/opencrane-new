@@ -3631,15 +3631,35 @@ New commands now validate saved groups, shared assistants and the chosen default
 payer before checking current caller access. The budget integration tests use the
 production startup payer, `installation-default`, without creating a team for it.
 Other valid group and shared-assistant cases seed their actual records.
-Personal-assistant caps are refused. Exact saved
-retries retain their original receipts. The scope-choices GET remains the next
-part of P4-26 row 3, together with its protocol and pagination tests.
+Personal-assistant caps are refused. Exact saved retries retain their original receipts.
 
 Spending choice refusals pass from the models process through POST `/api/org/models`
 as HTTP 422 with `{"status":"refused","reason":"spending_choice_unavailable"}`.
 No budget event is appended. Lost Owner/Admin access still returns 403.
 The Chromium integration check sends an unknown default payer, checks the fixed
 refusal and retained ceiling, corrects the payer and saves the same typed ceiling.
+
+### Named spending choices
+
+`GET /api/org/models/scope-choices?kind=paying_group|assistant&after=…&limit=…`
+uses the existing integration options. It reads 20 candidates by default, at most 50,
+plus one candidate to decide whether another page exists. `next` is the last examined
+opaque id; pass it as `after`. Filtering can leave a short or empty page with a continuation.
+No total is returned. Only existing groups and active, non-retired shared assistants appear.
+The installation payer is not invented as a group. Personal choices remain unavailable.
+
+Each row has `id`, `displayName`, the resource stream's `sequence`, and `cap`.
+A cap is `set` with safe integer `ceilingCents`, `not_configured`, or `unavailable`.
+Zero remains a set cap. Budget failures or stale budget state yield unavailable caps.
+Missing or lagging directory checkpoints return `status: applying`, never a complete empty list.
+The route reads at most three exact streams per candidate within a ten-second
+history deadline. It refuses streams over 1,000 events and scans no wildcard stream.
+After loading, it checks event-log Owner/Admin membership and OpenFGA once.
+Reads have no authority fence, append no events, use fixed refusals and always send `no-store`.
+
+`test/budget-choices.test.ts` covers real NATS/PostgreSQL/OpenFGA paging, resource revisions,
+caps, lag, access refusal, IAM outage and changes during a blocked load.
+Screens, accounting indexes and fresh-install qualification remain outside this change.
 
 ## Shared remote transport
 
