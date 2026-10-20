@@ -722,8 +722,10 @@ Set `DEV_REAL_PROVIDER_FILE` to the private OpenAI credential file path when run
 reads its value and sends it to the existing custody API. The path is not saved in
 stack settings or passed to server/models. The provider is named OpenAI demo.
 Models and verification omit `MODEL_UPSTREAM`; they use the production OpenAI route.
-After switch-on, models has no `MODEL_KEY_FILE`. The local stub is not started. Secondary models mounts the host certificate store
-read-only at `/etc/ssl/certs`, so the pinned gateway can verify public HTTPS certificates.
+After switch-on, models has no `MODEL_KEY_FILE`. The local stub is not started.
+Only secondary models mounts the host's `/etc/ssl/certs/ca-certificates.crt` file,
+read-only at the same path, so the pinned gateway can verify public HTTPS certificates.
+The rest of the host certificate directory is not mounted.
 Node uses bundled roots and could connect even when the gateway had no trusted roots.
 Missing, empty or invalid files fail with a fixed preparation error.
 
