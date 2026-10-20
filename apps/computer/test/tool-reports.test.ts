@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
 import { reportJournal, wireReport, type BridgeReport } from '../src/report-journal.ts';
+import { nativeRequests } from '../src/native-requests.ts';
 import { parseTurn, turnRunner, type TurnDriver } from '../src/turn-runner.ts';
 
 async function fixture(executionMode = 'memory_free') {
@@ -164,7 +165,15 @@ async function reportsUnsupportedConsent() {
       threadId: 'thread', turnId: 'codex-turn', serverName: 'oc_0123456789',
       mode: 'form', message: 'Private consent text', requestedSchema: { secret: 'private' },
     } };
-    setup.runner.complete(request);
+    const replies: unknown[] = [];
+    function send(reply: unknown) { replies.push(reply); }
+    const handle = nativeRequests(send, setup.runner.complete.bind(setup.runner));
+    handle(request);
+    handle(request);
+    expect(replies).toEqual([{ id: 17, error: {
+      code: -32601, message: 'Native consent is not supported',
+    } }]);
+    expect(setup.reports).toHaveLength(2);
     expect(setup.reports.at(-1)).toMatchObject({
       type: 'agent.native_consent_refused', nativeRequestId: '17',
       serverName: 'oc_0123456789', serverId: 'fixture', reason: 'unsupported_native_consent',
@@ -179,19 +188,29 @@ async function reportsUnsupportedConsent() {
 }
 it('reports unsupported native consent without saving its private request', reportsUnsupportedConsent);
 
-async function reportsNativeRefusal(mode: string) {
+async function reportsNativeRefusal(...test: string[]) {
+  const [mode, method, requestKind, outcome] = test;
+
   const setup = await fixture(mode);
   try {
-    const request = { id: 19, method: 'item/commandExecution/requestApproval', params: {
+    const request = { id: 19, method, params: {
       threadId: 'thread', turnId: 'codex-turn', command: 'PRIVATE_NATIVE_MARKER',
     } };
     setup.runner.complete({ ...request, params: { ...request.params, turnId: 'wrong' } });
     setup.runner.complete({ ...request, params: { threadId: 'thread' } });
     expect(setup.reports).toHaveLength(1);
-    setup.runner.complete(request);
+    const replies: unknown[] = [];
+    function send(reply: unknown) { replies.push(reply); }
+    const handle = nativeRequests(send, setup.runner.complete.bind(setup.runner));
+    handle(request);
+    handle(request);
+    if (outcome === 'declined') expect(replies).toEqual([{ id: 19, result: { decision: 'decline' } }]);
+    else expect(replies).toEqual([{ id: 19, error: {
+      code: -32601, message: 'Native request is not supported',
+    } }]);
     if (mode === 'memory_free') {
       expect(setup.reports.at(-1)).toMatchObject({ type: 'agent.native_request_refused',
-        nativeRequestId: '19', requestKind: 'shell', outcome: 'declined' });
+        nativeRequestId: '19', requestKind, outcome });
       expect(setup.reloadAll().at(-1)).toEqual(setup.reports.at(-1));
       expect(JSON.stringify(setup.reloadAll())).not.toContain('PRIVATE_NATIVE_MARKER');
     } else expect(setup.reports).toHaveLength(1);
@@ -201,5 +220,13 @@ async function reportsNativeRefusal(mode: string) {
     expect(setup.reports).toHaveLength(count);
   } finally { setup.close(); }
 }
-it.each(['memory_free', 'restricted'])(
-  'records only matching running memory-free native requests: %s', reportsNativeRefusal);
+const nativeCases = [
+  ['memory_free', 'item/commandExecution/requestApproval', 'shell', 'declined'],
+  ['memory_free', 'item/fileChange/requestApproval', 'file_change', 'declined'],
+  ['memory_free', 'item/permissions/requestApproval', 'permissions', 'unsupported'],
+  ['memory_free', 'item/tool/requestUserInput', 'user_input', 'unsupported'],
+  ['memory_free', 'future/request', 'other', 'unsupported'],
+  ['restricted', 'item/commandExecution/requestApproval', 'shell', 'declined'],
+];
+it.each(nativeCases)('records only matching running memory-free native requests: %s %s',
+  reportsNativeRefusal);

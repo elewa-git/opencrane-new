@@ -30,7 +30,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup subscriptions, nightly memory reviews and records, and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission and saved starts, personal connection references and blocks, expired saves, control intent and pause outcomes, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission and saved starts, native refusals, personal connection references and blocks, expired saves, control intent and pause outcomes, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
@@ -159,6 +159,9 @@ Archive and read choices name one person and their join. They contain no chat te
 
 Define records that close expired connection saves without carrying credentials.
 These records let live cleanup prove a delayed save can no longer succeed.
+
+Native request refusal records identify the request and turn without saving commands
+or prompts. They grant no access and do not appear in the chat display.
 
 ## Processes it handles
 

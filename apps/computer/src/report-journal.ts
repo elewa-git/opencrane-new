@@ -11,6 +11,8 @@ export interface BridgeReport {
   type: string;
   callId?: string;
   nativeRequestId?: string;
+  requestKind?: 'shell' | 'file_change' | 'permissions' | 'user_input' | 'other';
+  outcome?: 'declined' | 'unsupported';
   serverName?: string;
   serverId?: string;
   toolName?: string;
@@ -281,6 +283,17 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
 }
 
 function readToolDetails(value: Record<string, unknown>, report: BridgeReport) {
+  const requestKind = value['requestKind'];
+  if (requestKind !== undefined) {
+    if (requestKind !== 'shell' && requestKind !== 'file_change' && requestKind !== 'permissions'
+      && requestKind !== 'user_input' && requestKind !== 'other') throw new Error('Invalid request kind');
+    report.requestKind = requestKind;
+  }
+  const outcome = value['outcome'];
+  if (outcome !== undefined) {
+    if (outcome !== 'declined' && outcome !== 'unsupported') throw new Error('Invalid request outcome');
+    report.outcome = outcome;
+  }
   const nativeRequestId = optionalString(value, 'nativeRequestId');
   const serverName = optionalString(value, 'serverName');
   if (nativeRequestId !== undefined) report.nativeRequestId = nativeRequestId;

@@ -10,6 +10,7 @@ export const outputReportTypes: readonly string[] = [
   'agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
   'agent.message_delta', 'agent.message_completed', 'agent.output_lost',
   'agent.tool_call_started', 'agent.tool_call_finished', 'agent.native_consent_refused',
+  'agent.native_request_refused',
 ];
 
 /** Shared by model/MCP decisions; destination checks can use this same resource grant. */

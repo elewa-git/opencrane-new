@@ -1445,6 +1445,10 @@ async function participationVolume(sharedChild = false) {
       resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
       granteeKind: 'member', grantedBy: 'alice',
     });
+    await context.append('conversation-volume', 'agent.native_request_refused', {
+      conversationId: 'volume', turnId: 'busy-turn', nativeRequestId: '19',
+      requestKind: 'shell', outcome: 'declined',
+    }, false);
     const encrypted = context.keys.encrypt('test', 'volume', 'Saved history');
     const previousHead = await context.nats.store.head();
     for (let offset = 0; offset < 100_000; offset += 100) {

@@ -706,6 +706,7 @@ class TurnRunner {
     if (event['method'] === 'item/reasoning/summaryTextDelta' && typeof params['delta'] === 'string') {
       this.appendReport(input, 'agent.reasoning_summarised', { text: params['delta'] });
     }
+    if (this.gate.closed && event['id'] !== undefined) return;
     const report = itemReport(input, params, event['method'], event['id'],
       this.state.codexTurns.get(input.id));
     if (report) this.appendReport(input, report.type, report.data);

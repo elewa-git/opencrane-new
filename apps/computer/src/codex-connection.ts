@@ -77,5 +77,5 @@ export function codexConnection(input: Writable, output: Readable, handlers: Han
   }
   function notify(method: string, params: Record<string, unknown>) { write({ method, params }); }
   function reply(id: unknown, error: { code: number; message: string }) { write({ id, error }); }
-  return { rpc, notify, reply };
+  return { rpc, notify, reply, respond: write };
 }

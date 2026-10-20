@@ -1,0 +1,1 @@
+- Computers answer each native Codex request once and save safe refusal records for active tool-enabled turns. Native approvals remain disabled pending the next change.

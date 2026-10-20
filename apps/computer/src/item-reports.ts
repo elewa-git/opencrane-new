@@ -1,3 +1,4 @@
+import { nativeRefusal } from './native-requests.ts';
 import { isToolCallText } from '@opencrane/events/tool-call';
 import { createHash } from 'node:crypto';
 import { record } from './http.ts';
@@ -34,6 +35,15 @@ export function itemReport(input: Turn, params: Record<string, unknown>, method:
     const data = nativeConsentReport(input, params, requestId, codexTurnId);
     if (data) return { type: 'agent.native_consent_refused', data };
     return;
+  }
+  if (requestId !== undefined && typeof method === 'string') {
+    if (input.executionMode === 'restricted' || !codexTurnId ||
+        params['turnId'] !== codexTurnId) return;
+    if (typeof requestId !== 'string' && !Number.isSafeInteger(requestId)) return;
+    const nativeRequestId = String(requestId);
+    if (!isToolCallText(nativeRequestId)) return;
+    const data = { nativeRequestId, ...nativeRefusal(method) };
+    return { type: 'agent.native_request_refused', data };
   }
   if (method !== 'item/started' && method !== 'item/completed') return;
   const item = record(params['item']);
