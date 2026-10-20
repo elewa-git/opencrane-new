@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { modelsEnvironment } from './models-environment.ts';
+import { checkProviderMode, modelsEnvironment } from './models-environment.ts';
 
 function checksBothModes() {
   const inherited = { MODEL_KEY_FILE: '/must-not-survive/.keys/provider', MODEL_UPSTREAM: 'local' };
@@ -30,3 +30,15 @@ function realProviderEnvironment() {
 }
 test('real opt-in removes upstream overrides without changing later stub starts',
   realProviderEnvironment);
+
+function isolatesSavedMode() {
+  checkProviderMode({}, false);
+  checkProviderMode({ DEV_REAL_PROVIDER: '1' }, true);
+  assert.throws(function realToStub() {
+    checkProviderMode({ DEV_REAL_PROVIDER: '1' }, false);
+  }, /Provider mode change requires a fresh stack/u);
+  assert.throws(function stubToReal() {
+    checkProviderMode({}, true);
+  }, /Provider mode change requires a fresh stack/u);
+}
+test('repeat startup refuses changing the saved provider mode', isolatesSavedMode);

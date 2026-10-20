@@ -20,6 +20,7 @@ async function preservesFailureBeforeCleanup() {
     `${scripts}/sanitise-evidence.mjs`);
   await writeFile(`${scripts}/claim.sh`, '#!/bin/sh\necho 1\n', { mode: 0o755 });
   const start = `#!/bin/sh
+if [ -n "\${DEV_REAL_PROVIDER_FILE:-}" ]; then exit 2; fi
 mkdir -p "${slot}"
 printf 'Provider setup create: unavailable\\n' > "${slot}/failure.log"
 printf 'See server.log\\n' > "${slot}/last-error.log"
@@ -32,7 +33,7 @@ exit 1
   await writeFile(`${scripts}/down.sh`, `#!/bin/sh\nrm -rf "${slot}"\n`, { mode: 0o755 });
 
   try {
-    await assert.rejects(exec(`${scripts}/daily-fresh.sh`, { env: { ...process.env, HOME: home } }));
+    await assert.rejects(exec(`${scripts}/daily-fresh.sh`, { env: { ...process.env, HOME: home, DEV_REAL_PROVIDER_FILE: '/synthetic-canary' } }));
     const ledger = `${home}/.opencrane/daily-fresh`;
     const entries = await readdir(ledger);
     const evidence = entries.find((entry) => entry !== 'ledger.md');

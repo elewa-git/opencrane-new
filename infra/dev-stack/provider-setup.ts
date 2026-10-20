@@ -5,8 +5,15 @@ import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models';
 import { authEnv, directory, root } from './config.ts';
 
-type SetupOptions = { server: string; origin: string; cookie: string; silo: string; value: string };
+type SetupOptions = { server: string; origin: string; cookie: string; silo: string; value: string; real?: boolean };
+const operations: Record<string, string> = {
+  create: 'provider.created', save: 'provider.key_saved',
+  reachability: 'provider.verification_requested', test: 'provider.verification_requested',
+  models: 'provider.models_selected', default: 'provider.model_binding_set',
+  drain: 'provider.managed_calls_drain_set', 'switch-on': 'provider.managed_calls_enabled',
+};
 type Reply = {
+  operation?: string;
   revision: number; sequence: number; expectedProviderSequence: number;
   priceTableId: string; reservedCents: number;
   rows?: Array<{ kind: string; position: number }>;
@@ -14,7 +21,9 @@ type Reply = {
 };
 
 export async function setupProvider(options: SetupOptions) {
-  const route = '/api/org/providers/dev-stub';
+  const providerId = options.real ? 'dev-openai' : 'dev-stub';
+  const name = options.real ? 'OpenAI demo' : 'Local model stub';
+  const route = `/api/org/providers/${providerId}`;
   const headers = { origin: options.origin, cookie: options.cookie,
     'content-type': 'application/json' };
   async function request(step: string, path: string, input?: Record<string, unknown>) {
@@ -39,7 +48,15 @@ export async function setupProvider(options: SetupOptions) {
   async function save(step: string, path: string, input: Record<string, unknown>, verify = false) {
     const commandId = randomUUID();
     const command = { ...input, commandId };
-    const receipt = await request(step, path, command);
+    let receipt: Reply | undefined;
+    try {
+      receipt = await request(step, path, command);
+    } catch (error) {
+      if (!(error instanceof Error) || !/unavailable|invalid|50[0234]$/u.test(error.message)) {
+        throw error;
+      }
+      // Read the original command after a lost reply. Never submit an unknown write again.
+    }
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       const current = await request(step, `${route}/changes/${commandId}`);
@@ -48,15 +65,18 @@ export async function setupProvider(options: SetupOptions) {
       }
       if (current.projection?.content === 'current' && current.projection.iam === 'current' &&
           (!verify || current.outcome === 'pass')) {
-        return receipt;
+        if (!receipt && current.operation !== operations[step]) {
+          throw new Error(`Provider setup ${step}: unknown`);
+        }
+        return receipt ?? current;
       }
       await delay(100);
     }
     throw new Error(`Provider setup ${step}: timeout`);
   }
   const created = await save('create', '/api/org/providers', {
-    action: 'create', providerId: 'dev-stub', expectedRevision: 0,
-    provider: 'openai', name: 'Local model stub',
+    action: 'create', providerId, expectedRevision: 0,
+    provider: 'openai', name,
   });
   const saved = await save('save', `${route}/key`, {
     expectedRevision: created.revision, key: options.value,
@@ -70,7 +90,7 @@ export async function setupProvider(options: SetupOptions) {
     model, priceTableId: quote.priceTableId, reservedCents: quote.reservedCents, consent: true }, true);
   const enabledModels = [...new Set([model, 'gpt-6-luna'])];
   const selected = await save('models', '/api/org/providers', {
-    action: 'models', providerId: 'dev-stub', expectedRevision: saved.revision, models: enabledModels,
+    action: 'models', providerId, expectedRevision: saved.revision, models: enabledModels,
   });
   function isDefault(row: { kind: string }) {
     return row.kind === 'silo_default';
@@ -102,8 +122,18 @@ export async function setupProvider(options: SetupOptions) {
   await save('switch-on', `${route}/switch-on`, positions(drained));
 }
 
-export async function setupDevProvider(settings: Record<string, string>) {
+export async function setupDevProvider(settings: Record<string, string>, credentialFile?: string) {
   try {
+    let value: string;
+    if (credentialFile !== undefined) {
+      value = (await readFile(credentialFile, 'utf8')).trim();
+      if (!/^[\x21-\x7e]{1,4096}$/u.test(value)) {
+        throw new Error('Provider setup preparation: unavailable');
+      }
+    } else {
+      value = randomBytes(32).toString('hex');
+      await writeFile(`${directory}/model-managed-stub`, value, { mode: 0o600, flag: 'wx' });
+    }
     const config = loadAuthConfig(await authEnv());
     const contents = await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8');
     const oidc = JSON.parse(contents) as { extraIdentities: Array<{ subject: string }> };
@@ -112,10 +142,8 @@ export async function setupDevProvider(settings: Record<string, string>) {
     const session = { sub: oidc.extraIdentities[0]!.subject, orgId: config.expectedOrgId!,
       roles: [], authTime: now, exp: now + 300 };
     const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
-    const value = randomBytes(32).toString('hex');
-    await writeFile(`${directory}/model-managed-stub`, value, { mode: 0o600, flag: 'wx' });
     const options = { server: `http://127.0.0.1:${settings['SERVER_PORT']}`,
-      origin: settings['ORIGIN']!, silo: settings['SILO_ID']!, cookie, value };
+      origin: settings['ORIGIN']!, silo: settings['SILO_ID']!, cookie, value, real: credentialFile !== undefined };
     await setupProvider(options);
   } catch (error) {
     // Keep file locations, credentials and remote replies out of startup diagnostics.

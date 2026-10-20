@@ -1,3 +1,4 @@
+import { realModelJourney } from './real-model-journey.ts';
 import { uploadJourney } from './upload-journey.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -449,6 +450,10 @@ try {
     authz.use('person', member, 'model', model.id), authz.use('assistant', computer!.assistant_id, 'model', model.id),
   ]))).every(result => result.allowed), 'new member and assistant model grants');
   console.log('PASS new member and assistant model grants reach OpenFGA before chat');
+  if (process.env['DEV_REAL_PROVIDER'] === '1') {
+    assert(secondary && browser);
+    await realModelJourney(browser.ownerPage, browser.memberPages[0]!, origin, events.store, silo);
+  } else {
   const memberChatUrls: string[] = [];
   if (browser) for (const page of browser.memberPages) {
     const failedTransport: string[] = [];
@@ -562,6 +567,7 @@ try {
   }
   const phase4Requested = process.env['P4_JOURNEY_ATTEMPT'] !== undefined;
   if (secondary && browser && phase4Requested) await runPhase4Journey();
+  }
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });

@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { setupProvider } from './provider-setup.ts';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { setupDevProvider, setupProvider } from './provider-setup.ts';
 
 async function recordsSetup() {
   const expected = ['create', 'changes', 'key', 'changes', 'reachability', 'changes',
@@ -84,7 +86,8 @@ async function recordsSetup() {
 }
 test('provider setup uses ordered authenticated product calls and stops at each refusal', recordsSetup);
 
-async function waitsForSeededDefault() {
+async function waitsForSeededDefault(loseReply = false) {
+  let saves = 0;
   let bindingReads = 0;
   let selections = 0;
   async function handle(request: import('node:http').IncomingMessage,
@@ -93,6 +96,13 @@ async function waitsForSeededDefault() {
     for await (const chunk of request) contents += String(chunk);
     const input = contents ? JSON.parse(contents) : {};
     response.setHeader('content-type', 'application/json');
+    if (request.method === 'POST' && request.url?.endsWith('/key')) {
+      saves++;
+      if (loseReply) {
+        request.socket.destroy();
+        return;
+      }
+    }
     const isBindings = request.url === '/api/org/providers/dev-stub/bindings';
     if (isBindings && request.method === 'GET') {
       bindingReads++;
@@ -110,7 +120,7 @@ async function waitsForSeededDefault() {
         return;
       }
     }
-    const result = { status: 'appended', revision: 3, sequence: 6,
+    const result = { status: 'appended', operation: 'provider.key_saved', revision: 3, sequence: 6,
       expectedProviderSequence: 5, priceTableId: 'price', reservedCents: 1,
       projection: { content: 'current', iam: 'current' }, outcome: 'pass' };
     response.end(JSON.stringify(result));
@@ -124,6 +134,7 @@ async function waitsForSeededDefault() {
     cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
   try {
     await setupProvider(options);
+    assert.equal(saves, 1, 'An unknown write is never sent twice');
     assert.equal(bindingReads, 2);
     assert.equal(selections, 1, 'Wait for the scheduled binding before the single owner selection');
   } finally {
@@ -134,7 +145,10 @@ async function waitsForSeededDefault() {
   }
 }
 test('waits for the first provider binding before explicitly selecting the default',
-  waitsForSeededDefault);
+  function seededDefaultTest() { return waitsForSeededDefault(); });
+
+test('a lost save reply is recovered by reading its original receipt',
+  function lostReplyTest() { return waitsForSeededDefault(true); });
 
 async function refusesUnsafeReplies() {
   for (const failure of ['redirect', 'transport', 'json']) {
@@ -171,7 +185,7 @@ async function refusesUnsafeReplies() {
     }
     try {
       await assert.rejects(run, safeError);
-      assert.equal(requests, 1, 'A failed setup must neither follow a redirect nor continue');
+      assert.equal(requests, 2, 'A lost reply permits only the original receipt GET');
     } finally {
       server.closeAllConnections();
       const closed = once(server, 'close');
@@ -181,3 +195,20 @@ async function refusesUnsafeReplies() {
   }
 }
 test('setup refuses redirects and sanitises transport and JSON errors', refusesUnsafeReplies);
+
+async function refusesMissingCredentials() {
+  const folder = await mkdtemp(`${tmpdir()}/provider-input-`);
+  try {
+    for (const contents of [undefined, '', '  \n']) {
+      if (contents !== undefined) await writeFile(`${folder}/synthetic-canary`, contents);
+      async function start() {
+        await setupDevProvider({}, `${folder}/synthetic-canary`);
+      }
+      await assert.rejects(start, { message: 'Provider setup preparation: unavailable' });
+    }
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+test('private setup refuses missing and empty files without disclosing their locations',
+  refusesMissingCredentials);

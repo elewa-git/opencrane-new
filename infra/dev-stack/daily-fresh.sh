@@ -2,7 +2,7 @@
 set -u
 umask 077
 
-unset P4_JOURNEY_ATTEMPT
+unset P4_JOURNEY_ATTEMPT DEV_REAL_PROVIDER_FILE
 
 script_directory=$(CDPATH='' cd "$(dirname "$0")" && pwd -P)
 repository_root=$(CDPATH='' cd "$script_directory/../.." && pwd -P)

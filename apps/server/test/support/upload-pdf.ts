@@ -1,6 +1,6 @@
 /** A valid PDF with a fact that the stub must learn from the delivered file. */
-export function uploadPdf() {
-  const stream = 'BT /F1 18 Tf 20 80 Td (Project code: Willow-47.) Tj ET';
+export function uploadPdf(text = 'Project code: Willow-47.') {
+  const stream = `BT /F1 18 Tf 20 80 Td (${text}) Tj ET`;
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 350 120] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];
