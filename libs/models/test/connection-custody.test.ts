@@ -1724,3 +1724,47 @@ async function scanRetainsCurrentUnknownAndLate() {
 }
 it('scan keeps current and uncertain generations and an activation saved during its pass',
   scanRetainsCurrentUnknownAndLate);
+
+async function keepsForeignCurrentCopy() {
+  const test = await candidateFixture();
+  await test.invalidate();
+  const foreign = await natsFixture();
+  const input = { ...test.input, siloId: 'foreign', profileId: 'foreign-profile',
+    operationId: 'foreign-operation', appendUntil: Date.now() - 60_000 };
+  const staged = await test.store.custody.stage(input, material);
+  const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
+  const activation = { connectionId: input.connectionId, ownerKind: 'personal',
+    purpose: 'personal', generation: 1, uid: staged.identity!.uid,
+    resourceVersion: staged.identity!.resourceVersion, endpointDigest: input.endpointDigest,
+    operationId: input.operationId, changedBy: input.userId, expectedSequence: 0,
+    appendUntil: input.appendUntil, reason: 'bearer_create' };
+  const data = { userId: input.userId, serverId: input.serverId, profile: input.profileId,
+    secretRef: `secret:${staged.identity!.reference}`, activation };
+  const event = envelope('foreign', subject, 'connection.created', data, input.operationId);
+  event.principal = { kind: 'human', id: input.userId };
+  event.time = new Date(input.appendUntil - 1000).toISOString();
+  await foreign.seed([event]);
+  const localPosition = await events.store.head();
+  const lock = vi.spyOn(test.db, 'lock');
+  const scan = runningScan(test);
+  try {
+    await scan.pages();
+    const current = foldConnection(await history(foreign.store, subject, 'foreign'));
+    expect(current.status).toBe('saved_unverified');
+    expect(current.data?.secretRef === `secret:${staged.identity!.reference}`).toBe(true);
+    const localRows = await history(events.store, subject, 'foreign');
+    expect(test.store.secrets.has(staged.identity!.reference)).toBe(true);
+    expect(localRows).toEqual([]);
+    expect(await events.store.head()).toBe(localPosition);
+    expect(scan.records).toEqual([
+      { counts: { examined: 2, deleted: 1 }, message: 'Connection custody page scanned' },
+    ]);
+    expect(test.store.deletes).toBe(1);
+    expect(lock).toHaveBeenCalledTimes(1);
+  } finally {
+    await scan.close();
+    lock.mockRestore();
+    await foreign.close();
+  }
+}
+it('scan keeps and counts a foreign current copy on a mixed custody page', keepsForeignCurrentCopy);
