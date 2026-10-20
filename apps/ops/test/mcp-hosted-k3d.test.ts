@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -11,7 +11,6 @@ const specDigest = 'a'.repeat(64);
 const otherDigest = 'b'.repeat(64);
 let namespace = '';
 let otherNamespace = '';
-let directory = '';
 let approved: unknown;
 let secondImage = '';
 
@@ -25,7 +24,7 @@ function command(binary: string, args: string[], input?: string): string {
       throw new Error('denied: Computer must use the checked template');
     }
     if (policyMessage) throw new Error(`denied: ${policyMessage[0]}`);
-    for (const reason of ['denied', 'forbidden', 'is invalid:']) {
+    for (const reason of ['exceeded quota', 'denied', 'forbidden', 'is invalid:']) {
       if (result.stderr?.includes(reason)) throw new Error(reason);
     }
     throw new Error(`${binary} failed (private output withheld)`);
@@ -65,25 +64,6 @@ function refuse(value: unknown, lifecycle = true, message = /Hosted MCP check/u)
   }
   expect(request).toThrow(message);
 }
-function buildImage(label: string) {
-  const computer: unknown = JSON.parse(readFileSync('apps/computer/sandbox-template.json', 'utf8'));
-  const base = String(field(computer, 'spec.podTemplate.spec.containers.0.image'));
-  const address = command('docker', ['inspect', 'k3d-ocn-registry', '--format',
-    '{{(index .NetworkSettings.Networks "k3d-ocn").IPAddress}}']);
-  expect(address).toMatch(/^\d+\.\d+\.\d+\.\d+$/u);
-  const tag = `${address}:5000/opencrane/computer:${namespace}-${label}`;
-  const metadata = join(directory, 'build.json');
-  const dockerfile = `FROM ${base.replace('k3d-ocn-registry:5000', '127.0.0.1:5001')}\n`
-    + `LABEL test.mcp=${namespace}-${label}\n`;
-  writeFileSync(join(directory, 'Dockerfile'), dockerfile);
-  command('nice', ['-n', '10', 'docker', 'buildx', 'build', '--network=none',
-    '--output', `type=image,name=${tag},push=true,registry.insecure=true`,
-    '--metadata-file', metadata, directory]);
-  const result: unknown = JSON.parse(readFileSync(metadata, 'utf8'));
-  const digest: unknown = Reflect.get(Object(result), 'containerimage.digest');
-  expect(digest).toMatch(/^sha256:[a-f0-9]{64}$/u);
-  return `k3d-ocn-registry:5000/opencrane/computer@${String(digest)}`;
-}
 function approvedImages(image: string) {
   return { apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'mcp-approved-images' },
     data: { [specDigest]: image, [otherDigest]: secondImage } };
@@ -97,9 +77,9 @@ async function setup() {
   approved = JSON.parse(readFileSync('apps/ops/mcp-hosted-template.json', 'utf8')) as unknown;
   namespace = `opencrane-dev-${slot}-mcp-${randomUUID().slice(0, 8)}`;
   otherNamespace = `opencrane-dev-${slot}-mcp-${randomUUID().slice(0, 8)}`;
-  directory = mkdtempSync(join(tmpdir(), 'mcp-hosted-'));
-  const image = String(buildImage('first'));
-  secondImage = String(buildImage('second'));
+  const computer: unknown = JSON.parse(readFileSync('apps/computer/sandbox-template.json', 'utf8'));
+  const image = String(field(computer, 'spec.podTemplate.spec.containers.0.image'));
+  secondImage = `example.invalid/unapproved@sha256:${otherDigest}`;
   expect(image).not.toBe(secondImage);
   change(approved, 'spec.replicas', 1);
   change(approved, 'spec.template.spec.containers.0.image', image);
@@ -133,7 +113,6 @@ function cleanup() {
     }
     kube(['delete', 'namespace', namespace, otherNamespace, '--ignore-not-found', '--wait=false']);
   }
-  if (directory) rmSync(directory, { recursive: true, force: true });
 }
 beforeAll(setup, 420_000);
 afterAll(cleanup);
@@ -181,6 +160,7 @@ function cases() {
   it('fails closed without parameters', parameters);
   it('limits lifecycle permissions to this namespace', permissions);
   it('creates a Pod, allows only scaling and completes deletion', lifecycle, 90_000);
+  it('admits four Pods and refuses a fifth through quota', quota, 90_000);
 }
 function guard(_name: string, path: string, value: unknown) {
   const candidate = workload();
@@ -408,4 +388,22 @@ async function privileged() {
 async function missingLimits() {
   await isolatedGuard(workload(), 'has(variables.pod.containers)',
     `${container}.resources.limits`, undefined);
+}
+
+function quotaPod(name: string) {
+  return { apiVersion: 'v1', kind: 'Pod', metadata: { name,
+    annotations: { 'opencrane.ai/mcp-spec': specDigest } },
+  spec: structuredClone(field(approved, pod)) };
+}
+function quota() {
+  const names = ['quota-one', 'quota-two', 'quota-three', 'quota-four', 'quota-five'];
+  try {
+    for (const name of names.slice(0, 4)) kube(['create', '-f', '-'], quotaPod(name));
+    function fifth() {
+      kube(['create', '-f', '-'], quotaPod('quota-five'));
+    }
+    expect(fifth).toThrow('exceeded quota');
+  } finally {
+    kube(['delete', 'pods', ...names, '--ignore-not-found', '--wait=true', '--timeout=60s']);
+  }
 }
