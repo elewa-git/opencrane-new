@@ -45,7 +45,7 @@ async function setup(rootPatch: Record<string, unknown> = {}) {
   const root = await context.actor.setRootAllowance(rootBinding, 1);
   const store = await createEventStore(await context.nats.client('command'));
   const replica = await startDecision(context.actor, context.identity, context.binding);
-  return { ...context, root, store, replica };
+  return Object.assign(context, { root, store, replica });
 }
 async function close(context: Context) {
   await context.replica.close();
@@ -545,3 +545,34 @@ async function recoversNativeRootTurn() {
 }
 it('keeps the native root turn on actor retry and refuses changed bindings without release',
   recoversNativeRootTurn);
+
+async function recoversNativeHold() {
+  const context = await setup();
+  try {
+    const binding = child(context, 'lost-hold');
+    await admit(context, binding);
+    const append = context.actor.store.append.bind(context.actor.store);
+    async function loseReply(command: Parameters<typeof append>[0]) {
+      const result = await append(command);
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'budget.reserved') {
+        return { status: 'unavailable' as const, cause: new Error('Lost reserve reply') };
+      }
+      return result;
+    }
+    vi.spyOn(context.actor.store, 'append').mockImplementation(loseReply);
+    await expect(reserve(context, binding, 110)).rejects.toThrow();
+    vi.restoreAllMocks();
+    await context.restartActor();
+    const original = context.actor.state.reservations[0]!;
+    expect(await reserve(context, binding, 110)).toBe(original.id);
+    expect(context.actor.state.reservations).toHaveLength(1);
+    expect(context.actor.state.reservations[0]).toMatchObject({
+      amountCents: 110, call: { requestId: expect.any(String) } });
+  } finally {
+    vi.restoreAllMocks();
+    await close(context);
+  }
+}
+it('recovers one native hold and its original ids after a lost append reply and writer restart',
+  recoversNativeHold);
