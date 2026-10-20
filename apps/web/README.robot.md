@@ -486,11 +486,21 @@ progress.
 A budget stop row marks only its own turn. A turn that never started ends as stopped.
 The notice reads saved stop details once when it appears, when the socket reconnects,
 and when the first turn end report arrives. A queued stop has its own time, so an end
-report still refreshes a failed or earlier read. Check again is a GET. A failed read
-keeps the stop visible;
-lost access clears reasons and amounts. A `not_stopped` reply keeps the older generic
-notice because the saved row gives no scope or reset. A reset adds a dated line but
+report still refreshes a failed or earlier read. Check status only GETs the original
+conversation and turn. It keeps the reason visible while checking and after an unavailable
+reply. Calls appear once in saved order beneath the reason. Held means reserved;
+possibly_sent keeps the outcome unknown; charged means a recorded charge; released means
+the reservation was released. Only present cents use `money()`, including a real zero.
+Participant replies supply no amounts. An unavailable reply keeps the last saved status
+with a warning. A 401, 403 or denied input clears calls, reasons and amounts. Older reads
+cannot restore details after the conversation, turn or access changes. Two pending clicks
+send one GET. Call details stay in memory and never enter browser storage or the address.
+A `not_stopped` reply keeps the older generic notice because the saved row gives no scope or reset. A reset adds a dated line but
 never restarts the old turn. `npm run visual:screen-p3-14-stop` captures both widths.
+`npm run visual:screen-p3-14-calls` checks and captures WRK-43, participant, changed-status
+and unavailable replies at 1280px and 390px with reduced motion. It uses intercepted chat
+replies, checks wrapping, keyboard focus, 44px actions and the persistent reason. These
+checks do not qualify a fresh installation.
 
 Keyboard paths: Enter sends, Shift+Enter adds a line, Ctrl/Cmd+N opens a draft,
 Ctrl/Cmd+Shift+A asks the personal Agent, Ctrl/Cmd+K finds a session. Native panel

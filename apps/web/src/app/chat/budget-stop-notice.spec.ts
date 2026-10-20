@@ -229,12 +229,12 @@ it('ignores a stop reply that arrives after access is denied', async () => {
   expect(rootOf(fixture).textContent).not.toContain('€');
 });
 
-it('keeps the stop visible on unavailable and Check again only reads once', async () => {
+it('keeps the stop visible on unavailable and Check status only reads once', async () => {
   const { fixture, requests, methods } = await mount({}, 503);
   expect(rootOf(fixture).textContent).toContain('Stop details unavailable');
   expect(rootOf(fixture).textContent).toContain('This work is still stopped.');
   const button = rootOf(fixture).querySelector('button');
-  if (!button) throw new Error('Missing Check again');
+  if (!button) throw new Error('Missing Check status');
   button.click();
   button.click();
   expect(requests).toHaveLength(2);
@@ -291,14 +291,23 @@ function checkStatus(root: HTMLElement): HTMLButtonElement {
   return button;
 }
 
-it('shows every saved call once, in order, with honest status and optional amounts', async () => {
+function savedReference(element: Element): string | null {
+  return element.textContent;
+}
+
+function callReference(call: Extract<BudgetStopStatus, { status: 'stopped' }>['calls'][number]) {
+  return call.reference;
+}
+
+async function showsSavedCalls() {
   const reply = savedCalls();
   const { fixture } = await mount(reply);
   const root = rootOf(fixture);
   const cards = root.querySelectorAll('.budget-call');
   expect(cards).toHaveLength(5);
-  expect(Array.from(root.querySelectorAll('.budget-call code'), element => element.textContent))
-    .toEqual(reply.calls.map(call => call.reference));
+  const references = Array.from(root.querySelectorAll('.budget-call code'), savedReference);
+  const expectedReferences = reply.calls.map(callReference);
+  expect(references).toEqual(expectedReferences);
   expect(cards[0]?.textContent).toContain('Reserved');
   expect(cards[0]?.textContent).toContain('€0.80');
   expect(cards[1]?.textContent).toContain('Outcome unknown');
@@ -311,14 +320,18 @@ it('shows every saved call once, in order, with honest status and optional amoun
   expect(cards[4]?.textContent).toContain('Recorded charge');
   expect(cards[4]?.textContent).not.toContain('€');
   expect(root.textContent).not.toMatch(/definitely sent|completed|total/iu);
-});
+}
 
-it('shows participant call references and statuses without amounts or totals', async () => {
+async function showsParticipantCalls() {
   const reply = savedCalls();
   delete reply.reasons[0]!.limitCents;
   for (const call of reply.calls) {
-    if ('heldCents' in call) delete call.heldCents;
-    if ('chargedCents' in call) delete call.chargedCents;
+    if ('heldCents' in call) {
+      delete call.heldCents;
+    }
+    if ('chargedCents' in call) {
+      delete call.chargedCents;
+    }
   }
   const { fixture } = await mount(reply);
   const root = rootOf(fixture);
@@ -326,18 +339,21 @@ it('shows participant call references and statuses without amounts or totals', a
   expect(root.textContent).toContain('Outcome unknown');
   expect(root.textContent).toContain('zero-charge');
   expect(root.textContent).not.toMatch(/€|total/iu);
-});
+}
 
-it('adds no call card or status action for an empty saved list', async () => {
+async function showsNoInventedCard() {
   const { fixture } = await mount(stopped('global', 'monthly', 'ask_admin'));
   expect(rootOf(fixture).querySelector('.budget-calls')).toBeNull();
   expect(rootOf(fixture).querySelector('button')).toBeNull();
-});
+}
 
-it('checks the original call once while pending and updates without sending work', async () => {
+async function checksOriginalCall() {
   const { fixture } = await mount(savedCalls());
   let finish: ((response: Response) => void) | undefined;
-  const pending = new Promise<Response>(resolve => { finish = resolve; });
+  function saveResolver(resolve: (response: Response) => void): void {
+    finish = resolve;
+  }
+  const pending = new Promise<Response>(saveResolver);
   vi.spyOn(globalThis, 'fetch').mockReturnValue(pending);
   const button = checkStatus(rootOf(fixture));
   button.click();
@@ -359,9 +375,9 @@ it('checks the original call once while pending and updates without sending work
   }
   expect(vi.mocked(globalThis.fetch).mock.calls[1]?.[0])
     .toBe('/api/conversations/chat/budget-stops?turnId=message');
-});
+}
 
-it.each(['503', 'network', 'invalid'])('keeps the reason and last call after %s', async failure => {
+async function keepsLastStatus(failure: string) {
   const { fixture } = await mount(savedCalls());
   if (failure === 'network') {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
@@ -376,9 +392,9 @@ it.each(['503', 'network', 'invalid'])('keeps the reason and last call after %s'
   expect(rootOf(fixture).textContent).toContain('Group monthly limit reached: €200.00.');
   expect(rootOf(fixture).textContent).toContain('Outcome unknown');
   expect(rootOf(fixture).querySelectorAll('.budget-call')).toHaveLength(5);
-});
+}
 
-it.each([401, 403])('clears saved calls on %s and cannot check them again', async status => {
+async function clearsRefusedCalls(status: number) {
   const { fixture } = await mount(savedCalls());
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status }));
   checkStatus(rootOf(fixture)).click();
@@ -387,22 +403,33 @@ it.each([401, 403])('clears saved calls on %s and cannot check them again', asyn
   expect(rootOf(fixture).textContent).toContain('Access changed');
   expect(rootOf(fixture).querySelector('.budget-calls')).toBeNull();
   expect(rootOf(fixture).querySelector('button')).toBeNull();
-});
+}
 
-it.each(['turnId', 'conversationId', 'denied'] as const)(
-  'discards a pending call read after %s changes', async input => {
-    const { fixture } = await mount(savedCalls());
-    let finish: ((response: Response) => void) | undefined;
-    const pending = new Promise<Response>(resolve => { finish = resolve; });
-    vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(pending)
-      .mockResolvedValue(new Response(JSON.stringify({ status: 'not_stopped' })));
-    checkStatus(rootOf(fixture)).click();
-    fixture.componentRef.setInput(input, input === 'denied' ? true : 'another');
-    fixture.detectChanges();
-    finish?.(new Response(JSON.stringify(savedCalls())));
-    await fixture.whenStable();
-    fixture.detectChanges();
-    expect(rootOf(fixture).querySelector('.budget-calls')).toBeNull();
-    expect(rootOf(fixture).textContent).not.toContain('reserved-call');
-  },
-);
+async function ignoresOldCalls(input: 'turnId' | 'conversationId' | 'denied') {
+  const { fixture } = await mount(savedCalls());
+  let finish: ((response: Response) => void) | undefined;
+  function saveResolver(resolve: (response: Response) => void): void {
+    finish = resolve;
+  }
+  const pending = new Promise<Response>(saveResolver);
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  fetch.mockReturnValueOnce(pending);
+  fetch.mockResolvedValue(new Response(JSON.stringify({ status: 'not_stopped' })));
+  checkStatus(rootOf(fixture)).click();
+  fixture.componentRef.setInput(input, input === 'denied' ? true : 'another');
+  fixture.detectChanges();
+  finish?.(new Response(JSON.stringify(savedCalls())));
+  await fixture.whenStable();
+  fixture.detectChanges();
+  expect(rootOf(fixture).querySelector('.budget-calls')).toBeNull();
+  expect(rootOf(fixture).textContent).not.toContain('reserved-call');
+}
+
+it('shows every saved call once, in order, with honest status and optional amounts', showsSavedCalls);
+it('shows participant call references and statuses without amounts or totals', showsParticipantCalls);
+it('adds no call card or status action for an empty saved list', showsNoInventedCard);
+it('checks the original call once while pending and updates without sending work', checksOriginalCall);
+it.each(['503', 'network', 'invalid'])('keeps the reason and last call after %s', keepsLastStatus);
+it.each([401, 403])('clears saved calls on %s and cannot check them again', clearsRefusedCalls);
+const changedInputs = ['turnId', 'conversationId', 'denied'] as const;
+it.each(changedInputs)('discards a pending call read after %s changes', ignoresOldCalls);

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
@@ -92,10 +93,12 @@ async function capture(browser, frame, width) {
       await page.clock.install({ time: new Date('2026-11-02T10:00:00Z') });
     }
     await page.route(`${origin}/**`, serveAssets);
-    await chatFixture(page, frame.scenario, optionsFor(frame));
-    await page.route('**/api/conversations/*/budget-stops?*', async route => {
+    const fixture = await chatFixture(page, frame.scenario, optionsFor(frame));
+    async function readStop(route) {
       budgetReads.push(route.request().method());
-      assert.equal(new URL(route.request().url()).searchParams.get('turnId'), 'event-2');
+      const address = new URL(route.request().url());
+      assert.equal(address.pathname, '/api/conversations/chat/budget-stops');
+      assert.equal(address.searchParams.get('turnId'), 'event-2');
       if (frame.failedCheck && budgetReads.length > 1) {
         await route.fulfill({ status: 503, json: {} });
       } else if (frame.changed && budgetReads.length === 1) {
@@ -105,7 +108,8 @@ async function capture(browser, frame, width) {
       } else {
         await route.fulfill({ json: statusFor(frame) });
       }
-    });
+    }
+    await page.route('**/api/conversations/*/budget-stops?*', readStop);
     await page.goto(`${origin}/workspace?conversation=chat`);
     const notice = page.locator('oc-budget-stop-notice');
     await notice.waitFor();
@@ -143,6 +147,9 @@ async function capture(browser, frame, width) {
     const expectedReads = callsSet ? ['GET', 'GET'] : ['GET'];
     assert.deepEqual(budgetReads, expectedReads);
     assert.equal(await notice.getByRole('alert').count(), 0);
+    assert.deepEqual(fixture.commands, [], 'No work is sent or repeated');
+    assert(await page.evaluate(hasNoSavedCallDetails), 'Call details stay out of storage');
+    assert.equal(page.url(), `${origin}/workspace?conversation=chat`);
     const filename = `${frame.name}-${width}.png`;
     await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
     return filename;
@@ -155,6 +162,20 @@ function callFitsViewport(element) {
   const bounds = element.getBoundingClientRect();
   return element.scrollWidth <= element.clientWidth
     && bounds.left >= 0 && bounds.right <= innerWidth;
+}
+
+function statusCheckFinished() {
+  const action = document.querySelector('oc-budget-stop-notice button');
+  return action?.getAttribute('aria-disabled') === 'false';
+}
+
+function hasFocus(element) {
+  return element === document.activeElement;
+}
+
+function hasNoSavedCallDetails() {
+  const saved = JSON.stringify({ ...localStorage, ...sessionStorage });
+  return !/original-call|heldCents|chargedCents|Reserved:|Pull the Q3/iu.test(saved);
 }
 
 async function checkSavedCalls(page, notice, frame, budgetReads) {
@@ -175,12 +196,10 @@ async function checkSavedCalls(page, notice, frame, budgetReads) {
     await notice.getByText('Stop details unavailable', { exact: true }).waitFor();
     assert((await card.innerText()).includes('Outcome unknown'));
   } else {
-    await page.waitForFunction(() =>
-      document.querySelector('oc-budget-stop-notice button')
-        ?.getAttribute('aria-disabled') !== 'true');
+    await page.waitForFunction(statusCheckFinished);
   }
   assert.deepEqual(budgetReads, ['GET', 'GET']);
-  assert(await action.evaluate(element => element === document.activeElement));
+  assert(await action.evaluate(hasFocus));
   await notice.getByText('Group monthly limit reached', { exact: false }).waitFor();
   assert(await card.evaluate(callFitsViewport), 'Call card fits the screen');
   assert(await card.locator('code').evaluate(callFitsViewport), 'Reference wraps inside the card');
@@ -204,7 +223,12 @@ try {
     + `Captures: ${filenames.join(', ')}.\n`;
   let savedReceipt = receipt;
   if (callsSet) {
+    const source = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
     savedReceipt = '# Saved call status screens\n\n'
+      + `Date: ${new Date().toISOString().slice(0, 10)}. Source: ${source} plus working changes.\n\n`
+      + 'Environment: local Chromium with intercepted API replies; not a fresh installation. '
+      + 'Command: `npm run visual:screen-p3-14-calls`. Expected and observed: '
+      + 'saved status reads preserve the reason, wrap references and keep focus.\n\n'
       + 'PASS: Reduced-motion browser fixtures at 1280px and 390px. '
       + 'The reason stays visible; long references wrap and cards fit the screen. '
       + 'Check status uses the original turn GET, keeps keyboard focus and has a 44px target '

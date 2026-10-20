@@ -3,10 +3,6 @@
   @if (accessChanged()) {
     <strong>Access changed</strong>
     <p>Stop details are no longer available.</p>
-  } @else if (unavailable()) {
-    <strong>Stop details unavailable</strong>
-    <p>This work is still stopped.</p>
-    <button type="button" [disabled]="loading()" (click)="checkAgain()">Check again</button>
   } @else if (details(); as stop) {
     @for (reason of stop.reasons; track $index) {
       <div class="budget-reason">
@@ -18,8 +14,31 @@
   } @else if (notStopped()) {
     <strong>Spending limit reached</strong>
     <p>An Owner or Admin can review the limit, or wait for the next monthly budget period (UTC).</p>
-  } @else {
+  } @else if (!unavailable()) {
     <strong>Checking stop details</strong>
     <p>This work is still stopped.</p>
   }
+  @if (!accessChanged() && unavailable()) {
+    <strong class="budget-unavailable">Stop details unavailable</strong>
+    <p>This work is still stopped. Any status shown is from the last successful check.</p>
+  }
 </section>
+@if (!accessChanged()) {
+  @if (details()?.calls?.length) {
+    <section class="budget-calls" aria-label="Saved call status">
+      @for (call of details()!.calls; track $index) {
+        <article class="budget-call">
+          <strong>{{ callStatus(call) }}</strong>
+          <p>{{ callExplanation(call) }}</p>
+          @if (callAmount(call); as amount) { <p>{{ amount }}</p> }
+          <code>{{ call.reference }}</code>
+        </article>
+      }
+    </section>
+  }
+  @if (details()?.calls?.length || unavailable()) {
+    @if (loading()) { <p>Checking saved status…</p> }
+    <button class="budget-check" type="button" [attr.aria-disabled]="loading()"
+      (click)="checkStatus()">Check status</button>
+  }
+}

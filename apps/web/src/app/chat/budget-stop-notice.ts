@@ -5,6 +5,7 @@ import { ReadFailure, requestChat } from './chat-session-http';
 
 type Stopped = Extract<BudgetStopStatus, { status: 'stopped' }>;
 type Reason = Stopped['reasons'][number];
+type Call = Stopped['calls'][number];
 type Execution = Stopped['work'][number]['execution'];
 
 @Component({
@@ -28,6 +29,8 @@ export class BudgetStopNotice {
   protected readonly notStopped = signal(true);
   private readonly readAt = signal('');
   private readVersion = 0;
+  private selectedConversationId = '';
+  private selectedTurnId = '';
 
   protected readonly execution = computed(this.matchingExecution.bind(this));
   protected readonly newPeriod = computed(this.newPeriodLine.bind(this));
@@ -77,7 +80,11 @@ export class BudgetStopNotice {
       this.accessChanged.set(denied);
       return;
     }
-    this.details.set(undefined);
+    if (conversationId !== this.selectedConversationId || turnId !== this.selectedTurnId) {
+      this.details.set(undefined);
+    }
+    this.selectedConversationId = conversationId;
+    this.selectedTurnId = turnId;
     this.accessChanged.set(false);
     void this.read(conversationId, turnId, version);
   }
@@ -99,12 +106,46 @@ export class BudgetStopNotice {
     return `Resets ${this.utcDate(reason.resetAt)}. Ask an admin to review the limit.`;
   }
 
-  protected checkAgain(): void {
+  protected checkStatus(): void {
     if (this.loading() || this.accessChanged() || this.denied()) return;
     const conversationId = this.conversationId();
     const turnId = this.turnId();
     if (!conversationId || !turnId) return;
     void this.read(conversationId, turnId, ++this.readVersion);
+  }
+
+  protected callStatus(call: Call): string {
+    const names = {
+      held: 'Reserved',
+      possibly_sent: 'Outcome unknown',
+      charged: 'Recorded charge',
+      released: 'Reservation released',
+    };
+    return names[call.status];
+  }
+
+  protected callExplanation(call: Call): string {
+    if (call.status === 'held') {
+      return 'The reservation is held for this call.';
+    }
+    if (call.status === 'possibly_sent') {
+      return 'The call may have been sent. Its outcome is not known.';
+    }
+    if (call.status === 'charged') {
+      return 'A charge is recorded for this call.';
+    }
+    return 'The reservation was released.';
+  }
+
+  protected callAmount(call: Call): string {
+    if (call.status === 'charged' && call.chargedCents !== undefined) {
+      return `Charged: ${money(call.chargedCents)}`;
+    }
+    if ((call.status === 'held' || call.status === 'possibly_sent')
+      && call.heldCents !== undefined) {
+      return `Reserved: ${money(call.heldCents)}`;
+    }
+    return '';
   }
 
   private executionWords(execution: Execution): string {
@@ -143,7 +184,6 @@ export class BudgetStopNotice {
         this.details.set(undefined);
         this.accessChanged.set(true);
       } else {
-        this.details.set(undefined);
         this.unavailable.set(true);
       }
     } finally {
