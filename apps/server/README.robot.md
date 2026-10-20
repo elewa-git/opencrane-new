@@ -3431,10 +3431,22 @@ saved pausing, a current connection's empty bridge proof and a fresh complete ro
 receipt with the saved supervisor epoch. Invalid or missing proof saves no pause.
 Both outcomes use the pausing command's deterministic id and read-back pattern;
 both block work. Failed is allowed only from requested or pausing, with reason
-`pause_timeout`. PR 2h will call it from the 30-second deadline runner, including
-when the bridge or computer is down; that runner and its race/clock/outage tests
-are deferred by the size split. PR 2h also cancels saved approvals and releases
-unadmitted reservations at zero through the existing commands, once.
+`pause_timeout`. `bridge-deadline.ts` runs independently of connection, stop and
+proof waits, including when there is no ready computer. It uses the saved request
+time plus thirty seconds, capped by thirty seconds from the server's first
+monotonic observation. Polls and reconnects share that observation. Clock changes
+can shorten the limit but cannot extend it. A restart reads the original saved time
+and fails an expired request immediately. Shutdown stops the deadline checks.
+
+The proof path checks the same limit immediately before saving paused. Conditional
+writes prevent a delayed proof from replacing a saved failure. An append outage
+keeps work denied and retries only the original deterministic failure transition.
+Read-back and current saved status prevent duplicate failures after lost replies.
+Tests hold connections and proofs, move both clocks, race conditional writes, and
+restart after an append outage or lost reply beyond the NATS duplicate window.
+They also check unchanged terminal records and work/renewal refusal.
+Approval cancellation, zero release of unadmitted reservations and row 1c refusal
+auditing remain the next part. Native execution and writer requests stay off.
 Writer access, leases and full recovery remain later work. The access
 checks are unchanged. `bridge-gate.test.ts` also covers refusal and lost append replies;
 `supervisor-stop.test.ts` checks real executor children and restart denial.

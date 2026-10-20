@@ -1,0 +1,1 @@
+- Take-control attempts now keep their original thirty-second pause limit when a computer is unavailable, a connection stalls or proof arrives late. Expired attempts keep new work blocked and save one failure when the event log is available. Desktop control remains switched off.

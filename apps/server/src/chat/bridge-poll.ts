@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readComputerControl } from '@opencrane/auth';
 import type { bridgeControl } from './bridge-control.ts';
+import { watchTakeoverDeadline } from './bridge-deadline.ts';
 import type { Logger } from '@opencrane/observability';
 import { history } from '../../../ops/src/lifecycle.ts';
 import { creationEvent } from './private-session.ts';
@@ -238,10 +239,15 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
 
   async function watchControls(signal: AbortSignal) {
     const checking = new Map<string, Promise<void>>();
+    const deadlines = new Map<string, Promise<void>>();
     function failed() {
       logger.warn('Bridge control check unavailable; retrying next poll');
     }
     function start(assistantId: string) {
+      if (!deadlines.has(assistantId)) {
+        const deadline = watchTakeoverDeadline(options.store, options.silo, assistantId, signal);
+        deadlines.set(assistantId, deadline);
+      }
       if (checking.has(assistantId)) return;
       function finished() {
         checking.delete(assistantId);
@@ -257,6 +263,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     } catch (error) {
       if (!signal.aborted) throw error;
     } finally {
+      await Promise.all(deadlines.values());
       await Promise.all(checking.values());
     }
   }
