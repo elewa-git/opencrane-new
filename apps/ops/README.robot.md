@@ -683,9 +683,15 @@ Quota and network isolation remain for 8b; no runtime start path is connected he
 ## Scheduled private connection maintenance
 
 After subscription checks, `startWorkers` starts `scanConnections` without awaiting it.
-The loop uses the same loaded custody object as `cleanup-connection`. Unset or missing
+The loop receives the configured `SILO_ID` and the same loaded custody object as
+`cleanup-connection`. Unset or missing
 configuration leaves both disabled; malformed configuration still stops startup.
-The worker aborts and awaits the scan before closing its event store and database.
+The worker aborts and waits for the runtime, watcher and scan to settle before closing
+its event store and database. A failed task cannot skip that wait. A rejected scan logs
+fixed text without the error object, sets a failed exit code and aborts the worker.
 The loop's [contract](../../libs/models/README.robot.md#scheduled-connection-scans-p3-8-pr-3f-part-of-49)
 owns timing, continuation retries and safe logging. Worker tests cover configured and
 missing files, changed subscriptions, and dispatch while the first list request hangs.
+Shutdown tests hold that response until after SIGTERM and the runtime has stopped,
+including when the watcher rejects. A test-only module loader injects watcher and scan
+failures. The scan failure test checks automatic shutdown and private error redaction.

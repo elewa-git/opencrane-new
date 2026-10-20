@@ -941,7 +941,8 @@ async function scanFailure(failure: string) {
       return page;
     }
     vi.spyOn(custody, 'candidates').mockImplementation(failAfterList);
-    expect(await reconcileConnectionPage(events.store, test.db, custody, 'test')).toMatchObject({ deleted: 0 });
+    expect(await reconcileConnectionPage(events.store, test.db, custody, 'test'))
+      .toMatchObject({ deleted: 0 });
     expect(test.store.deletes).toBe(0);
     return;
   } else {
@@ -1070,7 +1071,8 @@ async function refusesInvalidRecovery(result: 'status' | 'identity') {
     recovery.mockResolvedValue({ status: 'recovered' });
   }
   const removal = vi.spyOn(custody, 'remove');
-  expect(await reconcileConnectionPage(events.store, test.db, custody, 'test')).toMatchObject({ deleted: 0 });
+  expect(await reconcileConnectionPage(events.store, test.db, custody, 'test'))
+      .toMatchObject({ deleted: 0 });
   expect(removal).not.toHaveBeenCalled();
 }
 it.each(['status', 'identity'] as const)(
@@ -1363,7 +1365,8 @@ async function refusesUnlistedPage(throws: boolean) {
   }
   const listing = vi.spyOn(custody, 'candidates');
   listing.mockImplementation(unavailable);
-  expect(await reconcileConnectionPage(events.store, test.db, custody, 'test')).toEqual({ status: 'unknown' });
+  expect(await reconcileConnectionPage(events.store, test.db, custody, 'test'))
+    .toEqual({ status: 'unknown' });
   expect(test.store.deletes).toBe(0);
 }
 it.each([false, true])('retains a failed candidate page (throws: %s)', refusesUnlistedPage);

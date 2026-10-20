@@ -2582,10 +2582,13 @@ Initial publication activation and in-process route replacement remain separate 
 
 ## Bounded connection maintenance (P3-8 PR 3d, Part of #49)
 
-`reconcileConnectionPage(store, db, custody, continuation?)` is a private live-maintenance
+`reconcileConnectionPage(store, db, custody, silo, continuation?)` is a private live-maintenance
 entry point. Each call lists at most 25 Secrets in the configured custody namespace,
 using the managed-by label. It reads at most 1 MiB and accepts a continuation of at most
-4,096 characters. It passes each verified stage through `reconcileConnectionStage`.
+4,096 characters. The caller supplies the configured worker silo. Candidates for any
+other silo count as examined but not deleted. They stay in custody without acquiring a
+profile lock, reading history, recovering a journal, appending an event or deleting a copy.
+Only matching candidates pass through `reconcileConnectionStage`.
 The result contains counts and a private continuation, never credential material.
 Callers retain that continuation between pages and start a new pass after the last page.
 Malformed objects or stage annotations stay in storage and are excluded from the
@@ -2864,15 +2867,20 @@ Fresh-install qualification and the deferred outage watchdog: NOT RUN.
 
 ## Scheduled connection scans (P3-8 PR 3f; Part of #49)
 
-`scanConnections` runs one pass at startup, then on a fixed 15-minute timer. Tests pass
+`scanConnections` receives the configured worker silo and passes it to every page check.
+It runs one pass at startup, then on a fixed 15-minute timer. Tests pass
 shorter intervals. Pages run sequentially to the end; ticks during work are skipped.
 An unknown page waits for the next tick with the same private continuation. A second
-unknown page discards that continuation and the next tick starts from the first page.
+consecutive unknown page discards that continuation and the next tick starts from the first page.
+A successful page clears the consecutive-unknown state.
 Abort stops further list requests and waits for the current bounded page to finish.
 Logs contain fixed text and examined/deleted counts only; the loop returns no page data.
 The worker shares custody with the cleanup reaction and starts scanning only after
 subscription checks. Replay never starts the loop. No new setting or event is needed.
 Tests use real NATS/PostgreSQL and HTTP custody, including exhausted retries, restart,
 late activation, pagination, slow/unknown pages and dispatch during a hanging list.
+The mixed-page test uses two real NATS stores and retains the other silo's current copy
+without adding anything to the worker's store. Timer tests check the default at 899,999
+and 900,000 milliseconds and retry an unknown page after an intervening success.
 Row 3 is complete apart from live qualification. Live Kubernetes, provider and
 fresh-install qualification: NOT RUN. Next for #49 is row 4, company opt-in and selection.

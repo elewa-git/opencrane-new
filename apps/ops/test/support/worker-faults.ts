@@ -3,6 +3,7 @@ import { mock } from 'node:test';
 import * as lifecycle from '../../src/lifecycle.ts';
 import * as handlers from '@opencrane/handlers';
 import * as models from '@opencrane/models';
+import * as eventStore from '@opencrane/event-store';
 
 async function failedWatcher(): Promise<void> {
   process.send?.('watcher-ready');
@@ -35,3 +36,15 @@ class ObservedRuntime extends handlers.HandlerRuntime {
 
 const handlerExports = { ...handlers, HandlerRuntime: ObservedRuntime };
 mock.module('@opencrane/handlers', { namedExports: handlerExports });
+
+async function observedConnection(...args: Parameters<typeof eventStore.connectEventStore>) {
+  const connected = await eventStore.connectEventStore(...args);
+  async function close() {
+    process.send?.('storage-closing');
+    await connected.close();
+  }
+  return { ...connected, close };
+}
+
+const storeExports = { ...eventStore, connectEventStore: observedConnection };
+mock.module('@opencrane/event-store', { namedExports: storeExports });

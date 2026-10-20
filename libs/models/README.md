@@ -22,7 +22,7 @@ flowchart LR
   models -->|checks remote HTTPS addresses and certificates; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
-  models -->|stages credentials, scans at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
+  models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store<br/>event log"]
@@ -413,6 +413,7 @@ A simultaneous change to another connection can also refuse the save; the caller
 Configured workers check private token copies at startup and every 15 minutes.
 They remove only copies proven safe to delete, including abandoned saves and copies
 left after failed cleanup jobs. Each pass checks one small page at a time.
+Workers keep copies belonging to other silos without checking or changing them.
 
 ## How to run or test it
 

@@ -104,6 +104,7 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
   const watcherReady = Promise.withResolvers<void>();
   const runtimeStopped = Promise.withResolvers<void>();
   const scanReady = Promise.withResolvers<void>();
+  let storageClosing = false;
   function received(message: unknown) {
     if (message === 'watcher-ready') {
       watcherReady.resolve();
@@ -113,6 +114,9 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
     }
     if (message === 'scan-ready') {
       scanReady.resolve();
+    }
+    if (message === 'storage-closing') {
+      storageClosing = true;
     }
   }
   child.on('message', received);
@@ -177,15 +181,19 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
           await until(watcherFailed);
         }
         child.kill('SIGTERM');
+        // Wait for queue shutdown so it cannot hide a missing wait for the scan.
         await runtimeStopped.promise;
         await delay(500);
         expect(child.exitCode).toBeNull();
         expect(child.signalCode).toBeNull();
         expect(listClosed).toBe(false);
+        // Check storage too: the open HTTP request can keep Node alive after storage closes.
+        expect(storageClosing).toBe(false);
         held.resolve();
         await exited;
         expect(child.exitCode).toBe(watcherFailure ? 1 : 0);
         expect(listClosed).toBe(true);
+        expect(storageClosing).toBe(true);
       }
     } else {
       await delay(100);
