@@ -25,6 +25,8 @@ async function recordsSetup() {
       steps.push(step);
       if (step === 'create') {
         assert.equal(input.provider, 'openai');
+        assert.equal(input.providerId, 'dev-openai');
+        assert.equal(input.name, 'OpenAI demo');
         assert.equal(input.expectedRevision, 0);
         assert.equal(Object.hasOwn(input, 'upstream'), false);
       }
@@ -57,7 +59,7 @@ async function recordsSetup() {
     const address = server.address();
     assert(address && typeof address !== 'string');
     const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
-      cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
+      cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value', real: true };
     try {
       if (refusal === -1) await setupProvider(options);
       else {
@@ -86,8 +88,10 @@ async function recordsSetup() {
 }
 test('provider setup uses ordered authenticated product calls and stops at each refusal', recordsSetup);
 
-async function waitsForSeededDefault(loseReply = false) {
+async function waitsForSeededDefault(loseReply = false, absent = false) {
   let saves = 0;
+  let savedCommand = '';
+  let recovered = false;
   let bindingReads = 0;
   let selections = 0;
   async function handle(request: import('node:http').IncomingMessage,
@@ -98,8 +102,17 @@ async function waitsForSeededDefault(loseReply = false) {
     response.setHeader('content-type', 'application/json');
     if (request.method === 'POST' && request.url?.endsWith('/key')) {
       saves++;
+      savedCommand = input.commandId;
       if (loseReply) {
         request.socket.destroy();
+        return;
+      }
+    }
+    if (savedCommand && request.url?.endsWith(`/changes/${savedCommand}`)) {
+      recovered = true;
+      if (absent) {
+        response.writeHead(404);
+        response.end('sensitive-value /private/location');
         return;
       }
     }
@@ -133,7 +146,15 @@ async function waitsForSeededDefault(loseReply = false) {
   const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
     cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
   try {
+    if (absent) {
+      async function run() { await setupProvider(options); }
+      await assert.rejects(run, { message: 'Provider setup save: 404' });
+      assert.equal(saves, 1);
+      assert.equal(selections, 0);
+      return;
+    }
     await setupProvider(options);
+    assert(recovered, 'Read the original save command');
     assert.equal(saves, 1, 'An unknown write is never sent twice');
     assert.equal(bindingReads, 2);
     assert.equal(selections, 1, 'Wait for the scheduled binding before the single owner selection');
@@ -149,6 +170,9 @@ test('waits for the first provider binding before explicitly selecting the defau
 
 test('a lost save reply is recovered by reading its original receipt',
   function lostReplyTest() { return waitsForSeededDefault(true); });
+
+test('an absent receipt after a lost response never repeats the unknown write',
+  function absentReceiptTest() { return waitsForSeededDefault(true, true); });
 
 async function refusesUnsafeReplies() {
   for (const failure of ['redirect', 'transport', 'json']) {

@@ -119,7 +119,7 @@ They never call Tailscale Serve. Sessions remain HttpOnly/SameSite=Lax; local HT
 uses non-Secure cookies with distinct names per id because cookies ignore ports.
 Real Zitadel login, organisation pinning, CSRF checks and PKCE still apply. Browser
 contexts and screenshots are separate; secondary screenshots live in their private
-generated directories. No paid model provider is used.
+generated directories. Paid providers require the explicit opt-in below.
 
 The limit is **owner plus two journey stacks on the 8-core, 16 GiB box**. Each
 secondary caps Compose services to 0.5 CPU each and 256–512 MiB each (models: one CPU / 768 MiB), Angular to two
@@ -694,7 +694,7 @@ Provider rows contain no address; the existing `MODEL_UPSTREAM` selects the loca
 `modelsEnvironment` removes inherited `MODEL_KEY_FILE` settings. Before recorded
 switch-on it supplies the local stub file; afterwards it supplies only shared custody.
 The stack restarts models after setup and waits for readiness. Repeat starts read
-`managedProviderCallsEnabled` before choosing the environment. No paid calls are made.
+`managedProviderCallsEnabled` before choosing the environment. Default starts make no paid calls.
 The [qualification receipt](../../docs/process/p4-22-managed-dev-stack/receipt.md)
 records the single-slot qualification. The provider reached ready and switch-on
 was accepted. A later-joining member chatted through the explicit default, with no
@@ -714,3 +714,32 @@ and secondary startup installation. See the [test contract](../../apps/ops/READM
 Pod admission includes `pods/resize` for hosted tools and computers. Computer Pod
 resource requests and limits must match the checked sandbox template. The hosted
 admission live file covers both policies in disposable secondary namespaces.
+
+## Opt-in real replies
+
+Set `DEV_REAL_PROVIDER_FILE` to the private OpenAI credential file path when running
+`up.sh --id 1 --fresh` or `up.sh --id 2 --fresh` on a claimed slot. Only private setup
+reads its value and sends it to the existing custody API. The path is not saved in
+stack settings or passed to server/models. The provider is named OpenAI demo.
+Models and verification omit `MODEL_UPSTREAM`; they use the production OpenAI route.
+After switch-on, models has no `MODEL_KEY_FILE`. The local stub is not started. Secondary models mounts the host certificate store
+read-only at `/etc/ssl/certs`, so the pinned gateway can verify public HTTPS certificates.
+Node uses bundled roots and could connect even when the gateway had no trusted roots.
+Missing, empty or invalid files fail with a fixed preparation error.
+
+Setup still uses the product reachability check, exact consented quote, registry models,
+explicit default, drain and switch-on. A lost write response permits only a GET of the
+original command receipt. Recovery requires the expected operation. An absent or unknown
+receipt never causes another POST. Incomplete setup stops; repeat startup cannot silently
+create another provider or change modes. Keep the opt-in on ordinary restarts. A fresh
+start is required to change between real and stub modes. The nightly unsets the opt-in.
+
+The real journey replaces only the stub chat checks. It uses existing sign-in and later
+member setup, then four chat turns: arithmetic with streaming/reload, Stop with partial
+text/reload, the member's capital-city answer, and an uploaded supplier quote's total and
+delivery date. The PDF goes through the normal malware scan and turn input. Together
+with provider verification this requests five paid turns. Real startup seeds a maximum
+2,000-cent daily/monthly ceiling; this is not a shared cross-stack spending counter.
+Run only within the owner's shared daily approval. A failure stops the journey without
+resubmitting a turn. The receipt in `docs/process/demo-real-model/` records source SHA,
+checks and reservation/charge cents; null charges mean an unresolved hold.
