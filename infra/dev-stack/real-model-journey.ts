@@ -65,7 +65,7 @@ export async function realModelJourney(owner: Page, member: Page, origin: string
   let check = 'owner streamed reply and reload';
   try {
     await draft(owner, origin);
-    await answer(owner, 'What is 19 multiplied by 23? Reply with the number only. Do not use tools.',
+    await answer(owner, 'What is 19 multiplied by 23? Explain the calculation in three sentences. Do not use tools.',
       [/\b437\b/u]);
     outcomes.push({ check, result: 'PASS' });
     check = 'Stop and reload';
