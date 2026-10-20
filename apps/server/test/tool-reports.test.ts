@@ -26,7 +26,14 @@ async function recordsToolReportsOnce() {
     const consent = { sequence: 3, conversationId: 'chat', turnId: 'message',
       assistantId: 'assistant', type: 'agent.native_consent_refused', nativeRequestId: '17',
       serverName: 'oc_0123456789', serverId: 'fixture', reason: 'unsupported_native_consent' };
-    for (const report of [started, finished, consent]) {
+    const native = { sequence: 4, conversationId: 'chat', turnId: 'message',
+      assistantId: 'assistant', type: 'agent.native_request_refused', nativeRequestId: '19',
+      requestKind: 'shell', outcome: 'declined' };
+    for (const field of ['callId', 'command', 'extra']) {
+      const invalid = { ...native, [field]: 'PRIVATE_NATIVE_MARKER' };
+      await expect(recordReport(nats.store, keys, context, invalid)).rejects.toThrow();
+    }
+    for (const report of [started, finished, consent, native]) {
       await expect(recordReport(nats.store, keys, context, report)).resolves.toBe('recorded');
       await expect(recordReport(nats.store, keys, context, report)).resolves.toBe('duplicate');
     }
@@ -41,8 +48,11 @@ async function recordsToolReportsOnce() {
         serverId: 'fixture', toolName: 'write', status: 'completed', durationMs: 75 },
       { conversationId: 'chat', turnId: 'message', nativeRequestId: '17',
         serverName: 'oc_0123456789', serverId: 'fixture', reason: 'unsupported_native_consent' },
+      { conversationId: 'chat', turnId: 'message', nativeRequestId: '19',
+        requestKind: 'shell', outcome: 'declined' },
     ]);
-    const next = { ...finished, sequence: 4 };
+    expect(JSON.stringify(rows)).not.toContain('PRIVATE_NATIVE_MARKER');
+    const next = { ...finished, sequence: 5 };
     const invalidReports = [
       { ...next, arguments: { private: 'text' } }, { ...next, result: 'private' },
       { ...next, error: 'private' }, { ...next, callId: 'bad\nid' },
@@ -57,7 +67,7 @@ async function recordsToolReportsOnce() {
     for (const report of invalidReports) {
       await expect(recordReport(nats.store, keys, context, report)).rejects.toThrow();
     }
-    expect(await nats.store.head()).toBe(5);
+    expect(await nats.store.head()).toBe(6);
   } finally {
     await nats.close();
     await rm(directory, { recursive: true, force: true });

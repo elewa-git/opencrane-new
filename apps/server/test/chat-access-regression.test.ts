@@ -252,6 +252,14 @@ async function readsApprovalsDuringToolProgress(type: string) {
       data['serverName'] = 'oc_0123456789';
       data['reason'] = 'unsupported_native_consent';
     }
+    if (type === 'agent.native_request_refused') {
+      delete data['callId'];
+      delete data['toolName'];
+      delete data['serverId'];
+      data['nativeRequestId'] = '19';
+      data['requestKind'] = 'shell';
+      data['outcome'] = 'declined';
+    }
     if (type === 'agent.tool_call_finished') data['status'] = 'completed';
     await context.append('conversation-tool-chat', type, data, false);
   }
@@ -268,7 +276,8 @@ async function readsApprovalsDuringToolProgress(type: string) {
     await context.close();
   }
 }
-it.each(['agent.tool_call_started', 'agent.tool_call_finished', 'agent.native_consent_refused'])(
+it.each(['agent.tool_call_started', 'agent.tool_call_finished', 'agent.native_consent_refused',
+  'agent.native_request_refused'])(
   'keeps approval reads available when %s arrives during the access check',
   readsApprovalsDuringToolProgress, 120_000);
 
