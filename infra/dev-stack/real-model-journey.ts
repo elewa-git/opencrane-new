@@ -59,6 +59,23 @@ async function supplier(page: Page, origin: string) {
   [/1[,. ]?234[,.]56/u, /17/u, /November|11/u, /2026/u]);
 }
 
+export async function realMemberJourney(member: Page, origin: string) {
+  const outcomes: Array<{ check: string; result: string }> = [];
+  let check = 'later member through the default';
+  try {
+    await draft(member, origin);
+    await answer(member, 'What is the capital of France? One plain sentence. Do not use tools.',
+      [/\bParis\b/iu]);
+    outcomes.push({ check, result: 'PASS' });
+    check = 'scanned supplier PDF total and delivery date';
+    await supplier(member, origin);
+    outcomes.push({ check, result: 'PASS' });
+  } catch {
+    outcomes.push({ check, result: 'FAIL' });
+  }
+  return outcomes;
+}
+
 export async function realModelJourney(owner: Page, member: Page, origin: string,
   store: EventStore, silo: string) {
   const outcomes: Array<{ check: string; result: string }> = [];
@@ -70,16 +87,14 @@ export async function realModelJourney(owner: Page, member: Page, origin: string
       [/\b437\b/u]);
     outcomes.push({ check, result: 'PASS' });
     check = 'Stop and reload';
-    await stop(owner);
-    outcomes.push({ check, result: 'PASS' });
-    check = 'later member through the default';
-    await draft(member, origin);
-    await answer(member, 'What is the capital of France? One plain sentence. Do not use tools.',
-      [/\bParis\b/iu]);
-    outcomes.push({ check, result: 'PASS' });
-    check = 'scanned supplier PDF total and delivery date';
-    await supplier(member, origin);
-    outcomes.push({ check, result: 'PASS' });
+    try {
+      await stop(owner);
+      outcomes.push({ check, result: 'PASS' });
+    } catch {
+      outcomes.push({ check, result: 'FAIL' });
+    }
+    const memberOutcomes = await realMemberJourney(member, origin);
+    outcomes.push(...memberOutcomes);
   } catch {
     outcomes.push({ check, result: 'FAIL' });
     throw new Error(`Real journey failed: ${check}`);
@@ -105,6 +120,9 @@ export async function realModelJourney(owner: Page, member: Page, origin: string
     const folder = `${root}/docs/process/demo-real-model`;
     await mkdir(folder, { recursive: true });
     await writeFile(`${folder}/live.json`, JSON.stringify(receipt, null, 2) + '\n');
+  }
+  for (const outcome of outcomes) {
+    if (outcome.result !== 'PASS') throw new Error(`Real journey failed: ${outcome.check}`);
   }
   console.log('PASS real replies: streaming, reload, Stop, later member and supplier PDF');
 }
