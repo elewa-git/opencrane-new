@@ -1,11 +1,12 @@
 import { nativeRequests } from '../src/native-requests.ts';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer as createSocketServer } from 'node:net';
 import { createInterface } from 'node:readline';
 import { setTimeout as pause } from 'node:timers/promises';
 
@@ -20,6 +21,7 @@ const capture = {
 };
 let stage = 'start';
 let activeClient;
+let nativeHost;
 let modelHoldStarted;
 let nextRpc = 0;
 const onRequest = process.argv.includes('--on-request');
@@ -149,13 +151,17 @@ function plannedCall(plan, namespaces) {
 async function handleModel(request, response) {
   const body = await readBody(request);
   const namespaces = [];
-  for (const tool of body.tools ?? []) {
+  const tools = [...(body.tools ?? [])];
+  for (const item of body.input ?? []) {
+    if (item.type === 'additional_tools') tools.push(...item.tools);
+  }
+  for (const tool of tools) {
     if (tool.type === 'namespace' && tool.name.startsWith('mcp__')) namespaces.push(tool);
   }
   const prompt = latestPrompt(body);
   const observedTools = { stage, prompt, atMs: Date.now() - startedAt,
     namespaces, input: body.input };
-  if (onRequest) observedTools.tools = body.tools;
+  if (onRequest) observedTools.tools = tools;
   if (stage !== 'R2' && stage !== 'R7') {
     observedTools.input = JSON.stringify(body.input);
   }
@@ -570,6 +576,25 @@ function expireProbe() {
 }
 
 try {
+  if (onRequest) {
+    mkdirSync('/run/executor', { recursive: true });
+    mkdirSync('/home/agent/workspace', { recursive: true });
+    function connectNativeHost(socket) {
+      const host = spawn('/usr/local/bin/tool-user', ['host'], {
+        stdio: ['pipe', 'pipe', 'inherit'],
+      });
+      socket.pipe(host.stdin);
+      host.stdout.pipe(socket);
+      function disconnect() { host.stdin.destroy(); }
+      socket.on('close', disconnect);
+      socket.on('error', disconnect);
+      function hostFailed() { socket.destroy(); }
+      host.stdin.on('error', hostFailed);
+    }
+    nativeHost = createSocketServer(connectNativeHost);
+    function startNativeHost(resolve) { nativeHost.listen('/run/executor/host.sock', resolve); }
+    await new Promise(startNativeHost);
+  }
   const modelPort = await listen(model);
   if (wireMode) {
     const { memoryFreeConfig } = await import('../src/codex-config.ts');
@@ -854,6 +879,7 @@ plugins = false
   console.log(JSON.stringify(capture, null, 2));
   clearTimeout(deadline);
   if (activeClient) await activeClient.close();
+  nativeHost?.close();
   mcp.close();
   model.close();
   if (runtimeProxy) await runtimeProxy.close();
@@ -979,12 +1005,19 @@ async function captureNativeRequests(config, configPath) {
     console.error(`Capturing ${name}`);
     const callId = `call_${name}`;
     const plan = { kind: 'tool', callId, itemId: `fc_${name}` };
-    if (tool === 'apply_patch') {
-      plan.item = { type: 'custom_tool_call', id: plan.itemId, call_id: callId,
-        name: tool, input: args };
-    } else if (tool) {
+    let nativeTool = tool;
+    let nativeArgs = args;
+    if (!nativeTool) {
+      nativeTool = 'mcp__oc_aaaaaaaaaa__read_before';
+      nativeArgs = {};
+    }
+    const call = `text(await tools.${nativeTool}(${JSON.stringify(nativeArgs)}));`;
+    const offered = 'for (const tool of ALL_TOOLS) text({ offeredTool: tool.name });';
+    plan.item = { type: 'custom_tool_call', id: plan.itemId, call_id: callId,
+      name: 'exec', namespace: 'functions', input: `${offered} ${call}` };
+    if (tool === 'request_user_input') {
       plan.item = { type: 'function_call', id: plan.itemId, call_id: callId,
-        name: tool, arguments: JSON.stringify(args) };
+        name: tool, namespace: 'functions', arguments: JSON.stringify(args) };
     }
     plans.set(name, plan);
     await activeClient.turn(target, name, overrides);
