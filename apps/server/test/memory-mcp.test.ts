@@ -2058,15 +2058,23 @@ async function missingLoadedEvidence(stage: string) {
 it.each(['absent', 'prepared', 'empty'])(
   'refuses valid personal proofs with %s loaded evidence', missingLoadedEvidence);
 
-async function loadChangeFact(query: string, callId: string) {
-  const body = { ...call, params: { ...call.params,
-    arguments: { scopeId, query, limit: 1 }, _meta: { ...metadata, callId } } };
-  const token = await signedRecall(setup, {}, body);
-  const requestHeaders = { ...headers, 'x-memory-context': token };
-  const response = await app.inject({ method: 'POST', url: route,
-    headers: requestHeaders, payload: body });
-  expect(response.statusCode, response.body).toBe(200);
-  return recallProofSchema.parse(response.json()).result.structuredContent;
+async function loadChangeFacts() {
+  const data = { conversationId: 'conversation', turnId: 'turn', requesterId: 'alice',
+    assistantId: 'assistant', computerId: 'computer', generation: 1, threadId: 'thread',
+    inputGeneration: 'change-input', projectionGeneration: 'projection', action: 'prepared',
+    delivery: null, callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
+    byteCount: 0, hasOmissions: false, reason: 'none' };
+  await seedEvidence(data);
+  const additions = [{ scopeId, memoryId: 'fact_21', revision: 1 },
+    { scopeId, memoryId: 'fact_22', revision: 1 }];
+  const position = await setup.nats.store.head(`scope-${scopeId}`);
+  await seedEvidence({ ...data, action: 'loaded', delivery: 'initial', additions,
+    byteCount: 1, scopePositions: [{ scopeId, position }] });
+  const token = await signedRecall(setup);
+  const parsed = parseMemoryRequest(JSON.stringify(call), headers);
+  const context = await verifyMemoryContext(token, setup.identity, parsed);
+  const { recallProof } = await import('../src/memory/recall-proof.ts');
+  return recallProof(testAuthConfig().cookieSecret, context, [additions[0]!], data.inputGeneration);
 }
 async function changeRequest(operation: 'correct' | 'forget') {
   const catalogue = memoryCatalogue;
@@ -2078,8 +2086,7 @@ async function changeRequest(operation: 'correct' | 'forget') {
   await publishMemory(setup);
   await grantWrite('member');
   await grantWrite('assistant');
-  const { recallProof } = await loadChangeFact('exactly', 'target');
-  await loadChangeFact('deliver', 'dependency');
+  const recallProof = await loadChangeFacts();
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const dependsOn = chat.memoryContext!.references;
   const target = dependsOn[0]!;

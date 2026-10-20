@@ -1750,6 +1750,8 @@ it('returns only the fixed refusal when memory preparation fails', sanitisesMemo
 
 async function correctionAfterLoadedAppend() {
   await seedRecallFact();
+  const initial = await directRecall('before-correction');
+  expect(initial.statusCode, initial.body).toBe(200);
   const bridge = await renewalBridge();
   expect(await bridge.exchange(1)).toHaveProperty('token');
   const append = setup.nats.store.append.bind(setup.nats.store);
