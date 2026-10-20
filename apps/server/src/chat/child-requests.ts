@@ -1,3 +1,4 @@
+import { childStartFailure } from './child-failure.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -14,6 +15,8 @@ import { participationClosed } from './participation.ts';
 export class ChildRequestRefused extends ChatConflict {}
 export class ChildRequestClosed extends ChatConflict {}
 export class ChildRequestChanged extends ChatConflict {}
+export class ChildRequestRace extends ChildRequestChanged {}
+export class ChildRequestFailed extends ChatConflict {}
 
 type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db' | 'keys'>;
 const inputSchema = z.strictObject({
@@ -55,7 +58,8 @@ async function load(options: Options, memberId: string, value: unknown) {
     }
   }
   requireOwnSource(source, input, memberId);
-  return { input, source, intent, sequence };
+  const failed = childStartFailure(rows, intentId) !== undefined;
+  return { input, source, intent, sequence, failed };
 }
 function requireOwnSource(source: StoredEvent | undefined, input: Input, memberId: string)
   : asserts source is StoredEvent {
@@ -69,6 +73,9 @@ function requireOwnSource(source: StoredEvent | undefined, input: Input, memberI
   }
 }
 type Loaded = Awaited<ReturnType<typeof load>>;
+function requireUnfailed(loaded: Loaded) {
+  if (loaded.failed) throw new ChildRequestFailed('Child request failed');
+}
 async function check(options: Options, memberId: string, loaded: Loaded,
   audience: string[], writing = true) {
   const { input, source } = loaded;
@@ -101,6 +108,7 @@ async function check(options: Options, memberId: string, loaded: Loaded,
   if (await participationClosed(options.store, options.silo, input.conversationId,
     deadline)) throw new ChildRequestClosed('Conversation closed');
   await fresh?.();
+  requireUnfailed(loaded);
   return { initialJoins, fresh };
 }
 async function review(options: Options, memberId: string, loaded: Loaded, writing = true) {
@@ -154,7 +162,8 @@ async function save(options: Options, memberId: string, id: string, subject: str
   const command = { event, expectedSequence: sequence, historyChecked: true as const,
     deadline: fresh.deadline };
   const result = await options.store.append(command);
-  if (result.status !== 'appended') throw new ChildRequestChanged('Child request changed');
+  if (result.status === 'conflict') throw new ChildRequestRace('Child request changed');
+  if (result.status !== 'appended') throw new Error('Child request outcome unavailable');
   const row = await readEventAt(options.store, subject, result.sequence, performance.now() + 10_000);
   if (!row) throw new Error('Child request outcome unavailable');
   verify(row, event);
@@ -224,7 +233,8 @@ function inputText(options: Options, conversationId: string, data: unknown) {
   try {
     return options.keys.decrypt(options.silo, conversationId, data);
   } catch {
-    throw new ChildRequestChanged('Child input changed');
+    // Keep key read failures retryable; unreadable input is not a proven refusal.
+    throw new ChatConflict('Child input unavailable');
   }
 }
 export async function addChildFirstInput(options: Options, memberId: string, value: unknown) {

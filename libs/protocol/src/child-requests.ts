@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { chatIdSchema, childRequestedDataSchema } from '@opencrane/events';
+import { chatIdSchema, childRequestedDataSchema, childStartFailedDataSchema } from '@opencrane/events';
 
 export const childReviewInputSchema = z.strictObject({
   requestId: chatIdSchema, sourceMessageId: chatIdSchema, assistantId: chatIdSchema,
@@ -11,6 +11,9 @@ export const childStartInputSchema = z.strictObject({
 });
 export const childRequestStatusSchema = z.union([
   z.strictObject({ state: z.literal('unknown') }),
+  z.strictObject({ state: z.literal('failed'), requestId: chatIdSchema,
+    stage: childStartFailedDataSchema.shape.stage, reason: childStartFailedDataSchema.shape.reason,
+    attempt: childStartFailedDataSchema.shape.attempt, failureEventId: chatIdSchema }),
   z.strictObject({ state: z.literal('queued'), requestId: chatIdSchema,
     childConversationId: chatIdSchema.optional() }),
 ]);

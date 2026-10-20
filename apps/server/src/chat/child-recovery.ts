@@ -3,8 +3,11 @@ import { z } from 'zod';
 import { childRequestedEventSchema, chatIdSchema, type ChildRequest } from '@opencrane/events';
 import { readEventAt } from '@opencrane/event-store';
 import type { Logger } from '@opencrane/observability';
-import type { ChatOptions } from './access.ts';
-import { createRequestedChild, addChildFirstInput } from './child-requests.ts';
+import { isChatRefused, type ChatOptions } from './access.ts';
+import { chatHistory } from './commands.ts';
+import { childStartFailure, recordChildStartFailure } from './child-failure.ts';
+import { createRequestedChild, addChildFirstInput, ChildRequestClosed,
+  ChildRequestChanged, ChildRequestRefused, ChildRequestRace } from './child-requests.ts';
 
 type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db' | 'keys'>;
 const referenceSchema = z.strictObject({
@@ -36,51 +39,97 @@ export async function recoverChildRequest(options: Options, value: unknown) {
     requestId: data.requestId, assistantId: data.assistantId, payingGroupId: data.payingGroupId,
     allowanceBoundCents: data.allowanceBoundCents,
     participantIds: data.initialJoins.map(participantId) };
-  await createRequestedChild(options, data.createdBy, input);
-  await addChildFirstInput(options, data.createdBy, input);
+  const parent = await chatHistory(options.store, options.silo, data.conversationId);
+  if (childStartFailure(parent, parsed.data.id)) return;
+  const child = await chatHistory(options.store, options.silo, data.childConversationId);
+  for (const row of child) {
+    if (row.event.id === data.firstInputId) return;
+  }
+  let stage: 'create' | 'first_input' = 'create';
+  try {
+    if (child.length === 0) await createRequestedChild(options, data.createdBy, input);
+    stage = 'first_input';
+    await addChildFirstInput(options, data.createdBy, input);
+  } catch (error) {
+    const reason = failureReason(error);
+    if (!reason) throw error;
+    await recordChildStartFailure(options, parsed.data.id, data, stage, reason);
+  }
+}
+
+function failureReason(error: unknown) {
+  if (error instanceof ChildRequestClosed) return 'conversation_closed';
+  if (error instanceof ChildRequestRefused || isChatRefused(error)) return 'access_refused';
+  if (error instanceof ChildRequestChanged && !(error instanceof ChildRequestRace)) {
+    return 'record_changed';
+  }
+  return undefined;
 }
 
 async function recoverPage(options: Options, after: number, logger: Logger, signal: AbortSignal) {
-  const result = await options.db.query(`SELECT * FROM child_requests
-    WHERE silo = $1 AND intent_position > $2 ORDER BY intent_position LIMIT 32`,
+  const result = await options.db.query(`SELECT silo, parent_id, intent_id, intent_position,
+    child_id, first_input_id FROM child_requests_v2
+    WHERE failed_attempt IS NULL AND silo = $1 AND intent_position > $2
+    ORDER BY intent_position LIMIT 32`,
   [options.silo, after]);
   let position = 0;
+  let retry = false;
   for (const row of result.rows) {
     if (signal.aborted) {
-      return position;
+      return { after: position, retry };
     }
     position = referenceSchema.parse(row).intent_position;
     try {
       await recoverChildRequest(options, row);
     } catch {
-      // Keep refusals and uncertain outcomes queued. Never log errors containing private input.
+      // Keep uncertain outcomes queued. Never log errors containing private input.
+      retry = true;
       logger.debug('Saved child request remains queued');
     }
   }
   if (result.rows.length < 32) {
-    return 0;
+    position = 0;
   }
-  return position;
+  return { after: position, retry };
 }
 
 export async function watchChildRequests(options: Options, logger: Logger,
   signal: AbortSignal) {
   let after = 0;
+  let backoffMs = 1000;
   const runOptions = { signal };
   while (!signal.aborted) {
     try {
-      after = await recoverPage(options, after, logger, signal);
+      const page = await recoverPage(options, after, logger, signal);
+      after = page.after;
+      backoffMs = page.retry ? Math.min(backoffMs * 2, 30_000) : 1000;
     } catch {
       if (!signal.aborted) {
+        backoffMs = Math.min(backoffMs * 2, 30_000);
         logger.warn('Child recovery is unavailable; requests remain queued');
       }
     }
     try {
-      await delay(1000, undefined, runOptions);
+      await delay(backoffMs, undefined, runOptions);
     } catch (error) {
       if (!signal.aborted) {
         throw error;
       }
     }
   }
+}
+
+export function startChildRecovery(options: Options, logger: Logger) {
+  const stop = new AbortController();
+  const work = watchChildRequests(options, logger, stop.signal);
+  function failed() {
+    logger.fatal('Child recovery stopped; restarting the server');
+    process.exit(1);
+  }
+  void work.catch(failed);
+  return async function closeChildRecovery() {
+    stop.abort();
+    await work;
+    logger.info('Child recovery stopped cleanly');
+  };
 }

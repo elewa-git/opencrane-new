@@ -79,7 +79,8 @@ export async function childFixture() {
     await rm(directory, { recursive: true, force: true });
   }
   return { app, nats, db, keys, runner, headers, append, close,
-    config, options, objects, feed, fga, auth };
+    config, options, objects, feed, fga, auth, directory,
+    databaseUrl: dbs.queue.options.connectionString! };
 }
 
 export async function childSession(context: Awaited<ReturnType<typeof childFixture>>,

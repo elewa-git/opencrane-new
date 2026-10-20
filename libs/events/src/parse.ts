@@ -1,5 +1,5 @@
 import { validEgressObservation } from './egress-observation.ts';
-import { childRequestedEventSchema } from './child-request.ts';
+import { childRequestedEventSchema, childStartFailedEventSchema } from './child-request.ts';
 import { memoryContextRecordedEventSchema } from './memory-context.ts';
 import { validSurveyEvent } from './survey.ts';
 import { validEgressRuleEvent } from './egress.ts';
@@ -135,6 +135,9 @@ function matchingMaintenanceScope(event: EventEnvelope) {
 }
 
 function validChildRequest(event: EventEnvelope) {
+  if (event.type === 'conversation.child_start_failed') {
+    return childStartFailedEventSchema.safeParse(event).success;
+  }
   return event.type !== 'conversation.child_requested' ||
     childRequestedEventSchema.safeParse(event).success;
 }

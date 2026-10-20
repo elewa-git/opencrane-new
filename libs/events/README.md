@@ -26,7 +26,7 @@ the hash of encrypted survey bytes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests, hosted image check requests and results, registration, startup, saved turns and closed chat failures, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch, not-sent outcomes and cancellation reasons| events["libs/events<br/>checks records and previews dates"]
+  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests and start failures, hosted image check requests and results, registration, startup, saved turns and closed chat failures, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch, not-sent outcomes and cancellation reasons| events["libs/events<br/>checks records and previews dates"]
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup subscriptions, nightly memory reviews and records, and cleanup results| events
@@ -189,6 +189,8 @@ before delivering these Stops to a computer.
 
 A child-chat request records the source id, chosen people, assistant and spending
 upper bound. It contains no message text and must name the requesting person.
+A saved child start failure names the attempt, stage and a fixed refusal reason.
+It contains no source text and cannot authorise work.
 
 Hosted image requests name one platform, a public upstream and the first check attempt.
 These records contain no check result or report bytes.

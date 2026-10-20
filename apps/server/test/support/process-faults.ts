@@ -3,6 +3,27 @@ import { registerHooks } from 'node:module';
 registerHooks({
   load(url, context, nextLoad) {
     const loaded = nextLoad(url, context);
+    if (process.env['TEST_CHILD_RECOVERY'] && url.endsWith('/chat/start.ts')) {
+      return { ...loaded, source: 'export async function startBridges() { return async () => {}; }' };
+    }
+    if (process.env['TEST_CHILD_RECOVERY'] && url.endsWith('/chat/child-recovery.ts')) {
+      if (!loaded.source) throw new Error('Expected recovery source');
+      const original = typeof loaded.source === 'string'
+        ? loaded.source : new TextDecoder().decode(loaded.source);
+      const source = original.replace('export async function watchChildRequests(',
+        'async function testWatchChildRequests(');
+      return { ...loaded, source: source + `
+        export async function watchChildRequests(options, logger, signal) {
+          if (process.env['TEST_CHILD_RECOVERY'] === 'fail') {
+            await delay(2000); throw new Error('Worker rejected');
+          }
+          await testWatchChildRequests(options, logger, signal);
+          await delay(100);
+          await options.db.query('SELECT 1');
+          await options.store.head();
+        }
+      ` };
+    }
     if (!url.endsWith('/libs/event-store/src/jetstream.ts') && !url.endsWith('/libs/observability/src/telemetry.ts')) return loaded;
     if (!loaded.source) throw new Error('Expected TypeScript source');
     const source = typeof loaded.source === 'string' ? loaded.source : new TextDecoder().decode(loaded.source);

@@ -701,3 +701,9 @@ the models fold checks that each result belongs to the current requested attempt
 `cleanup-connection` subscribes to `connection.revoked` and `connection.refreshed`.
 It performs live exact-generation cleanup after confirming saved profile history.
 This adds no event type or payload field. Replay starts no cleanup.
+
+## Child start failures
+
+`conversation.child_start_failed` requires an opencrane-server system writer,
+matching parent subject and command id, no report, strict fields and attempt 1–3.
+The [API](../../docs/api/group-chats.md#reviewed-child-requests) lists fixed stages and reasons.
