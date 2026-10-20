@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import type { ApprovalCard } from '@opencrane/protocol';
 import { ChatIcon } from './icon';
-
-type TerminalGlyph = 'done' | 'clock' | 'block' | 'dash';
+import { terminalGlyph } from './approval-terminal-words';
 
 @Component({
   selector: 'oc-approval-terminal-line',
@@ -17,18 +16,8 @@ export class ApprovalTerminalLine {
   readonly detail = input.required<string>();
   readonly opened = output<HTMLElement>();
 
-  protected glyph(): TerminalGlyph {
-    const state = this.card().state;
-    if (state === 'approved' || state === 'outcome_unknown') {
-      return 'done';
-    }
-    if (state === 'expired') {
-      return 'clock';
-    }
-    if (state === 'denied') {
-      return 'block';
-    }
-    return 'dash';
+  protected glyph(): string {
+    return terminalGlyph(this.card());
   }
 
   protected action(): string {

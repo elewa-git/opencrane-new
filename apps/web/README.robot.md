@@ -57,6 +57,17 @@ the address. It parses the server reply with `toolAccessExplanationSchema`. A mi
 grant reply has no sources, profile or policy details. A failed refresh keeps dated
 rows dimmed. Any 401 or 403 clears them and cancels other reads. Name lookups are
 left for a later part; the page uses generic person and assistant names.
+Finished chat approvals show saved decision, use, expiry and end times. A used
+approval stays one collapsed line; its uncertain result and Check status action
+are in the drawer. The drawer lists requested, decided, each used, and ended
+times when the server has them. Expiry uses the original expiry time on the line
+and labels the saved end time “Expiry recorded”. Cancelled cards show the saved
+fixed reason when present, or say that the record does not give one. A removed
+tool grant uses a lock glyph without claiming whose grant it was. A cancelled
+card whose turn stopped keeps its “Can't continue” review. The screen never
+creates a missing time from the browser clock. `npm run visual:screen-p3-5-times`
+captures five finished states at desktop and phone widths, plus a phone drawer.
+
 `/workspace/conversations` reads the server's Recent list. `?section=archived` reads
 Archived. Search stays in memory and uses at most 100 characters. Each request uses
 20 rows and the returned cursor. A changed list reloads page one once. Temporary
@@ -523,7 +534,7 @@ continue. A separately recorded approval outcome stays visible as its own result
 Enter cannot send a decision. Every participant sees the reviewed fields and
 consequence. Only the requester sees Approve and Deny. Other participants see
 that the requester must decide. Folded cards show only what the server proves.
-A used approval says that its result is unknown. A lost decision reply leads to
+A used approval says that its result is unknown in its drawer. A lost decision reply leads to
 one status read. The browser never repeats the POST by itself. A 503 can also
 mean the server refused before recording the choice. If a
 409 is followed by a still-open approval, the card says the choice was not recorded
@@ -531,11 +542,11 @@ and lets the requester choose again. A 200 keeps the card locked with a recorded
 message until a later read shows its latest state, even if the first read fails.
 Access refusals hide the cards but keep any open or uncertain choice locked. A
 15-second timeout ends a stuck poll so later polls can run. The approval drawer
-shows the same result and status check as the card. It closes if that card
+shows the saved result and status check. It closes if that card
 disappears. Focus moves to the conversation when a focused card disappears or
 access changes, and moves to a folded card when the drawer's opener is gone. No
-decision time, other person's name, cancellation cause, tool-server readback or
-confirmed result is available from this contract.
+other person's name, tool-server readback or confirmed result is available from
+this contract. The approval API supplies saved times and optional cancellation causes.
 The requester-only POST uses the session CSRF token and appends one conditional
 decision. A 403 or 400 means the decision was not recorded. A GET while handling
 that reply may still record that the approval expired or was cancelled. A 409

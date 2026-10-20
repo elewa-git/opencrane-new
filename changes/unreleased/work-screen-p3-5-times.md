@@ -1,0 +1,1 @@
+Finished chat approvals now show saved decision, use, expiry and end times. Cancelled approvals show their recorded reason when available. Used approvals stay on one line, with the uncertain result and Check status in their details.

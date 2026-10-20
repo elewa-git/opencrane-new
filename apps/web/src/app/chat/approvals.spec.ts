@@ -228,6 +228,16 @@ it.each(['cancelled', 'expired'] as const)(
   },
 );
 
+it('treats a saved first use as use even when the uses list is empty', async () => {
+  const saved = { ...usedCard(), state: 'cancelled' as const, uses: [] };
+  const fixture = await mount(() => Promise.resolve(response([saved])));
+  const line = requiredElement<HTMLElement>(rootOf(fixture), '.approval-terminal');
+  expect(line.textContent).toContain('used once');
+  expect(line.textContent).toContain('no confirmed result');
+  expect(line.textContent).not.toContain('nothing was sent');
+  fixture.destroy();
+});
+
 it('does not invent a time when the saved record has none', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2031-01-01T12:00:00Z'));
@@ -249,6 +259,7 @@ it('shows a denial decision time and the recorded expiry time', async () => {
   expect(denial.textContent).toContain('4 Oct 2026, 10:16 UTC');
   expect(root.textContent).toContain('4 Oct 2026, 10:32 UTC');
   requiredElement<HTMLButtonElement>(denial, '.approval-terminal').click();
+  fixture.detectChanges();
   expect(root.textContent).toContain('Decided');
   fixture.destroy();
 });
@@ -730,9 +741,9 @@ it('does not turn an outcome-unknown status check into a POST', async () => {
     else getCount += 1;
     return Promise.resolve(response([card('outcome_unknown', false)]));
   });
-  const root = rootOf(fixture);
+  const drawer = openTerminalDetails(fixture);
   const beforeCheck = getCount;
-  const checkStatus = root.querySelector<HTMLButtonElement>('.state-action')!;
+  const checkStatus = requiredElement<HTMLButtonElement>(drawer, '.state-action');
   checkStatus.click();
   checkStatus.click();
   await vi.waitFor(() => expect(getCount).toBe(beforeCheck + 1));

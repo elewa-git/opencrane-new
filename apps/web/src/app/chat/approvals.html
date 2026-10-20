@@ -72,12 +72,6 @@
             [words]="presentation.stateWords(card)"
             [detail]="presentation.terminalDetail(card)"
             (opened)="openDrawer(card, $event)" />
-          @if (presentation.outcomeUnknown(card) && !readFailed()) {
-            <oc-shared-state class="unknown-notice" [ocDogEar]="true" kind="unknown"
-              message="Result not confirmed"
-              detail="The approved call was allowed to go ahead once. OpenCrane has no confirmed result for it yet. Confirmation from the tool server is not available yet."
-              [actionBusy]="checkBusy(card)" (action)="checkDecisionStatus(card)" />
-          }
           @if (presentation.lastExpired(card)) {
             <oc-shared-state kind="expired" message="Ask again to start new checked work"
               detail="An expired approval can’t be revived." [showAction]="false" />
@@ -94,6 +88,13 @@
       [returnFocusTo]="openDrawerState.returnFocusTo ?? openDrawerState.opener"
       (closed)="drawerClosed()">
       <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
+      @if (presentation.times(card).length) {
+        <dl class="approval-times">
+          @for (row of presentation.times(card); track $index) {
+            <div class="approval-time-row"><dt>{{ row.label }}</dt><dd>{{ row.time }}</dd></div>
+          }
+        </dl>
+      }
       @if (card.state === 'requested') {
         <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
         @if (isStopped(card)) {
@@ -112,11 +113,14 @@
         }
       } @else {
         <p class="drawer-state">{{ presentation.stateWords(card) }} · {{ presentation.terminalDetail(card) }}</p>
-        @if (card.state === 'cancelled') {
-          <p class="gap-note">An approval is cancelled when its turn ends or stops, a new message or turn starts, the conversation closes, or the tool’s policy, publication or connection changes. Exact reason: Not available yet.</p>
+        @if (card.state === 'cancelled' && !card.cancelReason) {
+          <p class="gap-note">The saved record does not say why.</p>
         }
         @if (card.state === 'outcome_unknown') {
-          <p class="gap-note">Confirmation from the tool server is not available yet.</p>
+          <oc-shared-state kind="unknown" message="Result not confirmed"
+            detail="This approval was used and has no confirmed result. Confirmation from the tool server is not available yet."
+            [showAction]="!readFailed()" [actionBusy]="checkBusy(card)"
+            (action)="checkDecisionStatus(card)" />
         }
       }
       <div class="reference-row"><span>Reference</span><code>{{ presentation.reference(card) }}</code></div>
