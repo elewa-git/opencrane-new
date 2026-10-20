@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { link, open, unlink } from 'node:fs/promises';
+import { link, lstat, open, unlink } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -176,4 +176,24 @@ export async function createEgressReceipt(store: Pick<EventStore, 'append' | 're
     writing = undefined;
   }
   return { observationId, capture, retry };
+}
+
+export async function recoverEgressReceipt(store: EventStore, silo: string,
+  directory: string, name: string) {
+  const file = join(directory, name);
+  const details = await lstat(file);
+  if (!details.isFile() || (details.mode & 0o777) !== 0o600) {
+    throw new Error('egress_receipt_refused');
+  }
+  const parsed = parseEventByType(await readEvidence(file));
+  if (!parsed.success) throw new Error('egress_receipt_refused');
+  const saved = egressObservationSchema.parse(parsed.event.data);
+  const permitId = saved.permitId;
+  if (name !== `${egressObservationId(silo, permitId)}.jsonl` ||
+      saved.requestId !== permitId || saved.channel !== 'command') {
+    throw new Error('egress_receipt_refused');
+  }
+  const binding = { requestId: permitId, permitId, channel: 'command' as const,
+    host: saved.relay.host, port: saved.relay.port };
+  return createEgressReceipt(store, silo, binding, directory);
 }

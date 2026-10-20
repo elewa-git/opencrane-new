@@ -1,12 +1,12 @@
 import { once } from 'node:events';
 import { connect, createServer, Socket } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
-import { expect, it, onTestFinished } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay.ts';
 import { clientHello } from './egress-hello-fixture.ts';
 
 const destination = { host: 'registry.npmjs.org', port: 443 };
-async function fixture(stage = 'open', throwing = false) {
+async function fixture(stage = 'open', throwing = false, prepare?: () => Promise<void>) {
   const records: EgressCloseRecord[] = [];
   const sockets: Socket[] = [];
   let lookups = 0;
@@ -49,7 +49,7 @@ async function fixture(stage = 'open', throwing = false) {
     if (throwing) throw new Error('Callback failed');
   }
   const transport = { resolve, connect: connector };
-  const registry = new EgressRelayRegistry(closed, transport);
+  const registry = new EgressRelayRegistry(closed, transport, prepare);
   async function register(permitId = 'permit', expiresAt = Date.now() + 400) {
     return registry.register({ ...destination, permitId, expiresAt });
   }
@@ -234,3 +234,32 @@ async function matchesExactDestination() {
   expect(setup.counts().connections).toBe(1);
 }
 it('normalises the host and closes only the exact destination port', matchesExactDestination);
+
+
+async function preparationKeepsExpiry() {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function prepare() {
+    entered.resolve();
+    await release.promise;
+  }
+  const setup = await fixture('open', false, prepare);
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  function restoreTimers() {
+    vi.useRealTimers();
+  }
+  onTestFinished(restoreTimers);
+  const registering = setup.register('permit', Date.now() + 60_000);
+  await entered.promise;
+  await vi.advanceTimersByTimeAsync(30_000);
+  release.resolve();
+  const client = await setup.dial(await registering);
+  await once(client, 'data');
+  const closed = once(client, 'close', { signal: AbortSignal.timeout(1000) });
+  await vi.advanceTimersByTimeAsync(30_000);
+  await closed;
+  expect(setup.counts().connections).toBe(1);
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ reason: 'expired' });
+}
+it('keeps the original expiry when receipt preparation takes time', preparationKeepsExpiry);

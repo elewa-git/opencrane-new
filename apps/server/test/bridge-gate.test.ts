@@ -677,8 +677,9 @@ async function stopsBeforeResume() {
     await link.settled();
   }
   const reconnected = await test.connect();
-  function accepted() { return reconnected.control.receipt !== undefined; }
-  await until(accepted);
+  // Wait for the quiet receipt to trigger a stop after the earlier gate acknowledgement.
+  function stoppedAgain() { return stops.length > 1; }
+  await until(stoppedAgain, 2000);
   await reconnected.control.settled();
   expect(stops.length).toBeGreaterThan(1);
   expect(await readComputerControl(test.store, test.silo, 'assistant'))

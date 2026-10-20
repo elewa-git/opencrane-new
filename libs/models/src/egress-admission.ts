@@ -6,8 +6,10 @@ import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { egressDestinationDataSchema, egressObservationId, legacyMemberRole }
   from '@opencrane/events';
 import { egressGrantStream } from '@opencrane/projections';
-import { BudgetActor, envelope, history } from './actor.ts';
-import { authorityFence } from './authority.ts';
+import { egressHistory } from './egress-history.ts';
+import { requireBudget } from './budget-refusal.ts';
+import { BudgetActor, envelope } from './actor.ts';
+import { authorityFence, isAuthorityChanged } from './authority.ts';
 import { approvalActivity, requireActiveConversationTurn } from './decision-activity.ts';
 import { data, priceTableId } from './state.ts';
 import { turnRootBinding } from './root-budget.ts';
@@ -15,6 +17,7 @@ import type { EgressRelayRegistry } from './egress-relay.ts';
 
 class MissingRule extends Error {}
 type Activity = Awaited<ReturnType<typeof approvalActivity>>;
+type Read = ReturnType<typeof egressHistory>['read'];
 type Fresh = Awaited<ReturnType<typeof authorityFence>>;
 
 function activeWork(claims: EgressCapability, activity: Activity) {
@@ -50,22 +53,26 @@ function requireWorkBinding(ready: Record<string, unknown>, started: Record<stri
   }
 }
 
-async function checkTeam(actor: BudgetActor, binding: Binding, fields: Record<string, unknown>,
-  fresh: Fresh) {
+async function checkTeam(binding: Binding, requester: string, fields: Record<string, unknown>,
+  fresh: Fresh, read: Read) {
   if (fields['kind'] !== 'team') return;
   const subject = `team-${String(fields['ownerId'])}`;
   fresh.include(subject);
-  const team = await history(actor.store, subject, actor.silo, fresh.deadline);
+  const team = await read(subject, fresh.deadline);
   const auth = memberAuthorisation(binding);
   for (const change of team) {
+    const membershipChange = change.event.type === 'team.member_added' ||
+      change.event.type === 'team.member_removed';
+    // Ignore other members' membership receipts. Keep all team-wide authority checks.
+    if (membershipChange && data(change.event)['memberId'] !== requester) continue;
     if (!await auth.applied(change.event.id)) throw new Error('Egress refused');
   }
 }
 
 async function checkMember(actor: BudgetActor, binding: Binding, claims: EgressCapability,
-  fresh: Fresh) {
+  fresh: Fresh, read: Read) {
   const auth = memberAuthorisation(binding);
-  const members = await history(actor.store, `member-${claims.requester}`, actor.silo, fresh.deadline);
+  const members = await read(`member-${claims.requester}`, fresh.deadline);
   let member = false;
   for (const row of members) {
     const role = legacyMemberRole(row.event);
@@ -78,18 +85,17 @@ async function checkMember(actor: BudgetActor, binding: Binding, claims: EgressC
 }
 
 async function checkAccess(actor: BudgetActor, binding: Binding, claims: EgressCapability,
-  activity: Activity, fresh: Fresh) {
+  activity: Activity, fresh: Fresh, read: Read) {
   const auth = memberAuthorisation(binding);
-  await checkMember(actor, binding, claims, fresh);
-  const assistants = await history(actor.store, `assistant-${claims.assistant}`,
-    actor.silo, fresh.deadline);
+  await checkMember(actor, binding, claims, fresh, read);
+  const assistants = await read(`assistant-${claims.assistant}`, fresh.deadline);
   let active = false;
   for (const row of assistants) {
     const fields = data(row.event);
     if (row.event.type === 'assistant.created') {
       active = true;
       if (!await auth.applied(row.event.id)) throw new Error('Egress refused');
-      await checkTeam(actor, binding, fields, fresh);
+      await checkTeam(binding, claims.requester, fields, fresh, read);
     }
     if (row.event.type === 'assistant.settings_changed' && typeof fields['active'] === 'boolean') {
       active = fields['active'];
@@ -109,7 +115,7 @@ async function checkAccess(actor: BudgetActor, binding: Binding, claims: EgressC
   }
 }
 
-async function checkRules(actor: BudgetActor, claims: EgressCapability, fresh: Fresh) {
+async function checkRules(actor: BudgetActor, claims: EgressCapability, fresh: Fresh, read: Read) {
   const required = [
     ['silo', claims.silo, claims.siloPosition],
     ['person', claims.requester, claims.personPosition],
@@ -119,7 +125,7 @@ async function checkRules(actor: BudgetActor, claims: EgressCapability, fresh: F
     const rule = { host: claims.host, port: claims.port, scope, subjectId };
     const subject = egressGrantStream(actor.silo, rule);
     fresh.include(subject);
-    const rows = await history(actor.store, subject, actor.silo, fresh.deadline);
+    const rows = await read(subject, fresh.deadline);
     const last = rows.at(-1);
     if (!last || last.event.type !== 'egress.destination_allowed') {
       throw new MissingRule(`missing_${scope}_rule`);
@@ -188,8 +194,9 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     const work = activeWork(checked, activity);
     const subjects = [`member-${checked.requester}`, `assistant-${checked.assistant}`];
     const fresh = await authorityFence(actor.store, performance.now(), subjects);
-    await checkAccess(actor, binding, checked, activity, fresh);
-    await checkRules(actor, checked, fresh);
+    const access = egressHistory(actor.store, actor.silo);
+    await checkAccess(actor, binding, checked, activity, fresh, access.read);
+    await checkRules(actor, checked, fresh, access.read);
     const expiresAt = Math.min(checked.exp * 1000, checked.turnExpiresAt,
       checked.grantExpiresAt, checked.leaseExpiresAt ?? Infinity);
     async function confirm() {
@@ -212,13 +219,34 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     await actor.admitDispatch(dispatch, confirm, work.admittedAt);
     // Recheck after append retries, within the original deadline. This is the last
     // authority check before registration; the relay's 60-second cap applies afterwards.
-    try {
-      await confirm();
-    } catch (error) {
-      await recordRefusedDispatch(actor, checked);
-      throw error;
+    async function confirmRegistration() {
+      try {
+        await confirm();
+      } catch (error) {
+        await recordRefusedDispatch(actor, checked);
+        throw error;
+      }
     }
-    const registration = { permitId: requestId, host: checked.host, port: checked.port,
+    await confirmRegistration();
+    async function recheck() {
+      const subjects = [...access.positions.keys()];
+      const started = performance.now();
+      for (;;) {
+        const current = await authorityFence(actor.store, started, subjects);
+        await activity.confirm(current.deadline, false);
+        await checkAccess(actor, binding, checked, activity, current, access.read);
+        await checkRules(actor, checked, current, access.read);
+        requireBudget(actor.state, modelCall, actor.now(), work.admittedAt);
+        try {
+          await current();
+          return;
+        } catch (error) {
+          // Recheck a concurrent change without extending the original deadline.
+          if (!isAuthorityChanged(error)) throw error;
+        }
+      }
+    }
+    const registration = { recheck, confirm: confirmRegistration, permitId: requestId, host: checked.host, port: checked.port,
       expiresAt: checked.exp * 1000 };
     const relay = await registry.register(registration);
     res.setHeader('x-egress-relay', relay);

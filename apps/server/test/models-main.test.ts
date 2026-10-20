@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
-import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID, generateKeyPairSync } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
@@ -26,6 +26,7 @@ it('keeps running through a slow NATS reply and ingests later usage', async () =
   const nats = await natsFixture();
   const dbs = await databases();
   const fixture = await runningModelsFixture(nats, await dbs.postgres());
+  expect((await stat(`${fixture.directory}/egress`)).mode & 0o777).toBe(0o700);
   const laterUsageId = randomUUID();
   try {
     await waitForUsageEvent(nats.store, fixture.initialUsageId);

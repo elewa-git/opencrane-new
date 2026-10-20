@@ -3344,3 +3344,12 @@ and deletion of completed rows.
 Attempt 1 is implemented; three attempts is the accepted limit for the next retry part.
 Next: `conversation.child_retry_requested` and POST retry with stable receipts and ids.
 Activation, root allocation and bridge release are not built. Fresh-install qualification: NOT RUN.
+
+## Models relay startup (Part of #61)
+
+Inside the budget leader lock, `models-main.ts` calls `startEgress` once and passes its
+registry to `startDecision`. The library owns the private evidence directory, retained
+receipt checks and bounded shutdown. The process still supplies no `egressDecisionUrl`:
+normal startup leaves gateway CONNECT and command-worker networking off. No setting
+is added. The [models contract](../../libs/models/README.robot.md#relay-startup-and-revocation-checks-part-of-61)
+records the closure checks and the remaining outage-watchdog and crash-recovery work.
