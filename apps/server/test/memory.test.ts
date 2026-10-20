@@ -678,7 +678,9 @@ async function previewSetup() {
     locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`, registeredBy: 'owner' });
   const definition = losslessJson('{"name":"recall","inputSchema":{"type":"object"}}');
   const tool = { name: 'recall', revision: definition.digest, definition: definition.canonical,
-    reviewed: true, costCents: 0 };
+    reviewed: true, costCents: 0,
+    review: { action: 'Recall saved memory', consequence: 'Return facts to the requester',
+      targetArgument: 'scopeId', fields: ['scopeId'], stepUp: false } };
   const tools = [tool];
   const checkedAt = new Date().toISOString();
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
