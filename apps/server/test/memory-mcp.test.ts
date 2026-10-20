@@ -1486,7 +1486,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
         decisionRequest);
       expect(decision.status).toBe(403);
       const denied = z.object({ error: z.string() }).parse(await decision.json());
-      expect(denied.error).toContain('requester');
+      expect(denied.error).toBe('agent_person_scope_only');
       expect(await target.nats.store.head(`scope-${selectedId}`)).toBe(before);
       const { remember: commandRemember } = await import('../src/memory/commands.ts');
       const agent = { deadline: performance.now() + 2000, conversation: 'conversation',
@@ -2076,7 +2076,7 @@ async function loadChangeFacts() {
   const { recallProof } = await import('../src/memory/recall-proof.ts');
   return recallProof(testAuthConfig().cookieSecret, context, [additions[0]!], data.inputGeneration);
 }
-async function changeRequest(operation: 'correct' | 'forget') {
+async function changeRequest(operation: 'correct' | 'forget', checkControl = true) {
   const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
     await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
@@ -2099,7 +2099,12 @@ async function changeRequest(operation: 'correct' | 'forget') {
   }
   const body = { ...call, params: { ...call.params, name: operation, arguments: input } };
   const requestHeaders = { ...headers, 'mcp-name': operation };
-  return { body, requestHeaders, catalogue };
+  const request = { body, requestHeaders, catalogue };
+  if (checkControl) {
+    const control = await sendChange(request);
+    expect(control.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+  }
+  return request;
 }
 type ChangeRequest = Awaited<ReturnType<typeof changeRequest>>;
 async function changeToken(request: ChangeRequest, overrides = {}) {
@@ -2120,7 +2125,7 @@ async function sendChange(request: ChangeRequest, token?: string) {
   return app.inject({ method: 'POST', url: route, headers: requestHeaders, payload: request.body });
 }
 async function unavailableChange(operation: 'correct' | 'forget') {
-  const request = await changeRequest(operation);
+  const request = await changeRequest(operation, false);
   const position = await setup.nats.store.head(`scope-${scopeId}`);
   const directory = dirname(setup.options.configFile);
   const files = readdirSync(directory);
@@ -2265,9 +2270,15 @@ it.each(['self', 'selective'] as const)(
 async function changedBeforeBackend() {
   const request = await changeRequest('forget');
   const token = await changeToken(request);
-  await setup.append(`scope-${scopeId}`, 'memory.corrected', { scopeId,
-    memoryId: request.body.params.arguments['memoryId'],
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:2' });
+  const memoryId = String(request.body.params.arguments['memoryId']);
+  const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice', memoryId,
+    revision: 2, expectedRevision: 1, supersedes: { memoryId, revision: 1 }, reason: 'human',
+    kind: 'fact', pinned: false, expiresAt: null, sources: [], dependsOn: [],
+    ciphertext: 'A'.repeat(40), keyId: `key:${'a'.repeat(64)}` };
+  const event = envelope('test', `scope-${scopeId}`, 'memory.corrected', data);
+  event.principal = { kind: 'human', id: 'alice' };
+  event.source = 'opencrane-server';
+  await setup.nats.seed([event]);
   const response = await sendChange(request, token);
   expect(response.json()).toEqual({ status: 'refused' });
 }
