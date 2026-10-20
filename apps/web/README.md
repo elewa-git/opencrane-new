@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>sign-in, chat, checked approvals, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, live updates and access closures| server["apps/server<br/>the back end"]
+  web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, live updates and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
@@ -51,6 +51,8 @@ assistant check open rather than guessing an answer.
   tasks. These wishes give no access to groups or tools. A completed survey links to
   the Assistant page, which shows when persona review becomes available.
 - Lets people start conversations, send messages and stop a reply.
+  Closing a session clears its approval cards and any open approval details.
+  An approval awaiting another use still shows its earlier saved uses.
 - Shows why a spending limit stopped work, including its reset time when available.
   A stopped approval, including one now cancelled, keeps its review visible without decisions.
 - Lets Owners and Admins create an email invitation and copy its link. If the reply is
@@ -78,7 +80,9 @@ assistant check open rather than guessing an answer.
 - Shows live tool updates, reviewed approvals and sanitised tool details. It also
   shows uploaded files and the assistant's desktop. An incomplete review names its
   missing fields. The requester can deny it, while other participants can only read it.
-  A decision checks the latest card again before it is sent.
+  A decision checks the latest card again before it is sent. Finished approvals
+  show their saved times and the recorded reason when one exists. A used approval
+  keeps its result check inside its details.
   A refused native consent request shows its saved request reference and, when known,
   the server name. An older detail reply cannot change a reopened drawer. It grants no
   tool permission.

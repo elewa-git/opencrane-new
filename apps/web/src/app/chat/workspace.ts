@@ -447,7 +447,7 @@ export class Workspace implements OnInit {
     if (this.chat.denied()) return 'Conversation access changed';
     return 'Conversation loaded';
   }
-  private isClosedConversation(): boolean {
+  protected isClosedConversation(): boolean {
     return this.chat.rows().some(row => row.type === 'conversation.closed');
   }
   private composerReason(): string {

@@ -52,6 +52,11 @@
   color: #4f575a;
 }
 
+.terminal-copy strong[data-glyph='failed'],
+.terminal-glyph[data-glyph='failed'] {
+  color: #c1392b;
+}
+
 .terminal-action,
 .terminal-detail {
   overflow-wrap: anywhere;

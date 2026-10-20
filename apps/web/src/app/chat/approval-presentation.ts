@@ -1,6 +1,9 @@
 import type { ApprovalCard } from '@opencrane/protocol';
 import { utcDateTime } from './file-presentation';
 import type { LocalState } from './approval-state';
+import {
+  approvalTimeRows, terminalDetail, terminalUseWords, terminalWords, type ApprovalTimeRow,
+} from './approval-terminal-words';
 
 export class ApprovalPresentation {
   private readonly viewerId: () => string;
@@ -70,26 +73,21 @@ export class ApprovalPresentation {
 
   stateWords(card: ApprovalCard): string {
     if (card.state === 'approved') return this.actorWords(card, 'Approved');
-    if (card.state === 'outcome_unknown') return this.actorWords(card, 'Approved') + ' · used once';
+    if (card.state === 'outcome_unknown') {
+      return `${this.actorWords(card, 'Approved')} · ${terminalUseWords(card)}`;
+    }
     if (card.state === 'denied') return this.actorWords(card, 'Denied');
     if (card.state === 'expired') return 'Expired';
-    if (card.state === 'cancelled') return 'Cancelled';
+    if (card.state === 'cancelled') return terminalWords(card) ?? 'Cancelled';
     return 'Approval needed';
   }
 
   terminalDetail(card: ApprovalCard): string {
-    if (card.state === 'approved') return 'Not used yet';
-    if (card.state === 'outcome_unknown') {
-      return 'used once · can’t be reused';
-    }
-    if (card.state === 'expired') {
-      return `${utcDateTime(card.expiresAt)} · nothing was sent with this approval`;
-    }
-    return 'Nothing was sent with this approval';
+    return terminalDetail(card);
   }
 
-  outcomeUnknown(card: ApprovalCard): boolean {
-    return card.state === 'outcome_unknown';
+  times(card: ApprovalCard): ApprovalTimeRow[] {
+    return approvalTimeRows(card);
   }
 
   lastExpired(card: ApprovalCard): boolean {

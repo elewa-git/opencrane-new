@@ -5,7 +5,6 @@ import {
 import { z } from 'zod';
 import { approvalCardsSchema, type ApprovalCard } from '@opencrane/protocol';
 import { HingeDrawer } from '../ui/hinge-drawer';
-import { DogEar } from '../ui/paper';
 import { SharedState } from '../shared-state/shared-state';
 import { ApprovalLedger } from './approval-ledger';
 import { ApprovalTerminalLine } from './approval-terminal-line';
@@ -26,7 +25,7 @@ const responseSchema = z.object({ cards: approvalCardsSchema, csrf: z.string() }
 @Component({
   selector: 'oc-approval-cards',
   imports: [
-    HingeDrawer, DogEar, SharedState, ApprovalLedger, ApprovalTerminalLine,
+    HingeDrawer, SharedState, ApprovalLedger, ApprovalTerminalLine,
     ApprovalDecisionStatus,
   ],
   templateUrl: './approvals.html',

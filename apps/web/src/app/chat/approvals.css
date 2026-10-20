@@ -28,7 +28,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid #0a8497; outline-offs
 .only-requester { line-height: 1.5; }
 .only-requester { margin-bottom: 0; color: #50595b; }
 .terminal-wrap { min-width: 0; }
-.unknown-notice { display: block; margin-top: 8px; background: #f2fbfc; }
+.approval-times { margin: 12px 0; padding: 8px 12px; border-radius: 8px; background: #f1f4f5; }
+.approval-time-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.approval-time-row dt { color: #50595b; }
+.approval-time-row dd { margin: 0; text-align: right; }
 .reference-row { display: flex; justify-content: space-between; gap: 16px; padding-top: 12px; border-top: 1px solid #e1e6e7; }
 .reference-row code { font-family: 'DM Mono', monospace; overflow-wrap: anywhere; }
 .reference-row span { flex-shrink: 0; }
