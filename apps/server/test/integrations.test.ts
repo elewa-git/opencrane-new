@@ -1,7 +1,8 @@
 import type { AppendCommand } from '@opencrane/event-store';
 import { Writable } from 'node:stream';
 import { prepareGatewayConfiguration, gatewayConfigurationCurrent, publicationEntry, envelope } from '@opencrane/models';
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { toolPolicySchema } from '@opencrane/protocol';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { remoteFixture } from '@opencrane/models/testing/remote-mcp';
@@ -2121,3 +2122,64 @@ async function refusesReplacedInstallationPayer(scope: 'global' | 'paying_group'
 it.each(['global', 'paying_group'] as const)(
   'returns a fixed refusal for a replaced installation payer with a %s ceiling',
   refusesReplacedInstallationPayer);
+
+async function reviewsRemoteDeclarationsThroughProduct() {
+  const remote = await remoteFixture();
+  const worker = installWorker(app, nats.store, 'test', remote.network);
+  const admin = { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin };
+  const review = { action: 'Read or update a record', consequence: 'Return the saved record',
+    targetArgument: 'id', fields: ['id'], stepUp: false };
+  const metadata = { resultType: 'complete', ttlMs: 300_000, cacheScope: 'public' };
+  function declaredTool(name: string) {
+    return { name, inputSchema: { type: 'object' }, annotations: { readOnlyHint: name === 'read' },
+      _meta: { 'io.opencrane/costCents': 0, 'io.opencrane/review': review } };
+  }
+  function respond(method: string) {
+    if (method === 'server/discover') {
+      return { ...metadata, supportedVersions: ['2026-07-28'], capabilities: { tools: {} },
+        _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1' } } };
+    }
+    return { ...metadata, tools: ['read', 'write'].map(declaredTool) };
+  }
+  remote.respond(respond);
+  try {
+    const registration = await app.inject({ method: 'POST', url: '/api/org/integrations',
+      headers: admin, payload: { locator: 'https://mcp.example.test/declared' } });
+    expect(registration.statusCode).toBe(202);
+    const { serverId } = registration.json<{ serverId: string }>();
+    await worker.discover(serverId);
+    await runner.run(mcpCatalogue);
+    const url = `/api/org/integrations/${serverId}`;
+    const response = await app.inject({ url: `${url}/tools`, headers: admin });
+    expect(response.statusCode).toBe(200);
+    const state = toolPolicySchema.parse(response.json());
+    expect(state).toMatchObject({ connectionId: `installed-${serverId}`, accountMode: 'none',
+      published: false, tools: [{ reviewed: false, mode: 'block' },
+        { reviewed: false, mode: 'block' }] });
+    function choice(tool: NonNullable<NonNullable<typeof state.catalogue>['tools']>[number]) {
+      expect(tool).toMatchObject({ costCents: 0, review });
+      const mode = tool.name === 'read' ? 'allow' : 'ask';
+      return { name: tool.name, revision: tool.revision, reviewDigest: toolReviewDigest(tool), mode };
+    }
+    const payload = { commandId: 'product-review', expectedSequence: state.sequence,
+      policyRevision: state.policyRevision, catalogueDigest: state.catalogue!.schemaDigest,
+      connectionId: state.connectionId, accountMode: state.accountMode,
+      tools: state.catalogue!.tools!.map(choice) };
+    const exact = await app.inject({ method: 'POST', url: `${url}/review`, headers: admin, payload });
+    expect(exact.statusCode, exact.body).toBe(200);
+    await worker.discover(serverId);
+    await runner.run(mcpCatalogue);
+    const saved = await app.inject({ url: `${url}/tools`, headers: admin });
+    expect(saved.json()).toMatchObject({ published: false,
+      tools: [{ reviewed: true, mode: 'allow' }, { reviewed: true, mode: 'ask' }] });
+    const count = remote.calls.length;
+    await runner.rebuild(mcpCatalogue);
+    const replayed = await app.inject({ url: `${url}/tools`, headers: admin });
+    expect(replayed.json()).toEqual(saved.json());
+    expect(remote.calls).toHaveLength(count);
+  } finally {
+    await remote.close();
+  }
+}
+it('registers, discovers, reads and exactly reviews declared tools through product APIs',
+  reviewsRemoteDeclarationsThroughProduct);
