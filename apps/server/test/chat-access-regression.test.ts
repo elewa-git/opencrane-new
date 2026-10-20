@@ -1449,6 +1449,7 @@ async function participationVolume(sharedChild = false) {
       conversationId: 'volume', turnId: 'busy-turn', nativeRequestId: '19',
       requestKind: 'shell', outcome: 'declined',
     }, false);
+    await context.runner.run(conversations);
     const encrypted = context.keys.encrypt('test', 'volume', 'Saved history');
     const previousHead = await context.nats.store.head();
     for (let offset = 0; offset < 100_000; offset += 100) {
@@ -2725,3 +2726,35 @@ async function closedParentKeepsChildOutput() {
   }
 }
 it('keeps child output visible after its parent closes', closedParentKeepsChildOutput, 120_000);
+
+async function projectedNativeRefusal(replay: boolean) {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    await context.agentSession('native-audit');
+    const refusal = await context.append('conversation-native-audit', 'agent.native_request_refused', {
+      conversationId: 'native-audit', turnId: 'turn', nativeRequestId: '19',
+      requestKind: 'shell', outcome: 'declined',
+    }, false);
+    await context.runner.run(conversations);
+    if (replay) await context.runner.rebuild(conversations);
+    const response = await context.app.inject({
+      url: '/api/conversations/native-audit/messages', headers: context.headers(),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain('Hello');
+    expect(response.body).not.toContain(refusal.id);
+    expect(response.body).not.toContain('native_request_refused');
+    client = await openChatSocket(context, 'native-audit');
+    const frames = JSON.stringify(client.received);
+    expect(frames).toContain('Hello');
+    expect(frames).not.toContain(refusal.id);
+    expect(frames).not.toContain('native_request_refused');
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+it.each([false, true])('loads HTTP and socket messages after a projected native refusal (replay=%s)',
+  projectedNativeRefusal, 120_000);

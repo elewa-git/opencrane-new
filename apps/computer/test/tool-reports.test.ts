@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
 import { reportJournal, wireReport, type BridgeReport } from '../src/report-journal.ts';
+import { itemReport } from '../src/item-reports.ts';
 import { nativeRequests } from '../src/native-requests.ts';
 import { parseTurn, turnRunner, type TurnDriver } from '../src/turn-runner.ts';
 
@@ -238,3 +239,41 @@ const nativeCases = [
 ];
 it.each(nativeCases)('records only matching running memory-free native requests: %s %s',
   reportsNativeRefusal);
+
+function refusesUnboundNativeTurn() {
+  const turn = parseTurn({ id: 'turn', conversationId: 'chat', assistantId: 'assistant',
+    text: 'Hello', token: 'token', expiresAt: Date.now() + 60_000, executionMode: 'memory_free' });
+  const params = { threadId: 'thread' };
+  expect(itemReport(turn, params, 'item/commandExecution/requestApproval', 19)).toBeUndefined();
+}
+it('records no native request without a bound Codex turn id', refusesUnboundNativeTurn);
+
+function refusesInvalidNativeId(requestId: number) {
+  const turn = parseTurn({ id: 'turn', conversationId: 'chat', assistantId: 'assistant',
+    text: 'Hello', token: 'token', expiresAt: Date.now() + 60_000, executionMode: 'memory_free' });
+  const params = { threadId: 'thread', turnId: 'codex-turn' };
+  expect(itemReport(turn, params, 'item/commandExecution/requestApproval',
+    requestId, 'codex-turn')).toBeUndefined();
+}
+it.each([1.5, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity])(
+  'records no native request with invalid numeric id %s', refusesInvalidNativeId);
+
+function refusesInvalidJournalNativeField(field: string, value: string, message: string) {
+  const directory = mkdtempSync(`${tmpdir()}/invalid-native-report-`);
+  try {
+    const path = `${directory}/reports`;
+    const report = { sequence: 1, conversationId: 'chat', turnId: 'turn', assistantId: 'assistant',
+      type: 'agent.native_request_refused', nativeRequestId: '19',
+      requestKind: 'shell', outcome: 'declined', [field]: value };
+    writeFileSync(path, JSON.stringify(report) + '\n');
+    const journal = reportJournal({ journal: path });
+    expect(journal.load).toThrow(message);
+    expect(journal.reports).toHaveLength(0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+it.each([
+  ['requestKind', 'bad-kind', 'Invalid request kind'],
+  ['outcome', 'accepted', 'Invalid request outcome'],
+])('refuses a saved native report with invalid %s', refusesInvalidJournalNativeField);

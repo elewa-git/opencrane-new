@@ -70,3 +70,15 @@ async function answersWithoutActiveTurn(state: string) {
 }
 it.each(['absent', 'ended', 'gated'])(
   'answers once without recording when the turn is %s', answersWithoutActiveTurn);
+
+function ignoresNonStringMethod() {
+  const send = vi.fn();
+  const report = vi.fn();
+  const handle = nativeRequests(send, report);
+  expect(handle({ id: 31, method: 42 })).toBe(false);
+  expect(send).not.toHaveBeenCalled();
+  expect(report).not.toHaveBeenCalled();
+  expect(handle({ id: 31, method: 'future/request' })).toBe(true);
+  expect(send).toHaveBeenCalledTimes(1);
+}
+it('ignores a non-string method without consuming its request id', ignoresNonStringMethod);
