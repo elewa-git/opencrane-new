@@ -35,8 +35,14 @@ async function stop(page: Page) {
   await composer.press('Enter');
   await page.locator('.caret').waitFor();
   const reply = page.getByRole('article', { name: 'Agent reply', exact: true }).last();
-  await reply.locator('.prose').filter({ hasText: /[a-z]/iu }).waitFor();
-  await page.locator('oc-chat-composer').getByRole('button', { name: 'Stop', exact: true }).click();
+  const prose = reply.locator('.prose');
+  const receivedTextOptions = { hasText: /[a-z]/iu };
+  const receivedText = prose.filter(receivedTextOptions);
+  await receivedText.waitFor();
+  const chatComposer = page.locator('oc-chat-composer');
+  const stopButtonOptions = { name: 'Stop', exact: true };
+  const stopButton = chatComposer.getByRole('button', stopButtonOptions);
+  await stopButton.click();
   await page.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
   const partial = await reply.locator('.prose').innerText();
   assert(partial.length > 0, 'Stop keeps received text');
@@ -52,7 +58,8 @@ async function supplier(page: Page, origin: string) {
   await page.getByRole('button', { name: 'Upload from computer', exact: true }).click();
   const chooser = await choosing;
   const buffer = uploadPdf('EUR 1234.56; due 17 November 2026');
-  await chooser.setFiles({ name: 'supplier.pdf', mimeType: 'application/pdf', buffer });
+  const upload = { name: 'supplier.pdf', mimeType: 'application/pdf', buffer };
+  await chooser.setFiles(upload);
   await page.locator('.upload-status').filter({ hasText: 'Ready' }).waitFor();
   await answer(page, 'Read the attached supplier quote. What is the total in euros and the ' +
     'delivery date? Reply in one plain sentence. Do not use tools.',
