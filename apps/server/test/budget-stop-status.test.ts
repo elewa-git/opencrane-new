@@ -268,30 +268,54 @@ async function includesChargedCentsForRequester() {
 }
 it('includes charged cents in the requester reply', includesChargedCentsForRequester);
 
-async function routeRejectsStopWithoutTurnId() {
+async function routeRejectsMalformedStop(parser: 'load' | 'work') {
   const stopId = await stop();
   await setup.append('conversation-conversation', 'agent.turn_stop_requested', {
     conversationId: 'conversation', turnId, reason: 'budget', stopId });
+  const validStop = { conversationId: 'conversation', turnId, reason: 'budget', stopId };
+  // Make only the selected route step see bad data so the other parser cannot hide its removal.
+  const malformedStop = new Proxy(validStop, {
+    ownKeys(target) {
+      const stack = new Error().stack ?? '';
+      const isLoadParser = stack.includes('stopRecord');
+      const isWorkParser = stack.includes('stoppedWork');
+      const shouldFail = (parser === 'load' && isLoadParser) ||
+        (parser === 'work' && isWorkParser);
+      const keys = Reflect.ownKeys(target);
+      if (shouldFail) return [...keys, 'extra'];
+      return keys;
+    },
+    getOwnPropertyDescriptor(target, property) {
+      if (property === 'extra') {
+        return { configurable: true, enumerable: true, value: true, writable: false };
+      }
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+  });
+  await finish();
   const original = setup.nats.store.readStream.bind(setup.nats.store);
-  async function* missingTurnId(stream: string, from?: number, deadline?: number) {
+  async function* malformedStopRow(stream: string, from?: number, deadline?: number) {
     for await (const row of original(stream, from, deadline)) {
       if (stream === 'conversation-conversation' &&
           row.event.type === 'agent.turn_stop_requested') {
-        yield { ...row, event: { ...row.event, data: {
-          conversationId: 'conversation', reason: 'budget', stopId } } };
+        yield { ...row, event: { ...row.event, data: malformedStop } };
         continue;
       }
       yield row;
     }
   }
-  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(missingTurnId);
+  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(malformedStopRow);
 
   const response = await read();
   expect(response.statusCode).toBe(503);
   expect(response.json()).toEqual({ status: 'unavailable' });
 }
-it('refuses a saved Stop row without a turn id through the HTTP route',
-  routeRejectsStopWithoutTurnId);
+it('validates malformed saved Stop data while loading the record', async () => {
+  await routeRejectsMalformedStop('load');
+});
+it('validates malformed saved Stop data while building work', async () => {
+  await routeRejectsMalformedStop('work');
+});
 
 async function closesWithoutRecord() {
   await start();
