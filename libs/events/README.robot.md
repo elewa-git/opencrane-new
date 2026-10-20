@@ -740,3 +740,12 @@ message delta. The outer digest identifies the last original report, not combine
 Older reports remain valid. The bridge checks every original identity before combining.
 The parser retains one validator per registered type, but validates every input afresh.
 It caches no payloads, permissions or validation results.
+
+## Explicit personal account choices
+
+`connection.selected` is a strict select/clear union on the connection category.
+Both variants bind userId, serverId, connectionId and expectedSequence. Select requires
+profileId and positive profileRevision; clear omits both. The envelope supplies the human
+actor and stable commandId. The models fold checks the subject, actor and deterministic
+id (SHA-256 of JSON `[silo, subject, changeRef]`). No handler subscribes to this event.
+Activation schemas still accept only personal ownerKind and purpose.

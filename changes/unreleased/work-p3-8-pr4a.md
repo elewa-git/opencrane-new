@@ -1,0 +1,1 @@
+- Save or clear an explicit personal account choice for a tool server. Changed or blocked profiles become unavailable without choosing another account. This adds internal commands only; account verification and tool use remain closed.

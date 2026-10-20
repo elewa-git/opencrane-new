@@ -29,10 +29,11 @@ async function publishServer(locator = 'https://example.test/mcp') {
   const registration = envelope('test', 'mcp-server', 'mcp.server_registered', {
     serverId: 'server', kind: 'remote', locator, registeredBy: 'admin',
   });
+  const checkedAt = Date.now();
   const discovery = envelope('test', 'mcp-server', 'mcp.server_discovered', {
     serverId: 'server', connectionId: 'installed', accountMode: 'personal', tools: [],
-    toolCount: 0, schemaDigest: catalogueDigest([]), checkedAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + 300_000).toISOString(),
+    toolCount: 0, schemaDigest: catalogueDigest([]), checkedAt: new Date(checkedAt).toISOString(),
+    expiresAt: new Date(checkedAt + 300_000).toISOString(),
   });
   await nats.seed([registration, discovery]);
   const policyRevision = await nats.store.head('mcp-server');
@@ -168,6 +169,10 @@ async function staleSelection(action: string) {
   const test = await fixture();
   const selected = await test.select();
   await changeProfile(test, action);
+  if (action !== 'disable') {
+    const replacement = { ...test.input, profileId: 'replacement', changeRef: 'replacement' };
+    await test.save(replacement);
+  }
   expect(await test.read()).toEqual({ status: 'unavailable', sequence: selected.sequence });
   const command = { ...test.command, expectedSequence: selected.sequence, changeRef: 'again' };
   await expect(test.select(command)).rejects.toThrow();

@@ -20,8 +20,8 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks saved child answers, requests, retries and failures| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, tool stops, cleanup and nightly memory records| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks saved event shapes, including native access expiry and retry records| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews and results| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks saved event shapes, including native access expiry, retry records, personal connection choices and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
@@ -44,6 +44,9 @@ flowchart LR
 
 A saved reply can include receipts for several small pieces of text. Each receipt
 keeps its original number and digest so a repeated piece can be checked.
+
+A personal account choice records either one checked profile revision or an explicit clear.
+These records grant no access and contain no account label or credential.
 
 Saved personal connection revocations and replacements name the background cleanup
 reaction. Replaying those records never deletes stored credentials.

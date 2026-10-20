@@ -43,3 +43,11 @@ export const connectionOperationClosedDataSchema = z.strictObject({
   expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive(),
   reason: z.literal('append_deadline_passed'),
 });
+
+const selectionFields = { userId: connectionId, serverId: connectionId, connectionId,
+  expectedSequence: z.int().nonnegative() };
+export const connectionSelectedDataSchema = z.discriminatedUnion('action', [
+  z.strictObject({ ...selectionFields, action: z.literal('select'),
+    profileId: connectionId, profileRevision: z.int().positive() }),
+  z.strictObject({ ...selectionFields, action: z.literal('clear') }),
+]);
