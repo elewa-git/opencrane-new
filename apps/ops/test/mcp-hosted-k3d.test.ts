@@ -89,6 +89,7 @@ async function setup() {
   kube(['create', 'namespace', otherNamespace]);
   kube(['apply', '-f', 'infra/dev-stack/mcp-lifecycle-rbac.yaml']);
   kube(['apply', '-f', '-'], approvedImages(image));
+  command('node', ['infra/dev-stack/mcp-resources.mjs', namespace]);
   const script = process.env['MCP_ADMISSION_SCRIPT'] ?? 'infra/dev-stack/mcp-admission.mjs';
   command('node', [script, namespace]);
   const invalidReplicas = workload();
