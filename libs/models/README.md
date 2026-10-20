@@ -85,6 +85,7 @@ Neither checker admits an image or starts it; malware and vulnerability checks r
 
 The models process prepares private connection relays and records their closure.
 It checks access and spending again while a relay is open. Removing access ends it.
+Changing another team member's membership leaves a valid relay open.
 Restart recovers saved closure records without reopening connections. Outside networking
 remains switched off while outage and crash handling await qualification.
 

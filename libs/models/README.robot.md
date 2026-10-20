@@ -2841,6 +2841,8 @@ admission checks under a fresh two-second authority fence. Turn and generation c
 use the original `approvalActivity.confirm` tails; conversation history is never reloaded.
 Saved spending stops use `requireBudget` on the actor state, without a reservation.
 Harmless settings changes and unrelated assistants' stops leave the relay open.
+Team membership receipts are required only for the requester. Another member's pending
+addition or removal leaves the relay open. Team-wide events still require their receipts.
 
 Scope cutoff: items 1–2 only. The next part must add an independent outage watchdog,
 classify unavailable dependencies separately from revocation, check actor availability,

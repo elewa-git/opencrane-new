@@ -53,7 +53,7 @@ function requireWorkBinding(ready: Record<string, unknown>, started: Record<stri
   }
 }
 
-async function checkTeam(actor: BudgetActor, binding: Binding, fields: Record<string, unknown>,
+async function checkTeam(binding: Binding, requester: string, fields: Record<string, unknown>,
   fresh: Fresh, read: Read) {
   if (fields['kind'] !== 'team') return;
   const subject = `team-${String(fields['ownerId'])}`;
@@ -61,6 +61,10 @@ async function checkTeam(actor: BudgetActor, binding: Binding, fields: Record<st
   const team = await read(subject, fresh.deadline);
   const auth = memberAuthorisation(binding);
   for (const change of team) {
+    const membershipChange = change.event.type === 'team.member_added' ||
+      change.event.type === 'team.member_removed';
+    // Ignore other members' membership receipts. Keep all team-wide authority checks.
+    if (membershipChange && data(change.event)['memberId'] !== requester) continue;
     if (!await auth.applied(change.event.id)) throw new Error('Egress refused');
   }
 }
@@ -91,7 +95,7 @@ async function checkAccess(actor: BudgetActor, binding: Binding, claims: EgressC
     if (row.event.type === 'assistant.created') {
       active = true;
       if (!await auth.applied(row.event.id)) throw new Error('Egress refused');
-      await checkTeam(actor, binding, fields, fresh, read);
+      await checkTeam(binding, claims.requester, fields, fresh, read);
     }
     if (row.event.type === 'assistant.settings_changed' && typeof fields['active'] === 'boolean') {
       active = fields['active'];

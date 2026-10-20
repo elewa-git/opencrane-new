@@ -1,1 +1,2 @@
 - Prepare private connection relays in the models process, recover saved closure records after restart, and close relays when access or spending permission ends. Gateway CONNECT and command-worker networking remain off; outage watchdogs and crash reconciliation remain later work.
+- Keep a valid team relay open while another member's membership change awaits its access update; the requester's own removal still closes the relay.
