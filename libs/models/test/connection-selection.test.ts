@@ -298,3 +298,20 @@ async function serverReplacement() {
 }
 it('refuses an old profile after the installed endpoint is replaced and reviewed again',
   serverReplacement);
+
+async function staleReview() {
+  const test = await fixture();
+  const rows = await history(nats.store, 'mcp-server', 'test');
+  const discovery = envelope('test', 'mcp-server', 'mcp.server_discovered',
+    rows.at(-3)!.event.data);
+  const publication = envelope('test', 'mcp-server', 'mcp.server_published',
+    rows.at(-1)!.event.data);
+  try {
+    await nats.seed([discovery, publication]);
+    await expect(test.select()).rejects.toThrow();
+    expect(await nats.store.head(test.subject)).toBe(0);
+  } finally {
+    await publishServer();
+  }
+}
+it('requires a review of the current catalogue after rediscovery and legacy publication', staleReview);
