@@ -1702,6 +1702,43 @@ It returns the original receipt, currentSequence and separate content/IAM
 `current` or `applying` states. 404 `unknown` does not prove absence while a POST
 may still be running. Every reply uses `cache-control: no-store`.
 
+## Remote tool grant changes
+
+`POST /api/org/integrations/:serverId/access/changes` accepts the same strict 2 KiB
+body as model grant changes: `{commandId, expectedSequence, action, granteeKind, granteeId}`.
+Action is `grant` or `revoke`; kind is `member`, `team` or `assistant`.
+It uses the existing model-access route dependencies and session/Origin checks.
+Current Owner/Admin events and applied IAM receipts are required. It saves one typed
+`grant.given` or `grant.revoked` on `grantStream('mcp_server', serverId)`.
+No new event, IAM writer or projection worker is added.
+
+Grant targets must exist in this silo. Removed people and disabled assistants cannot
+receive grants. Groups have no inactive state. Unknown, foreign, rejected or unpublished
+servers refuse new grants; registered drafts can receive grants without publishing tools.
+Revokes remain possible for inactive targets and servers. They save a revocation even
+when no earlier grant is recorded. Kindless historical revocations remain readable.
+Server, target and grant histories load before the two-second write check. Groups read
+only their creation event; changes to group membership cannot block a grant save.
+Person, assistant and server positions are checked again before the single append.
+
+The reply names the original serverId, commandId, changeId, operation and sequence.
+Identical repeats recover that receipt; changed actors, payloads and expected positions
+return 409. Append uncertainty returns 503 `unknown`; no automatic append retry occurs.
+`GET /api/org/integrations/:serverId/access/changes/:commandId` checks admin access once
+and returns that receipt, currentSequence and separate content/IAM `current` or `applying`.
+Content means the members worker has recorded this event in its generic inventory;
+the model-only checkpoint is never used. Failed reads return 503; missing history is
+404 `unknown`, which never proves a retry safe. Replies use `cache-control: no-store`.
+
+`test/integration-access.test.ts` uses disposable NATS, PostgreSQL and OpenFGA.
+It checks admin access before grant history is read, after target preparation and on
+repeated commands. Caller demotion during the final position checks saves no grant.
+Separate receipt cases change only the silo, principal kind or principal id.
+This is the first part of #45 row 7: HTTP commands, original receipts and inventory replay.
+The real gateway intersection/revocation matrix remains NOT RUN for this part.
+Bounded access/candidate reads and screens follow in row 8; #105 owns group editing.
+Fresh-install qualification is NOT RUN.
+
 ## Invitation review fixes
 
 New email invitations use caller-generated UUID v4 member ids. Renewals locate
