@@ -344,6 +344,11 @@ NOT RUN or infrastructure error stops promotion. Only the owner-approved host
 swap and host crash-dump exceptions are accepted. TERM and INT stop the build and
 its loopback registry listener. Open connections are destroyed; shutdown is bounded.
 
+The image probe sends a turn id with each proxy grant and removal, and checks
+their replies before continuing. Its expiry and cross-thread checks use separate
+turn ids. A previous removal therefore cannot make those refusal checks pass
+for the wrong reason.
+
 CI prepares the upload test with `sh scripts/build-test-computer.sh`. It rebuilds
 the desktop/Codex base from public pins, then uses the production Dockerfile and
 lockfiles to create `ocn-upload-computer:test` locally. No private registry, running

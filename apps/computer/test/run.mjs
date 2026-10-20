@@ -110,23 +110,42 @@ console.log('HOST_ISOLATION_PASS');
     assert.equal(message.error, undefined); return message.result;
   };
   const thread = (await rpc('thread/start', { cwd: '/workspace', model: 'gpt-6.1-sol' })).thread.id;
-  const probeGrant = await admin('issue', { thread, ttl: 120000 });
-  const grantReply = await control('grant', probeGrant);
-  assert.deepEqual(JSON.parse(grantReply), { ok: true }, 'The probe grant must be accepted');
+  const probeRequest = { thread, ttl: 120000 };
+  const probeGrant = await admin('issue', probeRequest);
+  const probeTurnId = `isolation-${phase}`;
+  const probeAccess = { ...probeGrant, turnId: probeTurnId };
+  const grantReply = await control('grant', probeAccess);
+  const acceptedReply = { ok: true };
+  assert.deepEqual(JSON.parse(grantReply), acceptedReply, 'The probe grant must be accepted');
   await rpc('turn/start', { threadId: thread, input: [{ type: 'text', text: 'ISOLATION: run the probe.', text_elements: [] }] });
   const end = await until(() => messages.find(m => m.method === 'turn/completed'), 'probe turn', 120000);
   assert.equal(end.params.turn.status, 'completed');
   const requests = (await exec('backend', "console.log((await import('node:fs')).readFileSync('/tmp/model.jsonl','utf8'))")).trim().split('\n').map(line => JSON.parse(line));
   const outputs = requests.flatMap(request => request.body.input ?? []).filter(item => item.type === 'custom_tool_call_output');
   assert.match(JSON.stringify(outputs), /HOST_ISOLATION_PASS/);
-  await control('drop', { thread });
+  const probeDrop = { thread, turnId: probeTurnId };
+  const dropReply = await control('drop', probeDrop);
+  assert.deepEqual(JSON.parse(dropReply), acceptedReply, 'The probe grant must be removed');
   const localCall = value => exec(podName, `import {readFileSync} from 'node:fs';process.setgroups([]);process.setgid(1000);process.setuid(1000);console.log((await fetch('http://127.0.0.1:8080/v1/responses',{method:'POST',headers:{authorization:'Bearer '+readFileSync('/home/codex/caller','utf8'),'session-id':${JSON.stringify(thread)}},body:'{}'})).status)`, value);
   assert.equal(await localCall({}), '403');
-  assert.match(await control('grant', {thread,computer:'test',token:'test',expires:Date.now()+240000}), /bad input/);
+  const overlongGrant = {
+    thread,
+    turnId: `overlong-${phase}`,
+    computer: 'test',
+    token: 'test',
+    expires: Date.now() + 240000,
+  };
+  const overlongReply = await control('grant', overlongGrant);
+  assert.match(overlongReply, /bad input/);
   const invalidGrant = await admin('issue', {thread: 'another-thread',ttl:120000});
-  await control('grant', {...invalidGrant,thread});
+  const crossThreadTurnId = `cross-thread-${phase}`;
+  const crossThreadGrant = { ...invalidGrant, thread, turnId: crossThreadTurnId };
+  const crossThreadReply = await control('grant', crossThreadGrant);
+  assert.deepEqual(JSON.parse(crossThreadReply), acceptedReply);
   assert.equal(await localCall({}), '403');
-  await control('drop', {thread});
+  const crossThreadDrop = { thread, turnId: crossThreadTurnId };
+  const crossThreadDropReply = await control('drop', crossThreadDrop);
+  assert.deepEqual(JSON.parse(crossThreadDropReply), acceptedReply);
   pass('proxy grants', 'dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below');
   pass('executor isolation', 'real custom exec host and native exec-server: UID 1001, no_new_privs, clean host environment and private filesystem; shell seccomp EPERM for proxy/gateway/IPv6 and process tokens denied');
   assert.equal(await exec(podName, "console.log((await fetch('http://127.0.0.1:8080/v1/responses',{method:'POST',body:'{}'})).status)"), '401');
