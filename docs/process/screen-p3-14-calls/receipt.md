@@ -1,6 +1,6 @@
 # Saved call status screens
 
-Date: 2026-10-20. Source: 520f1f639a144777c06550598b7ec51991041289 plus working changes.
+Date: 2026-10-20. Source: 32e6690c106f262fe48439a3f21ac60d90bc1f1a plus working changes.
 
 Environment: local Chromium with intercepted API replies; not a fresh installation. Command: `npm run visual:screen-p3-14-calls`. Expected and observed: saved status reads preserve the reason, wrap references and keep focus.
 

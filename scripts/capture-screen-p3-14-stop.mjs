@@ -161,16 +161,16 @@ async function capture(browser, frame, width) {
 function callFitsViewport(element) {
   const bounds = element.getBoundingClientRect();
   return element.scrollWidth <= element.clientWidth
-    && bounds.left >= 0 && bounds.right <= innerWidth;
+    && bounds.left >= 0 && bounds.right <= globalThis.innerWidth;
 }
 
 function statusCheckFinished() {
-  const action = document.querySelector('oc-budget-stop-notice button');
+  const action = globalThis.document.querySelector('oc-budget-stop-notice button');
   return action?.getAttribute('aria-disabled') === 'false';
 }
 
 function hasFocus(element) {
-  return element === document.activeElement;
+  return element === globalThis.document.activeElement;
 }
 
 function hasNoSavedCallDetails() {
