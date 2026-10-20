@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, type TestContext } from 'vitest';
 
 const live = process.env['MCP_HOSTED_K3D'] === '1';
 const specDigest = 'a'.repeat(64);
@@ -13,6 +13,8 @@ let namespace = '';
 let otherNamespace = '';
 let approved: unknown;
 let secondImage = '';
+const ownedNamespaces = new Map<string, string>();
+let metadataSource: Peer | undefined;
 
 function command(binary: string, args: string[], input?: string): string {
   const result = spawnSync(binary, args, { input, encoding: 'utf8', timeout: 180_000 });
@@ -27,7 +29,7 @@ function command(binary: string, args: string[], input?: string): string {
     for (const reason of ['exceeded quota', 'denied', 'forbidden', 'is invalid:']) {
       if (result.stderr?.includes(reason)) throw new Error(reason);
     }
-    throw new Error(`${binary} failed (private output withheld)`);
+    throw new Error(`${binary} failed: status ${result.status}, signal ${result.signal}`);
   }
   return result.stdout.trim();
 }
@@ -85,8 +87,8 @@ async function setup() {
   change(approved, 'spec.template.spec.containers.0.image', image);
   change(approved, 'metadata.annotations', { 'opencrane.ai/mcp-spec': specDigest });
   change(approved, 'spec.template.metadata.annotations', { 'opencrane.ai/mcp-spec': specDigest });
-  kube(['create', 'namespace', namespace]);
-  kube(['create', 'namespace', otherNamespace]);
+  createNamespace(namespace);
+  createNamespace(otherNamespace);
   kube(['apply', '-f', 'infra/dev-stack/mcp-lifecycle-rbac.yaml']);
   kube(['apply', '-f', '-'], approvedImages(image));
   command('node', ['infra/dev-stack/mcp-resources.mjs', namespace]);
@@ -106,17 +108,26 @@ async function setup() {
   }
   throw new Error('Admission policy did not become active');
 }
+function createNamespace(name: string) {
+  const created: unknown = JSON.parse(kube(['create', 'namespace', name, '-o', 'json']));
+  ownedNamespaces.set(name, String(field(created, 'metadata.uid')));
+}
 function cleanup() {
-  if (namespace) {
+  if (ownedNamespaces.has(namespace)) {
     for (const suffix of ['statefulset', 'pod', 'scale']) {
       kube(['delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
         `${namespace}-${suffix}`, '--ignore-not-found']);
     }
-    kube(['delete', 'namespace', namespace, otherNamespace, '--ignore-not-found', '--wait=false']);
+  }
+  for (const [name, uid] of ownedNamespaces) {
+    expect(kube(['get', 'namespace', name, '-o', 'jsonpath={.metadata.uid}'])).toBe(uid);
+  }
+  if (ownedNamespaces.size) {
+    kube(['delete', 'namespace', ...ownedNamespaces.keys(), '--wait=true', '--timeout=60s']);
   }
 }
 beforeAll(setup, 420_000);
-afterAll(cleanup);
+afterAll(cleanup, 180_000);
 
 const pod = 'spec.template.spec';
 const container = `${pod}.containers.0`;
@@ -162,6 +173,9 @@ function cases() {
   it('limits lifecycle permissions to this namespace', permissions);
   it('creates a Pod, allows only scaling and completes deletion', lifecycle, 90_000);
   it('admits four Pods and refuses a fifth through quota', quota, 90_000);
+  it('bounds each resource total without changing admission', quotaTotals, 90_000);
+  it('allows only the gateway and reviewed upstream, with removal controls', network, 240_000);
+  it('blocks metadata when a reachable control exists', metadataConnection, 60_000);
 }
 function guard(_name: string, path: string, value: unknown) {
   const candidate = workload();
@@ -208,6 +222,13 @@ function permissions() {
       kube(['auth', 'can-i', verb!, resource!], undefined, true);
     }
     expect(request).toThrow('forbidden');
+  }
+  for (const resource of ['resourcequota/mcp-limit', 'networkpolicy/mcp-egress']) {
+    function patch() {
+      kube(['patch', resource, '--type=merge', '--dry-run=server',
+        '-p', JSON.stringify({ metadata: { labels: { changed: 'yes' } } })], undefined, true);
+    }
+    expect(patch).toThrow('forbidden');
   }
   for (const target of [otherNamespace, `opencrane-dev-${process.env['DEV_STACK_ID']}`]) {
     function request() {
@@ -407,4 +428,155 @@ function quota() {
   } finally {
     kube(['delete', 'pods', ...names, '--ignore-not-found', '--wait=true', '--timeout=60s']);
   }
+}
+
+function quotaTotals() {
+  const limits = [
+    ['requests.cpu', '99m'], ['requests.memory', '255Mi'],
+    ['limits.cpu', '999m'], ['limits.memory', '511Mi'],
+  ];
+  for (const [resource, value] of limits) {
+    const patch = { spec: { hard: { [resource!]: value } } };
+    kube(['patch', 'resourcequota/mcp-limit', '--type=merge', '-p', JSON.stringify(patch)]);
+    try {
+      function create() {
+        kube(['create', '-f', '-'], quotaPod('total'));
+      }
+      expect(create).toThrow('exceeded quota');
+    } finally {
+      command('node', ['infra/dev-stack/mcp-resources.mjs', namespace]);
+      kube(['delete', 'pod', 'total', '--ignore-not-found', '--wait=true', '--timeout=60s']);
+    }
+  }
+  kube(['create', '-f', '-'], quotaPod('total'));
+  kube(['delete', 'pod', 'total', '--wait=true', '--timeout=60s']);
+}
+
+type Peer = { namespace: string; name: string; address: string };
+const listener = `
+import socketserver
+import threading
+class Handler(socketserver.BaseRequestHandler):
+    def handle(self):
+        self.request.sendall(b'fixture')
+for port in (8080, 8081):
+    server = socketserver.TCPServer(('0.0.0.0', port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+threading.Event().wait()
+`;
+const probe = `
+import socket
+import sys
+try:
+    connection = socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=1)
+    connection.close()
+    print('connected')
+except OSError:
+    print('blocked')
+`;
+function listenerPod(target: string, name: string, app: string): Peer {
+  // Use an ordinary listener fixture; the computer entrypoint cannot run as a hosted tool.
+  const spec = structuredClone(field(approved, pod));
+  change(spec, 'containers.0.command', ['python3', '-c', listener]);
+  const fixture = { apiVersion: 'v1', kind: 'Pod', metadata: { namespace: target, name,
+    labels: { app } }, spec };
+  kube(['create', '-n', target, '-f', '-'], fixture);
+  return { namespace: target, name, address: '' };
+}
+async function ready(peer: Peer) {
+  kube(['wait', '-n', peer.namespace, `pod/${peer.name}`, '--for=condition=Ready', '--timeout=60s']);
+  peer.address = kube(['get', '-n', peer.namespace, `pod/${peer.name}`,
+    '-o', 'jsonpath={.status.podIP}']);
+  expect(peer.address).toMatch(/^\d+\.\d+\.\d+\.\d+$/u);
+  const local = [{ source: peer, address: '127.0.0.1', port: 8080, reason: peer.name }];
+  await connections(local, 'connected');
+}
+function connect(source: Peer, address: string, port = 8080) {
+  return kube(['exec', '-n', source.namespace, source.name, '--',
+    'python3', '-c', probe, address, String(port)]);
+}
+type Connection = { source: Peer; address: string; port: number; reason: string };
+async function connections(rows: Connection[], expected: string) {
+  for (const row of rows) {
+    let result = '';
+    for (let attempt = 0; attempt < 15; attempt++) {
+      result = connect(row.source, row.address, row.port);
+      if (result === expected) break;
+      await delay(500);
+    }
+    console.info(`${row.reason}: ${row.address}:${row.port} ${result} (expected ${expected})`);
+    expect(result, row.reason).toBe(expected);
+  }
+}
+async function removalControl(target: string, policy: string, rows: Connection[]) {
+  await connections(rows, 'blocked');
+  const saved: unknown = JSON.parse(kube(['get', '-n', target, 'networkpolicy', policy,
+    '-o', 'json']));
+  change(saved, 'metadata.resourceVersion', undefined);
+  change(saved, 'metadata.uid', undefined);
+  kube(['delete', '-n', target, 'networkpolicy', policy]);
+  try {
+    await connections(rows, 'connected');
+  } finally {
+    kube(['apply', '-n', target, '-f', '-'], saved);
+  }
+  await connections(rows, 'blocked');
+}
+async function network() {
+  const target = `${namespace}-net-mcp`;
+  const gatewayNamespace = `${namespace}-net-gateway`;
+  const upstreamNamespace = `${namespace}-net`;
+  for (const name of [target, gatewayNamespace, upstreamNamespace]) createNamespace(name);
+  const hosted = listenerPod(target, 'mcp', 'mcp');
+  metadataSource = hosted;
+  const gateway = listenerPod(gatewayNamespace, 'gateway', 'opencrane-gateway');
+  const wrongPod = listenerPod(gatewayNamespace, 'server', 'server');
+  const foreign = listenerPod(otherNamespace, 'gateway', 'opencrane-gateway');
+  const computer = listenerPod(upstreamNamespace, 'computer', 'computer');
+  const upstream = listenerPod(upstreamNamespace, 'upstream', 'upstream');
+  const arbitrary = listenerPod(upstreamNamespace, 'arbitrary', 'arbitrary');
+  for (const peer of [hosted, gateway, wrongPod, foreign, computer, upstream, arbitrary]) await ready(peer);
+  command('node', ['infra/dev-stack/mcp-resources.mjs', target, '8080',
+    `${upstream.address}:8080`]);
+  const ingress = [
+    { source: wrongPod, address: hosted.address, port: 8080, reason: 'wrong Pod in right namespace' },
+    { source: foreign, address: hosted.address, port: 8080, reason: 'right label in another silo' },
+    { source: computer, address: hosted.address, port: 8080, reason: 'direct computer' },
+    { source: upstream, address: hosted.address, port: 8080, reason: 'ordinary server' },
+    { source: gateway, address: hosted.address, port: 8081, reason: 'undeclared MCP port' },
+  ];
+  const controlPlane = kube(['get', 'service', 'kubernetes', '-n', 'default',
+    '-o', 'jsonpath={.spec.clusterIP}']);
+  const egress = [
+    { source: hosted, address: controlPlane, port: 443, reason: 'control plane' },
+    { source: hosted, address: upstream.address, port: 8081, reason: 'unreviewed upstream port' },
+    { source: hosted, address: arbitrary.address, port: 8080, reason: 'arbitrary destination' },
+    { source: hosted, address: foreign.address, port: 8080, reason: 'another silo' },
+  ];
+  expect(connect(gateway, hosted.address)).toBe('connected');
+  expect(connect(hosted, upstream.address)).toBe('connected');
+  await removalControl(target, 'mcp-ingress', ingress);
+  await removalControl(target, 'mcp-egress', egress);
+  expect(connect(gateway, hosted.address)).toBe('connected');
+  expect(connect(hosted, upstream.address)).toBe('connected');
+}
+
+async function metadataConnection(context: TestContext) {
+  if (!metadataSource) throw new Error('Network fixture was not started');
+  const target = metadataSource.namespace;
+  const saved: unknown = JSON.parse(kube(['get', '-n', target, 'networkpolicy/mcp-egress',
+    '-o', 'json']));
+  change(saved, 'metadata.resourceVersion', undefined);
+  change(saved, 'metadata.uid', undefined);
+  kube(['delete', '-n', target, 'networkpolicy/mcp-egress']);
+  try {
+    await delay(3000);
+    const control = connect(metadataSource, '169.254.169.254', 80);
+    if (control !== 'connected') context.skip('No reachable metadata listener without the policy');
+  } finally {
+    kube(['apply', '-n', target, '-f', '-'], saved);
+  }
+  const rows = [{ source: metadataSource, address: '169.254.169.254', port: 80,
+    reason: 'metadata' }];
+  await connections(rows, 'blocked');
 }
