@@ -14,15 +14,9 @@ import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fix
 
 const run = promisify(execFile);
 const image = process.env['CODEX_CAPTURE_IMAGE'];
+type Setup = Awaited<ReturnType<typeof fixture>>;
 
-async function captureNative() {
-  const setup = await fixture(2000, 20000, false, 'gpt-6.1-sol');
-  const directory = await mkdtemp(`${tmpdir()}/native-capture-`);
-  const socket = `${directory}/gateway.sock`;
-  const review = { action: 'Read fixture', consequence: 'Returns fixture data.',
-    targetArgument: 'record', fields: ['record'], stepUp: false };
-  const tool = toolEvidence({ name: 'read_before', reviewed: true, costCents: 0, review });
-  const catalogue = catalogueEvidence([tool]);
+function fixtureHandler(setup: Setup) {
   async function handle(request: IncomingMessage, response: ServerResponse) {
     if (request.url?.startsWith('/mcp/')) {
       const options = { method: request.method, headers: request.headers };
@@ -44,16 +38,18 @@ async function captureNative() {
     }
     const schema = z.object({ thread: z.string().default(''), turnId: z.string().default(''),
       approvalId: z.string().default('') });
-    const input = schema.parse(JSON.parse(Buffer.concat(chunks).toString()));
+    const bytes = Buffer.concat(chunks);
+    const input = schema.parse(JSON.parse(bytes.toString()));
     let result;
     if (request.url === '/bind') {
       const turn = { assistantId: 'assistant', computerId: 'computer',
         conversationId: 'conversation', turnId: input.turnId, threadId: input.thread,
         requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' };
       await setup.append('computer-assistant', 'computer.turn_started', turn);
-      await setup.append('conversation-conversation', 'agent.turn_started', {
+      const started = {
         conversationId: 'conversation', assistantId: 'assistant', turnId: input.turnId,
-      });
+      };
+      await setup.append('conversation-conversation', 'agent.turn_started', started);
       const claims = { ...setup.t, turn: input.turnId, thread: input.thread };
       const token = await setup.sign(claims, 'decision-service');
       result = { token, computer: setup.headers.authorization.slice(7) };
@@ -79,26 +75,43 @@ async function captureNative() {
     }
     void handle(request, response).catch(failed);
   }
-  const relay = createServer(serve);
+  return serve;
+}
+
+async function prepareAsk(setup: Setup) {
+  const review = { action: 'Read fixture', consequence: 'Returns fixture data.',
+    targetArgument: 'record', fields: ['record'], stepUp: false };
+  const reviewed = { name: 'read_before', reviewed: true, costCents: 0, review };
+  const tool = toolEvidence(reviewed);
+  const catalogue = catalogueEvidence([tool]);
+  const registration = { serverId: 'fixture', kind: 'remote',
+    locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_registered', registration);
+  const discovered = { serverId: 'fixture', connectionId: 'installed',
+    accountMode: 'none', ...catalogue };
+  await setup.append('mcp-fixture', 'mcp.server_discovered', discovered);
+  await reviewCatalogue(setup);
+  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: tool.name,
+    toolRevision: tool.revision, mode: 'ask', setBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+  const publication = { serverId: 'fixture', publishedBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_published', publication);
+  for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
+    const grant = { resourceType: 'mcp_server', resourceId: 'fixture',
+      granteeId, granteeKind, grantedBy: 'alice' };
+    const event = await setup.append(grantStream('mcp_server', 'fixture'), 'grant.given', grant);
+    await setup.auth.handler.handle(event, setup.db);
+  }
+}
+
+async function captureNative() {
+  const setup = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  const directory = await mkdtemp(`${tmpdir()}/native-capture-`);
+  const socket = `${directory}/gateway.sock`;
+  const handler = fixtureHandler(setup);
+  const relay = createServer(handler);
   try {
-    await setup.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture',
-      kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
-    await setup.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture',
-      connectionId: 'installed', accountMode: 'none', ...catalogue });
-    await reviewCatalogue(setup);
-    await setup.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture',
-      connectionId: 'installed', toolName: tool.name, toolRevision: tool.revision,
-      mode: 'ask', setBy: 'alice' });
-    await setup.append('mcp-fixture', 'mcp.server_published', {
-      serverId: 'fixture', publishedBy: 'alice',
-    });
-    for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
-      const event = await setup.append(grantStream('mcp_server', 'fixture'), 'grant.given', {
-        resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind,
-        grantedBy: 'alice',
-      });
-      await setup.auth.handler.handle(event, setup.db);
-    }
+    await prepareAsk(setup);
     relay.listen(socket);
     await once(relay, 'listening');
     await chmod(socket, 0o666);
@@ -110,7 +123,8 @@ async function captureNative() {
       '/app/test/codex-on-request.mjs'];
     async function captureOutput() {
       try {
-        return await run('docker', args, { maxBuffer: 16 * 1024 * 1024, timeout: 120_000 });
+        const limits = { maxBuffer: 16 * 1024 * 1024, timeout: 120_000 };
+        return await run('docker', args, limits);
       } catch (error) {
         const output = z.object({ stdout: z.string() }).parse(error);
         await writeFile('/tmp/pr12capture.json', output.stdout);

@@ -1,4 +1,5 @@
 import capture from './fixtures/codex-0.159.2-on-request.json' with { type: 'json' };
+import saved from './fixtures/codex-0.159.2-saved-thread.json' with { type: 'json' };
 import { expect, it, vi } from 'vitest';
 import { fixture } from './bridge-gate-fixture.ts';
 import { nativeRequests } from '../src/native-requests.ts';
@@ -46,9 +47,11 @@ async function answersWithoutActiveTurn(state: string) {
   const test = await fixture();
   const replies: unknown[] = [];
   function send(reply: unknown) { replies.push(reply); }
-  const handle = nativeRequests(send, test.channel.notification);
+  const handle = nativeRequests(send, test.channel.notification, state === 'private');
+  const stdout = vi.spyOn(process.stdout, 'write');
+  const stderr = vi.spyOn(process.stderr, 'write');
   try {
-    if (state !== 'absent') {
+    if (state === 'ended' || state === 'gated') {
       test.start('first');
       function started() { expect(test.calls).toContain('turn/start:thread-1'); }
       await vi.waitFor(started);
@@ -62,13 +65,25 @@ async function answersWithoutActiveTurn(state: string) {
     handle(request);
     handle(request);
     await test.flush();
-    expect(replies).toEqual([{ id: 23, result: { decision: 'decline' } }]);
+    if (state === 'private') {
+      expect(replies).toEqual([{ id: 23, error: {
+        code: -32601, message: 'Not available in a private turn',
+      } }]);
+    } else {
+      expect(replies).toEqual([{ id: 23, result: { decision: 'decline' } }]);
+    }
     expect(JSON.stringify(test.frames)).not.toContain('agent.native_request_refused');
     expect(JSON.stringify(test.frames)).not.toContain('PRIVATE_NATIVE_MARKER');
+    expect(JSON.stringify(stdout.mock.calls)).not.toContain('PRIVATE_NATIVE_MARKER');
+    expect(JSON.stringify(stderr.mock.calls)).not.toContain('PRIVATE_NATIVE_MARKER');
     test.finish('thread-1');
-  } finally { await test.close(); }
+  } finally {
+    stdout.mockRestore();
+    stderr.mockRestore();
+    await test.close();
+  }
 }
-it.each(['absent', 'ended', 'gated'])(
+it.each(['absent', 'ended', 'gated', 'private'])(
   'answers once without recording when the turn is %s', answersWithoutActiveTurn);
 
 function ignoresNonStringMethod() {
@@ -92,17 +107,32 @@ function capturesProductionPatchTool() {
 }
 it('captures the production patch tool offered by the routed model', capturesProductionPatchTool);
 
-function duplicateDecline(method: string) {
+function checksSavedCapture() {
   const replies: unknown[] = [];
   function send(reply: unknown) { replies.push(reply); }
-  const report = vi.fn();
-  const handle = nativeRequests(send, report);
-  const request = { id: 47, method, params: { command: 'REFUSED_ACTION_CANARY' } };
-  handle(request);
-  handle(request);
-  expect(replies).toEqual([{ id: 47, result: { decision: 'decline' } }]);
-  expect(JSON.stringify(replies)).not.toContain('REFUSED_ACTION_CANARY');
-  expect(report).toHaveBeenCalledTimes(1);
+  const record = vi.fn();
+  const handle = nativeRequests(send, record);
+  for (const entry of saved.nativeRequests) {
+    expect(entry.repliesPerId).toBe(1);
+    if (entry.stage.endsWith('_accept')) continue;
+    const before = replies.length;
+    handle(entry.message);
+    handle(entry.message);
+    expect(replies).toHaveLength(before + 1);
+    expect(replies.at(-1)).toEqual(entry.reply);
+  }
+  expect(record).toHaveBeenCalledTimes(replies.length);
+  for (const name of ['fixture_escalated_shell', 'fixture_file_change']) {
+    function matches(entry: (typeof saved.observations)[number]) { return entry.name === name; }
+    const observation = saved.observations.find(matches);
+    expect(observation).toMatchObject({ result: 'PASS', requests: 1, markerPresent: false });
+    expect(JSON.stringify(observation?.continuation)).toContain('rejected by user');
+  }
+  expect(saved.gatewayAsk.result).toBe('PASS');
+  expect(saved.gatewayAsk.decisions).toHaveLength(2);
+  for (const decision of saved.gatewayAsk.decisions) {
+    expect(decision).toMatchObject({ decision: 'rejected', beforeDecision: 0, afterDecision: 0 });
+  }
 }
-it.each(['item/commandExecution/requestApproval', 'item/fileChange/requestApproval'])(
-  'never changes a duplicate %s decline into permission', duplicateDecline);
+it('replays real fixture declines once and keeps both saved-thread calls behind Ask',
+  checksSavedCapture);

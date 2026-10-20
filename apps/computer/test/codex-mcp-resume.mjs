@@ -209,6 +209,7 @@ function startClient() {
   const child = spawn('codex', argumentsList, options);
   const pending = new Map();
   const turns = new Map();
+  let turnThread;
   const lineOptions = { input: child.stdout };
   const lines = createInterface(lineOptions);
 
@@ -244,6 +245,7 @@ function startClient() {
       if (stage.endsWith('_accept') && message.method === 'mcpServer/elicitation/request') {
         assert.equal(message.params._meta.codex_approval_kind, 'mcp_tool_call');
         assert.equal(message.params.serverName, 'oc_aaaaaaaaaa');
+        assert.equal(message.params.threadId, turnThread);
         assert.equal(acceptedNative.has(message.id), false);
         acceptedNative.add(message.id);
         sendNative({ id: message.id, result: { action: 'accept' } });
@@ -345,6 +347,7 @@ function startClient() {
   }
 
   async function turn(threadId, prompt = stage, overrides = {}) {
+    turnThread = threadId;
     function wait(resolve) { turns.set(threadId, resolve); }
     const finished = new Promise(wait);
     const input = [{ type: 'text', text: prompt, text_elements: [] }];
@@ -1071,7 +1074,8 @@ async function captureNativeRequests(config, configPath) {
     const fixtureName = `fixture_${name}`;
     const marker = `/tmp/native-fixture-${name}`;
     actionMarkers[fixtureName] = marker;
-    const rewritten = JSON.stringify(args).replaceAll(actionMarkers[name], marker);
+    const encoded = JSON.stringify(args);
+    const rewritten = encoded.replaceAll(actionMarkers[name], marker);
     await runCase([fixtureName, tool, JSON.parse(rewritten)], sandboxed.thread.id);
   }
   await activeClient.close();
@@ -1096,7 +1100,10 @@ async function fixtureRequest(path, value) {
       const chunks = [];
       function chunk(value) { chunks.push(value); }
       function done() {
-        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+        try {
+          const bytes = Buffer.concat(chunks);
+          resolve(JSON.parse(bytes.toString()));
+        }
         catch (error) { reject(error); }
       }
       response.on('data', chunk);
@@ -1145,12 +1152,16 @@ async function captureGatewayAsk(thread, runCase) {
     const decisions = [];
     for (const name of ['loaded_accept', 'reloaded_accept']) {
       assert.equal((await unload(thread)).unloaded, true);
-      const grant = await fixtureRequest('/bind', { thread, turnId: name });
-      const loadKey = Buffer.from(name).toString('hex').padEnd(32, '0');
+      const binding = { thread, turnId: name };
+      const grant = await fixtureRequest('/bind', binding);
+      const nameBytes = Buffer.from(name);
+      const encodedName = nameBytes.toString('hex');
+      const loadKey = encodedName.padEnd(32, '0');
       const catalogue = { loadKey, thread, conversation: 'conversation', turnId: name, tools };
       await proxyControl('/catalogue', catalogue, socket);
-      await proxyControl('/grant', { ...grant, thread, conversation: 'conversation',
-        turnId: name, expires: Date.now() + 60_000 }, socket);
+      const turnGrant = { ...grant, thread, conversation: 'conversation',
+        turnId: name, expires: Date.now() + 60_000 };
+      await proxyControl('/grant', turnGrant, socket);
       const url = `${runtimeProxy.url}/mcp/${loadKey}/oc_aaaaaaaaaa`;
       const server = { url, bearer_token_env_var: 'PROXY_CALLER_TOKEN' };
       const config = { mcp_servers: { oc_aaaaaaaaaa: server } };

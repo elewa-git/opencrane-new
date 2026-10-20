@@ -2,6 +2,16 @@
 
 For people, read [README.md](README.md) first.
 
+## Saved-thread native consent capture
+
+`test/codex-native-capture.test.ts` runs only with `CODEX_CAPTURE_IMAGE` set to the
+existing computer image. It starts normal disposable NATS, PostgreSQL and OpenFGA
+fixtures and the pinned gateway. A Unix socket carries the container's MCP calls
+to that gateway while the container uses `--network none`. Model replies stay local.
+The fixture grants no production consent. It uses the existing requester decision
+command to reject each Ask and checks that the upstream received no tool calls.
+See [the commands and results](../../docs/process/p3-5-pr12capture/receipt.md).
+
 ## Egress socket checks
 
 P3-20 #61 PR 2b is split again to keep this change near 600 lines.

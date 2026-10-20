@@ -435,6 +435,8 @@ npm run typecheck -w libs/models
 ```
 
 Some tests use Docker and a PostgreSQL test database. README.robot.md lists what they need.
+An optional Codex capture uses these disposable services to check that native consent
+still reaches the gateway's requester approval.
 
 A small example selects the model for a chat turn:
 

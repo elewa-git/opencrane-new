@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const path = process.argv[2] ??
-  new URL('./fixtures/codex-0.159.2-on-request.json', import.meta.url);
+  new URL('./fixtures/codex-0.159.2-saved-thread.json', import.meta.url);
 const capture = JSON.parse(readFileSync(path, 'utf8'));
 let failures = 0;
 
