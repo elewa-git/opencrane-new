@@ -24,11 +24,16 @@ export function pauseTimeRemaining(store: EventStore, silo: string, control: Con
 
 export async function watchTakeoverDeadline(store: EventStore, silo: string,
   assistantId: string, signal: AbortSignal) {
+  let observedPosition: number | undefined;
+  let control: ComputerControl | undefined;
   while (!signal.aborted) {
     let wait = 250;
     try {
       const position = await store.head(`computer-${assistantId}`);
-      const control = await readComputerControl(store, silo, assistantId);
+      if (position !== observedPosition) {
+        control = await readComputerControl(store, silo, assistantId);
+        observedPosition = position;
+      }
       if (signal.aborted) return;
       if (control?.phase === 'requested' || control?.phase === 'pausing') {
         const remaining = pauseTimeRemaining(store, silo, control);

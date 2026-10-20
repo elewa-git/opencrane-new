@@ -3436,7 +3436,9 @@ proof waits, including when there is no ready computer. It uses the saved reques
 time plus thirty seconds, capped by thirty seconds from the server's first
 monotonic observation. Polls and reconnects share that observation. Clock changes
 can shorten the limit but cannot extend it. A restart reads the original saved time
-and fails an expired request immediately. Shutdown stops the deadline checks.
+and fails an expired request immediately. The worker reuses saved control facts
+until the computer stream changes, but checks the deadline on every poll. Shutdown
+stops the deadline checks.
 
 The proof path checks the same limit immediately before saving paused. Conditional
 writes prevent a delayed proof from replacing a saved failure. An append outage
