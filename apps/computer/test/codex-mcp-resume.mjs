@@ -1,9 +1,12 @@
+import { nativeRequests } from '../src/native-requests.ts';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer as createSocketServer } from 'node:net';
 import { createInterface } from 'node:readline';
 import { setTimeout as pause } from 'node:timers/promises';
 
@@ -18,8 +21,10 @@ const capture = {
 };
 let stage = 'start';
 let activeClient;
+let nativeHost;
 let modelHoldStarted;
 let nextRpc = 0;
+const onRequest = process.argv.includes('--on-request');
 const wireMode = process.argv.includes('--wire');
 const heldApprovals = process.argv.includes('--held-approvals');
 const heldCalls = new Map();
@@ -125,12 +130,13 @@ function latestPrompt(body) {
 
 function hasOutput(body, callId) {
   for (const item of body.input ?? []) {
-    if (item.type === 'function_call_output' && item.call_id === callId) return true;
+    if (['function_call_output', 'custom_tool_call_output'].includes(item.type) && item.call_id === callId) return true;
   }
   return false;
 }
 
 function plannedCall(plan, namespaces) {
+  if (plan.item) return plan.item;
   if (plan.kind === 'background') {
     const argumentsText = JSON.stringify({ cmd: 'sleep 60', yield_time_ms: 1000 });
     return { type: 'function_call', id: plan.itemId, call_id: plan.callId,
@@ -145,12 +151,17 @@ function plannedCall(plan, namespaces) {
 async function handleModel(request, response) {
   const body = await readBody(request);
   const namespaces = [];
-  for (const tool of body.tools ?? []) {
+  const tools = [...(body.tools ?? [])];
+  for (const item of body.input ?? []) {
+    if (item.type === 'additional_tools') tools.push(...item.tools);
+  }
+  for (const tool of tools) {
     if (tool.type === 'namespace' && tool.name.startsWith('mcp__')) namespaces.push(tool);
   }
   const prompt = latestPrompt(body);
   const observedTools = { stage, prompt, atMs: Date.now() - startedAt,
     namespaces, input: body.input };
+  if (onRequest) observedTools.tools = tools;
   if (stage !== 'R2' && stage !== 'R7') {
     observedTools.input = JSON.stringify(body.input);
   }
@@ -183,7 +194,7 @@ async function handleModel(request, response) {
 async function listen(server) {
   function start(resolve) {
     let port = 0;
-    if (wireMode && server === mcp) port = 8080;
+    if ((wireMode && server === mcp) || (onRequest && server === model)) port = 8080;
     server.listen(port, '127.0.0.1', resolve);
   }
   await new Promise(start);
@@ -203,6 +214,14 @@ function startClient() {
 
   function send(message) { child.stdin.write(`${JSON.stringify(message)}\n`); }
 
+  function sendNative(reply) {
+    const entry = capture.nativeRequests.at(-1);
+    entry.reply = reply;
+    entry.repliesPerId = (entry.repliesPerId ?? 0) + 1;
+    send(reply);
+  }
+  function recordedNative() {}
+  const answerNative = nativeRequests(sendNative, recordedNative, stage === 'private');
   function receive(line) {
     const message = JSON.parse(line);
     const atMs = Date.now() - startedAt;
@@ -219,7 +238,10 @@ function startClient() {
       else waiting.resolve(message.result);
       return;
     }
-    if (message.id !== undefined) {
+    if (onRequest && message.id !== undefined) {
+      capture.nativeRequests.push({ stage, message });
+      answerNative(message);
+    } else if (message.id !== undefined) {
       const error = { code: -32601, message: 'Not supported by the local fixture' };
       const refused = { id: message.id, error };
       send(refused);
@@ -311,11 +333,11 @@ function startClient() {
     return sendRpc(method, params);
   }
 
-  async function turn(threadId, prompt = stage) {
+  async function turn(threadId, prompt = stage, overrides = {}) {
     function wait(resolve) { turns.set(threadId, resolve); }
     const finished = new Promise(wait);
     const input = [{ type: 'text', text: prompt, text_elements: [] }];
-    const turnParams = { threadId, input };
+    const turnParams = { threadId, input, ...overrides };
     await rpc('turn/start', turnParams);
     const result = await finished;
     assert.equal(result.status, 'completed');
@@ -554,6 +576,25 @@ function expireProbe() {
 }
 
 try {
+  if (onRequest) {
+    mkdirSync('/run/executor', { recursive: true });
+    mkdirSync('/home/agent/workspace', { recursive: true });
+    function connectNativeHost(socket) {
+      const host = spawn('/usr/local/bin/tool-user', ['host'], {
+        stdio: ['pipe', 'pipe', 'inherit'],
+      });
+      socket.pipe(host.stdin);
+      host.stdout.pipe(socket);
+      function disconnect() { host.stdin.destroy(); }
+      socket.on('close', disconnect);
+      socket.on('error', disconnect);
+      function hostFailed() { socket.destroy(); }
+      host.stdin.on('error', hostFailed);
+    }
+    nativeHost = createSocketServer(connectNativeHost);
+    function startNativeHost(resolve) { nativeHost.listen('/run/executor/host.sock', resolve); }
+    await new Promise(startNativeHost);
+  }
   const modelPort = await listen(model);
   if (wireMode) {
     const { memoryFreeConfig } = await import('../src/codex-config.ts');
@@ -604,6 +645,13 @@ apps = false
 plugins = false
 `;
   if (wireMode) config = productionConfig('probe-model');
+  if (onRequest) {
+    const { memoryFreeConfig } = await import('../src/codex-config.ts');
+    config = memoryFreeConfig('gpt-6.1-sol');
+    capture.model = 'gpt-6.1-sol';
+    capture.modelCatalogue = 'https://github.com/openai/codex/blob/rust-v0.159.2/' +
+      'codex-rs/models-manager/models.json';
+  }
   const configPath = join(probeHome, 'config.toml');
   writeFileSync(configPath, config);
   assert.equal(capture.version, 'codex-cli 0.159.2');
@@ -612,6 +660,9 @@ plugins = false
   const before = threadConfig(mcpPort, 'oc_aaaaaaaaaa', 'before');
   const after = threadConfig(mcpPort, 'oc_bbbbbbbbbb', 'after');
   const other = threadConfig(mcpPort, 'oc_aaaaaaaaaa', 'other');
+  if (onRequest) {
+    await captureNativeRequests(before, configPath);
+  } else {
   const started = await activeClient.rpc('thread/start', { cwd: '/tmp', config: before });
   let threadA = started.thread.id;
   await activeClient.turn(threadA, 'HISTORY_MARKER_A');
@@ -813,6 +864,7 @@ plugins = false
     assert.match(featureOutput, /mcp_2026_07_28/u);
   }
   capture.threadId = threadA;
+  }
   capture.result = 'PASS';
   for (const check of capture.checks) {
     if (check.result === 'FAIL') capture.result = 'FAIL';
@@ -827,6 +879,7 @@ plugins = false
   console.log(JSON.stringify(capture, null, 2));
   clearTimeout(deadline);
   if (activeClient) await activeClient.close();
+  nativeHost?.close();
   mcp.close();
   model.close();
   if (runtimeProxy) await runtimeProxy.close();
@@ -910,4 +963,105 @@ async function checkHeldCalls(threadA, threadB, config) {
   capture.approvalHold.stopMs = Date.now() - beganAt;
   assert.ok(capture.approvalHold.stopMs < 5000);
   assert.equal(heldCalls.get('call_S').sends, 0);
+}
+
+async function captureNativeRequests(config, configPath) {
+  capture.nativeRequests = [];
+  const schemaDirectory = join(probeHome, 'schema');
+  execFileSync('codex', ['app-server', 'generate-ts', '--out', schemaDirectory]);
+  capture.generatedProtocol = {};
+  const schemaNames = ['CommandExecutionRequestApprovalParams', 'FileChangeRequestApprovalParams',
+    'CommandExecutionRequestApprovalResponse', 'FileChangeRequestApprovalResponse',
+    'CommandExecutionApprovalDecision', 'FileChangeApprovalDecision',
+    'PermissionsRequestApprovalParams', 'ToolRequestUserInputParams'];
+  for (const name of schemaNames) {
+    capture.generatedProtocol[name] = readFileSync(join(schemaDirectory, 'v2', `${name}.ts`), 'utf8');
+  }
+  const started = await activeClient.rpc('thread/start', {
+    cwd: '/tmp', config, approvalPolicy: 'on-request',
+  });
+  const thread = started.thread.id;
+  const cases = [
+    ['mcp', null, null],
+    ['plain_shell', 'exec_command', { cmd: 'touch /tmp/native-plain-marker' }],
+    ['escalated_shell', 'exec_command', { cmd: 'touch /tmp/native-escalated-marker',
+      sandbox_permissions: 'require_escalated', justification: 'Local marker fixture' }],
+    ['file_write', 'exec_command', { cmd: 'printf fixture > /tmp/native-write-marker' }],
+    ['file_change', 'apply_patch', '*** Begin Patch\n*** Add File: /tmp/native-file-marker\n+fixture\n*** End Patch'],
+    ['user_input', 'request_user_input', { questions: [{ id: 'fixture', header: 'Fixture',
+      question: 'Choose a fixture', options: [
+        { label: 'One', description: 'First' }, { label: 'Two', description: 'Second' },
+      ] }] }],
+    ['permissions', 'request_permissions', { permissions: { network: { enabled: true } },
+      reason: 'Local fixture' }],
+  ];
+  const actionMarkers = { plain_shell: '/tmp/native-plain-marker',
+    escalated_shell: '/tmp/native-escalated-marker', file_write: '/tmp/native-write-marker',
+    file_change: '/tmp/native-file-marker', loaded_resume_shell: '/tmp/native-loaded-marker',
+    private_shell: '/tmp/native-private-marker' };
+  async function runCase(test, target = thread, overrides = { approvalPolicy: 'on-request' }) {
+    const [name, tool, args] = test;
+    stage = name;
+    console.error(`Capturing ${name}`);
+    const callId = `call_${name}`;
+    const plan = { kind: 'tool', callId, itemId: `fc_${name}` };
+    let nativeTool = tool;
+    let nativeArgs = args;
+    if (!nativeTool) {
+      nativeTool = 'mcp__oc_aaaaaaaaaa__read_before';
+      nativeArgs = {};
+    }
+    const call = `text(await tools.${nativeTool}(${JSON.stringify(nativeArgs)}));`;
+    const offered = 'for (const tool of ALL_TOOLS) text({ offeredTool: tool.name });';
+    plan.item = { type: 'custom_tool_call', id: plan.itemId, call_id: callId,
+      name: 'exec', namespace: 'functions', input: `${offered} ${call}` };
+    if (tool === 'request_user_input') {
+      plan.item = { type: 'function_call', id: plan.itemId, call_id: callId,
+        name: tool, namespace: 'functions', arguments: JSON.stringify(args) };
+    }
+    plans.set(name, plan);
+    await activeClient.turn(target, name, overrides);
+    const requests = [];
+    for (const entry of capture.nativeRequests) if (entry.stage === name) requests.push(entry);
+    const check = { name, result: 'PASS', requests: requests.length };
+    const marker = actionMarkers[name];
+    if (marker) {
+      check.marker = marker;
+      check.markerPresent = existsSync(marker);
+      for (const entry of requests) {
+        const method = entry.message.method;
+        if (method === 'item/commandExecution/requestApproval' ||
+            method === 'item/fileChange/requestApproval') {
+          assert.equal(check.markerPresent, false, `${name} ran after a refused approval`);
+        }
+      }
+    }
+    capture.checks.push(check);
+  }
+  for (const test of cases) await runCase(test);
+  stage = 'loaded_resume';
+  const resumed = await activeClient.rpc('thread/resume', { threadId: thread });
+  capture.loadedResumePolicy = resumed.approvalPolicy;
+  await runCase(['loaded_resume_mcp', null, null], thread, {});
+  await runCase(['loaded_resume_shell', 'exec_command', {
+    cmd: 'touch /tmp/native-loaded-marker', sandbox_permissions: 'require_escalated',
+    justification: 'Local marker fixture',
+  }], thread, {});
+  capture.markers = { plain: existsSync('/tmp/native-plain-marker'),
+    escalated: existsSync('/tmp/native-escalated-marker'),
+    written: existsSync('/tmp/native-write-marker'), file: existsSync('/tmp/native-file-marker') };
+  await activeClient.close();
+  stage = 'private';
+  const { privateConfig } = await import('../src/codex-config.ts');
+  writeFileSync(configPath, privateConfig('gpt-6.1-sol'));
+  activeClient = startClient();
+  await activeClient.initialise();
+  stage = 'private';
+  const privateThread = await activeClient.rpc('thread/start', {
+    cwd: '/tmp', ephemeral: true, approvalPolicy: 'never',
+  });
+  await runCase(['private_shell', 'exec_command', {
+    cmd: 'touch /tmp/native-private-marker', sandbox_permissions: 'require_escalated',
+    justification: 'Local marker fixture',
+  }], privateThread.thread.id, {});
 }

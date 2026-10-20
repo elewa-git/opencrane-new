@@ -1,6 +1,6 @@
 import {
   conversationCreatedDataSchema, agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema,
-  agentNativeConsentRefusedDataSchema,
+  agentNativeConsentRefusedDataSchema, agentNativeRequestRefusedDataSchema,
 } from '@opencrane/events';
 import { computerSummary, type ComputerSummary, type TurnSummary } from '@opencrane/auth';
 import { createHash } from 'node:crypto';
@@ -34,7 +34,11 @@ const toolFinishedReportSchema = agentToolCallFinishedDataSchema.extend({
 const nativeConsentReportSchema = agentNativeConsentRefusedDataSchema.extend({
   ...toolReportFields, type: z.literal('agent.native_consent_refused'),
 });
+const nativeRequestReportSchema = agentNativeRequestRefusedDataSchema.extend({
+  ...toolReportFields, type: z.literal('agent.native_request_refused'),
+});
 const reportSchema = z.union([
+  nativeRequestReportSchema,
   nativeConsentReportSchema,
   existingReportSchema, toolStartedReportSchema, toolFinishedReportSchema,
 ]);
@@ -170,7 +174,10 @@ function validateReportContextClass(report: z.infer<typeof reportSchema>,
 }
 function reportData(report: z.infer<typeof reportSchema>, silo: string, assistantId: string, keys: ReturnType<typeof conversationKeys>) {
   const common = { conversationId: report.conversationId, turnId: report.turnId };
-  if (report.type === 'agent.native_consent_refused') {
+  if (report.type === 'agent.native_request_refused') {
+    return { ...common, nativeRequestId: report.nativeRequestId,
+      requestKind: report.requestKind, outcome: report.outcome };
+  } else if (report.type === 'agent.native_consent_refused') {
     return { ...common, nativeRequestId: report.nativeRequestId, serverName: report.serverName,
       serverId: report.serverId, reason: report.reason };
   } else if (report.type === 'agent.tool_call_started') {

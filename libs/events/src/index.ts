@@ -118,3 +118,5 @@ export { memoryCorrectedEventSchema, memoryValueEventSchema } from './memory.ts'
 export { approvalCancelReasonSchema, approvalCancelledDataSchema }
   from './approval-cancellation.ts';
 export { approvalUsedDataSchema } from './data.ts';
+
+export { agentNativeRequestRefusedDataSchema } from './native-request.ts';

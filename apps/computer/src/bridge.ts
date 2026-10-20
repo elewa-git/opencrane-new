@@ -1,3 +1,4 @@
+import { nativeRequests } from './native-requests.ts';
 import { receiveFile } from './files.ts';
 // Codex process supervision and the authenticated server event channel.
 import { spawn } from 'node:child_process';
@@ -49,12 +50,7 @@ let initialised = false;
 let reported = false;
 let client: Socket | undefined;
 function memoryFreeMessage(message: Record<string, unknown>, line: string) {
-  if (message['id'] !== undefined && message['method'] === 'mcpServer/elicitation/request') {
-    channel.notification(message);
-    const error = { code: -32601, message: 'Native consent is not supported' };
-    persistent.reply(message['id'], error);
-    return;
-  }
+  if (answerNativeRequest(message)) return;
   channel.notification(message);
   if (client) client.write(line + '\n');
 }
@@ -64,6 +60,8 @@ function invalidMemoryFreeOutput() {
 }
 const persistent = codexConnection(child.stdin, child.stdout,
   { message: memoryFreeMessage, failed: invalidMemoryFreeOutput });
+function reportNativeRequest(message: Record<string, unknown>) { channel.notification(message); }
+const answerNativeRequest = nativeRequests(persistent.respond, reportNativeRequest);
 const initialiseParams = {
   clientInfo: { name: 'opencrane-computer', version: '1' },
   capabilities: { experimentalApi: true },
@@ -82,14 +80,7 @@ async function privateSession() {
   const closed = new Promise<void>(closedPromise);
   let threadId: string | undefined;
   function dispatchPrivateMessage(message: Record<string, unknown>) {
-    if (message['id'] !== undefined && typeof message['method'] === 'string') {
-      if (message['method'] === 'mcpServer/elicitation/request' &&
-          record(message['params'])['threadId'] === threadId) {
-        channel.notification(message);
-      }
-      connection.reply(message['id'], { code: -32601, message: 'Not available in a private turn' });
-      return;
-    }
+    if (answerPrivateRequest(message)) return;
     const params = message['params'];
     if (!params || typeof params !== 'object' || !('threadId' in params)
       || params.threadId !== threadId) return;
@@ -100,6 +91,11 @@ async function privateSession() {
     catch { close(); }
   }
   const connection = codexConnection(socket, socket, { message: privateMessage, failed: close });
+  function reportPrivateRequest(message: Record<string, unknown>) {
+    if (message['method'] === 'mcpServer/elicitation/request' &&
+        record(message['params'])['threadId'] === threadId) channel.notification(message);
+  }
+  const answerPrivateRequest = nativeRequests(connection.respond, reportPrivateRequest, true);
   socket.on('error', close);
   try {
     await once(socket, 'connect');

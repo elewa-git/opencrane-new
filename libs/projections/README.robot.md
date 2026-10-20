@@ -774,3 +774,11 @@ returns superseded revision bounds separately from permanently hidden fact ids.
 Historical links to replaced revisions hide dependent facts transitively. Replay skips
 superseded decryption and keeps outgoing links from every revision. Rebuild offline
 before serving existing corrected histories; replay itself changes no keys.
+
+## Native request refusal audit records
+
+`agent.native_request_refused` stays in the event log. The conversation
+projection skips it before inserting chat rows, just like private memory records.
+Rebuild repeats that omission. The server regression projects a real NATS event into
+PostgreSQL, then reads messages through HTTP and the socket, with and without replay.
+The volume regression projects the refusal before seeding its large message batch.

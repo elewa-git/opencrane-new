@@ -300,6 +300,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.tool_call_started` | bridge (reported) | call id, server id and tool name; no arguments | conversation feed; browser (WebSocket) |
 | `agent.native_consent_refused` | bridge (reported) | native request id, named server, bound turn and explicit unsupported refusal; no consent text | conversation feed; browser (WebSocket); grants no permission |
+| `agent.native_request_refused` | bridge (reported) | conversationId, turnId, nativeRequestId, requestKind (shell/file_change/permissions/user_input/other), outcome (declined/unsupported); no command, path or prompt | audit only; no chat display or permission grant |
 | `tool.dispatch_started` | models process | requestId, serverId, connectionId, gateway generation, recordDigest and reviewRevision; no request bytes | Consume one published tool permit on `decision-<request>` before sending. Replay never sends a call. |
 | `tool.dispatch_recorded` | gateway log ingest or models process | linked request id, call, server, UTC times, duration and dispatch evidence; `not_dispatched` with `dispatch_refused` closes a confirmed start when a later check refuses before sending; no arguments | conversation feed; browser (WebSocket) |
 | `approval.retry_requested` | requester command | unchanged approval after verified non-dispatch | approval read state; one replacement permit |

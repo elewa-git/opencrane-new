@@ -23,7 +23,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes and public keys| computer
-  server["apps/server<br/>the back end"] <-->|turns, files, shared history, stops, signed gates, immediate gate replies, root stop receipts and reports| computer
+  server["apps/server<br/>the back end"] <-->|turns, files, shared history, stops, signed gates, immediate gate replies, root stop receipts and safe refusal reports| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer --> supervisor["Root supervisor<br/>protected launch and desktop checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
@@ -33,7 +33,8 @@ flowchart LR
 
 ## What it is responsible for
 
-- Refuses unsupported native MCP consent and reports its request without private text.
+- Answers each native Codex request once, including after a turn ends.
+  Reports refusals during active tool-enabled turns without command or prompt text.
 
 - Builds the container image with Codex, a browser, a remote desktop and document tools.
 - Accepts new server passes only through authenticated Kubernetes access as root.

@@ -1,0 +1,2 @@
+- Computers answer each native Codex request once and save safe refusal records for active tool-enabled turns. Native approvals remain disabled pending the next change.
+- Native refusal audit records no longer interrupt chat history or socket message loading, including after replay.

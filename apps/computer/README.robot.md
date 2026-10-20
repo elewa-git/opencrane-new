@@ -955,3 +955,28 @@ calling the real root socket in disposable Docker computers. It also starts real
 Chromium automation under the executor and desktop users. Executor automation exits;
 desktop automation and Xvnc stay running and full quiet proof stays unavailable.
 These are source checks with Docker/runc, not pinned gVisor or fresh-install qualification.
+
+## Native request replies
+
+PR 12a keeps memory-free and private thread starts on `never`. PR 12b will change
+only memory-free starts and turns. `native-requests.ts` answers server requests
+once per id for each Codex connection, even without a running turn or after a stop.
+Elicitation keeps its unsupported error and `agent.native_consent_refused` record.
+Shell/file approvals decline; other requests receive an unsupported error.
+Only a matching, running memory-free Codex turn can record `agent.native_request_refused`.
+The closed takeover gate suppresses records, not replies. The app.sock client receives
+no server requests to answer. Private sessions keep their unsupported error.
+
+`test/codex-on-request.mjs` uses Codex 0.159.2, the real memory-free config and a local
+stub endpoint with the routed `gpt-6.1-sol` catalogue metadata bundled in that binary.
+The fixture uses the JavaScript tool interface and the packaged native host.
+Run it in the built image with `--network none`, as recorded in
+[test/fixtures/codex-0.159.2-on-request.json](test/fixtures/codex-0.159.2-on-request.json).
+The capture records actual requests and the next model input, plus generated protocol
+shapes for methods that did not appear. It does not create artificial approval requests.
+Plain and escalated shell ran without asking under `danger-full-access`; file writes
+and the offered patch tool also ran without approval. Each shell or file action checks
+its own marker, including loaded-resume and private attempts. Default mode refused
+user input; permissions were absent from the JavaScript tool list. The private host
+was disabled and its marker was absent. Live shell/file decline checks
+are NOT RUN because Codex sent neither request. Fresh-install qualification is NOT RUN.

@@ -1,3 +1,4 @@
+import { agentNativeRequestRefusedDataSchema } from './native-request.ts';
 import { approvalCancelledDataSchema } from './approval-cancellation.ts';
 import { childPublicationEvent } from './child-publication.ts';
 import { childRequestEvent, childStartFailedEvent } from './child-request.ts';
@@ -308,6 +309,13 @@ export const eventRegistry: readonly EventDefinition[] = [
     data.agentNativeConsentRefusedDataSchema, {
       conversationId: 'conv_1', turnId: 'turn_1', nativeRequestId: '17',
       serverName: 'oc_0123456789', serverId: 'mcp_1', reason: 'unsupported_native_consent',
+    }),
+
+  event('agent.native_request_refused', 'conversation',
+    'The bridge refused a native request without saving its command or prompt.',
+    agentNativeRequestRefusedDataSchema, {
+      conversationId: 'conv_1', turnId: 'turn_1', nativeRequestId: '19',
+      requestKind: 'shell', outcome: 'declined',
     }),
 
   // Tools, approvals and effects
