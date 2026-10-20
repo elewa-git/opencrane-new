@@ -1,5 +1,5 @@
 import { nativeRequests } from '../src/native-requests.ts';
-import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -14,7 +14,7 @@ const probeHome = mkdtempSync(join(tmpdir(), 'codex-resume-'));
 const startedAt = Date.now();
 const versionOptions = { encoding: 'utf8' };
 const versionOutput = execFileSync('codex', ['--version'], versionOptions);
-const capture = {
+export const capture = {
   measuredAt: new Date(startedAt).toISOString(), version: versionOutput.trim(),
   requests: [], modelTools: [], rpc: [], replies: [], notifications: [],
   completedTurns: [], stderr: [], checks: [],
@@ -222,6 +222,7 @@ function startClient() {
   }
   function recordedNative() {}
   const answerNative = nativeRequests(sendNative, recordedNative, stage === 'private');
+  const acceptedNative = new Set();
   function receive(line) {
     const message = JSON.parse(line);
     const atMs = Date.now() - startedAt;
@@ -240,7 +241,17 @@ function startClient() {
     }
     if (onRequest && message.id !== undefined) {
       capture.nativeRequests.push({ stage, message });
-      answerNative(message);
+      if (stage.endsWith('_accept') && message.method === 'mcpServer/elicitation/request') {
+        assert.equal(message.params._meta.codex_approval_kind, 'mcp_tool_call');
+        assert.equal(message.params.serverName, 'oc_aaaaaaaaaa');
+        assert.equal(acceptedNative.has(message.id), false);
+        acceptedNative.add(message.id);
+        sendNative({ id: message.id, result: { action: 'accept' } });
+      } else {
+        answerNative(message);
+        // Re-deliver the actual request locally to check connection-level deduplication.
+        answerNative(message);
+      }
     } else if (message.id !== undefined) {
       const error = { code: -32601, message: 'Not supported by the local fixture' };
       const refused = { id: message.id, error };
@@ -876,7 +887,7 @@ plugins = false
   process.exitCode = 1;
 } finally {
   capture.elapsedMs = Date.now() - startedAt;
-  console.log(JSON.stringify(capture, null, 2));
+  if (!onRequest) console.log(JSON.stringify(capture, null, 2));
   clearTimeout(deadline);
   if (activeClient) await activeClient.close();
   nativeHost?.close();
@@ -967,18 +978,8 @@ async function checkHeldCalls(threadA, threadB, config) {
 
 async function captureNativeRequests(config, configPath) {
   capture.nativeRequests = [];
-  const schemaDirectory = join(probeHome, 'schema');
-  execFileSync('codex', ['app-server', 'generate-ts', '--out', schemaDirectory]);
-  capture.generatedProtocol = {};
-  const schemaNames = ['CommandExecutionRequestApprovalParams', 'FileChangeRequestApprovalParams',
-    'CommandExecutionRequestApprovalResponse', 'FileChangeRequestApprovalResponse',
-    'CommandExecutionApprovalDecision', 'FileChangeApprovalDecision',
-    'PermissionsRequestApprovalParams', 'ToolRequestUserInputParams'];
-  for (const name of schemaNames) {
-    capture.generatedProtocol[name] = readFileSync(join(schemaDirectory, 'v2', `${name}.ts`), 'utf8');
-  }
   const started = await activeClient.rpc('thread/start', {
-    cwd: '/tmp', config, approvalPolicy: 'on-request',
+    cwd: '/tmp', config, approvalPolicy: 'never',
   });
   const thread = started.thread.id;
   const cases = [
@@ -1012,12 +1013,19 @@ async function captureNativeRequests(config, configPath) {
       nativeArgs = {};
     }
     const call = `text(await tools.${nativeTool}(${JSON.stringify(nativeArgs)}));`;
-    const offered = 'for (const tool of ALL_TOOLS) text({ offeredTool: tool.name });';
     plan.item = { type: 'custom_tool_call', id: plan.itemId, call_id: callId,
-      name: 'exec', namespace: 'functions', input: `${offered} ${call}` };
+      name: 'exec', namespace: 'functions', input: call };
     if (tool === 'request_user_input') {
       plan.item = { type: 'function_call', id: plan.itemId, call_id: callId,
         name: tool, namespace: 'functions', arguments: JSON.stringify(args) };
+    }
+    if (name.startsWith('fixture_')) {
+      plan.item = { type: 'function_call', id: plan.itemId, call_id: callId,
+        name: tool, namespace: 'functions', arguments: JSON.stringify(args) };
+      if (tool === 'apply_patch') {
+        plan.item = { type: 'custom_tool_call', id: plan.itemId, call_id: callId,
+          name: tool, namespace: 'functions', input: args };
+      }
     }
     plans.set(name, plan);
     await activeClient.turn(target, name, overrides);
@@ -1037,19 +1045,35 @@ async function captureNativeRequests(config, configPath) {
       }
     }
     capture.checks.push(check);
+    for (const entry of requests) assert.equal(entry.repliesPerId, 1);
   }
   for (const test of cases) await runCase(test);
   stage = 'loaded_resume';
   const resumed = await activeClient.rpc('thread/resume', { threadId: thread });
   capture.loadedResumePolicy = resumed.approvalPolicy;
-  await runCase(['loaded_resume_mcp', null, null], thread, {});
+  await runCase(['loaded_resume_mcp', null, null]);
   await runCase(['loaded_resume_shell', 'exec_command', {
     cmd: 'touch /tmp/native-loaded-marker', sandbox_permissions: 'require_escalated',
     justification: 'Local marker fixture',
-  }], thread, {});
+  }]);
+  capture.unload = await unload(thread);
+  assert.equal(capture.unload.unloaded, true);
+  await activeClient.rpc('thread/resume', { threadId: thread, config, approvalPolicy: 'never' });
+  await runCase(['reloaded_mcp', null, null]);
+  if (process.env.CAPTURE_SOCKET) await captureGatewayAsk(thread, runCase);
   capture.markers = { plain: existsSync('/tmp/native-plain-marker'),
     escalated: existsSync('/tmp/native-escalated-marker'),
     written: existsSync('/tmp/native-write-marker'), file: existsSync('/tmp/native-file-marker') };
+  const fixtureConfig = { features: { code_mode_host: false } };
+  const sandboxed = await activeClient.rpc('thread/start', { cwd: '/tmp',
+    config: fixtureConfig, sandbox: 'read-only', approvalPolicy: 'on-request' });
+  for (const [name, tool, args] of cases.slice(1, 5)) {
+    const fixtureName = `fixture_${name}`;
+    const marker = `/tmp/native-fixture-${name}`;
+    actionMarkers[fixtureName] = marker;
+    const rewritten = JSON.stringify(args).replaceAll(actionMarkers[name], marker);
+    await runCase([fixtureName, tool, JSON.parse(rewritten)], sandboxed.thread.id);
+  }
   await activeClient.close();
   stage = 'private';
   const { privateConfig } = await import('../src/codex-config.ts');
@@ -1064,4 +1088,90 @@ async function captureNativeRequests(config, configPath) {
     cmd: 'touch /tmp/native-private-marker', sandbox_permissions: 'require_escalated',
     justification: 'Local marker fixture',
   }], privateThread.thread.id, {});
+}
+
+async function fixtureRequest(path, value) {
+  function send(resolve, reject) {
+    function received(response) {
+      const chunks = [];
+      function chunk(value) { chunks.push(value); }
+      function done() {
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+        catch (error) { reject(error); }
+      }
+      response.on('data', chunk);
+      response.on('end', done);
+    }
+    const options = { socketPath: process.env.CAPTURE_SOCKET, path, method: 'POST' };
+    const request = httpRequest(options, received);
+    request.on('error', reject);
+    request.end(JSON.stringify(value));
+  }
+  return new Promise(send);
+}
+
+async function captureGatewayAsk(thread, runCase) {
+  const { proxy } = await import('../src/proxy.ts');
+  const { proxyControl } = await import('../src/proxy-control.ts');
+  function forward(request, response) {
+    const options = { socketPath: process.env.CAPTURE_SOCKET,
+      path: request.url, method: request.method, headers: request.headers };
+    function received(upstream) {
+      response.writeHead(upstream.statusCode, upstream.headers);
+      upstream.pipe(response);
+    }
+    const outgoing = httpRequest(options, received);
+    function failed() { response.destroy(); }
+    outgoing.on('error', failed);
+    request.pipe(outgoing);
+  }
+  const relay = createServer(forward);
+  const port = await listen(relay);
+  const socket = join(probeHome, 'ask.sock');
+  const options = { port: 0, callerPath: join(probeHome, 'ask-caller'), controlSocket: socket };
+  async function renew() { throw new Error('The fixture only denies the requester decision'); }
+  function waiting(boundThread, approvalId) {
+    assert.equal(boundThread, thread);
+    capture.waiting = { approvalId };
+    return true;
+  }
+  runtimeProxy = await proxy(`http://127.0.0.1:${port}`, options,
+    'local-fixture-only', { waiting, renew });
+  runtimeProxy.approvals.resume(true);
+  try {
+    const definition = { name: 'read_before', inputSchema: { type: 'object' } };
+    const tools = [{ key: 'oc_aaaaaaaaaa', serverId: 'fixture', connectionId: 'installed',
+      definitions: [JSON.stringify(definition)], modes: { read_before: 'ask' } }];
+    const decisions = [];
+    for (const name of ['loaded_accept', 'reloaded_accept']) {
+      assert.equal((await unload(thread)).unloaded, true);
+      const grant = await fixtureRequest('/bind', { thread, turnId: name });
+      const loadKey = Buffer.from(name).toString('hex').padEnd(32, '0');
+      const catalogue = { loadKey, thread, conversation: 'conversation', turnId: name, tools };
+      await proxyControl('/catalogue', catalogue, socket);
+      await proxyControl('/grant', { ...grant, thread, conversation: 'conversation',
+        turnId: name, expires: Date.now() + 60_000 }, socket);
+      const url = `${runtimeProxy.url}/mcp/${loadKey}/oc_aaaaaaaaaa`;
+      const server = { url, bearer_token_env_var: 'PROXY_CALLER_TOKEN' };
+      const config = { mcp_servers: { oc_aaaaaaaaaa: server } };
+      await activeClient.rpc('thread/resume', { threadId: thread, config,
+        approvalPolicy: 'never' });
+      if (name === 'loaded_accept') {
+        await activeClient.rpc('thread/resume', { threadId: thread });
+      }
+      delete capture.waiting;
+      const running = runCase([name, null, null]);
+      const until = Date.now() + 10_000;
+      while (!capture.waiting && Date.now() < until) await pause(20);
+      assert.ok(capture.waiting, 'Native acceptance did not reach gateway Ask');
+      const decision = await fixtureRequest('/deny', capture.waiting);
+      assert.equal(decision.error, undefined);
+      assert.equal(decision.beforeDecision, 0);
+      assert.equal(decision.afterDecision, 0);
+      await runtimeProxy.approvals.settle(capture.waiting.approvalId, 'denied');
+      await running;
+      decisions.push({ name, ...decision });
+    }
+    capture.gatewayAsk = { result: 'PASS', beforeDecision: 0, afterDecision: 0, decisions };
+  } finally { relay.close(); }
 }

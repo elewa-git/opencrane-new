@@ -21,7 +21,7 @@ function requireCondition(name, method) {
       assert.equal(observation.markerPresent, false, `${name}: declined action ran`);
     }
   }
-  assert.ok(observation.continuation, `${name}: missing continuation`);
+  assert.ok(observation.continuation?.length > 0, `${name}: missing continuation`);
 }
 
 const conditions = [
@@ -31,6 +31,10 @@ const conditions = [
   ['mcp', 'mcpServer/elicitation/request'],
   ['loaded_resume_mcp', 'mcpServer/elicitation/request'],
   ['reloaded_mcp', 'mcpServer/elicitation/request'],
+  ['fixture_escalated_shell', 'item/commandExecution/requestApproval'],
+  ['fixture_file_change', 'item/fileChange/requestApproval'],
+  ['loaded_accept', 'mcpServer/elicitation/request'],
+  ['reloaded_accept', 'mcpServer/elicitation/request'],
 ];
 for (const [name, method] of conditions) {
   try {
