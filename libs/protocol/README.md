@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, history and tool holds"]
-  server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies, live stop notices and dated approvals| protocol
+  server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and call statuses, live stop notices and dated approvals| protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool lists, publications and not-sent outcomes"]
@@ -70,8 +70,9 @@ Child requests carry reviewed choices and a signed review. Status replies show o
 the requester’s saved request and child id, or a saved refusal with its stage and attempt.
 They contain no source message text.
 
-Spending stop replies carry saved reasons and execution status. The server
-decides who may read them and whether to include a limit. A live stop notice
+Spending stop replies carry saved reasons, execution status and call statuses.
+They distinguish money held, charged or released, and calls that might have been
+sent. The server decides who may read them and whether to include amounts. A live stop notice
 names the original request so the browser can read its saved status. Reconnecting
 uses that same read; it does not send the request again.
 Approval cards carry saved UTC decision, use and end times, dated uses and fixed

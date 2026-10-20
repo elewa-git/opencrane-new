@@ -107,7 +107,7 @@ export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   rootId: z.string().optional(), call: callSchema, dispatchGate: z.literal(1).optional(),
   retryDigest: z.string().optional(), bodyDigest: z.string().optional(),
-  expired: z.literal(true).optional(),
+  expired: z.literal(true).optional(), outcome: z.enum(['unknown', 'not_dispatched']).optional(),
   settledCents: z.int().nonnegative().optional(), outcomeUnknown: z.boolean().optional() });
 const ceilingsSchema = z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: z.string(), ceilingCents: z.int().nonnegative() }));
 const stopSchema = z.object({ id: z.string(), position: z.int().nonnegative(),
@@ -183,6 +183,7 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
     const reservation = state.reservations.find(r => r.id === d['reservationId']);
     if (!reservation) throw new Error('Unknown reservation');
     reservation.settledCents = Math.max(reservation.settledCents ?? 0, z.int().nonnegative().parse(d['settledCents']));
+    reservation.outcome = reservationSchema.shape.outcome.parse(d['outcome']);
     reservation.outcomeUnknown = d['outcome'] === 'unknown';
   }
 }

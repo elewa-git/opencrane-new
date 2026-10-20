@@ -13,7 +13,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model grants, live updates, spending stop notices and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model grants, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
   server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops, turn decisions and relay closures| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
@@ -337,7 +337,9 @@ using the same computer connection. An admitted turn stays recorded until cleanu
 can confirm it ended. Public closing and freezing displayed output are not built yet.
 
 A participant can read why a chat turn stopped for spending. Only the person who
-asked for that turn sees its limit. Reading the saved result starts no work.
+asked for that turn sees its limit and call amounts. The reply distinguishes held,
+charged and released calls, and calls that might have been sent.
+Reading the saved result starts no work.
 Failed reads still check access before reporting that the result is unavailable.
 
 The models process shares a PostgreSQL lock with the preparation worker while

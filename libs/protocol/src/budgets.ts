@@ -27,11 +27,18 @@ const stopReason = z.object({
 const stoppedWork = z.object({
   turnId: id, execution: z.enum(['not_started', 'stopping', 'ended']),
 }).strict();
+const stoppedCall = z.discriminatedUnion('status', [
+  z.object({ reference: id, status: z.enum(['held', 'possibly_sent']),
+    heldCents: cents.optional() }).strict(),
+  z.object({ reference: id, status: z.literal('charged'),
+    chargedCents: cents.optional() }).strict(),
+  z.object({ reference: id, status: z.literal('released') }).strict(),
+]);
 const position = z.int().nonnegative();
 export const budgetStopStatusSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('not_stopped') }).strict(),
   z.object({ status: z.literal('stopped'), stopId: id,
-    reasons: z.array(stopReason).min(1), work: z.array(stoppedWork),
+    reasons: z.array(stopReason).min(1), work: z.array(stoppedWork), calls: z.array(stoppedCall),
     positions: z.object({ stop: position, turn: position.nullable(), conversation: position,
       computer: position, budget: position }).strict(),
   }).strict(),
