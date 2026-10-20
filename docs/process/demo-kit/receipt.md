@@ -49,3 +49,39 @@ are recorded separately; this does not hide that broader failure.
 
 At 19:31 UTC the full lint command was still running: PARTIAL at this snapshot.
 The pull request records its final result and CI on the pushed commit.
+
+## Slot safety and CLI checks
+
+20 October 2026. Source: `ea9f022c6`. These checks use disposable files and recording
+fixtures. They do not qualify a live demo.
+
+Fetch and rebase: PASS. `origin/main` was `43cdd68d8b33cba943ca0a770700ae03a332b239`
+and was already an ancestor of the branch. Neither rebase state directory remained.
+
+Test commit `25696b16d` came before the slot fix. Its regression failed because a
+request for slot 2 called cleanup for the existing slot 1. The corrected launcher
+checks the returned id and requested id before installing the cleanup trap. Startup
+and seed failures still clean the secondary whose startup this run attempted.
+The full explanation of what `--fresh` removes now appears before the owner commands.
+
+CLI test commit `f4c91b3f2` uses the real configuration and session code with synthetic
+settings in a temporary home. Its HTTP fixture cannot contact a running stack.
+Removing each id, ownership or origin guard made its test fail. Loading configuration
+before checking the id also made its test fail. Printing the synthetic provider
+credential made the launcher's output assertion fail. All temporary changes were restored.
+
+| Own check | Result |
+| --- | --- |
+| Changed Node tests, final two runs | PASS; 13 each, 31.05 / 30.50 seconds |
+| Focused strict TypeScript check for demo files | PASS |
+| Required workspace/package typecheck | PASS |
+| Full lint, including knip, docs, links, fixture and licence checks | PASS |
+| Event catalogue | PASS; 149 event types |
+| `npm run lint:changelog` | PASS |
+| Shell syntax and `git diff --check` | PASS |
+
+All test, lint and typecheck commands used `nice -n 10`. The changed-test commands
+set `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; these tests do not
+connect to PostgreSQL. No root suite or live journey ran. No stack was claimed or
+started, no model call was made, and the owner stack was untouched. Live qualification
+remains NOT RUN. The other test gaps and unfinished demo work remain as described above.
