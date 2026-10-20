@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { setupDevProvider, setupProvider } from './provider-setup.ts';
+import { setupProvider } from './provider-setup.ts';
 
 async function recordsSetup() {
   const expected = ['create', 'changes', 'key', 'changes', 'reachability', 'changes',
@@ -224,10 +226,21 @@ async function refusesMissingCredentials() {
   try {
     for (const contents of [undefined, '', '  \n']) {
       if (contents !== undefined) await writeFile(`${folder}/synthetic-canary`, contents);
-      async function start() {
-        await setupDevProvider({}, `${folder}/synthetic-canary`);
-      }
-      await assert.rejects(start, { message: 'Provider setup preparation: unavailable' });
+      const script = `
+        import { setupDevProvider } from './infra/dev-stack/provider-setup.ts';
+        try { await setupDevProvider({}, process.argv[1]); }
+        catch (error) { console.log(error.message); }
+      `;
+      // Isolate all setup files, including when a regression ignores the supplied path.
+      const env = { ...process.env, DEV_STACK_ID: 'owner', DEV_STACK_DIR: folder };
+      const args = ['--experimental-strip-types', '--input-type=module', '-e', script,
+        `${folder}/synthetic-canary`];
+      const result = await promisify(execFile)(process.execPath, args, { env });
+      assert.equal(result.stdout.trim(), 'Provider setup preparation: unavailable');
+      assert.equal(result.stderr, '');
+      const files = await readdir(folder);
+      assert.equal(files.includes('model-managed-stub'), false);
+
     }
   } finally {
     await rm(folder, { recursive: true, force: true });
