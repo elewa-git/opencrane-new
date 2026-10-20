@@ -702,13 +702,11 @@ the models fold checks that each result belongs to the current requested attempt
 It performs live exact-generation cleanup after confirming saved profile history.
 This adds no event type or payload field. Replay starts no cleanup.
 
-<<<<<<< HEAD
 ## Child start failures
 
 `conversation.child_start_failed` requires an opencrane-server system writer,
 matching parent subject and command id, no report, strict fields and attempt 1–3.
 The [API](../../docs/api/group-chats.md#reviewed-child-requests) lists fixed stages and reasons.
-=======
 ## Native request refusals
 
 `agent.native_request_refused` is a strict conversation record with conversationId,
@@ -717,4 +715,3 @@ and outcome (declined, unsupported). It contains no callId, command, path, reaso
 Elicitation uses the unchanged `agent.native_consent_refused` contract. The new record
 grants no access and is excluded from chat display. The bridge reports it only for a
 matching running memory-free turn while the takeover gate remains open.
->>>>>>> c1917332f (🛂 Answer native requests once and record safe refusals)
