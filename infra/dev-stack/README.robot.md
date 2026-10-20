@@ -756,3 +756,22 @@ with provider verification this requests five paid turns. Real startup seeds a m
 Run only within the owner's shared daily approval. A failure stops the journey without
 resubmitting a turn. The receipt in `docs/process/demo-real-model/` records source SHA,
 checks and reservation/charge cents; null charges mean an unresolved hold.
+
+## Demo group seed
+
+`DEV_STACK_ID=1 node --experimental-strip-types infra/dev-stack/demo-seed-run.ts`
+reuses the bootstrapped Owner and joined slot member, creates two named groups and
+one shared assistant, and prints bookmarks. It uses a five-minute development Owner
+session and authenticated HTTP commands only. Command ids and payloads stay fixed.
+Private `demo-requests` files prevent resubmission after an unknown result; server
+receipts remain the source of truth. Missing people are refused before any writes.
+The caller must own the stack directory. Owner use additionally requires `--owner-run`.
+
+`demo-up.sh` requires an explicit secondary id and `DEV_REAL_PROVIDER_FILE` path.
+It claims through `claim.sh`, checks the returned id, sets `COMPUTER_IDLE_MS=14400000`,
+runs fresh startup and seeds. Failure calls `down.sh` for that claim; success keeps it.
+It inherits the full startup journey and makes no claim about three-minute duration.
+The [owner runbook](../../docs/process/demo/README.md) marks the current owner-mode
+refusal and unfinished PDF, ceiling and smoke work. This is the first split of #32
+P2-7 PR 2. The seed does not rename existing members or make cloud identity changes.
+Tests use `nice -n 10 node --experimental-strip-types --test infra/dev-stack/demo-*.test.ts`.

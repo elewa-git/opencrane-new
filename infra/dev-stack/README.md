@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|checks provider setup and optional real replies| apps
+  stack -->|seeds demo groups and checks real replies through APIs| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -48,6 +48,7 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 - Keep one extra computer place so a saved-data repeat can start a new shared assistant.
 - Measure reply arrival, process memory and open files during live-view checks.
 - Keep up to three separate development stacks on one machine.
+- Seed two demo groups and a shared assistant through product APIs, keeping their ids on repeats.
 - Put the package gateway Service IP in the computer settings before a chat turn starts.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
   On failure, save the error and recent process logs before removing that stack.
@@ -133,6 +134,7 @@ Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user
 ## Where to read more
 
 - [README.robot.md](README.robot.md): exact settings, limits, credentials and test details.
+- [Demo guide](../../docs/process/demo/README.md): secondary start and owner refresh prerequisites.
 - [infra/devbox](../devbox/README.md): the local cluster used for computers.
 - [infra/nats](../nats/README.md): the event log's connection rules.
 - [infra/clamav](../clamav/README.md): the file scanner used by uploads.

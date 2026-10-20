@@ -46,13 +46,20 @@ async function recordingApi() {
     void respond(request, response);
   }
   const server = createServer(handler);
-  await new Promise<void>(function listen(resolve) { server.listen(0, '127.0.0.1', resolve); });
+  function listen(resolve: () => void) {
+    server.listen(0, '127.0.0.1', resolve);
+  }
+  await new Promise<void>(listen);
   const address = server.address();
   assert(address && typeof address !== 'string');
   const origin = `http://127.0.0.1:${address.port}`;
+  function stop(resolve: () => void) {
+    function done() { resolve(); }
+    server.close(done);
+  }
   async function close() {
     server.closeAllConnections();
-    await new Promise<void>(function stop(resolve) { server.close(function done() { resolve(); }); });
+    await new Promise<void>(stop);
     await rm(directory, { recursive: true, force: true });
   }
   return { writes, options: { origin, cookie: 'synthetic-session', directory }, close,
@@ -66,11 +73,15 @@ async function repeatsWithoutCreatingMore() {
     await seedDemo(fixture.options);
     const original = structuredClone(fixture.writes);
     assert.equal(original.length, 7);
-    assert.deepEqual(original.slice(0, 2).map(readName), ['Acacia Trading', 'Kijani Logistics']);
+    const groups = original.slice(0, 2);
+    const names = groups.map(readName);
+    assert.deepEqual(names, ['Acacia Trading', 'Kijani Logistics']);
     assert.equal(original.at(-1)?.['assistantId'], 'team-demo-acacia');
     await seedDemo(fixture.options);
     assert.deepEqual(fixture.writes, original);
-  } finally { await fixture.close(); }
+  } finally {
+    await fixture.close();
+  }
 }
 function readName(command: Record<string, unknown>) { return command['name']; }
 
@@ -81,7 +92,9 @@ async function reconcilesLostReplies() {
     await seedDemo(fixture.options);
     await seedDemo(fixture.options);
     assert.equal(fixture.writes.length, 7);
-  } finally { await fixture.close(); }
+  } finally {
+    await fixture.close();
+  }
 }
 
 async function retainsUnknownRequests() {
@@ -92,7 +105,9 @@ async function retainsUnknownRequests() {
     await assert.rejects(seedDemo(fixture.options), /^Error: Demo seed outcome unknown$/u);
     await assert.rejects(seedDemo(fixture.options), /^Error: Demo seed outcome unknown$/u);
     assert.equal(fixture.writes.length, 1);
-  } finally { await fixture.close(); }
+  } finally {
+    await fixture.close();
+  }
 }
 
 async function refusesMissingPeople() {
@@ -101,15 +116,21 @@ async function refusesMissingPeople() {
     fixture.missingMember();
     await assert.rejects(seedDemo(fixture.options), /^Error: Demo seed request refused$/u);
     assert.equal(fixture.writes.length, 0);
-  } finally { await fixture.close(); }
+  } finally {
+    await fixture.close();
+  }
 }
 
 function refusesOwnerAndMissingIds() {
-  for (const id of [undefined, '', 'owner', '3']) assert.throws(function reject() { demoStackId(id); });
+  for (const id of [undefined, '', 'owner', '3']) {
+    function reject() { demoStackId(id); }
+    assert.throws(reject);
+  }
   assert.equal(demoStackId('1'), '1');
   assert.equal(demoStackId('2'), '2');
   assert.equal(demoStackId('owner', true), 'owner');
-  assert.throws(function rejectMissing() { demoStackId(undefined, true); });
+  function rejectMissing() { demoStackId(undefined, true); }
+  assert.throws(rejectMissing);
 }
 
 test('seed keeps the same people, two groups and assistant on repeat', repeatsWithoutCreatingMore);

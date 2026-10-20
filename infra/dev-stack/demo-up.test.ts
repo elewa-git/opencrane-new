@@ -22,7 +22,8 @@ async function checksLauncher() {
     DEMO_CLEANUP: `${directory}/cleanup` };
   function run(id?: string, failure = '0') {
     const env = { ...environment, DEV_STACK_ID: id, DEMO_FAILURE: failure };
-    return spawnSync('/bin/sh', [`${scripts}/demo-up.sh`], { env, encoding: 'utf8' });
+    const options = { env, encoding: 'utf8' as const };
+    return spawnSync('/bin/sh', [`${scripts}/demo-up.sh`], options);
   }
   try {
     for (const id of [undefined, '', 'owner', '3']) assert.equal(run(id).status, 2);
