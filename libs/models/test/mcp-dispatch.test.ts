@@ -2753,8 +2753,9 @@ async function refusesConflictingAdapterReadback() {
       yield row;
     }
   }
-  async function lostSaveReply() {
-    throw new Error('Save reply lost');
+  function lostSaveReply(): Promise<never> {
+    const error = new Error('Save reply lost');
+    return Promise.reject(error);
   }
   const reader = vi.spyOn(setup.nats.store, 'readStream');
   const writer = vi.spyOn(setup.nats.store, 'append');
