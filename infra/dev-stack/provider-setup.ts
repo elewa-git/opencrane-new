@@ -5,7 +5,9 @@ import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models';
 import { authEnv, directory, root } from './config.ts';
 
-type SetupOptions = { server: string; origin: string; cookie: string; silo: string; value: string; real?: boolean };
+type SetupOptions = {
+  server: string; origin: string; cookie: string; silo: string; value: string; real?: boolean;
+};
 const operations: Record<string, string> = {
   create: 'provider.created', save: 'provider.key_saved',
   reachability: 'provider.verification_requested', test: 'provider.verification_requested',
@@ -143,7 +145,8 @@ export async function setupDevProvider(settings: Record<string, string>, credent
       roles: [], authTime: now, exp: now + 300 };
     const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
     const options = { server: `http://127.0.0.1:${settings['SERVER_PORT']}`,
-      origin: settings['ORIGIN']!, silo: settings['SILO_ID']!, cookie, value, real: credentialFile !== undefined };
+      origin: settings['ORIGIN']!, silo: settings['SILO_ID']!, cookie, value,
+      real: credentialFile !== undefined };
     await setupProvider(options);
   } catch (error) {
     // Keep file locations, credentials and remote replies out of startup diagnostics.

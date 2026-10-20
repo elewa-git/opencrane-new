@@ -165,14 +165,13 @@ async function waitsForSeededDefault(loseReply = false, absent = false) {
     await closed;
   }
 }
-test('waits for the first provider binding before explicitly selecting the default',
-  function seededDefaultTest() { return waitsForSeededDefault(); });
+function seededDefaultTest() { return waitsForSeededDefault(); }
+function lostReplyTest() { return waitsForSeededDefault(true); }
+function absentReceiptTest() { return waitsForSeededDefault(true, true); }
 
-test('a lost save reply is recovered by reading its original receipt',
-  function lostReplyTest() { return waitsForSeededDefault(true); });
-
-test('an absent receipt after a lost response never repeats the unknown write',
-  function absentReceiptTest() { return waitsForSeededDefault(true, true); });
+test('waits for the first provider binding before explicitly selecting the default', seededDefaultTest);
+test('a lost save reply is recovered by reading its original receipt', lostReplyTest);
+test('an absent receipt after a lost response never repeats the unknown write', absentReceiptTest);
 
 async function refusesUnsafeReplies() {
   for (const failure of ['redirect', 'transport', 'json']) {

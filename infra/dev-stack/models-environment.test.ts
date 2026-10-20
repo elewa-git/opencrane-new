@@ -34,11 +34,13 @@ test('real opt-in removes upstream overrides without changing later stub starts'
 function isolatesSavedMode() {
   checkProviderMode({}, false);
   checkProviderMode({ DEV_REAL_PROVIDER: '1' }, true);
-  assert.throws(function realToStub() {
+  function realToStub() {
     checkProviderMode({ DEV_REAL_PROVIDER: '1' }, false);
-  }, /Provider mode change requires a fresh stack/u);
-  assert.throws(function stubToReal() {
+  }
+  function stubToReal() {
     checkProviderMode({}, true);
-  }, /Provider mode change requires a fresh stack/u);
+  }
+  assert.throws(realToStub, /Provider mode change requires a fresh stack/u);
+  assert.throws(stubToReal, /Provider mode change requires a fresh stack/u);
 }
 test('repeat startup refuses changing the saved provider mode', isolatesSavedMode);
