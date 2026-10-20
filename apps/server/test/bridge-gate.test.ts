@@ -629,37 +629,40 @@ function isThreadStart(method: string) { return method.startsWith('thread/start:
 async function stopsBeforeResume() {
   const stops: StopInput[] = [];
   const releaseStop = Promise.withResolvers<void>();
-  const replayRelease = Promise.withResolvers<void>();
+  let replayRelease = Promise.withResolvers<void>();
+  let replayEntered = Promise.withResolvers<void>();
   let replayHeld = false;
   async function stop(input: StopInput) {
     stops.push(input);
     await releaseStop.promise;
-    test.computer.finish('thread-1');
     return stopped(input);
   }
   const test = await setup(true, stop, true);
+  const start = performance.now();
   await test.save();
   const head = test.store.head.bind(test.store);
   async function holdReportPosition(...args: Parameters<typeof head>) {
     if (args.length === 0 && !replayHeld) {
       replayHeld = true;
+      replayEntered.resolve();
       await replayRelease.promise;
     }
     return head(...args);
   }
   vi.spyOn(test.store, 'head').mockImplementation(holdReportPosition);
-  const start = performance.now();
+  // Advance only interval retries; keep the two-second deadline and service timers real.
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   const connecting = test.connect();
   try {
     function stopping() { return stops.length > 0; }
     await until(stopping, 2000);
     expect(performance.now() - start).toBeLessThan(2000);
-    expect(replayHeld).toBe(true);
+    await replayEntered.promise;
     expect(test.computer.calls).toContain('turn/interrupt:thread-1');
     expect(await readComputerControl(test.store, test.silo, 'assistant'))
       .toMatchObject({ phase: 'requested' });
-    // Keep the root stop pending across timer retries to check that they share one call.
-    await delay(550);
+    // Force timer retries while the root stop is pending to check that they share one call.
+    await vi.advanceTimersByTimeAsync(750);
     expect(stops).toHaveLength(1);
     releaseStop.resolve();
     async function pausing() {
@@ -670,20 +673,35 @@ async function stopsBeforeResume() {
     expect(stops).toEqual([{ computerId: 'computer', podUid: 'pod', generation: 1,
       takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] }]);
   } finally {
+    vi.useRealTimers();
     releaseStop.resolve();
     replayRelease.resolve();
     const link = await connecting;
     link.socket.terminate();
     await link.settled();
   }
-  const reconnected = await test.connect();
-  // Wait for the quiet receipt to trigger a stop after the earlier gate acknowledgement.
-  function stoppedAgain() { return stops.length > 1; }
-  await until(stoppedAgain, 2000);
-  await reconnected.control.settled();
-  expect(stops.length).toBeGreaterThan(1);
-  expect(await readComputerControl(test.store, test.silo, 'assistant'))
-    .toMatchObject({ phase: 'pausing' });
+
+  // Keep replay blocked on both connections: this fixture has no saved chat for its reports.
+  replayRelease = Promise.withResolvers<void>();
+  replayEntered = Promise.withResolvers<void>();
+  replayHeld = false;
+  const reconnecting = test.connect();
+  try {
+    await replayEntered.promise;
+    expect(stops).toHaveLength(1);
+    // Delay the terminal notification until the new connection is waiting to resume.
+    test.computer.finish('thread-1');
+    function stoppedAgain() { return stops.length > 1; }
+    await until(stoppedAgain, 2000);
+    expect(stops.length).toBeGreaterThan(1);
+    expect(await readComputerControl(test.store, test.silo, 'assistant'))
+      .toMatchObject({ phase: 'pausing' });
+  } finally {
+    replayRelease.resolve();
+    const reconnected = await reconnecting;
+    reconnected.socket.terminate();
+    await reconnected.settled();
+  }
 }
 it('calls root stop within two seconds while reconnect resume waits for active work',
   stopsBeforeResume);
