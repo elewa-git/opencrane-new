@@ -13,6 +13,8 @@ import { until, databases } from '@opencrane/authz/testing';
 async function workerWaitsBeforeStartingReactions(scenario: string) {
   const changed = scenario.includes('changed');
   const configured = !scenario.includes('missing');
+  const hanging = scenario.includes('hanging');
+  const watcherFailure = scenario === 'hanging watcher failure';
   const held = Promise.withResolvers<void>();
   let lists = 0;
   let listClosed = false;
@@ -24,7 +26,7 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
     expect(request.url).toContain('/secrets?');
     lists += 1;
     response.once('close', closed);
-    if (scenario === 'hanging') {
+    if (hanging) {
       await held.promise;
     }
     response.end(JSON.stringify({ items: [], metadata: {} }));
@@ -64,6 +66,7 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
     KUBE_NAMESPACE: 'test', TOKEN_SIGNING_KEY_FILE: `${directory}/key.pem`,
     TOKEN_ISSUER: 'https://test.example', LOG_LEVEL: 'info',
     CONNECTION_CUSTODY_FILE: `${directory}/custody.json`,
+    WORKER_TEST_FAULT: watcherFailure ? 'watcher' : '',
     PATH: `${directory}:${process.env['PATH'] ?? ''}` };
   if (configured) {
     const config = { apiUrl: `http://127.0.0.1:${address.port}`, namespace: 'custody',
@@ -82,9 +85,26 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
       reason: 'append_deadline_passed' } };
   await nats.seed([event]);
   const filename = new URL('../src/worker.ts', import.meta.url);
-  const options: ForkOptions = { env, execArgv: ['--experimental-strip-types'],
+  const execArgv = ['--experimental-strip-types'];
+  if (hanging) {
+    const faults = new URL('./support/worker-faults.ts', import.meta.url);
+    execArgv.push('--experimental-test-module-mocks', '--import', faults.href);
+  }
+  const options: ForkOptions = { env, execArgv,
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'] };
   const child = fork(filename, ['dispatcher'], options);
+  const exited = once(child, 'exit');
+  const watcherReady = Promise.withResolvers<void>();
+  const runtimeStopped = Promise.withResolvers<void>();
+  function received(message: unknown) {
+    if (message === 'watcher-ready') {
+      watcherReady.resolve();
+    }
+    if (message === 'runtime-stopped') {
+      runtimeStopped.resolve();
+    }
+  }
+  child.on('message', received);
   let output = '';
   function collect(chunk: Buffer) {
     output += chunk.toString();
@@ -121,8 +141,26 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
         return lists === 1;
       }
       await until(listed);
-      if (scenario === 'hanging') {
+      if (hanging) {
         expect(listClosed).toBe(false);
+        if (watcherFailure) {
+          await watcherReady.promise;
+          child.send('reject-watcher');
+          function watcherFailed() {
+            return output.includes('Computer watcher failed');
+          }
+          await until(watcherFailed);
+        }
+        child.kill('SIGTERM');
+        await runtimeStopped.promise;
+        await delay(500);
+        expect(child.exitCode).toBeNull();
+        expect(child.signalCode).toBeNull();
+        expect(listClosed).toBe(false);
+        held.resolve();
+        await exited;
+        expect(child.exitCode).toBe(watcherFailure ? 1 : 0);
+        expect(listClosed).toBe(true);
       }
     } else {
       await delay(100);
@@ -131,7 +169,6 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
   } finally {
     held.resolve();
     if (child.exitCode === null && child.signalCode === null) {
-      const exited = once(child, 'exit');
       child.kill('SIGTERM');
       await exited;
     }
@@ -145,5 +182,6 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
 }
 it.skipIf(!process.env['PG_TEST_URL']).each([
   'missing changed', 'configured changed', 'missing ready', 'configured ready', 'hanging',
+  'hanging watcher failure',
 ])('worker starts custody scanning only after subscriptions agree: %s',
   workerWaitsBeforeStartingReactions);
