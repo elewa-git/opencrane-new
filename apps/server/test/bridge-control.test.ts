@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { readComputerControl } from '@opencrane/auth';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -125,7 +127,23 @@ async function bridgeFixture(cachedControl = false) {
     link.socket.ping();
     await pong;
   }
+  const watchers: (() => Promise<void>)[] = [];
+  function startControls(connect = connection, store = options.store) {
+    const watchedOptions = { ...watchOptions, store };
+    const watcher = assistantProcessor(watchedOptions, tokens, new Set(),
+      connect, connectionId, logger);
+    watcher.forgetMissing([conversation]);
+    const abort = new AbortController();
+    const watching = watcher.watchControls(abort.signal);
+    async function stop() {
+      abort.abort();
+      await watching;
+    }
+    watchers.push(stop);
+    return stop;
+  }
   async function close() {
+    for (const stop of watchers) await stop();
     link.socket.terminate();
     for (const socket of computers.clients) socket.terminate();
     await link.settled();
@@ -135,7 +153,7 @@ async function bridgeFixture(cachedControl = false) {
   }
   return { ...options, objects, bytes, message, link, frames, process, pollStops,
     append: view.append, runner: view.runner, db: view.db,
-    intendControl, upload, flushFrames, close };
+    intendControl, upload, flushFrames, startControls, close };
 }
 
 it('fails each queued input once after close and keeps the original messages', async () => {
@@ -592,3 +610,23 @@ it('sends a manual Stop without waiting for ordinary conversation delivery', asy
     expect.objectContaining({ turnId: turn.turnId, conversationId: 'chat' }),
   ]);
 });
+async function expiresWithoutReadyComputer() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  await test.append('computer-assistant', 'computer.lost', {
+    assistantId: 'assistant', computerId: 'desktop',
+  });
+  const expired = Date.parse(request.time) + 30_000;
+  vi.spyOn(Date, 'now').mockReturnValue(expired);
+  test.startControls();
+  let phase;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    phase = (await readComputerControl(test.store, 'test', 'assistant'))?.phase;
+    if (phase === 'failed') break;
+    await delay(10);
+  }
+  expect(phase).toBe('failed');
+}
+it('fails an old request immediately on restart without a ready computer',
+  expiresWithoutReadyComputer);
