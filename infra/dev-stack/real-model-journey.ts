@@ -83,20 +83,24 @@ export async function realModelJourney(owner: Page, member: Page, origin: string
     outcomes.push({ check, result: 'FAIL' });
     throw new Error(`Real journey failed: ${check}`);
   } finally {
-    const spending = new Map<string, { reservedCents: number; chargedCents: number | null }>();
+    const spending = new Map<string, { turnId: string | null; reservedCents: number; chargedCents: number | null }>();
     for await (const row of store.readStream(`budget-${silo}`)) {
       const data = row.event.data as Record<string, unknown>;
       const id = String(data['reservationId']);
       if (row.event.type === 'budget.reserved') {
-        spending.set(id, { reservedCents: Number(data['amountCents']), chargedCents: null });
+        const call = data['modelCall'] as { turnId?: string } | undefined;
+        spending.set(id, { turnId: call?.turnId ?? null,
+          reservedCents: Number(data['amountCents']), chargedCents: null });
       }
       if (row.event.type === 'budget.settled') {
         const reservation = spending.get(id);
-        if (reservation) reservation.chargedCents = Number(data['settledCents']);
+        if (reservation && data['outcome'] !== 'unknown') {
+          reservation.chargedCents = Number(data['settledCents']);
+        }
       }
     }
     const commit = await promisify(execFile)('git', ['rev-parse', 'HEAD'], { cwd: root });
-    const receipt = { sha: commit.stdout.trim(), outcomes, reservations: [...spending.values()] };
+    const receipt = { sha: commit.stdout.trim(), outcomes, reservations: [...spending.entries()] };
     const folder = `${root}/docs/process/demo-real-model`;
     await mkdir(folder, { recursive: true });
     await writeFile(`${folder}/live.json`, JSON.stringify(receipt, null, 2) + '\n');
