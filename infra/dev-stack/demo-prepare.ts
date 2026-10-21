@@ -56,6 +56,24 @@ async function savedCommand(options: Options, path: string, receiptPath: string,
   throw new Error('Demo command still applying');
 }
 
+async function createPersonalConversation(options: Options, assistantId: string) {
+  const conversationId = 'demo-supplier-v1';
+  const id = 'demo-supplier-create-v1';
+  const data = { id, conversationId, assistantId };
+  // The receipt needs an existing chat. Record the attempt before creating it,
+  // so a lost reply or refused receipt can never cause another creation request.
+  if (await reserveRequest(options.directory, id)) {
+    try {
+      await request(options, '/api/conversations', data);
+    } catch {
+      // Read the original receipt after an uncertain reply.
+    }
+  }
+  await savedCommand(options, '/api/conversations',
+    `/api/conversations/${conversationId}/changes/${id}`, id, data);
+  return conversationId;
+}
+
 export async function prepareDemo(options: Options, allowanceCents: number) {
   assert(Number.isInteger(allowanceCents) && allowanceCents > 0 && allowanceCents <= 2000,
     'Demo allowance must be 1 to 2000 integer cents');
@@ -63,11 +81,7 @@ export async function prepareDemo(options: Options, allowanceCents: number) {
   const context = await request(options, '/api/chat');
   const personal = await context.json() as { assistantId?: string };
   assert(context.ok && personal.assistantId?.startsWith('personal-'), 'Personal assistant required');
-  const conversationId = 'demo-supplier-v1';
-  const id = 'demo-supplier-create-v1';
-  const data = { id, conversationId, assistantId: personal.assistantId };
-  await savedCommand(options, '/api/conversations',
-    `/api/conversations/${conversationId}/changes/${id}`, id, data);
+  const conversationId = await createPersonalConversation(options, personal.assistantId);
   const path = `/api/conversations/${conversationId}/files`;
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
