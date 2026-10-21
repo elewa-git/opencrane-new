@@ -5,6 +5,7 @@ import { expect, it } from 'vitest';
 import { bridgeSocket, type BridgeSocketState } from '../src/bridge-socket.ts';
 import type { BridgeReport } from '../src/report-journal.ts';
 import type { TurnDriver } from '../src/turn-runner.ts';
+import { record } from '../src/http.ts';
 
 function report(sequence: number, text = 'partial'): BridgeReport {
   return { sequence, conversationId: 'chat', turnId: 'turn', assistantId: 'assistant',
@@ -45,10 +46,10 @@ async function fixture() {
   async function connect(since: number) {
     const socket = new WebSocket(url, { headers: { 'x-bridge-token': 'test' } });
     sockets.push(socket);
-    const received: BridgeReport[] = [];
+    const received: Record<string, unknown>[] = [];
     function receive(bytes: Buffer) {
       const parsed: unknown = JSON.parse(bytes.toString());
-      received.push(parsed as BridgeReport);
+      received.push(record(parsed));
     }
     socket.on('message', receive);
     await once(socket, 'open');
@@ -101,7 +102,7 @@ async function rebuildsAFullWindowFromTheAdvancedSavedPosition() {
     for (let index = 0; index < 37; index++) {
       const saved = second.received[index];
       expect(saved).toEqual(computer.reports[index + 33]);
-      second.socket.send(JSON.stringify({ type: 'ack', sequence: saved!.sequence }));
+      second.socket.send(JSON.stringify({ type: 'ack', sequence: saved!['sequence'] }));
       await computer.flush(second.socket);
     }
     expect(second.received).toEqual(computer.reports.slice(33));

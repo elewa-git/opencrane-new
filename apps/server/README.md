@@ -11,7 +11,7 @@ Stop uses the same saved chat facts as progress reports, so it does not reload
 every piece of a long reply before saving or delivering the request.
 An invalid old memory record does not block sending or stopping a message.
 Memory operations still refuse that record.
-Messages and Stop cannot reuse an earlier event id, including a report id.
+Messages and Stop refuse an id already used by a different event, including a report.
 A second process handles model access and spending. Both processes use the
 same secret to protect conversation keys in a packaged install.
 
