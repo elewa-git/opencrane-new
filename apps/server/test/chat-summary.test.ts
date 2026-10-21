@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { dirname } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { readEventAt, type StoredEvent, type AppendCommand } from '@opencrane/event-store';
@@ -7,7 +8,7 @@ import { countReads, event as fixtureEvent, expectNoWholeReads,
 import { conversationKeys } from '../src/chat/keys.ts';
 import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
-import { chatHistory } from '../src/chat/commands.ts';
+import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let keys: ReturnType<typeof conversationKeys>;
@@ -332,3 +333,32 @@ async function refusesChangedBatchOriginal(change: 'earlier' | 'later' | 'reorde
 it.each(['earlier', 'later', 'reordered'] as const)(
   'refuses a replay with a changed %s original and an unchanged final report',
   refusesChangedBatchOriginal);
+async function savesStopWithoutRereadingStreamedReports() {
+  await setup();
+  const events: EventEnvelope[] = [];
+  for (let sequence = 1; sequence <= 200; sequence++) {
+    const base = event(`piece-${sequence}`, 'agent.output_lost', {
+      conversationId: 'chat', turnId: 'message',
+    });
+    events.push({ ...base, report: { computerId: 'computer', sequence, digest: 'a'.repeat(64) } });
+  }
+  await nats.seed(events);
+  await record(201, 200);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* delayedRows(...args: Parameters<typeof read>) {
+    for await (const row of read(...args)) {
+      if (args[0] === subject) await delay(12);
+      yield row;
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(delayedRows);
+  const startedAt = performance.now();
+  const input = { id: 'stop', conversationId: 'chat', stopTurnId: 'message' };
+  const commandContext = { silo: 'test', memberId: 'admin' };
+  const saved = await chatCommand(nats.store, keys, commandContext, input);
+  expect(saved.status).toBe('appended');
+  expect(performance.now() - startedAt).toBeLessThan(2000);
+  expect(await chatCommand(nats.store, keys, commandContext, input)).toEqual(saved);
+}
+it('saves Stop within two seconds without rereading an already consumed reply',
+  savesStopWithoutRereadingStreamedReports);
