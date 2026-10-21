@@ -92,3 +92,38 @@ async function waitsForSharedSession() {
 }
 test('demo can finish a recorded shared session by checking its saved status',
   waitsForSharedSession);
+
+async function stopsWhileComposerLoads() {
+  const { chromium } = await import('playwright');
+  const { stop } = await import('./real-model-journey.ts');
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const page = await browser.newPage();
+    const body = `<oc-chat-composer><textarea aria-label="Message your agent"
+      onkeydown="if(event.key==='Enter') start()"></textarea></oc-chat-composer>
+      <script>
+      function stopped() {
+        localStorage.setItem('stopped', 'yes');
+        document.querySelector('article').innerHTML =
+          '<div class="prose">London is a city.</div><span>Stopped · partial reply kept</span>';
+      }
+      function start() {
+        document.body.innerHTML = '<oc-chat-composer>Loading your workspace…</oc-chat-composer>' +
+          '<article aria-label="Agent reply"><div class="prose">London is a city.</div>' +
+          '<span class="caret">|</span><button onclick="stopped()">Stop</button></article>';
+      }
+      if (localStorage.getItem('stopped')) { start(); stopped(); }
+      </script>`;
+    async function respond(route: import('playwright').Route) {
+      await route.fulfill({ contentType: 'text/html', body });
+    }
+    await page.route('http://stop.test/**', respond);
+    await page.goto('http://stop.test/');
+    await page.getByRole('textbox', { name: 'Message your agent' }).waitFor();
+    page.setDefaultTimeout(5000);
+    await stop(page);
+    const reply = page.getByRole('article', { name: 'Agent reply', exact: true });
+    assert.equal(await reply.locator('.prose').innerText(), 'London is a city.');
+  } finally { await browser.close(); }
+}
+test('demo Stop uses the reply control while the composer is loading', stopsWhileComposerLoads);
