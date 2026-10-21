@@ -42,6 +42,17 @@ function canReuseProgress(previous: Progress, head: number, assistant: Snapshot,
   return previous.computerEventId === assistant.current?.id && !linkClosed;
 }
 
+function pendingManualStops(rows: Awaited<ReturnType<typeof chatHistory>>,
+  closed: Set<string>) {
+  const requested = [];
+  for (const row of rows) {
+    if (row.event.type !== 'agent.turn_stop_requested') continue;
+    const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
+    if (!('reason' in stop) && !closed.has(stop.turnId)) requested.push(stop);
+  }
+  return requested;
+}
+
 export function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
   connection: Connection,
   connectionId: (assistantId: string) => number | undefined, logger: Logger) {
@@ -194,12 +205,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       }
       if (rows.some(isClosed)) return;
       const stops = pendingBudgetStops(rows, assistant.closed);
-      const requested = [];
-      for (const row of rows) {
-        if (row.event.type !== 'agent.turn_stop_requested') continue;
-        const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
-        if (!('reason' in stop) && !assistant.closed.has(stop.turnId)) requested.push(stop);
-      }
+      const requested = pendingManualStops(rows, assistant.closed);
       if (!stops.length && !requested.length) return;
       const link = await connection(computer.computerId, assistantId);
       sendBudgetStops(link, stops);
