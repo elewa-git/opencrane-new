@@ -37,11 +37,12 @@ test('smoke records failures without private errors and refuses work after three
 async function refusesUnsafeSlots() {
   const { spawnSync } = await import('node:child_process');
   for (const id of ['', 'owner', '3']) {
-    const env = { PATH: process.env['PATH'], DEV_STACK_ID: id, DEMO_ALLOWANCE_CENTS: '100' };
+    const env = { PATH: process.env['PATH'], DEV_STACK_ID: id, DEMO_ALLOWANCE_CENTS: '100',
+      DEV_STACK_DIR: '/invalid-demo-configuration' };
     const args = ['--experimental-strip-types', 'infra/dev-stack/demo-smoke-run.ts'];
     const result = spawnSync(process.execPath, args, { env, encoding: 'utf8', timeout: 10000 });
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /Demo smoke incomplete/u);
+    assert.match(result.stderr, /Demo tasks require an explicit secondary id/u);
     assert.equal(result.stdout, '');
   }
 }
@@ -127,3 +128,27 @@ async function stopsWhileComposerLoads() {
   } finally { await browser.close(); }
 }
 test('demo Stop uses the reply control while the composer is loading', stopsWhileComposerLoads);
+
+async function failsWithinDeadline() {
+  let milliseconds = 0;
+  function now() { return milliseconds; }
+  async function fail() {
+    milliseconds = 1_000;
+    throw new Error('Synthetic failure');
+  }
+  const result = await timedSmoke([{ name: 'failed step', run: fail }], now);
+  assert.deepEqual(result, { elapsedMs: 1000, result: 'FAIL', steps: [
+    { name: 'failed step', result: 'FAIL', elapsedMs: 1000 },
+  ] });
+}
+async function exceedsDeadlineDespitePassing() {
+  let milliseconds = 0;
+  function now() { return milliseconds; }
+  async function pass() { milliseconds = 180_001; }
+  const result = await timedSmoke([{ name: 'slow success', run: pass }], now);
+  assert.deepEqual(result, { elapsedMs: 180001, result: 'FAIL', steps: [
+    { name: 'slow success', result: 'PASS', elapsedMs: 180001 },
+  ] });
+}
+test('one failed step refuses the smoke even within 180 seconds', failsWithinDeadline);
+test('all passing steps still refuse the smoke beyond 180 seconds', exceedsDeadlineDespitePassing);
