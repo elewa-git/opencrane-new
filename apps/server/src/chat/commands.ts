@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { readStreamSummary, readEventAt, type SummaryKind,
+import { readEventAt,
   type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { chatIdSchema, groupConversationCommandSchema,
   conversationCreatedDataSchema, getEventDefinition } from '@opencrane/events';
 import { participationClosed } from './participation.ts';
 import { chatWrite } from './write-priority.ts';
+import { readChatCommandFacts } from './chat-summary.ts';
 import type { conversationKeys } from './keys.ts';
 
 const id = chatIdSchema;
@@ -105,23 +106,6 @@ function comparePosition(first: StoredEvent, second: StoredEvent) {
   return first.sequence - second.sequence;
 }
 
-type Commands = { created?: StoredEvent; closed: boolean; positions: Map<string, number> };
-function emptyCommands(): Commands {
-  return { closed: false, positions: new Map() };
-}
-function addCommand(summary: Commands, row: StoredEvent) {
-  if (row.event.type === 'conversation.created') summary.created = row;
-  if (row.event.type === 'conversation.closed') summary.closed = true;
-  if (!summary.positions.has(row.event.id)) summary.positions.set(row.event.id, row.sequence);
-}
-function commandSize(summary: Commands) {
-  return summary.positions.size * 256;
-}
-const commands: SummaryKind<Commands> = {
-  name: 'chat-commands', keep: 64, empty: emptyCommands, add: addCommand,
-  budget: { limit: 16 * 1024 * 1024, size: commandSize },
-};
-
 /** Load command facts before the short access check, then append one event. */
 export async function chatCommand(
   store: Store, keys: ReturnType<typeof conversationKeys>, context: Context,
@@ -135,17 +119,19 @@ export async function chatCommand(
   return save();
 }
 
+function stoppedTurnId(input: Input) {
+  if ('stopTurnId' in input) return input.stopTurnId;
+  return undefined;
+}
+
 async function saveChatCommand(
   store: Store, keys: ReturnType<typeof conversationKeys>, context: Context,
   input: Input, fresh?: (operation: 'retry' | 'append') => Promise<number>,
 ) {
   const subject = `conversation-${input.conversationId}`;
-  function take(summary: Commands, sequence: number) {
-    return { created: summary.created, closed: summary.closed,
-      position: summary.positions.get(input.id), sequence };
-  }
-  const facts = await readStreamSummary(store, context.silo, subject, commands,
-    performance.now() + 10_000, take);
+  const requestedTurn = stoppedTurnId(input);
+  const facts = await readChatCommandFacts(store, context.silo, input.conversationId,
+    input.id, requestedTurn);
   if (facts.position !== undefined) {
     const previous = await readEventAt(store, subject, facts.position, performance.now() + 10_000);
     if (!previous) throw new Error('Saved command unavailable');
@@ -157,15 +143,10 @@ async function saveChatCommand(
   if (closed) throw new ChatConflict('Conversation state conflict');
   validateConversation(facts, input, context.memberId);
   if ('stopTurnId' in input) {
-    const turnFacts = await readStreamSummary(store, context.silo, subject, commands,
-      performance.now() + 10_000, takeTurn);
-    const turn = await readEventAt(store, subject, turnFacts ?? 0, performance.now() + 10_000);
+    const turn = await readEventAt(store, subject, facts.turnPosition ?? 0,
+      performance.now() + 10_000);
     if (!turn || turn.event.type !== 'message.posted' ||
         turn.event.principal?.id !== context.memberId) throw new ChatConflict('Unrequested turn');
-  }
-  function takeTurn(summary: Commands) {
-    if ('stopTurnId' in input) return summary.positions.get(input.stopTurnId);
-    return undefined;
   }
   const type = commandType(input);
   const data = commandData(input, context, keys);

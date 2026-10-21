@@ -1420,11 +1420,17 @@ Report reads do not load participation history. Turn starts check the small part
 closure summary separately, before deciding whether to start or repeat a turn.
 The report summary's position still belongs only to the conversation stream.
 
-Reports and turn commands share the server's `chat` summary, built on the event
+Browser commands, Stop polling, reports and turn commands share the server's `chat` summary, built on the event
 store's stream summary. The server keeps up to 64 conversations per store connection and rebuilds a dropped summary from
 the first event. Each call reads through the latest saved event before copying
 its facts. History reads have their own ten-second limit and finish before turn
 admission starts its access check.
+
+Browser command ids use 256 bytes each in the existing 32 MiB cache budget.
+Stop and terminal rows use 512 bytes each. They contain no reply text. Stop polling
+reads these rows and new events, without rescanning earlier reply pieces.
+Command retries still verify the original saved event. New commands still use one
+conditional append after fresh access checks.
 
 The summary keeps the first conversation creation, the first message's raw author
 and execution mode for each event id, closed turn ids, and report positions by
