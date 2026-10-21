@@ -49,6 +49,9 @@ jobs:
       - name: Check the event catalogue matches the registry
         run: npm run check:events
 
+      - name: Install Chromium for demo recording checks
+        run: npx playwright install --with-deps chromium
+
       - name: Check local provider setup and model stub
         run: >-
           nice -n 10 node --experimental-strip-types --test

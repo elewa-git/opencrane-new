@@ -56,9 +56,10 @@ async function requiresCurrentRefusal() {
     page.setDefaultTimeout(100);
     const old = '<article>Earlier attempt</article><article><oc-budget-stop-notice>' +
       'Company limit reached</oc-budget-stop-notice></article>';
-    const current = '<article>This attempt</article>';
+    const current = '<article><p>This attempt</p></article>';
     await page.setContent(old + current + '<article>Still waiting</article>');
     await assert.rejects(demoRefusal(page, 'This attempt'));
+    page.setDefaultTimeout(5000);
     const refused = '<article><oc-budget-stop-notice>Company limit reached' +
       '</oc-budget-stop-notice></article>';
     await page.setContent(old + current + refused);

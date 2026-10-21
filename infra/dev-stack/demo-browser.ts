@@ -6,8 +6,14 @@ import type { Page } from 'playwright';
 import { answer, stop } from './real-model-journey.ts';
 import { demoBudget, demoCeiling } from './demo-prepare.ts';
 import { timedSmoke } from './demo-smoke.ts';
+import { findBudgetNoticeForPrompt } from './browser-budgets.ts';
 
 type Options = Parameters<typeof demoBudget>[0];
+
+export async function demoRefusal(page: Page, prompt: string) {
+  const notice = await findBudgetNoticeForPrompt(page, prompt);
+  await notice.getByText(/limit reached/iu).waitFor();
+}
 
 export async function warmDemo(owner: Page, member: Page, origin: string) {
   owner.setDefaultTimeout(120_000);
@@ -104,11 +110,12 @@ export async function demoBrowser(owner: Page, member: Page, options: Options,
       await demoCeiling(options, `demo-limit-${id}`, before.ceilingCents, before.todayCents);
       await member.goto(sharedUrl);
       const composer = member.getByRole('textbox', { name: 'Message your agent' });
-      await composer.fill('Say hello in one plain sentence.');
+      const prompt = `Limit demonstration ${id}. Say hello in one plain sentence.`;
+      await composer.fill(prompt);
       await composer.press('Enter');
-      await member.locator('oc-budget-stop-notice').last().getByText(/limit reached/iu).waitFor();
+      await demoRefusal(member, prompt);
       await member.reload();
-      await member.locator('oc-budget-stop-notice').last().getByText(/limit reached/iu).waitFor();
+      await demoRefusal(member, prompt);
       const refused = await demoBudget(options);
       assert.equal(refused.todayCents, before.todayCents);
       assert.equal(refused.reservedCents, before.reservedCents);
