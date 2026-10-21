@@ -729,6 +729,16 @@ The rest of the host certificate directory is not mounted.
 Node uses bundled roots and could connect even when the gateway had no trusted roots.
 Missing, empty or invalid files fail with a fixed preparation error.
 
+The owner can use `up.sh --id owner --owner-run --fresh` with the same file-path
+setting, after the runbook's fresh-install prerequisites are met. Every owner real
+start requires the explicit flag, TTY stdin and no `OPENCRANE_FLEET_TASK` variable.
+The guard runs before reading or creating the owner directory. Fleet-marked owner
+starts are refused even without a real-provider setting. Unmarked owner stand-in
+starts retain their existing behaviour. `--owner-run` is refused for secondary ids.
+Real owner startup skips the stand-in process; startup and status do not require it.
+The owner models process already runs on the host and uses its existing certificate store.
+The owner command has not been run live; tests replace system commands in a temporary home.
+
 The Compose test resolves both owner and secondary configuration without starting
 containers. It checks the exact certificate source, destination and read-only setting,
 and refuses certificate mounts on other services. Startup tests use a temporary home
@@ -765,7 +775,9 @@ one shared assistant, and prints bookmarks. It uses a five-minute development Ow
 session and authenticated HTTP commands only. Command ids and payloads stay fixed.
 Private `demo-requests` files prevent resubmission after an unknown result; server
 receipts remain the source of truth. Missing people are refused before any writes.
-The caller must own the stack directory. Owner use additionally requires `--owner-run`.
+The caller must own the stack directory. Owner use additionally requires `--owner-run`,
+TTY stdin and an absent `OPENCRANE_FLEET_TASK` variable. These checks happen before
+loading owner configuration. Even an empty fleet marker is refused.
 
 `demo-up.sh` requires an explicit secondary id and `DEV_REAL_PROVIDER_FILE` path.
 It claims through `claim.sh`, checks the returned id, sets `COMPUTER_IDLE_MS=14400000`,
@@ -773,9 +785,8 @@ runs fresh startup and seeds. A mismatched, owner or invalid claim stops before 
 or cleanup. Once startup is attempted, startup or seed failure calls `down.sh` for that
 secondary; success keeps it.
 It inherits the full startup journey and makes no claim about three-minute duration.
-The [owner runbook](../../docs/process/demo/README.md) marks the current owner-mode
-refusal and unfinished PDF, ceiling and smoke work. This is the first split of #32
-P2-7 PR 2. The seed does not rename existing members or make cloud identity changes.
+The [owner runbook](../../docs/process/demo/README.md) records the unfinished PDF,
+ceiling and smoke work, and the required fresh-install proof. The seed does not rename existing members or make cloud identity changes.
 Tests use `nice -n 10 node --experimental-strip-types --test infra/dev-stack/demo-*.test.ts`.
 
 The launcher tests record startup and cleanup without starting services. They check

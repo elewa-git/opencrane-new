@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|seeds demo groups and checks real replies through APIs| apps
+  stack -->|seeds demos and checks real replies; owner starts need a terminal| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -42,6 +42,7 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
 - Connect and test that provider as the Owner before a fresh stack starts its chat checks.
 - Optionally use a real OpenAI provider on a spare stack, with a separate paid chat check.
+- Allow an explicit owner real-provider start from an interactive terminal, while refusing fleet tasks.
 - Run browser checks against real local services. The approval journey is currently skipped.
 - Check group chats from the To line, participant access, direct chats, shared assistants and
   provider key saving in a fresh stack.
@@ -65,6 +66,9 @@ Later starts read the recorded mode again. An explicit real-provider start reads
 credential file only during setup and saves it through the same product API. Real mode
 uses a separate check for streamed answers, Stop, a later member and a supplier PDF.
 Changing an existing stack between real and local providers requires a fresh start.
+Owner real starts require `--owner-run` and an interactive terminal. Fleet tasks are
+refused before owner data is read. The [demo guide](../../docs/process/demo/README.md)
+keeps the remaining live checks explicit.
 
 The models process gets a separate control port for checking loaded configuration.
 The stack never forwards it. The approval journey is skipped while publication

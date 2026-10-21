@@ -58,6 +58,7 @@ jobs:
           infra/dev-stack/browser-audit.test.ts
           infra/dev-stack/demo-seed.test.ts infra/dev-stack/demo-up.test.ts
           infra/dev-stack/demo-seed-run.test.ts
+          infra/dev-stack/stack-real-mode.test.ts tools/fleet/codex-task.test.ts
           infra/dev-stack/zitadel-setup.test.ts infra/package/fresh-twice.test.ts
           infra/package/browser-capture.test.ts
 

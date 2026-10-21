@@ -18,7 +18,8 @@ async function cliFixture() {
   const identities = { extraIdentities: [{ subject: 'synthetic-owner' }] };
   await writeFile(`${scripts}/zitadel.json`, JSON.stringify(identities));
   async function prepare(id: string, origin: string, marker?: string) {
-    const stack = `${directory}/.config/opencrane/dev-stack-${id}`;
+    const suffix = id === 'owner' ? '' : `-${id}`;
+    const stack = `${directory}/.config/opencrane/dev-stack${suffix}`;
     await mkdir(stack, { recursive: true });
     await writeFile(`${stack}/stack-owner`, marker ?? `worktree=${directory}\npid=123\n`);
     await writeFile(`${stack}/settings.env`, `ORIGIN=${origin}\n`);
@@ -33,7 +34,7 @@ async function cliFixture() {
     ];
     await writeFile(`${stack}/auth.env`, settings.join('\n'));
   }
-  async function run(id?: string, ownerRun = false, fleet?: string) {
+  async function run(id?: string, ownerRun = false, fleet?: string, terminal = false) {
     const record = `${directory}/record`;
     await writeFile(record, '');
     const env: NodeJS.ProcessEnv = {
@@ -48,7 +49,15 @@ async function cliFixture() {
     if (ownerRun) {
       args.push('--owner-run');
     }
-    const result = spawnSync(process.execPath, args, options);
+    let result;
+    if (terminal) {
+      const commandParts = [process.execPath, ...args];
+      const quotedParts = commandParts.map(shellQuote);
+      const command = quotedParts.join(' ');
+      result = spawnSync('/usr/bin/script', ['-qec', command, '/dev/null'], options);
+    } else {
+      result = spawnSync(process.execPath, args, options);
+    }
     assert.ifError(result.error);
     assert.equal(result.signal, null);
     const calls = await readFile(record, 'utf8');
@@ -158,9 +167,9 @@ async function refusesAutomatedOwnerSeed() {
   const fixture = await cliFixture();
   try {
     for (const fleet of [undefined, '', 'task']) {
-      const result = await fixture.run('owner', true, fleet);
+      const result = await fixture.run('owner', true, fleet, fleet !== undefined);
       assert.equal(result.status, 1);
-      assert.match(result.stderr, /Demo seed incomplete/u);
+      assert.match(`${result.stdout}${result.stderr}`, /Demo seed incomplete/u);
       assert.equal(result.calls, '', 'Refuse before loading owner settings');
     }
   } finally {
@@ -170,3 +179,23 @@ async function refusesAutomatedOwnerSeed() {
 
 test('owner seed with the explicit flag still refuses automation before configuration',
   refusesAutomatedOwnerSeed);
+
+function shellQuote(value: string) {
+  return "'" + value.replaceAll("'", "'\"'\"'") + "'";
+}
+
+async function seedsInteractiveOwner() {
+  const fixture = await cliFixture();
+  try {
+    await fixture.prepare('owner', 'https://owner.invalid');
+    const result = await fixture.run('owner', true, undefined, true);
+    assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+    assert.match(result.calls, /GET https:\/\/owner.invalid\/api\/groups/u);
+    assert.match(result.stdout, /PASS demo groups and assistant saved/u);
+    assert.equal(result.stdout.includes('synthetic-cookie-secret'), false);
+  } finally {
+    await fixture.close();
+  }
+}
+
+test('explicit interactive owner seed uses the recording API', seedsInteractiveOwner);

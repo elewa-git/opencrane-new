@@ -47,8 +47,8 @@ request records is not a recovery step. Assistant creation does not prove readin
 
 ### Secondary rehearsal
 
-Only one live rehearsal uses the shared machine at a time. The Stop/image qualification
-must finish and release its stack before this rehearsal starts. Keep the remaining
+Only one live rehearsal uses the shared machine at a time. The refreshed computer image
+has passed Stop with the stand-in; Stop with the real model still needs checking. Keep the remaining
 allowance for all paid runs together within 2,000 cents per UTC day, including unknown
 holds. Startup's 2,000-cent ceiling is per stack; it is not a shared daily counter.
 
@@ -67,16 +67,18 @@ not the proposed three-minute smoke. The launcher does not suppress a failed jou
 
 ### OWNER-RUN: refreshing the owner checkout
 
-**Do not run this sequence yet.** The merged real-provider switch rejects owner stacks.
-The Stop fix, complete fresh-install proof, PDF seed and smoke remain prerequisites.
-There is no qualified owner SHA in this guide. These are owner commands only; task
-launchers cannot use them. No task has run them or checked the real phone path.
+**A complete real-demo fresh-install PASS is still required before this sequence.**
+The owner real-mode command and refreshed image are available. PDF seeding, ceilings
+and the timed smoke are still unfinished. There is no qualified owner SHA in this guide.
+These commands require an interactive terminal and refuse any `OPENCRANE_FLEET_TASK`
+marker, including an empty one. Task launchers export that marker. No task has run
+these commands on the owner stack or checked the real phone path.
 
 Before choosing a SHA, confirm that it is merged into `origin/main`, includes both
 the real-provider and demo-kit changes, includes the qualified Stop image, and has
 an explicit fresh-install PASS. That PASS must include real replies and the demo
 checks. A green `ci-ok`, a stand-in nightly or partial real replies cannot substitute.
-The eventual owner-mode support must also be present and qualified.
+Owner startup is tested with disposable recording fixtures. It has not been run live.
 
 The first command stops existing services from their existing checkout. Keeping that
 checkout path avoids transferring its ownership marker. Replace the SHA placeholder
@@ -100,7 +102,7 @@ npm ci
 export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
 export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
 export COMPUTER_IDLE_MS=14400000
-infra/dev-stack/up.sh --id owner --fresh
+infra/dev-stack/up.sh --id owner --owner-run --fresh
 DEV_STACK_ID=owner node --experimental-strip-types infra/dev-stack/demo-seed-run.ts --owner-run
 ```
 
@@ -108,13 +110,15 @@ DEV_STACK_ID=owner node --experimental-strip-types infra/dev-stack/demo-seed-run
 
 Once a fresh refresh has passed, plain startup preserves the seeded data and renews
 its 24-hour computer token. Keep the same qualified SHA and provider file path.
+Real mode still requires `--owner-run` and interactive stdin on every start.
+The credential is supplied by file path only; it is never placed in a command argument.
 
 ```sh
 # OWNER-RUN ONLY, after the qualified refresh above.
 cd /home/jente/dev/opencrane-new
 export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
 export COMPUTER_IDLE_MS=14400000
-infra/dev-stack/up.sh --id owner
+infra/dev-stack/up.sh --id owner --owner-run
 ```
 
 Sign in again in separate browser profiles. Open each person's personal chat and the

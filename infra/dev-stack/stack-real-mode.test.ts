@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 
@@ -12,6 +12,8 @@ type Startup = {
   ownerRun?: boolean;
   terminal?: boolean;
   fleet?: string;
+  shell?: boolean;
+  fresh?: boolean;
 };
 
 async function startupFailure(startup: Startup) {
@@ -20,12 +22,19 @@ async function startupFailure(startup: Startup) {
   const cleanup = { recursive: true, force: true };
   try {
     await mkdir(bin);
+    await symlink(process.execPath, `${bin}/node`);
     const executable = { mode: 0o755 };
     // Replace system commands before invoking the entry point. No fixture can
     // reach Docker, Kubernetes, sign-in setup or the owner's saved directory.
     await writeFile(`${bin}/kubectl`, '#!/bin/sh\nexit 0\n', executable);
     for (const command of ['docker', 'tailscale', 'flock']) {
       await writeFile(`${bin}/${command}`, '#!/bin/sh\nexit 97\n', executable);
+    }
+    if (startup.shell) {
+      const wrapper = '#!/bin/sh\n' +
+        'if [ "$5" != infra/dev-stack/stack.ts ]; then exit 97; fi\n' +
+        'shift 2\nexec "$@"\n';
+      await writeFile(`${bin}/flock`, wrapper, executable);
     }
     let directory = `${home}/.config/opencrane/dev-stack`;
     if (startup.id !== 'owner') {
@@ -42,7 +51,7 @@ async function startupFailure(startup: Startup) {
       await writeFile(`${directory}/settings.env`, settings);
     }
     const environment: NodeJS.ProcessEnv = {
-      PATH: bin,
+      PATH: `${bin}:/usr/bin:/bin`,
       HOME: home,
       DEV_STACK_ID: startup.id,
     };
@@ -55,22 +64,34 @@ async function startupFailure(startup: Startup) {
     if (startup.fleet !== undefined) {
       environment['OPENCRANE_FLEET_TASK'] = startup.fleet;
     }
-    const args = ['--experimental-strip-types', 'infra/dev-stack/stack.ts', 'up'];
+    let executablePath = process.execPath;
+    let args = ['--experimental-strip-types', 'infra/dev-stack/stack.ts', 'up'];
+    if (startup.shell) {
+      executablePath = '/bin/sh';
+      args = ['infra/dev-stack/up.sh', '--id', startup.id];
+    }
+    if (startup.fresh) {
+      args.push('--fresh');
+    }
     if (startup.ownerRun) {
       args.push('--owner-run');
     }
     const options = { env: environment, timeout: 15_000, encoding: 'utf8' as const };
     let result;
     if (startup.terminal) {
-      const commandParts = [process.execPath, ...args];
+      const commandParts = [executablePath, ...args];
       const quotedParts = commandParts.map(shellQuote);
       const command = quotedParts.join(' ');
       result = spawnSync('/usr/bin/script', ['-qec', command, '/dev/null'], options);
     } else {
-      result = spawnSync(process.execPath, args, options);
+      result = spawnSync(executablePath, args, options);
     }
     assert.ifError(result.error);
     assert.equal(result.status, 1, result.stderr);
+    const output = `${result.stdout}${result.stderr}`.trim();
+    if (output.includes('Owner commands require')) {
+      await assert.rejects(readFile(`${directory}/stack-owner`, 'utf8'));
+    }
     try {
       return await readFile(`${directory}/failure.log`, 'utf8');
     } catch {
@@ -144,6 +165,7 @@ async function acceptsInteractiveOwnerStarts() {
   for (const savedMode of [undefined, 'real'] as const) {
     const startup: Startup = {
       id: 'owner', credential: '/synthetic-key', ownerRun: true, terminal: true,
+      shell: true, fresh: savedMode === undefined,
     };
     if (savedMode) {
       startup.savedMode = savedMode;
