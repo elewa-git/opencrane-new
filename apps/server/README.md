@@ -13,7 +13,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model and remote tool grants, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model and remote tool grants and choices, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
   server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops, turn decisions and relay closures| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
@@ -291,6 +291,8 @@ have not been checked. Unrelated read receipts do not require reading the event 
 - Lets admins create a group assistant with selected tools and a fixed paying group.
 - Lets owners and admins give or revoke remote tool access for one person, group or assistant.
   Each change has its own saved reference and separate table and permission progress.
+  They can read saved grant sources and browse people, groups and assistants in small pages.
+  These reads do not say whether a tool is ready for an assistant to use.
 - Keeps each member's group chat private while they share the assistant's computer.
 - Provides the one-time command used to claim a new installation.
 

@@ -1581,6 +1581,36 @@ admission number. The member-history limit is 10,000 events. `test/groups.test.t
 covers existing ids, removed admissions, conflicting identities, duplicate bindings
 and both limits.
 
+## Integration access reads (Part of #45)
+
+Owner/Admin `GET /api/org/integrations/:serverId/access` checks membership once,
+then reads at most 100 latest grant facts from the shared member inventory.
+Each row includes its name, direct/group/assistant source, saved event id, date,
+sequence, saved grant/revoke state and IAM receipt progress. `expectedSequence`
+is the server-grant stream position for a later command. Revoked facts remain
+visible. These are grant facts, not counts of people who can use a tool.
+
+`complete` means the content tables are current and all grant facts fit within
+100 rows. Otherwise `grantTotal` is null. IAM progress is separate; a missing
+receipt remains `applying`. Missing or lagging content also remains `applying`.
+An unavailable read returns a sanitised 503, never an empty successful result.
+
+`GET /api/org/integrations/:serverId/access/candidates` reuses model-access
+choices and names. Its strict query requires `kind=member|team|assistant`, accepts
+`after` and `limit=1..100` (default 50), and returns the next id or null.
+Choices are ordered by id within one silo. Member choices exclude departed people.
+Group counts describe joined members; assistant choices describe saved creations.
+Both routes return `no-store`; unknown and foreign servers return 404. Content
+loading has its own ten-second event-read deadline and no write access check.
+Reads neither append events nor probe, publish, connect or call tools.
+
+Tests: `test/integration-access-reads.test.ts` uses disposable NATS, PostgreSQL and
+OpenFGA for paging, refusals, lag, overflow, slow reads and replay equality.
+PARTIAL: `/facts`, the four-fact detail, actual Allowed for list UI and its consumers
+remain deferred. Existing publication status and access/explanation stay separate;
+installation, account connection, grants and assistant availability are not combined.
+Fresh-install live qualification: NOT RUN. No web component or visual script is added.
+
 ## Model access reads
 
 `GET /api/org/models/:modelId/access` and

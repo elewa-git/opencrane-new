@@ -98,27 +98,31 @@ async function kindsForRevocation(db: Query, table: string, silo: string, modelI
 export const modelAccess = projection('model-access', '');
 export const replayModelAccess = projection('model-access-replay', '_replay');
 
-export async function readModelGrantRows(db: Query, silo: string, modelId: string) {
-  const result = await db.query<ModelGrantState & { total: number }>(
-    `SELECT a.grantee_kind AS "granteeKind", a.grantee_id AS "granteeId",
-      COUNT(*) OVER()::int AS total,
-      CASE a.grantee_kind
+const grantDisplayName = `CASE a.grantee_kind
         WHEN 'member' THEN COALESCE(m.display_name, a.grantee_id)
         WHEN 'team' THEN COALESCE(g.name, a.grantee_id)
         ELSE CASE WHEN x.kind = 'personal'
           THEN COALESCE(m_owner.display_name, x.owner_id, a.grantee_id) || ' personal assistant'
           ELSE COALESCE(x.name, a.grantee_id) END
-      END AS "displayName",
-      a.state, a.event_id AS "eventId", a.event_time AS "eventTime", a.position
-      FROM model_access_grants a
-      LEFT JOIN members m ON a.grantee_kind = 'member'
+      END`;
+
+const grantNameJoins = `LEFT JOIN members m ON a.grantee_kind = 'member'
         AND m.silo = a.silo AND m.member_id = a.grantee_id
       LEFT JOIN groups g ON a.grantee_kind = 'team'
         AND g.silo = a.silo AND g.group_id = a.grantee_id
       LEFT JOIN model_access_assistants x ON a.grantee_kind = 'assistant'
         AND x.silo = a.silo AND x.assistant_id = a.grantee_id
       LEFT JOIN members m_owner ON x.kind = 'personal'
-        AND m_owner.silo = x.silo AND m_owner.member_id = x.owner_id
+        AND m_owner.silo = x.silo AND m_owner.member_id = x.owner_id`;
+
+export async function readModelGrantRows(db: Query, silo: string, modelId: string) {
+  const result = await db.query<ModelGrantState & { total: number }>(
+    `SELECT a.grantee_kind AS "granteeKind", a.grantee_id AS "granteeId",
+      COUNT(*) OVER()::int AS total,
+      ${grantDisplayName} AS "displayName",
+      a.state, a.event_id AS "eventId", a.event_time AS "eventTime", a.position
+      FROM model_access_grants a
+      ${grantNameJoins}
       WHERE a.silo = $1 AND a.model_id = $2
       ORDER BY a.grantee_kind, a.grantee_id LIMIT $3`, [silo, modelId, MODEL_GRANT_LIMIT]);
   function toPublicRow(row: ModelGrantState): ModelGrantState {
@@ -179,5 +183,22 @@ async function assistantCandidates(db: Query, silo: string, after: string | unde
         ON a.kind = 'personal' AND m.silo = a.silo AND m.member_id = a.owner_id
       WHERE a.silo = $1 AND a.assistant_id > $2
       ORDER BY a.assistant_id LIMIT $3`, [silo, after ?? '', limit + 1]);
+  return result.rows;
+}
+
+/** Read only the latest indexed grant references, including revocations. */
+export async function readToolGrantReferences(db: Query, silo: string, subject: string) {
+  type Reference = Pick<ModelGrantState, 'granteeKind' | 'granteeId' | 'displayName' | 'eventId'> & {
+    position: string;
+  };
+  const result = await db.query<Reference>(`WITH selected_grants AS (
+    SELECT silo, link_kind AS grantee_kind, link_id AS grantee_id, event_id, position
+    FROM inventory_inputs WHERE silo = $1 AND subject = $2
+      AND link_kind IN ('member', 'team', 'assistant')
+    ORDER BY link_kind, link_id LIMIT 101
+  ) SELECT a.grantee_kind AS "granteeKind", a.grantee_id AS "granteeId",
+    a.event_id AS "eventId", a.position, ${grantDisplayName} AS "displayName"
+    FROM selected_grants a ${grantNameJoins}
+    ORDER BY a.grantee_kind, a.grantee_id`, [silo, subject]);
   return result.rows;
 }

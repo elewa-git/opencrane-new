@@ -188,8 +188,8 @@ async function slowReadSurvivesChatActivity() {
   database.query = async function slow(sql, parameters) {
     if (!waited && sql.includes('projection_checkpoints')) {
       waited = true;
-      await append('conversation-unrelated', 'conversation.title_changed',
-        { conversationId: 'unrelated', title: 'Unrelated', changedBy: 'owner' });
+      await append('conversation-unrelated', 'agent.turn_started',
+        { conversationId: 'unrelated', turnId: 'unrelated-turn', assistantId: 'helper' });
       await delay(2100);
     }
     return query(sql, parameters);
@@ -202,6 +202,25 @@ async function slowReadSurvivesChatActivity() {
   }
 }
 it('allows authorised reads over two seconds despite unrelated chat activity', slowReadSurvivesChatActivity);
+
+async function unavailableReadIsSanitised() {
+  const query = database.query.bind(database);
+  database.query = function unavailable() {
+    return Promise.reject(new Error('private-error-canary'));
+  };
+  try {
+    for (const url of [path, `${path}/candidates?kind=member`]) {
+      const response = await get(url);
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ status: 'unavailable' });
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.body).not.toContain('private-error-canary');
+    }
+  } finally {
+    database.query = query;
+  }
+}
+it('returns an unknown read outcome without exposing private error details', unavailableReadIsSanitised);
 
 async function overflowIsIncomplete() {
   expect((await get()).statusCode).toBe(200);
