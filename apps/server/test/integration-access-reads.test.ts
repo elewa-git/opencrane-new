@@ -185,7 +185,8 @@ async function labelsDepartedGrantHolderAfterReplay() {
     expect(after.json()).toMatchObject(expected);
     const original = before.json<{ loadedAt: string }>();
     const replayed = after.json<{ loadedAt: string }>();
-    expect({ ...replayed, loadedAt: original.loadedAt }).toEqual(original);
+    const replayComparison = { ...replayed, loadedAt: original.loadedAt };
+    expect(replayComparison).toEqual(original);
     expect((await auth.check('bob', 'member')).allowed).toBe(false);
     await expect(readActiveMember(nats.store, auth.binding, 'bob'))
       .rejects.toThrow(MemberAccessRefused);

@@ -20,8 +20,12 @@ const toolGrantSchema = modelAccessGrantSchema.extend({
 });
 
 function membershipStatus(reference: Awaited<ReturnType<typeof readToolGrantReferences>>[number]) {
-  if (reference.granteeKind !== 'member') return null;
-  if (reference.membershipStatus === 'removed') return 'departed';
+  if (reference.granteeKind !== 'member') {
+    return null;
+  }
+  if (reference.membershipStatus === 'removed') {
+    return 'departed';
+  }
   if (reference.membershipStatus === 'joined' || reference.membershipStatus === 'invited') {
     return reference.membershipStatus;
   }
