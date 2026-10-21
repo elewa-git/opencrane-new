@@ -80,6 +80,10 @@ node --experimental-strip-types infra/dev-stack/demo-smoke-run.ts
 
 The example 700 is not a spending approval. Copy private receipts and screenshots
 from the slot's `demo-smoke/` directory before running `down.sh --id 1`.
+The command saves both previous company limits and restores them when it finishes
+or stops. If a run still has `saved-ceilings.json`, keep that folder: the next
+invocation finishes its restore before starting another rehearsal. Spending records
+name this run's reservations, charges and holds, and failed warm-up still has timings.
 
 ### OWNER-RUN: refreshing the owner checkout
 
