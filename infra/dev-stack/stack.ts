@@ -534,7 +534,9 @@ async function up(fresh: boolean) {
     }
   }
   await wait(() => healthy(`${origin}/org/integrations`), 'web origin');
-  if (!tokenBootstrap) await journey();
+  // Check owner readiness through health, process and listener checks below.
+  // Keep automated chat journeys on claimed secondary stacks only.
+  if (!tokenBootstrap && secondary) await journey();
   const after = await run('ss', ['-H', '-ltnp']);
   await save('listeners-after.txt', after);
   const pids = await Promise.all(names.map(processId));
