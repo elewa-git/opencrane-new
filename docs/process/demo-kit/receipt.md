@@ -269,7 +269,6 @@ that a refusal is absent now uses that short deadline; page setup uses the norma
 fixture timeout. Both corrected runs passed. No application timeout changed.
 The pull request records GitHub `ci-ok` on the pushed commit.
 
-
 ## 21 October 2026 — paid secondary rehearsal
 
 Overall: PARTIAL. The two three-minute runs failed. This section replaces the
@@ -295,11 +294,11 @@ Each behaviour fix has a separate preceding failing test commit.
 
 | Finding | Failing test | Fix |
 | --- | --- | --- |
-| Real startup seeded a larger cap before paid verification | `0c16013f8` | `fbff70b37`: apply the integer allowance during startup |
-| The new personal chat's receipt endpoint refused access before the chat existed | `eb1966f5b` | `aeb4efde1`: create once, then read its receipt; never repeat an uncertain write |
-| A full bridge queue discarded reports it had already accepted after disconnect | `d3795caa4` | `d9d850a75`: save the bounded accepted queue after disconnect |
-| Shared warm-up waited in the pending session chooser | `87a9b2d0a` | `41ba473ef`: use the existing session status helper |
-| Stop waited for the composer while the reply already offered Stop | `3d493ea3b` | `eb9e5a46e`: use the reply's Stop control |
+| Real startup seeded a larger cap before paid verification | `d0d3e076f` | `1f55c3e4d`: apply the integer allowance during startup |
+| The new personal chat's receipt endpoint refused access before the chat existed | `f3873dd72` | `2f562698a`: create once, then read its receipt; never repeat an uncertain write |
+| A full bridge queue discarded reports it had already accepted after disconnect | `dc9ff27a4` | `4e410887e`: save the bounded accepted queue after disconnect |
+| Shared warm-up waited in the pending session chooser | `4d72f391a` | `79af6c5c7`: use the existing session status helper |
+| Stop waited for the composer while the reply already offered Stop | `e5c2a88ef` | `819d00fdb`: use the reply's Stop control |
 
 The first Stop request was saved at 05:25:04.481. The computer finished its report
 journal at 05:25:16.275, but the server had saved only 102 of 594 reports at
@@ -420,3 +419,55 @@ The screenshots were visually checked for secrets and private locations:
 The separate narrow PDF preview attempt timed out waiting for its Open button;
 there is no passing narrow PDF screenshot. Failure images are evidence of the
 remaining problems, not proof of a successful journey.
+
+### Cleanup and final source checks
+
+Slot cleanup: PASS. `down.sh --id 1` completed and removed the slot's directory,
+including its claim, services, volumes and computer namespaces. This is the
+release operation for slots obtained through `claim.sh`; that script has no
+separate release option. Only this worktree's secondary was removed.
+
+After the live run, main advanced. Fetch and rebase onto
+`a7b564bf41a8de9ddc5a21d43a1142d7958caf65` also completed. Both rebase state
+directories were absent and main was an ancestor. The fix table uses the rebased
+commit ids. The live JSON files retain the SHAs actually used during the runs.
+The final source fixes end at `819d00fdb`; the live evidence commit is `e11b31b23`.
+No further paid run was made after this rebase.
+
+| Own final check | Result | Time |
+| --- | --- | --- |
+| Focused Node tests, serial runs | PASS, 31 tests each | 241.185 / 141.228 s |
+| Bridge pressure regression and existing pressure tests | PASS, 3 tests | 23.14 s |
+| Bridge pressure and replay tests after the final rebase | PASS, 49 tests | 180.65 s |
+| Event security rules, unchanged | PASS, 438 tests | 6.14 s |
+| Event catalogue | PASS, 149 event types | Not timed |
+| Changelog validation | PASS | Not timed |
+
+The earlier broad bridge run failed three time-sensitive replay read-count
+assertions while the stack was busy. The final 49-test run passed unchanged after
+slot cleanup. An earlier parallel Node run also hit two CLI fixture timeouts;
+both final serial runs passed without loosening assertions. The new bridge
+regression passed in both final bridge runs.
+
+Tests, lint and typecheck used `nice -n 10`. The Node fixtures used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; they do not connect
+to that database. Bridge tests used a task-owned PostgreSQL 17.6 container on a
+random localhost port, checked with `pg_isready`, and its actual `PG_TEST_URL`.
+The test database was removed with `docker rm -f -v pgtest-demo-kit-3` after the
+checks. No full root suite ran. Temporary browser sessions and observation
+helpers were removed. The pre-existing tool symlinks were kept.
+
+Required workspace/package typecheck: PASS. The separate strict demo-script
+check first found an optional assistant id that TypeScript could not narrow.
+Commit `4971d53d9` splits the existing validation into presence and personal-id
+checks. It accepts the same ids and changes no request or retry behaviour.
+The focused strict check then passed. Preparation tests passed twice more:
+three tests each, 3.131 / 3.131 seconds. This is the final source-code commit.
+
+Full lint: PASS, including dependency rules, knip, Markdown, links, fixture checks,
+reviewed component licences and changelog validation. ESLint reported zero errors
+and 23 warnings. An earlier lint process was paused during live work and replaced
+with this complete run after cleanup. `git diff --check`: PASS.
+
+The source checks are green; live qualification remains PARTIAL as recorded
+above. GitHub CI on the final pushed commit is reported on the pull request.
