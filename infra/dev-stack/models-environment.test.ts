@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkProviderMode, modelsEnvironment } from './models-environment.ts';
+import { checkProviderMode, modelsEnvironment, startupCeilings } from './models-environment.ts';
 
 function checksBothModes() {
   const inherited = { MODEL_KEY_FILE: '/must-not-survive/.keys/provider', MODEL_UPSTREAM: 'local' };
@@ -49,3 +49,22 @@ function isolatesSavedMode() {
   assert.throws(stubToReal, /Provider mode change requires a fresh stack/u);
 }
 test('repeat startup refuses changing the saved provider mode', isolatesSavedMode);
+
+function boundsPaidStartup() {
+  assert.deepEqual(startupCeilings(true, '600'), {
+    ceilingCents: 600, dailyCeilingCents: 600,
+  });
+  assert.deepEqual(startupCeilings(true, undefined), {
+    ceilingCents: 2000, dailyCeilingCents: 2000,
+  });
+  assert.deepEqual(startupCeilings(false, undefined), {
+    ceilingCents: 20000, dailyCeilingCents: 4000,
+  });
+  for (const allowance of ['', '0', '-1', '600.5', '2001', 'invalid']) {
+    function invalidAllowance() {
+      startupCeilings(true, allowance);
+    }
+    assert.throws(invalidAllowance, /Invalid demo allowance/u);
+  }
+}
+test('paid startup applies the approved allowance before provider verification', boundsPaidStartup);
