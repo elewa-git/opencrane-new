@@ -43,7 +43,7 @@ export function choicesDifferentFromSaved(
   return keptChoices;
 }
 
-function hasName(name: string): (tool: Tool) => boolean {
+export function hasName(name: string): (tool: Tool) => boolean {
   return (tool) => tool.name === name;
 }
 

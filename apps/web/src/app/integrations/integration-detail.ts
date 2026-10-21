@@ -1,6 +1,8 @@
 import { canReviewUnpublished } from '../tool-policy/tool-policy-choices';
 import { isReadyPublication, isRecord, isOlderPublication, savedSequence }
   from './publication-ready';
+import { isPublicationIdentifier, readStoredPublication, removeStoredPublication, storePublication }
+  from './publication-reference';
 import { AddFlowSteps } from './add-flow-steps';
 import { InitialReviewConfirmation } from './initial-review-confirmation';
 import {
@@ -440,7 +442,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       return;
     }
     const reference = status['changeRef'];
-    if (typeof reference !== 'string' || !publicationIdentifier.test(reference)) {
+    if (!isPublicationIdentifier(reference)) {
       this.changeState.set('failed');
       return;
     }
@@ -494,36 +496,6 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   private focusHeaderRefreshAfterMessageRetry(): void {
     if (!this.refreshing()) return;
     requestAnimationFrame(focusHeaderRefresh);
-  }
-}
-
-const publicationStoragePrefix = 'integration-publication:';
-const publicationIdentifier = /^[\w-]{1,200}$/u;
-
-export function readStoredPublication(serverId: string): string {
-  try {
-    const stored = sessionStorage.getItem(publicationStoragePrefix + serverId);
-    if (stored && publicationIdentifier.test(stored)) return stored;
-    if (stored !== null) removeStoredPublication(serverId);
-  } catch {
-    // Keep the page usable when browser storage is blocked.
-  }
-  return '';
-}
-
-function storePublication(serverId: string, commandId: string): void {
-  try {
-    sessionStorage.setItem(publicationStoragePrefix + serverId, commandId);
-  } catch {
-    // Keep the reference in memory while this page is open.
-  }
-}
-
-function removeStoredPublication(serverId: string): void {
-  try {
-    sessionStorage.removeItem(publicationStoragePrefix + serverId);
-  } catch {
-    // The page still clears its in-memory reference.
   }
 }
 

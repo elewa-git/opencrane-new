@@ -1,9 +1,10 @@
-import { IntegrationDetail, readStoredPublication } from '../integrations/integration-detail';
+import { IntegrationDetail } from '../integrations/integration-detail';
+import { readStoredPublication } from '../integrations/publication-reference';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import { IntegrationsAccessLost } from '../integrations/integrations-access-lost';
 import { AddFlowSteps } from '../integrations/add-flow-steps';
 import {
-  initialToolPolicy, canReviewUnpublished, initialModeDisabled, TOOL_MODE_OPTIONS,
+  initialToolPolicy, canReviewUnpublished, initialModeDisabled, hasName, TOOL_MODE_OPTIONS,
   choicesDifferentFromSaved,
   choicesForCurrentTools,
   choicesWithout,
@@ -100,9 +101,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     return initialToolPolicy(this.policy());
   }
 
-  protected canReviewUnpublished(): boolean {
-    return canReviewUnpublished(this.policy());
-  }
+  protected readonly canReviewUnpublished = canReviewUnpublished;
 
   protected modeDisabled(tool: Tool, mode: ToolMode): boolean {
     return mode !== 'block' && initialModeDisabled(this.policy(), tool.name);
@@ -556,8 +555,4 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     const heading = this.document.querySelector<HTMLElement>('#integration-access-heading');
     heading?.focus();
   };
-}
-
-function hasName(name: string): (tool: Tool) => boolean {
-  return (tool) => tool.name === name;
 }
