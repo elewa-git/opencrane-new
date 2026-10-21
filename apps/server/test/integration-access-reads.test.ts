@@ -3,7 +3,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
+import { grantRevokedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { event, natsFixture } from '@opencrane/event-store/testing';
+import { MemberAccessRefused, readActiveMember } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { groups, members, modelAccess, pgDb, ProjectionRunner,
   rebuildModelAccessProjection, rebuildMemberProjection } from '@opencrane/projections';
@@ -171,7 +173,8 @@ async function labelsDepartedGrantHolderAfterReplay() {
     const teams = await get(`${path}/candidates?kind=team`);
     expect(teams.json()).toMatchObject({ rows: [{ id: 'sales', memberCount: 0 }] });
     expect((await auth.check('bob', 'member')).allowed).toBe(false);
-    expect((await auth.use('person', 'bob', 'mcp_server', 'fixture')).allowed).toBe(false);
+    await expect(readActiveMember(nats.store, auth.binding, 'bob'))
+      .rejects.toThrow(MemberAccessRefused);
     const position = await nats.store.head();
     await rebuildModelAccessProjection(database, nats.reader, logger, { verify: true });
     await rebuildMemberProjection(database, nats.reader, logger, { verify: true });
@@ -182,7 +185,8 @@ async function labelsDepartedGrantHolderAfterReplay() {
     const replayed = after.json<{ loadedAt: string }>();
     expect({ ...replayed, loadedAt: original.loadedAt }).toEqual(original);
     expect((await auth.check('bob', 'member')).allowed).toBe(false);
-    expect((await auth.use('person', 'bob', 'mcp_server', 'fixture')).allowed).toBe(false);
+    await expect(readActiveMember(nats.store, auth.binding, 'bob'))
+      .rejects.toThrow(MemberAccessRefused);
     expect(await nats.store.head()).toBe(position);
   } finally {
     await append('member-bob', 'member.joined', { memberId: 'bob', role: 'member',
@@ -221,6 +225,63 @@ async function reportsLagAndReplays() {
   expect(await nats.store.head()).toBe(position);
 }
 it('keeps pending revokes visible, omits departed choices and restores equal reads by replay', reportsLagAndReplays);
+
+function foreignGrantEvent(record: EventEnvelope): EventEnvelope {
+  return { ...record, silo: 'foreign' };
+}
+
+function wrongGrantEventType(record: EventEnvelope): EventEnvelope {
+  return { ...record, type: 'member.removed' };
+}
+
+function differentGrantHolder(record: EventEnvelope): EventEnvelope {
+  const fields = grantRevokedDataSchema.parse(record.data);
+  return { ...record, data: { ...fields, granteeId: 'another-person' } };
+}
+
+async function refusesMismatchedGrantEvent(change: (record: EventEnvelope) => EventEnvelope) {
+  const revoke = await append(subject, 'grant.revoked', { resourceType: 'mcp_server',
+    resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', revokedBy: 'owner' });
+  await project();
+  expect((await get()).statusCode).toBe(200);
+  const read = nats.store.readStream.bind(nats.store);
+  let replacements = 0;
+  // Simulate a damaged referenced event while keeping its id and position unchanged.
+  nats.store.readStream = async function* mismatched(stream, from, deadline) {
+    for await (const row of read(stream, from, deadline)) {
+      if (stream === subject && row.event.id === revoke.id) {
+        replacements += 1;
+        yield { ...row, event: change(row.event) };
+      } else {
+        yield row;
+      }
+    }
+  };
+  try {
+    const response = await get();
+    expect(replacements).toBe(1);
+    expect(response.statusCode, response.body).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(response.headers['cache-control']).toBe('no-store');
+  } finally {
+    nats.store.readStream = read;
+  }
+}
+
+async function refusesForeignGrantEvent() {
+  await refusesMismatchedGrantEvent(foreignGrantEvent);
+}
+it('refuses a referenced grant event from another silo', refusesForeignGrantEvent);
+
+async function refusesWrongGrantEventType() {
+  await refusesMismatchedGrantEvent(wrongGrantEventType);
+}
+it('refuses a referenced event with a non-grant event type', refusesWrongGrantEventType);
+
+async function refusesDifferentGrantHolder() {
+  await refusesMismatchedGrantEvent(differentGrantHolder);
+}
+it('refuses a referenced grant event for a different grantee', refusesDifferentGrantHolder);
 
 async function slowReadSurvivesChatActivity() {
   const query = database.query.bind(database);
