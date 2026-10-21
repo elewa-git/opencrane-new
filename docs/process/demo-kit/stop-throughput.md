@@ -290,7 +290,7 @@ rebased source. Final pushed-head CI is reported in the PR.
 ### Saved id correction and replay checks
 
 21 October 2026. Source `aeae092510`; fix `a76e493a9`; test-first commit `891657eb0`.
-Environment: the existing development worktree, Node 22, disposable real NATS
+Environment: the existing development worktree, Node 22.23.3, disposable real NATS
 and loopback WebSockets. This was not a fresh installation. No live stack,
 provider call or runtime image build was used for this correction.
 
@@ -321,7 +321,7 @@ Files: server `chat-summary.test.ts` and `chat-summary-memory.test.ts`; computer
 `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; these selected
 files require no PostgreSQL fixture. Safe local logs are
 `/tmp/demo-stop-close-red.log`, `/tmp/demo-stop-close-mutation-*.log` and
-`/tmp/demo-stop-close-green-final-{1,2}.log`.
+`/tmp/demo-stop-close-green-rebased-{1,2}.log`.
 
 PASS: event catalogue check, with 149 event types agreeing.
 NOT RUN: full root suite locally, live qualification, new image and paid calls.
@@ -333,5 +333,11 @@ and changelog checks; full workspace and package typecheck. Both ran under
 `nice -n 10`. The first lint attempt refused an unsafe type assertion in the new
 socket fixture. The fixture now uses the existing object parser; every report
 assertion is unchanged. The final lint and typecheck logs are
-`/tmp/demo-stop-close-lint-final.log` and `/tmp/demo-stop-close-typecheck-final.log`.
+`/tmp/demo-stop-close-lint-rebased.log` and `/tmp/demo-stop-close-typecheck-rebased.log`.
 The PR comment records CI for the pushed commit, including its `ci-ok` result.
+
+PASS: rebased only this branch's 13 commits onto the updated #549 source
+`0b1414804`. The first attempt to rebase normally tried to replay the old base's
+commits and was aborted. Rebasing from the original base `cae9e5b4e` then finished
+cleanly. `git range-diff` confirmed all 13 commits were unchanged. The focused
+tests passed twice and full typecheck passed again on the rebased source.
