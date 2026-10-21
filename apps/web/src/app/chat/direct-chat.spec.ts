@@ -2315,7 +2315,7 @@ async function subscribesOnceAfterSending(): Promise<void> {
   const socketCount = api.sockets.length;
   expect(api.sentSocketMessages).toHaveLength(1);
   enterMessage(fixture, 'Confirm the delivery');
-  await waitForText(fixture, 'Message recorded.');
+  await waitForText(fixture, 'Saved. Refresh to read it in the transcript.');
   await settle(fixture);
   expect(api.sockets).toHaveLength(socketCount);
   expect(api.sentSocketMessages).toHaveLength(1);
