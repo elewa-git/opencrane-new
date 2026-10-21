@@ -46,3 +46,25 @@ async function refusesUnsafeSlots() {
   }
 }
 test('smoke refuses missing, owner and invalid slots before loading settings', refusesUnsafeSlots);
+
+async function requiresCurrentRefusal() {
+  const { chromium } = await import('playwright');
+  const { demoRefusal } = await import('./demo-browser.ts');
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(100);
+    const old = '<article>Earlier attempt</article><article><oc-budget-stop-notice>' +
+      'Company limit reached</oc-budget-stop-notice></article>';
+    const current = '<article>This attempt</article>';
+    await page.setContent(old + current + '<article>Still waiting</article>');
+    await assert.rejects(demoRefusal(page, 'This attempt'));
+    const refused = '<article><oc-budget-stop-notice>Company limit reached' +
+      '</oc-budget-stop-notice></article>';
+    await page.setContent(old + current + refused);
+    await demoRefusal(page, 'This attempt');
+  } finally {
+    await browser.close();
+  }
+}
+test('current budget refusal cannot pass by matching an earlier saved refusal', requiresCurrentRefusal);
