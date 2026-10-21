@@ -622,7 +622,7 @@ try {
       throw new Error('Invalid startup options');
     }
     if (!secondary && (process.env['DEV_REAL_PROVIDER_FILE'] !== undefined || ownerRun ||
-        process.env['OPENCRANE_FLEET_TASK'] !== undefined)) {
+        !process.stdin.isTTY || process.env['OPENCRANE_FLEET_TASK'] !== undefined)) {
       requireOwnerRun(ownerRun);
     }
   } else if (flags.length > 1 || (flag && action !== 'package-up')) {

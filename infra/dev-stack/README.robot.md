@@ -733,8 +733,9 @@ The owner can use `up.sh --id owner --owner-run --fresh` with the same file-path
 setting, after the runbook's fresh-install prerequisites are met. Every owner real
 start requires the explicit flag, TTY stdin and no `OPENCRANE_FLEET_TASK` variable.
 The guard runs before reading or creating the owner directory. Fleet-marked owner
-starts are refused even without a real-provider setting. Unmarked owner stand-in
-starts retain their existing behaviour. `--owner-run` is refused for secondary ids.
+starts are refused even without a real-provider setting, as are all headless owner
+starts. Unmarked interactive owner stand-in starts retain their existing behaviour.
+`--owner-run` is refused for secondary ids.
 Real owner startup skips the stand-in process; startup and status do not require it.
 The owner models process already runs on the host and uses its existing certificate store.
 The owner command has not been run live; tests replace system commands in a temporary home.

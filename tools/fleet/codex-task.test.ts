@@ -16,7 +16,8 @@ async function marksFleetChildren() {
       '  if [ "$1" = -o ]; then shift; printf "fixture" > "$1"; fi\n' +
       '  shift\n' +
       'done\n';
-    await writeFile(`${bin}/codex`, fixture, { mode: 0o755 });
+    const executable = { mode: 0o755 };
+    await writeFile(`${bin}/codex`, fixture, executable);
     const prompt = `${directory}/prompt.md`;
     await writeFile(prompt, 'Synthetic fixture; no task runs.');
     for (const inherited of [undefined, 'parent-task', '']) {
@@ -35,7 +36,8 @@ async function marksFleetChildren() {
       assert.equal(marker, inherited ?? 'fixture');
     }
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    const cleanup = { recursive: true, force: true };
+    await rm(directory, cleanup);
   }
 }
 
