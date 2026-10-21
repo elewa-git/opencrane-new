@@ -158,3 +158,110 @@ test('daily fresh removes known secrets and credential patterns from every retai
   removesSecrets);
 test('daily fresh withholds logs when its secret files cannot be read correctly',
   withholdsUnsanitisedLogs);
+
+async function nightlyFixture(claim: string, fail = false) {
+  const home = await mkdtemp(`${tmpdir()}/daily-fresh-groups-`);
+  const scripts = `${home}/checkout/infra/dev-stack`;
+  await mkdir(scripts, { recursive: true });
+  await copyFile('infra/dev-stack/daily-fresh.sh', `${scripts}/daily-fresh.sh`);
+  await chmod(`${scripts}/daily-fresh.sh`, 0o755);
+  await symlink(resolve('infra/dev-stack/sanitise-evidence.mjs'),
+    `${scripts}/sanitise-evidence.mjs`);
+  await writeFile(`${scripts}/claim.sh`, `#!/bin/sh\necho '${claim}'\n`, { mode: 0o755 });
+  const start = `#!/bin/sh
+printf '%s\\n' "$P4_JOURNEY_ATTEMPT" >> "${home}/attempts"
+[ "$DEV_STACK_ID" = '${claim}' ] || exit 8
+[ -z "\${DEV_REAL_PROVIDER_FILE+x}" ] || exit 9
+[ -z "\${DEV_REAL_PROVIDER+x}" ] || exit 9
+[ -z "\${MODEL_KEY_FILE+x}" ] || exit 9
+[ -z "\${DEMO_ALLOWANCE_CENTS+x}" ] || exit 9
+[ -n "$P4_JOURNEY_ATTEMPT" ] || exit 10
+slot="${home}/.config/opencrane/dev-stack-$DEV_STACK_ID"
+output="$slot/p4-journey/$P4_JOURNEY_ATTEMPT/group-chat"
+mkdir -p "$output"
+printf '{"assertions":[{"status":"FAIL"}]}\\n' > "$output/../receipt.json"
+printf 'fixture-picture' > "$output/group-messages-390.png"
+exit ${fail ? 1 : 0}
+`;
+  await writeFile(`${scripts}/up.sh`, start, { mode: 0o755 });
+  const down = `#!/bin/sh
+printf '%s\\n' "$*" >> "${home}/cleanup"
+rm -rf "${home}/.config/opencrane/dev-stack-${claim}"
+`;
+  await writeFile(`${scripts}/down.sh`, down, { mode: 0o755 });
+  await writeFile(`${home}/paid-canary`, 'ordinary group text');
+  const environment = {
+    ...process.env,
+    HOME: home,
+    P4_JOURNEY_ATTEMPT: '../inherited-attempt',
+    DEV_REAL_PROVIDER_FILE: `${home}/paid-canary`,
+    DEV_REAL_PROVIDER: '1',
+    MODEL_KEY_FILE: `${home}/paid-canary`,
+    ZITADEL_KEY_FILE: `${home}/disposable-identity-key`,
+    DEMO_ALLOWANCE_CENTS: '2000',
+  };
+  await writeFile(environment.ZITADEL_KEY_FILE, 'disposable identity fixture');
+  return { home, command: `${scripts}/daily-fresh.sh`, options: { env: environment } };
+}
+
+async function namesNightlyAttempts() {
+  const fixture = await nightlyFixture('2');
+  try {
+    await exec(fixture.command, fixture.options);
+    await exec(fixture.command, fixture.options);
+    const attempts = (await readFile(`${fixture.home}/attempts`, 'utf8')).trim().split('\n');
+    assert.equal(attempts.length, 2);
+    assert.notEqual(attempts[0], attempts[1]);
+    for (const attempt of attempts) assert.match(attempt, /^nightly-[a-zA-Z0-9-]+$/u);
+    const cleanup = await readFile(`${fixture.home}/cleanup`, 'utf8');
+    assert.equal(cleanup, '--id 2\n--id 2\n');
+    const ledger = await readFile(`${fixture.home}/.opencrane/daily-fresh/ledger.md`, 'utf8');
+    for (const attempt of attempts) assert.ok(ledger.includes(attempt));
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+
+async function retainsFailedGroupJourney() {
+  const fixture = await nightlyFixture('1', true);
+  try {
+    await assert.rejects(exec(fixture.command, fixture.options));
+    const attempt = (await readFile(`${fixture.home}/attempts`, 'utf8')).trim();
+    const ledger = `${fixture.home}/.opencrane/daily-fresh`;
+    const entries = await readdir(ledger);
+    function isEvidence(entry: string) { return entry !== 'ledger.md'; }
+    const evidence = entries.find(isEvidence);
+    assert.ok(evidence);
+    const output = `${ledger}/${evidence}/p4-journey/${attempt}`;
+    const receipt = await readFile(`${output}/receipt.json`, 'utf8');
+    assert.equal(receipt, '{"assertions":[{"status":"FAIL"}]}\n');
+    assert.equal(await readFile(`${output}/group-chat/group-messages-390.png`, 'utf8'),
+      'fixture-picture');
+    assert.equal((await stat(`${output}/receipt.json`)).mode & 0o777, 0o600);
+    const line = await readFile(`${ledger}/ledger.md`, 'utf8');
+    assert.match(line, /FAIL/u);
+    assert.match(line, /up.sh --fresh/u);
+    await assert.rejects(stat(`${fixture.home}/.config/opencrane/dev-stack-1`),
+      { code: 'ENOENT' });
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+
+async function refusesUnsafeCleanup() {
+  for (const claim of ['owner', '3', '1 extra']) {
+    const fixture = await nightlyFixture(claim);
+    try {
+      await assert.rejects(exec(fixture.command, fixture.options));
+      await assert.rejects(stat(`${fixture.home}/attempts`), { code: 'ENOENT' });
+      await assert.rejects(stat(`${fixture.home}/cleanup`), { code: 'ENOENT' });
+    } finally {
+      await rm(fixture.home, { recursive: true, force: true });
+    }
+  }
+}
+
+test('nightly names each free group journey and cleans only its claimed id', namesNightlyAttempts);
+test('nightly propagates a failed group journey and retains its receipt before cleanup',
+  retainsFailedGroupJourney);
+test('nightly never cleans an invalid claim', refusesUnsafeCleanup);
