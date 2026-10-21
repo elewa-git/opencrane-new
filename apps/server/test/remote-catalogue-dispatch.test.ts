@@ -257,8 +257,10 @@ async function refreshesShortTtl() {
       return remote.calls.length;
     }
     await expect.poll(captureCount).toBe(calls + refresh * 2);
+    await watch.check();
     async function saved() {
       const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+      expect(policy.checkedAt).toBe(new Date().toISOString());
       expect(Date.parse(policy.expiresAt!)).toBeGreaterThan(Date.now());
     }
     await expect.poll(saved).toBeUndefined();
