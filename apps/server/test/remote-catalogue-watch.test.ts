@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { databases } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history, readToolPolicy } from '@opencrane/models';
@@ -90,8 +91,8 @@ async function lateRegistration() {
   await setup.register('late');
   expectHeld(watch, 'late');
   const first = watch.check();
-  expect(watch.check()).toBe(first);
-  await first;
+  const concurrent = watch.check();
+  await Promise.all([first, concurrent]);
   watch.requireCurrent('late');
   expect(setup.remote.calls).toHaveLength(2);
   const before = await readToolPolicy(setup.nats.store, 'test', 'late');
@@ -123,7 +124,14 @@ async function boundedRows() {
   for (let index = 0; index < 33; index++) {
     await setup.register(`server-${String(index).padStart(2, '0')}`);
   }
+  const failed = vi.fn();
+  const polling = setInterval(setup.watch.tick, 100, failed);
+  function stopPolling() {
+    clearInterval(polling);
+  }
+  onTestFinished(stopPolling);
   await setup.watch.check();
+  expect(failed).not.toHaveBeenCalled();
   setup.watch.requireCurrent('server-00');
   expectHeld(setup.watch, 'server-32');
   expectHeld(setup.watch, 'foreign');
@@ -160,44 +168,23 @@ async function heldWatch(mode: 'zero' | 'drift' | 'cost' | 'details' | 'leader' 
 it.each(['zero', 'drift', 'cost', 'details', 'leader', 'restart'] as const)(
   'keeps remote calls held after %s', heldWatch);
 
-async function unavailableRows(mode: 'failed' | 'rows' | 'leader') {
+async function unavailableRows() {
   const setup = await fixture();
   await setup.register('held');
   await setup.watch.check();
   const before = await readToolPolicy(setup.nats.store, 'test', 'held');
-  const query = setup.db.query.bind(setup.db);
-  const rows = await query('SELECT silo, server_id, source_kind FROM mcp_catalogue');
-  const waiting = Promise.withResolvers<typeof rows>();
   const reader = vi.spyOn(setup.db, 'query');
-  if (mode === 'leader') {
-    setup.requireLeader.mockReturnValue(waiting.promise);
-  } else if (mode === 'rows') {
-    reader.mockReturnValue(waiting.promise);
-  } else {
-    reader.mockRejectedValue(new Error('ROW_SECRET_CANARY'));
-  }
-  const checking = setup.watch.check();
-  const refused = expect(checking).rejects.toThrow('Catalogue rows unavailable');
-  if (mode !== 'failed') {
-    await Promise.resolve();
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(Date.now() + 5001);
-    expectHeld(setup.watch, 'held');
-    waiting.resolve(rows);
-  }
-  await refused;
+  reader.mockRejectedValue(new Error('ROW_SECRET_CANARY'));
+  await expect(setup.watch.check()).rejects.toThrow('Catalogue rows unavailable');
   expectHeld(setup.watch, 'held');
   reader.mockRestore();
-  setup.requireLeader.mockResolvedValue(undefined);
   await setup.watch.check();
   const after = await readToolPolicy(setup.nats.store, 'test', 'held');
   expect(after.policyRevision).toBeGreaterThan(before.policyRevision);
   const saved = await history(setup.nats.store, 'mcp-held', 'test');
   expect(JSON.stringify(saved)).not.toContain('ROW_SECRET_CANARY');
 }
-it.each(['failed', 'rows', 'leader'] as const)(
-  'invalidates old approvals after an unavailable row or leader check: %s',
-  unavailableRows);
+it('invalidates old approvals after a row-read failure', unavailableRows);
 
 async function failedDriftAppend() {
   const setup = await fixture();
@@ -208,7 +195,8 @@ async function failedDriftAppend() {
   vi.setSystemTime(Date.now() + 270_000);
   const append = setup.nats.store.append.bind(setup.nats.store);
   async function refuseDrift(command: Parameters<typeof append>[0]) {
-    if (Reflect.get(command.event as object, 'type') === 'mcp.tools_changed') {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'mcp.tools_changed') {
       expectHeld(setup.watch, 'held');
       throw new Error('Store unavailable');
     }
@@ -227,3 +215,13 @@ async function failedDriftAppend() {
   expectHeld(setup.watch, 'held');
 }
 it('keeps an unsaved drift hold through row removal and an unchanged recapture', failedDriftAppend);
+
+async function refusesWildcardRow() {
+  const setup = await fixture();
+  await setup.register('held');
+  await setup.db.query("UPDATE mcp_catalogue SET server_id = '*'");
+  const reader = vi.spyOn(setup.nats.store, 'readStream');
+  await expect(setup.watch.check()).rejects.toThrow('Catalogue rows unavailable');
+  expect(reader).not.toHaveBeenCalled();
+}
+it('refuses a wildcard catalogue id before reading event history', refusesWildcardRow);

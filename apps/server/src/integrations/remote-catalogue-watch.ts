@@ -5,14 +5,16 @@ import { z } from 'zod';
 import { discoverInventory } from './inventory.ts';
 import { remoteRequest, type RemoteNetwork } from './remote.ts';
 
-const candidate = z.object({ silo: z.string(), server_id: z.string(), source_kind: z.literal('remote') });
-const registration = z.object({ serverId: z.string(), kind: z.literal('remote'), locator: z.string() });
+const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const candidate = z.object({ silo: z.string(), server_id: identifier,
+  source_kind: z.literal('remote') });
+const registration = z.object({ serverId: identifier, kind: z.literal('remote'),
+  locator: z.string() });
 
 export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
   requireLeader: () => Promise<void>, network: RemoteNetwork = {}) {
   let stopped = false;
-  let active: Promise<void> | undefined;
-  let rowsExpireAt = 0;
+  let active: Promise<string[]> | undefined;
   let nextRead = 0;
   async function capture(serverId: string, signal: AbortSignal) {
     const rows = await history(store, `mcp-${serverId}`, silo, performance.now() + 30_000);
@@ -38,16 +40,12 @@ export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
 
   async function reconcile() {
     let serverIds: string[];
-    if (rowsExpireAt > 0 && rowsExpireAt <= Date.now()) {
-      watch.reconcile([]);
-    }
     try {
-      const startedAt = Date.now();
       await requireLeader();
       const result = await db.query(`SELECT silo, server_id, source_kind FROM mcp_catalogue
         WHERE silo = $1 AND source_kind = 'remote' AND tool_count IS NOT NULL
         ORDER BY server_id LIMIT 32`, [silo]);
-      if (stopped || Date.now() - startedAt >= 2000) {
+      if (stopped) {
         throw new Error('Catalogue rows unavailable');
       }
       serverIds = [];
@@ -59,14 +57,15 @@ export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
         serverIds.push(row.server_id);
       }
       watch.reconcile(serverIds);
-      rowsExpireAt = Date.now() + 5000;
     } catch {
-      rowsExpireAt = 0;
       watch.reconcile([]);
       throw new Error('Catalogue rows unavailable');
     }
+    return serverIds;
+  }
+  function checkServers(serverIds: string[]) {
     const checks = serverIds.map(watch.checkDue);
-    await Promise.all(checks);
+    return Promise.all(checks);
   }
   function finished() {
     active = undefined;
@@ -76,26 +75,20 @@ export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
     if (stopped) {
       return Promise.reject(new Error('Catalogue watch stopped'));
     }
-    active ??= reconcile().finally(finished);
-    return active;
+    if (!active) {
+      const reading = reconcile();
+      active = reading.finally(finished);
+    }
+    return active.then(checkServers);
   }
   function tick(onError: (error: unknown) => void) {
     if (!stopped && !active && Date.now() >= nextRead) {
       void check().catch(onError);
     }
   }
-  function requireCurrent(serverId: string) {
-    if (rowsExpireAt <= Date.now()) {
-      // Keep a stalled row reader closed and invalidate approvals before later recovery.
-      watch.reconcile([]);
-      throw new Error('Catalogue rows unavailable');
-    }
-    watch.requireCurrent(serverId);
-  }
   function close() {
     stopped = true;
-    rowsExpireAt = 0;
     watch.close();
   }
-  return { check, tick, requireCurrent, close };
+  return { check, tick, requireCurrent: watch.requireCurrent, close };
 }

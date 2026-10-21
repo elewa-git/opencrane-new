@@ -46,7 +46,8 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
 
   function checkDue(serverId: string) {
     const state = servers.get(serverId);
-    if (!state || !state.monitored || state.failures >= 3 || Date.now() < state.nextCheck) {
+    if (!state || !state.monitored || state.active || state.failures >= 3 ||
+        Date.now() < state.nextCheck) {
       return Promise.resolve();
     }
     return check(serverId);

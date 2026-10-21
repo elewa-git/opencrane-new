@@ -2849,8 +2849,8 @@ this part. Fresh-install qualification and paid calls are NOT RUN.
 `models-main.ts` runs `remoteCatalogueWatch` under the budget leader. It polls at most
 32 discovered remote catalogue rows in this silo, ordered by server id, once per second.
 Registrations without discovery wait for the installer. Missing and overflow rows refuse calls.
-The existing PostgreSQL timeout is one second. Replies older than two seconds are rejected;
-five seconds without a completed row read holds calls even if the reader or timer stalls.
+The existing PostgreSQL timeout is one second. Failed reads hold calls. Membership polls
+continue while captures run; a stalled worker cannot extend saved catalogue expiry.
 
 Event history supplies the saved locator and credential-free connection. `remoteRequest`
 and `discoverInventory` check public DNS, pin addresses and verify hostname TLS. Production
