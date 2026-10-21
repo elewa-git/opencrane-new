@@ -337,6 +337,7 @@ A lost reply can be checked after restart with current rights, without another c
 ## Processes it handles
 
 The server combines small pieces of the same streamed reply before saving them.
+It gives Stop priority over progress waiting to be saved.
 It acknowledges each piece only after the combined text is saved.
 
 An admin saves one remote tool grant. After a lost reply, they check the original reference.

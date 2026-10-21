@@ -4,6 +4,7 @@ import { readStreamSummary, readEventAt, type SummaryKind,
 import { chatIdSchema, groupConversationCommandSchema,
   conversationCreatedDataSchema, getEventDefinition } from '@opencrane/events';
 import { participationClosed } from './participation.ts';
+import { chatWrite } from './write-priority.ts';
 import type { conversationKeys } from './keys.ts';
 
 const id = chatIdSchema;
@@ -127,6 +128,17 @@ export async function chatCommand(
   value: unknown, fresh?: (operation: 'retry' | 'append') => Promise<number>,
 ) {
   const input = chatInput.parse(value);
+  const save = saveChatCommand.bind(null, store, keys, context, input, fresh);
+  if ('stopTurnId' in input) {
+    return chatWrite(store, `conversation-${input.conversationId}`, 'stop', save);
+  }
+  return save();
+}
+
+async function saveChatCommand(
+  store: Store, keys: ReturnType<typeof conversationKeys>, context: Context,
+  input: Input, fresh?: (operation: 'retry' | 'append') => Promise<number>,
+) {
   const subject = `conversation-${input.conversationId}`;
   function take(summary: Commands, sequence: number) {
     return { created: summary.created, closed: summary.closed,

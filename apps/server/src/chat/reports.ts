@@ -9,6 +9,7 @@ import { readEventAt, readStreamSummary, type AppendCommand, type EventStore, ty
 import { readEvents } from '@opencrane/projections';
 import { readChatFacts } from './chat-summary.ts';
 import type { conversationKeys } from './keys.ts';
+import { chatWrite } from './write-priority.ts';
 
 // Permanent refusals need operator attention; reconnecting cannot repair them.
 export class ReportRejected extends Error {}
@@ -157,7 +158,8 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
       ...(preceding ? { preceding } : {}) }, data,
   };
   const command: AppendCommand = { expectedSequence: facts.sequence, historyChecked: true, event };
-  const result = await store.append(command);
+  const append = store.append.bind(store, command);
+  const result = await chatWrite(store, subject, 'report', append);
   if (result.status === 'conflict' && performance.now() < deadline) {
     // Reload after a competing Stop or message. Never repeat an uncertain append.
     return recordReport(store, keys, context, value, batch, deadline);

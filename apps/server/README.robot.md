@@ -3487,6 +3487,9 @@ stay separate. One conditional append saves encrypted combined text and each ori
 sequence and digest. Only then does the bridge acknowledge every included report.
 Replay checks original digests even when it arrives in different groups. A definite
 append conflict reloads history within ten seconds; uncertain writes are not resubmitted.
+Stop waits only for report appends already running, then holds new report appends
+until its history and access checks and single conditional append finish. This
+priority is local to the server process; conditional appends still decide conflicts.
 Access, turn admission, reservations and memory checks keep their existing paths.
 `bridge-throughput.test.ts` drives 2,700 reports through a real socket and NATS,
 checks a competing Stop append, replay identity and recovered text.
