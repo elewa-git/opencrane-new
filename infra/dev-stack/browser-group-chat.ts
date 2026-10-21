@@ -339,7 +339,7 @@ function isKnownConversation(ids: Set<string>, row: ConversationRow): boolean {
   return ids.has(row.conversationId);
 }
 
-async function readConversations(page: Page, origin: string): Promise<ConversationRow[]> {
+export async function readConversations(page: Page, origin: string): Promise<ConversationRow[]> {
   const response = await page.request.get(`${origin}/api/conversations`);
   assert.equal(response.status(), 200);
   const body = await response.json() as { rows: ConversationRow[] };

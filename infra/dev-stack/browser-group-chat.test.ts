@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import type { Page } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
 import { waitForSharedAssistantReply, type Phase4Assertion } from './browser-phase4.ts';
-import { browserGroupChat } from './browser-group-chat.ts';
+import { browserGroupChat, readConversations } from './browser-group-chat.ts';
 
 async function propagatesAnIncompleteJourney() {
   const directory = await mkdtemp(`${tmpdir()}/group-journey-failure-`);
@@ -50,3 +50,26 @@ async function acceptsACompletedRealPrivateReply() {
 
 test('the private shared-session check accepts a completed real answer',
   acceptsACompletedRealPrivateReply);
+
+async function readsTheListAfterARecordedChange() {
+  let reads = 0;
+  const body = { rows: [{ conversationId: 'saved-group', mode: 'group',
+    participantIds: ['owner', 'member'] }] };
+  function status() {
+    return reads === 1 ? 409 : 200;
+  }
+  async function json() {
+    return body;
+  }
+  const response = { status, json };
+  async function get() {
+    reads += 1;
+    return response;
+  }
+  const page = { request: { get } } as unknown as Page;
+  assert.deepEqual(await readConversations(page, 'http://fixture.invalid'), body.rows);
+  assert.equal(reads, 2);
+}
+
+test('the group journey reads again when a recorded message changes the list',
+  readsTheListAfterARecordedChange);
