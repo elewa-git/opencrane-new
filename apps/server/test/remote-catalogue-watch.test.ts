@@ -121,23 +121,32 @@ it('adds late registrations, shares captures, renews beyond five minutes and rem
 async function boundedRows() {
   const setup = await fixture();
   await setup.register('foreign', 'other');
-  for (let index = 0; index < 33; index++) {
+  await setup.register('server-00');
+  await setup.watch.check();
+  for (let index = 1; index < 33; index++) {
     await setup.register(`server-${String(index).padStart(2, '0')}`);
   }
-  const failed = vi.fn();
-  const polling = setInterval(setup.watch.tick, 100, failed);
-  function stopPolling() {
-    clearInterval(polling);
+  // Check the row limit without requiring every candidate to become ready at once.
+  setup.remote.setAnswers(['127.0.0.1']);
+  const reader = vi.spyOn(setup.nats.store, 'readStream');
+  const query = vi.spyOn(setup.db, 'query');
+  await expect(setup.watch.check()).rejects.toThrow();
+  const rowResult = z.object({ rows: z.array(z.unknown()) });
+  const rows = rowResult.parse(await query.mock.results[0]!.value);
+  expect(rows.rows).toHaveLength(32);
+  const subjects = new Set<string>();
+  for (const call of reader.mock.calls) {
+    subjects.add(call[0]);
   }
-  onTestFinished(stopPolling);
-  await setup.watch.check();
-  expect(failed).not.toHaveBeenCalled();
+  expect(subjects.has('mcp-server-31')).toBe(true);
+  expect(subjects.has('mcp-server-32')).toBe(false);
   setup.watch.requireCurrent('server-00');
   expectHeld(setup.watch, 'server-32');
   expectHeld(setup.watch, 'foreign');
   expectHeld(setup.watch, 'missing');
-  expect(setup.remote.calls).toHaveLength(64);
+  expect(setup.remote.calls).toHaveLength(2);
 }
+
 it('bounds same-silo rows and refuses overflow, foreign and missing servers', boundedRows);
 
 async function heldWatch(mode: 'zero' | 'drift' | 'cost' | 'details' | 'leader' | 'restart') {
