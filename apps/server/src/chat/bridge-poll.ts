@@ -8,6 +8,7 @@ import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
 import { agentSession } from './reports.ts';
 import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
+import { agentTurnStopRequestedDataSchema } from '@opencrane/events';
 import {
   assistantSnapshot, processConversation, type ConversationProgress,
   type WatchOptions, type AgentSession,
@@ -193,9 +194,19 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       }
       if (rows.some(isClosed)) return;
       const stops = pendingBudgetStops(rows, assistant.closed);
-      if (!stops.length) return;
+      const requested = [];
+      for (const row of rows) {
+        if (row.event.type !== 'agent.turn_stop_requested') continue;
+        const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
+        if (!('reason' in stop) && !assistant.closed.has(stop.turnId)) requested.push(stop);
+      }
+      if (!stops.length && !requested.length) return;
       const link = await connection(computer.computerId, assistantId);
       sendBudgetStops(link, stops);
+      for (const stop of requested) {
+        const frame = { type: 'stop', turnId: stop.turnId, conversationId: stop.conversationId };
+        link.socket.send(JSON.stringify(frame));
+      }
     } catch {
       // Retry this chat on a later poll without delaying checks for other chats.
     }

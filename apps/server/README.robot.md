@@ -3490,6 +3490,8 @@ append conflict reloads history within ten seconds; uncertain writes are not res
 Stop waits only for report appends already running, then holds new report appends
 until its history and access checks and single conditional append finish. This
 priority is local to the server process; conditional appends still decide conflicts.
+The separate Stop poll sends manual requests as well as spending Stops, without
+waiting for ordinary turn or file delivery.
 Access, turn admission, reservations and memory checks keep their existing paths.
 `bridge-throughput.test.ts` drives 2,700 reports through a real socket and NATS,
 checks a competing Stop append, replay identity and recovered text.
