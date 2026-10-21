@@ -18,7 +18,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews, dated approvals, memory, owners, providers, free reachability, spending and saved call statuses| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews of declared costs and approval details, dated approvals, memory, owners, providers, free reachability, spending and saved call statuses| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses and certificates; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
@@ -92,6 +92,9 @@ It checks access and spending again while a relay is open. Removing access ends 
 Changing another team member's membership leaves a valid relay open.
 Restart recovers saved closure records without reopening connections. Outside networking
 remains switched off while outage and crash handling await qualification.
+
+Tool mode changes require the server’s declared zero cost and approval details
+for both Allow and Ask. Admin review locks those values before a tool can be enabled.
 
 ## What it is responsible for
 

@@ -68,7 +68,9 @@ async function saveIntent(store: ConfigurationStore, serverId: string, changeRef
   if (await store.head(subject) === 0) {
     const definition = '{"inputSchema":{"type":"object"},"name":"read"}';
     const tool = { name: 'read', definition, revision: losslessJson(definition).digest,
-      reviewed: false, costCents: 0 as const };
+      reviewed: false, costCents: 0 as const,
+      review: { action: 'Read a record', consequence: 'Show the record',
+        targetArgument: 'id', fields: ['id'], stepUp: false } };
     const tools = [tool];
     const now = Date.now();
     const catalogue = { serverId, connectionId: `installed-${serverId}`, accountMode: 'none',

@@ -1145,6 +1145,23 @@ uniqueness and only declared string/integer/boolean types. They may appear only
 along a chain of `properties` keys from the input root. Integer argument range
 checks belong to the later call path; discovery never invokes tools.
 
+Discovery reads `_meta['io.opencrane/costCents']` and `_meta['io.opencrane/review']`
+with the discovered-tool event validators. Cost must be exactly zero, including before
+JSON number rounding. Review details use the existing strict action, consequence,
+targetArgument, fields and stepUp schema. Discovery requires an explicit boolean stepUp;
+only saved legacy events retain the false default. Missing declarations stay absent; hints and
+admin choices never supply them. Malformed declarations exclude only that tool with
+`invalid_tool_cost` or `invalid_tool_review`, without validation errors or rejected values.
+The original lossless definition and digest include the declarations. Metadata changes
+therefore invalidate review and hold the whole server through the existing catalogue fold.
+Successful credential-free remote discovery saves `connectionId: installed-<serverId>`
+and `accountMode: none`. Retries and worker restarts retain that saved reference.
+HTTP 401/403 still records `connection_required`, with no personal or company account.
+`test/tool-declarations.test.ts` covers parsing and policy. `test/integrations.test.ts`
+covers register → discovery → tools GET → exact Allow/Ask review and projection rebuild
+through product APIs, using the local TLS fixture and no seeded discovery for that server.
+Fresh-install qualification remains NOT RUN.
+
 Discovery leaves tools blocked and unpublished. Protected servers show Needs input
 until P3-9; publication, grants and calls are outside this ticket. The local HTTPS,
 DNS rebinding and browser fixtures use no external MCP endpoints. Run

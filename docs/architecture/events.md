@@ -589,6 +589,13 @@ later PRs; this change enables no new dispatch path.
 non-metered tool such as the Odoo fixture. An allowed tool with absent cost is
 refused as `unknown_cost`. Discovery hints alone never establish price or access;
 hosted provider tools with unknown prices remain disabled.
+Remote discovery copies cost and approval details from the tool definition’s
+`_meta['io.opencrane/costCents']` and `_meta['io.opencrane/review']`, using the
+existing discovered-tool validators. Missing declarations stay absent. Malformed
+ones exclude only that tool with `invalid_tool_cost` or `invalid_tool_review`.
+The original definition and its digest remain unchanged. Successful credential-free
+remote discovery saves `installed-<serverId>` as its connection reference and `none`
+as its account mode. HTTP 401/403 still requires a connection.
 
 ### Memory
 
@@ -780,7 +787,7 @@ review; legacy events without this field remain readable. See the
 `mcp.server_reviewed` names the exact catalogue digest, connection and account mode.
 Each tool choice names its definition revision, mode and `reviewDigest`. That digest
 covers the saved zero-cost declaration and safe approval details. Allow/Ask requires
-explicit `costCents: 0`; Ask also requires approval details. The command accepts the
+explicit `costCents: 0` and approval details, including for read-only tools. The command accepts the
 current `policyRevision` as a check, rather than letting the caller choose a new revision.
 Discovery never marks review. Review does not grant access or publish a server.
 Restrictions take effect immediately. A wider mode withdraws publication until a later

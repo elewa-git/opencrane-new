@@ -1,7 +1,8 @@
 import type { AppendCommand } from '@opencrane/event-store';
 import { Writable } from 'node:stream';
 import { prepareGatewayConfiguration, gatewayConfigurationCurrent, publicationEntry, envelope } from '@opencrane/models';
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { toolPolicySchema } from '@opencrane/protocol';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { remoteFixture } from '@opencrane/models/testing/remote-mcp';
@@ -535,11 +536,13 @@ async function prepareReviewedOdooCatalogue(reviewed = true) {
   const readDefinition = losslessJson(
     '{"name":"read","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}');
   const writeDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
+  const review = { action: 'Use a record', consequence: 'Return the saved record',
+    targetArgument: 'id', fields: ['id'], stepUp: false };
   const tools = [
     { name: 'read', revision: readDefinition.digest, definition: readDefinition.canonical,
-      reviewed: true, readOnly: true, costCents: 0 },
+      reviewed: true, readOnly: true, costCents: 0, review },
     { name: 'write', revision: writeDefinition.digest, definition: writeDefinition.canonical,
-      reviewed: true, readOnly: false, costCents: 0 },
+      reviewed: true, readOnly: false, costCents: 0, review },
   ];
   const checkedAt = new Date().toISOString();
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
@@ -549,7 +552,7 @@ async function prepareReviewedOdooCatalogue(reviewed = true) {
   if (reviewed) {
     const state = await catalogue.tools('test', 'odoo');
     function choice(tool: typeof tools[number]) {
-      const evidence = { costCents: tool.costCents, review: null };
+      const evidence = { costCents: tool.costCents, review: tool.review };
       return { name: tool.name, revision: tool.revision,
         reviewDigest: losslessJson(JSON.stringify(evidence)).digest, mode: 'block' };
     }
@@ -914,7 +917,12 @@ it('projects protected discovery as Needs input and replays inventory without an
       await runner.rebuild(mcpCatalogue);
       expect(await catalogue.rows('test')).toEqual(rows);
       expect(remote.calls).toHaveLength(count);
-      if (path === 'public') expect(await catalogue.tools('test', serverId)).toMatchObject({ published: false, connectionId: null, tools: [{ mode: 'block', reviewed: false }, { mode: 'block', reviewed: false }] });
+      if (path === 'public') {
+        const policy = await catalogue.tools('test', serverId);
+        expect(policy).toMatchObject({ published: false,
+          connectionId: `installed-${serverId}`, accountMode: 'none',
+          tools: [{ mode: 'block', reviewed: false }, { mode: 'block', reviewed: false }] });
+      }
     }
   } finally { await remote.close(); }
 });
@@ -1412,14 +1420,20 @@ const invalidReviews = ['hash', 'definition', 'review', 'stale', 'revision', 'co
   'account', 'incomplete', 'forged-admin', 'member', 'foreign', 'origin'];
 it.each(invalidReviews)('refuses %s review input without changing the stream', refusesInexactReview);
 
-async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details') {
+async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details' | 'allow-details') {
   const command = await exactReviewCommand();
   const state = await catalogue.tools('test', 'odoo');
   const snapshot = state.catalogue!;
   function removeCost(tool: NonNullable<typeof snapshot.tools>[number]) {
     return { ...tool, costCents: undefined };
   }
+  function removeReview(tool: NonNullable<typeof snapshot.tools>[number]) {
+    return { ...tool, review: undefined };
+  }
   let saved = snapshot;
+  if (kind === 'ask-details' || kind === 'allow-details') {
+    saved = { ...snapshot, tools: snapshot.tools!.map(removeReview) };
+  }
   if (kind === 'cost') {
     saved = { ...snapshot, tools: snapshot.tools!.map(removeCost) };
   }
@@ -1444,8 +1458,52 @@ async function refusesUnavailableReview(kind: 'cost' | 'expired' | 'ask-details'
   expect((await app.inject(request)).statusCode).toBe(409);
   expect(await nats.store.head('mcp-odoo')).toBe(before);
 }
-it.each(['cost', 'expired', 'ask-details'] as const)(
+it.each(['cost', 'expired', 'ask-details', 'allow-details'] as const)(
   'refuses review without current %s evidence', refusesUnavailableReview);
+
+async function refusesAllowAfterIncompleteBlockReview() {
+  const command = await exactReviewCommand();
+  const original = await catalogue.tools('test', 'odoo');
+  function removeDetails(tool: NonNullable<NonNullable<typeof original.catalogue>['tools']>[number]) {
+    return { ...tool, review: undefined };
+  }
+  const declarations = original.catalogue!.tools!.map(removeDetails);
+  const snapshot = { ...original.catalogue!, tools: declarations };
+  await mcp('odoo', 'mcp.server_discovered', snapshot);
+  await runner.run(mcpCatalogue);
+  const discovered = await catalogue.tools('test', 'odoo');
+  function blockChoice(tool: typeof declarations[number]) {
+    return { name: tool.name, revision: tool.revision,
+      reviewDigest: toolReviewDigest(tool), mode: 'block' };
+  }
+  const payload = { ...command, expectedSequence: discovered.sequence,
+    policyRevision: discovered.policyRevision, tools: declarations.map(blockChoice) };
+  const requestHeaders = { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin };
+  const reviewRequest = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
+    headers: requestHeaders, payload };
+  expect((await app.inject(reviewRequest)).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+  const reviewed = await catalogue.tools('test', 'odoo');
+  // Reach the command's declaration check with a valid review that replay preserves.
+  expect(reviewed.tools).toMatchObject([
+    { reviewed: true, mode: 'block', costCents: 0 },
+    { reviewed: true, mode: 'block', costCents: 0 },
+  ]);
+  expect(reviewed.reviewRevision).toBe(reviewed.sequence);
+  expect(reviewed.catalogue!.tools![0]!.review).toBeUndefined();
+  const modeCommand = { commandId: 'allow-without-details', expectedSequence: reviewed.sequence,
+    connectionId: 'installed-odoo', toolName: 'read',
+    toolRevision: reviewed.tools[0]!.revision, mode: 'allow' };
+  const modeRequest = { method: 'POST' as const, url: '/api/org/integrations/odoo/tools',
+    headers: requestHeaders, payload: modeCommand };
+  const before = await nats.store.head('mcp-odoo');
+  expect((await app.inject(modeRequest)).statusCode).toBe(409);
+  expect(await nats.store.head('mcp-odoo')).toBe(before);
+  await runner.run(mcpCatalogue);
+  expect(await catalogue.tools('test', 'odoo')).toEqual(reviewed);
+}
+it('refuses an Allow command after a valid Block review without approval details',
+  refusesAllowAfterIncompleteBlockReview);
 
 async function publicationRequest() {
   const review = await exactReviewCommand();
@@ -2121,3 +2179,64 @@ async function refusesReplacedInstallationPayer(scope: 'global' | 'paying_group'
 it.each(['global', 'paying_group'] as const)(
   'returns a fixed refusal for a replaced installation payer with a %s ceiling',
   refusesReplacedInstallationPayer);
+
+async function reviewsRemoteDeclarationsThroughProduct() {
+  const remote = await remoteFixture();
+  const worker = installWorker(app, nats.store, 'test', remote.network);
+  const admin = { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin };
+  const review = { action: 'Read or update a record', consequence: 'Return the saved record',
+    targetArgument: 'id', fields: ['id'], stepUp: false };
+  const metadata = { resultType: 'complete', ttlMs: 300_000, cacheScope: 'public' };
+  function declaredTool(name: string) {
+    return { name, inputSchema: { type: 'object' }, annotations: { readOnlyHint: name === 'read' },
+      _meta: { 'io.opencrane/costCents': 0, 'io.opencrane/review': review } };
+  }
+  function respond(method: string) {
+    if (method === 'server/discover') {
+      return { ...metadata, supportedVersions: ['2026-07-28'], capabilities: { tools: {} },
+        _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1' } } };
+    }
+    return { ...metadata, tools: ['read', 'write'].map(declaredTool) };
+  }
+  remote.respond(respond);
+  try {
+    const registration = await app.inject({ method: 'POST', url: '/api/org/integrations',
+      headers: admin, payload: { locator: 'https://mcp.example.test/declared' } });
+    expect(registration.statusCode).toBe(202);
+    const { serverId } = registration.json<{ serverId: string }>();
+    await worker.discover(serverId);
+    await runner.run(mcpCatalogue);
+    const url = `/api/org/integrations/${serverId}`;
+    const response = await app.inject({ url: `${url}/tools`, headers: admin });
+    expect(response.statusCode).toBe(200);
+    const state = toolPolicySchema.parse(response.json());
+    expect(state).toMatchObject({ connectionId: `installed-${serverId}`, accountMode: 'none',
+      published: false, tools: [{ reviewed: false, mode: 'block' },
+        { reviewed: false, mode: 'block' }] });
+    function choice(tool: NonNullable<NonNullable<typeof state.catalogue>['tools']>[number]) {
+      expect(tool).toMatchObject({ costCents: 0, review });
+      const mode = tool.name === 'read' ? 'allow' : 'ask';
+      return { name: tool.name, revision: tool.revision, reviewDigest: toolReviewDigest(tool), mode };
+    }
+    const payload = { commandId: 'product-review', expectedSequence: state.sequence,
+      policyRevision: state.policyRevision, catalogueDigest: state.catalogue!.schemaDigest,
+      connectionId: state.connectionId, accountMode: state.accountMode,
+      tools: state.catalogue!.tools!.map(choice) };
+    const exact = await app.inject({ method: 'POST', url: `${url}/review`, headers: admin, payload });
+    expect(exact.statusCode, exact.body).toBe(200);
+    await worker.discover(serverId);
+    await runner.run(mcpCatalogue);
+    const saved = await app.inject({ url: `${url}/tools`, headers: admin });
+    expect(saved.json()).toMatchObject({ published: false,
+      tools: [{ reviewed: true, mode: 'allow' }, { reviewed: true, mode: 'ask' }] });
+    const count = remote.calls.length;
+    await runner.rebuild(mcpCatalogue);
+    const replayed = await app.inject({ url: `${url}/tools`, headers: admin });
+    expect(replayed.json()).toEqual(saved.json());
+    expect(remote.calls).toHaveLength(count);
+  } finally {
+    await remote.close();
+  }
+}
+it('registers, discovers, reads and exactly reviews declared tools through product APIs',
+  reviewsRemoteDeclarationsThroughProduct);

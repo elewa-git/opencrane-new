@@ -2906,3 +2906,10 @@ without adding anything to the worker's store. Timer tests check the default at 
 and 900,000 milliseconds and retry an unknown page after an intervening success.
 Row 3 is complete apart from live qualification. Live Kubernetes, provider and
 fresh-install qualification: NOT RUN. Next for #49 is row 4, company opt-in and selection.
+
+## Declared tool evidence for mode changes
+
+`setToolPolicy` requires both explicit zero cost and saved approval details for Allow
+and Ask. It cannot fill missing declarations. Exact review uses the same requirement
+in `reviewedToolChoices`; the projection checks it again when applying mode events.
+History still loads before the two-second authority check. No access streams changed.

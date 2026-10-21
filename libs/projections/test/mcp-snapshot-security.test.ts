@@ -12,7 +12,9 @@ const definition = '{"inputSchema":{"type":"object"},"name":"read"}';
 const revision = createHash('sha256').update(definition).digest('hex');
 const revisionList = JSON.stringify([{ name: 'read', revision }]);
 const schemaDigest = createHash('sha256').update(revisionList).digest('hex');
-const tool = { name: 'read', revision, reviewed: true, definition, costCents: 0 };
+const review = { action: 'Read a record', consequence: 'Show the record',
+  targetArgument: 'id', fields: ['id'], stepUp: false };
+const tool = { review, name: 'read', revision, reviewed: true, definition, costCents: 0 };
 const catalogue = { serverId: 'fixture', toolCount: 1, schemaDigest,
   checkedAt, expiresAt, connectionId: 'installed', accountMode: 'none', tools: [tool] };
 
@@ -245,3 +247,46 @@ function appliesValidModeChoice() {
   expect(after.tools).toMatchObject([{ reviewed: true, mode: 'allow' }]);
 }
 it('applies Allow when the connection, revision and review all match', appliesValidModeChoice);
+
+function publishedIncompleteReview() {
+  const incompleteTool = { ...tool, review: undefined };
+  const incompleteCatalogue = { ...catalogue, tools: [incompleteTool] };
+  const discovery = record('mcp.server_discovered', incompleteCatalogue);
+  const discovered = applyToolPolicy(emptyToolPolicy(), discovery, 1);
+  const choice = { name: 'read', revision,
+    reviewDigest: toolReviewDigest(incompleteTool), mode: 'block' };
+  const reviewData = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+    catalogueDigest: schemaDigest, policyRevision: 1, reviewedBy: 'admin', tools: [choice] };
+  const reviewed = applyToolPolicy(discovered, record('mcp.server_reviewed', reviewData), 2);
+  const publication = record('mcp.server_published', { serverId: 'fixture', publishedBy: 'admin' });
+  const published = applyToolPolicy(reviewed, publication, 3);
+  expect(published).toMatchObject({ reviewRevision: 2, published: true,
+    tools: [{ reviewed: true, mode: 'block' }] });
+  const legacyData = { ...reviewData, policyRevision: 3,
+    tools: [{ ...choice, mode: 'allow' }] };
+  return { published, legacyReview: record('mcp.server_reviewed', legacyData) };
+}
+
+function refusesWrongLegacyReviewer(kind: 'non-human' | 'different-human') {
+  const { published, legacyReview } = publishedIncompleteReview();
+  const principal = kind === 'non-human'
+    ? { kind: 'system' as const, id: 'admin' }
+    : { kind: 'human' as const, id: 'another-admin' };
+  const forged = { ...legacyReview, principal };
+  function applyForgedReview() {
+    return applyToolPolicy(published, forged, 4);
+  }
+  expect(applyForgedReview).toThrow('Tool review does not match the saved catalogue');
+}
+it.each(['non-human', 'different-human'] as const)(
+  'refuses a legacy Allow review from a %s principal', refusesWrongLegacyReviewer);
+
+function clearsExistingLegacyReviewAndPublication() {
+  const { published, legacyReview } = publishedIncompleteReview();
+  const blocked = applyToolPolicy(published, legacyReview, 4);
+  expect(blocked.tools).toMatchObject([{ reviewed: false, mode: 'block' }]);
+  expect(blocked.reviewRevision).toBeUndefined();
+  expect(blocked.published).toBe(false);
+}
+it('clears an existing review revision and publication on an incomplete legacy Allow review',
+  clearsExistingLegacyReviewAndPublication);
