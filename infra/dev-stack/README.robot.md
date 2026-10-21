@@ -851,6 +851,31 @@ Each warm attempt has a 180-second deadline. It checks streaming/reload, PDF fac
 preview/download bytes, Stop/reload, live direct delivery, a shared reply, and company
 limit refusal/restore. Restoration is attempted even after failure or timeout.
 Two attempts capture the Owner browser at 1280 and 390 pixels; the member stays at 390.
-Private timings, screenshots and spending totals go under the slot's `demo-smoke/`.
+Private timings, screenshots and spending records go under the slot's `demo-smoke/`.
+Each run saves both previous company ceilings in its own `saved-ceilings.json` before
+changing either. Normal completion, failures, SIGINT and SIGTERM restore them through
+the admin API. Signals stop new work and close the browser before restoration. The
+file is removed only after the API confirms both restored values. If restoration
+cannot finish, the next invocation restores saved files before preparing another run.
+Keep the run folders until any unfinished restoration has completed. SIGKILL and a
+host outage cannot run cleanup; their saved files need that next invocation.
+
+`spending.json` keeps a starting company budget and budget-stream position. It reads
+budget events without appending to the store and matches reservations to message ids
+submitted by this run's browser contexts. `turns.json` saves those ids without prompts
+or credentials. Each recorded call names its reservation, turn, charged cents and
+held cents. Unknown outcomes retain the full hold; confirmed unsent calls show zero
+charge and hold. Earlier calls and other users' turns are excluded from run totals.
+Company totals remain supporting information. Records describe the last observation;
+a still-running turn may create further reservations after that observation. A failed
+final read marks the record PARTIAL and retains the last known charges and holds.
+`timings.json` is written on failures too, including failed warm-up and interrupted
+attempts. A warm-up that was never reached is NOT RUN.
+
+Recording fixtures cover preparation failure after raising 100 cents to 700, both
+interrupt signals during the limit step, a failed restore recovered on the next run,
+and spending and timings after failed warm-up. Separate fixtures reject a failed
+step within 180 seconds and successful steps taking longer than 180 seconds. The CLI
+fixture refuses configuration loading to prove the secondary id check runs first.
 The command does not claim or remove a stack. Use `claim.sh` before startup and
 `down.sh --id` after copying the receipt. Live results are in the demo receipt.

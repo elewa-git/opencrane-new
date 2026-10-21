@@ -4,3 +4,4 @@
 - Replies keep saving reports that were already accepted when a busy connection closes.
 - Demo warm-up checks a shared session's saved status before opening its chat.
 - The real-model Stop check uses the reply's Stop control while the composer is loading.
+- Demo rehearsals restore both previous company ceilings after failures or interruption and recover unfinished restores before the next run. Private records separate each run's charged and held calls and keep timings when warm-up fails.

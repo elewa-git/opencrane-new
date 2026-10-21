@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|prepares demo chats and checks real replies through APIs| apps
+  stack -->|prepares demos, restores limits and records spending| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -54,6 +54,8 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 - Seed two demo groups and a shared assistant through product APIs, keeping their ids on repeats.
 - Prepare a scanned personal PDF, bound company spending, warm computers and time demo checks.
   A smaller approved demo allowance also limits paid calls made during fresh startup.
+  Rehearsals save the previous company limits and restore them when they finish or stop.
+  Private records identify the run's calls, charges and money still held.
 - Put the package gateway Service IP in the computer settings before a chat turn starts.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
   On failure, save the error and recent process logs before removing that stack.
