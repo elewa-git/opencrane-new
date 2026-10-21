@@ -15,6 +15,18 @@ const parameters = z.strictObject({ serverId: id });
 const emptyQuery = z.strictObject({});
 const registration = z.object({ serverId: id });
 const sources = { member: 'direct', team: 'group', assistant: 'assistant' } as const;
+const toolGrantSchema = modelAccessGrantSchema.extend({
+  membershipStatus: z.enum(['joined', 'invited', 'departed', 'unknown']).nullable(),
+});
+
+function membershipStatus(reference: Awaited<ReturnType<typeof readToolGrantReferences>>[number]) {
+  if (reference.granteeKind !== 'member') return null;
+  if (reference.membershipStatus === 'removed') return 'departed';
+  if (reference.membershipStatus === 'joined' || reference.membershipStatus === 'invited') {
+    return reference.membershipStatus;
+  }
+  return 'unknown';
+}
 
 async function registered(options: GroupOptions, serverId: string, deadline: number) {
   // Read only the first server event. Registration does not grant tool use.
@@ -76,9 +88,10 @@ async function grantRow(options: GroupOptions, serverId: string,
   const applied = await memberAuthorisation(options.binding).applied(saved.event.id);
   const row = { granteeKind: reference.granteeKind, granteeId: reference.granteeId,
     displayName: reference.displayName, source: sources[reference.granteeKind],
+    membershipStatus: membershipStatus(reference),
     state: given ? 'granted' : 'revoked', eventId: saved.event.id, eventTime: saved.event.time,
     sequence, projection: 'current' };
-  return { ...modelAccessGrantSchema.parse(row), iam: applied ? 'current' : 'applying' };
+  return { ...toolGrantSchema.parse(row), iam: applied ? 'current' : 'applying' };
 }
 
 export async function readToolAccess(request: FastifyRequest, reply: FastifyReply,

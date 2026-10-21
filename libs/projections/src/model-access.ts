@@ -190,6 +190,7 @@ async function assistantCandidates(db: Query, silo: string, after: string | unde
 export async function readToolGrantReferences(db: Query, silo: string, subject: string) {
   type Reference = Pick<ModelGrantState, 'granteeKind' | 'granteeId' | 'displayName' | 'eventId'> & {
     position: string;
+    membershipStatus: string | null;
   };
   const result = await db.query<Reference>(`WITH selected_grants AS (
     SELECT silo, link_kind AS grantee_kind, link_id AS grantee_id, event_id, position
@@ -197,7 +198,8 @@ export async function readToolGrantReferences(db: Query, silo: string, subject: 
       AND link_kind IN ('member', 'team', 'assistant')
     ORDER BY link_kind, link_id LIMIT 101
   ) SELECT a.grantee_kind AS "granteeKind", a.grantee_id AS "granteeId",
-    a.event_id AS "eventId", a.position, ${grantDisplayName} AS "displayName"
+    a.event_id AS "eventId", a.position, ${grantDisplayName} AS "displayName",
+    m.status AS "membershipStatus"
     FROM selected_grants a ${grantNameJoins}
     ORDER BY a.grantee_kind, a.grantee_id`, [silo, subject]);
   return result.rows;

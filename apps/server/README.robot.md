@@ -1588,7 +1588,10 @@ then reads at most 100 latest grant facts from the shared member inventory.
 Each row includes its name, direct/group/assistant source, saved event id, date,
 sequence, saved grant/revoke state and IAM receipt progress. `expectedSequence`
 is the server-grant stream position for a later command. Revoked facts remain
-visible. These are grant facts, not counts of people who can use a tool.
+visible. Each row also returns `membershipStatus`: `joined`, `invited`, `departed`
+or `unknown` for a person, and null for a group or assistant. It describes the
+person's membership separately from the saved grant state. Departed people cannot
+use tools. These are grant facts, not counts of people who can use a tool.
 
 `complete` means the content tables are current and all grant facts fit within
 100 rows. Otherwise `grantTotal` is null. IAM progress is separate; a missing
@@ -1606,6 +1609,11 @@ Reads neither append events nor probe, publish, connect or call tools.
 
 Tests: `test/integration-access-reads.test.ts` uses disposable NATS, PostgreSQL and
 OpenFGA for paging, refusals, lag, overflow, slow reads and replay equality.
+The departure case leaves Bob's grant in place and checks his separate departed
+status before and after replay. Referenced events with the wrong silo, event type
+or grantee return only 503 `unavailable`.
+`libs/projections/test/tool-grant-references.test.ts` checks the database's 101-row
+limit and silo selection through the exported reader with real PostgreSQL.
 PARTIAL: `/facts`, the four-fact detail, actual Allowed for list UI and its consumers
 remain deferred. Existing publication status and access/explanation stay separate;
 installation, account connection, grants and assistant availability are not combined.

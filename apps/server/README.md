@@ -13,7 +13,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model and remote tool grants and choices, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model and remote tool grants, membership status and choices, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
   server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops, turn decisions and relay closures| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
@@ -64,6 +64,9 @@ saved closure records at startup. It closes relays when stopping. Outside networ
 remains switched off while outage and crash handling await qualification.
 
 ## What it is responsible for
+
+Remote tool grant reads show a person's membership separately from their saved grant.
+A departed person keeps their grant history and cannot use tools.
 
 When a chat closes, the back end ends waiting requests and asks the computer to
 stop work already under way. It keeps checking saved events after a restart.
