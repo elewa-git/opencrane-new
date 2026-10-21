@@ -20,8 +20,7 @@ function restoreClock() {
 }
 
 function advanceToNextCheck() {
-  const options = { toFake: ['Date' as const] };
-  vi.useFakeTimers(options);
+  // Freeze Date alone. Vitest polling otherwise advances its fake timer clock too.
   onTestFinished(restoreClock);
   vi.setSystemTime(Date.now() + 270_000);
 }

@@ -282,8 +282,8 @@ it('holds after a one-second membership deadline and ignores a late read during 
 async function schedulesShortTtl() {
   const setup = await fixture(500);
   await setup.register('short');
-  const clock = { toFake: ['Date' as const] };
-  vi.useFakeTimers(clock);
+  // Freeze Date alone so polling does not advance the catalogue's time.
+  vi.setSystemTime(Date.now());
   await setup.watch.check();
   const before = await readToolPolicy(setup.nats.store, 'test', 'short');
   const errors = vi.fn();
