@@ -471,3 +471,60 @@ with this complete run after cleanup. `git diff --check`: PASS.
 
 The source checks are green; live qualification remains PARTIAL as recorded
 above. GitHub CI on the final pushed commit is reported on the pull request.
+
+## Ceiling recovery and run spending — 21 October 2026
+
+Runtime code and test source: `60d8307a2c0f8353a88d916801d5167a6512c32e`.
+Rebased onto `2ecadcc3e85c66e47db4b2c387ec4eb83e6e6ac7`; the rebase finished.
+The paid rehearsal's changes and records remain. The startup conflict keeps both
+main's owner safeguards and the approved allowance before paid provider setup.
+
+Each rehearsal saves both previous company ceilings in its private output folder
+before changing them. Failures and SIGINT/SIGTERM stop further work and restore
+those values through the admin API. A failed restore keeps its file, and the next
+run restores it before preparation. The file is removed only after both values
+are confirmed. A conditional restore also advances the stream when the values
+already match, preventing an older interrupted write from raising them later.
+
+Spending records start with a company budget and budget-stream position. They
+match reservations to this run's submitted message ids and retain charged and
+held cents separately. Unknown usage stays held. Earlier reservations and other
+users' turns do not count towards this run. Failed warm-up and interrupted smoke
+still write timings. A failed final spending read keeps previously observed
+charges and holds and marks the record PARTIAL.
+
+Failing-test commits preceded each behaviour change. The preparation regression
+first ended at 700 instead of 100 cents after HTTP 503. Signal and restart fixtures,
+missing spending fields, the specific id refusal and a lost charge during a failed
+final read also failed before their fixes. Three temporary removal probes failed
+as intended: accepting a failed step within 180 seconds, accepting passing steps
+after 180 seconds, and loading configuration before checking the secondary id.
+All probe changes were removed.
+
+| Own check | Result |
+| --- | --- |
+| Post-rebase demo, startup and journey-refusal fixtures, two runs | PASS; 64 each, 330.97 / 274.12 seconds |
+| Workspace and package typecheck | PASS |
+| Focused strict TypeScript check on rebased demo scripts and fixtures | PASS |
+| Full lint, including knip | PASS; zero errors, 23 existing warnings |
+| Event catalogue | PASS; 149 types |
+| Changelog check | PASS |
+| Three removal probes | PASS; each removal caused its specific test to fail |
+| Rebase completion and diff whitespace | PASS |
+
+The first focused typecheck found two type issues; both were corrected before the
+final focused check and post-rebase test runs. Earlier targeted passes also passed
+29 and 30 tests. No assertion, access check, money check, memory check or key-handling
+rule was weakened. New recovery and spending tests are included in CI.
+
+All lint, typecheck and test commands used `nice -n 10`. Tests set
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; these recording
+fixtures do not connect to PostgreSQL. No root suite or database container ran.
+Logs are in `/tmp/demo-kit-3-final-tests-*.log` and `/tmp/demo-kit-3-fix-*.log` on
+this host. The fixtures use synthetic API responses, browser interactions and
+budget events; they do not prove a real-provider journey.
+
+This fix task made no paid calls, charged no money, held no money and claimed no
+slot. The owner stack was untouched. Fresh live qualification for these fixes is
+NOT RUN. The earlier paid rehearsal remains PARTIAL, including its recorded Stop
+and direct-delivery failures. The PR remains draft.
