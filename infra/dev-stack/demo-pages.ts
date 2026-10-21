@@ -50,7 +50,7 @@ async function checkPages(page: Page, origin: string, output: string) {
       await page.getByText('History loaded', { exact: true }).waitFor();
       const text = await page.locator('oc-audit').innerText();
       sawLimits ||= text.includes('budget.ceiling_set');
-      sawGroups ||= text.includes('group.created');
+      sawGroups ||= text.includes('team.created');
       await capture(page, output, `change-history-${historyPage}`);
       historyPage += 1;
       if (sawLimits && sawGroups) break;
@@ -76,7 +76,7 @@ async function checkPages(page: Page, origin: string, output: string) {
 }
 
 try {
-  demoStackId(process.env['DEV_STACK_ID']);
+  const id = demoStackId(process.env['DEV_STACK_ID']);
   const attempt = process.env['P4_JOURNEY_ATTEMPT'];
   assert(attempt && /^[a-zA-Z0-9-]+$/u.test(attempt), 'A safe rehearsal attempt is required');
   const { directory, root, readEnv, authEnv } = await import('./config.ts');
@@ -85,7 +85,8 @@ try {
   const settings = await readEnv('settings');
   assert.equal(settings['DEV_REAL_PROVIDER'], '1');
   const { browserSessions } = await import('./browser-signin.ts');
-  const origin = settings['ORIGIN']!;
+  const origin = `http://127.0.0.1:${25000 + Number(id) * 100 + 6}`;
+  assert.equal(settings['ORIGIN'], origin, 'Unexpected secondary origin');
   const browser = await browserSessions(loadAuthConfig(await authEnv()), origin);
   const output = `${directory}/demo-pages/${attempt}`;
   try {

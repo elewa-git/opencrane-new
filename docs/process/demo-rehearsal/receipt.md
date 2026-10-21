@@ -19,7 +19,7 @@ export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
 export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
 export DEMO_ALLOWANCE_CENTS=500
 export COMPUTER_IDLE_MS=14400000
-export P4_JOURNEY_ATTEMPT=demo-rehearsal-proof-r1
+export P4_JOURNEY_ATTEMPT=demo-rehearsal-r2a
 infra/dev-stack/up.sh --id 1 --fresh
 node --experimental-strip-types infra/dev-stack/demo-seed-run.ts
 node --experimental-strip-types infra/dev-stack/demo-smoke-run.ts
@@ -27,7 +27,7 @@ node --experimental-strip-types infra/dev-stack/demo-pages.ts
 infra/dev-stack/down.sh --id 1
 ```
 
-The second run uses `demo-rehearsal-proof-r2`. Only product provider setup reads the
+The second run uses `demo-rehearsal-r2b`. Only product provider setup reads the
 paid file. Its value is never printed. Failed proof is copied before cleanup.
 
 ## Fresh-install results
@@ -60,8 +60,9 @@ Startup exited 1 on each attempt; the kit seed and smoke were NOT RUN.
 | [b3c4c4075](failed-b3c4c4075/receipt.json) | Real private reply was checked against stand-in text | 13 | 17 |
 | [688be242a](failed-688be242a/receipt.json) | Second synthetic colleague's HTTP join returned 409 | 13 | 16 |
 | [c96931aad](failed-c96931aad/receipt.json) | Replay restarted the server before an offline rebuild | 13 | 16 |
+| [abacbe417](failed-abacbe417/receipt.json) | Group display timed out; new history check used the wrong event name | 29 | 51 |
 
-The three attempts total 88 cents including holds. The first two passed the real
+The four attempts total 168 cents including holds. The first two passed the real
 streaming, Stop, member and PDF checks. The third also passed seven group checks,
 including zero AI/computer/budget work and access clearing within two seconds.
 [The first failure picture](failed-b3c4c4075/private-reply-390.png) shows the real answer.
