@@ -45,7 +45,8 @@ export async function demoBrowser(owner: Page, member: Page, options: Options,
     }
     const renderedBy = Date.now() + 10_000;
     while (true) {
-      const viewer = owner.frames().find(nativeViewer);
+      const frames = owner.frames();
+      const viewer = frames.find(nativeViewer);
       const numberOptions = { name: 'Page number', exact: true, includeHidden: true };
       const number = viewer?.getByRole('textbox', numberOptions);
       if (number && await number.count() && await number.inputValue() === '1') break;
@@ -72,7 +73,10 @@ export async function demoBrowser(owner: Page, member: Page, options: Options,
     await member.locator('.transcript[aria-busy="false"]').waitFor();
     for (const name of ['New chat', 'Change']) {
       const button = member.getByRole('button', { name, exact: true });
-      if (await button.count()) { await button.click(); break; }
+      if (await button.count()) {
+        await button.click();
+        break;
+      }
     }
     await member.locator('#colleague-search').fill('zitadel-owner');
     await member.locator('.colleague-option').first().click();
@@ -127,8 +131,16 @@ export async function demoBrowser(owner: Page, member: Page, options: Options,
     await owner.close();
     await member.close();
   }
-  function deadline() { void expire().catch(ignoreClosed); }
-  function ignoreClosed() { /* Both pages may already have closed. */ }
+  function deadline() {
+    void expire().catch(ignoreClosed);
+  }
+  function ignoreClosed() {
+    // Allow the deadline to close pages that have already closed after a failure.
+  }
   const timer = setTimeout(deadline, 180_000);
-  try { return await timedSmoke(steps); } finally { clearTimeout(timer); }
+  try {
+    return await timedSmoke(steps);
+  } finally {
+    clearTimeout(timer);
+  }
 }

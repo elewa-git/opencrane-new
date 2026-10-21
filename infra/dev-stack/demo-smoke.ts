@@ -18,7 +18,9 @@ export async function timedSmoke(steps: Step[], now = performance.now.bind(perfo
     results.push({ name: step.name, result, elapsedMs: Math.round(now() - before) });
   }
   const elapsedMs = Math.round(now() - started);
-  function passed(step: typeof results[number]) { return step.result === 'PASS'; }
+  function passed(step: typeof results[number]) {
+    return step.result === 'PASS';
+  }
   const result = results.every(passed) && elapsedMs <= 180_000 ? 'PASS' : 'FAIL';
   return { elapsedMs, result, steps: results };
 }

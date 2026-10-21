@@ -786,8 +786,9 @@ runs fresh startup and seeds. A mismatched, owner or invalid claim stops before 
 or cleanup. Once startup is attempted, startup or seed failure calls `down.sh` for that
 secondary; success keeps it.
 It inherits the full startup journey and makes no claim about three-minute duration.
-The [owner runbook](../../docs/process/demo/README.md) records the unfinished PDF,
-ceiling and smoke work, and the required fresh-install proof. The seed does not rename existing members or make cloud identity changes.
+The [owner runbook](../../docs/process/demo/README.md) keeps owner-mode and fresh-install
+qualification gates. The timed rehearsal below adds PDF and ceiling preparation.
+The seed does not rename existing members or make cloud identity changes.
 Tests use `nice -n 10 node --experimental-strip-types --test infra/dev-stack/demo-*.test.ts`.
 
 The launcher tests record startup and cleanup without starting services. They check

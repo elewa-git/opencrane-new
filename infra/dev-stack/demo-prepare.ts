@@ -74,7 +74,9 @@ export async function prepareDemo(options: Options, allowanceCents: number) {
     const response = await request(options, path);
     assert(response.ok, 'Demo files unavailable');
     const list = await response.json() as { rows: Array<{ name: string; status: string }> };
-    function supplier(file: typeof list.rows[number]) { return file.name === 'supplier.pdf'; }
+    function supplier(file: typeof list.rows[number]) {
+      return file.name === 'supplier.pdf';
+    }
     const file = list.rows.find(supplier);
     if (file?.status === 'delivered') return conversationId;
     if (!file && await reserveRequest(options.directory, 'demo-supplier-upload-v1')) {
@@ -84,7 +86,9 @@ export async function prepareDemo(options: Options, allowanceCents: number) {
         'idempotency-key': 'demo-supplier-upload-v1' };
       const init = { method: 'POST', headers, body: bytes, redirect: 'error' as const,
         signal: AbortSignal.timeout(120_000) };
-      try { await fetch(`${options.origin}${path}`, init); } catch {
+      try {
+        await fetch(`${options.origin}${path}`, init);
+      } catch {
         // The file list proves delivery without uploading again after an uncertain reply.
       }
     }

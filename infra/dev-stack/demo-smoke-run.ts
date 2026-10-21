@@ -51,7 +51,9 @@ try {
     await writeFile(`${output}/spending.json`, JSON.stringify({ sha, budget }, null, 2));
     await browser.browser.close();
   }
-  function failed(attempt: typeof attempts[number]) { return attempt.result !== 'PASS'; }
+  function failed(attempt: typeof attempts[number]) {
+    return attempt.result !== 'PASS';
+  }
   if (attempts.length !== 2 || attempts.some(failed)) process.exitCode = 1;
 } catch {
   console.error('Demo smoke incomplete; inspect private slot receipts. No turn is retried.');
