@@ -39,9 +39,8 @@ export async function stop(page: Page) {
   const receivedTextOptions = { hasText: /[a-z]/iu };
   const receivedText = prose.filter(receivedTextOptions);
   await receivedText.waitFor();
-  const chatComposer = page.locator('oc-chat-composer');
   const stopButtonOptions = { name: 'Stop', exact: true };
-  const stopButton = chatComposer.getByRole('button', stopButtonOptions);
+  const stopButton = reply.getByRole('button', stopButtonOptions);
   await stopButton.click();
   await reply.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
   const partial = await reply.locator('.prose').innerText();

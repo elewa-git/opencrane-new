@@ -3,3 +3,4 @@
 - Demo preparation creates the PDF chat before reading its protected receipt and keeps uncertain attempts from being repeated.
 - Replies and Stop results can recover after fast model output fills the bridge queue; accepted reports are saved even after the connection closes.
 - Demo warm-up checks a shared session's saved status before opening its chat.
+- The real-model Stop check uses the reply's Stop control while the composer is loading.

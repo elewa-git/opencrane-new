@@ -82,7 +82,7 @@ async function waitsForSharedSession() {
       const choosing = '<button onclick="location.href=\'/workspace?conversation=saved\'">' +
         'Check status</button>';
       const body = selected ? '<p>Private session</p>' : choosing;
-      await route.fulfill({ contentType: 'text/html', body });
+      await route.fulfill({ contentType: 'text/html; charset=utf-8', body });
     }
     await page.route('http://demo.test/**', respond);
     await page.goto('http://demo.test/workspace/shared');
@@ -115,7 +115,7 @@ async function stopsWhileComposerLoads() {
       if (localStorage.getItem('stopped')) { start(); stopped(); }
       </script>`;
     async function respond(route: import('playwright').Route) {
-      await route.fulfill({ contentType: 'text/html', body });
+      await route.fulfill({ contentType: 'text/html; charset=utf-8', body });
     }
     await page.route('http://stop.test/**', respond);
     await page.goto('http://stop.test/');
