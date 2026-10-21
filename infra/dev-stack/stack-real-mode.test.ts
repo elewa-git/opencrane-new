@@ -179,3 +179,12 @@ test('owner starts refuse missing consent, non-interactive stdin and any fleet m
   refusesAutomatedOwnerStarts);
 test('explicit interactive owner real starts reach isolated setup, fresh and saved',
   acceptsInteractiveOwnerStarts);
+
+async function refusesUnmarkedHeadlessOwner() {
+  const startup: Startup = { id: 'owner' };
+  const failure = await startupFailure(startup);
+  assert.match(failure, /Owner commands require --owner-run, interactive stdin and no fleet task/u);
+}
+
+test('an unmarked headless start cannot default to the owner stand-in stack',
+  refusesUnmarkedHeadlessOwner);
