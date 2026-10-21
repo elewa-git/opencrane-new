@@ -341,6 +341,7 @@ PASS: rebased only this branch's 13 commits onto the updated #549 source
 commits and was aborted. Rebasing from the original base `cae9e5b4e` then finished
 cleanly. `git range-diff` confirmed all 13 commits were unchanged. The focused
 tests passed twice and full typecheck passed again on the rebased source.
+
 ## Stop display
 
 21 October 2026. Stacked on #550; Part of #32. Production source `e765eca22`
