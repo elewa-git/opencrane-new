@@ -6,11 +6,11 @@ import { demoRecording } from './test/demo-recording.ts';
 import { browserRecording } from './test/demo-browser-recording.ts';
 import { spendingRecording } from './test/demo-spending-recording.ts';
 
-async function recordsFailedWarmUp() {
+async function recordsFailedWarmUp(failFinalRead = false) {
   const fixture = await demoRecording();
   fixture.allowPreparation();
   const browser = browserRecording(false, true);
-  const store = spendingRecording(browser.callCount);
+  const store = spendingRecording(browser.callCount, failFinalRead);
   const output = `${fixture.options.directory}/demo-smoke/failed-warm`;
   try {
     await assert.rejects(runDemoSmoke(browser, fixture.options, 700, output,
@@ -27,7 +27,8 @@ async function recordsFailedWarmUp() {
       { reservationId: 'held-call', turnId: 'turn-1', chargedCents: null, heldCents: 25 },
       { reservationId: 'unsent-call', turnId: 'turn-1', chargedCents: 0, heldCents: 0 },
     ]);
-    assert.equal(spending.budget.ceilingCents, 100);
+    if (failFinalRead) assert.equal(spending.status, 'PARTIAL');
+    else assert.equal(spending.budget.ceilingCents, 100);
     const timings = JSON.parse(await readFile(`${output}/timings.json`, 'utf8'));
     assert.equal(timings.sha, 'fixture-sha');
     assert.equal(timings.warmResult, 'FAIL');
@@ -40,8 +41,11 @@ async function recordsFailedWarmUp() {
     await fixture.close();
   }
 }
+async function failedWarmUp() { await recordsFailedWarmUp(); }
 test('a failed warm-up records its own charged and held calls, starting snapshot and timings',
-  recordsFailedWarmUp);
+  failedWarmUp);
+async function failedFinalRead() { await recordsFailedWarmUp(true); }
+test('an interrupted final spending read keeps charges and holds already observed', failedFinalRead);
 
 async function restoresCompletedRun() {
   const fixture = await demoRecording();

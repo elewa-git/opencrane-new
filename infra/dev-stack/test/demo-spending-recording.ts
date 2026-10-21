@@ -1,12 +1,15 @@
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 
-export function spendingRecording(callCount: () => number) {
+export function spendingRecording(callCount: () => number, failFinalRead = false) {
+  let reads = 0;
   async function head() { return 10; }
   async function* readStream() {
+    reads += 1;
     yield row(5, 'budget.reserved', 'old-call', { amountCents: 99, modelCall: { turnId: 'old' } });
     if (callCount() === 0) return;
     yield row(11, 'budget.reserved', 'charged-call',
       { amountCents: 20, modelCall: { turnId: 'turn-1' } });
+    if (failFinalRead && reads === 3) throw new Error('Recording store unavailable');
     yield row(12, 'budget.reserved', 'held-call',
       { amountCents: 25, modelCall: { turnId: 'turn-1' } });
     yield row(13, 'budget.settled', 'charged-call', { settledCents: 4 });
