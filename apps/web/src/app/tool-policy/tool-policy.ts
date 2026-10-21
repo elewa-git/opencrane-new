@@ -3,7 +3,7 @@ import { SharedState, type PresentationState } from '../shared-state/shared-stat
 import { IntegrationsAccessLost } from '../integrations/integrations-access-lost';
 import { AddFlowSteps } from '../integrations/add-flow-steps';
 import {
-  initialToolPolicy, initialModeDisabled, TOOL_MODE_OPTIONS,
+  initialToolPolicy, canReviewUnpublished, initialModeDisabled, TOOL_MODE_OPTIONS,
   choicesDifferentFromSaved,
   choicesForCurrentTools,
   choicesWithout,
@@ -100,13 +100,17 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     return initialToolPolicy(this.policy());
   }
 
+  protected canReviewUnpublished(): boolean {
+    return canReviewUnpublished(this.policy());
+  }
+
   protected modeDisabled(tool: Tool, mode: ToolMode): boolean {
     return mode !== 'block' && initialModeDisabled(this.policy(), tool.name);
   }
 
   protected openReview(): void {
     const policy = this.policy();
-    if (!policy || !this.isInitial() || this.state() !== 'ready') return;
+    if (!policy || !canReviewUnpublished(policy) || this.state() !== 'ready') return;
     const tools: Tool[] = [];
     for (const tool of policy.tools) tools.push({ ...tool, mode: this.selected(tool) });
     this.reviewSnapshot.set({ ...policy, tools });

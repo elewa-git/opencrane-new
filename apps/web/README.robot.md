@@ -840,6 +840,8 @@ The [original screen receipt](../../docs/process/screen-p4-22-access/receipt.md)
 ## Initial tool publication
 
 The tools page stages initial modes in memory and reuses the detail page for step 5.
+After a review is saved, mode Save controls and exact review stay available
+until publication.
 The fresh policy must match the staged sequence, catalogue, connection and account mode.
 Definitions and declarations are escaped text. Allow and Ask require declared zero cost
 and approval details. The audience GET must return a complete, current list before

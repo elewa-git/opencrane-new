@@ -109,7 +109,7 @@
           }
         </section>
       }
-      @if (isInitial() && policy.tools.length > 0) {
+      @if (canReviewUnpublished() && policy.tools.length > 0) {
         <button type="button" [disabled]="state() !== 'ready'" (click)="openReview()">
           Review before publishing
         </button>

@@ -48,8 +48,11 @@ function hasName(name: string): (tool: Tool) => boolean {
 }
 
 export function initialToolPolicy(policy: ToolPolicy | undefined): boolean {
-  return !!policy?.catalogue && policy.reviewRevision === undefined &&
-    !policy.driftHeld && !policy.publication && !policy.published;
+  return canReviewUnpublished(policy) && policy?.reviewRevision === undefined;
+}
+
+export function canReviewUnpublished(policy: ToolPolicy | undefined): boolean {
+  return !!policy?.catalogue && !policy.driftHeld && !policy.publication && !policy.published;
 }
 
 export function initialModeDisabled(policy: ToolPolicy | undefined, name: string): boolean {
@@ -58,7 +61,7 @@ export function initialModeDisabled(policy: ToolPolicy | undefined, name: string
       return declaration.costCents !== 0 || !declaration.review;
     }
   }
-  return initialToolPolicy(policy);
+  return canReviewUnpublished(policy);
 }
 
 export const TOOL_MODE_OPTIONS: Array<{ value: Tool['mode']; label: string }> = [

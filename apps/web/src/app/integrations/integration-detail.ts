@@ -1,4 +1,4 @@
-import { initialToolPolicy } from '../tool-policy/tool-policy-choices';
+import { canReviewUnpublished } from '../tool-policy/tool-policy-choices';
 import { isReadyPublication, isRecord, isOlderPublication, savedSequence }
   from './publication-ready';
 import { AddFlowSteps } from './add-flow-steps';
@@ -86,7 +86,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     const policy = this.policy();
     return this.view() === 'changes' && this.toolsReadState() === 'loaded' &&
       this.changeState() === 'disabled' && !!policy &&
-      (this.initialPolicy() ? initialToolPolicy(policy) : policy.driftHeld === true) &&
+      (this.initialPolicy() ? canReviewUnpublished(policy) : policy.driftHeld === true) &&
       policy.connectionId !== null && policy.accountMode !== null &&
       policy.catalogue?.tools !== undefined && this.comparison()?.reviewable === true &&
       !this.checkExpired();
