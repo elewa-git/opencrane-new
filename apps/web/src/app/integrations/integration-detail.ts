@@ -13,18 +13,18 @@ import {
   integrationsResponseSchema, toolPolicySchema,
   type IntegrationRow, type ToolPolicy,
 } from '@opencrane/protocol';
-import { SharedState, type PresentationState } from '../shared-state/shared-state';
+import { SharedState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
 import { IntegrationsAccessLost } from './integrations-access-lost';
 import { IntegrationFacts } from './integration-facts';
 import { buildIntegrationFacts, type ToolsReadState } from './integration-facts-map';
-import { needsReview } from './integration-status';
+import { needsReview, publicationMessage, publicationHeading, publicationKind,
+  publicationStatusMessage, type PublicationChangeState } from './integration-status';
 import { compareToolCatalogues, initialToolMode } from './tool-changes';
 import { reviewCommand, bindInitialToolModes } from './review-command';
 
 type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
-type ChangeState = 'loading' | 'disabled' | 'reviewing' | 'publishing' | 'applying'
-  | 'unknown-review' | 'unknown-publication' | 'conflict' | 'failed' | 'confirmed';
+
 
 @Component({
   selector: 'oc-integration-detail',
@@ -49,7 +49,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   protected readonly hasRenderedProtectedContent = signal(false);
   protected readonly facts = computed(this.integrationFacts.bind(this));
   protected readonly comparison = computed(this.toolComparison.bind(this));
-  protected readonly changeState = signal<ChangeState>('loading');
+  protected readonly changeState = signal<PublicationChangeState>('loading');
   protected readonly changeRef = signal('');
   protected readonly needsReview = needsReview;
   protected readonly skeletonWidths = ['78%', '52%', '66%', '44%'];
@@ -95,58 +95,14 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       !this.checkExpired();
   }
 
-  protected changeMessage(): string {
-    const state = this.changeState();
-    if (state === 'reviewing') return 'Saving the exact tool review…';
-    if (state === 'publishing' || state === 'applying') {
-      return 'Publishing the reviewed tool list. Calls stay paused until this finishes.';
-    }
-    if (state === 'unknown-publication') {
-      return 'The change outcome is uncertain. Calls stay paused. Check the original change status.';
-    }
-    if (state === 'unknown-review') {
-      if (!this.initialPolicy()) return 'The review outcome is unknown. Read the tool details again.';
-      return 'The review outcome is unknown. Check the original change before doing anything else.';
-    }
-    if (state === 'conflict') return 'The tool list changed. Review again after a fresh read.';
-    if (state === 'failed') return "Couldn't check publication progress. Calls stay paused.";
-    if (state === 'confirmed') return 'The current publication is confirmed.';
-    return '';
-  }
+  protected readonly changeMessage = publicationMessage;
+  protected readonly publicationHeading = publicationHeading;
+  protected readonly publicationKind = publicationKind;
+  protected readonly publicationMessage = publicationStatusMessage;
 
   protected compactPublication(): boolean {
     const state = this.changeState();
     return state !== 'loading' && state !== 'disabled' && state !== 'failed';
-  }
-
-  protected publicationHeading(): string {
-    const name = this.row()?.name ?? 'integration';
-    if (this.changeState() === 'confirmed') {
-      return `${name} is ready`;
-    }
-    if (this.changeState() === 'publishing' || this.changeState() === 'applying') {
-      return `Publishing ${name}`;
-    }
-    return name;
-  }
-
-  protected publicationKind(): PresentationState {
-    const state = this.changeState();
-    if (state === 'confirmed') {
-      return 'confirmed';
-    }
-    if (state === 'reviewing' || state === 'publishing' || state === 'applying') {
-      return 'applying';
-    }
-    return 'unknown';
-  }
-
-  protected publicationMessage(): string {
-    const state = this.changeState();
-    if (state === 'unknown-publication' || state === 'unknown-review' || state === 'failed') {
-      return 'Outcome unknown';
-    }
-    return this.changeMessage();
   }
 
   protected async reviewAndPublish(): Promise<void> {
@@ -371,15 +327,6 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     const total = policy.tools.length;
     const noun = total === 1 ? 'tool' : 'tools';
     return `Nothing is available to an assistant yet. ${count} of ${total} ${noun} reviewed.`;
-  }
-
-  protected loadedTime(): string {
-    const value = this.loadedAt();
-    if (!value) return '';
-    const options: Intl.DateTimeFormatOptions = {
-      hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC',
-    };
-    return `${new Date(value).toLocaleTimeString('en-GB', options)} UTC`;
   }
 
   protected readonly initialMode = initialToolMode;

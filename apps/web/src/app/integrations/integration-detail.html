@@ -64,7 +64,7 @@
     @if (compactPublication()) {
       <header class="detail-heading">
         <div class="heading-copy">
-          <h1>{{ publicationHeading() }}</h1>
+          <h1>{{ publicationHeading(changeState(), integration.name) }}</h1>
           <p>{{ integration.name }}</p>
         </div>
       </header>
@@ -72,7 +72,7 @@
       @if (changeState() === 'conflict') {
         <section class="draft-notice publication-conflict" role="status">
           <h2>Access changed while you were editing</h2>
-          <p>{{ changeMessage() }} Nothing has been overwritten.</p>
+          <p>{{ changeMessage(changeState(), !!initialPolicy()) }} Nothing has been overwritten.</p>
           <div class="actions">
             @if (initialPolicy()) {
               <a class="button primary" [href]="'/org/integrations/' + serverId() + '/tools'">
@@ -87,16 +87,16 @@
           </div>
         </section>
       } @else {
-        <section class="publication-notice" [class.publication-unknown]="publicationKind() === 'unknown'"
+        <section class="publication-notice" [class.publication-unknown]="publicationKind(changeState()) === 'unknown'"
           role="status">
-          <oc-shared-state [kind]="publicationKind()" [message]="publicationMessage()"
-            [detail]="publicationKind() === 'unknown'
+          <oc-shared-state [kind]="publicationKind(changeState())" [message]="publicationMessage(changeState(), !!initialPolicy())"
+            [detail]="publicationKind(changeState()) === 'unknown'
               ? 'The change may or may not have applied. Check status before doing anything else.'
               : undefined"
             [changeReference]="changeRef()"
-            [showAction]="publicationKind() === 'unknown' && !!changeRef()"
+            [showAction]="publicationKind(changeState()) === 'unknown' && !!changeRef()"
             (action)="checkPublicationChange()" />
-          @if (publicationKind() === 'unknown' && !changeRef()) {
+          @if (publicationKind(changeState()) === 'unknown' && !changeRef()) {
             <button class="button primary" type="button" (click)="refresh()">
               {{ changeState() === 'unknown-review' ? 'Review again' : 'Refresh' }}
             </button>
@@ -146,7 +146,7 @@
       </div>
     }
     @if (changeState() === 'failed') {
-      <p class="draft-notice" role="status">{{ changeMessage() }}</p>
+      <p class="draft-notice" role="status">{{ changeMessage(changeState(), !!initialPolicy()) }}</p>
     }
     @if (comparison(); as changes) {
       <section class="changes-list" aria-label="Changed tools">

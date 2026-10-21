@@ -31,6 +31,16 @@ function readyPolicy(status = readyStatus()): ToolPolicy {
   });
 }
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input.url;
+}
+
 function reply(body: unknown): Response {
   return new Response(JSON.stringify(body));
 }
@@ -123,7 +133,7 @@ describe('publication status request order', () => {
     const policyReplies = [Promise.resolve(reply(accepted)), Promise.resolve(reply(accepted))];
     const statusReplies = [Promise.resolve(reply(unknown))];
     function readReply(input: RequestInfo | URL): Promise<Response> {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.endsWith('/tools')) {
         const next = policyReplies.shift();
         if (!next) throw new Error('Unexpected policy read');
@@ -159,7 +169,7 @@ describe('publication status request order', () => {
     statusReplies.push(olderReady.promise);
     const secondCheck = component['checkPublicationChange']();
     function isStatusRead(call: Parameters<typeof fetch>): boolean {
-      return String(call[0]).includes('/changes/');
+      return requestUrl(call[0]).includes('/changes/');
     }
     await vi.waitFor(function readyReadStarted() {
       const statusReads = fetchMock.mock.calls.filter(isStatusRead);
