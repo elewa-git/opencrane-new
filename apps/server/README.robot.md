@@ -1426,7 +1426,11 @@ the first event. Each call reads through the latest saved event before copying
 its facts. History reads have their own ten-second limit and finish before turn
 admission starts its access check.
 
-Browser command ids use 256 bytes each in the existing 32 MiB cache budget.
+The summary indexes every saved event id, including reports, and keeps its first
+position. A command that reuses a report id is refused even after NATS forgets
+its duplicate entry. Each compact report id and position counts as 64 bytes plus
+twice the id length in the existing 32 MiB cache budget. Browser command ids
+still count as at least 256 bytes each.
 Stop and terminal rows use 512 bytes each. They contain no reply text. Stop polling
 reads these rows and new events, without rescanning earlier reply pieces.
 Command retries still verify the original saved event. New commands still use one

@@ -8,7 +8,8 @@ type Message = { authorId: unknown; executionMode: unknown; position: number };
 type ComputerReports = { lastSequence: number; positions: Map<number, number> };
 type ChatSummary = {
   contentSequence: number;
-  commandPositions: Map<string, number>;
+  eventPositions: Map<string, number>;
+  eventPositionBytes: number;
   stopRows: StoredEvent[];
   latestHuman?: { id: string; authorId: unknown } | undefined;
   created: Record<string, unknown> | undefined;
@@ -36,7 +37,7 @@ export type ChatFacts = {
 const closedTurn = z.object({ turnId: z.string() });
 
 function emptyChat(): ChatSummary {
-  return { contentSequence: 0, commandPositions: new Map(), stopRows: [],
+  return { contentSequence: 0, eventPositions: new Map(), eventPositionBytes: 0, stopRows: [],
     created: undefined, conversationClosed: false,
     messages: new Map(), closedTurnIds: new Set(), cleanupEndedTurnIds: new Set(),
     reports: new Map(), reportCount: 0, memoryContexts: new Map(), memoryFailure: undefined };
@@ -72,17 +73,27 @@ function addChat(summary: ChatSummary, row: StoredEvent) {
 }
 function addCommandFacts(summary: ChatSummary, row: StoredEvent) {
   const type = row.event.type;
-  if (type === 'conversation.created' || type === 'message.posted' ||
-      type === 'agent.turn_stop_requested') {
-    if (!summary.commandPositions.has(row.event.id)) {
-      summary.commandPositions.set(row.event.id, row.sequence);
-    }
+  // Check every saved id so a command cannot reuse a report id after broker deduplication expires.
+  if (!summary.eventPositions.has(row.event.id)) {
+    summary.eventPositions.set(row.event.id, row.sequence);
+    summary.eventPositionBytes += eventPositionSize(row);
   }
   if (type === 'conversation.created' || type === 'conversation.closed' ||
       type === 'agent.turn_stop_requested' || type === 'agent.turn_completed' ||
       type === 'agent.turn_failed') {
     summary.stopRows.push(row);
   }
+}
+
+function eventPositionSize(row: StoredEvent) {
+  const type = row.event.type;
+  const compactBytes = 64 + row.event.id.length * 2;
+  if (type === 'conversation.created' || type === 'message.posted' ||
+      type === 'agent.turn_stop_requested') {
+    return Math.max(256, compactBytes);
+  }
+  // Count the id and numeric position without retaining the report or its text.
+  return compactBytes;
 }
 
 function recordClosedTurn(summary: ChatSummary, row: StoredEvent,
@@ -171,7 +182,7 @@ function chatSize(summary: ChatSummary) {
   // Count compact replay positions separately so many reply chunks can stay warm.
   return summary.messages.size * 256 + summary.closedTurnIds.size * 128 +
     summary.cleanupEndedTurnIds.size * 128 + summary.reports.size * 256 +
-    summary.reportCount * 64 + summary.commandPositions.size * 256 +
+    summary.reportCount * 64 + summary.eventPositionBytes +
     summary.stopRows.length * 512 + memorySize(summary);
 }
 function memorySize(summary: ChatSummary) {
@@ -221,8 +232,8 @@ export function readChatCommandFacts(store: Pick<EventStore, 'readStream'>, silo
   function take(summary: ChatSummary) {
     return {
       created: summary.stopRows.find(isCreation), closed: summary.conversationClosed,
-      position: summary.commandPositions.get(commandId), sequence: summary.contentSequence,
-      turnPosition: turnId === undefined ? undefined : summary.commandPositions.get(turnId),
+      position: summary.eventPositions.get(commandId), sequence: summary.contentSequence,
+      turnPosition: turnId === undefined ? undefined : summary.eventPositions.get(turnId),
     };
   }
   return readStreamSummary(store, silo, `conversation-${conversationId}`, chat,
