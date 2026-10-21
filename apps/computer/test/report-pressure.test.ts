@@ -21,14 +21,16 @@ async function stopsWhileReplayingAStreamingReply(piece: string) {
     if (!streaming) return;
     pieces++;
     const params = { threadId: 'thread-1', itemId: 'reply', delta: piece };
-    computer.channel.notification({ method: 'item/agentMessage/delta', params });
+    const notification = { method: 'item/agentMessage/delta', params };
+    computer.channel.notification(notification);
   }
   function modelRpc(method: string, params: Record<string, unknown>) {
     if (method === 'turn/interrupt') {
       streaming = false;
       const turn = { id: 'codex-thread-1', status: 'interrupted' };
       const completed = { threadId: 'thread-1', turn };
-      computer.channel.notification({ method: 'turn/completed', params: completed });
+      const notification = { method: 'turn/completed', params: completed };
+      computer.channel.notification(notification);
     }
     return rpc(method, params);
   }
@@ -52,8 +54,9 @@ async function stopsWhileReplayingAStreamingReply(piece: string) {
     }
     function receive(bytes: Buffer) {
       const report = record(JSON.parse(bytes.toString()));
-      const sequence = report['sequence'];
-      if (typeof sequence !== 'number') return;
+      const sequenceValue = report['sequence'];
+      if (typeof sequenceValue !== 'number') return;
+      const sequence = sequenceValue;
       outstanding++;
       outstandingBytes += bytes.length;
       // Match the server's bounded queue, with asynchronous persistence still in progress.
@@ -80,7 +83,8 @@ async function stopsWhileReplayingAStreamingReply(piece: string) {
     }
     socket.on('message', receive);
     const startedAt = performance.now();
-    socket.send(JSON.stringify({ type: 'resume', since: 1 }));
+    const resume = { type: 'resume', since: 1 };
+    socket.send(JSON.stringify(resume));
     const expired = delay(2000);
     await Promise.race([closed.promise, expired]);
     expect(streamingAtStop).toBe(true);

@@ -51,7 +51,9 @@ async function warmReportReadsOnlyNewRows() {
     const base = event(`output-${sequence}`, 'agent.output_lost', {
       conversationId: 'chat', turnId: 'message',
     });
-    events.push({ ...base, report: { computerId: 'computer', sequence, digest: 'a'.repeat(64) } });
+    const report = { computerId: 'computer', sequence, digest: 'a'.repeat(64) };
+    const saved = { ...base, report };
+    events.push(saved);
   }
   await nats.seed(events);
   await record(499, 498);
@@ -340,7 +342,9 @@ async function savesStopWithoutRereadingStreamedReports() {
     const base = event(`piece-${sequence}`, 'agent.output_lost', {
       conversationId: 'chat', turnId: 'message',
     });
-    events.push({ ...base, report: { computerId: 'computer', sequence, digest: 'a'.repeat(64) } });
+    const report = { computerId: 'computer', sequence, digest: 'a'.repeat(64) };
+    const saved = { ...base, report };
+    events.push(saved);
   }
   await nats.seed(events);
   await record(201, 200);
