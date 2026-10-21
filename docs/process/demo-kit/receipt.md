@@ -212,3 +212,54 @@ No secondary stack was claimed or started, and no paid model call ran. All tempo
 fixture files were removed. No access, money, memory or key-handling rule changed.
 The provider key still enters setup by file path only. Fresh-install qualification,
 real owner replies, laptop tunnelling and real-phone access remain NOT RUN.
+
+## 21 October 2026 — PDF preparation and timed smoke
+
+Source: `a32374b4eb07f74fe03dde1a83aadaff47268802`, on main
+`523fc7218f4c84addbb8ddccf7fbccd48952e593`. Overall: PARTIAL.
+Test commits `570f96029` and `33fce5529` failed on their missing entry points
+before implementation. Recording fixtures prove that lost replies and unknown
+receipts never cause another write. They also check integer company ceilings,
+the personal PDF upload, unsafe slot refusals and timed result recording.
+
+The checked single-page quote says EUR 1,234.56 and delivery 17 November 2026.
+Preparation uses the existing group seed, authenticated APIs, request records and
+server receipts. It changes only company ceilings. No dependency, event, API or
+access rule changes. The owner-mode work in PR #546 is neither copied nor required.
+
+| Own check | Result | Time |
+| --- | --- | --- |
+| `npm ci`; tool symlinks | PASS | 32 s |
+| Demo Node tests, final two runs | PASS; 17 each | 22.41 / 28.45 s |
+| Event security rules, unchanged | PASS; 438 tests | 3.03 s |
+| Event catalogue | PASS; 149 types | 0.96 s |
+| Focused strict TypeScript check | PASS | Not timed |
+| Workspace/package typecheck | PASS | Not timed |
+| Standalone Chromium PDF rendering and visual inspection | PASS; one readable page | Not timed |
+| Full lint including knip | PARTIAL; first run ended with SIGTERM (143) | Not timed |
+| Changelog and Markdown checks | PASS after removing a blank line | Not timed |
+
+Tests use `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and
+`nice -n 10`; these recording fixtures do not connect to PostgreSQL. No root suite
+or database container was started. Full lint and typecheck also use `nice -n 10`.
+
+| Real warm-slot smoke | First attempt | Second attempt |
+| --- | --- | --- |
+| Streaming and reload | NOT RUN | NOT RUN |
+| PDF facts, rendered preview and original download | NOT RUN | NOT RUN |
+| Stop and partial reply after reload | NOT RUN | NOT RUN |
+| Live direct delivery | NOT RUN | NOT RUN |
+| Shared-assistant reply | NOT RUN | NOT RUN |
+| Company-limit refusal and restore | NOT RUN | NOT RUN |
+| Three-minute duration and 1280/390 screenshots | NOT RUN | NOT RUN |
+
+Real preparation, warm-up and smoke timings: NOT RUN. Paid calls: zero;
+charged: 0 cents; held: 0 cents. The remaining shared daily allowance is not
+recorded in the available receipts. Its current value has been requested before
+paid execution. No secondary was claimed or created, so no cleanup is due.
+Real-model Stop diagnosis and fresh-install qualification remain NOT RUN.
+The owner stack, owner refresh, laptop tunnel and real phone remain untouched
+and NOT RUN. Browser viewport checks would not qualify a physical phone.
+
+A detached lint repeat is running at this receipt. The pull request records its
+final result and GitHub `ci-ok` on the pushed commit.
