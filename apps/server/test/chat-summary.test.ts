@@ -9,6 +9,7 @@ import { conversationKeys } from '../src/chat/keys.ts';
 import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let keys: ReturnType<typeof conversationKeys>;
@@ -366,3 +367,32 @@ async function savesStopWithoutRereadingStreamedReports() {
 }
 it('saves Stop within two seconds without rereading an already consumed reply',
   savesStopWithoutRereadingStreamedReports);
+
+async function keepsChatCommandsSeparateFromInvalidMemoryEvidence() {
+  await setup();
+  const completed = event('completed', 'agent.turn_completed', {
+    conversationId: 'chat', turnId: 'message',
+  });
+  const lateMemory = event('late-memory', 'agent.memory_context_recorded', {
+    conversationId: 'chat', turnId: 'message', requesterId: 'alice', assistantId: 'assistant',
+    computerId: 'computer', generation: 1, threadId: 'thread', inputGeneration: 'context',
+    action: 'prepared', delivery: null, callDigest: null, dispatchDigest: null,
+    additions: [], scopePositions: [], projectionGeneration: 'projection', byteCount: 0,
+    hasOmissions: false, reason: 'none',
+  });
+  lateMemory.source = 'opencrane-server';
+  lateMemory.principal = { kind: 'system', id: 'server' };
+  lateMemory.correlation = {};
+  await nats.seed([completed, lateMemory]);
+  const commandContext = { silo: 'test', memberId: 'admin' };
+  const input = { id: 'next-message', conversationId: 'chat', text: 'Another request' };
+  const saved = await chatCommand(nats.store, keys, commandContext, input);
+  expect(saved.status).toBe('appended');
+  const stop = { id: 'next-stop', conversationId: 'chat', stopTurnId: 'next-message' };
+  const stopped = await chatCommand(nats.store, keys, commandContext, stop);
+  expect(stopped.status).toBe('appended');
+  const reading = readChatFacts(nats.store, 'test', 'chat', 'message');
+  await expect(reading).rejects.toThrow('Memory evidence arrived after the turn closed');
+}
+it('allows chat and Stop commands while strict memory reads still reject late evidence',
+  keepsChatCommandsSeparateFromInvalidMemoryEvidence);
