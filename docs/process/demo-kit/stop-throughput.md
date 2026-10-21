@@ -496,3 +496,68 @@ and displayed character counts differ. [Real reply after reload](stop-display-re
   task's throwaway PostgreSQL container and its volume were removed too. Temporary
   probe scripts were removed; private evidence remains under `/tmp/demo-stop-display/`.
   The requested tool symlinks remain. The owner stack was not used or changed.
+
+### CI repair checks, 21 October 2026
+
+PRODUCT CHANGE: no in this repair round. Runtime code, test code, assertions and
+timeouts are unchanged from `25e12e066`.
+
+PASS: fetched origin and ran the whole-branch rebase onto `origin/main` at
+`1041206f322bdc584c1b32d2d486f96198cf5b76`. Git reported the branch was already
+current. The merge base equals that main commit, and neither rebase directory
+exists. Returned to `work/demo-stop-display` after the main comparison.
+
+FAIL in [the earlier CI run](https://github.com/elewa-git/opencrane-new/actions/runs/39640193941):
+Markdown rule MD022 found no blank line above `## Stop display`. Fixed in
+`c16623236`. PASS: full Markdown lint after the correction.
+
+The same CI run reported five MCP cleanup hooks exceeding 10,000 ms:
+`guards published HTTPS tool calls: revision`, `held_start`, `watch_admission`,
+`refuses a direct responded callback after a saved unknown outcome`, and
+`saves a checked remote response against its consumed permit once: tool_error`.
+It also reported missing quiet-proof fields in
+`keeps automation under UID 1002 separate from full quiet proof`.
+
+PASS: repeated each complete file five times on branch source `c16623236` and
+five times on main source `1041206f3`. Each invocation used `nice -n 10`,
+`--maxWorkers=1` and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+
+| Complete test file | Branch passes | Main passes | Failures |
+| --- | --- | --- | --- |
+| `libs/models/test/mcp-dispatch.test.ts` | 5/5 | 5/5 | 0 |
+| `apps/computer/test/supervisor-identity.test.ts` | 5/5 | 5/5 | 0 |
+
+Each MCP run passed 173 tests; each supervisor run passed five. All 1,780 test
+executions passed, including every reported case. Neither failure reproduced on
+either source. Treat the earlier test failures as load flakes on this evidence,
+as requested. No branch-only failure needed a behaviour fix. The projection runner
+keeps reply pieces inside its awaited run and sets no timer for later reply writes.
+The supervisor and its fixture are unchanged by this PR. No check was weakened.
+
+The environment was this Linux worktree with Node 22.23.3 and disposable test
+services. Computer fixtures reused image `sha256:8874255dfbc3` with each source's
+computer files mounted into fresh containers. The image id was unchanged for the
+main comparison. PARTIAL: one extra MCP invocation was interrupted while reordering
+the queue; it is excluded from the completed-run counts. Full run records are in
+`/tmp/demo-stop-display-repeat.jsonl`; logs are
+`/tmp/demo-stop-display-{branch,main}-{mcp,identity}-{1,2,3,4,5}.log`.
+
+PASS: all four tests in `libs/projections/test/streaming.test.ts`, twice, with one
+worker under `nice -n 10` (14.47 and 13.19 seconds for the complete file).
+Used fresh PostgreSQL 17.6 at
+`postgres://postgres:test-only@127.0.0.1:53525/postgres`, following the disposable
+database rule for projection tests. Removed container
+`pgtest-demo-stop-display-ci-20261021` and its volume with `docker rm -f -v`.
+Logs: `/tmp/demo-stop-display-streaming-{1,2}.log` and
+`/tmp/demo-stop-display-streaming-results.log`.
+
+PASS: full lint, including knip and changelog lint; full workspace and package
+typecheck; event catalogue check with 149 agreeing event types. All ran under
+`nice -n 10` on `c16623236`. Logs:
+`/tmp/demo-stop-display-{lint,typecheck,events}.log`. Markdown, local links and
+changelog lint are checked again with this receipt before committing.
+
+NOT RUN in this repair round: a live stack, fresh-install journey, paid calls or
+the full root suite locally. The earlier live results keep their stated sources
+and limits. The PR comment records CI for the pushed head and its `ci-ok` result.
