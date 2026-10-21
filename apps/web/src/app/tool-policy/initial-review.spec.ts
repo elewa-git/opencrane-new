@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { toolPolicySchema } from '@opencrane/protocol';
 import { reviewCommand } from '../integrations/review-command';
+import { initialToolPolicy } from './tool-policy-choices';
 import { ToolPolicyScreen } from './tool-policy';
 
 function initialPolicy() {
@@ -79,4 +80,12 @@ it('refuses an expired initial snapshot', async () => {
   const policy = initialPolicy();
   policy.expiresAt = new Date(Date.now() - 1000).toISOString();
   await expect(reviewCommand(policy, 'expired-review')).rejects.toThrow();
+});
+
+it('keeps saved mode editing after review and before publication', () => {
+  const policy = initialPolicy();
+  policy.sequence = 4;
+  policy.reviewRevision = 4;
+  policy.tools[0]!.reviewed = true;
+  expect(initialToolPolicy(policy)).toBe(false);
 });
