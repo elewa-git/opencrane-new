@@ -40,8 +40,10 @@ export async function demoSpending(options: Options, output: string, sha: string
         if (row.event.type === 'budget.reserved') {
           const modelCall = data['modelCall'] as { turnId: string } | undefined;
           if (!modelCall || !turns.has(modelCall.turnId)) continue;
-          calls.set(reservationId, { reservationId, turnId: modelCall.turnId,
-            chargedCents: null, heldCents: data['amountCents'] as number });
+          if (!calls.has(reservationId)) {
+            calls.set(reservationId, { reservationId, turnId: modelCall.turnId,
+              chargedCents: null, heldCents: data['amountCents'] as number });
+          }
         }
         if (row.event.type === 'budget.settled' && data['outcome'] !== 'unknown') {
           const call = calls.get(reservationId);
