@@ -96,12 +96,16 @@ async function waitsForSeededDefault(loseReply = false, absent = false, unavaila
   let recovered = false;
   let bindingReads = 0;
   let selections = 0;
+  let paidTests = 0;
   async function handle(request: import('node:http').IncomingMessage,
     response: import('node:http').ServerResponse) {
     let contents = '';
     for await (const chunk of request) contents += String(chunk);
     const input = contents ? JSON.parse(contents) : {};
     response.setHeader('content-type', 'application/json');
+    if (input.action === 'test') {
+      paidTests += 1;
+    }
     if (request.method === 'POST' && request.url?.endsWith('/key')) {
       saves++;
       savedCommand = input.commandId;
@@ -164,6 +168,7 @@ async function waitsForSeededDefault(loseReply = false, absent = false, unavaila
     assert(recovered, 'Read the original save command');
     assert.equal(saves, 1, 'An unknown write is never sent twice');
     assert.equal(bindingReads, 2);
+    assert.equal(paidTests, 1, 'The binding read never repeats the paid test');
     assert.equal(selections, 1, 'Wait for the scheduled binding before the single owner selection');
   } finally {
     server.closeAllConnections();

@@ -100,7 +100,16 @@ export async function setupProvider(options: SetupOptions) {
   async function seededDefault() {
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
-      const bindings = await request('bindings', `${route}/bindings`);
+      let bindings: Reply;
+      try {
+        bindings = await request('bindings', `${route}/bindings`);
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== 'Provider setup bindings: 503') {
+          throw error;
+        }
+        await delay(100);
+        continue;
+      }
       const previous = bindings.rows?.find(isDefault);
       if (previous) return { bindings, previous };
       await delay(100);

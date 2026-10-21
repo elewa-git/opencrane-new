@@ -213,7 +213,9 @@ async function restartStackProcess(
 }
 
 function matchesStackEntrypoint(name: 'server' | 'conversations', argument: string): boolean {
-  if (name === 'server') return argument.endsWith('apps/server/src/main.ts');
+  if (name === 'server') {
+    return argument.endsWith('apps/server/src/main.ts');
+  }
   return argument.endsWith('apps/ops/src/worker.ts');
 }
 

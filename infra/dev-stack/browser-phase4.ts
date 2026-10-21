@@ -71,7 +71,9 @@ export async function browserPhase4(options: BrowserPhase4Options): Promise<void
     assistantId);
   await qualifyDirectChat(options, ownerPage, memberMobile, memberDesktop,
     attemptDirectory);
-  if (options.scope === 'groups') return;
+  if (options.scope === 'groups') {
+    return;
+  }
   await qualifyProvider(options, ownerPage, attemptDirectory);
   if (options.secondaryStack) {
     await qualifyOwnershipTransfer(options, ownerPage, attemptDirectory);
@@ -831,7 +833,9 @@ function isAgentEvent(row: { type: string }): boolean {
 
 async function agentActivityCount(store: EventStore): Promise<number> {
   const head = await store.head();
-  if (!head) return 0;
+  if (!head) {
+    return 0;
+  }
   let count = 0;
   for await (const stored of readEvents(store, 1, head)) {
     const type = stored.event.type;

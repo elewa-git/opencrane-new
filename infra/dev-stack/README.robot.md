@@ -765,7 +765,8 @@ The isolation test supplies synthetic inherited keys whose values match expected
 text. Reading either key changes that text during sanitisation and fails the test.
 
 Setup still uses the product reachability check, exact consented quote, registry models,
-explicit default, drain and switch-on. A lost write response permits only a GET of the
+explicit default, drain and switch-on. The initial default-binding read waits through a temporary 503 within its existing
+thirty-second deadline. A lost write response permits only a GET of the
 original command receipt. Recovery requires the expected operation. An absent or unknown
 receipt never causes another POST. Incomplete setup stops; repeat startup cannot silently
 create another provider or change modes. Keep the opt-in on ordinary restarts. A fresh
@@ -893,13 +894,3 @@ step within 180 seconds and successful steps taking longer than 180 seconds. The
 fixture refuses configuration loading to prove the secondary id check runs first.
 The command does not claim or remove a stack. Use `claim.sh` before startup and
 `down.sh --id` after copying the receipt. Live results are in the demo receipt.
-
-## Remaining demo pages
-
-After the seed and smoke command, `DEV_STACK_ID=1 P4_JOURNEY_ATTEMPT=<attempt>
-node --experimental-strip-types infra/dev-stack/demo-pages.ts` checks Action history,
-the seeded group, an unopened invitation, Model answered with no key field, and
-Change history for limits and groups. It captures 1280px and 390px pictures under
-`demo-pages/<attempt>/` in the owned secondary directory. The invitation field is
-masked in pictures. It makes no model calls. A failed check writes FAIL in
-`pages.json` and exits unsuccessfully. Repeating it creates another invitation.

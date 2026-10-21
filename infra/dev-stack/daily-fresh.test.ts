@@ -230,7 +230,9 @@ async function retainsFailedGroupJourney() {
     const attempt = (await readFile(`${fixture.home}/attempts`, 'utf8')).trim();
     const ledger = `${fixture.home}/.opencrane/daily-fresh`;
     const entries = await readdir(ledger);
-    function isEvidence(entry: string) { return entry !== 'ledger.md'; }
+    function isEvidence(entry: string) {
+      return entry !== 'ledger.md';
+    }
     const evidence = entries.find(isEvidence);
     assert.ok(evidence);
     const output = `${ledger}/${evidence}/p4-journey/${attempt}`;

@@ -19,15 +19,15 @@ export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
 export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
 export DEMO_ALLOWANCE_CENTS=500
 export COMPUTER_IDLE_MS=14400000
-export P4_JOURNEY_ATTEMPT=demo-rehearsal-final-a
+export P4_JOURNEY_ATTEMPT=demo-rehearsal-verified-a
 infra/dev-stack/up.sh --id 1 --fresh
 node --experimental-strip-types infra/dev-stack/demo-seed-run.ts
 node --experimental-strip-types infra/dev-stack/demo-smoke-run.ts
-node --experimental-strip-types infra/dev-stack/demo-pages.ts
+node --experimental-strip-types .tools/demo-rehearsal-pages.ts
 infra/dev-stack/down.sh --id 1
 ```
 
-The second run uses `demo-rehearsal-final-b`. Only product provider setup reads the
+The second run uses `demo-rehearsal-verified-b`. Only product provider setup reads the
 paid file. Its value is never printed. Failed proof is copied before cleanup.
 
 ## Fresh-install results
@@ -63,7 +63,7 @@ Startup exited 1 on each attempt; the kit seed and smoke were NOT RUN.
 | [abacbe417](failed-abacbe417/receipt.json) | Group display timed out; new history check used the wrong event name | 29 | 51 |
 | [85714c511](failed-85714c511/receipt.json) | Journey read asserted 200 during a documented moving list | 13 | 17 |
 
-The five attempts total 198 cents including holds. The first two passed the real
+The five early failures total 198 cents including holds. The first two passed the real
 streaming, Stop, member and PDF checks. The third also passed seven group checks,
 including zero AI/computer/budget work and access clearing within two seconds.
 [The first failure picture](failed-b3c4c4075/private-reply-390.png) shows the real answer.
@@ -72,7 +72,7 @@ including zero AI/computer/budget work and access clearing within two seconds.
 ## Source checks
 
 - PASS: failing-first commits `4e7669ba7`, `4a298440b` and `d39698e9f` and `5f1f03943` precede their fixes.
-- PASS: 25 focused Node tests twice; 17 owner/mode refusal tests twice; changed scripts compile.
+- PASS: 32 focused Node tests twice; 17 owner/mode refusal tests twice; changed scripts compile.
 - PASS: required lint and workspace typecheck; event catalogue, Knip and changelog checks.
 - PASS: 438 event-security tests with the supplied `PG_TEST_URL`.
 - FAIL: an additional compiler check across every dev-stack script found existing errors in
@@ -80,3 +80,8 @@ including zero AI/computer/budget work and access clearing within two seconds.
 
 Checks and tests used `nice -n 10`. No full root test suite or fleet batch ran.
 The owner stack, port 44200 and its data were untouched. No dependency or product event changed.
+
+The prior [d89186d28 install A](prior-d89186d28-a/receipt.json) passed all ten steps
+and all eight group checks (29 cents charged, 52 held). Its install B stopped on
+a temporary binding-read 503 after one paid verification (1 cent, no hold). These
+[failed B details](failed-d89186d28-b/receipt.json) bring the retained total to 280 cents.
