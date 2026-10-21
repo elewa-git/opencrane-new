@@ -1,0 +1,157 @@
+{
+  "image": "sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+  "beforeFixSource": "fbff70b3738a948ce69edd75f1c340cbc84376c0",
+  "testCommit": "d3795caa4",
+  "fixCommit": "d9d850a75",
+  "stopRequestedAt": "2026-10-21T05:25:04.481Z",
+  "journalFinishedAt": "2026-10-21T05:25:16.274905757Z",
+  "bridgeJournalReports": [
+    {
+      "line": 1,
+      "type": "agent.turn_started",
+      "turnId": "d08bebcd-1de9-4b90-b1cf-71ff6cf8ccc4",
+      "previousSequence": 0,
+      "sequence": 1
+    },
+    {
+      "line": 36,
+      "type": "agent.turn_completed",
+      "turnId": "d08bebcd-1de9-4b90-b1cf-71ff6cf8ccc4",
+      "previousSequence": 35,
+      "sequence": 36
+    },
+    {
+      "line": 37,
+      "type": "agent.turn_started",
+      "turnId": "47ab40ad-8773-4427-bd5c-40d533c9127c",
+      "previousSequence": 36,
+      "sequence": 37
+    },
+    {
+      "line": 594,
+      "type": "agent.turn_failed",
+      "turnId": "47ab40ad-8773-4427-bd5c-40d533c9127c",
+      "previousSequence": 593,
+      "sequence": 594
+    }
+  ],
+  "gatewayUsageLine": {
+    "line": 2,
+    "id": "2e84f204-b6e9-4941-8d00-d450bb06dffb",
+    "uncertainReason": "missing_usage"
+  },
+  "savedProgress": [
+    {
+      "observedAt": "2026-10-21T05:29:54.173Z",
+      "reports": 102,
+      "first": {
+        "time": "2026-10-21T05:24:41.157Z",
+        "type": "agent.turn_started",
+        "sequence": 108,
+        "reportSequence": 1
+      },
+      "last": {
+        "time": "2026-10-21T05:29:50.302Z",
+        "type": "agent.message_delta",
+        "sequence": 278,
+        "reportSequence": 102
+      }
+    },
+    {
+      "observedAt": "2026-10-21T05:30:54.143Z",
+      "reports": 117,
+      "first": {
+        "time": "2026-10-21T05:24:41.157Z",
+        "type": "agent.turn_started",
+        "sequence": 108,
+        "reportSequence": 1
+      },
+      "last": {
+        "time": "2026-10-21T05:30:50.396Z",
+        "type": "agent.message_delta",
+        "sequence": 293,
+        "reportSequence": 117
+      }
+    },
+    {
+      "observedAt": "2026-10-21T05:37:13.442Z",
+      "reports": 184,
+      "first": {
+        "time": "2026-10-21T05:24:41.157Z",
+        "type": "agent.turn_started",
+        "sequence": 108,
+        "reportSequence": 1
+      },
+      "last": {
+        "time": "2026-10-21T05:37:00.848Z",
+        "type": "agent.message_delta",
+        "sequence": 372,
+        "reportSequence": 184
+      }
+    },
+    {
+      "observedAt": "2026-10-21T05:41:16.775Z",
+      "reports": 379,
+      "first": {
+        "time": "2026-10-21T05:24:41.157Z",
+        "type": "agent.turn_started",
+        "sequence": 108,
+        "reportSequence": 1
+      },
+      "last": {
+        "time": "2026-10-21T05:41:13.717Z",
+        "type": "agent.message_delta",
+        "sequence": 569,
+        "reportSequence": 379
+      }
+    },
+    {
+      "observedAt": "2026-10-21T05:42:14.455Z",
+      "reports": 594,
+      "first": {
+        "time": "2026-10-21T05:24:41.157Z",
+        "type": "agent.turn_started",
+        "sequence": 108,
+        "reportSequence": 1
+      },
+      "last": {
+        "time": "2026-10-21T05:41:38.322Z",
+        "type": "agent.turn_failed",
+        "sequence": 784,
+        "reportSequence": 594
+      }
+    }
+  ],
+  "replayFixture": [
+    {
+      "attempt": 1,
+      "code": 1013,
+      "reason": "Report queue limit",
+      "saved": 0
+    },
+    {
+      "attempt": 2,
+      "code": 1013,
+      "reason": "Report queue limit",
+      "saved": 0
+    }
+  ],
+  "failingRegression": {
+    "acceptedReports": 64,
+    "savedReports": 1
+  },
+  "fixedRegression": {
+    "acceptedReports": 64,
+    "savedReports": 64
+  },
+  "conversationEndSavedAt": "2026-10-21T05:41:38.322Z",
+  "computerEndSavedAt": "2026-10-21T05:41:38.376Z",
+  "pendingPdfDeliveredAt": "2026-10-21T05:42:08.689Z",
+  "timedRunJournalEnd": {
+    "line": 2664,
+    "type": "agent.turn_failed",
+    "turnId": "8a51c5ed-e1a6-41b0-b252-7bcd1a177e4b",
+    "sequence": 2664,
+    "previousSequence": 2663
+  }
+}

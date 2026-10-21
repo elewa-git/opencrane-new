@@ -1,0 +1,60 @@
+[
+  {
+    "width": 1280,
+    "startedAt": "2026-10-21T06:07:14.640Z",
+    "elapsedMs": 136908,
+    "result": "FAIL",
+    "error": "TimeoutError: locator.waitFor: Timeout 120000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.caret') to be visible\u001b[22m\n",
+    "before": {
+      "sequence": 2574,
+      "defaultPayingGroupId": "installation-default",
+      "periodStart": "2026-10-01T00:00:00.000Z",
+      "todayCents": 25,
+      "monthCents": 25,
+      "reservedCents": 34,
+      "ceilingCents": 600,
+      "dailyCeilingCents": 600,
+      "ceilings": []
+    },
+    "after": {
+      "sequence": 2574,
+      "defaultPayingGroupId": "installation-default",
+      "periodStart": "2026-10-01T00:00:00.000Z",
+      "todayCents": 25,
+      "monthCents": 25,
+      "reservedCents": 34,
+      "ceilingCents": 600,
+      "dailyCeilingCents": 600,
+      "ceilings": []
+    }
+  },
+  {
+    "width": 390,
+    "startedAt": "2026-10-21T06:09:33.016Z",
+    "elapsedMs": 137272,
+    "result": "FAIL",
+    "error": "TimeoutError: locator.waitFor: Timeout 120000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.caret') to be visible\u001b[22m\n",
+    "before": {
+      "sequence": 2574,
+      "defaultPayingGroupId": "installation-default",
+      "periodStart": "2026-10-01T00:00:00.000Z",
+      "todayCents": 25,
+      "monthCents": 25,
+      "reservedCents": 34,
+      "ceilingCents": 600,
+      "dailyCeilingCents": 600,
+      "ceilings": []
+    },
+    "after": {
+      "sequence": 2982,
+      "defaultPayingGroupId": "installation-default",
+      "periodStart": "2026-10-01T00:00:00.000Z",
+      "todayCents": 25,
+      "monthCents": 25,
+      "reservedCents": 50,
+      "ceilingCents": 600,
+      "dailyCeilingCents": 600,
+      "ceilings": []
+    }
+  }
+]

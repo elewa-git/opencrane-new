@@ -268,3 +268,155 @@ A later confirmation exposed a 100 ms fixture-load timeout. Only the assertion
 that a refusal is absent now uses that short deadline; page setup uses the normal
 fixture timeout. Both corrected runs passed. No application timeout changed.
 The pull request records GitHub `ci-ok` on the pushed commit.
+
+
+## 21 October 2026 — paid secondary rehearsal
+
+Overall: PARTIAL. The two three-minute runs failed. This section replaces the
+previous NOT RUN status for paid execution. It does not qualify the demo as done.
+
+At the start, fetch and rebase onto `dc44c6cfc12045494d57504e275c00810476c3ed`
+completed. The base was an ancestor and neither rebase state directory remained.
+One secondary, slot 1, was claimed through `claim.sh`. The owner stack and port
+44200 were untouched. Real startup began at 05:20:38 UTC. Its initial live checks
+passed arithmetic with reload, a later member reply and PDF facts. Stop failed.
+The provider was supplied only by its key-file path to private setup and the
+existing custody API. No credential value is included in this evidence.
+
+The company daily and monthly ceilings were both 600 cents before the first paid
+verification. The event record confirms this at 05:21:25 UTC. The refreshed computer
+image was `sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc`.
+The orchestrator authorised a maximum of 600 cents from the remaining shared daily
+allowance of 2,000 cents. No ceiling above 600 cents was set.
+
+### Findings and small fixes
+
+Each behaviour fix has a separate preceding failing test commit.
+
+| Finding | Failing test | Fix |
+| --- | --- | --- |
+| Real startup seeded a larger cap before paid verification | `0c16013f8` | `fbff70b37`: apply the integer allowance during startup |
+| The new personal chat's receipt endpoint refused access before the chat existed | `eb1966f5b` | `aeb4efde1`: create once, then read its receipt; never repeat an uncertain write |
+| A full bridge queue discarded reports it had already accepted after disconnect | `d3795caa4` | `d9d850a75`: save the bounded accepted queue after disconnect |
+| Shared warm-up waited in the pending session chooser | `87a9b2d0a` | `41ba473ef`: use the existing session status helper |
+| Stop waited for the composer while the reply already offered Stop | `3d493ea3b` | `eb9e5a46e`: use the reply's Stop control |
+
+The first Stop request was saved at 05:25:04.481. The computer finished its report
+journal at 05:25:16.275, but the server had saved only 102 of 594 reports at
+05:29:50 and 184 by 05:37:00. Replay filled the 64-report queue and closed the
+connection with code 1013, `Report queue limit`. The old connection check then
+skipped accepted reports. The regression saved only one of 64 accepted reports
+before the fix and all 64 after it. The byte and count limits remain unchanged.
+
+After restarting only this slot's server on the fix, all 594 reports were saved
+by 05:41:38.322. The waiting PDF arrived at 05:42:08.689. The computer journal's
+line 594 was `agent.turn_failed`; gateway usage line 2 recorded `missing_usage`
+for reservation `2e84f204-b6e9-4941-8d00-d450bb06dffb`. Its 16 cents remain held.
+[Stop evidence](stop-diagnosis.json) records the report lines, event positions and
+times without message text. No access, money or memory check was weakened.
+
+### Timed runs
+
+Source: `41ba473efd3f6dd291197535c2ab2fead16e30d9`. Warm-up took 45.723 seconds.
+The server included the bridge fix. These runs preceded the Stop-selector fix.
+Screenshots added a small amount of time to successful steps. The three-minute
+deadline closed both pages and prevented later steps from running.
+
+| Smoke step | 1280 pixels, 05:52:38 UTC | 390 pixels, 05:55:39 UTC |
+| --- | --- | --- |
+| Streaming and reload | PASS, 18.676 s | FAIL, 180.053 s |
+| PDF facts, rendered preview and identical original download | PASS, 22.089 s | NOT RUN |
+| Stop and partial reply after reload | FAIL, 139.379 s | NOT RUN |
+| Live direct delivery | NOT RUN | NOT RUN |
+| Shared-assistant reply | NOT RUN | NOT RUN |
+| Company-limit refusal and restore | NOT RUN | NOT RUN |
+| Whole run within three minutes | FAIL, 180.144 s | FAIL, 180.054 s |
+
+The first timed Stop submitted turn `8a51c5ed-e1a6-41b0-b252-7bcd1a177e4b`
+at 05:53:23.577. It saved no Stop request: the helper waited for the absent
+composer control while the reply offered Stop. Its computer journal grew to
+2,664 reports. Gateway usage line 10 recorded `missing_usage`, leaving 18 cents
+held. The next attempt could not use the supplier chat. The bridge fix alone did
+not make this long reply recover within the smoke deadline. The remaining delay
+needs further work; this rehearsal does not claim a complete Stop fix.
+
+[Raw timed results](paid-timings.json) preserve every result, including NOT RUN.
+[Startup results](paid-startup.json) record the earlier fresh-install checks.
+
+### Separate follow-up steps
+
+These used the same action functions and assertions, one action at a time, with
+its own three-minute deadline. They are not a passing end-to-end smoke.
+
+| Step | 1280 pixels | 390 pixels |
+| --- | --- | --- |
+| Direct delivery | PARTIAL, 13.269 s | FAIL, 180.073 s |
+| Shared-assistant reply and reload | PASS, 40.526 s | PASS, 31.790 s |
+| Company-limit refusal, reload and restore | PASS, 39.785 s | PASS, 36.633 s |
+
+Direct-delivery assertions passed on desktop, but the screenshot immediately
+showed “You no longer have access”. That contradicts a complete PASS. The second
+attempt timed out. No access check was bypassed or relaxed. This remains a blocker.
+Both company-limit checks refused the current prompt, preserved charged and held
+amounts, and restored both company ceilings to 600 cents. Neither made a paid call.
+[Follow-up timings](paid-extra-timings.json) retain the raw assertion results;
+the desktop direct result above also includes the screenshot finding.
+
+The owner stack, owner refresh, laptop tunnel and physical phone remain NOT RUN.
+A 390-pixel Chromium viewport does not qualify a real phone. A fresh install with
+all final fixes and a complete repeated smoke remains NOT RUN.
+
+The final Stop helper was also tried in fresh chats at both widths on source
+`eb9e5a46e`. Both failed waiting for streaming: 136.908 and 137.272 seconds.
+The first request started its paid call later, after its browser timeout. The
+second screenshot reports an uncertain message receipt. No uncertain command
+was resubmitted. [Fresh-chat results](paid-fresh-timings.json) preserve both attempts.
+At 06:09:08 the supplier messages read returned 200; at 06:09:13 it returned 503,
+as did approvals. [HTTP observations](paid-access-responses.json) contain only
+paths, times and status codes. The saved session cookie had not expired.
+
+### Paid calls and screenshots
+
+Final recorded spending: **25 cents charged, 50 cents held; 75 cents total**.
+Three calls have unknown usage, so their full holds remain in the total.
+No call was made after the 600-cent allowance was reached; it was never reached.
+After the limit checks restored 600 cents, the daily ceiling was lowered to the
+25 cents already charged to prevent queued work dispatching during shutdown.
+The budget snapshot confirms that change. Removing a disposable stack does not
+make its outstanding provider usage known or release this task's reported holds.
+
+| Paid call | Initial reservation, cents | Charged, cents | Still held, cents |
+| --- | --- | --- | --- |
+| Provider verification | 1 | 1 | 0 |
+| Startup arithmetic | 16 | 3 | 0 |
+| Startup Stop | 16 | Unknown | 16 |
+| Startup later-member reply | 16 | 3 | 0 |
+| Startup PDF facts | 16 | 3 | 0 |
+| First personal warm-up | 16 | 3 | 0 |
+| Repeated personal warm-up | 17 | 1 | 0 |
+| Shared warm-up | 15 | 3 | 0 |
+| Timed streaming, 1280 | 17 | 1 | 0 |
+| Timed PDF, 1280 | 17 | 1 | 0 |
+| Timed Stop, 1280 | 18 | Unknown | 18 |
+| Separate shared reply, 1280 | 15 | 3 | 0 |
+| Separate shared reply, 390 | 15 | 3 | 0 |
+| Fresh Stop, 1280, dispatched late | 16 | Unknown | 16 |
+
+[Call ledger](paid-calls.json), [budget events](paid-budget-events.json) and
+[gateway usage](paid-gateway-usage.json) retain identifiers and times for each call.
+There was no additional paid call in the second timed attempt, direct delivery,
+either refusal check, or the second fresh Stop attempt before shutdown.
+
+The screenshots were visually checked for secrets and private locations:
+[desktop reply](paid-streaming-1280.png), [desktop PDF](paid-pdf-1280.png),
+[desktop direct failure](paid-direct-step-1280.png),
+[desktop shared reply](paid-shared-step-1280.png),
+[narrow shared reply](paid-shared-step-390.png),
+[desktop refusal](paid-limit-step-1280.png),
+[narrow refusal](paid-limit-step-390.png),
+[narrow reconnect state](paid-access-390.png),
+[desktop fresh Stop failure](paid-fresh-stop-1280.png) and
+[narrow uncertain message](paid-fresh-stop-390.png).
+The separate narrow PDF preview attempt timed out waiting for its Open button;
+there is no passing narrow PDF screenshot. Failure images are evidence of the
+remaining problems, not proof of a successful journey.

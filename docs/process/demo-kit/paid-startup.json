@@ -1,0 +1,63 @@
+{
+  "sha": "fbff70b3738a948ce69edd75f1c340cbc84376c0",
+  "outcomes": [
+    {
+      "check": "owner streamed reply and reload",
+      "result": "PASS"
+    },
+    {
+      "check": "Stop and reload",
+      "result": "FAIL"
+    },
+    {
+      "check": "later member through the default",
+      "result": "PASS"
+    },
+    {
+      "check": "scanned supplier PDF total and delivery date",
+      "result": "PASS"
+    }
+  ],
+  "reservations": [
+    [
+      "2812e683-5bab-45f0-9a78-6aee3afd6af0",
+      {
+        "turnId": "8ab58681-b5fd-40f0-9bb4-046a6b3cd864",
+        "reservedCents": 1,
+        "chargedCents": 1
+      }
+    ],
+    [
+      "c8344b14-33bd-42ff-a5ff-bf8af4063dca",
+      {
+        "turnId": "d08bebcd-1de9-4b90-b1cf-71ff6cf8ccc4",
+        "reservedCents": 16,
+        "chargedCents": 3
+      }
+    ],
+    [
+      "2e84f204-b6e9-4941-8d00-d450bb06dffb",
+      {
+        "turnId": "47ab40ad-8773-4427-bd5c-40d533c9127c",
+        "reservedCents": 16,
+        "chargedCents": null
+      }
+    ],
+    [
+      "7964369e-75cd-4c63-9ab4-95430541faed",
+      {
+        "turnId": "386dfc14-cc08-46ed-9951-4a128e3d6931",
+        "reservedCents": 16,
+        "chargedCents": 3
+      }
+    ],
+    [
+      "772c9b28-0422-4e57-8c21-5b5440a4ecda",
+      {
+        "turnId": "6d927cfc-2f46-4541-8db6-03f7846f5163",
+        "reservedCents": 16,
+        "chargedCents": 3
+      }
+    ]
+  ]
+}
