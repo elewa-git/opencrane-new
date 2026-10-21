@@ -461,14 +461,16 @@ async function qualifySharedAssistant(
 }
 
 export async function waitForSharedAssistantReply(page: Page, output: string): Promise<void> {
-  const reply = page.getByText('Hello from your computer.', { exact: true });
+  const reply = page.getByRole('article', { name: 'Agent reply', exact: true }).last();
   try {
-    await reply.waitFor({ timeout: 120_000 });
+    await reply.getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
+    const text = await reply.locator('.prose').innerText();
+    assert(text.trim().length > 0, 'The private assistant must return a non-empty answer');
   } catch (error) {
     const failureScreenshot = resolve(output, 'shared-assistant-private-chat-failure.png');
     await page.screenshot({ path: failureScreenshot, fullPage: false });
     const mainText = await page.locator('main').innerText();
-    throw new Error(`The private chat did not show the stub reply. Screen text: `
+    throw new Error(`The private chat did not finish its reply. Screen text: `
       + mainText.slice(0, 500), { cause: error });
   }
 }
