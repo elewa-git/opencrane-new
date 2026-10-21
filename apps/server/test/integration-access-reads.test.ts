@@ -153,6 +153,46 @@ async function refusesInvalidReads() {
 }
 it('refuses outsiders, foreign and unknown servers and invalid page inputs', refusesInvalidReads);
 
+async function labelsDepartedGrantHolderAfterReplay() {
+  const grant = await append(subject, 'grant.given', { resourceType: 'mcp_server',
+    resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' });
+  await append('member-bob', 'member.removed', { memberId: 'bob', removedBy: 'owner' });
+  await project();
+  try {
+    const before = await get();
+    expect(before.statusCode, before.body).toBe(200);
+    const expected = { complete: true, grantTotal: 3, grants: expect.arrayContaining([
+      expect.objectContaining({ granteeKind: 'member', granteeId: 'bob', displayName: 'bob',
+        state: 'granted', membershipStatus: 'departed', eventId: grant.id }),
+    ]) };
+    expect(before.json()).toMatchObject(expected);
+    const choices = await get(`${path}/candidates?kind=member`);
+    expect(choices.json()).toMatchObject({ rows: [{ id: 'admin' }, { id: 'owner' }] });
+    const teams = await get(`${path}/candidates?kind=team`);
+    expect(teams.json()).toMatchObject({ rows: [{ id: 'sales', memberCount: 0 }] });
+    expect((await auth.check('bob', 'member')).allowed).toBe(false);
+    expect((await auth.use('person', 'bob', 'mcp_server', 'fixture')).allowed).toBe(false);
+    const position = await nats.store.head();
+    await rebuildModelAccessProjection(database, nats.reader, logger, { verify: true });
+    await rebuildMemberProjection(database, nats.reader, logger, { verify: true });
+    const after = await get();
+    expect(after.statusCode, after.body).toBe(200);
+    expect(after.json()).toMatchObject(expected);
+    const original = before.json<{ loadedAt: string }>();
+    const replayed = after.json<{ loadedAt: string }>();
+    expect({ ...replayed, loadedAt: original.loadedAt }).toEqual(original);
+    expect((await auth.check('bob', 'member')).allowed).toBe(false);
+    expect((await auth.use('person', 'bob', 'mcp_server', 'fixture')).allowed).toBe(false);
+    expect(await nats.store.head()).toBe(position);
+  } finally {
+    await append('member-bob', 'member.joined', { memberId: 'bob', role: 'member',
+      email: 'bob@example.test', displayName: 'bob', invitationId: 'invite-bob' });
+    await project();
+  }
+}
+it('labels Bob departed while keeping his saved grant before and after replay',
+  labelsDepartedGrantHolderAfterReplay, 120_000);
+
 async function reportsLagAndReplays() {
   const revoke = await append(subject, 'grant.revoked', { resourceType: 'mcp_server',
     resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', revokedBy: 'owner' }, 'acme', false);
