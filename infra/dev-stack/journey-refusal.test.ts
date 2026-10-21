@@ -13,6 +13,8 @@ const commands: Invocation[] = [
   { script: 'screenshot-journey.ts', args: ['fresh'] },
   { script: 'mcp-journey.ts', args: ['fresh'] },
   { script: 'live-view-repeat.ts', args: [] },
+  { script: '../package/capture.mjs', args: ['fresh-1-'] },
+  { script: '../package/fresh-twice.ts', args: ['/synthetic-values.json'] },
 ];
 
 async function invoke(command: Invocation, fleet?: string, id = 'owner', realMode = false) {
@@ -118,3 +120,13 @@ for (const script of ['bootstrap-journey.ts', 'live-view-repeat.ts']) {
   }
   test(`${script} refuses saved real mode before starting a stand-in journey`, refuseRealMode);
 }
+
+async function packageCaptureRefusesRealMode() {
+  const command = { script: '../package/capture.mjs', args: ['fresh-1-'] };
+  const result = await invoke(command, undefined, '1', true);
+  assert.notEqual(result.status, 0);
+  assert.equal(result.reads, 'settings read\n', result.output);
+  assert.match(result.output, /This journey requires the stand-in model/u);
+}
+
+test('package browser capture refuses a saved real-mode stack', packageCaptureRefusesRealMode);
