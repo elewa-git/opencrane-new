@@ -468,7 +468,7 @@ and displayed character counts differ. [Real reply after reload](stop-display-re
 - PASS: failing-first commit `0ffde53fd` reproduced the slow commit path without a
   stack or provider: 18,346 ms against a fixed 2,000 ms limit. The final test keeps
   that same limit for 28,224 characters and verifies every original row and closure.
-- PASS: the final four changed tests passed twice (16.01 and 21.56 seconds for each
+- PASS: the final four changed tests passed twice (12.24 and 12.36 seconds for each
   complete file). PostgreSQL tests cover rollback, retry, duplicate ids and racing
   runners. In-memory SQL checks cover the timing bound and invalid middle deltas.
   One earlier invalid-delta check timed out at 30 seconds during the fresh stack

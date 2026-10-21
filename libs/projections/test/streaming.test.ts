@@ -86,7 +86,9 @@ async function projectsLongReply() {
       position = page.rows.at(-1)?.position ?? events.length;
     }
     expect(rows).toHaveLength(events.length);
-    expect(rows.map(rowData)).toEqual(events.map(storedData));
+    const actualData = rows.map(rowData);
+    const expectedData = events.map(storedData);
+    expect(actualData).toEqual(expectedData);
     expect(rows.at(-1)?.type).toBe('agent.turn_failed');
     expect(await runner.checkpoint(conversations)).toBe(events.length);
     expect(elapsed).toBeLessThan(2000);
@@ -99,7 +101,8 @@ it('projects a 28,224-character reply and its closure within two seconds', proje
 
 async function retriesFailedReplyBatch() {
   const storage = await database('pg');
-  const events = replyEvents().slice(0, 70);
+  const completeReply = replyEvents();
+  const events = completeReply.slice(0, 70);
   let fail = true;
   const projection = { ...conversations, apply, applyReplies };
   async function applyReplies(tx: Query, batch: StoredEvent[]) {
@@ -136,7 +139,8 @@ it('rolls back a failed reply batch with its receipts and resumes all its text',
 
 async function duplicateReplyBatches() {
   const storage = await database('pg');
-  const events = replyEvents().slice(0, 70);
+  const completeReply = replyEvents();
+  const events = completeReply.slice(0, 70);
   const original = events[1]!.event;
   events[2] = { sequence: 3, event: original };
   events[67] = { sequence: 68, event: original };
@@ -180,7 +184,8 @@ function storedData(row: StoredEvent) {
 async function rejectsInvalidMiddleDelta() {
   const engine = new PGlite();
   const storage = { db: pgliteDb(engine), close: engine.close.bind(engine) };
-  const events = replyEvents().slice(0, 10);
+  const completeReply = replyEvents();
+  const events = completeReply.slice(0, 10);
   events[4]!.event.data = { conversationId: 'chat' };
   const logger = createLogger('streaming-test', { level: 'silent' });
   const runner = new ProjectionRunner(storage.db, sourceFor(events), logger);
