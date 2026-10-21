@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import { budgetSummarySchema } from '@opencrane/protocol';
 import { request, reserveRequest } from './demo-seed.ts';
@@ -74,10 +76,71 @@ async function createPersonalConversation(options: Options, assistantId: string)
   return conversationId;
 }
 
-export async function prepareDemo(options: Options, allowanceCents: number) {
+const savedCeilingsSchema = z.object({
+  ceilingCents: z.int().nonnegative(), dailyCeilingCents: z.int().nonnegative(),
+  commandId: z.string().uuid(),
+});
+
+export async function saveDemoCeilings(options: Options, output: string) {
+  await mkdir(output, { recursive: true, mode: 0o700 });
+  const path = `${output}/saved-ceilings.json`;
+  try {
+    return savedCeilingsSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const budget = await demoBudget(options);
+  const saved = { ceilingCents: budget.ceilingCents,
+    dailyCeilingCents: budget.dailyCeilingCents, commandId: randomUUID() };
+  // Finish saving before any ceiling write, so a later process can restore both values.
+  await writeFile(path, JSON.stringify(saved), { flag: 'wx', mode: 0o600, flush: true });
+  return saved;
+}
+
+export async function restoreDemoCeilings(options: Options, output: string) {
+  const path = `${output}/saved-ceilings.json`;
+  let saved;
+  try {
+    saved = savedCeilingsSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  const current = await demoBudget(options);
+  if (current.ceilingCents !== saved.ceilingCents ||
+      current.dailyCeilingCents !== saved.dailyCeilingCents) {
+    // Use a fresh conditional command after an interrupted restore. Reapplying these
+    // same limits cannot charge money or raise them above the saved values.
+    await demoCeiling(options, `demo-restore-${randomUUID()}`,
+      saved.ceilingCents, saved.dailyCeilingCents);
+  }
+  await rm(path);
+}
+
+export async function recoverDemoCeilings(options: Options) {
+  const parent = `${options.directory}/demo-smoke`;
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const entries = await readdir(parent, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) await restoreDemoCeilings(options, `${parent}/${entry.name}`);
+  }
+}
+
+export async function prepareDemo(options: Options, allowanceCents: number,
+  output = `${options.directory}/demo-smoke/preparation`) {
   assert(Number.isInteger(allowanceCents) && allowanceCents > 0 && allowanceCents <= 2000,
     'Demo allowance must be 1 to 2000 integer cents');
-  await demoCeiling(options, `demo-ceiling-${allowanceCents}-v1`, allowanceCents, allowanceCents);
+  const saved = await saveDemoCeilings(options, output);
+  try {
+    await demoCeiling(options, `demo-ceiling-${saved.commandId}`, allowanceCents, allowanceCents);
+    return await preparePersonalPdf(options);
+  } catch (error) {
+    await restoreDemoCeilings(options, output);
+    throw error;
+  }
+}
+
+async function preparePersonalPdf(options: Options) {
   const context = await request(options, '/api/chat');
   const personal = await context.json() as { assistantId?: string };
   const assistantId = personal.assistantId;
