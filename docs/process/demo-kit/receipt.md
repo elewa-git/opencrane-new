@@ -215,12 +215,15 @@ real owner replies, laptop tunnelling and real-phone access remain NOT RUN.
 
 ## 21 October 2026 — PDF preparation and timed smoke
 
-Source: `a32374b4eb07f74fe03dde1a83aadaff47268802`, on main
+Source: `10beeb2d61491b480257fdad2e53f1f35c1cdb7a`, on main
 `523fc7218f4c84addbb8ddccf7fbccd48952e593`. Overall: PARTIAL.
 Test commits `570f96029` and `33fce5529` failed on their missing entry points
 before implementation. Recording fixtures prove that lost replies and unknown
 receipts never cause another write. They also check integer company ceilings,
 the personal PDF upload, unsafe slot refusals and timed result recording.
+Test commit `9ee1fa8e3` adds a browser fixture for repeated limit checks.
+Restoring the old selector made it fail with `Missing expected rejection`.
+The corrected check follows the current message and cannot accept an older refusal.
 
 The checked single-page quote says EUR 1,234.56 and delivery 17 November 2026.
 Preparation uses the existing group seed, authenticated APIs, request records and
@@ -230,7 +233,7 @@ access rule changes. The owner-mode work in PR #546 is neither copied nor requir
 | Own check | Result | Time |
 | --- | --- | --- |
 | `npm ci`; tool symlinks | PASS | 32 s |
-| Demo Node tests, final two runs | PASS; 17 each | 22.41 / 28.45 s |
+| Demo and budget-helper tests, final two runs | PASS; 21 each | 29.54 / 24.91 s |
 | Event security rules, unchanged | PASS; 438 tests | 3.03 s |
 | Event catalogue | PASS; 149 types | 0.96 s |
 | Focused strict TypeScript check | PASS | Not timed |
