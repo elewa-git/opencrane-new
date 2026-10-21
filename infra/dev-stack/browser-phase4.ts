@@ -460,7 +460,7 @@ async function qualifySharedAssistant(
   return created.assistantId;
 }
 
-async function waitForSharedAssistantReply(page: Page, output: string): Promise<void> {
+export async function waitForSharedAssistantReply(page: Page, output: string): Promise<void> {
   const reply = page.getByText('Hello from your computer.', { exact: true });
   try {
     await reply.waitFor({ timeout: 120_000 });
