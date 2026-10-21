@@ -106,14 +106,10 @@ export async function restoreDemoCeilings(options: Options, output: string) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
     throw error;
   }
-  const current = await demoBudget(options);
-  if (current.ceilingCents !== saved.ceilingCents ||
-      current.dailyCeilingCents !== saved.dailyCeilingCents) {
-    // Use a fresh conditional command after an interrupted restore. Reapplying these
-    // same limits cannot charge money or raise them above the saved values.
-    await demoCeiling(options, `demo-restore-${randomUUID()}`,
-      saved.ceilingCents, saved.dailyCeilingCents);
-  }
+  // Append even when the read table already shows these limits. Advance the stream
+  // so an earlier interrupted write with an old expected sequence cannot raise them later.
+  await demoCeiling(options, `demo-restore-${randomUUID()}`,
+    saved.ceilingCents, saved.dailyCeilingCents);
   await rm(path);
 }
 
@@ -135,7 +131,8 @@ export async function prepareDemo(options: Options, allowanceCents: number,
     await demoCeiling(options, `demo-ceiling-${saved.commandId}`, allowanceCents, allowanceCents);
     return await preparePersonalPdf(options);
   } catch (error) {
-    await restoreDemoCeilings(options, output);
+    const restoring = { ...options, signal: undefined };
+    await restoreDemoCeilings(restoring, output);
     throw error;
   }
 }
@@ -164,7 +161,8 @@ async function preparePersonalPdf(options: Options) {
         'content-type': 'application/octet-stream', 'x-file-name': 'supplier.pdf',
         'idempotency-key': 'demo-supplier-upload-v1' };
       const init = { method: 'POST', headers, body: bytes, redirect: 'error' as const,
-        signal: AbortSignal.timeout(120_000) };
+        signal: AbortSignal.any([AbortSignal.timeout(120_000),
+          ...(options.signal ? [options.signal] : [])]) };
       try {
         await fetch(`${options.origin}${path}`, init);
       } catch {

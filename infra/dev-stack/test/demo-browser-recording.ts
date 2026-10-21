@@ -18,6 +18,12 @@ export function browserRecording(interruptAtLimit = false, failWarm = false) {
     async function goto(url: string) { check(); location = url; }
     function url() { return location; }
     async function nothing() { check(); }
+    async function click() {
+      check();
+      if (location.endsWith('/workspace/shared')) {
+        location = location.replace('/workspace/shared', '/workspace?conversation=shared');
+      }
+    }
     async function fill(value: string) { check(); prompt = value; }
     async function press() {
       check();
@@ -36,7 +42,7 @@ export function browserRecording(interruptAtLimit = false, failWarm = false) {
     async function getAttribute() { check(); return '/supplier.pdf'; }
     function locator() { check(); return element; }
     const element = { fill, press, innerText, count, inputValue, getAttribute,
-      waitFor: nothing, click: nothing, first: locator, last: locator, filter: locator,
+      waitFor: nothing, click, first: locator, last: locator, filter: locator,
       getByRole: locator, getByText: locator, locator };
     async function newPage() { check(); return page(); }
     function context() { return { newPage }; }
@@ -48,7 +54,7 @@ export function browserRecording(interruptAtLimit = false, failWarm = false) {
     function setDefaultTimeout() { check(); }
     // Keep Page as the external browser boundary. Every method stays in this recording.
     return { goto, url, context, frames, getByRole: locator, getByText: locator, locator,
-      reload: nothing, screenshot: nothing, close: nothing, setViewportSize: nothing,
+      waitForLoadState: nothing, reload: nothing, screenshot: nothing, close: nothing, setViewportSize: nothing,
       setDefaultTimeout, request: { get } } as unknown as Page;
   }
   const ownerPage = page();

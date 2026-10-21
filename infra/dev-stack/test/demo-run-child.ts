@@ -6,6 +6,7 @@ const output = process.env['DEMO_OUTPUT']!;
 const browser = browserRecording(process.env['DEMO_INTERRUPT'] === '1');
 try {
   await runner.runDemoSmoke(browser, options, 700, output, 'fixture-sha');
-} catch {
+} catch (error) {
+  console.error(error);
   process.exitCode = 1;
 }

@@ -122,13 +122,17 @@ export async function demoBrowser(owner: Page, member: Page, options: Options,
       assert.equal(refused.todayCents, before.todayCents);
       assert.equal(refused.reservedCents, before.reservedCents);
     } finally {
-      await demoCeiling(options, `demo-restore-${id}`,
-        before.ceilingCents, before.dailyCeilingCents);
+      // Let the run restore its saved original limits after interrupted work has stopped.
+      if (!options.signal?.aborted) {
+        await demoCeiling(options, `demo-restore-${id}`,
+          before.ceilingCents, before.dailyCeilingCents);
+      }
     }
   }
   const actions = [streaming, pdf, stopped, direct, shared, limit];
   function step(run: () => Promise<void>) {
     async function bounded(remainingMs: number) {
+      options.signal?.throwIfAborted();
       owner.setDefaultTimeout(remainingMs);
       member.setDefaultTimeout(remainingMs);
       await run();
