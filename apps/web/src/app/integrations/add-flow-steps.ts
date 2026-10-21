@@ -11,7 +11,7 @@ const ADD_FLOW_STEPS: AddFlowStep[] = [
   { number: 2, label: 'Admission', unavailable: false },
   { number: 3, label: 'Connection', unavailable: true },
   { number: 4, label: 'Tools & access', unavailable: false },
-  { number: 5, label: 'Publish', unavailable: true },
+  { number: 5, label: 'Publish', unavailable: false },
 ];
 
 @Component({

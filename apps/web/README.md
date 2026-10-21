@@ -14,7 +14,7 @@ flowchart LR
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
-  web -->|shows full tool definitions and checks the saved publication| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
+  web -->|reviews tools and keeps current publication results| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
   web -->|checks role and removal outcomes; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores and forgets| memory["Memory panel<br/>scopes, personal facts, sources, safe receipts and forget outcomes"]
 ```
@@ -144,6 +144,12 @@ assistant check open rather than guessing an answer.
 - Supports keyboard use in menus, dialogs and the chat workspace.
 - Not built yet: the organisation overview and Routines pages.
 - Not built yet: several personal settings pages, which show an unavailable message.
+
+Admins can stage modes for newly added tools, review their declared costs and approval
+details, then confirm the saved catalogue and audience. Publishing creates no grants.
+Calls wait until the gateway acknowledges the publication. Reload keeps its status check.
+Publishing and its result use a short status card. An uncertain result keeps Check status
+near the top. Overlapping checks keep the latest result and the newer saved tool policy.
 
 ## Processes it handles
 

@@ -23,15 +23,17 @@ async function reviewDigest(declaration: Declaration): Promise<string> {
 
 function choiceMode(policy: ToolPolicy, declaration: Declaration): Choice['mode'] {
   let saved: ToolPolicy['tools'][number] | undefined;
-  let previous: Declaration | undefined;
+  let existedBefore = !policy.driftHeld;
   for (const tool of policy.tools) {
     if (tool.name === declaration.name) saved = tool;
   }
   for (const tool of policy.previousCatalogue?.tools ?? []) {
-    if (tool.name === declaration.name) previous = tool;
+    if (tool.name === declaration.name) existedBefore = true;
   }
-  if (!previous || !saved || declaration.costCents !== 0) return 'block';
-  if (saved.mode === 'ask' && declaration.review) return 'ask';
+  if (!existedBefore || !saved ||
+      saved.revision !== declaration.revision || declaration.costCents !== 0 ||
+      !declaration.review) return 'block';
+  if (saved.mode === 'ask') return 'ask';
   if (saved.mode === 'allow') return 'allow';
   return 'block';
 }
@@ -42,7 +44,7 @@ async function reviewChoice(policy: ToolPolicy, declaration: Declaration): Promi
 }
 
 export async function reviewCommand(policy: ToolPolicy, commandId: string) {
-  const comparison = compareToolCatalogues(policy);
+  const comparison = compareToolCatalogues(policy, !policy.driftHeld);
   if (!policy.catalogue?.tools || !policy.connectionId || !policy.accountMode ||
       policy.expiresAt === null || Date.parse(policy.expiresAt) <= Date.now() ||
       !comparison?.reviewable) {
@@ -56,4 +58,15 @@ export async function reviewCommand(policy: ToolPolicy, commandId: string) {
     catalogueDigest: policy.catalogue.schemaDigest,
     connectionId: policy.connectionId, accountMode: policy.accountMode,
     policyRevision: policy.policyRevision, tools };
+}
+
+export function bindInitialToolModes(
+  policy: ToolPolicy, staged: ToolPolicy | undefined, recovering: boolean,
+): boolean {
+  if (!staged || recovering) return true;
+  if (policy.sequence !== staged.sequence || policy.policyRevision !== staged.policyRevision ||
+      policy.connectionId !== staged.connectionId || policy.accountMode !== staged.accountMode ||
+      policy.catalogue?.schemaDigest !== staged.catalogue?.schemaDigest) return false;
+  policy.tools = staged.tools;
+  return true;
 }

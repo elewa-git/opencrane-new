@@ -43,10 +43,17 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
 .draft-notice h2 { margin: 0 0 8px; font-size: 18px; }
 .draft-notice p { margin-top: 6px; }
 .publication-notice {
-  border-color: #b9e4ec;
-  background: #f1fbfd;
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  padding: 18px;
+  border: 1px solid var(--oc-border-default);
+  border-radius: 12px;
+  background: white;
 }
-.status-glyph { display: inline-block; margin-right: 10px; color: #087b90; font-size: 20px; }
+.publication-notice oc-shared-state { width: 100%; }
+.publication-unknown { background: var(--oc-neutral-soft); }
+.publication-conflict .actions { margin-top: 16px; }
 .changes-list {
   min-width: 0;
   border: 1px solid var(--oc-border-default);
@@ -120,3 +127,5 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   .change-row > * { padding: 4px 0; }
   .change-cell h3 { display: block; margin: 8px 0 4px; font-size: 12px; }
 }
+
+.change-cell summary { min-height: 44px; display: flex; align-items: center; }

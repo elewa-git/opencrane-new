@@ -61,9 +61,57 @@
   </section>
 } @else if (row(); as integration) {
   @if (view() === 'changes') {
+    @if (compactPublication()) {
+      <header class="detail-heading">
+        <div class="heading-copy">
+          <h1>{{ publicationHeading(changeState(), integration.name) }}</h1>
+          <p>{{ integration.name }}</p>
+        </div>
+      </header>
+      @if (initialPolicy()) { <oc-add-flow-steps [current]="5" /> }
+      @if (changeState() === 'conflict') {
+        <section class="draft-notice publication-conflict" role="status">
+          <h2>Access changed while you were editing</h2>
+          <p>{{ changeMessage(changeState(), !!initialPolicy()) }} Nothing has been overwritten.</p>
+          <div class="actions">
+            @if (initialPolicy()) {
+              <a class="button primary" [href]="'/org/integrations/' + serverId() + '/tools'">
+                Review again
+              </a>
+            } @else {
+              <button class="button primary" type="button" (click)="refresh()">Review again</button>
+            }
+            <a class="button secondary" [href]="'/org/integrations/' + serverId() + '/tools'">
+              Discard my edits
+            </a>
+          </div>
+        </section>
+      } @else {
+        <section class="publication-notice" [class.publication-unknown]="publicationKind(changeState()) === 'unknown'"
+          role="status">
+          <oc-shared-state [kind]="publicationKind(changeState())" [message]="publicationMessage(changeState(), !!initialPolicy())"
+            [detail]="publicationKind(changeState()) === 'unknown'
+              ? 'The change may or may not have applied. Check status before doing anything else.'
+              : undefined"
+            [changeReference]="changeRef()"
+            [showAction]="publicationKind(changeState()) === 'unknown' && !!changeRef()"
+            (action)="checkPublicationChange()" />
+          @if (publicationKind(changeState()) === 'unknown' && !changeRef()) {
+            <button class="button primary" type="button" (click)="refresh()">
+              {{ changeState() === 'unknown-review' ? 'Review again' : 'Refresh' }}
+            </button>
+          }
+          @if (changeState() === 'applying') {
+            <button class="button secondary" type="button" (click)="checkPublicationChange()">
+              Check status
+            </button>
+          }
+        </section>
+      }
+    } @else {
     <header class="detail-heading">
       <div class="heading-copy">
-        <h1>Review changed tools</h1>
+        <h1>{{ initialPolicy() ? 'Review before publishing' : 'Review changed tools' }}</h1>
         <p>{{ integration.name }} ·
           {{ policy() ? 'Last successful check ' + checkedTime() : 'Tool policy not checked' }}</p>
       </div>
@@ -75,6 +123,7 @@
         </button>
       </div>
     </header>
+    @if (initialPolicy()) { <oc-add-flow-steps [current]="5" /> }
     @if (toolsReadState() === 'failed' && !refreshing()) {
       <div class="policy-failure" aria-hidden="true">
         <oc-shared-state kind="failed" message="Couldn't check the tool policy."
@@ -96,11 +145,8 @@
         Calls stay paused until a fresh check passes.
       </div>
     }
-    @if (changeMessage()) {
-      <div class="draft-notice publication-notice" role="status">
-        <p><span class="status-glyph" aria-hidden="true">◷</span>{{ changeMessage() }}</p>
-        @if (changeRef()) { <p>Change reference: {{ changeRef() }}</p> }
-      </div>
+    @if (changeState() === 'failed') {
+      <p class="draft-notice" role="status">{{ changeMessage(changeState(), !!initialPolicy()) }}</p>
     }
     @if (comparison(); as changes) {
       <section class="changes-list" aria-label="Changed tools">
@@ -128,7 +174,7 @@
                 <details><summary>Full definition after</summary><pre>{{ change.fullAfter }}</pre></details>
               }
             </div>
-            <div class="change-cell"><h3>Access</h3><p>{{ change.access }}</p></div>
+            <div class="change-cell"><h3>Access</h3><p>{{ initialPolicy() ? initialMode(policy(), change.name) : change.access }}</p></div>
           </article>
         }
       </section>
@@ -141,22 +187,23 @@
     <p>Audience: the reviewed tool list for this connection. People and assistants still need
       their own grants. Old approvals stay ended and cannot be restored by publishing.</p>
     <p>There's no rollback. Calls stay paused until the current publication is confirmed.</p>
+    @if (initialPolicy() && policy(); as currentPolicy) {
+      <oc-initial-review-confirmation [policy]="currentPolicy" [name]="integration.name"
+        [enabled]="canReviewChanges()" (confirmed)="reviewAndPublish()"
+        (accessEnded)="isAccessRefusal($event)" />
+      <a class="button secondary" [href]="'/org/integrations/' + serverId() + '/tools'">
+        Back to tools
+      </a>
+    }
     @if (policy()) {
       <div class="actions">
-        @if (canReviewChanges()) {
+        @if (canReviewChanges() && !initialPolicy()) {
           <button class="button primary" type="button" (click)="reviewAndPublish()">
             Review and publish
           </button>
         }
-        @if (changeState() === 'conflict' || changeState() === 'unknown-review') {
-          <button class="button primary" type="button" (click)="refresh()">Review again</button>
-        }
-        @if (changeState() === 'applying' || changeState() === 'unknown-publication') {
-          <button class="button secondary" type="button" (click)="checkPublicationChange()">
-            Check status
-          </button>
-        }
       </div>
+    }
     }
   } @else {
   <header class="detail-heading">

@@ -170,7 +170,10 @@ describe('reviewed changed tools', () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
       .mockResolvedValueOnce(reply(policy()))
-      .mockResolvedValueOnce(reply({ status: 'ready', changeRef: 'confirmed-publication' }));
+      .mockResolvedValueOnce(reply({ status: 'ready', changeRef: 'confirmed-publication',
+        generation: 1, fragmentDigest: 'f'.repeat(64), recordDigest: 'a'.repeat(64),
+        configDigest: 'b'.repeat(64), requestedAt: new Date(Date.now() - 1000).toISOString(),
+        observedAt: new Date().toISOString() }));
     const fixture = page();
     await vi.waitFor(() => expect(content(fixture).textContent)
       .toContain('The current publication is confirmed'));

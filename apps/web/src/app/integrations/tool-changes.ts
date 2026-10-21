@@ -31,8 +31,8 @@ interface Definition {
   _meta?: unknown;
 }
 
-export function compareToolCatalogues(policy: ToolPolicy): ToolComparison | null {
-  const before = policy.previousCatalogue;
+export function compareToolCatalogues(policy: ToolPolicy, initial?: boolean): ToolComparison | null {
+  const before = previousCatalogue(policy, initial);
   const after = policy.catalogue;
   // Treat equal digests as a restart capture of the same list, not a new comparison.
   if (!before?.tools || !after?.tools || before.schemaDigest === after.schemaDigest) return null;
@@ -57,6 +57,13 @@ export function compareToolCatalogues(policy: ToolPolicy): ToolComparison | null
     if (row.kind === 'Schema changed' || row.kind === 'Details changed') counts.changed += 1;
   }
   return { rows, counts, reviewable: reviewable && rows.length > 0 };
+}
+
+function previousCatalogue(policy: ToolPolicy, initial: boolean | undefined) {
+  if (initial && policy.catalogue) {
+    return { ...policy.catalogue, schemaDigest: '', tools: [] };
+  }
+  return policy.previousCatalogue;
 }
 
 function hasCompleteDefinitions(
@@ -262,4 +269,13 @@ function unreviewedAccess(mode: string | undefined, kind: ToolChangeRow['kind'])
   if (mode === 'ask') return 'Ask (saved choice; paused)';
   if (mode === 'allow') return 'Allow (saved choice; paused)';
   return 'Block until reviewed';
+}
+
+export function initialToolMode(policy: ToolPolicy | undefined, name: string): string {
+  for (const tool of policy?.tools ?? []) {
+    if (tool.name !== name) continue;
+    if (tool.mode === 'allow') return 'Allow automatically';
+    if (tool.mode === 'ask') return 'Ask';
+  }
+  return 'Block';
 }

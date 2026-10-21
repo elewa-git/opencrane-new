@@ -132,8 +132,9 @@ An expired catalogue says that calls stay paused. The changes page posts the exa
 catalogue digest, policy revision, connection, account mode and every tool choice to
 `POST /api/org/integrations/:id/review`. A new tool is Block. The next POST to
 `/:id/publication` uses the review receipt's sequence for both `expectedSequence` and
-`reviewRevision`. An unknown review needs a fresh detail read; there is no review
-status endpoint. An unknown publication checks only
+`reviewRevision`. An unknown drift review needs a fresh detail read; there is no review
+status endpoint. An unknown initial review keeps its original id and stays uncertain
+until its status can be proved. An unknown publication checks only
 `GET /api/org/integrations/changes/:commandId` for its original command. The command id
 is saved in session storage before the POST, keyed by server, so reopening checks that
 original change before offering another decision. An unknown or deadline publication
@@ -835,3 +836,28 @@ The existing screen receipt records its limits.
 Adding `-- --part2` writes only the new paging and reload captures.
 The [original screen receipt](../../docs/process/screen-p4-22-access/receipt.md) and
 [reload and paging receipt](../../docs/process/screen-p4-22-access2/receipt.md) record the limits.
+
+## Initial tool publication
+
+The tools page stages initial modes in memory and reuses the detail page for step 5.
+After a review is saved, mode Save controls and exact review stay available
+until publication.
+The fresh policy must match the staged sequence, catalogue, connection and account mode.
+Definitions and declarations are escaped text. Allow and Ask require declared zero cost
+and approval details. The audience GET must return a complete, current list before
+confirmation. Publishing changes no grants, accounts or approvals.
+Only the original review or publication id enters sessionStorage. Reload checks that original command.
+A Ready reply needs complete acknowledgement fields and the current publication binding.
+Each status check has a request number. Policy reads, status reads and failed reads from
+older checks cannot change the latest result. A policy reply below the sequence already
+shown is rejected. Access refusals still clear protected data from any outstanding read.
+Applying and Ready show a compact status card. Unknown keeps its original reference and
+Check status near the top. Conflict offers a fresh review or Discard my edits. Refusal
+clears details and links to Overview. Phone confirmation actions sit at the bottom.
+The exact evidence tests cover the receipt's server, change, review and generation,
+both source sequence bounds, expiry, date order and all five staged review bindings.
+Removing each of those 13 guards separately makes its matching test fail.
+The integration facts route is absent on this base; the page says it is unavailable.
+Expanded published-mode and apply details await their frames. No backend policy changed.
+`npm run visual:screen-tools-publish` uses intercepted APIs and no live stack.
+The [screen receipt](../../docs/process/screen-tools-publish/receipt.md) records its limits.

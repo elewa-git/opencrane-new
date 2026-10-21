@@ -1,4 +1,7 @@
-@if (state() === 'access') {
+@if (reviewSnapshot(); as snapshot) {
+  <oc-integration-detail [serverId]="serverId()" view="changes"
+    [initialPolicy]="snapshot" (accessEnded)="clearOnAccessLoss($event)" />
+} @else if (state() === 'access') {
   <h1>Integrations</h1>
   <oc-integrations-access-lost />
 } @else {
@@ -15,7 +18,7 @@
       </span>
     </nav>
     <h1>Tools &amp; access</h1>
-    <p class="intro">Set access for each tool. Reads are included.</p>
+    <p class="intro">Choose a mode for each tool. New tools start Block.</p>
     <oc-add-flow-steps [current]="4" />
 
     <div id="tool-status" class="status-region" [class.status-failed]="statusKind() === 'failed'"
@@ -67,8 +70,7 @@
         <section class="tools-card" aria-label="Tool modes" [attr.aria-busy]="toolsBusy()">
           <h2>{{ policy.tools.length }} {{ policy.tools.length === 1 ? 'tool' : 'tools' }}</h2>
           @for (tool of policy.tools; track tool.name) {
-            <fieldset [disabled]="state() !== 'ready' || !tool.reviewed
-              || policy.connectionId === null"
+            <fieldset [disabled]="!canEdit(tool)"
               [attr.aria-describedby]="policy.connectionId === null ? 'connection-note' : null">
               <legend>{{ tool.name }}</legend>
               <span class="data-chip">{{ tool.readOnly ? 'Reads data' : 'May change data' }}</span>
@@ -92,24 +94,35 @@
                   <label>
                     <input type="radio" [name]="'mode-' + tool.name" [value]="mode.value"
                       [checked]="selected(tool) === mode.value"
+                      [disabled]="modeDisabled(tool, mode.value)"
                       [attr.aria-describedby]="!tool.reviewed ? toolDescriptionId(tool) : null"
                       (change)="choose(tool, mode.value)" />
                     <span>{{ mode.label }}</span>
                   </label>
                 }
               </div>
-              <button type="button" [attr.aria-label]="saveLabel(tool)"
-                [disabled]="saveDisabled(tool)" (click)="save(tool)">Save</button>
+              @if (!isInitial()) {
+                <button type="button" [attr.aria-label]="saveLabel(tool)"
+                  [disabled]="saveDisabled(tool)" (click)="save(tool)">Save</button>
+              }
             </fieldset>
           }
         </section>
       }
+      @if (canReviewUnpublished(policy) && policy.tools.length > 0) {
+        <button class="review-action" type="button" [disabled]="state() !== 'ready'"
+          (click)="openReview()">
+          Review before publishing
+        </button>
+      }
+      @if (!isInitial()) {
       <section class="audience" aria-labelledby="audience-heading">
         <h2 id="audience-heading">Audience</h2>
         <oc-shared-state kind="not_configured" message="Not available yet"
           detail="People and assistant access can't be set here yet. Both the person asking and
             the assistant will need a current grant." [showAction]="false" />
       </section>
+      }
     }
   </section>
 }

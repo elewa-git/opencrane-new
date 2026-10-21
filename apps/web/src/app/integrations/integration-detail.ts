@@ -1,5 +1,12 @@
+import { canReviewUnpublished } from '../tool-policy/tool-policy-choices';
+import { isReadyPublication, isRecord, isOlderPublication, savedSequence }
+  from './publication-ready';
+import { isPublicationIdentifier, readStoredPublication, removeStoredPublication, storePublication }
+  from './publication-reference';
+import { AddFlowSteps } from './add-flow-steps';
+import { InitialReviewConfirmation } from './initial-review-confirmation';
 import {
-  ChangeDetectionStrategy, Component, computed, input, signal,
+  ChangeDetectionStrategy, Component, computed, input, output, signal,
   type OnDestroy, type OnInit,
 } from '@angular/core';
 import {
@@ -11,23 +18,26 @@ import { GrainLoader } from '../ui/grain-loader';
 import { IntegrationsAccessLost } from './integrations-access-lost';
 import { IntegrationFacts } from './integration-facts';
 import { buildIntegrationFacts, type ToolsReadState } from './integration-facts-map';
-import { needsReview } from './integration-status';
-import { compareToolCatalogues } from './tool-changes';
-import { reviewCommand } from './review-command';
+import { needsReview, publicationMessage, publicationHeading, publicationKind,
+  publicationStatusMessage, type PublicationChangeState } from './integration-status';
+import { compareToolCatalogues, initialToolMode } from './tool-changes';
+import { reviewCommand, bindInitialToolModes } from './review-command';
 
 type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
-type ChangeState = 'loading' | 'disabled' | 'reviewing' | 'publishing' | 'applying'
-  | 'unknown-review' | 'unknown-publication' | 'conflict' | 'failed' | 'confirmed';
+
 
 @Component({
   selector: 'oc-integration-detail',
-  imports: [SharedState, GrainLoader, IntegrationsAccessLost, IntegrationFacts],
+  imports: [SharedState, GrainLoader, IntegrationsAccessLost, IntegrationFacts,
+    InitialReviewConfirmation, AddFlowSteps],
   templateUrl: './integration-detail.html',
   styleUrl: './integration-detail.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class IntegrationDetail implements OnInit, OnDestroy {
   readonly serverId = input.required<string>();
+  readonly initialPolicy = input<ToolPolicy>();
+  readonly accessEnded = output<Response>();
   readonly view = input<'detail' | 'changes'>('detail');
   protected readonly row = signal<IntegrationRow | undefined>(undefined);
   protected readonly policy = signal<ToolPolicy | undefined>(undefined);
@@ -39,7 +49,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   protected readonly hasRenderedProtectedContent = signal(false);
   protected readonly facts = computed(this.integrationFacts.bind(this));
   protected readonly comparison = computed(this.toolComparison.bind(this));
-  protected readonly changeState = signal<ChangeState>('loading');
+  protected readonly changeState = signal<PublicationChangeState>('loading');
   protected readonly changeRef = signal('');
   protected readonly needsReview = needsReview;
   protected readonly skeletonWidths = ['78%', '52%', '66%', '44%'];
@@ -47,6 +57,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   private readonly request = new AbortController();
   private accessLost = false;
   private publicationCommandId = '';
+  private publicationCheckSequence = 0;
 
   ngOnInit(): void {
     if (this.view() === 'changes') {
@@ -77,28 +88,21 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   protected canReviewChanges(): boolean {
     const policy = this.policy();
     return this.view() === 'changes' && this.toolsReadState() === 'loaded' &&
-      this.changeState() === 'disabled' && policy?.driftHeld === true &&
+      this.changeState() === 'disabled' && !!policy &&
+      (this.initialPolicy() ? canReviewUnpublished(policy) : policy.driftHeld === true) &&
       policy.connectionId !== null && policy.accountMode !== null &&
       policy.catalogue?.tools !== undefined && this.comparison()?.reviewable === true &&
       !this.checkExpired();
   }
 
-  protected changeMessage(): string {
+  protected readonly changeMessage = publicationMessage;
+  protected readonly publicationHeading = publicationHeading;
+  protected readonly publicationKind = publicationKind;
+  protected readonly publicationMessage = publicationStatusMessage;
+
+  protected compactPublication(): boolean {
     const state = this.changeState();
-    if (state === 'reviewing') return 'Saving the exact tool review…';
-    if (state === 'publishing' || state === 'applying') {
-      return 'Publishing the reviewed tool list. Calls stay paused until this finishes.';
-    }
-    if (state === 'unknown-publication') {
-      return 'Publication is uncertain. Calls stay paused. Check the original change status.';
-    }
-    if (state === 'unknown-review') {
-      return 'The review outcome is unknown. Read the tool details again before another review.';
-    }
-    if (state === 'conflict') return 'The tool list changed. Review again after a fresh read.';
-    if (state === 'failed') return "Couldn't check publication progress. Calls stay paused.";
-    if (state === 'confirmed') return 'The current publication is confirmed.';
-    return '';
+    return state !== 'loading' && state !== 'disabled' && state !== 'failed';
   }
 
   protected async reviewAndPublish(): Promise<void> {
@@ -106,12 +110,18 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     if (!policy || !this.canReviewChanges()) return;
     this.changeState.set('reviewing');
     const reviewId = globalThis.crypto.randomUUID();
+    if (this.initialPolicy()) {
+      this.publicationCommandId = reviewId;
+      storePublication(this.serverId(), reviewId);
+      this.changeRef.set(reviewId);
+    }
     try {
       const body = await reviewCommand(policy, reviewId);
       if (this.shouldIgnoreResult()) return;
       const response = await this.sendChange('review', body);
       if (!response || this.shouldIgnoreResult()) return;
       if (response.status === 409) {
+        this.clearPublicationReference();
         this.changeState.set('conflict');
         return;
       }
@@ -122,7 +132,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const receipt: unknown = await response.json();
       if (this.shouldIgnoreResult()) return;
       const sequence = savedSequence(receipt);
-      if (sequence === null) {
+      if (sequence !== policy.sequence + 1) {
         this.changeState.set('unknown-review');
         return;
       }
@@ -153,7 +163,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       }
       const receipt: unknown = await response.json();
       if (this.shouldIgnoreResult()) return;
-      if (savedSequence(receipt) === null) {
+      if (savedSequence(receipt) !== reviewRevision + 1) {
         this.changeState.set('unknown-publication');
         return;
       }
@@ -173,20 +183,78 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   }
 
   protected async checkPublicationChange(): Promise<void> {
-    if (!this.publicationCommandId || this.accessLost) return;
+    if (!this.publicationCommandId || this.accessLost) {
+      return;
+    }
     const originalId = this.publicationCommandId;
+    // Let only the latest check update the policy and publication outcome.
+    const checkSequence = ++this.publicationCheckSequence;
     const url = `/api/org/integrations/changes/${encodeURIComponent(originalId)}`;
+    const options = {
+      headers: { accept: 'application/json' },
+      signal: this.request.signal,
+    };
     try {
-      const response = await fetch(url, { headers: { accept: 'application/json' },
-        signal: this.request.signal });
-      if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) return;
-      if (!response.ok) throw new Error('Change status unavailable');
+      if (this.initialPolicy()) {
+        const policyLoaded = await this.readPublicationPolicy(checkSequence);
+        if (!policyLoaded) {
+          return;
+        }
+      }
+      const response = await fetch(url, options);
+      if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) {
+        return;
+      }
+      if (this.ignorePublicationCheck(checkSequence)) {
+        return;
+      }
+      if (!response.ok) {
+        throw new Error('Change status unavailable');
+      }
       const status: unknown = await response.json();
-      if (this.shouldIgnoreResult() || this.publicationCommandId !== originalId) return;
+      if (this.ignorePublicationCheck(checkSequence) ||
+          this.publicationCommandId !== originalId) {
+        return;
+      }
       this.setPublicationState(status, originalId);
     } catch {
-      if (!this.shouldIgnoreResult()) this.changeState.set('unknown-publication');
+      if (!this.ignorePublicationCheck(checkSequence)) {
+        this.changeState.set('unknown-publication');
+      }
     }
+  }
+
+  private ignorePublicationCheck(checkSequence: number): boolean {
+    return this.shouldIgnoreResult() || checkSequence !== this.publicationCheckSequence;
+  }
+
+  private async readPublicationPolicy(checkSequence: number): Promise<boolean> {
+    const options = { signal: this.request.signal };
+    const response = await fetch(this.toolsUrl(), options);
+    if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) {
+      return false;
+    }
+    if (this.ignorePublicationCheck(checkSequence)) {
+      return false;
+    }
+    if (!response.ok) {
+      throw new Error('Tool policy unavailable');
+    }
+    const raw: unknown = await response.json();
+    if (this.ignorePublicationCheck(checkSequence)) {
+      return false;
+    }
+    const policy = toolPolicySchema.parse(raw);
+    if (policy.serverId !== this.serverId()) {
+      throw new Error('Different server');
+    }
+    // Keep newer saved evidence when a later read reaches a delayed projection.
+    const currentSequence = this.policy()?.sequence ?? 0;
+    if (policy.sequence < currentSequence) {
+      throw new Error('Older tool policy');
+    }
+    this.policy.set(policy);
+    return true;
   }
 
   private setPublicationState(raw: unknown, originalId: string): void {
@@ -201,7 +269,8 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     const policy = this.policy();
     const oldPublication = isOlderPublication(policy) &&
       policy?.publication?.commandId === originalId;
-    if (raw['status'] === 'ready') {
+    const ready = isReadyPublication(raw, policy, this.initialPolicy() !== undefined);
+    if (raw['status'] === 'ready' && ready) {
       this.clearPublicationReference();
       this.changeState.set(oldPublication ? 'disabled' : 'confirmed');
       return;
@@ -260,14 +329,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     return `Nothing is available to an assistant yet. ${count} of ${total} ${noun} reviewed.`;
   }
 
-  protected loadedTime(): string {
-    const value = this.loadedAt();
-    if (!value) return '';
-    const options: Intl.DateTimeFormatOptions = {
-      hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC',
-    };
-    return `${new Date(value).toLocaleTimeString('en-GB', options)} UTC`;
-  }
+  protected readonly initialMode = initialToolMode;
 
   protected driftHeld(): boolean {
     return this.policy()?.driftHeld === true;
@@ -294,7 +356,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
 
   private toolComparison() {
     const policy = this.policy();
-    return policy ? compareToolCatalogues(policy) : null;
+    return policy ? compareToolCatalogues(policy, this.initialPolicy() !== undefined) : null;
   }
 
   private integrationFacts() {
@@ -350,12 +412,15 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const toolsRaw: unknown = await toolsResponse.json();
       if (this.shouldIgnoreResult()) return;
       const policy = toolPolicySchema.parse(toolsRaw);
+      if (!bindInitialToolModes(policy, this.initialPolicy(), !!this.publicationCommandId)) {
+        this.changeState.set('conflict');
+      }
       this.policy.set(policy);
       this.toolsReadState.set('loaded');
       this.state.set('ready');
       this.refreshing.set(false);
       this.hasRenderedProtectedContent.set(true);
-      if (this.view() === 'changes') {
+      if (this.view() === 'changes' && this.changeState() !== 'conflict') {
         if (this.publicationCommandId) await this.checkPublicationChange();
         else await this.readPublicationStatus();
       }
@@ -399,12 +464,13 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       this.changeState.set('disabled');
       return;
     }
-    if (status['status'] === 'ready') {
+    const ready = isReadyPublication(status, policy, this.initialPolicy() !== undefined);
+    if (status['status'] === 'ready' && ready) {
       this.changeState.set('confirmed');
       return;
     }
     const reference = status['changeRef'];
-    if (typeof reference !== 'string' || !publicationIdentifier.test(reference)) {
+    if (!isPublicationIdentifier(reference)) {
       this.changeState.set('failed');
       return;
     }
@@ -434,6 +500,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   isAccessRefusal(response: Response): boolean {
     if (response.status !== 401 && response.status !== 403) return false;
     this.accessLost = true;
+    this.accessEnded.emit(response);
     this.request.abort();
     this.row.set(undefined);
     this.policy.set(undefined);
@@ -458,56 +525,6 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     if (!this.refreshing()) return;
     requestAnimationFrame(focusHeaderRefresh);
   }
-}
-
-const publicationStoragePrefix = 'integration-publication:';
-const publicationIdentifier = /^[\w-]{1,200}$/u;
-
-function publicationStorageKey(serverId: string): string {
-  return publicationStoragePrefix + serverId;
-}
-
-function readStoredPublication(serverId: string): string {
-  try {
-    const stored = sessionStorage.getItem(publicationStorageKey(serverId));
-    if (stored && publicationIdentifier.test(stored)) return stored;
-    if (stored !== null) removeStoredPublication(serverId);
-  } catch {
-    // Keep the page usable when browser storage is blocked.
-  }
-  return '';
-}
-
-function storePublication(serverId: string, commandId: string): void {
-  try {
-    sessionStorage.setItem(publicationStorageKey(serverId), commandId);
-  } catch {
-    // Keep the reference in memory while this page is open.
-  }
-}
-
-function removeStoredPublication(serverId: string): void {
-  try {
-    sessionStorage.removeItem(publicationStorageKey(serverId));
-  } catch {
-    // The page still clears its in-memory reference.
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isOlderPublication(policy: ToolPolicy | undefined): boolean {
-  if (!policy?.driftHeld || !policy.publication) return false;
-  return policy.publication.reviewRevision < policy.policyRevision;
-}
-
-function savedSequence(value: unknown): number | null {
-  if (!isRecord(value) || value['status'] !== 'appended') return null;
-  const sequence = value['sequence'];
-  return typeof sequence === 'number' && Number.isSafeInteger(sequence) && sequence > 0
-    ? sequence : null;
 }
 
 function focusAccessHeading(): void {
