@@ -80,8 +80,10 @@ export async function prepareDemo(options: Options, allowanceCents: number) {
   await demoCeiling(options, `demo-ceiling-${allowanceCents}-v1`, allowanceCents, allowanceCents);
   const context = await request(options, '/api/chat');
   const personal = await context.json() as { assistantId?: string };
-  assert(context.ok && personal.assistantId?.startsWith('personal-'), 'Personal assistant required');
-  const conversationId = await createPersonalConversation(options, personal.assistantId);
+  const assistantId = personal.assistantId;
+  assert(context.ok && assistantId, 'Personal assistant required');
+  assert(assistantId.startsWith('personal-'), 'Personal assistant required');
+  const conversationId = await createPersonalConversation(options, assistantId);
   const path = `/api/conversations/${conversationId}/files`;
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
