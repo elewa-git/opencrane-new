@@ -1,6 +1,6 @@
 # Initial tool publication screens
 
-Date: 2026-10-21T06:08:22.146Z. Source base: 35e310b4156f7b84990021dd0eedd7ff91c85c25, plus working-tree changes.
+Date: 2026-10-21T06:27:49.680Z. Source base: d258d5294071b3fe397eee905437f0d7129b7829, plus working-tree changes.
 
 PASS: intercepted browser checks at 1280 and 390 px, reduced motion, modal focus, 44 px controls and no horizontal overflow. Applying and lost replies survive reload; only the original change is checked. Malformed, stale and wrong-reference replies stay unknown.
 
