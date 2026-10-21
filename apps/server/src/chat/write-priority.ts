@@ -29,7 +29,8 @@ export async function chatWrite<Result>(store: object, subject: string,
   writes.add(finished.promise);
   try {
     // Wait only for report appends already running. Keep queued progress behind Stop.
-    if (kind === 'stop') await Promise.all(reports.get(store)?.get(subject) ?? []);
+    const activeReports = reports.get(store)?.get(subject);
+    if (kind === 'stop' && activeReports) await Promise.all(activeReports);
     return await save();
   } finally {
     writes.delete(finished.promise);

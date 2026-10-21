@@ -55,6 +55,17 @@ function messageBytes(raw: RawData) {
   return Buffer.from(raw);
 }
 
+function combineQueuedReport(batch: ReportBatch | undefined, value: unknown,
+  report: z.infer<typeof reportDetails>, bytes: number) {
+  if (!batch || batch.started) return false;
+  if (!canCombineReports(batch.values.at(-1), value, batch.textLength)) return false;
+  batch.values.push(value);
+  batch.sequences.push(report.sequence);
+  batch.textLength += report.text?.length ?? 0;
+  batch.bytes += bytes;
+  return true;
+}
+
 function turnStatus(type: string) {
   if (type === 'agent.turn_started') return 'started';
   if (type === 'agent.turn_completed') return 'completed';
@@ -175,14 +186,7 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
       queues.set(report.conversationId, queue);
       queue.count++;
       queue.bytes += bytes.length;
-      const last = queue.last;
-      if (last && !last.started && canCombineReports(last.values.at(-1), value, last.textLength)) {
-        last.values.push(value);
-        last.sequences.push(report.sequence);
-        last.textLength += report.text?.length ?? 0;
-        last.bytes += bytes.length;
-        return;
-      }
+      if (combineQueuedReport(queue.last, value, report, bytes.length)) return;
       const batch: ReportBatch = { values: [value], sequences: [report.sequence],
         textLength: report.text?.length ?? 0, bytes: bytes.length, started: false };
       queue.last = batch;
