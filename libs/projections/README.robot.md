@@ -63,8 +63,24 @@ The source must provide every event in global order; filtering is a handler
 concern in this slice. Poll or call again for later events. An abort stops
 between transactions; an already running transaction may finish.
 
+Adjacent `agent.message_delta` events share one transaction, up to 64 events or
+512 KiB of encoded events. A single larger event is processed alone. The runner
+flushes before any other event and at the captured history boundary; it never waits
+for future reply text. Every original row and position is retained. Receipts,
+projection writes and the final checkpoint commit or roll back together. Duplicate
+ids are checked within the group and against earlier committed receipts. The
+conversation projection checks every delta, reads each chat once and inserts the
+original rows together. Only its final position changes; deltas cannot change
+participants, visible activity or the first close. The
+checkpoint is checked again under the existing cross-process lock. Other event
+types keep their separate transactions. No access or event-store append rule changes.
+
 Every handler attempt uses observability's `runHandler`, including preparation and
-the transaction commit. Start telemetry in the host to obtain real `trace_id`
+the transaction commit. A reply batch uses its last event as the log reference.
+Preparation still happens outside the transaction.
+`test/streaming.test.ts` checks a 28,224-character reply against a fixed two-second
+bound with a ten-millisecond commit delay in an in-memory PostgreSQL engine.
+Separate real PostgreSQL checks cover rollback, restart and racing duplicate batches. Start telemetry in the host to obtain real `trace_id`
 values; the helper deliberately omits that field with a no-op tracer.
 
 The low-level `rebuild` method is destructive and remains for tests and offline
