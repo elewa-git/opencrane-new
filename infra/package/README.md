@@ -20,7 +20,7 @@ flowchart LR
   infra["infra<br/>local infrastructure"] -->|contains| package["package<br/>Helm install"]
   infra -->|contains| stack["dev-stack<br/>slot claims and fresh checks"]
   infra -->|contains| devbox["devbox<br/>local cluster"]
-  stack -->|checks the slot| package
+  stack -->|checks the slot and guards automated chat| package
   package -->|starts with a private chat secret| apps["apps<br/>website and server"]
   package -->|starts| services["services<br/>NATS, PostgreSQL, OpenFGA"]
   package -->|runs| bootstrap["bootstrap<br/>first owner"]
@@ -59,7 +59,9 @@ flowchart LR
    test owner and browser chat for each install. It removes the first package
    before preparing the second one on the same slot. It refuses retained rows in
    every memory table before checking the first chat. A failed browser check
-   reports the step and a short error without private browser data.
+   reports the step and a short error without private browser data. The runner and
+   browser capture refuse the owner slot and fleet tasks before reading configuration.
+   Browser capture also refuses a saved real-mode stack.
 
 ## How to run or test it
 

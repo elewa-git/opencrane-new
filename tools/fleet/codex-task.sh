@@ -10,6 +10,8 @@
 # agents have full control of it by the owner's decision.
 set -u
 NAME="$1"; WORKDIR="$2"; PROMPT="$3"; EFFORT="${4:-high}"; MODEL="${5:-gpt-6.1-sol}"
+OPENCRANE_FLEET_TASK=${OPENCRANE_FLEET_TASK-$NAME}
+export OPENCRANE_FLEET_TASK
 OUT="${FLEET_LOGS:-$HOME/.fleet}/$NAME"; mkdir -p "$OUT"
 cd "$WORKDIR" || exit 2
 nice -n 10 ionice -c3 codex exec --ignore-user-config -m "$MODEL" -c model_reasoning_effort="$EFFORT" \

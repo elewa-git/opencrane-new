@@ -729,6 +729,17 @@ The rest of the host certificate directory is not mounted.
 Node uses bundled roots and could connect even when the gateway had no trusted roots.
 Missing, empty or invalid files fail with a fixed preparation error.
 
+The owner can use `up.sh --id owner --owner-run --fresh` with the same file-path
+setting, after the runbook's fresh-install prerequisites are met. Every owner real
+start requires the explicit flag, TTY stdin and no `OPENCRANE_FLEET_TASK` variable.
+The guard runs before reading or creating the owner directory. Fleet-marked owner
+starts are refused even without a real-provider setting, as are all headless owner
+starts. Unmarked interactive owner stand-in starts retain their existing behaviour.
+`--owner-run` is refused for secondary ids.
+Real owner startup skips the stand-in process; startup and status do not require it.
+The owner models process already runs on the host and uses its existing certificate store.
+The owner command has not been run live; tests replace system commands in a temporary home.
+
 The Compose test resolves both owner and secondary configuration without starting
 containers. It checks the exact certificate source, destination and read-only setting,
 and refuses certificate mounts on other services. Startup tests use a temporary home
@@ -765,7 +776,9 @@ one shared assistant, and prints bookmarks. It uses a five-minute development Ow
 session and authenticated HTTP commands only. Command ids and payloads stay fixed.
 Private `demo-requests` files prevent resubmission after an unknown result; server
 receipts remain the source of truth. Missing people are refused before any writes.
-The caller must own the stack directory. Owner use additionally requires `--owner-run`.
+The caller must own the stack directory. Owner use additionally requires `--owner-run`,
+TTY stdin and an absent `OPENCRANE_FLEET_TASK` variable. These checks happen before
+loading owner configuration. Even an empty fleet marker is refused.
 
 `demo-up.sh` requires an explicit secondary id and `DEV_REAL_PROVIDER_FILE` path.
 It claims through `claim.sh`, checks the returned id, sets `COMPUTER_IDLE_MS=14400000`,
@@ -773,9 +786,8 @@ runs fresh startup and seeds. A mismatched, owner or invalid claim stops before 
 or cleanup. Once startup is attempted, startup or seed failure calls `down.sh` for that
 secondary; success keeps it.
 It inherits the full startup journey and makes no claim about three-minute duration.
-The [owner runbook](../../docs/process/demo/README.md) marks the current owner-mode
-refusal and unfinished PDF, ceiling and smoke work. This is the first split of #32
-P2-7 PR 2. The seed does not rename existing members or make cloud identity changes.
+The [owner runbook](../../docs/process/demo/README.md) records the unfinished PDF,
+ceiling and smoke work, and the required fresh-install proof. The seed does not rename existing members or make cloud identity changes.
 Tests use `nice -n 10 node --experimental-strip-types --test infra/dev-stack/demo-*.test.ts`.
 
 The launcher tests record startup and cleanup without starting services. They check
@@ -784,3 +796,31 @@ startup or cleanup, seed failure removes only the started secondary, and no synt
 credential value appears in output. The CLI tests use real configuration and session
 code with disposable settings and an HTTP fixture. They check id validation before
 configuration loads, worktree ownership and the fixed secondary origins.
+
+## Owner startup and automated journey safety
+
+An authorised owner start uses service health, process and listener checks to report
+readiness. It does not invoke `journey.ts`. Automated owner journeys are always refused.
+The shell launcher, direct stack journey action, main journey, bootstrap journey,
+MCP journey, screenshot journey, repeated live-view journey and package chat scripts refuse the owner id
+and any `OPENCRANE_FLEET_TASK` marker before configuration is evaluated.
+The main journey checks `DEV_REAL_PROVIDER` against the saved mode before setup;
+bootstrap and repeated live-view journeys require the saved stand-in mode.
+
+Real starts save real mode after infrastructure and provider checks. Startup remembers
+the previous saved mode before a fresh reset. On failure, SIGINT or SIGTERM it stops
+processes and Compose services launched by that attempt, removes any namespaces and
+HTTPS handler it created, and restores that mode. It attempts each cleanup step even
+if another fails. Existing containers are excluded from cleanup. It keeps the restrictive
+model firewall rules. A fresh reset still erases data; restoring the mode cannot undo it.
+The [demo guide](../../docs/process/demo/README.md#owner-run-switching-the-real-model-off)
+documents stopping services and making a fresh stand-in start.
+
+`stack-start.test.ts` runs the real startup control flow with fake configuration,
+processes, service adapters and network calls. It checks readiness, deferred mode saving,
+failures after saving and switch-on, and both interruption signals. Previous modes
+include absent, `0` and `1`. `journey-refusal.test.ts` records configuration evaluation
+and stops before external calls. It checks all automated entry points and detects
+removal of the non-start owner flag refusal, duplicate flag check and secondary owner
+flag refusal. CI runs both files with the existing Node fixtures. These are local
+source checks, not live qualification.

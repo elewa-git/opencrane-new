@@ -1,9 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { demoStackId, seedDemo } from './demo-seed.ts';
+import { requireOwnerRun } from './owner-run.ts';
 
 try {
   const ownerRun = process.argv.length === 3 && process.argv[2] === '--owner-run';
+  if (process.env['DEV_STACK_ID'] === 'owner') {
+    requireOwnerRun(ownerRun);
+  }
   const id = demoStackId(process.env['DEV_STACK_ID'], ownerRun);
   if (process.argv.length > 2 && !ownerRun) {
     throw new Error('Invalid arguments');

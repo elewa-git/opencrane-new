@@ -74,6 +74,12 @@ If Kubernetes is unavailable during secondary
 Cleanup lets computer claims release their Pods and volumes before Helm removes
 the computer warm pool.
 
+`fresh-twice.ts` and `capture.mjs` refuse the owner id and any
+`OPENCRANE_FLEET_TASK` marker before configuration is evaluated. The capture script
+also reads the saved settings and refuses real mode before signing in or sending chat.
+Importing the runner's assertion helpers does not start a qualification run.
+The isolated refusal tests live in `infra/dev-stack/journey-refusal.test.ts`.
+
 `fresh-twice.ts` repeats the preparation, Helm install, loopback forward,
 browser capture and package cleanup on one claimed secondary slot. Pass the
 slot id through `DEV_STACK_ID`, a private values file as its only argument,

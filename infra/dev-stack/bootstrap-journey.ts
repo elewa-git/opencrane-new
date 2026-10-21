@@ -1,4 +1,6 @@
 /// <reference lib="dom" />
+import './journey-entry.ts';
+import { requireStandInJourney } from './journey-guard.ts';
 // Fresh secondary qualification only. Always tears down its claimed stack.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -19,6 +21,8 @@ import { authEnv, directory, readEnv, root } from './config.ts';
 import { namespace, project, secondary, stackId } from './identity.ts';
 
 assert(secondary, 'Bootstrap qualification requires a claimed secondary stack');
+const settings = await readEnv('settings');
+requireStandInJourney(settings);
 assert.equal(await readFile(`${directory}/stack-owner`, 'utf8'), root);
 const exec = promisify(execFile);
 const output = 'docs/process/bootstrap-live';
@@ -72,7 +76,6 @@ async function claim(page: Page, origin: string, token: string) {
 }
 
 try {
-  const settings = await readEnv('settings');
   const origin = settings['ORIGIN']!, silo = settings['SILO_ID']!;
   const config = loadAuthConfig(await authEnv());
   events = await connectEventStore(await readEnv('command'));

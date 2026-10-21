@@ -1,3 +1,4 @@
+import './journey-entry.ts';
 // Run after up with fresh or repeat. Replaces only this secondary HTTP process with
 // buildServer using the local HTTPS fixture transport; finish with down.sh --id.
 import assert from 'node:assert/strict';
@@ -11,12 +12,12 @@ import { connectMcpCatalogue, connectMemberFeed } from '@opencrane/projections';
 import { buildServer } from '../../apps/server/src/server.ts';
 import { attachWebSocketServer } from '../../apps/server/src/websocket.ts';
 import { remoteReference } from '../../apps/server/src/integrations/registration.ts';
-import { remoteFixture } from '../../apps/server/test/support/remote-mcp.ts';
 import { enterLoginName, testUsers } from './browser-signin.ts';
 import { authEnv, directory, readEnv, root } from './config.ts';
 import { secondary } from './identity.ts';
 
 assert(secondary, 'MCP qualification requires a claimed secondary stack');
+const { remoteFixture } = await import('../../apps/server/test/support/remote-mcp.ts');
 const run = process.argv[2];
 assert(run === 'fresh' || run === 'repeat', 'Choose fresh or repeat evidence');
 assert.equal(await readFile(`${directory}/stack-owner`, 'utf8'), root);

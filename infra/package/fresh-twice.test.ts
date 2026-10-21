@@ -188,6 +188,7 @@ async function prepareRunnerFiles(home: string, scenario: RunnerCase) {
   await mkdir(bin);
   const files = ['infra/package/fresh-twice.ts', 'infra/package/browser-capture.ts', 'infra/dev-stack/config.ts',
     'infra/dev-stack/identity.ts', 'infra/dev-stack/packaged.ts',
+    'infra/package/fresh-twice-entry.ts', 'infra/dev-stack/journey-guard.ts',
     'libs/event-store/test/certificates.ts'];
   for (const file of files) {
     await cp(file, join(worktree, file));

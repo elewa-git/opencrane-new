@@ -1,4 +1,6 @@
 /// <reference lib="dom" />
+import './journey-entry.ts';
+import { requireStandInJourney } from './journey-guard.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { loadavg } from 'node:os';
@@ -18,13 +20,15 @@ import { browserLiveViewJourney } from './browser-live-view.ts';
 import { measureFirstReplyDelta } from './live-view-reply-timing.ts';
 
 assert(secondary, 'Repeated qualification requires a claimed secondary stack');
+const settings = await readEnv('settings');
+requireStandInJourney(settings);
 const argumentsList = process.argv.slice(2);
 const quiet = argumentsList.includes('--quiet');
 const outputArgument = argumentsList.find(argument => argument !== '--quiet');
 const output = outputArgument ?? 'docs/process/i77-live-view';
 const cpuPressureLimit = quiet ? 10 : 20;
 await mkdir(output, { recursive: true });
-const settings = await readEnv('settings'), binding = await readEnv('binding');
+const binding = await readEnv('binding');
 const silo = settings['SILO_ID']!, origin = settings['ORIGIN']!;
 const member = 'zitadel-member', admin = 'zitadel-owner';
 const config = loadAuthConfig(await authEnv());
