@@ -100,7 +100,7 @@ try {
       await page.route('**/*', serve.bind(null, state));
       await page.goto('https://tools-access.opencrane.test/org/integrations/fixture/tools');
       const editor = page.locator('oc-tool-audience');
-      await editor.waitFor();
+      await editor.getByRole('heading', { name: 'Audience', exact: true }).waitFor();
       if (['conflict', 'no-effect', 'applying', 'content-applying', 'unknown', 'saved'].includes(scene)) {
         await editor.getByRole('button', { name: 'Assistant', exact: true }).click();
         await editor.getByRole('button', { name: 'Sales assistant', exact: true }).focus();
@@ -112,7 +112,7 @@ try {
         await editor.getByText(words[scene], { exact: false }).waitFor();
         if (['unknown', 'applying', 'content-applying'].includes(scene)) {
           assert(await page.getByRole('button', { name: 'Review access' }).isDisabled());
-          assert(await page.locator('fieldset').isDisabled());
+          assert(await page.locator('input[value="block"]').isDisabled());
           await editor.getByRole('button', { name: 'Check status' }).click();
           await page.reload();
           await editor.getByRole('button', { name: 'Check status' }).waitFor();
