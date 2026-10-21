@@ -17,9 +17,11 @@ export function isReadyPublication(
   if (Date.parse(policy.expiresAt) <= now || Date.parse(status.observedAt) > now ||
       Date.parse(status.requestedAt) > Date.parse(status.observedAt)) return false;
   if (policy.publication) {
-    return policy.publication.commandId === status.changeRef &&
+    const matchesIntent = policy.publication.commandId === status.changeRef &&
       policy.publication.fragmentDigest === status.fragmentDigest &&
       policy.publication.reviewRevision === policy.reviewRevision;
+    if (!matchesIntent) return false;
+    return !requireIntent || matchesObservation(policy, status);
   }
   return !requireIntent;
 }
@@ -38,4 +40,18 @@ export function savedSequence(value: unknown): number | null {
   const sequence = value['sequence'];
   return typeof sequence === 'number' && Number.isSafeInteger(sequence) && sequence > 0
     ? sequence : null;
+}
+
+function matchesObservation(policy: ToolPolicy, status: z.infer<typeof readySchema>): boolean {
+  const receipt = policy.configurationObservation;
+  if (!receipt || !policy.publication) return false;
+  const sameReview = receipt.serverId === policy.serverId &&
+    receipt.changeRef === status.changeRef && receipt.reviewRevision === policy.reviewRevision &&
+    receipt.fragmentDigest === status.fragmentDigest;
+  const sameGeneration = receipt.generation === status.generation &&
+    receipt.recordDigest === status.recordDigest && receipt.configDigest === status.configDigest &&
+    receipt.observedAt === status.observedAt;
+  return sameReview && sameGeneration &&
+    receipt.sourceSequence > policy.publication.expectedSequence &&
+    receipt.sourceSequence <= policy.sequence;
 }

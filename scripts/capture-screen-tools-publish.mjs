@@ -11,7 +11,7 @@ const output = resolve('docs/process/screen-tools-publish');
 const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://tools-publish.opencrane.test';
 const checkedAt = new Date().toISOString();
-const expiresAt = new Date(Date.now() + 300_000).toISOString();
+const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
 const review = { action: 'Read items', consequence: 'Items are read',
   targetArgument: 'item', fields: ['item'], stepUp: false };
 const tool = { name: 'read_item_with_a_long_saved_name', revision: 'a'.repeat(64),
@@ -67,10 +67,18 @@ async function serve(route, state) {
     assert.equal(command.reviewRevision, 4);
     assert.equal(command.expectedSequence, 4);
     state.reference = command.commandId;
-    state.policy = { ...initial, sequence: 5, reviewRevision: 4,
+    state.policy = { ...initial, sequence: 5, policyRevision: 5,
+      publicationRevision: 5, reviewRevision: 4,
       tools: [{ ...tool, reviewed: true, mode: 'allow' }],
       publication: { serverId: 'fixture', publishedBy: 'owner', ...command,
         fragmentDigest: 'f'.repeat(64) } };
+    if (state.ack) state.policy.sequence = 6;
+    if (state.ack) state.policy.configurationObservation = {
+      serverId: 'fixture', changeRef: command.commandId, sourceSequence: 5,
+      reviewRevision: 4, generation: 1, fragmentDigest: 'f'.repeat(64),
+      recordDigest: 'c'.repeat(64), configDigest: 'd'.repeat(64),
+      processRef: '00000000-0000-4000-8000-000000000001', observedAt: checkedAt,
+    };
     if (state.scenario === 'lost') return route.abort();
     return route.fulfill({ json: { status: 'appended', sequence: 5 } });
   }
@@ -90,8 +98,9 @@ async function serve(route, state) {
     if (state.scenario === 'lost-review') body.status = 'unknown';
     if (state.ack) body = { status: 'ready', changeRef: state.reference, generation: 1,
       fragmentDigest: 'f'.repeat(64), recordDigest: 'c'.repeat(64), configDigest: 'd'.repeat(64),
-      requestedAt: checkedAt, observedAt: new Date().toISOString() };
+      requestedAt: checkedAt, observedAt: checkedAt };
     if (state.scenario === 'malformed') body = { status: 'ready', changeRef: state.reference };
+    if (state.scenario === 'wrong-config') body.configDigest = 'e'.repeat(64);
     if (state.scenario === 'stale') body.fragmentDigest = 'e'.repeat(64);
     if (state.scenario === 'wrong') body.changeRef = 'another-change';
   } else throw new Error(`Unexpected API path ${path}`);
@@ -116,7 +125,7 @@ async function layout(page) {
 
 async function capture(browser, width, scenario) {
   const state = { scenario, policy: structuredClone(initial), posts: 0,
-    ack: ['ready', 'stale', 'wrong'].includes(scenario) };
+    ack: ['ready', 'stale', 'wrong', 'wrong-config'].includes(scenario) };
   if (scenario === 'empty') state.policy.tools = [];
   const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
   async function intercept(route) { await serve(route, state); }
@@ -181,7 +190,7 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 try {
   for (const width of [1280, 390]) {
-    for (const scenario of ['lost-review', 'tools', 'review', 'confirm', 'applying', 'lost', 'conflict',
+    for (const scenario of ['wrong-config', 'lost-review', 'tools', 'review', 'confirm', 'applying', 'lost', 'conflict',
       'refusal', 'empty', 'loading', 'ready', 'malformed', 'stale', 'wrong']) {
       await capture(browser, width, scenario);
     }
