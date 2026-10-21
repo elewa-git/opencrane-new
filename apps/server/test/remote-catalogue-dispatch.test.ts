@@ -15,16 +15,31 @@ import { z } from 'zod';
 import { discoverInventory } from '../src/integrations/inventory.ts';
 import { remoteCatalogueWatch } from '../src/integrations/remote-catalogue-watch.ts';
 
+function restoreClock() {
+  vi.useRealTimers();
+}
+
+function advanceToNextCheck() {
+  const options = { toFake: ['Date' as const] };
+  vi.useFakeTimers(options);
+  onTestFinished(restoreClock);
+  vi.setSystemTime(Date.now() + 270_000);
+}
+
 async function freePort() {
   const server = createServer();
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('No fixture port');
+  if (!address || typeof address === 'string') {
+    throw new Error('No fixture port');
+  }
   server.close();
   await once(server, 'close');
   return address.port;
 }
+
+type Setup = Awaited<ReturnType<typeof fixture>>;
 
 async function dispatchFixture(mode: 'allow' | 'ask' = 'allow') {
   const setup = await fixture();
@@ -51,11 +66,13 @@ async function dispatchFixture(mode: 'allow' | 'ask' = 'allow') {
     return Promise.resolve(JSON.stringify(reply(method)));
   }
   await mcpCatalogue.create(setup.db);
-  await setup.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture',
-    kind: 'remote', locator: 'https://mcp.example.test/mcp', registeredBy: 'alice' });
+  const registration = { serverId: 'fixture', kind: 'remote',
+    locator: 'https://mcp.example.test/mcp', registeredBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_registered', registration);
   const inventory = await discoverInventory(call);
-  await setup.append('mcp-fixture', 'mcp.server_discovered', { ...inventory,
-    serverId: 'fixture', connectionId: 'installed', accountMode: 'none' });
+  const discovery = { ...inventory, serverId: 'fixture',
+    connectionId: 'installed', accountMode: 'none' };
+  await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
   const rows = await history(setup.nats.store, 'mcp-fixture', 'test');
   for (const row of rows) {
     await mcpCatalogue.apply(setup.db, row.event, row.sequence);
@@ -65,37 +82,8 @@ async function dispatchFixture(mode: 'allow' | 'ask' = 'allow') {
     requireLeader, remote.network);
   onTestFinished(watch.close);
   await watch.check();
-  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-  function choice(tool: NonNullable<NonNullable<typeof policy.catalogue>['tools']>[number]) {
-    return { name: tool.name, revision: tool.revision,
-      reviewDigest: toolReviewDigest(tool), mode };
-  }
-  const review = { commandId: 'review', expectedSequence: policy.sequence,
-    policyRevision: policy.policyRevision, catalogueDigest: policy.catalogue!.schemaDigest,
-    connectionId: 'installed', accountMode: 'none', tools: policy.catalogue!.tools!.map(choice) };
-  expect((await reviewToolPolicy(setup.nats.store, setup.binding, 'alice', 'fixture', review))
-    .status).toBe('appended');
-  const reviewed = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-  const publication = { commandId: 'publish', expectedSequence: reviewed.sequence,
-    reviewRevision: reviewed.reviewRevision };
-  expect((await publishToolPolicy(setup.nats.store, setup.binding, 'alice',
-    'fixture', publication)).status).toBe('appended');
-  const record = await prepareGatewayConfiguration(setup.nats.store, 'test', 'fixture', 'publish');
-  const controlPort = await freePort();
-  const delivery = gatewayDelivery({ db: setup.db, mode: 'live', store: setup.nats.store,
-    silo: 'test', child: setup.gatewayChild()!, configFile: setup.options.configFile,
-    controlPort, settings: setup.options });
-  onTestFinished(delivery.close);
-  setup.dispatchOptions.acknowledged = delivery.acknowledged;
-  await delivery.deliver(record);
-  const config = await readFile(setup.options.configFile, 'utf8');
-  const path = /\/configuration\/\d+\/[a-f0-9-]+/u.exec(config)![0];
-  async function acknowledged() {
-    const response = await fetch(`http://127.0.0.1:${controlPort}${path}`);
-    expect(response.status).toBe(200);
-    expect(await delivery.observe()).not.toBeNull();
-  }
-  await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
+  const record = await reviewAndPublish(setup, mode);
+  await deliverConfiguration(setup, record);
   setup.dispatchOptions.routes.length = 0;
   setup.dispatchOptions.remoteNetwork = remote.network;
   setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
@@ -105,10 +93,11 @@ async function dispatchFixture(mode: 'allow' | 'ask' = 'allow') {
     const event = await setup.append(grantStream('mcp_server', 'fixture'), 'grant.given', grant);
     await setup.auth.handler.handle(event, setup.db);
   }
-  const raw = JSON.stringify({ jsonrpc: '2.0', id: 'read', method: 'tools/call',
+  const callBody = { jsonrpc: '2.0', id: 'read', method: 'tools/call',
     params: { name: 'read', arguments: { id: 'record' }, _meta: { threadId: setup.t.thread,
       callId: 'tool-call-read', 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-      'io.modelcontextprotocol/clientCapabilities': {} } } });
+      'io.modelcontextprotocol/clientCapabilities': {} } } };
+  const raw = JSON.stringify(callBody);
   const headers = { ...setup.headers,
     'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'read',
     'x-opencrane-gateway-generation': String(record.generation),
@@ -119,16 +108,19 @@ async function dispatchFixture(mode: 'allow' | 'ask' = 'allow') {
     const token = await setup.sign(setup.t, 'decision-service');
     const requestHeaders = { ...headers, 'x-turn-token': token,
       ...(approvalId ? { 'x-opencrane-approval-id': approvalId } : {}) };
-    return fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
-      { method: 'POST', headers: requestHeaders, body: raw });
+    const request = { method: 'POST', headers: requestHeaders, body: raw };
+    return fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
   }
   async function send(permit: string) {
     const headers = { 'content-type': 'application/json', 'x-opencrane-mcp-permit': permit };
-    return fetch(`${setup.options.decisionUrl}/dispatch/mcp/fixture/installed`,
-      { method: 'POST', headers, body: raw });
+    const request = { method: 'POST', headers, body: raw };
+    return fetch(`${setup.options.decisionUrl}/dispatch/mcp/fixture/installed`, request);
   }
   function changeContract(changed: boolean) {
-    declaration = changed ? { 'io.opencrane/expectedRevision': { version: 'unsupported' } } : {};
+    declaration = {};
+    if (changed) {
+      declaration = { 'io.opencrane/expectedRevision': { version: 'unsupported' } };
+    }
   }
   function shortTtl() {
     ttlMs = 500;
@@ -136,12 +128,52 @@ async function dispatchFixture(mode: 'allow' | 'ask' = 'allow') {
   return { setup, remote, watch, admission, send, changeContract, shortTtl };
 }
 
+async function reviewAndPublish(setup: Setup, mode: 'allow' | 'ask') {
+  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  function choice(tool: NonNullable<NonNullable<typeof policy.catalogue>['tools']>[number]) {
+    return { name: tool.name, revision: tool.revision,
+      reviewDigest: toolReviewDigest(tool), mode };
+  }
+  const review = { commandId: 'review', expectedSequence: policy.sequence,
+    policyRevision: policy.policyRevision, catalogueDigest: policy.catalogue!.schemaDigest,
+    connectionId: 'installed', accountMode: 'none', tools: policy.catalogue!.tools!.map(choice) };
+  const reviewedResult = await reviewToolPolicy(setup.nats.store, setup.binding,
+    'alice', 'fixture', review);
+  expect(reviewedResult.status).toBe('appended');
+  const reviewed = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  const publication = { commandId: 'publish', expectedSequence: reviewed.sequence,
+    reviewRevision: reviewed.reviewRevision };
+  const publishedResult = await publishToolPolicy(setup.nats.store, setup.binding,
+    'alice', 'fixture', publication);
+  expect(publishedResult.status).toBe('appended');
+  return prepareGatewayConfiguration(setup.nats.store, 'test', 'fixture', 'publish');
+}
+
+async function deliverConfiguration(setup: Setup,
+  record: Awaited<ReturnType<typeof reviewAndPublish>>) {
+  const controlPort = await freePort();
+  const options = { db: setup.db, mode: 'live' as const, store: setup.nats.store,
+    silo: 'test', child: setup.gatewayChild()!, configFile: setup.options.configFile,
+    controlPort, settings: setup.options };
+  const delivery = gatewayDelivery(options);
+  onTestFinished(delivery.close);
+  setup.dispatchOptions.acknowledged = delivery.acknowledged;
+  await delivery.deliver(record);
+  const config = await readFile(setup.options.configFile, 'utf8');
+  const path = /\/configuration\/\d+\/[a-f0-9-]+/u.exec(config)![0];
+  async function acknowledged() {
+    const response = await fetch(`http://127.0.0.1:${controlPort}${path}`);
+    expect(response.status).toBe(200);
+    expect(await delivery.observe()).not.toBeNull();
+  }
+  const polling = { timeout: 5000 };
+  await expect.poll(acknowledged, polling).toBeUndefined();
+}
+
 async function holdsChangedContract(changed: boolean, finalSend: boolean) {
   const context = await dispatchFixture();
   const { setup, remote, watch } = context;
-  vi.useFakeTimers({ toFake: ['Date'] });
-  onTestFinished(vi.useRealTimers);
-  vi.setSystemTime(Date.now() + 270_000);
+  advanceToNextCheck();
   const allowed = await context.admission();
   expect(allowed.status, await allowed.text()).toBe(200);
   const permit = z.string().parse(allowed.headers.get('x-opencrane-mcp-permit'));
@@ -178,6 +210,15 @@ async function holdsChangedContract(changed: boolean, finalSend: boolean) {
   expect(after.catalogue!.schemaDigest).toBe(before.catalogue!.schemaDigest);
   expect(after.driftHeld).toBe(true);
   expect(after.catalogue!.discoverResult).not.toBe(before.catalogue!.discoverResult);
+  const discoverySchema = z.object({ capabilities: z.object({
+    experimental: z.record(z.string(), z.unknown()),
+  }) });
+  const latest = discoverySchema.parse(JSON.parse(after.catalogue!.discoverResult!));
+  let expectedContract: Record<string, unknown> = {};
+  if (changed) {
+    expectedContract = { 'io.opencrane/expectedRevision': { version: 'unsupported' } };
+  }
+  expect(latest.capabilities.experimental).toEqual(expectedContract);
   expect(after.policyRevision).toBeGreaterThan(before.policyRevision);
   expect((await context.admission()).status).toBe(403);
   expect(remote.connections()).toBe(captures + 2);
@@ -193,9 +234,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])(
 async function refreshesShortTtl() {
   const context = await dispatchFixture('ask');
   const { setup, remote, watch } = context;
-  vi.useFakeTimers({ toFake: ['Date'] });
-  onTestFinished(vi.useRealTimers);
-  vi.setSystemTime(Date.now() + 270_000);
+  advanceToNextCheck();
   context.shortTtl();
   await watch.check();
   const asked = await context.admission();

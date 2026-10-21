@@ -2847,16 +2847,25 @@ this part. Fresh-install qualification and paid calls are NOT RUN.
 ## Dispatch catalogue capture (#48 PR 3b, first split)
 
 `models-main.ts` runs `remoteCatalogueWatch` under the budget leader. It polls at most
-32 discovered remote catalogue rows in this silo, ordered by server id, once per second.
+32 discovered remote catalogue rows in this silo, ordered by server id. It waits at most
+one second before polling again. Short catalogue TTLs bring the next poll forward.
 Registrations without discovery wait for the installer. Missing and overflow rows refuse calls.
-The existing PostgreSQL timeout is one second. Failed reads hold calls. Membership polls
+The whole membership read has a one-second deadline. Failed or timed-out reads hold calls,
+and a late result cannot restore membership. Membership polls
 continue while captures run; a stalled worker cannot extend saved catalogue expiry.
 
-Event history supplies the saved locator and credential-free connection. `remoteRequest`
+The same event history supplies the saved locator and credential-free connection.
+The watch folds those rows once rather than reading them again during capture. `remoteRequest`
 and `discoverInventory` check public DNS, pin addresses and verify hostname TLS. Production
 injects no resolver or CA. The shared watch keeps its 30-second attempt, inventory bounds,
 one capture per server and shortest discovery/page TTL, capped at 300000 ms.
+Checks start after one quarter of short TTLs, with the existing 30-second margin for longer TTLs.
+A timer starts the next poll even when the main models loop is busy. Zero TTL still refuses.
 Unchanged, continuously fresh checks preserve policyRevision and waiting approvals.
+The watch compares the latest discovery's `io.opencrane/expectedRevision` declaration too.
+A withdrawn or changed declaration holds dispatch before the event append and saves the new
+discovery through `mcp.tools_changed`, even when the tool hashes are identical.
+Dispatch therefore cannot keep using a declaration the server has withdrawn.
 
 Removing a row aborts capture. Unfinished captures and unresolved drift holds retain their
 bounded slot. Restart, outages and leadership loss close calls; recovery invalidates old

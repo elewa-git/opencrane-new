@@ -265,10 +265,14 @@ async function slowMembershipRead() {
   setup.watch.requireCurrent('held');
   expect(reader).toHaveBeenCalledTimes(2);
   expect(setup.remote.calls).toHaveLength(4);
+  await query('DELETE FROM mcp_catalogue WHERE server_id = $1', ['held']);
+  await setup.watch.check();
+  expectHeld(setup.watch, 'held');
   const beforeLateResult = await readToolPolicy(setup.nats.store, 'test', 'held');
   late.resolve(rows);
   await settled;
   await pause(0);
+  expectHeld(setup.watch, 'held');
   expect(await readToolPolicy(setup.nats.store, 'test', 'held')).toEqual(beforeLateResult);
   expect(setup.remote.calls).toHaveLength(4);
 }

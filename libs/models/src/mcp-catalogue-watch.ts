@@ -1,4 +1,5 @@
 import type { EventStore } from '@opencrane/event-store';
+import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { envelope } from './actor.ts';
@@ -53,6 +54,16 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     return check(serverId);
   }
 
+  function nextCheckAt() {
+    let next = Infinity;
+    for (const state of servers.values()) {
+      if (state.monitored && !state.active && state.failures < 3) {
+        next = Math.min(next, state.nextCheck);
+      }
+    }
+    return next;
+  }
+
   function requireCurrent(serverId: string) {
     const state = servers.get(serverId);
     if (state && state.expiresAt <= Date.now()) {
@@ -83,7 +94,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
         const refreshing = refresh(serverId, state, controller.signal);
         await untilAborted(refreshing, controller.signal);
         state.failures = 0;
-        state.nextCheck = Math.max(Date.now() + 1000, state.expiresAt - 30_000);
+        state.nextCheck = refreshAt(state);
       } catch (error) {
         holdWatch(state);
         state.failures += 1;
@@ -128,7 +139,11 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       throw new Error('Captured catalogue identity mismatch');
     }
     validateMcpCatalogue(catalogue);
-    const changed = catalogue.schemaDigest !== policy.catalogue.schemaDigest;
+    const currentContract = revisionContract(catalogue.discoverResult);
+    const savedContract = revisionContract(policy.catalogue.discoverResult);
+    // Save withdrawn or changed dispatch promises even when every tool is identical.
+    const changed = catalogue.schemaDigest !== policy.catalogue.schemaDigest ||
+      currentContract !== savedContract;
     let type = 'mcp.catalogue_checked';
     let data: unknown = { serverId, outcome: 'unchanged', schemaDigest: catalogue.schemaDigest,
       checkedAt: catalogue.checkedAt, expiresAt: catalogue.expiresAt };
@@ -147,7 +162,9 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     async function saveCapture(sequence: number) {
       signal.throwIfAborted();
       const event = envelope(silo, `mcp-${serverId}`, type, data);
-      const command = { event, expectedSequence: sequence, deadline, signal };
+      // Reuse the policy history already read. Give each capture a new event id.
+      const command = { event, expectedSequence: sequence, deadline, signal,
+        historyChecked: true as const };
       const result = await store.append(command);
       if (result.status !== 'appended') throw new Error('Catalogue append unconfirmed');
       if (changed) {
@@ -201,12 +218,13 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       state.controller?.abort();
     }
   }
-  return { check, checkDue, reconcile, requireCurrent, close };
+  return { check, checkDue, nextCheckAt, reconcile, requireCurrent, close };
 }
 
 function refreshWatchState(state: ReturnType<typeof newWatch>,
   policy: Awaited<ReturnType<typeof readToolPolicy>>, catalogue: Catalogue) {
   state.expiresAt = Date.parse(catalogue.expiresAt!);
+  state.checkedAt = Date.parse(catalogue.checkedAt!);
   const receipt = policy.configurationObservation;
   if (policy.driftHeld === true) {
     state.driftHeld = true;
@@ -230,7 +248,7 @@ function holdWatch(state: ReturnType<typeof newWatch>) {
 
 function newWatch() {
   return { monitored: true, held: true, holdCount: 0, driftHeld: false, driftSequence: 0,
-    expiresAt: 0, nextCheck: 0, failures: 0,
+    checkedAt: 0, expiresAt: 0, nextCheck: 0, failures: 0,
     active: undefined as Promise<void> | undefined,
     controller: undefined as AbortController | undefined };
 }
@@ -247,4 +265,33 @@ async function untilAborted<T>(work: Promise<T>, signal: AbortSignal) {
   } finally {
     signal.removeEventListener('abort', refuse);
   }
+}
+
+function refreshAt(state: ReturnType<typeof newWatch>) {
+  const ttlMs = state.expiresAt - state.checkedAt;
+  if (ttlMs <= 0) {
+    return Date.now() + 1000;
+  }
+  // Leave most of a short TTL for reading and saving the next capture.
+  // Keep the existing margin for longer TTLs.
+  const marginMs = Math.min(30_000, ttlMs * 3 / 4);
+  return Math.max(Date.now() + 1, state.expiresAt - marginMs);
+}
+
+function revisionContract(discovery: string | undefined) {
+  if (discovery === undefined) {
+    return undefined;
+  }
+  const parsed = losslessJson(discovery);
+  const capabilities = objectField(parsed, 'capabilities');
+  const experimental = objectField(capabilities, 'experimental');
+  const contract = objectField(experimental, 'io.opencrane/expectedRevision');
+  return contract?.canonical;
+}
+
+function objectField(value: JsonValue | undefined, name: string) {
+  if (value?.value instanceof Map) {
+    return value.value.get(name);
+  }
+  return undefined;
 }

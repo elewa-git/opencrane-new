@@ -7,7 +7,7 @@ export { startDecision } from './decision.ts';
 export { startGateway, ingestUsage, gatewayUsage } from './gateway.ts';
 export { budgets, readBudget, budgetSummary, totals, models, priceTableId, costCents, reservationCents, requestReservationCents, shortContextTokens } from './state.ts';
 export { taskRouting, modelForTask, type TaskKind } from './routing.ts';
-export { readToolPolicy, setToolPolicy, reviewToolPolicy } from './tool-policy.ts';
+export { readToolPolicy, toolPolicyFromRows, setToolPolicy, reviewToolPolicy } from './tool-policy.ts';
 export { modelGrantHandler, migrateModelGrants } from './grants.ts';
 
 export { payingGroupAuthority, groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';

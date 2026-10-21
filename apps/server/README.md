@@ -21,7 +21,7 @@ flowchart LR
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
-  server -->|checks registered remote tool lists, declared free costs and complete approval details through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
+  server -->|rechecks remote tool lists and revision promises before expiry through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records refused turn decisions| nats
 ```
@@ -30,6 +30,9 @@ Tool discovery records the exact definitions and how long the check remains vali
 The models process keeps checking registered remote servers, including ones added after
 startup. Missing checks and changed definitions hold calls until the required checks
 and review are complete. A restart begins with calls held.
+Checks also pause calls if a server withdraws or changes its promise to check tool revisions.
+A slow membership read pauses calls after one second. Healthy servers with short-lived
+lists are checked again before those lists expire.
 It saves each tool’s declared zero cost and approval details, including whether approval
 needs recent sign-in. A tool with incomplete details is excluded. An admin must review
 both before enabling any tool, including reads. Missing declarations keep it blocked.
