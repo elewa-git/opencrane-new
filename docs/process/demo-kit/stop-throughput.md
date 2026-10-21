@@ -286,3 +286,52 @@ Screenshots: [1280 pixels](stop-closure-rebased-1280.png) and
 PASS: released slot 1 again and removed the final temporary probes. Server
 typecheck, focused lint, knip, event catalogue and changelog checks passed on the
 rebased source. Final pushed-head CI is reported in the PR.
+
+### Saved id correction and replay checks
+
+21 October 2026. Source `aeae092510`; fix `a76e493a9`; test-first commit `891657eb0`.
+Environment: the existing development worktree, Node 22, disposable real NATS
+and loopback WebSockets. This was not a fresh installation. No live stack,
+provider call or runtime image build was used for this correction.
+
+PASS: failing-first reproduction of the old-report id collision. The fixture
+publishes an old report without a broker duplicate entry, representing an expired
+duplicate window. Stop and a new message must both return `Id reused` and leave
+the saved history unchanged. All four cold/warm cases initially failed because
+the command saved a second event. They now pass. Every saved id keeps its first
+position in the shared summary; retries still read and verify that event.
+The 32 MiB cache limit is unchanged. Added report ids and numeric positions count
+towards it without retaining reply text. The existing long-history and oversized
+cache tests pass, preserving warm reads and rebuilds after eviction.
+
+PASS: each requested guard has a test that fails when that guard is removed.
+Each mutation was run separately and restored before the passing runs.
+
+| Removed guard | Observed failure |
+| --- | --- |
+| Do not send an in-flight sequence again | The socket received the first report twice. |
+| Clear pending reports on reconnect | Replay included the old pending report before the new reports. |
+| Clear in-flight entries on reconnect | The old full window blocked replay. |
+| Reset in-flight bytes on reconnect | The old byte count blocked the expected new window. |
+| Keep the first position for a repeated stored id | The later position replaced the first one, 4 instead of 3. |
+
+PASS: 31 focused tests in four files, twice, under `nice -n 10` with one worker.
+Files: server `chat-summary.test.ts` and `chat-summary-memory.test.ts`; computer
+`bridge-socket.test.ts` and `report-pressure.test.ts`. Both runs used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; these selected
+files require no PostgreSQL fixture. Safe local logs are
+`/tmp/demo-stop-close-red.log`, `/tmp/demo-stop-close-mutation-*.log` and
+`/tmp/demo-stop-close-green-final-{1,2}.log`.
+
+PASS: event catalogue check, with 149 event types agreeing.
+NOT RUN: full root suite locally, live qualification, new image and paid calls.
+The earlier image and live measurements above remain tied to their stated source.
+Other listed coverage gaps remain outside this correction.
+
+PASS: full lint, including knip, dependency, Markdown, local-link, fixture, licence
+and changelog checks; full workspace and package typecheck. Both ran under
+`nice -n 10`. The first lint attempt refused an unsafe type assertion in the new
+socket fixture. The fixture now uses the existing object parser; every report
+assertion is unchanged. The final lint and typecheck logs are
+`/tmp/demo-stop-close-lint-final.log` and `/tmp/demo-stop-close-typecheck-final.log`.
+The PR comment records CI for the pushed commit, including its `ci-ok` result.
