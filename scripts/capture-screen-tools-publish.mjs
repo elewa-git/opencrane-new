@@ -95,7 +95,7 @@ async function serve(route, state) {
   else if (path.endsWith('/publication')) body = { status: 'disabled' };
   else if (path.includes('/changes/')) {
     body = { status: 'applying', changeRef: state.reference };
-    if (state.scenario === 'lost-review') body.status = 'unknown';
+    if (['lost', 'lost-review'].includes(state.scenario)) body.status = 'unknown';
     if (state.ack) body = { status: 'ready', changeRef: state.reference, generation: 1,
       fragmentDigest: 'f'.repeat(64), recordDigest: 'c'.repeat(64), configDigest: 'd'.repeat(64),
       requestedAt: checkedAt, observedAt: checkedAt };
@@ -120,6 +120,44 @@ async function layout(page) {
   for (const button of await page.locator('main button:visible, main summary:visible').all()) {
     const box = await button.boundingBox();
     assert(box && box.height >= 44, 'Control shorter than 44 px');
+  }
+}
+
+async function assertFrameState(page, width, scenario) {
+  if (scenario === 'tools' && width === 390) {
+    const action = await page.getByRole('button', { name: 'Review before publishing' }).boundingBox();
+    const panel = await page.locator('.tool-policy').boundingBox();
+    assert(action && panel && action.width >= panel.width - 2, 'Phone review action must fill the panel');
+  }
+  if (scenario === 'confirm' && width === 390) {
+    const actions = await page.locator('dialog .actions').boundingBox();
+    assert(actions && actions.y + actions.height >= 870, 'Phone confirmation actions must sit at the bottom');
+  }
+  if (['applying', 'ready', 'lost', 'lost-review', 'malformed', 'stale', 'wrong',
+    'wrong-config', 'conflict'].includes(scenario)) {
+    assert.equal(await page.locator('.changes-list, oc-initial-review-confirmation').count(), 0,
+      'Publication outcomes must hide the review form');
+  }
+  if (scenario === 'applying') {
+    assert.equal(await page.locator('h1').innerText(), 'Publishing Fixture server');
+  }
+  if (scenario === 'ready') {
+    assert.equal(await page.locator('.publication-notice [data-glyph-name="check"]').count(), 1);
+    assert.equal(await page.locator('main').getByText(/Calls stay paused/).count(), 0);
+    assert.equal(await page.locator('.status-glyph').count(), 0);
+  }
+  if (['lost', 'lost-review', 'malformed', 'stale', 'wrong', 'wrong-config'].includes(scenario)) {
+    assert.equal(await page.locator('.publication-notice [data-state="unknown"]').count(), 1);
+    const action = await page.getByRole('button', { name: 'Check status' }).boundingBox();
+    assert(action && action.y < 500, 'Check status must stay near the top');
+  }
+  if (scenario === 'conflict') {
+    assert.equal(await page.locator('.draft-notice.publication-conflict').count(), 1);
+    assert.equal(await page.getByRole('link', { name: 'Discard my edits' }).count(), 1);
+  }
+  if (scenario === 'refusal') {
+    assert.equal(await page.getByRole('link', { name: 'Go to Overview' }).getAttribute('href'), '/org/overview');
+    assert.equal(await page.locator('main').getByText('Your access has changed. Details have been cleared from this page.').count(), 1);
   }
 }
 
@@ -182,20 +220,28 @@ async function capture(browser, width, scenario) {
     }
   }
   await layout(page);
+  await assertFrameState(page, width, scenario);
   await page.screenshot({ path: resolve(output, `${scenario}-${width}.png`), fullPage: scenario !== 'confirm' });
   await page.close();
 }
 
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
+const failures = [];
 try {
   for (const width of [1280, 390]) {
     for (const scenario of ['wrong-config', 'lost-review', 'tools', 'review', 'confirm', 'applying', 'lost', 'conflict',
       'refusal', 'empty', 'loading', 'ready', 'malformed', 'stale', 'wrong']) {
-      await capture(browser, width, scenario);
+      try {
+        await capture(browser, width, scenario);
+      } catch (error) {
+        failures.push(`${scenario}-${width}: ${error.message}`);
+        for (const context of browser.contexts()) await context.close();
+      }
     }
   }
 } finally { await browser.close(); }
+assert.deepEqual(failures, [], 'Screen checks failed');
 const source = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 await writeFile(resolve(output, 'receipt.md'), '# Initial tool publication screens\n\n' +
   `Date: ${checkedAt}. Source base: ${source}, plus working-tree changes.\n\n` +
