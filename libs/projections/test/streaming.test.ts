@@ -83,6 +83,7 @@ async function projectsLongReply() {
     expect(rows.map(rowData)).toEqual(events.map(storedData));
     expect(rows.at(-1)?.type).toBe('agent.turn_failed');
     expect(await runner.checkpoint(conversations)).toBe(events.length);
+    console.info('Reply projection milliseconds:', Math.round(elapsed));
     expect(elapsed).toBeLessThan(2000);
   } finally {
     await storage.close();

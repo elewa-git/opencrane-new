@@ -21,7 +21,9 @@ export async function* replyBatches(events: AsyncIterable<StoredEvent>) {
     batch.push(stored);
     bytes += size;
   }
-  if (batch.length) yield batch;
+  if (batch.length) {
+    yield batch;
+  }
 }
 
 export async function applyReplyBatch(tx: Query, projection: Projection,
@@ -29,19 +31,26 @@ export async function applyReplyBatch(tx: Query, projection: Projection,
   const checkpoint = await tx.query<{ sequence: string | number }>(
     'SELECT sequence FROM projection_checkpoints WHERE name = $1', [projection.name]);
   let sequence = Number(checkpoint.rows[0]?.sequence);
-  if (!Number.isSafeInteger(sequence)) throw new Error('Projection is not initialised');
+  if (!Number.isSafeInteger(sequence)) {
+    throw new Error('Projection is not initialised');
+  }
   const ids = batch.map(eventId);
   const receipts = await tx.query<{ event_id: string }>(
     'SELECT event_id FROM projection_events WHERE projection = $1 AND event_id = ANY($2::text[])',
     [projection.name, ids]);
-  const seen = new Set(receipts.rows.map(receiptId));
+  const savedIds = receipts.rows.map(receiptId);
+  const seen = new Set(savedIds);
   const added: string[] = [];
   const pending: StoredEvent[] = [];
   for (let index = 0; index < batch.length; index += 1) {
     const stored = batch[index]!;
     // Recheck under the lock: another runner may already have committed this group.
-    if (stored.sequence <= sequence) continue;
-    if (stored.sequence !== sequence + 1) throw new Error('Event sequence gap');
+    if (stored.sequence <= sequence) {
+      continue;
+    }
+    if (stored.sequence !== sequence + 1) {
+      throw new Error('Event sequence gap');
+    }
     if (!seen.has(stored.event.id)) {
       if (projection.applyReplies) {
         pending.push(stored);
@@ -54,7 +63,9 @@ export async function applyReplyBatch(tx: Query, projection: Projection,
     }
     sequence = stored.sequence;
   }
-  if (pending.length && projection.applyReplies) await projection.applyReplies(tx, pending);
+  if (pending.length && projection.applyReplies) {
+    await projection.applyReplies(tx, pending);
+  }
   if (added.length) {
     await tx.query('INSERT INTO projection_events SELECT $1, unnest($2::text[])',
       [projection.name, added]);
@@ -64,5 +75,9 @@ export async function applyReplyBatch(tx: Query, projection: Projection,
   return sequence;
 }
 
-function eventId(stored: StoredEvent): string { return stored.event.id; }
-function receiptId(row: { event_id: string }): string { return row.event_id; }
+function eventId(stored: StoredEvent): string {
+  return stored.event.id;
+}
+function receiptId(row: { event_id: string }): string {
+  return row.event_id;
+}

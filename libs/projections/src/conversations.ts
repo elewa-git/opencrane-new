@@ -415,12 +415,18 @@ async function applyReplies(db: Query, events: StoredEvent[]): Promise<void> {
   const placeholders: string[] = [];
   for (const stored of events) {
     const event = stored.event;
-    if (event.type !== 'agent.message_delta') throw new Error('Expected a reply delta');
+    if (event.type !== 'agent.message_delta') {
+      throw new Error('Expected a reply delta');
+    }
     const entry = conversationFeedEntry(event);
-    if (!entry) throw new Error('Invalid reply delta');
+    if (!entry) {
+      throw new Error('Invalid reply delta');
+    }
     const { conversationId, data } = entry;
-    const identity = JSON.stringify([event.silo, conversationId]);
-    latest.set(identity, { stored, conversationId });
+    const identityFields = [event.silo, conversationId];
+    const identity = JSON.stringify(identityFields);
+    const current = { stored, conversationId };
+    latest.set(identity, current);
     silos.add(event.silo);
     const offset = values.length;
     values.push(event.silo, conversationId, stored.sequence, event.id, event.type,
@@ -435,5 +441,7 @@ async function applyReplies(db: Query, events: StoredEvent[]): Promise<void> {
     await foldConversation(db, stored.event, conversationId, stored.sequence);
   }
   await db.query(`INSERT INTO conversation_feed VALUES ${placeholders.join(',')}`, values);
-  for (const silo of silos) await db.query("SELECT pg_notify('conversations', $1)", [silo]);
+  for (const silo of silos) {
+    await db.query("SELECT pg_notify('conversations', $1)", [silo]);
+  }
 }
