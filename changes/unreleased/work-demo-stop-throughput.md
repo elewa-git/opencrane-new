@@ -1,1 +1,2 @@
 - Save long streamed replies in bounded batches, preserving each report's replay checks. Direct chats keep one subscription after delivery and show when they are reconnecting.
+- Refuse a streamed reply batch when another writer saved different earlier text, even if the final piece matches.

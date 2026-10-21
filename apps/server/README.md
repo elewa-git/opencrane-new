@@ -6,6 +6,7 @@ The back end for OpenCrane sign-in, conversations and organisation settings.
 It is a Node service that accepts browser requests and sends live updates.
 It keeps saving accepted computer reports after a connection drops, so replies
 and Stop results can finish arriving when the computer reconnects.
+It confirms each piece of a reply only after checking that its text was saved.
 A second process handles model access and spending. Both processes use the
 same secret to protect conversation keys in a packaged install.
 

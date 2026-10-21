@@ -3485,7 +3485,11 @@ turn, chat, assistant, requester, thread, message and execution details. It keep
 There is no timer waiting for a batch. Starts, completions, tools and legacy reports
 stay separate. One conditional append saves encrypted combined text and each original
 sequence and digest. Only then does the bridge acknowledge every included report.
-Replay checks original digests even when it arrives in different groups. A definite
+Replay checks original digests even when it arrives in different groups. After an
+append, the server checks every original against saved receipts before acknowledging
+it. A concurrent writer can save the same final report with different earlier text;
+that mismatch is refused. Receipts saved across separate events remain valid.
+A definite
 append conflict reloads history within ten seconds; uncertain writes are not resubmitted.
 Stop waits only for report appends already running, then holds new report appends
 until its history and access checks and single conditional append finish. This

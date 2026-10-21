@@ -139,7 +139,34 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   if (result.status !== 'appended') throw new Error('Report append unavailable');
   const committed = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
   verifyDigest(committed, digest, event.id);
+  if (batch) {
+    // A concurrent append may save different groups with the same final report.
+    // Check every original against its saved receipt before acknowledging the batch.
+    await verifyAppendedBatch(store, context, batch, committed!);
+  }
   return 'recorded' as const;
+}
+
+async function verifyAppendedBatch(store: EventStore, context: ReportContext,
+  batch: Report[], committed: StoredEvent) {
+  for (const original of batch) {
+    function matchesSequence(receipt: { sequence: number }) {
+      return receipt.sequence === original.sequence;
+    }
+    const receipt = committed.event.report;
+    let saved: StoredEvent | undefined = committed;
+    if (receipt?.sequence !== original.sequence && !receipt?.preceding?.some(matchesSequence)) {
+      const deadline = performance.now() + 10_000;
+      const facts = await readChatFacts(store, context.silo, original.conversationId,
+        original.turnId, context.computerId, original.sequence, deadline);
+      saved = undefined;
+      if (facts.reportPosition !== undefined) {
+        saved = await readEventAt(store, committed.event.subject, facts.reportPosition, deadline);
+      }
+    }
+    if (!saved) throw new ReportRejected('Report sequence reused');
+    verifyReportReplay(saved, original, reportDigest(original));
+  }
 }
 
 function reportAuthor(report: Report, assistantId: string,

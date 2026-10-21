@@ -11,9 +11,9 @@ async function releasesWaitersAfterFailure(kind: 'report' | 'stop') {
     throw new Error('Append failed');
   }
   let saved = false;
-  async function saveWaitingAppend() {
+  function saveWaitingAppend() {
     saved = true;
-    return 'saved';
+    return Promise.resolve('saved');
   }
   const failing = chatWrite(store, 'conversation-one', kind, failAppend);
   const rejected = expect(failing).rejects.toThrow('Append failed');
@@ -37,8 +37,8 @@ async function keepsStopsInDifferentChatsIndependent() {
     entered.resolve();
     await release.promise;
   }
-  async function saveStop() {
-    return 'saved';
+  function saveStop() {
+    return Promise.resolve('saved');
   }
   const report = chatWrite(store, 'conversation-one', 'report', holdReport);
   await entered.promise;
