@@ -36,10 +36,11 @@ test('smoke records failures without private errors and refuses work after three
 
 async function refusesUnsafeSlots() {
   const { spawnSync } = await import('node:child_process');
-  for (const id of ['', 'owner', '3']) {
+  for (const id of [undefined, '', 'owner', '3']) {
     const env = { PATH: process.env['PATH'], DEV_STACK_ID: id, DEMO_ALLOWANCE_CENTS: '100',
       DEV_STACK_DIR: '/invalid-demo-configuration' };
-    const args = ['--experimental-strip-types', 'infra/dev-stack/demo-smoke-run.ts'];
+    const args = ['--experimental-strip-types', '--import',
+      './infra/dev-stack/test/demo-smoke-preload.mjs', 'infra/dev-stack/demo-smoke-run.ts'];
     const result = spawnSync(process.execPath, args, { env, encoding: 'utf8', timeout: 10000 });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Demo tasks require an explicit secondary id/u);
