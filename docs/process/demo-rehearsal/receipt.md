@@ -1,35 +1,25 @@
 # Demo rehearsal
 
-Status: PARTIAL. The first startup found journey drift. This work does not complete #32 or provide an owner demo commit yet.
+Status: PARTIAL. No merged owner demo commit is qualified. This does not complete #32.
+The source includes every prerequisite through `06a0e47ac`, including both Stop fixes.
+The final two fresh installs must use the same full source SHA.
 
-## Source and limits
+## Limits and commands
 
-The source includes all prerequisite merges through `06a0e47ac`, including the
-Stop closure and display fixes. Both fresh installs must use one full source SHA.
-The owner stack, its port 44200 and its data are outside these checks.
+The task limit is 1,000 euro cents, including charged cents and unresolved holds.
+Each run sets both company ceilings to 500 cents. The refusal step lowers the limit
+to today's spending and restores it. Nightly uses the free stand-in and clears paid settings.
 
-The task allowance is 1,000 euro cents including charges and unresolved holds.
-Each fresh install has a separate 500-cent allowance. Startup and smoke both set
-the company daily and monthly ceilings to 500 cents. The refusal step lowers the
-company limit to today's spending and restores the saved limits afterwards.
-Nightly checks use the free model stand-in and discard inherited paid settings.
-
-## Commands
-
-`npm ci` installed this worktree's packages. Its `.tools/nats-server` and
-`.tools/lychee` link to the requested tools in the main checkout.
-`infra/dev-stack/claim.sh` returned slot 1 for this worktree.
-
-For each run, the following commands use a different attempt name. Only the
-product provider setup reads the paid file; its value is never printed.
+`npm ci` installed this worktree. The requested NATS and lychee tools are symlinked
+in `.tools/`. `claim.sh` returned slot 1. Each run uses these kit commands:
 
 ```sh
 export DEV_STACK_ID=1
 export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
 export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
 export DEMO_ALLOWANCE_CENTS=500
-export P4_JOURNEY_ATTEMPT=demo-rehearsal-final-r1
 export COMPUTER_IDLE_MS=14400000
+export P4_JOURNEY_ATTEMPT=demo-rehearsal-proof-r1
 infra/dev-stack/up.sh --id 1 --fresh
 node --experimental-strip-types infra/dev-stack/demo-seed-run.ts
 node --experimental-strip-types infra/dev-stack/demo-smoke-run.ts
@@ -37,13 +27,12 @@ node --experimental-strip-types infra/dev-stack/demo-pages.ts
 infra/dev-stack/down.sh --id 1
 ```
 
-The second final fresh run uses `demo-rehearsal-final-r2`. The seed command is reused from the kit
-and is repeated safely by the smoke command. A failed startup remains failed;
-continuing checks cannot turn its result into PASS.
+The second run uses `demo-rehearsal-proof-r2`. Only product provider setup reads the
+paid file. Its value is never printed. Failed proof is copied before cleanup.
 
 ## Fresh-install results
 
-| Check | First fresh install | Second fresh install |
+| Check | First proof install | Second proof install |
 | --- | --- | --- |
 | Fresh startup and kit seed | NOT RUN | NOT RUN |
 | Streamed reply and reload | NOT RUN | NOT RUN |
@@ -61,40 +50,31 @@ continuing checks cannot turn its result into PASS.
 Owner refresh, physical-phone access, laptop tunnel and Safari: NOT RUN.
 A 390px Chromium window does not prove a physical phone or Safari.
 
+## Retained failed attempts
+
+Receipts include the full source SHA, attempt, timings, paid reservations and cents.
+Startup exited 1 on each attempt; the kit seed and smoke were NOT RUN.
+
+| Source and receipt | Failure | Charged cents | Held cents |
+| --- | --- | --- | --- |
+| [b3c4c4075](failed-b3c4c4075/receipt.json) | Real private reply was checked against stand-in text | 13 | 17 |
+| [688be242a](failed-688be242a/receipt.json) | Second synthetic colleague's HTTP join returned 409 | 13 | 16 |
+| [c96931aad](failed-c96931aad/receipt.json) | Replay restarted the server before an offline rebuild | 13 | 16 |
+
+The three attempts total 88 cents including holds. The first two passed the real
+streaming, Stop, member and PDF checks. The third also passed seven group checks,
+including zero AI/computer/budget work and access clearing within two seconds.
+[The first failure picture](failed-b3c4c4075/private-reply-390.png) shows the real answer.
+[The group pictures](failed-c96931aad/group-messages-390.png) show ordinary messages.
+
 ## Source checks
 
-Failing-first commits: `4e7669ba7`, `4a298440b` and `d39698e9f`. The first reproduces missing
-nightly attempts, missing retained receipts and invalid cleanup. The second
-reproduces an incomplete group journey returning successfully. The third checks a
-completed real private reply before fixing the stand-in-only expectation.
+- PASS: failing-first commits `4e7669ba7`, `4a298440b` and `d39698e9f` precede their fixes.
+- PASS: 24 focused Node tests twice; 17 owner/mode refusal tests twice; changed scripts compile.
+- PASS: required lint and workspace typecheck; event catalogue, Knip and changelog checks.
+- PASS: 438 event-security tests with the supplied `PG_TEST_URL`.
+- FAIL: an additional compiler check across every dev-stack script found existing errors in
+  `mcp-journey.ts`, `wake-latency.ts` and `zitadel-setup.test.ts`, outside this change.
 
-- PASS: 24 focused Node tests, twice, under `nice -n 10`, after the private-reply fix.
-- PASS: event catalogue, Knip and changelog checks.
-- PASS: 17 journey entry-point refusal tests, twice, after the fixture correction.
-- PASS: 438 event-security tests with the supplied `PG_TEST_URL`, under `nice -n 10`.
-- PASS: changed dev-stack files compile with a temporary narrowed TypeScript config.
-- PASS: required workspace typecheck.
-- PASS: required lint. Existing long-function warnings remain.
-- FAIL: an additional compiler check across every dev-stack script found existing
-  errors in `mcp-journey.ts`, `wake-latency.ts` and `zitadel-setup.test.ts`.
-  They are outside this change. No full root test suite or fleet batch ran.
-
-## Retained first failure
-
-[The first receipt](failed-b3c4c4075/receipt.json) records source
-`b3c4c4075d30b10a7c4ae544abbc45f4700a90b3` and attempt `demo-rehearsal-r1`.
-Real streaming, Stop, the member reply and PDF facts passed. The private shared
-assistant also returned a real answer, but the old check waited for the stand-in
-sentence. Startup exited 1; the kit seed and smoke were NOT RUN on that attempt.
-[The failure picture](failed-b3c4c4075/private-reply-390.png) shows the real answer.
-The total was six paid reservations: 13 cents charged and 17 held. Both company
-ceilings were 500 cents. The failed proof was copied before slot cleanup.
-
-## Retained fixture failure
-
-[The second receipt](failed-688be242a/receipt.json) records source
-`688be242a2aa914ed46540dae771404a8958d75c` and attempt `demo-rehearsal-fixed-r1`.
-The real private reply, group pages and direct exchange passed. Joining the second
-synthetic group colleague returned 409. The fixture now uses the existing event
-seed for both synthetic colleagues, with no unused personal assistants. The kit
-seed and smoke were NOT RUN. This attempt's spending is in its receipt.
+Checks and tests used `nice -n 10`. No full root test suite or fleet batch ran.
+The owner stack, port 44200 and its data were untouched. No dependency or product event changed.

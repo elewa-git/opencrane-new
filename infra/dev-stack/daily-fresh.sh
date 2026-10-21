@@ -11,7 +11,7 @@ repository_root=$(CDPATH='' cd "$script_directory/../.." && pwd -P)
 ledger_directory="$HOME/.opencrane/daily-fresh"
 ledger_file="$ledger_directory/ledger.md"
 started_at=$(date +%s)
-main_commit=$(git -C "$repository_root" rev-parse HEAD 2>/dev/null || printf 'unknown')
+source_commit=$(git -C "$repository_root" rev-parse HEAD 2>/dev/null || printf 'unknown')
 stack_id=
 failed_step='claim.sh'
 run_result=FAIL
@@ -32,8 +32,8 @@ write_receipt() {
   receipt_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
   mkdir -p "$ledger_directory"
   chmod 700 "$ledger_directory"
-  printf '%s | main commit %s | %s | %s | failed step %s | duration %ss | attempt %s\n' \
-    "$receipt_time" "$main_commit" "$run_result" "$receipt_note" \
+  printf '%s | source commit %s | %s | %s | failed step %s | duration %ss | attempt %s\n' \
+    "$receipt_time" "$source_commit" "$run_result" "$receipt_note" \
     "$failed_step" "$duration" "$P4_JOURNEY_ATTEMPT" >> "$ledger_file"
   chmod 600 "$ledger_file"
 }

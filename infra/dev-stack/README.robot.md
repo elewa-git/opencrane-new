@@ -391,8 +391,8 @@ It adds a third seeded member and
 checks that earlier messages stay hidden from that member. The check also removes a
 member, asks another member to leave, and records how quickly each screen clears.
 It checks the long-name and no-match picker states, refuses an unauthorised add, and
-refuses a people-and-assistant choice without saving a conversation. It restarts the
-server and checks that replay keeps the group mode and participants.
+refuses a people-and-assistant choice without saving a conversation. It stops the server and conversation worker for an offline replay, then restarts both
+and checks server health directly. Replay must keep the group mode and participants.
 
 The shared-assistant check adds a model grant to the disposable event store so the
 group can create an assistant. The member starts a private session with it. The direct
