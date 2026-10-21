@@ -260,3 +260,29 @@ is preserved. Final pushed-head checks are reported in the PR.
 The first CI run also failed `upload.test.ts` because the MinIO image registry
 refused its pull after exceeding a request quota. That failure is not on the
 permitted rerun list and was not rerun on that head.
+
+### Final rebase and stand-in repeat
+
+PASS: rebased this branch onto updated #549 source `cae9e5b4e`; Git confirmed
+completion and ancestry. Kept both sets of tests and both receipts when resolving
+conflicts. The test-first commits after rebase are `ddb6de97a`, `9833a9657` and
+`3d9680b8f`. Final measured source: `64f934382`, including the memory correction.
+PASS: 73 targeted tests twice after the rebase, including the new batch checks.
+
+Reclaimed the same secondary slot 1 and installed it fresh with the clean pinned
+computer image. Both company ceilings were again 300 cents. These were stand-in
+calls only; real charged plus held spending remains 17 cents.
+
+| Width | Click, UTC | Closure saved, UTC | Elapsed | Reload retention |
+| --- | --- | --- | --- | --- |
+| 1280 | 12:00:36.555 | 12:00:37.516 | PASS: 961 ms | PASS: 28,574 characters at 12:01:59.404 |
+| 390 | 12:02:43.011 | 12:02:44.440 | PASS: 1,429 ms | PASS: 29,068 characters at 12:04:19.421 |
+
+PARTIAL: the page exceeded the 65-second display wait in both runs. Reload showed
+the saved closure and kept the partial text, unchanged on a second reload.
+Screenshots: [1280 pixels](stop-closure-rebased-1280.png) and
+[390 pixels](stop-closure-rebased-390.png). No further paid call was made.
+
+PASS: released slot 1 again and removed the final temporary probes. Server
+typecheck, focused lint, knip, event catalogue and changelog checks passed on the
+rebased source. Final pushed-head CI is reported in the PR.
