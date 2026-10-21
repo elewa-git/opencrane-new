@@ -53,6 +53,7 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 - Keep up to three separate development stacks on one machine.
 - Seed two demo groups and a shared assistant through product APIs, keeping their ids on repeats.
 - Prepare a scanned personal PDF, bound company spending, warm computers and time demo checks.
+  A smaller approved demo allowance also limits paid calls made during fresh startup.
 - Put the package gateway Service IP in the computer settings before a chat turn starts.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
   On failure, save the error and recent process logs before removing that stack.

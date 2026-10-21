@@ -1,1 +1,2 @@
 - The secondary demo rehearsal prepares a scanned supplier PDF and company spending ceilings, warms both assistants, and records two timed browser checks with screenshots.
+- Fresh real-provider startup honours the approved demo allowance before its first paid check.

@@ -763,7 +763,8 @@ member setup, then four chat turns: arithmetic with streaming/reload, Stop with 
 text/reload, the member's capital-city answer, and an uploaded supplier quote's total and
 delivery date. The PDF goes through the normal malware scan and turn input. Together
 with provider verification this requests five paid turns. Real startup seeds a maximum
-2,000-cent daily/monthly ceiling; this is not a shared cross-stack spending counter.
+2,000-cent daily/monthly ceiling. Set `DEMO_ALLOWANCE_CENTS` before startup to use a
+smaller approved limit, including provider verification. This is not a shared spending counter.
 Run only within the owner's shared daily approval. A failure stops the journey without
 resubmitting a turn. The receipt in `docs/process/demo-real-model/` records source SHA,
 checks and reservation/charge cents; null charges mean an unresolved hold.
