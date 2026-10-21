@@ -5,7 +5,7 @@ import type { EventEnvelope } from '@opencrane/events';
 import { countReads, event as fixtureEvent, expectNoWholeReads,
   natsFixture } from '@opencrane/event-store/testing';
 import { conversationKeys } from '../src/chat/keys.ts';
-import { recordReport } from '../src/chat/reports.ts';
+import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { chatHistory } from '../src/chat/commands.ts';
 
@@ -287,3 +287,48 @@ async function keepsSecondComputerStarts() {
   expect(starts).toHaveLength(2);
 }
 it('keeps a second computer start and checks that computer\'s own repeat', keepsSecondComputerStarts);
+
+function originalReport(sequence: number, text = `piece ${sequence} `) {
+  return { ...report, sequence, previousSequence: sequence - 1, text };
+}
+async function checksRegroupedReplay(partlySaved: boolean) {
+  await setup();
+  const originals = [originalReport(1), originalReport(2), originalReport(3),
+    originalReport(4)];
+  await recordReports(nats.store, keys, context, originals.slice(0, 2));
+  if (!partlySaved) await recordReports(nats.store, keys, context, originals.slice(2));
+  const append = vi.spyOn(nats.store, 'append');
+  expect(await recordReports(nats.store, keys, context, originals.slice(1, 3))).toBe('duplicate');
+  expect(append).toHaveBeenCalledTimes(partlySaved ? 1 : 0);
+  expect(await reportPosition(nats.store, 'test', 'computer')).toBe(partlySaved ? 3 : 4);
+  const rows = await chatHistory(nats.store, 'test', 'chat');
+  let text = '';
+  for (const row of rows) {
+    if (row.event.type === 'agent.message_delta') {
+      text += keys.decrypt('test', 'chat', row.event.data);
+    }
+  }
+  expect(text).toBe(partlySaved ? 'piece 1 piece 2 piece 3 ' : 'piece 1 piece 2 piece 3 piece 4 ');
+}
+it.each([false, true])('checks every regrouped original (partly saved %s)',
+  checksRegroupedReplay);
+
+async function refusesChangedBatchOriginal(change: 'earlier' | 'later' | 'reordered') {
+  await setup();
+  const originals = [originalReport(1), originalReport(2), originalReport(3)];
+  await recordReports(nats.store, keys, context, originals);
+  const submitted = [...originals];
+  if (change === 'earlier') submitted[0] = originalReport(1, 'changed');
+  if (change === 'later') submitted[1] = originalReport(2, 'changed');
+  if (change === 'reordered') {
+    submitted[0] = originalReport(1, originals[1]!.text);
+    submitted[1] = originalReport(2, originals[0]!.text);
+  }
+  const append = vi.spyOn(nats.store, 'append');
+  await expect(recordReports(nats.store, keys, context, submitted))
+    .rejects.toThrow('Report sequence reused');
+  expect(append).not.toHaveBeenCalled();
+}
+it.each(['earlier', 'later', 'reordered'] as const)(
+  'refuses a replay with a changed %s original and an unchanged final report',
+  refusesChangedBatchOriginal);

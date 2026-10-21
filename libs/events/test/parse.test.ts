@@ -260,3 +260,23 @@ it('keeps every report receipt ordered and confines batches to text deltas', () 
 function makeReceipt(_value: unknown, index: number) {
   return { sequence: index + 1, digest: 'a'.repeat(64) };
 }
+
+const invalidEarlierReceipts = [
+  { name: 'non-integer', preceding: [{ sequence: 1.5, digest: 'a'.repeat(64) }] },
+  { name: 'bad digest', preceding: [{ sequence: 1, digest: 'invalid' }] },
+  { name: 'extra field', preceding: [{ sequence: 1, digest: 'a'.repeat(64), extra: true }] },
+  { name: 'empty array', preceding: [] },
+  { name: '64 receipts', preceding: Array.from({ length: 64 }, makeReceipt) },
+];
+function rejectsInvalidEarlierReceipt(test: typeof invalidEarlierReceipts[number]) {
+  const data = { conversationId: 'chat', turnId: 'turn', messageId: 'reply',
+    contentType: 'text', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test' };
+  const valid = { computerId: 'computer', sequence: 65, digest: 'b'.repeat(64),
+    preceding: Array.from({ length: 63 }, makeReceipt) };
+  const event = { ...baseEnvelope('agent.message_delta', data), report: valid };
+  expect(parseEventByType(event).success).toBe(true);
+  const report = { ...valid, preceding: test.preceding };
+  expect(parseEventByType({ ...event, report }).success).toBe(false);
+}
+it.each(invalidEarlierReceipts)('refuses an earlier receipt with $name',
+  rejectsInvalidEarlierReceipt);
