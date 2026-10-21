@@ -3,6 +3,7 @@ import { conversationParticipantIds, conversationCreatedDataSchema, conversation
   toolDispatchRecordedDataSchema,
   getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { ProjectionRunner, type EventSource, type Projection } from './runner.ts';
+import type { StoredEvent } from '@opencrane/event-store';
 import type { Logger } from '@opencrane/observability';
 import type { Db, Query } from './db.ts';
 import { createConversationListState, applyConversationPreference }
@@ -10,6 +11,7 @@ import { createConversationListState, applyConversationPreference }
 
 export const conversations: Projection = {
   name: 'conversations',
+  applyReplies,
   async create(db) {
     await requireLegacyReplay(db);
     await requireActivityReplay(db);
@@ -404,4 +406,34 @@ async function foldParticipant(db: Query, event: EventEnvelope,
       WHERE silo = $1 AND conversation_id = $2 AND participant_id = $3 AND end_position IS NULL`,
     [event.silo, conversationId, participantId, position, event.id]);
   }
+}
+
+async function applyReplies(db: Query, events: StoredEvent[]): Promise<void> {
+  const latest = new Map<string, { stored: StoredEvent; conversationId: string }>();
+  const silos = new Set<string>();
+  const values: unknown[] = [];
+  const placeholders: string[] = [];
+  for (const stored of events) {
+    const event = stored.event;
+    if (event.type !== 'agent.message_delta') throw new Error('Expected a reply delta');
+    const entry = conversationFeedEntry(event);
+    if (!entry) throw new Error('Invalid reply delta');
+    const { conversationId, data } = entry;
+    const identity = JSON.stringify([event.silo, conversationId]);
+    latest.set(identity, { stored, conversationId });
+    silos.add(event.silo);
+    const offset = values.length;
+    values.push(event.silo, conversationId, stored.sequence, event.id, event.type,
+      JSON.stringify(data), event.time);
+    placeholders.push(`($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},` +
+      `$${offset + 5},$${offset + 6},$${offset + 7})`);
+  }
+  // Adjacent deltas cannot change membership, activity or closure. Advance each
+  // chat once, but retain every checked row, including hidden reports after close.
+  for (const { stored, conversationId } of latest.values()) {
+    await validateMode(db, stored.event, conversationId);
+    await foldConversation(db, stored.event, conversationId, stored.sequence);
+  }
+  await db.query(`INSERT INTO conversation_feed VALUES ${placeholders.join(',')}`, values);
+  for (const silo of silos) await db.query("SELECT pg_notify('conversations', $1)", [silo]);
 }

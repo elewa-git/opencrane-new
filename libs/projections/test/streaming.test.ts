@@ -34,7 +34,9 @@ function replyEvents(): StoredEvent[] {
 }
 
 function sourceFor(events: StoredEvent[]): EventSource {
-  async function head() { return events.length; }
+  function head() {
+    return Promise.resolve(events.length);
+  }
   async function* subscribe(from: number) {
     await Promise.resolve();
     for (const event of events) {
@@ -93,7 +95,10 @@ async function retriesFailedReplyBatch() {
   const storage = await database('pg');
   const events = replyEvents().slice(0, 70);
   let fail = true;
-  const projection = { ...conversations, apply };
+  const projection = { ...conversations, apply, applyReplies };
+  async function applyReplies(tx: Query, batch: StoredEvent[]) {
+    for (const stored of batch) await apply(tx, stored.event, stored.sequence);
+  }
   async function apply(tx: Query, event: EventEnvelope, position: number) {
     await conversations.apply(tx, event, position);
     if (fail && position === 33) throw new Error('Reply projection interrupted');
@@ -151,3 +156,22 @@ it('keeps original positions and ignores duplicate ids within and across racing 
 
 function rowData(row: { data: unknown }) { return row.data; }
 function storedData(row: StoredEvent) { return row.event.data; }
+
+async function rejectsInvalidMiddleDelta() {
+  const storage = await database('pg');
+  const events = replyEvents().slice(0, 10);
+  events[4]!.event.data = { conversationId: 'chat' };
+  const logger = createLogger('streaming-test', { level: 'silent' });
+  const runner = new ProjectionRunner(storage.db, sourceFor(events), logger);
+  try {
+    await runner.initialise(conversations);
+    await expect(runner.run(conversations)).rejects.toThrow('Invalid conversation event');
+    expect(await runner.checkpoint(conversations)).toBe(1);
+    expect((await readConversation(storage.db, 'test', 'chat')).rows).toHaveLength(1);
+  } finally {
+    await storage.close();
+  }
+}
+
+it('validates every reply delta before saving any row in its batch',
+  rejectsInvalidMiddleDelta, 30_000);

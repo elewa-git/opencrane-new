@@ -2,12 +2,15 @@ import type { EventEnvelope } from "@opencrane/events";
 import type { StoredEvent } from "@opencrane/event-store";
 import { runHandler, type Logger } from "@opencrane/observability";
 import type { Db, Query } from "./db.ts";
+import { replyBatches, applyReplyBatch } from "./reply-batches.ts";
 
 export interface Projection {
   name: string;
   create(db: Query): Promise<void>;
   drop(db: Query): Promise<void>;
   apply(db: Query, event: EventEnvelope, position: number): Promise<void>;
+  /** Apply adjacent reply deltas together without changing their saved order or positions. */
+  applyReplies?(db: Query, events: StoredEvent[]): Promise<void>;
   /** Read outside dependencies before opening the transaction; return only database work. */
   prepare?(event: EventEnvelope): Promise<Projection['apply']>;
   /** Record completion only after all events from position one have been applied. */
@@ -110,17 +113,25 @@ export class ProjectionRunner {
   private async apply(
     db: Db,
     projection: Projection,
-    stored: StoredEvent,
+    batch: StoredEvent[],
     attempt: number,
   ): Promise<number> {
+    const stored = batch[batch.length - 1]!;
     const event = stored.event;
     async function handleEvent(): Promise<number> {
-      let applyEvent = projection.apply.bind(projection);
-      if (projection.prepare) {
-        applyEvent = await projection.prepare(event);
+      const prepared: Projection['apply'][] = [];
+      for (const entry of batch) {
+        let applyEvent = projection.apply.bind(projection);
+        if (projection.prepare) {
+          applyEvent = await projection.prepare(entry.event);
+        }
+        prepared.push(applyEvent);
       }
       async function updateProjection(tx: Query): Promise<number> {
-        return applyPreparedEvent(tx, projection, stored, applyEvent);
+        if (batch.length === 1) {
+          return applyPreparedEvent(tx, projection, stored, prepared[0]!);
+        }
+        return applyReplyBatch(tx, projection, batch, prepared);
       }
       return db.transaction(updateProjection);
     }
@@ -157,13 +168,18 @@ export class ProjectionRunner {
       return;
     }
     await projection.inspectHistory?.(readEvents(this.source, 1, head, signal));
-    for await (const stored of readEvents(this.source, checkpoint + 1, head, signal)) {
+    const events = readEvents(this.source, checkpoint + 1, head, signal);
+    for await (const batch of replyBatches(events)) {
       signal?.throwIfAborted();
-      checkpoint = this.db.lock
-        ? await this.db.lock(projection.name, (db) =>
-            this.apply(db, projection, stored, attempt),
-          )
-        : await this.apply(this.db, projection, stored, attempt);
+      const apply = this.apply.bind(this);
+      async function applyBatch(db: Db) {
+        return apply(db, projection, batch, attempt);
+      }
+      if (this.db.lock) {
+        checkpoint = await this.db.lock(projection.name, applyBatch);
+      } else {
+        checkpoint = await applyBatch(this.db);
+      }
       if (checkpoint >= head) {
         break;
       }

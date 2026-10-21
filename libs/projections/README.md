@@ -8,6 +8,8 @@ screens can load data quickly. The package keeps tables for members, groups,
 model providers, conversations, files, computers, memory, tool servers and a history of
 who did what. The saved event log
 remains the record of what happened, so these tables can be rebuilt.
+Workers save adjacent pieces of a streamed reply together. This keeps live
+text and the final Stop result from waiting behind hundreds of separate commits.
 
 ## Where it fits
 
@@ -24,7 +26,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables, including closed assistant chats for cleanup, bounded grant lists with membership status, choices and join times| pg["PostgreSQL<br/>database"]
-  projections -->|keeps native refusal audits and child requests outside feeds; saves public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
+  projections -->|keeps native refusal audits and child requests outside feeds; saves ordered reply batches, public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and reads unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
