@@ -178,7 +178,8 @@ function storedData(row: StoredEvent) {
 }
 
 async function rejectsInvalidMiddleDelta() {
-  const storage = await database('pg');
+  const engine = new PGlite();
+  const storage = { db: pgliteDb(engine), close: engine.close.bind(engine) };
   const events = replyEvents().slice(0, 10);
   events[4]!.event.data = { conversationId: 'chat' };
   const logger = createLogger('streaming-test', { level: 'silent' });

@@ -341,3 +341,157 @@ PASS: rebased only this branch's 13 commits onto the updated #549 source
 commits and was aborted. Rebasing from the original base `cae9e5b4e` then finished
 cleanly. `git range-diff` confirmed all 13 commits were unchanged. The focused
 tests passed twice and full typecheck passed again on the rebased source.
+## Stop display
+
+21 October 2026. Stacked on #550; Part of #32. Production source `e765eca22`
+(the first working fix was `db10e38f1`);
+failing-first commit `0ffde53fd`. Fetched origin and completed the rebase onto
+`52cb1ffae`, then installed this worktree's dependencies. Used only claimed
+secondary slot 1, at loopback ports starting at 25100.
+
+### Where the delay occurred
+
+The conversation projection was behind the saved reply. Each worker committed
+separately for every text event, including workers that ignored that event.
+The conversation worker also reread and rewrote the same chat details for every
+piece. Database probes found repeated commit waits, including WAL synchronisation.
+The browser was already processing each received update quickly.
+
+Adjacent reply deltas now share a bounded database transaction. The conversation
+projection checks each event, reads each chat once and inserts the original rows
+together. It keeps all saved positions, duplicate checks, rollback and partial text.
+Other event types keep their separate transactions. No browser, access, event,
+provider, dependency or authority-test contract changed.
+
+Temporary probes saved timestamps, event ids, lengths and timings, never credentials
+or reply text. The saved-event observer followed the live end. Projection polling was scheduled
+every 50 ms; page sampling every 100 ms. Later runs also sampled after two animation
+frames following a page change. Scheduling can add delay to these observations. Event timestamps below precede observer
+arrival and give the stricter bound. Parse and apply are browser elapsed times.
+The baseline worker was restarted midway to add query timing; this is a diagnostic
+trace, not a pristine latency benchmark.
+
+| Closure hop | Before, 1280 | First fixed run, 1280 |
+| --- | --- | --- |
+| Click, UTC | 12:55:36.336 | 13:11:31.454 |
+| Saved event | 12:55:37.522 | 13:11:32.544 |
+| Projection observed | 12:56:36.726 | 13:11:33.589 |
+| Server sent | 12:56:36.786 | 13:11:33.592 |
+| Browser received | 12:56:36.794 | 13:11:33.608 |
+| Browser parse / apply | 0.2 / 1.5 ms | 0.2 / 11.3 ms |
+| Page showed Stopped | 12:56:36.868 | 13:11:33.667 |
+| Saved closure to display | FAIL: 59,346 ms | PASS: 1,123 ms |
+| Click to display | FAIL: 60,532 ms | FAIL: 2,213 ms |
+| Updates / bytes received | 455 / 258,053 | 441 / 251,273 |
+| Retained characters | 29,484 | 30,212 |
+
+Normal streaming also lagged before the fix: only 6,448 characters were visible
+at Stop, while about 29,000 were saved. The largest measured text lag was 53,744 ms.
+In the first fixed run it was 1,261 ms. That run overlapped the focused database
+checks, passed reload retention and the saved-to-display bound, but missed the
+click bound. It did not authorise a paid confirmation.
+
+### Repeated stand-in checks
+
+Early repeats remained FAIL: click/display, saved/display and largest streaming lag
+were respectively 1,930/669/2,093 ms and 2,725/916/2,551 ms. The stack had inherited
+low scheduling priority from the test launcher. Restarting only this slot's server
+and workers at normal priority removed that setup mistake. The first desktop repeat
+still missed the click bound (2,589/1,407/1,909 ms). These misses are retained here;
+the result does not promise the timing bound under every shared-host load.
+
+The following four consecutive runs passed. Tests were not running during them.
+Each run sent a new long stand-in reply, clicked Stop, waited for the displayed
+status and reloaded. Both desktop repeats and both narrow-screen repeats retained
+exactly the stopped text. The provider was still the stand-in throughout.
+
+| Width / run | Click to display | Saved to display | Largest streaming lag | Retained characters | Result |
+| --- | --- | --- | --- | --- | --- |
+| 390 / first | 1,315 ms | 583 ms | 1,331 ms | 29,614 | PASS |
+| 1280 / second | 1,237 ms | 371 ms | 1,422 ms | 30,446 | PASS |
+| 390 / second | 1,471 ms | 896 ms | 1,781 ms | 31,486 | PASS |
+| 1280 / third | 1,462 ms | 667 ms | 1,495 ms | 30,784 | PASS |
+
+The final desktop closure was saved at 13:43:20.302 UTC, observed in PostgreSQL at
+20.867, sent at 20.929, received at 20.933 and displayed at 20.969. Browser JSON
+parsing measured 0 ms at timer precision; validation and application took 3.8 ms.
+It received 795 distinct row updates totalling 430,797 bytes. The final narrow run
+used 904 updates / 486,300 bytes: saved at 13:42:27.770, projected at 28.520,
+sent at 28.627, received at 28.634 and displayed at 28.666; parse/application
+measured 0/7.1 ms. The browser still receives each original ordered row.
+
+Streaming measurements matched each saved delta's cumulative character count to
+the first page sample containing it. They stop at the saved Stop request, because
+the page intentionally hides text saved after that request. Update totals count
+distinct received row ids for that chat; reconnect duplicates are not counted twice.
+The two-second bound is measured against the event timestamp, before its observer
+arrival, so observer delay does not make the result look faster.
+
+Screenshots after reload: [desktop](stop-display-1280.png) and
+[narrow screen](stop-display-390.png). Detailed private timings and probe output
+are in `/tmp/demo-stop-display/` on the development host.
+
+### Paid confirmation
+
+PASS: a fresh install on the same slot set both company ceilings to 300 cents
+before provider setup. Only private setup received the provider credential path.
+No credential value was copied into commands, timings or repository files.
+The automatic stock chat journey was disabled for this run so it could not make
+extra paid calls. Temporary setup and timing changes were then removed.
+
+| Paid call, UTC | Reserved | Charged | Still held | Result |
+| --- | --- | --- | --- | --- |
+| 13:46:06.878, provider verification | 1 cent | 1 cent | 0 cents | PASS |
+| 13:47:27.048, long reply and Stop | 16 cents | Not settled | 16 cents | PASS; interrupted outcome retains its reservation |
+
+Total charged plus held: 17 cents, within the task's 300-cent allowance. No paid
+retry ran. The earlier stand-in calls did not contact the paid provider.
+
+The real-model Stop click was at 13:47:46.320 UTC. Closure was saved at 47.204,
+sent at 47.422, received at 47.448 and shown at 47.469: PASS at 1,149 ms from click
+and 265 ms from the saved event. JSON parsing measured 0 ms at timer precision;
+validation and application took 2.2 ms. The page received 338 distinct updates /
+176,270 bytes. The closure observer started late after its spending read failed
+during the server restart, so its PostgreSQL hop is NOT RUN as a usable timing.
+The server-send and browser probes were already running.
+
+PASS: reload kept the 2,527 displayed characters (2,595 source characters including
+Markdown). The first probe's extra prefix comparison failed because an unfinished
+`**Inverness` became formatted bold text when the closing markers arrived. A read-only
+follow-up confirmed exact equality across reload and confirmed the earlier prefix
+once those Markdown markers were removed. It made no model call. The stand-in
+streaming-lag calculation is not used for this formatted real reply, because source
+and displayed character counts differ. [Real reply after reload](stop-display-real-1280.png).
+
+### Checks and limits
+
+- PASS: failing-first commit `0ffde53fd` reproduced the slow commit path without a
+  stack or provider: 18,346 ms against a fixed 2,000 ms limit. The final test keeps
+  that same limit for 28,224 characters and verifies every original row and closure.
+- PASS: the final four changed tests passed twice (16.01 and 21.56 seconds for each
+  complete file). PostgreSQL tests cover rollback, retry, duplicate ids and racing
+  runners. In-memory SQL checks cover the timing bound and invalid middle deltas.
+  One earlier invalid-delta check timed out at 30 seconds during the fresh stack
+  restart; that validation-only check now uses the existing in-memory engine.
+- PASS: lint, typecheck, event catalogue, knip, licence checks and changelog checks.
+  Full code lint had no errors and 24 existing warnings. Its dependency check found
+  a type-import cycle; moving the private batch functions into the runner fixed it.
+  Changed code and the remaining lint steps were checked again afterwards.
+- PARTIAL: the wider focused run passed 670 of 671 tests, including all projection
+  tests, the unchanged authority tests, read regressions and event security rules.
+  The unchanged 1,502-event socket test failed its 1,500 ms bound at 1,925.5 ms;
+  the clean repeat also failed at 2,498.8 ms. This remains FAIL, not a waived check.
+  No full root suite ran locally. Tests, lint and type checks used lowered priority.
+- PASS: read and removal regression assertions in that focused run passed. No access
+  checks were bypassed or changed. A separate manual participant-removal or browser
+  403 journey is NOT RUN; these are covered by existing automated checks only.
+- PASS: the stand-in repeats and one paid Stop/reload journey above passed on fresh
+  slot installations. Earlier timing misses remain recorded. This is PARTIAL source
+  readiness while the local socket timing failure remains unresolved; GitHub results
+  are reported on the pull request for its pushed head.
+
+- PASS: slot 1 was stopped and released after the paid read-only checks. Its services,
+  containers and computer namespace were removed through the stack tooling. The
+  task's throwaway PostgreSQL container and its volume were removed too. Temporary
+  probe scripts were removed; private evidence remains under `/tmp/demo-stop-display/`.
+  The requested tool symlinks remain. The owner stack was not used or changed.
