@@ -28,7 +28,7 @@ export DEV_STACK_ID=1
 export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
 export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
 export DEMO_ALLOWANCE_CENTS=500
-export P4_JOURNEY_ATTEMPT=demo-rehearsal-fixed-r1
+export P4_JOURNEY_ATTEMPT=demo-rehearsal-final-r1
 export COMPUTER_IDLE_MS=14400000
 infra/dev-stack/up.sh --id 1 --fresh
 node --experimental-strip-types infra/dev-stack/demo-seed-run.ts
@@ -37,7 +37,7 @@ node --experimental-strip-types infra/dev-stack/demo-pages.ts
 infra/dev-stack/down.sh --id 1
 ```
 
-The second corrected fresh run uses `demo-rehearsal-fixed-r2`. The seed command is reused from the kit
+The second final fresh run uses `demo-rehearsal-final-r2`. The seed command is reused from the kit
 and is repeated safely by the smoke command. A failed startup remains failed;
 continuing checks cannot turn its result into PASS.
 
@@ -70,6 +70,7 @@ completed real private reply before fixing the stand-in-only expectation.
 
 - PASS: 24 focused Node tests, twice, under `nice -n 10`, after the private-reply fix.
 - PASS: event catalogue, Knip and changelog checks.
+- PASS: 17 journey entry-point refusal tests, twice, after the fixture correction.
 - PASS: 438 event-security tests with the supplied `PG_TEST_URL`, under `nice -n 10`.
 - PASS: changed dev-stack files compile with a temporary narrowed TypeScript config.
 - PASS: required workspace typecheck.
@@ -88,3 +89,12 @@ sentence. Startup exited 1; the kit seed and smoke were NOT RUN on that attempt.
 [The failure picture](failed-b3c4c4075/private-reply-390.png) shows the real answer.
 The total was six paid reservations: 13 cents charged and 17 held. Both company
 ceilings were 500 cents. The failed proof was copied before slot cleanup.
+
+## Retained fixture failure
+
+[The second receipt](failed-688be242a/receipt.json) records source
+`688be242a2aa914ed46540dae771404a8958d75c` and attempt `demo-rehearsal-fixed-r1`.
+The real private reply, group pages and direct exchange passed. Joining the second
+synthetic group colleague returned 409. The fixture now uses the existing event
+seed for both synthetic colleagues, with no unused personal assistants. The kit
+seed and smoke were NOT RUN. This attempt's spending is in its receipt.

@@ -124,7 +124,7 @@ async function groupChatMembers() {
     sub: otherSubject, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 3600,
   })}`;
   identities.set(otherMember, { sub: otherSubject, cookie: otherCookie });
-  await ensureMember(otherMember, 'member');
+  await ensureNamedMember(otherMember, 'Audit colleague');
   await until(async () => (await authz.check(otherMember, 'member')).allowed,
     'second group colleague OpenFGA');
 
@@ -315,8 +315,9 @@ async function ensureNamedMember(memberId: string, displayName: string) {
     invitedIdentity: { issuer: config.issuerUrl, sub: identities.get(memberId)?.sub ?? `dev-${memberId}` },
     expiresAt: new Date(Date.now() + 3600_000).toISOString() }, 'dev-stack-journey',
   '378127409465593948');
+  // Skip personal computers for these colleagues so the demo assistant fits in this slot.
   await append('member.joined', `member-${memberId}`, { memberId, invitationId,
-    displayName, email, role: 'member' }, 'dev-stack-journey',
+    displayName, email, role: 'member', personalAssistant: 'none' }, 'dev-stack-journey',
   identities.get(memberId)?.sub ?? `dev-${memberId}`);
   await until(() => activeMember(memberId), `seeded member projection ${memberId}`);
 }

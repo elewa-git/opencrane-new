@@ -384,7 +384,10 @@ browser checks. Both modules reuse the signed-in owner and member pages. The gro
 chat check creates a conversation from the To line with two colleagues, checks the
 mode before the first message, and sends ordinary messages to each member. It waits
 for earlier computer starts to finish, then counts AI, computer and budget events
-around those sends. It adds a third seeded member and
+around those sends. Synthetic colleagues use the existing event fixture and
+`personalAssistant: none`; they need no personal computer for group messages.
+This leaves room for the demo assistant inside the six-computer slot limit.
+It adds a third seeded member and
 checks that earlier messages stay hidden from that member. The check also removes a
 member, asks another member to leave, and records how quickly each screen clears.
 It checks the long-name and no-match picker states, refuses an unauthorised add, and
