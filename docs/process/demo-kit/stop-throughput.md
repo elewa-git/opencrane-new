@@ -451,7 +451,7 @@ The real-model Stop click was at 13:47:46.320 UTC. Closure was saved at 47.204,
 sent at 47.422, received at 47.448 and shown at 47.469: PASS at 1,149 ms from click
 and 265 ms from the saved event. JSON parsing measured 0 ms at timer precision;
 validation and application took 2.2 ms. The page received 338 distinct updates /
-176,270 bytes. The closure observer started late after its spending read failed
+176,324 UTF-8 bytes. The closure observer started late after its spending read failed
 during the server restart, so its PostgreSQL hop is NOT RUN as a usable timing.
 The server-send and browser probes were already running.
 
