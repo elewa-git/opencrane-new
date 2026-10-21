@@ -282,12 +282,25 @@ it('holds after a one-second membership deadline and ignores a late read during 
 async function schedulesShortTtl() {
   const setup = await fixture(500);
   await setup.register('short');
+  const clock = { toFake: ['Date' as const] };
+  vi.useFakeTimers(clock);
   await setup.watch.check();
   const before = await readToolPolicy(setup.nats.store, 'test', 'short');
   const errors = vi.fn();
   setup.watch.tick(errors);
-  // Keep the production scheduler running without another caller supplying ticks.
-  await pause(1750);
+  // Keep real timers and service calls, but advance Date only after each saved refresh.
+  // Avoid turning shared-machine delays into an artificial expiry between assertions.
+  const startedAt = Date.now();
+  const initialCalls = setup.remote.calls.length;
+  for (let refresh = 1; refresh <= 14; refresh++) {
+    vi.setSystemTime(startedAt + refresh * 125);
+    function captureCount() {
+      return setup.remote.calls.length;
+    }
+    await expect.poll(captureCount).toBe(initialCalls + refresh * 2);
+    await setup.watch.check();
+    setup.watch.requireCurrent('short');
+  }
   setup.watch.requireCurrent('short');
   const after = await readToolPolicy(setup.nats.store, 'test', 'short');
   expect(after.policyRevision).toBe(before.policyRevision);
