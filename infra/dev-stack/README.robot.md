@@ -796,3 +796,31 @@ startup or cleanup, seed failure removes only the started secondary, and no synt
 credential value appears in output. The CLI tests use real configuration and session
 code with disposable settings and an HTTP fixture. They check id validation before
 configuration loads, worktree ownership and the fixed secondary origins.
+
+## Owner startup and automated journey safety
+
+An authorised owner start uses service health, process and listener checks to report
+readiness. It does not invoke `journey.ts`. Automated owner journeys are always refused.
+The shell launcher, direct stack journey action, main journey, bootstrap journey,
+MCP journey, screenshot journey, repeated live-view journey and package chat scripts refuse the owner id
+and any `OPENCRANE_FLEET_TASK` marker before configuration is evaluated.
+The main journey checks `DEV_REAL_PROVIDER` against the saved mode before setup;
+bootstrap and repeated live-view journeys require the saved stand-in mode.
+
+Real starts save real mode after infrastructure and provider checks. Startup remembers
+the previous saved mode before a fresh reset. On failure, SIGINT or SIGTERM it stops
+processes and Compose services launched by that attempt, removes any namespaces and
+HTTPS handler it created, and restores that mode. It attempts each cleanup step even
+if another fails. Existing containers are excluded from cleanup. It keeps the restrictive
+model firewall rules. A fresh reset still erases data; restoring the mode cannot undo it.
+The [demo guide](../../docs/process/demo/README.md#owner-run-switching-the-real-model-off)
+documents stopping services and making a fresh stand-in start.
+
+`stack-start.test.ts` runs the real startup control flow with fake configuration,
+processes, service adapters and network calls. It checks readiness, deferred mode saving,
+failures after saving and switch-on, and both interruption signals. Previous modes
+include absent, `0` and `1`. `journey-refusal.test.ts` records configuration evaluation
+and stops before external calls. It checks all automated entry points and detects
+removal of the non-start owner flag refusal, duplicate flag check and secondary owner
+flag refusal. CI runs both files with the existing Node fixtures. These are local
+source checks, not live qualification.

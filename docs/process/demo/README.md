@@ -14,7 +14,7 @@ The development scripts start a stack. The seed talks to the same server as the 
 flowchart LR
   Owner --> Scripts[Development scripts]
   Scripts --> Seed[Demo seed]
-  Scripts --> Journey[Startup checks]
+  Scripts --> Checks[Owner readiness or secondary journey]
   Seed --> API[Product APIs]
   Browser --> API
 ```
@@ -52,6 +52,9 @@ has passed Stop with the stand-in; Stop with the real model still needs checking
 allowance for all paid runs together within 2,000 cents per UTC day, including unknown
 holds. Startup's 2,000-cent ceiling is per stack; it is not a shared daily counter.
 
+**The secondary launcher uses a fresh start. It wipes the claimed stack's conversations,
+files, budgets, service data and computer disks.**
+
 ```sh
 DEV_STACK_ID=1 \
 ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key \
@@ -79,6 +82,10 @@ the real-provider and demo-kit changes, includes the qualified Stop image, and h
 an explicit fresh-install PASS. That PASS must include real replies and the demo
 checks. A green `ci-ok`, a stand-in nightly or partial real replies cannot substitute.
 Owner startup is tested with disposable recording fixtures. It has not been run live.
+It checks service health, running processes and listener addresses without sending
+chat prompts. Automated journeys refuse the owner id and any fleet marker before
+reading configuration. A failed or interrupted real start restores the previous saved
+mode and stops services launched by that start. It cannot restore data erased by `--fresh`.
 
 The first command stops existing services from their existing checkout. Keeping that
 checkout path avoids transferring its ownership marker. Replace the SHA placeholder
@@ -124,6 +131,28 @@ infra/dev-stack/up.sh --id owner --owner-run
 Sign in again in separate browser profiles. Open each person's personal chat and the
 member's shared assistant, send one short warm-up question, and wait for completion.
 Startup, sign-in and waking computers are outside the three-minute warm rehearsal.
+
+### OWNER-RUN: switching the real model off
+
+Stopping the stack ends the running real-mode services. Removing the provider file
+setting alone does not stop them. Returning to the stand-in model needs a fresh start.
+
+**The fresh start below wipes the owner's conversations, uploaded files, budgets,
+local service data and computer disks, and replaces generated service credentials.**
+Cloud sign-in accounts survive. These commands require the same interactive owner
+terminal and absent fleet marker as the real start.
+
+```sh
+# OWNER-RUN ONLY, after accepting the data wipe above.
+cd /home/jente/dev/opencrane-new
+infra/dev-stack/down.sh --id owner
+unset DEV_REAL_PROVIDER_FILE
+infra/dev-stack/up.sh --id owner --owner-run --fresh
+```
+
+The final command starts the stand-in model and reports service readiness. It does
+not run an automated owner journey. Later stand-in starts keep the provider file
+setting unset and omit `--fresh` to preserve their new data.
 
 ### Bookmarks and warm rehearsal
 
