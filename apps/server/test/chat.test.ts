@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
-import { recordReport } from '../src/chat/reports.ts';
+import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 
 async function reservesProviderConversationPrefix() {
@@ -216,3 +216,74 @@ it('binds personal paying group at admission, keeps it on retries and refuses sh
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+const batchRaces = [
+  { split: false, changed: true },
+  { split: true, changed: true },
+  { split: true, changed: false },
+];
+async function checksConcurrentBatchOriginals(test: typeof batchRaces[number]) {
+  const nats = await natsFixture();
+  const directory = await mkdtemp(`${tmpdir()}/batch-race-`);
+  const release = Promise.withResolvers<void>();
+  let pending: Promise<string> | undefined;
+  try {
+    const keys = conversationKeys(directory);
+    keys.provision('test', 'race');
+    const member = { silo: 'test', memberId: 'alice' };
+    const created = { id: 'create', conversationId: 'race', assistantId: 'assistant' };
+    const message = { id: 'message', conversationId: 'race', text: 'Hello' };
+    await chatCommand(nats.store, keys, member, created);
+    await chatCommand(nats.store, keys, member, message);
+    const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
+    const originals = [batchReport(1, 'first '), batchReport(2, 'middle '),
+      batchReport(3, 'last')];
+    const submitted = [...originals];
+    if (test.changed) submitted[0] = batchReport(1, 'never saved ');
+    const entered = Promise.withResolvers<void>();
+    const append = nats.store.append.bind(nats.store);
+    let held = false;
+    async function holdFirstAppend(command: Parameters<typeof append>[0]) {
+      if (!held) {
+        held = true;
+        entered.resolve();
+        await release.promise;
+      }
+      return append(command);
+    }
+    vi.spyOn(nats.store, 'append').mockImplementation(holdFirstAppend);
+    pending = recordReports(nats.store, keys, context, submitted);
+    await entered.promise;
+    if (test.split) {
+      await recordReports(nats.store, keys, context, originals.slice(0, 1));
+      await recordReports(nats.store, keys, context, originals.slice(1));
+    } else {
+      await recordReports(nats.store, keys, context, originals);
+    }
+    release.resolve();
+    if (test.changed) await expect(pending).rejects.toThrow('Report sequence reused');
+    else await expect(pending).resolves.toBe('recorded');
+    const rows = await chatHistory(nats.store, 'test', 'race');
+    let text = '';
+    for (const row of rows) {
+      if (row.event.type === 'agent.message_delta') {
+        text += keys.decrypt('test', 'race', row.event.data);
+      }
+    }
+    expect(text).toBe('first middle last');
+    expect(await reportPosition(nats.store, 'test', 'computer')).toBe(3);
+  } finally {
+    release.resolve();
+    await Promise.allSettled(pending ? [pending] : []);
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+function batchReport(sequence: number, text: string) {
+  return { sequence, previousSequence: sequence - 1, conversationId: 'race',
+    turnId: 'message', assistantId: 'assistant', type: 'agent.message_delta',
+    messageId: 'reply', text };
+}
+it.each(batchRaces)(
+  'checks every concurrent batch original in real NATS (split $split, changed $changed)',
+  checksConcurrentBatchOriginals);
