@@ -17,21 +17,36 @@ const commands: Invocation[] = [
   { script: '../package/fresh-twice.ts', args: ['/synthetic-values.json'] },
 ];
 
-async function invoke(command: Invocation, fleet?: string, id = 'owner', realMode = false) {
+async function invoke(
+  command: Invocation,
+  fleet?: string,
+  id = 'owner',
+  realMode = false,
+  recordCommands = false,
+) {
   const home = await mkdtemp(`${tmpdir()}/journey-refusal-`);
   try {
     const bin = `${home}/bin`;
     await mkdir(bin);
-    await symlink(process.execPath, `${bin}/node`);
-    await symlink('/usr/bin/dirname', `${bin}/dirname`);
     const executable = { mode: 0o755 };
-    await writeFile(`${bin}/flock`, '#!/bin/sh\nshift 2\nexec "$@"\n', executable);
+    if (recordCommands) {
+      const nodeStub = '#!/bin/sh\nprintf node >> "$JOURNEY_COMMANDS"\n';
+      const flockStub = '#!/bin/sh\nprintf flock >> "$JOURNEY_COMMANDS"\n';
+      await writeFile(`${bin}/node`, nodeStub, executable);
+      await writeFile(`${bin}/flock`, flockStub, executable);
+    } else {
+      await symlink(process.execPath, `${bin}/node`);
+      await writeFile(`${bin}/flock`, '#!/bin/sh\nshift 2\nexec "$@"\n', executable);
+    }
+    await symlink('/usr/bin/dirname', `${bin}/dirname`);
     await writeFile(`${bin}/id`, '#!/bin/sh\necho 999999\n', executable);
     const record = `${home}/record`;
     await writeFile(record, '');
+    await writeFile(`${home}/commands`, '');
     await writeFile(`${home}/stack-owner`, process.cwd());
     const env: NodeJS.ProcessEnv = {
       HOME: home, PATH: bin, DEV_STACK_ID: id, JOURNEY_RECORD: record,
+      JOURNEY_COMMANDS: `${home}/commands`,
       NODE_OPTIONS: '--import=./infra/dev-stack/test/journey-refusal-preload.mjs',
     };
     if (realMode) env['JOURNEY_SAVED_MODE'] = '1';
@@ -46,7 +61,13 @@ async function invoke(command: Invocation, fleet?: string, id = 'owner', realMod
     const result = spawnSync(executablePath, args, options);
     assert.ifError(result.error);
     const reads = await readFile(record, 'utf8');
-    return { status: result.status, output: result.stdout + result.stderr, reads };
+    const commandCalls = await readFile(`${home}/commands`, 'utf8');
+    return {
+      status: result.status,
+      output: result.stdout + result.stderr,
+      reads,
+      commandCalls,
+    };
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -97,6 +118,19 @@ async function refuseNonStartConsent() {
 }
 
 test('the shell refuses owner consent on non-start actions before invoking Node', refuseNonStartConsent);
+
+async function refuseShellJourney() {
+  for (const fleet of [undefined, '', 'demo-kit-2']) {
+    const command = { script: 'run.sh', shell: true, args: ['journey'] };
+    const result = await invoke(command, fleet, 'owner', false, true);
+    assert.equal(result.status, 2, result.output);
+    assert.equal(result.commandCalls, '', `flock or Node ran: ${result.commandCalls}`);
+    assert.match(result.output, /Automated journeys require a secondary stack and no fleet task/u);
+  }
+}
+
+test('the shell refuses owner journeys before flock or Node, with any fleet marker',
+  refuseShellJourney);
 
 async function refuseInvalidOptions() {
   for (const args of [['up', '--fresh', '--fresh'], ['up', '--owner-run', '--owner-run'],
