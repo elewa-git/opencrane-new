@@ -31,10 +31,11 @@ it('binds the first exact review without a previous catalogue', async () => {
   expect(command.tools[0]?.reviewDigest).toMatch(/^[a-f0-9]{64}$/u);
 });
 
-function servePolicy(policy: ReturnType<typeof initialPolicy>) {
+function servePolicy(policy: ReturnType<typeof initialPolicy>, unavailable = false) {
   function read(input: RequestInfo | URL) {
     const address = input instanceof Request ? input.url : input.toString();
     if (address.endsWith('/access')) {
+      if (unavailable) return Promise.resolve(new Response('{}', { status: 503 }));
       const response = new Response(JSON.stringify({ serverId: 'fixture', expectedSequence: 0,
         loadedAt: new Date().toISOString(), canManage: true, grants: [], complete: true,
         grantTotal: 0, projection: { content: 'current', iam: 'current', sequence: 0 } }));
@@ -95,14 +96,14 @@ it('refuses an expired initial snapshot', async () => {
   await expect(reviewCommand(policy, 'expired-review')).rejects.toThrow();
 });
 
-it('keeps saved mode editing and exact review after a saved review', async () => {
+it('keeps reviewed mode editing available when the separate audience read is unavailable', async () => {
   const policy = initialPolicy();
   policy.sequence = 4;
   policy.reviewRevision = 4;
   policy.tools[0]!.reviewed = true;
   expect(initialToolPolicy(policy)).toBe(false);
   expect(initialModeDisabled(policy, 'missing_declaration')).toBe(true);
-  servePolicy(policy);
+  servePolicy(policy, true);
   const fixture = TestBed.createComponent(ToolPolicyScreen);
   fixture.componentRef.setInput('serverId', 'fixture');
   fixture.detectChanges();
