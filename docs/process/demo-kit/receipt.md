@@ -161,3 +161,54 @@ The fleet test now lives beside the existing dev-stack command fixtures, and CI
 runs it there. The focused TypeScript check passed again after the move. No lint
 rule or project exclusion was changed. The draft PR records the final full-lint
 result and CI result on its pushed commit.
+
+## Owner startup readiness and recovery
+
+21 October 2026. Source: `232ae3f7afd57027d0471027abd0d96d15f6f2cd`.
+Rebased onto `dc44c6cfc12045494d57504e275c00810476c3ed`; the rebase finished cleanly.
+A range comparison confirmed that the branch commits kept their changes.
+Overall: PARTIAL. Live owner qualification remains NOT RUN.
+
+The accepted owner startup fixture now reaches the readiness report. It replaces
+process launches, configuration, service adapters and network calls. Owner starts
+check health, running processes and listener addresses without running a chat journey.
+Real mode is saved after infrastructure and provider checks. Failed starts restore
+absent, stand-in and real saved modes and stop their launched services. Both SIGINT
+and SIGTERM after switch-on restore the previous stand-in mode and stop those services.
+A fresh reset still erases data; restoring the mode does not undo that reset.
+
+Automated entry tests cover the shell, direct stack journey, main journey, bootstrap,
+MCP, screenshot, repeated live-view and package chat scripts. Owner and fleet calls
+stop before configuration. The main journey checks saved mode before setup; stand-in
+chat drivers refuse saved real mode. The demo guide now documents stopping the stack,
+removing the provider file setting and making a fresh stand-in start, with the data-wipe
+warning before the commands. Other unfinished demo work and listed test gaps remain.
+
+Failing tests preceded implementation in commits `5bcd18640`, `dbb5cb3f6`, `8f761672e`,
+`2e6ad7640` and `3f49d940c`. Three removal probes each caused an assertion failure:
+non-start owner consent, duplicate startup options and secondary owner consent.
+All probes were restored. These are checks by the builder.
+
+| Own check on the rebased source | Result |
+| --- | --- |
+| Changed and related Node fixtures, 11 files, twice | PASS; 89 tests each, 196.59 / 183.18 seconds |
+| Workspace and package typecheck | PASS |
+| Focused TypeScript for new guards and tests | PASS |
+| Full lint | PASS; no errors, 22 warnings in unchanged code |
+| Event catalogue | PASS; 149 event types |
+| Knip | PASS |
+| Changelog check | PASS |
+| Shell syntax and diff whitespace | PASS |
+| Three guard-removal probes | PASS; each removal was detected |
+
+Test, lint and typecheck commands used `nice -n 10`. Tests set
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; these fixtures do not
+connect to PostgreSQL. No full root suite ran. The old-base lint run and second test
+run were stopped when main advanced; the checks restarted after the rebase.
+Logs are in `/tmp/demo-kit-2-fixes/` on this host.
+
+No live owner command ran. The owner stack, port 44200 and owner data were untouched.
+No secondary stack was claimed or started, and no paid model call ran. All temporary
+fixture files were removed. No access, money, memory or key-handling rule changed.
+The provider key still enters setup by file path only. Fresh-install qualification,
+real owner replies, laptop tunnelling and real-phone access remain NOT RUN.
