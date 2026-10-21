@@ -1,12 +1,16 @@
+import '../dev-stack/journey-entry.ts';
+import { requireStandInJourney } from '../dev-stack/journey-guard.ts';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
-import { directory } from '../dev-stack/config.ts';
+import { directory, readEnv } from '../dev-stack/config.ts';
 import { browserFailure } from './browser-capture.ts';
 import { secondary, stackId } from '../dev-stack/identity.ts';
 
 assert(secondary, 'Capture requires a claimed secondary slot');
+const settings = await readEnv('settings');
+requireStandInJourney(settings);
 const port = 25000 + Number(stackId) * 100 + 6;
 const origin = `http://127.0.0.1:${port}`;
 const output = 'docs/process/p5-1-live';
