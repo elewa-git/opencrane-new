@@ -44,7 +44,7 @@ function commands(): Command[] {
   return result;
 }
 
-async function request(options: Options, path: string, data?: Record<string, unknown>) {
+export async function request(options: Options, path: string, data?: Record<string, unknown>) {
   const headers = { origin: options.origin, cookie: options.cookie,
     'content-type': 'application/json' };
   const init = { headers, method: data ? 'POST' : 'GET',
@@ -57,7 +57,7 @@ async function request(options: Options, path: string, data?: Record<string, unk
   }
 }
 
-async function reserveRequest(directory: string, commandId: string) {
+export async function reserveRequest(directory: string, commandId: string) {
   await mkdir(`${directory}/demo-requests`, { recursive: true, mode: 0o700 });
   try {
     // Keep an attempted request across restarts. A missing receipt never permits a new write.
