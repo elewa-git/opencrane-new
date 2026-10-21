@@ -882,3 +882,15 @@ Direct chats subscribe once per socket. Reloading history after sending a messag
 not resubscribe on that socket. A replacement socket subscribes from the latest position.
 A 1013 busy close shows Reconnecting and keeps saved messages. HTTP 503 remains unavailable;
 403, explicit refusals and policy closes still clear protected data.
+
+## Initial tool audience
+
+The unpublished tools page reads `/access` and 50 member or assistant candidates per page.
+One selected row sends one `/access/changes` command. Review access waits for the original
+receipt's content and IAM confirmation and a fresh access read. Conflict and no-effect
+require Refresh audience. Unknown checks only the original id, including after reload.
+Only the id and grant/revoke action enter sessionStorage; names stay in memory.
+Any 401/403 clears the parent and editor, including replies from an older candidate read.
+INT-31 uses existing chip styles and shared states; INT-33 explains the selected pair.
+Published editing, groups and multi-save recovery await their frames.
+`npm run visual:screen-tools-access` captures intercepted replies at both widths.

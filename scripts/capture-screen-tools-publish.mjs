@@ -28,8 +28,9 @@ const integration = { serverId: 'fixture', name: 'Fixture server', version: '1',
   accountModel: 'None', toolsAllowed: 0, toolsTotal: 1,
   source: { kind: 'remote_url', label: 'Remote URL', detail: 'example.test' },
   status: { kind: 'draft', label: 'Draft', detail: 'Review tools' } };
-const access = { serverId: 'fixture', complete: true,
-  projection: { content: 'current', iam: 'current' }, grants: [
+const access = { serverId: 'fixture', complete: true, expectedSequence: 2,
+  loadedAt: checkedAt, canManage: true, grantTotal: 2,
+  projection: { content: 'current', iam: 'current', sequence: 2 }, grants: [
     { granteeKind: 'member', granteeId: 'alex', displayName: 'Alex Kim', source: 'direct',
       state: 'granted', eventId: 'grant-person', eventTime: checkedAt, sequence: 1,
       projection: 'current', iam: 'current', membershipStatus: 'joined' },
@@ -89,7 +90,8 @@ async function serve(route, state) {
     body = state.policy;
   }
   else if (path.endsWith('/access')) {
-    if (state.scenario === 'refusal') return route.fulfill({ status: 403, json: {} });
+    state.accessReads = (state.accessReads ?? 0) + 1;
+    if (state.scenario === 'refusal' && state.accessReads > 1) return route.fulfill({ status: 403, json: {} });
     body = access;
   } else if (path.endsWith('/facts')) return route.fulfill({ status: 404, json: {} });
   else if (path.endsWith('/publication')) body = { status: 'disabled' };
@@ -128,7 +130,7 @@ async function layout(page) {
 
 async function assertFrameState(page, width, scenario) {
   if (scenario === 'tools' && width === 390) {
-    const action = await page.getByRole('button', { name: 'Review before publishing' }).boundingBox();
+    const action = await page.getByRole('button', { name: 'Review access' }).boundingBox();
     const panel = await page.locator('.tool-policy').boundingBox();
     assert(action && panel && action.width >= panel.width - 2, 'Phone review action must fill the panel');
   }
@@ -182,7 +184,7 @@ async function capture(browser, width, scenario) {
     assert(await page.locator('input[value="block"]').isChecked());
     if (scenario !== 'tools') {
       await page.locator('input[value="allow"]').locator('..').click();
-      await page.getByRole('button', { name: 'Review before publishing' }).click();
+      await page.getByRole('button', { name: 'Review access' }).click();
       if (scenario === 'refusal') await page.getByText('You no longer have access to Integrations').waitFor();
       else {
         await page.getByText('Saved audience. Publishing does not change these grants.').waitFor();

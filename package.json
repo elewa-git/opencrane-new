@@ -22,6 +22,7 @@
     "check:package-licences": "python3 infra/package/check-licences.py",
     "check:docker-volume-cleanup": "node --experimental-strip-types scripts/check-docker-volume-cleanup.mjs",
     "changelog:gather": "node scripts/changelog-gather.mjs",
+    "visual:screen-tools-access": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-tools-access.mjs",
     "visual:screen-tools-publish": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-tools-publish.mjs",
     "visual:org-admin": "node scripts/capture-org-admin.mjs",
     "lint:code": "eslint .",

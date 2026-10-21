@@ -116,3 +116,11 @@ fieldset:disabled .state { opacity: 1; }
   .modes { display: grid; grid-template-columns: 1fr; width: 100%; }
   .modes label { justify-content: flex-start; }
 }
+
+.review-action, .review-back { margin-top: 12px; }
+.review-back { display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 8px 16px; margin-left: 8px; border-radius: 6px;
+  border: 1px solid var(--oc-border-input); background: white; color: inherit; }
+@media (max-width: 700px) {
+  .review-back { width: 100%; margin-left: 0; }
+}

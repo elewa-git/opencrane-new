@@ -9,11 +9,11 @@ it('reads the initial audience before allowing review or another grant', async (
     catalogue: { serverId: 'fixture', toolCount: 0, schemaDigest: 'b'.repeat(64),
       checkedAt, expiresAt, tools: [] }, tools: [] };
   const paths: string[] = [];
-  async function read(input: RequestInfo | URL) {
-    const path = String(input);
+  function read(input: RequestInfo | URL) {
+    const path = input instanceof Request ? input.url : input.toString();
     paths.push(path);
-    if (path.endsWith('/tools')) return new Response(JSON.stringify(policy));
-    return new Response('{}', { status: 503 });
+    if (path.endsWith('/tools')) return Promise.resolve(new Response(JSON.stringify(policy)));
+    return Promise.resolve(new Response('{}', { status: 503 }));
   }
   vi.spyOn(globalThis, 'fetch').mockImplementation(read);
   const fixture = TestBed.createComponent(ToolPolicyScreen);

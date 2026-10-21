@@ -1,0 +1,52 @@
+<h2>Audience</h2>
+<div role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
+  <oc-shared-state [kind]="state()" [message]="message()" [showAction]="false"
+    [changeReference]="pending()?.commandId" />
+</div>
+<div class="chips">
+  @for (row of list()?.grants ?? []; track row.granteeKind + row.granteeId) {
+    @if (row.state === 'granted' && !(edit()?.granteeId === row.granteeId
+      && edit()?.granteeKind === row.granteeKind)) {
+      <span class="chip"><span>{{ row.displayName }} · {{ labels[row.granteeKind] }}
+        @if (row.membershipStatus === 'departed') { · Left the organisation }
+      </span>
+      @if (row.granteeKind === 'member' || row.granteeKind === 'assistant') {
+        <button type="button" [disabled]="locked()" [attr.aria-label]="'Remove ' + row.displayName"
+          (click)="choose(row.granteeKind, row.granteeId, row.displayName, 'revoke')">×</button>
+      }
+      </span>
+    }
+  }
+  @if (edit(); as chosen) {
+    <span class="chip"><span>{{ chosen.displayName }} · {{ chosen.action === 'grant' ? 'Add' : 'Remove' }}</span>
+      <button type="button" aria-label="Cancel selection" (click)="cancel()">×</button>
+    </span>
+  }
+</div>
+<p class="routing">Both the person asking and the assistant need access.
+  Choosing a person does not add their assistant. Draft grants give no access before publication.</p>
+<div class="sources">
+  <button type="button" [disabled]="locked()" (click)="add('member')">Person</button>
+  <button type="button" [disabled]="locked()" (click)="add('assistant')">Assistant</button>
+</div>
+@if (picking()) { <p role="status">Loading candidates…</p> }
+@if (candidates(); as page) {
+  @for (row of page.rows; track row.id) {
+    <article><button type="button" [disabled]="locked() || alreadyGranted(row.id)"
+      (click)="choose(kind(), row.id, row.displayName, 'grant')">{{ row.displayName }}</button></article>
+  } @empty { <p>No candidates found.</p> }
+  @if (page.next) {
+    <button type="button" [disabled]="locked() || picking()"
+      (click)="add(kind(), page.next)">Load more</button>
+  }
+}
+@if (pending()) {
+  <button type="button" [disabled]="busy()" (click)="check()">Check status</button>
+} @else if (edit()) {
+  <button type="button" [disabled]="busy() || disabled()" (click)="save()">Save access</button>
+} @else if (state() === 'failed' || state() === 'needs_input' || state() === 'applying') {
+  <button type="button" [disabled]="busy()" (click)="refresh()">Refresh audience</button>
+}
+@if (explanation(); as address) {
+  <p><a [href]="address">Why do this person and assistant need access?</a></p>
+}
