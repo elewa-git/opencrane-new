@@ -24,6 +24,7 @@ import { getEventDefinition } from './registry.ts';
 // A minimal check just to read `type` safely off an input we don't know
 // the shape of yet. We don't know which event this is until this passes.
 const typeFieldSchema = z.object({ type: z.string().min(1) });
+const schemas = new Map<string, z.ZodType<EventEnvelope>>();
 
 export type ParseEventByTypeResult =
   | { readonly success: true; readonly event: EventEnvelope }
@@ -51,6 +52,27 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     return { success: false, reason: 'unknown_event_type', type: typeField.data.type };
   }
 
+  const schema = schemaFor(definition);
+  const result = schema.safeParse(input);
+  if (!result.success) {
+    return { success: false, reason: 'invalid_event', error: result.error };
+  }
+
+  const event: EventEnvelope = result.data;
+  if (event.type === 'provider.managed_calls_enabled') {
+    const subjectSchema = z.literal(`budget-${event.silo}`);
+    const subject = subjectSchema.safeParse(event.subject);
+    if (!subject.success) {
+      return { success: false, reason: 'invalid_event', error: subject.error };
+    }
+  }
+  return { success: true, event };
+}
+
+function schemaFor(definition: NonNullable<ReturnType<typeof getEventDefinition>>) {
+  const cached = schemas.get(definition.type);
+  if (cached) return cached;
+  // Reuse validation rules, never a validation result. The registry bounds this cache.
   let envelopeSchema = eventEnvelopeSchema(definition.dataSchema);
   envelopeSchema = envelopeSchema.superRefine(checkDelegationEvent);
   envelopeSchema = envelopeSchema.refine(validEgressRuleEvent);
@@ -78,20 +100,13 @@ export function parseEventByType(input: unknown): ParseEventByTypeResult {
     schema = memoryContextRecordedEventSchema;
   }
   schema = memoryEventSchema(definition.type) ?? schema;
-  const result = schema.safeParse(input);
-  if (!result.success) {
-    return { success: false, reason: 'invalid_event', error: result.error };
-  }
+  schema = schema.refine(validReportBatch);
+  schemas.set(definition.type, schema);
+  return schema;
+}
 
-  const event: EventEnvelope = result.data;
-  if (event.type === 'provider.managed_calls_enabled') {
-    const subjectSchema = z.literal(`budget-${event.silo}`);
-    const subject = subjectSchema.safeParse(event.subject);
-    if (!subject.success) {
-      return { success: false, reason: 'invalid_event', error: subject.error };
-    }
-  }
-  return { success: true, event };
+function validReportBatch(event: EventEnvelope) {
+  return event.report?.preceding === undefined || event.type === 'agent.message_delta';
 }
 
 function memoryEventSchema(type: string): z.ZodType<EventEnvelope> | undefined {

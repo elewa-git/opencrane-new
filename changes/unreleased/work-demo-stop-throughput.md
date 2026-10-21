@@ -1,0 +1,1 @@
+- Save long streamed replies in bounded batches, preserving each report's replay checks. Direct chats keep one subscription after delivery and show when they are reconnecting.

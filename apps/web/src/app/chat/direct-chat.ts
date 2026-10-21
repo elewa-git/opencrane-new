@@ -107,6 +107,8 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly applyingMessage = this.sending.applyingMessage.bind(this.sending);
   protected readonly recordedMessage = this.sending.recordedMessage;
   private readonly socket = inject(WebSocketService);
+  readonly connectionState = this.socket.state;
+  private subscribed = false;
   private readonly subscription = this.socket.received.subscribe(this.receive.bind(this));
   private readonly accessLossSubscription = this.socket.accessLost.subscribe(
     this.clearAfterAccessChange.bind(this));
@@ -429,9 +431,8 @@ export class DirectChat implements OnInit, OnDestroy {
     // Read the saved history before subscribing so reconnect can resume from its position.
     if (this.socketConversationId !== conversationId) {
       this.socketConversationId = conversationId;
+      this.subscribed = false;
       this.socket.connect();
-    } else {
-      this.sendSubscription();
     }
   }
 
@@ -601,7 +602,10 @@ export class DirectChat implements OnInit, OnDestroy {
   private subscribeWhenConnected(): void {
     if (!this.selectedConversationId() || this.pageState() === 'access_changed') return;
     // Track socket state before checking its saved id, so opening it runs this effect.
-    if (this.socket.state() !== 'open') return;
+    if (this.socket.state() !== 'open') {
+      this.subscribed = false;
+      return;
+    }
     if (this.historyState() !== 'ready') return;
     if (this.socketConversationId !== this.selectedConversationId()) return;
     this.sendSubscription();
@@ -609,9 +613,9 @@ export class DirectChat implements OnInit, OnDestroy {
 
   private sendSubscription(): void {
     const conversationId = this.selectedConversationId();
-    if (!conversationId) return;
+    if (!conversationId || this.subscribed) return;
     const subscription = directSubscription(conversationId, this.position, this.generation);
-    this.socket.send(subscription);
+    this.subscribed = this.socket.send(subscription);
   }
 
   private receive(raw: unknown): void {

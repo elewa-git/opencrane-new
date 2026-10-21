@@ -237,3 +237,26 @@ describe('parseEventByType', () => {
     });
   });
 });
+
+it('keeps every report receipt ordered and confines batches to text deltas', () => {
+  const receipt = { sequence: 1, digest: 'a'.repeat(64) };
+  const report = { computerId: 'computer', sequence: 2, digest: 'b'.repeat(64),
+    preceding: [receipt] };
+  const event = { ...baseEnvelope('agent.message_delta', { conversationId: 'chat',
+    turnId: 'turn', messageId: 'reply', contentType: 'text',
+    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test' }), report };
+  expect(parseEventByType(event).success).toBe(true);
+  for (const preceding of [[receipt, receipt], [{ ...receipt, sequence: 2 }],
+    Array.from({ length: 64 }, makeReceipt)]) {
+    expect(parseEventByType({ ...event, report: { ...report, preceding } }).success).toBe(false);
+  }
+  const terminal = { ...baseEnvelope('agent.turn_completed',
+    { conversationId: 'chat', turnId: 'turn' }), report };
+  expect(parseEventByType(terminal).success).toBe(false);
+  // Recheck invalid input after warming the validator with a valid event.
+  expect(parseEventByType({ ...event, silo: '' }).success).toBe(false);
+});
+
+function makeReceipt(_value: unknown, index: number) {
+  return { sequence: index + 1, digest: 'a'.repeat(64) };
+}

@@ -861,3 +861,7 @@ The integration facts route is absent on this base; the page says it is unavaila
 Expanded published-mode and apply details await their frames. No backend policy changed.
 `npm run visual:screen-tools-publish` uses intercepted APIs and no live stack.
 The [screen receipt](../../docs/process/screen-tools-publish/receipt.md) records its limits.
+Direct chats subscribe once per socket. Reloading history after sending a message does
+not resubscribe on that socket. A replacement socket subscribes from the latest position.
+A 1013 busy close shows Reconnecting and keeps saved messages. HTTP 503 remains unavailable;
+403, explicit refusals and policy closes still clear protected data.

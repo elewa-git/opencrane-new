@@ -9,6 +9,7 @@ import * as eventSchemas from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
+import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 
 it('saves 2700 streaming reports through the bridge within ten seconds', async () => {
@@ -37,12 +38,14 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
   const finished = Promise.withResolvers<void>();
   let sent = 0;
   let acknowledged = 0;
+  function reportFor(sequence: number, text = 'word ') {
+    return { sequence, previousSequence: sequence - 1,
+      conversationId: 'long', turnId: 'request-long', assistantId: 'assistant',
+      type: 'agent.message_delta', messageId: 'reply', text };
+  }
   function sendReport() {
     sent++;
-    const report = { sequence: sent, previousSequence: sent - 1,
-      conversationId: 'long', turnId: 'request-long', assistantId: 'assistant',
-      type: 'agent.message_delta', messageId: 'reply', text: 'word ' };
-    socket.send(JSON.stringify(report));
+    socket.send(JSON.stringify(reportFor(sent)));
   }
   function receive(raw: RawData) {
     const value = JSON.parse(raw.toString()) as { type: string; sequence?: number };
@@ -66,10 +69,18 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
     finally { metrics.readMs += performance.now() - began; }
   }
   nats.store.readStream = timedRead;
+  let stopMs = 0;
   const append = nats.store.append.bind(nats.store);
   async function timedAppend(...args: Parameters<typeof append>) {
     const began = performance.now();
     metrics.appends++;
+    if (metrics.appends === 5) {
+      const stopStarted = performance.now();
+      const stop = { id: 'stop-long', conversationId: 'long', stopTurnId: 'request-long' };
+      const result = await chatCommand(nats.store, keys, context, stop);
+      expect(result.status).toBe('appended');
+      stopMs = performance.now() - stopStarted;
+    }
     try { return await append(...args); }
     finally { metrics.appendMs += performance.now() - began; }
   }
@@ -109,8 +120,32 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
     for (let index = 0; index < 32; index++) sendReport();
     await finished.promise;
     const elapsedMs = performance.now() - started;
-    process.stdout.write(`${JSON.stringify({ reports: acknowledged, elapsedMs, metrics })}\n`);
+    process.stdout.write(`${JSON.stringify({ reports: acknowledged, elapsedMs, stopMs, metrics })}\n`);
     expect(elapsedMs).toBeLessThan(10_000);
+    expect(stopMs).toBeLessThan(2000);
+    expect(await reportPosition(nats.store, 'test', 'computer')).toBe(2700);
+    let savedText = '';
+    for await (const row of nats.store.readStream('conversation-long')) {
+      if (row.event.type === 'agent.message_delta') {
+        savedText += keys.decrypt('test', 'long', row.event.data);
+      }
+    }
+    expect(savedText).toBe('word '.repeat(2700));
+    const reportContext = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
+    const mismatches = [{ turnId: 'other' }, { conversationId: 'other' },
+      { assistantId: 'other' }, { messageId: 'other' }, { threadId: 'other' },
+      { requesterId: 'other' }, { executionMode: 'restricted' }, { previousSequence: 99 }];
+    for (const mismatch of mismatches) {
+      const values = [reportFor(2701), { ...reportFor(2702), ...mismatch }];
+      await expect(recordReports(nats.store, keys, reportContext, values))
+        .rejects.toThrow('Report batch mismatch');
+    }
+    for (const sequence of [1, 12, 31, 1350, 2700]) {
+      expect(await recordReport(nats.store, keys, reportContext, reportFor(sequence)))
+        .toBe('duplicate');
+      await expect(recordReport(nats.store, keys, reportContext, reportFor(sequence, 'changed')))
+        .rejects.toThrow('Report sequence reused');
+    }
   } finally {
     validation.mockRestore();
     json.mockRestore();

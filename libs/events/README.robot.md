@@ -728,3 +728,12 @@ supplies the silo. `adapter_response_received` requires this binding and `respon
 cannot carry the binding. No remote adapter evidence can claim `not_dispatched`.
 The models process validates these references against the consumed permit and saved start.
 Schema validation alone grants no authority to write an observation.
+
+## Streaming report receipts
+
+Only `agent.message_delta` may carry `report.preceding`: up to 63 earlier sequence/digest
+pairs, strictly increasing and below `report.sequence`. All belong to the same encrypted
+message delta. The outer digest identifies the last original report, not combined text.
+Older reports remain valid. The bridge checks every original identity before combining.
+The parser retains one validator per registered type, but validates every input afresh.
+It caches no payloads, permissions or validation results.

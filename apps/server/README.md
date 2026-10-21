@@ -22,7 +22,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks and batches streamed reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
   server -->|rechecks remote tool lists and revision promises before expiry through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records refused turn decisions| nats
@@ -335,6 +335,9 @@ the fact immediately and reports whether cleanup is pending, unavailable or fini
 A lost reply can be checked after restart with current rights, without another change.
 
 ## Processes it handles
+
+The server combines small pieces of the same streamed reply before saving them.
+It acknowledges each piece only after the combined text is saved.
 
 An admin saves one remote tool grant. After a lost reply, they check the original reference.
 The check never resends the change. A draft server's grants cannot publish its tools.
