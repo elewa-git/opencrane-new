@@ -82,10 +82,20 @@ it('refuses an expired initial snapshot', async () => {
   await expect(reviewCommand(policy, 'expired-review')).rejects.toThrow();
 });
 
-it('keeps saved mode editing after review and before publication', () => {
+it('keeps saved mode editing and exact review after a saved review', async () => {
   const policy = initialPolicy();
   policy.sequence = 4;
   policy.reviewRevision = 4;
   policy.tools[0]!.reviewed = true;
   expect(initialToolPolicy(policy)).toBe(false);
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(policy)));
+  const fixture = TestBed.createComponent(ToolPolicyScreen);
+  fixture.componentRef.setInput('serverId', 'fixture');
+  fixture.detectChanges();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('Expected tools');
+  await vi.waitFor(() => expect(root.querySelector('fieldset')).not.toBeNull());
+  expect(root.querySelector('button[aria-label="Save mode for read_item"]')).not.toBeNull();
+  expect(root.textContent).toContain('Review before publishing');
+  fixture.destroy();
 });
