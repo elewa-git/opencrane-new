@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { toolPolicySchema } from '@opencrane/protocol';
 import { reviewCommand } from '../integrations/review-command';
-import { initialToolPolicy } from './tool-policy-choices';
+import { initialModeDisabled, initialToolPolicy } from './tool-policy-choices';
 import { ToolPolicyScreen } from './tool-policy';
 
 function initialPolicy() {
@@ -88,6 +88,7 @@ it('keeps saved mode editing and exact review after a saved review', async () =>
   policy.reviewRevision = 4;
   policy.tools[0]!.reviewed = true;
   expect(initialToolPolicy(policy)).toBe(false);
+  expect(initialModeDisabled(policy, 'missing_declaration')).toBe(true);
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(policy)));
   const fixture = TestBed.createComponent(ToolPolicyScreen);
   fixture.componentRef.setInput('serverId', 'fixture');
