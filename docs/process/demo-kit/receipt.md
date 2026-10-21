@@ -215,7 +215,7 @@ real owner replies, laptop tunnelling and real-phone access remain NOT RUN.
 
 ## 21 October 2026 — PDF preparation and timed smoke
 
-Source: `10beeb2d61491b480257fdad2e53f1f35c1cdb7a`, on main
+Source: `de6b2a800a7a62c3eb9432bc819b88dfc54c541a`, on main
 `523fc7218f4c84addbb8ddccf7fbccd48952e593`. Overall: PARTIAL.
 Test commits `570f96029` and `33fce5529` failed on their missing entry points
 before implementation. Recording fixtures prove that lost replies and unknown
@@ -233,13 +233,13 @@ access rule changes. The owner-mode work in PR #546 is neither copied nor requir
 | Own check | Result | Time |
 | --- | --- | --- |
 | `npm ci`; tool symlinks | PASS | 32 s |
-| Demo and budget-helper tests, final two runs | PASS; 21 each | 29.54 / 24.91 s |
+| Demo and budget-helper tests, final two runs | PASS; 21 each | 33.96 / 30.34 s |
 | Event security rules, unchanged | PASS; 438 tests | 3.03 s |
 | Event catalogue | PASS; 149 types | 0.96 s |
 | Focused strict TypeScript check | PASS | Not timed |
 | Workspace/package typecheck | PASS | Not timed |
 | Standalone Chromium PDF rendering and visual inspection | PASS; one readable page | Not timed |
-| Full lint including knip | PARTIAL; first run ended with SIGTERM (143) | Not timed |
+| Full lint including knip | PASS on repeat; first run ended with SIGTERM (143) | 733 s |
 | Changelog and Markdown checks | PASS after removing a blank line | Not timed |
 
 Tests use `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and
@@ -264,5 +264,7 @@ Real-model Stop diagnosis and fresh-install qualification remain NOT RUN.
 The owner stack, owner refresh, laptop tunnel and real phone remain untouched
 and NOT RUN. Browser viewport checks would not qualify a physical phone.
 
-A detached lint repeat is running at this receipt. The pull request records its
-final result and GitHub `ci-ok` on the pushed commit.
+A later confirmation exposed a 100 ms fixture-load timeout. Only the assertion
+that a refusal is absent now uses that short deadline; page setup uses the normal
+fixture timeout. Both corrected runs passed. No application timeout changed.
+The pull request records GitHub `ci-ok` on the pushed commit.
