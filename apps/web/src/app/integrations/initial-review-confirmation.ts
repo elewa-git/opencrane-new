@@ -5,12 +5,22 @@ import { ChangeDetectionStrategy, Component, input, output, signal,
 import { modelAccessGrantSchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 
-const accessSchema = z.object({ serverId: z.string(), complete: z.boolean(),
-  projection: z.object({ content: z.literal('current'), iam: z.literal('current') }),
-  grants: z.array(modelAccessGrantSchema.extend({
-    membershipStatus: z.enum(['joined', 'invited', 'departed', 'unknown']).nullable(),
-    iam: z.literal('current'),
-  })) });
+const accessProjectionSchema = z.object({
+  content: z.literal('current'),
+  iam: z.literal('current'),
+});
+
+const audienceGrantSchema = modelAccessGrantSchema.extend({
+  membershipStatus: z.enum(['joined', 'invited', 'departed', 'unknown']).nullable(),
+  iam: z.literal('current'),
+});
+
+const accessSchema = z.object({
+  serverId: z.string(),
+  complete: z.boolean(),
+  projection: accessProjectionSchema,
+  grants: z.array(audienceGrantSchema),
+});
 
 @Component({
   selector: 'oc-initial-review-confirmation',
@@ -47,7 +57,11 @@ export class InitialReviewConfirmation implements OnInit, OnDestroy {
   }
 
   protected confirm(): void {
-    if (!this.enabled() || !this.audience()?.complete || !this.acknowledged()) return;
+    const audienceComplete = this.audience()?.complete === true;
+    const canConfirm = this.enabled() && audienceComplete && this.acknowledged();
+    if (!canConfirm) {
+      return;
+    }
     this.confirming.set(false);
     this.confirmed.emit();
   }
@@ -55,30 +69,52 @@ export class InitialReviewConfirmation implements OnInit, OnDestroy {
   private async read(kind: 'access' | 'facts'): Promise<void> {
     const serverId = this.policy().serverId ?? '';
     try {
-      const response = await fetch(`/api/org/integrations/${encodeURIComponent(serverId)}/${kind}`,
-        { signal: this.request.signal, headers: { accept: 'application/json' } });
-      if (this.request.signal.aborted) return;
+      const url = `/api/org/integrations/${encodeURIComponent(serverId)}/${kind}`;
+      const options = {
+        signal: this.request.signal,
+        headers: { accept: 'application/json' },
+      };
+      const response = await fetch(url, options);
+      if (this.request.signal.aborted) {
+        return;
+      }
       if (response.status === 401 || response.status === 403) {
         this.request.abort();
         this.audience.set(undefined);
         this.accessEnded.emit(response);
         return;
       }
-      if (!response.ok) throw new Error('Read unavailable');
+      if (!response.ok) {
+        throw new Error('Read unavailable');
+      }
       if (kind === 'facts') {
         this.factsMessage.set('Account mode and connection below come from the saved tool policy.');
         return;
       }
-      const raw: unknown = await response.json();
-      if (this.request.signal.aborted) return;
-      const audience = accessSchema.parse(raw);
-      if (audience.serverId !== serverId || !audience.complete) throw new Error('Incomplete list');
-      this.audience.set(audience);
-      this.audienceMessage.set('Saved audience. Publishing does not change these grants.');
+      await this.readAudience(response, serverId);
     } catch {
-      if (this.request.signal.aborted) return;
-      if (kind === 'access') this.audienceMessage.set('Audience unavailable. Reload before publishing.');
-      else this.factsMessage.set('Additional connection facts are unavailable.');
+      if (this.request.signal.aborted) {
+        return;
+      }
+      if (kind === 'access') {
+        this.audienceMessage.set('Audience unavailable. Reload before publishing.');
+      } else {
+        this.factsMessage.set('Additional connection facts are unavailable.');
+      }
     }
+  }
+
+  private async readAudience(response: Response, serverId: string): Promise<void> {
+    const raw: unknown = await response.json();
+    if (this.request.signal.aborted) {
+      return;
+    }
+    const audience = accessSchema.parse(raw);
+    const sameServer = audience.serverId === serverId;
+    if (!sameServer || !audience.complete) {
+      throw new Error('Incomplete list');
+    }
+    this.audience.set(audience);
+    this.audienceMessage.set('Saved audience. Publishing does not change these grants.');
   }
 }

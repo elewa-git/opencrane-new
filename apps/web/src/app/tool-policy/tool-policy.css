@@ -109,7 +109,7 @@ fieldset:disabled .state { opacity: 1; }
   .modes label { min-width: 0; padding: 6px 8px; }
   .modes label span { overflow-wrap: normal; }
   .modes label:has(input:focus-visible) { outline: 2px solid var(--oc-focus-ring); }
-  fieldset > button, .notice-actions button { width: 100%; }
+  fieldset > button, .notice-actions button, .review-action { width: 100%; }
   .notice-actions { display: grid; }
 }
 @media (max-width: 360px) {

@@ -13,7 +13,7 @@ import {
   integrationsResponseSchema, toolPolicySchema,
   type IntegrationRow, type ToolPolicy,
 } from '@opencrane/protocol';
-import { SharedState } from '../shared-state/shared-state';
+import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
 import { IntegrationsAccessLost } from './integrations-access-lost';
 import { IntegrationFacts } from './integration-facts';
@@ -57,6 +57,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   private readonly request = new AbortController();
   private accessLost = false;
   private publicationCommandId = '';
+  private publicationCheckSequence = 0;
 
   ngOnInit(): void {
     if (this.view() === 'changes') {
@@ -111,6 +112,41 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     if (state === 'failed') return "Couldn't check publication progress. Calls stay paused.";
     if (state === 'confirmed') return 'The current publication is confirmed.';
     return '';
+  }
+
+  protected compactPublication(): boolean {
+    const state = this.changeState();
+    return state !== 'loading' && state !== 'disabled' && state !== 'failed';
+  }
+
+  protected publicationHeading(): string {
+    const name = this.row()?.name ?? 'integration';
+    if (this.changeState() === 'confirmed') {
+      return `${name} is ready`;
+    }
+    if (this.changeState() === 'publishing' || this.changeState() === 'applying') {
+      return `Publishing ${name}`;
+    }
+    return name;
+  }
+
+  protected publicationKind(): PresentationState {
+    const state = this.changeState();
+    if (state === 'confirmed') {
+      return 'confirmed';
+    }
+    if (state === 'reviewing' || state === 'publishing' || state === 'applying') {
+      return 'applying';
+    }
+    return 'unknown';
+  }
+
+  protected publicationMessage(): string {
+    const state = this.changeState();
+    if (state === 'unknown-publication' || state === 'unknown-review' || state === 'failed') {
+      return 'Outcome unknown';
+    }
+    return this.changeMessage();
   }
 
   protected async reviewAndPublish(): Promise<void> {
@@ -191,31 +227,76 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   }
 
   protected async checkPublicationChange(): Promise<void> {
-    if (!this.publicationCommandId || this.accessLost) return;
+    if (!this.publicationCommandId || this.accessLost) {
+      return;
+    }
     const originalId = this.publicationCommandId;
+    // Let only the latest check update the policy and publication outcome.
+    const checkSequence = ++this.publicationCheckSequence;
     const url = `/api/org/integrations/changes/${encodeURIComponent(originalId)}`;
+    const options = {
+      headers: { accept: 'application/json' },
+      signal: this.request.signal,
+    };
     try {
-      if (this.initialPolicy() && !await this.readPublicationPolicy()) return;
-      const response = await fetch(url, { headers: { accept: 'application/json' },
-        signal: this.request.signal });
-      if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) return;
-      if (!response.ok) throw new Error('Change status unavailable');
+      if (this.initialPolicy()) {
+        const policyLoaded = await this.readPublicationPolicy(checkSequence);
+        if (!policyLoaded) {
+          return;
+        }
+      }
+      const response = await fetch(url, options);
+      if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) {
+        return;
+      }
+      if (this.ignorePublicationCheck(checkSequence)) {
+        return;
+      }
+      if (!response.ok) {
+        throw new Error('Change status unavailable');
+      }
       const status: unknown = await response.json();
-      if (this.shouldIgnoreResult() || this.publicationCommandId !== originalId) return;
+      if (this.ignorePublicationCheck(checkSequence) ||
+          this.publicationCommandId !== originalId) {
+        return;
+      }
       this.setPublicationState(status, originalId);
     } catch {
-      if (!this.shouldIgnoreResult()) this.changeState.set('unknown-publication');
+      if (!this.ignorePublicationCheck(checkSequence)) {
+        this.changeState.set('unknown-publication');
+      }
     }
   }
 
-  private async readPublicationPolicy(): Promise<boolean> {
-    const response = await fetch(this.toolsUrl(), { signal: this.request.signal });
-    if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) return false;
-    if (!response.ok) throw new Error('Tool policy unavailable');
+  private ignorePublicationCheck(checkSequence: number): boolean {
+    return this.shouldIgnoreResult() || checkSequence !== this.publicationCheckSequence;
+  }
+
+  private async readPublicationPolicy(checkSequence: number): Promise<boolean> {
+    const options = { signal: this.request.signal };
+    const response = await fetch(this.toolsUrl(), options);
+    if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) {
+      return false;
+    }
+    if (this.ignorePublicationCheck(checkSequence)) {
+      return false;
+    }
+    if (!response.ok) {
+      throw new Error('Tool policy unavailable');
+    }
     const raw: unknown = await response.json();
-    if (this.shouldIgnoreResult()) return false;
+    if (this.ignorePublicationCheck(checkSequence)) {
+      return false;
+    }
     const policy = toolPolicySchema.parse(raw);
-    if (policy.serverId !== this.serverId()) throw new Error('Different server');
+    if (policy.serverId !== this.serverId()) {
+      throw new Error('Different server');
+    }
+    // Keep newer saved evidence when a later read reaches a delayed projection.
+    const currentSequence = this.policy()?.sequence ?? 0;
+    if (policy.sequence < currentSequence) {
+      throw new Error('Older tool policy');
+    }
     this.policy.set(policy);
     return true;
   }

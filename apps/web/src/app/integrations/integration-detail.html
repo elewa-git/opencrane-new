@@ -61,6 +61,54 @@
   </section>
 } @else if (row(); as integration) {
   @if (view() === 'changes') {
+    @if (compactPublication()) {
+      <header class="detail-heading">
+        <div class="heading-copy">
+          <h1>{{ publicationHeading() }}</h1>
+          <p>{{ integration.name }}</p>
+        </div>
+      </header>
+      @if (initialPolicy()) { <oc-add-flow-steps [current]="5" /> }
+      @if (changeState() === 'conflict') {
+        <section class="draft-notice publication-conflict" role="status">
+          <h2>Access changed while you were editing</h2>
+          <p>{{ changeMessage() }} Nothing has been overwritten.</p>
+          <div class="actions">
+            @if (initialPolicy()) {
+              <a class="button primary" [href]="'/org/integrations/' + serverId() + '/tools'">
+                Review again
+              </a>
+            } @else {
+              <button class="button primary" type="button" (click)="refresh()">Review again</button>
+            }
+            <a class="button secondary" [href]="'/org/integrations/' + serverId() + '/tools'">
+              Discard my edits
+            </a>
+          </div>
+        </section>
+      } @else {
+        <section class="publication-notice" [class.publication-unknown]="publicationKind() === 'unknown'"
+          role="status">
+          <oc-shared-state [kind]="publicationKind()" [message]="publicationMessage()"
+            [detail]="publicationKind() === 'unknown'
+              ? 'The change may or may not have applied. Check status before doing anything else.'
+              : undefined"
+            [changeReference]="changeRef()"
+            [showAction]="publicationKind() === 'unknown' && !!changeRef()"
+            (action)="checkPublicationChange()" />
+          @if (publicationKind() === 'unknown' && !changeRef()) {
+            <button class="button primary" type="button" (click)="refresh()">
+              {{ changeState() === 'unknown-review' ? 'Review again' : 'Refresh' }}
+            </button>
+          }
+          @if (changeState() === 'applying') {
+            <button class="button secondary" type="button" (click)="checkPublicationChange()">
+              Check status
+            </button>
+          }
+        </section>
+      }
+    } @else {
     <header class="detail-heading">
       <div class="heading-copy">
         <h1>{{ initialPolicy() ? 'Review before publishing' : 'Review changed tools' }}</h1>
@@ -97,11 +145,8 @@
         Calls stay paused until a fresh check passes.
       </div>
     }
-    @if (changeMessage()) {
-      <div class="draft-notice publication-notice" role="status">
-        <p><span class="status-glyph" aria-hidden="true">◷</span>{{ changeMessage() }}</p>
-        @if (changeRef()) { <p>Change reference: {{ changeRef() }}</p> }
-      </div>
+    @if (changeState() === 'failed') {
+      <p class="draft-notice" role="status">{{ changeMessage() }}</p>
     }
     @if (comparison(); as changes) {
       <section class="changes-list" aria-label="Changed tools">
@@ -147,7 +192,7 @@
         [enabled]="canReviewChanges()" (confirmed)="reviewAndPublish()"
         (accessEnded)="isAccessRefusal($event)" />
       <a class="button secondary" [href]="'/org/integrations/' + serverId() + '/tools'">
-        {{ changeState() === 'conflict' ? 'Review again' : 'Back to tools' }}
+        Back to tools
       </a>
     }
     @if (policy()) {
@@ -157,16 +202,8 @@
             Review and publish
           </button>
         }
-        @if (!initialPolicy() && (changeState() === 'conflict' || changeState() === 'unknown-review')) {
-          <button class="button primary" type="button" (click)="refresh()">Review again</button>
-        }
-        @if (changeState() === 'applying' || changeState() === 'unknown-publication'
-          || (initialPolicy() && changeState() === 'unknown-review')) {
-          <button class="button secondary" type="button" (click)="checkPublicationChange()">
-            Check status
-          </button>
-        }
       </div>
+    }
     }
   } @else {
   <header class="detail-heading">
