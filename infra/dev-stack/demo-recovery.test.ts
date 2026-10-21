@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { prepareDemo } from './demo-prepare.ts';
+import { spendingRecording } from './test/demo-spending-recording.ts';
 import { demoRecording } from './test/demo-recording.ts';
 
 async function restoresFailedPreparation() {
@@ -83,8 +84,9 @@ async function recoversLeftover() {
     assert.equal(saved.dailyCeilingCents, 80);
     fixture.failRestore(false);
     const previousWrites = fixture.writes.length;
-    await assert.rejects(runner.runDemoSmoke(browserRecording(), fixture.options,
-      700, second, 'fixture-sha'));
+    const browser = browserRecording();
+    await assert.rejects(runner.runDemoSmoke(browser, fixture.options,
+      700, second, 'fixture-sha', spendingRecording(browser.callCount), 'fixture'));
     assert.equal(fixture.writes[previousWrites]?.['ceilingCents'], 100);
     assert.equal(fixture.writes[previousWrites]?.['dailyCeilingCents'], 80);
     assert.equal(fixture.budget.ceilingCents, 100);

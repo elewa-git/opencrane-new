@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises';
-import type { Browser, Page } from 'playwright';
+import type { Browser, Page, Request } from 'playwright';
 
 export function browserRecording(interruptAtLimit = false, failWarm = false) {
   let closed = false;
   let pending: (() => void) | undefined;
   let submitted = 0;
+  const listeners = new Set<(request: Request) => void>();
   function check() {
     if (closed) throw new Error('Recording browser closed');
   }
@@ -28,6 +29,11 @@ export function browserRecording(interruptAtLimit = false, failWarm = false) {
     async function press() {
       check();
       submitted += 1;
+      function requestUrl() { return `${new URL(location).origin}/api/conversations/demo/messages`; }
+      function method() { return 'POST'; }
+      function postDataJSON() { return { id: `turn-${submitted}`, text: prompt }; }
+      const request = { url: requestUrl, method, postDataJSON } as Request;
+      for (const listener of listeners) listener(request);
       if (prompt.startsWith('Limit demonstration') && interruptAtLimit) {
         process.send?.('limit');
         function wait(resolve: () => void) { pending = resolve; }
@@ -45,7 +51,9 @@ export function browserRecording(interruptAtLimit = false, failWarm = false) {
       waitFor: nothing, click, first: locator, last: locator, filter: locator,
       getByRole: locator, getByText: locator, locator };
     async function newPage() { check(); return page(); }
-    function context() { return { newPage }; }
+    function on(_event: string, listener: (request: Request) => void) { listeners.add(listener); }
+    function off(_event: string, listener: (request: Request) => void) { listeners.delete(listener); }
+    function context() { return { newPage, on, off }; }
     function frameUrl() { return 'chrome-extension://pdf'; }
     function frames() { return [{ url: frameUrl, getByRole: locator }]; }
     async function body() { return readFile('infra/dev-stack/fixtures/supplier.pdf'); }
