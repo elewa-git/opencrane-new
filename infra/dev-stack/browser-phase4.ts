@@ -552,7 +552,7 @@ async function privateSessionEvent(
   throw new Error(`Private conversation ${conversationId} has no saved creation event`);
 }
 
-async function waitForPrivateSessionToApply(page: Page): Promise<void> {
+export async function waitForPrivateSessionToApply(page: Page): Promise<void> {
   const deadline = Date.now() + 120_000;
   const statusButton = page.getByRole('button', { name: /Check status|Checking/ });
   while (!page.url().includes('/workspace?conversation=')) {

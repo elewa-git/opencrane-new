@@ -2,3 +2,4 @@
 - Fresh real-provider startup honours the approved demo allowance before its first paid check.
 - Demo preparation creates the PDF chat before reading its protected receipt and keeps uncertain attempts from being repeated.
 - Replies and Stop results can recover after fast model output fills the bridge queue; accepted reports are saved even after the connection closes.
+- Demo warm-up checks a shared session's saved status before opening its chat.

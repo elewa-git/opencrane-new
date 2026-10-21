@@ -7,6 +7,7 @@ import { answer, stop } from './real-model-journey.ts';
 import { demoBudget, demoCeiling } from './demo-prepare.ts';
 import { timedSmoke } from './demo-smoke.ts';
 import { findBudgetNoticeForPrompt } from './browser-budgets.ts';
+import { waitForPrivateSessionToApply } from './browser-phase4.ts';
 
 type Options = Parameters<typeof demoBudget>[0];
 
@@ -24,6 +25,7 @@ export async function warmDemo(owner: Page, member: Page, origin: string) {
   await member.getByRole('button', { name: /^Choose Acacia supplier assistant/u }).click();
   const selection = member.getByRole('dialog');
   await selection.getByRole('button', { name: 'Start session', exact: true }).click();
+  await waitForPrivateSessionToApply(member);
   await answer(member, 'Say ready in one plain sentence. Do not use tools.', [/ready/iu]);
   return member.url();
 }
