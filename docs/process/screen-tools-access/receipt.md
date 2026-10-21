@@ -1,6 +1,6 @@
 # Initial tool audience
 
-Date: 2026-10-21T13:40:05.282Z. Source: c5e2c9ca9aed889fdcf5c165c41e6c5ace254562.
+Date: 2026-10-21T14:42:05.834Z. Source: 805bbedbbda8550f394068f2b9ccb0c7d1b8d5f3.
 Environment: built web app, intercepted APIs and a fresh browser context per case. No live install.
 Command: `npm run visual:screen-tools-access`.
 
@@ -9,7 +9,7 @@ PASS: each save sends once and reads its original receipt. Content and IAM Apply
 [Desktop](audience-1280.png) and [phone](audience-390.png) show the saved audience.
 
 PARTIAL: INT-31 uses existing chips and shared states. Tool rows and shell keep the earlier publication layout. The existing INT-33 page explains the pair. Published editing and groups are outside this part.
-NOT RUN: fresh-install journey, real IAM or gateway, model calls and full root suite.
+NOT RUN: fresh-install audience journey, live grant confirmation or gateway, model calls and local full root suite.
 
-PASS: 37 selected web tests twice, 438 unchanged event security checks once, repository typecheck, event catalogue, Knip, changelog, dependency, documentation, link, fixture and licence checks. The existing publication capture flow also passed all 30 cases in a temporary output folder.
-PARTIAL: full typed lint was still running when this receipt was written; the final changed-file lint passed. GitHub CI is reported in the pull request.
+PASS: 37 selected web tests twice and 438 unchanged event security checks once. The existing integration browser journey passed with disposable PostgreSQL, NATS and OpenFGA (1 focused test; 93 other tests not run locally). The database and its volume were removed.
+PASS: changed-file typed lint, web typecheck, event catalogue, Knip and changelog checks after the correction. Full lint and repository typecheck are running again; the pull request records their final results.

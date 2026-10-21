@@ -169,6 +169,6 @@ PASS: each save sends once and reads its original receipt. Content and IAM Apply
 [Desktop](audience-1280.png) and [phone](audience-390.png) show the saved audience.
 
 PARTIAL: INT-31 uses existing chips and shared states. Tool rows and shell keep the earlier publication layout. The existing INT-33 page explains the pair. Published editing and groups are outside this part.
-NOT RUN: fresh-install journey, real IAM or gateway, model calls and full root suite.
+NOT RUN: fresh-install audience journey, live grant confirmation or gateway, model calls and local full root suite.
 `;
 await writeFile(resolve(output, 'receipt.md'), receipt);
