@@ -90,7 +90,7 @@ async function recordsSetup() {
 }
 test('provider setup uses ordered authenticated product calls and stops at each refusal', recordsSetup);
 
-async function waitsForSeededDefault(loseReply = false, absent = false) {
+async function waitsForSeededDefault(loseReply = false, absent = false, unavailable = false) {
   let saves = 0;
   let savedCommand = '';
   let recovered = false;
@@ -121,6 +121,11 @@ async function waitsForSeededDefault(loseReply = false, absent = false) {
     const isBindings = request.url === '/api/org/providers/dev-stub/bindings';
     if (isBindings && request.method === 'GET') {
       bindingReads++;
+      if (unavailable && bindingReads === 1) {
+        response.writeHead(503);
+        response.end('sensitive-value /private/location');
+        return;
+      }
       const rows = bindingReads === 1 ? [] : [{ kind: 'silo_default', position: 5 }];
       const expectedProviderSequence = bindingReads === 1 ? 4 : 5;
       response.end(JSON.stringify({ rows, expectedProviderSequence }));
@@ -177,6 +182,12 @@ function absentReceiptTest() {
   return waitsForSeededDefault(true, true);
 }
 
+function temporaryBindingTest() {
+  return waitsForSeededDefault(false, false, true);
+}
+
+test('waits for a temporarily unavailable provider binding without repeating writes',
+  temporaryBindingTest);
 test('waits for the first provider binding before explicitly selecting the default', seededDefaultTest);
 test('a lost save reply is recovered by reading its original receipt', lostReplyTest);
 test('an absent receipt after a lost response never repeats the unknown write', absentReceiptTest);
