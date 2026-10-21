@@ -1,3 +1,4 @@
+import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { databases } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -234,3 +235,60 @@ async function refusesWildcardRow() {
   expect(reader).not.toHaveBeenCalled();
 }
 it('refuses a wildcard catalogue id before reading event history', refusesWildcardRow);
+
+async function slowMembershipRead() {
+  const setup = await fixture();
+  await setup.register('held');
+  await setup.watch.check();
+  const query = setup.db.query.bind(setup.db);
+  const late = Promise.withResolvers<Awaited<ReturnType<typeof query>>>();
+  const rows = await query('SELECT silo, server_id, source_kind FROM mcp_catalogue');
+  function delayedRead() {
+    return late.promise;
+  }
+  const reader = vi.spyOn(setup.db, 'query');
+  reader.mockImplementationOnce(delayedRead);
+  const checking = setup.watch.check();
+  let result: 'pending' | 'resolved' | 'refused' = 'pending';
+  function resolved() {
+    result = 'resolved';
+  }
+  function refused() {
+    result = 'refused';
+  }
+  const settled = checking.then(resolved, refused);
+  // Leave the first read pending while the next poll and capture recover.
+  await pause(1100);
+  expect(result).toBe('refused');
+  expectHeld(setup.watch, 'held');
+  await setup.watch.check();
+  setup.watch.requireCurrent('held');
+  expect(reader).toHaveBeenCalledTimes(2);
+  expect(setup.remote.calls).toHaveLength(4);
+  const beforeLateResult = await readToolPolicy(setup.nats.store, 'test', 'held');
+  late.resolve(rows);
+  await settled;
+  await pause(0);
+  expect(await readToolPolicy(setup.nats.store, 'test', 'held')).toEqual(beforeLateResult);
+  expect(setup.remote.calls).toHaveLength(4);
+}
+it('holds after a one-second membership deadline and ignores a late read during recovery',
+  slowMembershipRead);
+
+async function schedulesShortTtl() {
+  const setup = await fixture(500);
+  await setup.register('short');
+  await setup.watch.check();
+  const before = await readToolPolicy(setup.nats.store, 'test', 'short');
+  const errors = vi.fn();
+  setup.watch.tick(errors);
+  // Keep the production scheduler running without another caller supplying ticks.
+  await pause(1750);
+  setup.watch.requireCurrent('short');
+  const after = await readToolPolicy(setup.nats.store, 'test', 'short');
+  expect(after.policyRevision).toBe(before.policyRevision);
+  expect(setup.remote.calls.length).toBeGreaterThanOrEqual(8);
+  expect(errors).not.toHaveBeenCalled();
+}
+it('schedules healthy 500 ms catalogues before expiry without waiting for another tick',
+  schedulesShortTtl);
