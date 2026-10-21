@@ -49,7 +49,8 @@ async function interruptedLimit(signal: NodeJS.Signals) {
     child.kill(signal);
   }
   child.on('message', interrupt);
-  const timer = setTimeout(function timeout() { child.kill('SIGKILL'); }, 15000);
+  function killChildAfterTimeout() { child.kill('SIGKILL'); }
+  const timer = setTimeout(killChildAfterTimeout, 15000);
   try {
     const [code, killed] = await once(child, 'exit');
     assert.equal(reachedLimit, true, stderr);

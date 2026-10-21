@@ -1,6 +1,125 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { Page } from 'playwright';
 import { timedSmoke } from './demo-smoke.ts';
+
+function warmPage(sharedSessionDelay = false) {
+  let location = '';
+  let statusChecks = 0;
+  let sessionStarted = false;
+  async function fill() {}
+  async function press() {
+    if (!location.includes('/workspace?conversation=')) {
+      throw new Error('The shared session is still waiting in the chooser');
+    }
+  }
+  async function innerText() {
+    return 'ready';
+  }
+  async function waitFor() {}
+  async function count() {
+    return 1;
+  }
+  async function isEnabled() {
+    return true;
+  }
+  async function click() {}
+  function last() {
+    return element;
+  }
+  function locator() {
+    return element;
+  }
+  function getByRole(role: string, options?: { name?: string | RegExp }) {
+    return roleElement(role, options);
+  }
+  function getByText() {
+    return element;
+  }
+  const element = {
+    fill,
+    press,
+    innerText,
+    waitFor,
+    count,
+    isEnabled,
+    click,
+    last,
+    locator,
+    getByRole,
+    getByText,
+  };
+  async function goto(url: string) {
+    location = url;
+  }
+  function currentUrl() {
+    return location;
+  }
+  async function reload() {}
+  async function waitForLoadState() {}
+  function roleElement(role: string, options?: { name?: string | RegExp }) {
+    return page.getByRole(role, options);
+  }
+  async function startSession() {
+    sessionStarted = true;
+  }
+  async function checkSessionStatus() {
+    if (!sessionStarted) {
+      return;
+    }
+    statusChecks += 1;
+    if (statusChecks === 2) {
+      location = 'http://demo.test/workspace?conversation=saved';
+    }
+  }
+  function sessionStatusButton() {
+    return { ...element, click: checkSessionStatus };
+  }
+  function startSessionButton() {
+    return { ...element, click: startSession };
+  }
+  function statusButtonName(name: string | RegExp | undefined) {
+    return name instanceof RegExp && /Check status|Checking/u.test(name.source);
+  }
+  function pageRole(_role: string, options?: { name?: string | RegExp }) {
+    const name = options?.name;
+    if (sharedSessionDelay && name === 'Start session') {
+      return startSessionButton();
+    }
+    if (sharedSessionDelay && statusButtonName(name)) {
+      return sessionStatusButton();
+    }
+    return element;
+  }
+  function setDefaultTimeout() {}
+  const page = {
+    setDefaultTimeout,
+    goto,
+    url: currentUrl,
+    reload,
+    waitForLoadState,
+    locator,
+    getByText,
+    getByRole: pageRole,
+  };
+  function checkCount() {
+    return statusChecks;
+  }
+  const fixture = { page: page as unknown as Page, statusChecks: checkCount };
+  return fixture;
+}
+
+async function warmsOwnerAndDelayedSharedSession() {
+  const { warmDemo } = await import('./demo-browser.ts');
+  const ownerFixture = warmPage();
+  const memberFixture = warmPage(true);
+  const origin = 'http://demo.test';
+  const sharedUrl = await warmDemo(ownerFixture.page, memberFixture.page, origin);
+  assert.equal(sharedUrl, 'http://demo.test/workspace?conversation=saved');
+  assert.equal(memberFixture.statusChecks(), 2);
+}
+test('warm-up waits for a delayed shared session before sending its reply',
+  warmsOwnerAndDelayedSharedSession);
 
 async function recordsFailuresAndDeadline() {
   let milliseconds = 0;
@@ -137,7 +256,9 @@ async function failsWithinDeadline() {
     milliseconds = 1_000;
     throw new Error('Synthetic failure');
   }
-  const result = await timedSmoke([{ name: 'failed step', run: fail }], now);
+  const failedStep = { name: 'failed step', run: fail };
+  const steps = [failedStep];
+  const result = await timedSmoke(steps, now);
   assert.deepEqual(result, { elapsedMs: 1000, result: 'FAIL', steps: [
     { name: 'failed step', result: 'FAIL', elapsedMs: 1000 },
   ] });
@@ -146,7 +267,9 @@ async function exceedsDeadlineDespitePassing() {
   let milliseconds = 0;
   function now() { return milliseconds; }
   async function pass() { milliseconds = 180_001; }
-  const result = await timedSmoke([{ name: 'slow success', run: pass }], now);
+  const slowStep = { name: 'slow success', run: pass };
+  const steps = [slowStep];
+  const result = await timedSmoke(steps, now);
   assert.deepEqual(result, { elapsedMs: 180001, result: 'FAIL', steps: [
     { name: 'slow success', result: 'PASS', elapsedMs: 180001 },
   ] });
