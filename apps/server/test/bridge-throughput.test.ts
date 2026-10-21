@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { performance } from 'node:perf_hooks';
@@ -70,6 +71,11 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
   }
   nats.store.readStream = timedRead;
   let stopMs = 0;
+  let stopped: ReturnType<typeof chatCommand> | undefined;
+  async function checkStopAccess() {
+    await delay(100);
+    return performance.now() + 2000;
+  }
   const append = nats.store.append.bind(nats.store);
   async function timedAppend(...args: Parameters<typeof append>) {
     const began = performance.now();
@@ -77,9 +83,12 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
     if (metrics.appends === 5) {
       const stopStarted = performance.now();
       const stop = { id: 'stop-long', conversationId: 'long', stopTurnId: 'request-long' };
-      const result = await chatCommand(nats.store, keys, context, stop);
-      expect(result.status).toBe('appended');
-      stopMs = performance.now() - stopStarted;
+      async function stopWhileStreaming() {
+        const result = await chatCommand(nats.store, keys, context, stop, checkStopAccess);
+        stopMs = performance.now() - stopStarted;
+        return result;
+      }
+      stopped = stopWhileStreaming();
     }
     try { return await append(...args); }
     finally { metrics.appendMs += performance.now() - began; }
@@ -121,6 +130,7 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
     await finished.promise;
     const elapsedMs = performance.now() - started;
     process.stdout.write(`${JSON.stringify({ reports: acknowledged, elapsedMs, stopMs, metrics })}\n`);
+    expect((await stopped)?.status).toBe('appended');
     expect(elapsedMs).toBeLessThan(10_000);
     expect(stopMs).toBeLessThan(2000);
     expect(await reportPosition(nats.store, 'test', 'computer')).toBe(2700);
