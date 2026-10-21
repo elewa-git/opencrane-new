@@ -7,10 +7,11 @@ import childProcess from 'node:child_process';
 import { promisify } from 'node:util';
 
 const directory = process.env['DEV_STACK_DIR'];
-const recordFile = `${directory}/operations`;
+const recordFile = `${process.env.HOME}/operations`;
 const running = new Map();
 let nextPid = 900000;
 let switchedOn = false;
+let failureRaised = false;
 const containers = new Set();
 
 function record(message) {
@@ -18,11 +19,14 @@ function record(message) {
 }
 function snapshot() {
   const state = { processes: [...running.values()], containers: [...containers], switchedOn };
-  writeFileSync(`${directory}/services.json`, JSON.stringify(state));
+  writeFileSync(`${process.env.HOME}/services.json`, JSON.stringify(state));
 }
 function failureAt(stage) {
   record(stage);
-  if (process.env['START_FAILURE'] === stage) throw new Error(`Fixture failure: ${stage}`);
+  if (process.env['START_FAILURE'] === stage && !failureRaised) {
+    failureRaised = true;
+    throw new Error(`Fixture failure: ${stage}`);
+  }
 }
 
 async function execute(command, args) {
@@ -32,6 +36,7 @@ async function execute(command, args) {
   }
   let stdout = '';
   if (command === 'tailscale') {
+    if (args[0] === 'serve' && switchedOn) failureAt('after-switch-on');
     if (args[0] === 'status') {
       stdout = JSON.stringify({ Self: { DNSName: 'owner.example.test.', TailscaleIPs: [] } });
     } else {
@@ -97,7 +102,7 @@ Object.defineProperty(process.stdin, 'isTTY', { value: true });
 
 async function fetchFixture(url) {
   record(`health ${url}`);
-  if (String(url).endsWith('/org/integrations')) failureAt('after-switch-on');
+
   return new Response('ready');
 }
 globalThis.fetch = fetchFixture;
