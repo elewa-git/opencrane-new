@@ -12,6 +12,7 @@ const commands: Invocation[] = [
   { script: 'bootstrap-journey.ts', args: [] },
   { script: 'screenshot-journey.ts', args: ['fresh'] },
   { script: 'mcp-journey.ts', args: ['fresh'] },
+  { script: 'live-view-repeat.ts', args: [] },
 ];
 
 async function invoke(command: Invocation, fleet?: string, id = 'owner', realMode = false) {
@@ -26,6 +27,7 @@ async function invoke(command: Invocation, fleet?: string, id = 'owner', realMod
     await writeFile(`${bin}/id`, '#!/bin/sh\necho 999999\n', executable);
     const record = `${home}/record`;
     await writeFile(record, '');
+    await writeFile(`${home}/stack-owner`, process.cwd());
     const env: NodeJS.ProcessEnv = {
       HOME: home, PATH: bin, DEV_STACK_ID: id, JOURNEY_RECORD: record,
       NODE_OPTIONS: '--import=./infra/dev-stack/test/journey-refusal-preload.mjs',
@@ -105,3 +107,14 @@ async function refuseInvalidOptions() {
 }
 
 test('direct startup refuses duplicate flags and secondary owner consent', refuseInvalidOptions);
+
+for (const script of ['bootstrap-journey.ts', 'live-view-repeat.ts']) {
+  async function refuseRealMode() {
+    const command = { script, args: [] };
+    const result = await invoke(command, undefined, '1', true);
+    assert.notEqual(result.status, 0);
+    assert.equal(result.reads, 'settings read\n', result.output);
+    assert.match(result.output, /This journey requires the stand-in model/u);
+  }
+  test(`${script} refuses saved real mode before starting a stand-in journey`, refuseRealMode);
+}
