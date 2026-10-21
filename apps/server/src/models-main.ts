@@ -1,5 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
-import { captureDispatchCatalogue } from './integrations/watch-capture.ts';
+import { remoteCatalogueWatch } from './integrations/remote-catalogue-watch.ts';
 import { conversationKeys } from './chat/keys.ts';
 // The lease chooses which process runs this worker. Budget decisions still only
 // append events to NATS.
@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
 import { providerSecrets, BudgetActor, startDecision, startGateway, startEgress,
-  ingestUsage, managedProviderCallsEnabled, mcpDispatchRouteSchema, mcpCatalogueWatch,
+  ingestUsage, managedProviderCallsEnabled, mcpDispatchRouteSchema,
   gatewayConfigurationWorker
 } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
@@ -108,20 +108,7 @@ try {
       if (stop.signal.aborted) throw new Error('Models process stopped');
       await locked.query('SELECT 1');
     }
-    function serverId(route: typeof mcpRoutes[number]) {
-      return route.serverId;
-    }
-    async function capture(serverId: string, signal: AbortSignal) {
-      function matches(route: typeof mcpRoutes[number]) {
-        return route.serverId === serverId;
-      }
-      const route = mcpRoutes.find(matches);
-      if (!route) throw new Error('Catalogue route unavailable');
-      return captureDispatchCatalogue(route, signal);
-    }
-    const watchOptions = { serverIds: mcpRoutes.map(serverId), capture,
-      requireLeader: requireDispatchLeader };
-    const watch = mcpCatalogueWatch(events.store, silo, watchOptions);
+    const watch = remoteCatalogueWatch(db.db, events.store, silo, requireDispatchLeader);
     function watchFailed() {
       logger.error('MCP catalogue watch unavailable; calls remain held');
     }
@@ -198,9 +185,9 @@ try {
         await delay(100, undefined, { signal: stop.signal });
       }
     } finally {
+      watch.close();
       stop.signal.removeEventListener('abort', closeRelays);
       await egress.close();
-      watch.close();
       await configurationWorker?.close();
       await gateway?.stop();
       await decision.close();

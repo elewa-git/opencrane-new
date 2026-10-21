@@ -2787,7 +2787,16 @@ Its reviewed `discoverResult` must declare
 `capabilities.experimental["io.opencrane/expectedRevision"]`; otherwise it refuses
 before DNS. This declaration promises atomic refusal of a mismatched
 `x-opencrane-mcp-revision` before running a tool. Unsupported servers stay unavailable.
-Remote calls use the saved dated catalogue check, without an in-process watch.
+Remote calls require both dated saved evidence and the running catalogue watch at
+admission and immediately before sending. A hold raised after a permit or saved start
+refuses the send without opening an upstream connection. Authenticated adapter outcomes
+and unknown-result handling remain unchanged. The watch reconciles a bounded list of
+server ids; removal aborts active capture and retains any unresolved local drift hold.
+Each capture compares the latest remote revision declaration with the saved one before
+renewing dates. A withdrawn or changed declaration saves the latest discovery as a changed
+catalogue, even with identical tool hashes. The hold starts before saving that event.
+Short positive TTLs are checked after one quarter of their lifetime. Longer TTLs keep the
+30-second refresh margin and the inventory's 300000 ms cap. Zero TTL remains refused.
 
 DNS takes at most one second and no longer than the remaining permit/access lifetime,
 before admission or start saving. Every answer must be public. TLS uses the checked

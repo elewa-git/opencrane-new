@@ -105,6 +105,10 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     }
     if (!policy.gatewayBinding || !policy.locator || policy.serverKind !== 'remote' ||
         policy.policy.accountMode !== 'none') throw new Error('Remote MCP unavailable');
+    if (!options?.requireCatalogue) {
+      throw new Error('MCP catalogue watch unavailable');
+    }
+    options.requireCatalogue(policy.policy.serverId!);
     requireRemoteRevision(policy.policy.catalogue?.discoverResult);
     return { serverId: policy.policy.serverId!, connectionId: policy.policy.connectionId!,
       upstream: '', locator: policy.locator, generation: String(policy.gatewayBinding.generation),
@@ -307,7 +311,13 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     if (permit.gatewayBinding) {
       requireGatewayAcknowledgement(permit.gatewayBinding, acknowledged);
     }
-    if (permit.route.locator) return permit.route;
+    if (permit.route.locator) {
+      if (!options?.requireCatalogue) {
+        throw new Error('MCP catalogue watch unavailable');
+      }
+      options.requireCatalogue(permit.route.serverId);
+      return permit.route;
+    }
     const currentRoute = routeFor(permit.route.serverId, permit.route.connectionId);
     if (JSON.stringify(currentRoute) !== JSON.stringify(permit.route)) {
       throw new Error('MCP backend changed');
