@@ -133,8 +133,13 @@ async function main() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     await main();
-  } catch {
-    console.error('Demo smoke incomplete; inspect private slot receipts. No turn is retried.');
+  } catch (error) {
+    if (error instanceof Error &&
+        error.message === 'Demo tasks require an explicit secondary id') {
+      console.error(error.message);
+    } else {
+      console.error('Demo smoke incomplete; inspect private slot receipts. No turn is retried.');
+    }
     process.exitCode = 1;
   }
 }

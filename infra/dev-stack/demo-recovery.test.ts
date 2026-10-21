@@ -55,6 +55,14 @@ async function interruptedLimit(signal: NodeJS.Signals) {
     assert.equal(reachedLimit, true, stderr);
     assert.equal(killed, null);
     assert.equal(code, 1);
+    const spending = JSON.parse(await readFile(`${output}/spending.json`, 'utf8'));
+    assert.equal(spending.callCount, 3);
+    assert.equal(spending.chargedCents, 4);
+    assert.equal(spending.heldCents, 25);
+    const timings = JSON.parse(await readFile(`${output}/timings.json`, 'utf8'));
+    assert.equal(timings.warmResult, 'PASS');
+    assert.equal(timings.attempts.length, 1);
+    assert.equal(timings.attempts[0].result, 'FAIL');
     assert.equal(fixture.budget.ceilingCents, 100);
     assert.equal(fixture.budget.dailyCeilingCents, 80);
     await assert.rejects(readFile(`${output}/saved-ceilings.json`), { code: 'ENOENT' });

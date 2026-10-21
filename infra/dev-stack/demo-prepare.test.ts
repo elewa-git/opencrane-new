@@ -8,6 +8,7 @@ import { prepareDemo } from './demo-prepare.ts';
 async function recordingRun(hideReceipts: boolean, hideConversationReceipt = false) {
   const directory = await mkdtemp(`${tmpdir()}/demo-prepare-`);
   const writes: string[] = [];
+  const ceilingWrites: number[] = [];
   const receipts = new Map<string, unknown>();
   let uploaded = false;
   let ceilingCents = 2000;
@@ -30,8 +31,10 @@ async function recordingRun(hideReceipts: boolean, hideConversationReceipt = fal
         const command = JSON.parse(bytes.toString());
         if (path === '/api/org/models') {
           assert.equal(command.scope, 'global');
-          assert.equal(command.ceilingCents, 700);
-          assert.equal(command.dailyCeilingCents, 700);
+          const expected = command.commandId.startsWith('demo-restore-') ? 2000 : 700;
+          assert.equal(command.ceilingCents, expected);
+          assert.equal(command.dailyCeilingCents, expected);
+          ceilingWrites.push(command.ceilingCents);
           ceilingCents = command.ceilingCents;
         } else {
           assert.equal(command.assistantId, 'personal-owner');
@@ -79,13 +82,18 @@ async function recordingRun(hideReceipts: boolean, hideConversationReceipt = fal
     if (hideConversationReceipt) {
       await assert.rejects(prepareDemo(options, 700), /receipt unavailable/u);
       await assert.rejects(prepareDemo(options, 700), /receipt unavailable/u);
-      assert.deepEqual(writes, ['/api/org/models', '/api/conversations']);
+      assert.deepEqual(writes, ['/api/org/models', '/api/conversations',
+        '/api/org/models', '/api/org/models', '/api/org/models']);
+      assert.deepEqual(ceilingWrites, [700, 2000, 700, 2000]);
+      assert.equal(ceilingCents, 2000);
       return;
     }
     if (hideReceipts) {
       await assert.rejects(prepareDemo(options, 700), /outcome unknown/u);
       await assert.rejects(prepareDemo(options, 700), /outcome unknown/u);
-      assert.equal(writes.length, 1);
+      assert.deepEqual(writes, ['/api/org/models', '/api/org/models', '/api/org/models']);
+      assert.deepEqual(ceilingWrites, [700, 2000, 2000]);
+      assert.equal(ceilingCents, 2000);
       return;
     }
     await prepareDemo(options, 700);
