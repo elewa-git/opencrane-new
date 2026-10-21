@@ -112,6 +112,7 @@ try {
         await editor.getByText(words[scene], { exact: false }).waitFor();
         if (['unknown', 'applying', 'content-applying'].includes(scene)) {
           assert(await page.getByRole('button', { name: 'Review access' }).isDisabled());
+          assert(await page.locator('fieldset').isDisabled());
           await editor.getByRole('button', { name: 'Check status' }).click();
           await page.reload();
           await editor.getByRole('button', { name: 'Check status' }).waitFor();

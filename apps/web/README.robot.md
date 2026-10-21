@@ -889,6 +889,7 @@ The unpublished tools page reads `/access` and 50 member or assistant candidates
 One selected row sends one `/access/changes` command. Review access waits for the original
 receipt's content and IAM confirmation and a fresh access read. Conflict and no-effect
 require Refresh audience. Unknown checks only the original id, including after reload.
+An audience read outage holds Review access; only an unresolved grant also holds tool mode saves.
 Only the id and grant/revoke action enter sessionStorage; names stay in memory.
 Any 401/403 clears the parent and editor, including replies from an older candidate read.
 INT-31 uses existing chip styles and shared states; INT-33 explains the selected pair.

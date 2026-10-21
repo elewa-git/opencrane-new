@@ -111,6 +111,8 @@ it('keeps reviewed mode editing available when the separate audience read is una
   if (!(root instanceof HTMLElement)) throw new Error('Expected tools');
   await vi.waitFor(() => expect(root.querySelector('fieldset')?.disabled).toBe(false));
   expect(root.querySelector('button[aria-label="Save mode for read_item"]')).not.toBeNull();
+  const reviewButton = root.querySelector<HTMLButtonElement>('.review-action');
+  expect(reviewButton?.disabled).toBe(true);
   expect(root.textContent).toContain('Review access');
   fixture.destroy();
 });

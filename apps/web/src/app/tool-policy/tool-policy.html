@@ -112,6 +112,7 @@
       @if (canReviewUnpublished(policy)) {
         <oc-tool-audience [serverId]="serverId()" [toolName]="policy.tools[0]?.name ?? ''"
           [disabled]="state() !== 'ready'" (ready)="audienceReady.set($event)"
+          (pendingChange)="audiencePending.set($event)"
           (accessEnded)="clearOnAccessLoss($event)" />
       }
       @if (canReviewUnpublished(policy) && policy.tools.length > 0) {

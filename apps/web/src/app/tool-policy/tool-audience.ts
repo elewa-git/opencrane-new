@@ -30,6 +30,7 @@ export class ToolAudience implements OnInit, OnDestroy {
   readonly toolName = input('');
   readonly disabled = input(false);
   readonly ready = output<boolean>();
+  readonly pendingChange = output<boolean>();
   readonly accessEnded = output<Response>();
   protected readonly list = signal<z.infer<typeof accessSchema> | undefined>(undefined);
   protected readonly candidates = signal<Candidate | undefined>(undefined);
@@ -71,6 +72,7 @@ export class ToolAudience implements OnInit, OnDestroy {
   }
   private reportReady(): void {
     this.ready.emit(!this.locked() && !this.picking());
+    this.pendingChange.emit(this.pending() !== undefined);
   }
   protected async refresh(): Promise<void> {
     if (this.busy() || this.pending()) return;
@@ -146,6 +148,7 @@ export class ToolAudience implements OnInit, OnDestroy {
       action: edit.action, granteeKind: edit.granteeKind, granteeId: edit.granteeId };
     this.pending.set({ commandId: command.commandId, action: command.action });
     this.store();
+    this.pendingChange.emit(true);
     this.edit.set(undefined);
     this.busy.set(true);
     this.show('applying', 'Applying');

@@ -49,9 +49,9 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   private readonly document = inject(DOCUMENT);
   private abortController: AbortController | undefined;
   private requestVersion = 0;
-  private hadRenderedTools = false;
 
   protected readonly audienceReady = signal(false);
+  protected readonly audiencePending = signal(false);
   readonly serverId = input.required<string>();
   protected readonly reviewSnapshot = signal<ToolPolicy | undefined>(undefined);
   protected readonly policy = signal<ToolPolicy | undefined>(undefined);
@@ -95,8 +95,8 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   protected canEdit(tool: Tool): boolean {
-    return this.state() === 'ready' && (!canReviewUnpublished(this.policy())
-      || this.audienceReady()) && (tool.reviewed || this.isInitial()) &&
+    return this.state() === 'ready' && !this.audiencePending()
+      && (tool.reviewed || this.isInitial()) &&
       this.policy()?.connectionId !== null;
   }
 
@@ -270,7 +270,6 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
       if (!this.isCurrent(version)) return;
       this.policy.set(policy);
       this.restorePublication(policy);
-      if (policy.tools.length > 0) this.hadRenderedTools = true;
       const keptChoices = preserveUnchangedChoices
         ? choicesForCurrentTools(previousPolicy, previousChoices, policy)
         : new Map<string, ToolChoice>();
@@ -547,7 +546,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     this.statusKind.set('access_changed');
     this.message.set('Access changed. Ask an Owner or Admin.');
     this.detail.set('');
-    if (this.hadRenderedTools) globalThis.setTimeout(this.focusAccessHeading, 0);
+    globalThis.setTimeout(this.focusAccessHeading, 0);
     return true;
   }
 
