@@ -70,3 +70,25 @@ async function requiresCurrentRefusal() {
   }
 }
 test('current budget refusal cannot pass by matching an earlier saved refusal', requiresCurrentRefusal);
+
+async function waitsForSharedSession() {
+  const { chromium } = await import('playwright');
+  const { waitForPrivateSessionToApply } = await import('./browser-phase4.ts');
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const page = await browser.newPage();
+    async function respond(route: import('playwright').Route) {
+      const selected = route.request().url().includes('conversation=');
+      const choosing = '<button onclick="location.href=\'/workspace?conversation=saved\'">' +
+        'Check status</button>';
+      const body = selected ? '<p>Private session</p>' : choosing;
+      await route.fulfill({ contentType: 'text/html', body });
+    }
+    await page.route('http://demo.test/**', respond);
+    await page.goto('http://demo.test/workspace/shared');
+    await waitForPrivateSessionToApply(page);
+    assert.equal(page.url(), 'http://demo.test/workspace?conversation=saved');
+  } finally { await browser.close(); }
+}
+test('demo can finish a recorded shared session by checking its saved status',
+  waitsForSharedSession);
