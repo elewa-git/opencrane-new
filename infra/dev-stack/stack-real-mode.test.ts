@@ -9,6 +9,9 @@ type Startup = {
   credential?: string;
   bootstrap?: string;
   savedMode?: 'stub' | 'real';
+  ownerRun?: boolean;
+  terminal?: boolean;
+  fleet?: string;
 };
 
 async function startupFailure(startup: Startup) {
@@ -49,11 +52,30 @@ async function startupFailure(startup: Startup) {
     if (startup.bootstrap !== undefined) {
       environment['DEV_OWNER_BOOTSTRAP'] = startup.bootstrap;
     }
+    if (startup.fleet !== undefined) {
+      environment['OPENCRANE_FLEET_TASK'] = startup.fleet;
+    }
     const args = ['--experimental-strip-types', 'infra/dev-stack/stack.ts', 'up'];
+    if (startup.ownerRun) {
+      args.push('--owner-run');
+    }
     const options = { env: environment, timeout: 15_000, encoding: 'utf8' as const };
-    const result = spawnSync(process.execPath, args, options);
+    let result;
+    if (startup.terminal) {
+      const commandParts = [process.execPath, ...args];
+      const quotedParts = commandParts.map(shellQuote);
+      const command = quotedParts.join(' ');
+      result = spawnSync('/usr/bin/script', ['-qec', command, '/dev/null'], options);
+    } else {
+      result = spawnSync(process.execPath, args, options);
+    }
+    assert.ifError(result.error);
     assert.equal(result.status, 1, result.stderr);
-    return await readFile(`${directory}/failure.log`, 'utf8');
+    try {
+      return await readFile(`${directory}/failure.log`, 'utf8');
+    } catch {
+      return `${result.stdout}${result.stderr}`.trim();
+    }
   } finally {
     await rm(home, cleanup);
   }
@@ -61,7 +83,6 @@ async function startupFailure(startup: Startup) {
 
 async function refusesIneligibleRealMode() {
   const cases: Startup[] = [
-    { id: 'owner', credential: '/synthetic-key' },
     { id: '1', credential: '/synthetic-key', bootstrap: '0' },
     { id: '2', credential: '' },
   ];
@@ -95,7 +116,44 @@ async function acceptsMatchingModes() {
   }
 }
 
-test('real mode refuses owner stacks, disabled owner bootstrap and an empty opt-in',
+test('real mode refuses disabled owner bootstrap and an empty opt-in',
   refusesIneligibleRealMode);
 test('startup checks saved provider mode before setup', refusesSavedModeChanges);
 test('eligible fresh and matching saved modes reach setup', acceptsMatchingModes);
+
+function shellQuote(value: string) {
+  return "'" + value.replaceAll("'", "'\"'\"'") + "'";
+}
+
+async function refusesAutomatedOwnerStarts() {
+  const cases: Startup[] = [
+    { id: 'owner', credential: '/synthetic-key', terminal: true },
+    { id: 'owner', credential: '/synthetic-key', ownerRun: true },
+    { id: 'owner', credential: '/synthetic-key', ownerRun: true, terminal: true, fleet: 'task' },
+    { id: 'owner', credential: '/synthetic-key', ownerRun: true, terminal: true, fleet: '' },
+    { id: 'owner', fleet: 'task' },
+  ];
+  for (const startup of cases) {
+    const failure = await startupFailure(startup);
+    assert.match(failure, /Owner commands require --owner-run, interactive stdin and no fleet task/u);
+    assert.equal(failure.includes('/synthetic-key'), false);
+  }
+}
+
+async function acceptsInteractiveOwnerStarts() {
+  for (const savedMode of [undefined, 'real'] as const) {
+    const startup: Startup = {
+      id: 'owner', credential: '/synthetic-key', ownerRun: true, terminal: true,
+    };
+    if (savedMode) {
+      startup.savedMode = savedMode;
+    }
+    const failure = await startupFailure(startup);
+    assert.equal(failure, 'Error: tailscale failed; see the private last-error.log');
+  }
+}
+
+test('owner starts refuse missing consent, non-interactive stdin and any fleet marker',
+  refusesAutomatedOwnerStarts);
+test('explicit interactive owner real starts reach isolated setup, fresh and saved',
+  acceptsInteractiveOwnerStarts);
