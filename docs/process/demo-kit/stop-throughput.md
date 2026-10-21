@@ -74,3 +74,63 @@ Paid calls: **none**. Charged: **0 cents**. Held with real providers: **0 cents*
 The task limit was 300 cents including holds; the earlier 75 cents is outside it.
 PASS: released slot 1, restored and removed temporary source fixtures, and removed
 `pgtest-demo-stop-throughput` with its volume. No owner resources were removed.
+
+## 21 October — batch acknowledgements and guard checks
+
+PASS: fetched `origin` and rebased the whole branch onto `ff7095f9f`.
+Git confirmed that the rebase finished and that this main commit is an ancestor.
+The bridge conflict kept main's saving of accepted reports after disconnect.
+The stacked `work/demo-stop-close` branch was not changed.
+
+A concurrent writer could save a batch with the same final piece but different
+text in an earlier piece. The losing writer then acknowledged text that was
+never saved. Test commit `3302e097b` reproduces this on real NATS, both with
+whole batches and with one writer saving separate groups. Both changed-text
+cases failed before the fix. The server now checks every original sequence
+and digest against saved receipts after append, including concurrent duplicate
+results. It reads another saved event only when that original is absent from
+the returned event. An unchanged regrouped batch remains accepted.
+
+PASS: removing each requested guard made its tests fail. All guards were restored.
+
+| Removed check | Observed failure |
+| --- | --- |
+| Check each original during replay | Four failures: an unsaved piece was skipped; changed earlier, later and reordered text was accepted |
+| Earlier receipt integer sequence | The non-integer receipt was accepted |
+| Earlier receipt digest format | The bad digest was accepted |
+| Earlier receipt strict fields | The extra field was accepted |
+| At least one earlier receipt | The empty array was accepted |
+| At most 63 earlier receipts | All 64 otherwise valid receipts were accepted below final sequence 65 |
+| Release waiting writes after failure | Both report and Stop waiters timed out |
+| Keep waiting writes separate for each chat | The second chat's Stop timed out behind the first chat's report |
+
+The remaining listed test gaps were left outside this change. No access, money,
+memory or queue limit was weakened. No dependency or event type was added.
+
+Validation uses `nice -n 10`, one Vitest worker, real NATS fixtures and a disposable
+PostgreSQL 17.6 container. Its loopback port is 53256 and `PG_TEST_URL` is set for
+all projection tests. Logs are in `/tmp/demo-stop-throughput-checks/` on this host.
+Live qualification: NOT RUN in this round. Paid calls: none; charged and held
+with real providers: 0 cents. No live stack was started or changed.
+
+PASS: the concurrent membership acceptance test passed 10/10 repetitions on
+rebased branch source `977cf2e85` plus the batch fix, and 10/10 on `origin/main`
+`ff7095f9f`. Each repetition ran both same-command and different-command cases:
+20 test cases passed on each revision, with zero failed repetitions. The full
+104-test membership file also passed once on this branch. The failure from CI
+run `39577821667` was not reproduced on either revision. This does not establish
+that it is a known flake. Membership commands, their tests and the event-store
+adapter were not changed.
+
+PASS: 71 direct-chat browser tests, twice. The added batch-race and guard tests
+are in commits `3302e097b` and `1d86bd21c`; the production fix is `4d0836dd3`.
+
+PASS: all 83 tests across the seven targeted server/event files, twice. This includes
+main's accepted-after-disconnect regression. The 2,700-report runs took 4,372 ms
+and 2,435 ms; the competing Stop appends took 191 ms and 138 ms. Typecheck,
+`check:events` and `lint:changelog` passed. No full root suite was run.
+PASS: removed the disposable PostgreSQL container with its volume and the detached
+main comparison worktree. The saved test logs remain available on this host.
+PASS: the full lint chain, including knip, documentation, links, fixture boundaries,
+licences and changelog checks. GitHub CI is tracked on the pushed commit in the PR
+comments; these local results do not claim that CI or live qualification passed.
