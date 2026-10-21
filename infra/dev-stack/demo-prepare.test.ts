@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { prepareDemo } from './demo-prepare.ts';
 
-async function repeatsAfterLostReplies() {
+async function recordingRun(hideReceipts: boolean) {
   const directory = await mkdtemp(`${tmpdir()}/demo-prepare-`);
   const writes: string[] = [];
   const receipts = new Map<string, unknown>();
@@ -24,6 +24,7 @@ async function repeatsAfterLostReplies() {
         assert.equal(request.headers['x-file-name'], 'supplier.pdf');
         const checked = await readFile('infra/dev-stack/fixtures/supplier.pdf');
         assert(bytes.equals(checked));
+        assert.match(checked.toString(), /Total EUR 1234.56; delivery 17 November 2026/u);
         uploaded = true;
       } else {
         const command = JSON.parse(bytes.toString());
@@ -50,7 +51,8 @@ async function repeatsAfterLostReplies() {
       ? [{ name: 'supplier.pdf', status: 'delivered', textPath: 'uploads/demo/supplier.pdf.md' }]
       : [] };
     if (path.includes('/changes/')) {
-      result = receipts.get(path.split('/').at(-1)!) ?? { status: 'unknown' };
+      result = hideReceipts ? { status: 'unknown' }
+        : receipts.get(path.split('/').at(-1)!) ?? { status: 'unknown' };
     }
     response.setHeader('content-type', 'application/json');
     response.end(JSON.stringify(result));
@@ -66,6 +68,12 @@ async function repeatsAfterLostReplies() {
   const options = { directory, origin: `http://127.0.0.1:${address.port}`,
     cookie: 'synthetic-session' };
   try {
+    if (hideReceipts) {
+      await assert.rejects(prepareDemo(options, 700), /outcome unknown/u);
+      await assert.rejects(prepareDemo(options, 700), /outcome unknown/u);
+      assert.equal(writes.length, 1);
+      return;
+    }
     await prepareDemo(options, 700);
     await prepareDemo(options, 700);
     assert.deepEqual(writes, ['/api/org/models', '/api/conversations',
@@ -80,6 +88,10 @@ async function repeatsAfterLostReplies() {
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+async function repeatsAfterLostReplies() { await recordingRun(false); }
+async function keepsUnknownWrites() { await recordingRun(true); }
+test('preparation never repeats a write when its receipt stays unknown', keepsUnknownWrites);
 
 test('preparation keeps one scanned personal PDF and company cap after lost replies',
   repeatsAfterLostReplies);

@@ -15,7 +15,7 @@ async function draft(page: Page, origin: string) {
   await page.getByText('Draft', { exact: true }).waitFor();
 }
 
-async function answer(page: Page, prompt: string, facts: RegExp[]) {
+export async function answer(page: Page, prompt: string, facts: RegExp[]) {
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.fill(prompt);
   await composer.press('Enter');
@@ -29,7 +29,7 @@ async function answer(page: Page, prompt: string, facts: RegExp[]) {
   assert.equal(await reply.locator('.prose').innerText(), text, 'Reload keeps the answer');
 }
 
-async function stop(page: Page) {
+export async function stop(page: Page) {
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.fill('Write a long numbered list of 200 European cities and describe each one.');
   await composer.press('Enter');
@@ -43,11 +43,11 @@ async function stop(page: Page) {
   const stopButtonOptions = { name: 'Stop', exact: true };
   const stopButton = chatComposer.getByRole('button', stopButtonOptions);
   await stopButton.click();
-  await page.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
+  await reply.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
   const partial = await reply.locator('.prose').innerText();
   assert(partial.length > 0, 'Stop keeps received text');
   await page.reload();
-  await page.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
+  await reply.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
   assert.equal(await reply.locator('.prose').innerText(), partial);
 }
 

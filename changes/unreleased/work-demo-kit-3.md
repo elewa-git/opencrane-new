@@ -1,0 +1,1 @@
+- The secondary demo rehearsal prepares a scanned supplier PDF and company spending ceilings, warms both assistants, and records two timed browser checks with screenshots.

@@ -824,3 +824,31 @@ and stops before external calls. It checks all automated entry points and detect
 removal of the non-start owner flag refusal, duplicate flag check and secondary owner
 flag refusal. CI runs both files with the existing Node fixtures. These are local
 source checks, not live qualification.
+
+## Timed demo rehearsal
+
+The command prepares and rehearses an owned real secondary:
+
+```sh
+DEV_STACK_ID=1 DEMO_ALLOWANCE_CENTS=700 \
+node --experimental-strip-types infra/dev-stack/demo-smoke-run.ts
+```
+
+Replace 700 with the confirmed remaining daily allowance, including startup and holds;
+it must be an integer from 1 to 2000. The company daily and monthly ceilings both
+use that value. No group or assistant ceiling changes. Owner and missing ids are refused.
+
+The command signs in separate browser profiles, reuses the group seed and uploads
+`fixtures/supplier.pdf` through scanning into a fixed personal chat. The quote says
+EUR 1,234.56, delivery 17 November 2026. Request records and original receipts prevent
+unknown writes from being repeated. The PDF list must report delivery before warm-up.
+Warm-up sends one short question to each of the personal and shared computers.
+Preparation and warm-up sit outside the timed checks and still count as paid calls.
+
+Each warm attempt has a 180-second deadline. It checks streaming/reload, PDF facts,
+preview/download bytes, Stop/reload, live direct delivery, a shared reply, and company
+limit refusal/restore. Restoration is attempted even after failure or timeout.
+Two attempts capture the Owner browser at 1280 and 390 pixels; the member stays at 390.
+Private timings, screenshots and spending totals go under the slot's `demo-smoke/`.
+The command does not claim or remove a stack. Use `claim.sh` before startup and
+`down.sh --id` after copying the receipt. Live results are in the demo receipt.

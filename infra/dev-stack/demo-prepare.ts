@@ -43,9 +43,17 @@ async function savedCommand(options: Options, path: string, receiptPath: string,
       // Read the original receipt after a lost reply. Never repeat an unknown write.
     }
   }
-  const result = await request(options, receiptPath);
-  const saved = await result.json() as { status?: string };
-  assert(result.ok && saved.status === 'appended', 'Demo command outcome unknown');
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const result = await request(options, receiptPath);
+    const saved = await result.json() as { status?: string;
+      projection?: { content: string; iam: string } };
+    assert(result.ok && saved.status === 'appended', 'Demo command outcome unknown');
+    if (!saved.projection || (saved.projection.content === 'current' &&
+        saved.projection.iam === 'current')) return;
+    await delay(100);
+  }
+  throw new Error('Demo command still applying');
 }
 
 export async function prepareDemo(options: Options, allowanceCents: number) {

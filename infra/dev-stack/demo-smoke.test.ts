@@ -33,3 +33,16 @@ async function recordsFailuresAndDeadline() {
 
 test('smoke records failures without private errors and refuses work after three minutes',
   recordsFailuresAndDeadline);
+
+async function refusesUnsafeSlots() {
+  const { spawnSync } = await import('node:child_process');
+  for (const id of ['', 'owner', '3']) {
+    const env = { PATH: process.env['PATH'], DEV_STACK_ID: id, DEMO_ALLOWANCE_CENTS: '100' };
+    const args = ['--experimental-strip-types', 'infra/dev-stack/demo-smoke-run.ts'];
+    const result = spawnSync(process.execPath, args, { env, encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Demo smoke incomplete/u);
+    assert.equal(result.stdout, '');
+  }
+}
+test('smoke refuses missing, owner and invalid slots before loading settings', refusesUnsafeSlots);
