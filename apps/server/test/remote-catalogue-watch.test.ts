@@ -1,19 +1,21 @@
-import { PGlite } from '@electric-sql/pglite';
+import { databases } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history, readToolPolicy } from '@opencrane/models';
 import { remoteFixture } from '@opencrane/models/testing/remote-mcp';
-import { mcpCatalogue, pgliteDb } from '@opencrane/projections';
+import { mcpCatalogue, pgDb } from '@opencrane/projections';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { discoverInventory } from '../src/integrations/inventory.ts';
 import { remoteCatalogueWatch } from '../src/integrations/remote-catalogue-watch.ts';
 
 async function fixture(ttlMs = 600_000) {
   const nats = await natsFixture();
-  const engine = new PGlite();
-  const db = pgliteDb(engine);
+  const storage = await databases();
+  const db = pgDb(storage.queue);
   const remote = await remoteFixture();
   await mcpCatalogue.create(db);
   let description = 'Original';
+  let costCents: number | undefined = 0;
+  let action = 'Read';
   function reply(method: string) {
     const cache = { resultType: 'complete', ttlMs, cacheScope: 'public' };
     if (method === 'server/discover') {
@@ -21,39 +23,64 @@ async function fixture(ttlMs = 600_000) {
         _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1' } } };
     }
     return { ...cache, tools: [{ name: 'read', description, inputSchema: { type: 'object' },
-      _meta: { 'io.opencrane/costCents': 0, 'io.opencrane/review': {
-        action: 'Read', consequence: 'Reads a record', fields: [], stepUp: false,
+      _meta: { 'io.opencrane/costCents': costCents, 'io.opencrane/review': {
+        action, consequence: 'Reads a record', targetArgument: 'record',
+        fields: ['record'], stepUp: false,
       } } }] };
   }
   remote.respond(reply);
-  async function call(method: string) { return JSON.stringify(reply(method)); }
+  function call(method: string) {
+    const resultJson = JSON.stringify(reply(method));
+    return Promise.resolve(resultJson);
+  }
   async function append(serverId: string, type: string, data: unknown, silo = 'test') {
     const event = envelope(silo, `mcp-${serverId}`, type, data);
     const expectedSequence = await nats.store.head(event.subject);
     const result = await nats.store.append({ event, expectedSequence });
-    if (result.status !== 'appended') throw new Error('Fixture append failed');
+    if (result.status !== 'appended') {
+      throw new Error('Fixture append failed');
+    }
     await mcpCatalogue.apply(db, event, result.sequence);
   }
   async function register(serverId: string, silo = 'test') {
     await append(serverId, 'mcp.server_registered', { serverId, kind: 'remote',
       locator: 'https://mcp.example.test/mcp', registeredBy: 'admin' }, silo);
     const inventory = await discoverInventory(call);
+    expect(inventory.tools).toHaveLength(1);
     await append(serverId, 'mcp.server_discovered', { ...inventory, serverId,
       connectionId: `installed-${serverId}`, accountMode: 'none' }, silo);
   }
-  const requireLeader = vi.fn().mockResolvedValue(undefined);
+  const requireLeader = vi.fn();
+  requireLeader.mockResolvedValue(undefined);
   const watch = remoteCatalogueWatch(db, nats.store, 'test', requireLeader, remote.network);
   async function cleanup() {
     watch.close();
     vi.restoreAllMocks();
     vi.useRealTimers();
     await remote.close();
-    await engine.close();
+    await storage.close();
     await nats.close();
   }
   onTestFinished(cleanup);
-  return { nats, db, remote, watch, register, requireLeader,
-    change: function change() { description = 'Changed'; } };
+  function change(mode: string) {
+    if (mode === 'cost') {
+      costCents = undefined;
+    } else if (mode === 'details') {
+      action = 'Inspect';
+    } else if (mode === 'restore') {
+      description = 'Original';
+    } else {
+      description = 'Changed';
+    }
+  }
+  return { nats, db, remote, watch, register, requireLeader, change };
+}
+
+function expectHeld(watch: ReturnType<typeof remoteCatalogueWatch>, serverId: string) {
+  function requireCurrent() {
+    watch.requireCurrent(serverId);
+  }
+  expect(requireCurrent).toThrow();
 }
 
 async function lateRegistration() {
@@ -61,7 +88,7 @@ async function lateRegistration() {
   const { watch } = setup;
   await watch.check();
   await setup.register('late');
-  expect(() => watch.requireCurrent('late')).toThrow();
+  expectHeld(watch, 'late');
   const first = watch.check();
   expect(watch.check()).toBe(first);
   await first;
@@ -70,10 +97,11 @@ async function lateRegistration() {
   const before = await readToolPolicy(setup.nats.store, 'test', 'late');
   const start = Date.now();
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(start + 270_000);
-  await watch.check();
-  vi.setSystemTime(start + 310_000);
-  watch.requireCurrent('late');
+  for (let elapsed = 1000; elapsed <= 310_000; elapsed += 1000) {
+    vi.setSystemTime(start + elapsed);
+    await watch.check();
+    watch.requireCurrent('late');
+  }
   const after = await readToolPolicy(setup.nats.store, 'test', 'late');
   expect(after.policyRevision).toBe(before.policyRevision);
   expect(setup.remote.calls).toHaveLength(4);
@@ -84,7 +112,7 @@ async function lateRegistration() {
   }
   await setup.db.query('DELETE FROM mcp_catalogue WHERE server_id = $1', ['late']);
   await watch.check();
-  expect(() => watch.requireCurrent('late')).toThrow();
+  expectHeld(watch, 'late');
 }
 it('adds late registrations, shares captures, renews beyond five minutes and removes rows',
   lateRegistration);
@@ -97,19 +125,19 @@ async function boundedRows() {
   }
   await setup.watch.check();
   setup.watch.requireCurrent('server-00');
-  expect(() => setup.watch.requireCurrent('server-32')).toThrow();
-  expect(() => setup.watch.requireCurrent('foreign')).toThrow();
-  expect(() => setup.watch.requireCurrent('missing')).toThrow();
+  expectHeld(setup.watch, 'server-32');
+  expectHeld(setup.watch, 'foreign');
+  expectHeld(setup.watch, 'missing');
   expect(setup.remote.calls).toHaveLength(64);
 }
 it('bounds same-silo rows and refuses overflow, foreign and missing servers', boundedRows);
 
-async function heldWatch(mode: 'zero' | 'drift' | 'leader' | 'restart') {
+async function heldWatch(mode: 'zero' | 'drift' | 'cost' | 'details' | 'leader' | 'restart') {
   const setup = await fixture(mode === 'zero' ? 0 : 600_000);
   await setup.register('held');
   await setup.watch.check();
-  if (mode === 'drift') {
-    setup.change();
+  if (['drift', 'cost', 'details'].includes(mode)) {
+    setup.change(mode);
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(Date.now() + 270_000);
     await setup.watch.check();
@@ -125,9 +153,77 @@ async function heldWatch(mode: 'zero' | 'drift' | 'leader' | 'restart') {
     const replacement = remoteCatalogueWatch(setup.db, setup.nats.store, 'test',
       setup.requireLeader, setup.remote.network);
     onTestFinished(replacement.close);
-    expect(() => replacement.requireCurrent('held')).toThrow();
+    expectHeld(replacement, 'held');
   }
-  expect(() => setup.watch.requireCurrent('held')).toThrow();
+  expectHeld(setup.watch, 'held');
 }
-it.each(['zero', 'drift', 'leader', 'restart'] as const)(
+it.each(['zero', 'drift', 'cost', 'details', 'leader', 'restart'] as const)(
   'keeps remote calls held after %s', heldWatch);
+
+async function unavailableRows(mode: 'failed' | 'rows' | 'leader') {
+  const setup = await fixture();
+  await setup.register('held');
+  await setup.watch.check();
+  const before = await readToolPolicy(setup.nats.store, 'test', 'held');
+  const query = setup.db.query.bind(setup.db);
+  const rows = await query('SELECT silo, server_id, source_kind FROM mcp_catalogue');
+  const waiting = Promise.withResolvers<typeof rows>();
+  const reader = vi.spyOn(setup.db, 'query');
+  if (mode === 'leader') {
+    setup.requireLeader.mockReturnValue(waiting.promise);
+  } else if (mode === 'rows') {
+    reader.mockReturnValue(waiting.promise);
+  } else {
+    reader.mockRejectedValue(new Error('ROW_SECRET_CANARY'));
+  }
+  const checking = setup.watch.check();
+  const refused = expect(checking).rejects.toThrow('Catalogue rows unavailable');
+  if (mode !== 'failed') {
+    await Promise.resolve();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 5001);
+    expectHeld(setup.watch, 'held');
+    waiting.resolve(rows);
+  }
+  await refused;
+  expectHeld(setup.watch, 'held');
+  reader.mockRestore();
+  setup.requireLeader.mockResolvedValue(undefined);
+  await setup.watch.check();
+  const after = await readToolPolicy(setup.nats.store, 'test', 'held');
+  expect(after.policyRevision).toBeGreaterThan(before.policyRevision);
+  const saved = await history(setup.nats.store, 'mcp-held', 'test');
+  expect(JSON.stringify(saved)).not.toContain('ROW_SECRET_CANARY');
+}
+it.each(['failed', 'rows', 'leader'] as const)(
+  'invalidates old approvals after an unavailable row or leader check: %s',
+  unavailableRows);
+
+async function failedDriftAppend() {
+  const setup = await fixture();
+  await setup.register('held');
+  await setup.watch.check();
+  setup.change('drift');
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.now() + 270_000);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  async function refuseDrift(command: Parameters<typeof append>[0]) {
+    if (Reflect.get(command.event as object, 'type') === 'mcp.tools_changed') {
+      expectHeld(setup.watch, 'held');
+      throw new Error('Store unavailable');
+    }
+    return append(command);
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  writer.mockImplementation(refuseDrift);
+  await expect(setup.watch.check()).rejects.toThrow();
+  writer.mockRestore();
+  await setup.db.query("UPDATE mcp_catalogue SET source_kind = 'hosted'");
+  await setup.watch.check();
+  await setup.db.query("UPDATE mcp_catalogue SET source_kind = 'remote'");
+  setup.change('restore');
+  vi.setSystemTime(Date.now() + 5000);
+  await setup.watch.check();
+  expectHeld(setup.watch, 'held');
+}
+it('keeps an unsaved drift hold through row removal and an unchanged recapture', failedDriftAppend);

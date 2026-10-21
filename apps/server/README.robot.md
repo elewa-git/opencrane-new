@@ -1052,8 +1052,8 @@ Chromium at 1280/390px.
 These fixtures create disposable NATS/OpenFGA instances and private Postgres databases.
 They do not use the shared dev stack or a paid upstream.
 
-The model process ignores `MODEL_MCP_ROUTES`. Dispatch and catalogue watching use
-empty route lists until generation admission is connected. `CONVERSATION_KEYS_DIR`
+The model process ignores `MODEL_MCP_ROUTES`. Dispatch uses saved publication records. Catalogue watching reads bounded remote
+catalogue rows independently of the empty operator route list. `CONVERSATION_KEYS_DIR`
 still names the server's private directory for encrypted approval reviews.
 
 Read-only desktop sessions use `POST /api/conversations/:id/view` and
@@ -2846,20 +2846,23 @@ this part. Fresh-install qualification and paid calls are NOT RUN.
 
 ## Dispatch catalogue capture (#48 PR 3b, first split)
 
-`models-main.ts` starts the shared catalogue watch with no configured servers.
-`watch-capture.ts` sends only `server/discover` and `tools/list` to the operator's
-configured dispatch destination, with the configured generation and no caller credentials.
-It refuses redirects, sessions, invalid replies and responses over 4 MiB. It reuses
-`discoverInventory`: ten pages, 100 tools per page, 32 KiB per tool, 512 KiB of tool
-definitions and 900 KiB for the inventory. The watch bounds the whole attempt in time.
-Tool descriptions stay inside the exact saved definition; no Markdown, HTML or icons run.
+`models-main.ts` runs `remoteCatalogueWatch` under the budget leader. It polls at most
+32 discovered remote catalogue rows in this silo, ordered by server id, once per second.
+Registrations without discovery wait for the installer. Missing and overflow rows refuse calls.
+The existing PostgreSQL timeout is one second. Replies older than two seconds are rejected;
+five seconds without a completed row read holds calls even if the reader or timer stalls.
 
-This capture supports credential-free catalogues at the configured dispatch path only.
-A backend requiring a caller context for discovery, or advertising zero TTL, remains held.
-That includes the present memory backend; this change adds no memory or Odoo exception.
-Per-call capture for zero TTL, discovery credentials and hosted instance lifecycle wiring
-remain unfinished. A models-process restart always recaptures; this does not prove capture
-on every independently restarted MCP process. No live capability completion is claimed.
+Event history supplies the saved locator and credential-free connection. `remoteRequest`
+and `discoverInventory` check public DNS, pin addresses and verify hostname TLS. Production
+injects no resolver or CA. The shared watch keeps its 30-second attempt, inventory bounds,
+one capture per server and shortest discovery/page TTL, capped at 300000 ms.
+Unchanged, continuously fresh checks preserve policyRevision and waiting approvals.
+
+Removing a row aborts capture. Unfinished captures and unresolved drift holds retain their
+bounded slot. Restart, outages and leadership loss close calls; recovery invalidates old
+approvals before recapture and cannot clear drift or invent an acknowledgement.
+Zero-TTL per-use proof, discovery credentials, hosted lifecycle wiring and fresh Stage B
+qualification remain outside this source part.
 
 ## Publication preparation (P3-4 PR 2a; Part of #45)
 
@@ -3132,12 +3135,11 @@ only `gateway-config-<silo>`, delivers the latest current request and probes it 
 later ticks without rewriting it. The worker receives the root PostgreSQL `Db`
 for the shared per-silo preparation and replacement lock; it must not use the
 connection already holding the budget leadership lock. Restart creates a new process reference and
-requires another delivery and probe. Dispatch and catalogue watch receive empty
-route lists; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.
+requires another delivery and probe. Dispatch receives an empty operator route list; the catalogue watch reads remote rows; `MODEL_MCP_ROUTES` is ignored. No call is enabled by this worker.
 The worker's synchronous `acknowledged()` read is passed into dispatch options.
 It is empty before live confirmation and after the child exits or the worker closes.
 Authorisation and dispatch compare its generation and exact gateway stream position.
-Production dispatch routes remain empty until the guarded destination is connected.
+Published remote calls use their saved destination through the guarded HTTPS transport.
 
 ## Signed bridge gate delivery (P3-17 PR 2d; Part of #58)
 

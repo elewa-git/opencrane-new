@@ -2612,12 +2612,12 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   }
   const encoded = JSON.stringify(rows);
   expect(encoded).not.toContain('not_dispatched');
-  if (mode === 'lost_start') expect(remote.connections()).toBe(0);
-  if (['redirect', 'untrusted', 'wrong_name', 'lost_start'].includes(mode)) {
+  if (['lost_start', 'watch_final'].includes(mode)) expect(remote.connections()).toBe(0);
+  if (['redirect', 'untrusted', 'wrong_name', 'lost_start', 'watch_final'].includes(mode)) {
     expect(encoded).toContain('tool.dispatch_started');
   }
   if (['private', 'metadata', 'mixed', 'empty', 'undeclared', 'dns_timeout',
-    'permit_timeout'].includes(mode)) {
+    'permit_timeout', 'watch_admission'].includes(mode)) {
     expect(remote.connections()).toBe(0);
     expect(encoded).not.toContain('tool.dispatch_started');
     expect(encoded).not.toContain('mcp.dispatch_admitted');

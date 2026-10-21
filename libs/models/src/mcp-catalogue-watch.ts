@@ -20,19 +20,54 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
   }
   let stopped = false;
 
+  function reconcile(serverIds: string[]) {
+    const wanted = new Set(serverIds.slice(0, 32));
+    for (const [serverId, state] of servers) {
+      if (wanted.has(serverId)) {
+        continue;
+      }
+      state.monitored = false;
+      holdWatch(state);
+      state.controller?.abort();
+      // Keep unfinished captures and unsaved drift holds within the same bounded set.
+      if (!state.active && !state.driftHeld) {
+        servers.delete(serverId);
+      }
+    }
+    for (const serverId of wanted) {
+      const state = servers.get(serverId);
+      if (state) {
+        state.monitored = true;
+      } else if (servers.size < 32) {
+        servers.set(serverId, newWatch());
+      }
+    }
+  }
+
+  function checkDue(serverId: string) {
+    const state = servers.get(serverId);
+    if (!state || !state.monitored || state.failures >= 3 || Date.now() < state.nextCheck) {
+      return Promise.resolve();
+    }
+    return check(serverId);
+  }
+
   function requireCurrent(serverId: string) {
     const state = servers.get(serverId);
     if (state && state.expiresAt <= Date.now()) {
       holdWatch(state);
     }
-    if (stopped || !state || state.held || state.driftHeld || state.expiresAt <= Date.now()) {
+    if (stopped || !state || !state.monitored || state.held || state.driftHeld ||
+        state.expiresAt <= Date.now()) {
       throw new Error('MCP catalogue watch unavailable');
     }
   }
 
   function check(serverId: string): Promise<void> {
     const found = servers.get(serverId);
-    if (stopped || !found) return Promise.reject(new Error('Catalogue watch stopped'));
+    if (stopped || !found || !found.monitored) {
+      return Promise.reject(new Error('Catalogue watch stopped'));
+    }
     const state = found;
     if (state.active) return state.active;
     const controller = new AbortController();
@@ -158,14 +193,6 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     if (result.status !== 'appended') throw new Error('Catalogue failure append unconfirmed');
   }
 
-  function tick(onError: (error: unknown) => void) {
-    for (const [serverId, state] of servers) {
-      if (!stopped && !state.active && state.failures < 3 && Date.now() >= state.nextCheck) {
-        void check(serverId).catch(onError);
-      }
-    }
-  }
-
   function close() {
     stopped = true;
     for (const state of servers.values()) {
@@ -173,7 +200,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       state.controller?.abort();
     }
   }
-  return { check, requireCurrent, tick, close };
+  return { check, checkDue, reconcile, requireCurrent, close };
 }
 
 function refreshWatchState(state: ReturnType<typeof newWatch>,
@@ -201,7 +228,7 @@ function holdWatch(state: ReturnType<typeof newWatch>) {
 }
 
 function newWatch() {
-  return { held: true, holdCount: 0, driftHeld: false, driftSequence: 0,
+  return { monitored: true, held: true, holdCount: 0, driftHeld: false, driftSequence: 0,
     expiresAt: 0, nextCheck: 0, failures: 0,
     active: undefined as Promise<void> | undefined,
     controller: undefined as AbortController | undefined };

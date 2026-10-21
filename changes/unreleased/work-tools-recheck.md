@@ -1,0 +1,1 @@
+Registered remote tool servers keep their catalogues checked after startup. Missing or stale checks hold calls, and changes to definitions, declared cost or approval details hold dispatch before saving the change. Calls check the running watch again immediately before sending.

@@ -19,7 +19,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews of declared costs and approval details, dated approvals, memory, owners, providers, free reachability, spending and saved call statuses| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
-  models -->|checks remote HTTPS addresses and certificates; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks remote HTTPS addresses, certificates and the running catalogue watch; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -38,6 +38,8 @@ the first use time and adds another dated use; use alone never proves success.
 Approval cards include the turn they belong to. The chat hides decisions after that turn stops.
 
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
+Remote calls also need the running catalogue watch at admission and just before sending.
+A new hold refuses an already permitted call before it reaches the remote server.
 A change to the tools or their rules ends that approval. Saving a replacement publication
 also ends waiting and unused approvals for that server. Reloading another server keeps
 them valid. A gateway acknowledgement cannot revive an ended approval.
