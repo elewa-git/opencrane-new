@@ -30,7 +30,8 @@ function load(url, context, nextLoad) {
   `;
   return { ...result, source: prefix + result.source };
 }
-registerHooks({ load });
+const hooks = { load };
+registerHooks(hooks);
 globalThis.fetch = async function refuseNetwork() {
   appendFileSync(process.env['JOURNEY_RECORD'], 'network attempted\n');
   throw new Error('Network is unavailable in refusal fixtures');

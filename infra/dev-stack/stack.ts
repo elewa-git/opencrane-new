@@ -1,3 +1,5 @@
+import './stack-entry.ts';
+import { requireAutomatedJourney } from './journey-guard.ts';
 import { issueMinioLease } from './minio-tokens.ts';
 import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
@@ -77,7 +79,9 @@ async function rollbackOwnerStart(startup: OwnerStartup, previousMode: string | 
       failures.push(error);
     }
   }
-  async function processes() { await stopLaunchedProcesses(startup); }
+  async function processes() {
+    await stopLaunchedProcesses(startup);
+  }
   async function containers() {
     if (startup.containers.size) await compose('stop', ...startup.containers);
   }
@@ -92,7 +96,9 @@ async function rollbackOwnerStart(startup: OwnerStartup, previousMode: string | 
       await run('sudo', ['-n', 'tailscale', 'serve', '--https=443', 'off']);
     }
   }
-  async function mode() { await restoreProviderMode(previousMode); }
+  async function mode() {
+    await restoreProviderMode(previousMode);
+  }
   // Attempt every cleanup step, including restoration when another stop fails.
   await attempt(processes);
   await attempt(containers);
@@ -111,7 +117,9 @@ async function startOwnerReal(fresh: boolean) {
     abort: new AbortController(), processes: new Map(), containers: new Set(),
     namespaces: new Set(), serveStarted: false,
   };
-  function interrupt() { startup.abort.abort(new Error('Owner startup interrupted')); }
+  function interrupt() {
+    startup.abort.abort(new Error('Owner startup interrupted'));
+  }
   ownerStartup = startup;
   process.on('SIGINT', interrupt);
   process.on('SIGTERM', interrupt);
@@ -129,11 +137,20 @@ async function startOwnerReal(fresh: boolean) {
     process.off('SIGTERM', interrupt);
   }
 }
-async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
+async function run(command: string, args: string[],
+  env: Record<string, string> = base, timeout = 180_000) {
   checkStartupInterruption();
+  let commandArguments = args;
+  if (command === 'kubectl') commandArguments = ['--context=k3d-ocn', ...args];
+  const options = {
+    cwd: root, env, timeout, signal: ownerStartup?.abort.signal,
+    maxBuffer: 8 * 1024 * 1024,
+  };
   // Capture output in private files: database URLs and provider errors can contain secrets.
-  try { return (await exec(command, command === 'kubectl' ? ['--context=k3d-ocn', ...args] : args, { cwd: root, env, timeout, signal: ownerStartup?.abort.signal, maxBuffer: 8 * 1024 * 1024 })).stdout; }
-  catch (error) {
+  try {
+    const result = await exec(command, commandArguments, options);
+    return result.stdout;
+  } catch (error) {
     await save('last-error.log', String(error));
     throw new Error(`${command} failed; see the private last-error.log`);
   }
@@ -141,7 +158,8 @@ async function run(command: string, args: string[], env: Record<string, string> 
 async function compose(...args: string[]) {
   if (ownerStartup && args[0] === 'up') {
     const current = await compose('ps', '--services', '--status', 'running');
-    const running = new Set(current.trim().split('\n'));
+    const trimmed = current.trim();
+    const running = new Set(trimmed.split('\n'));
     for (const service of args.slice(1)) {
       if (!service.startsWith('-') && !running.has(service)) {
         ownerStartup.containers.add(service);
@@ -456,7 +474,7 @@ async function up(fresh: boolean) {
     if (secondary) await writeEnv('models', {});
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
-  await writeEnv('settings', settings);
+  if (!real) await writeEnv('settings', settings);
   // Create custody before Docker can create this mount as root.
   try {
     await mkdir(`${directory}/provider-secrets`, { recursive: true, mode: 0o700 });
@@ -689,6 +707,7 @@ async function up(fresh: boolean) {
   console.log(`Stack ready: ${origin}/org/integrations (Zitadel sign-in)`);
 }
 async function journey() {
+  requireAutomatedJourney();
   const settings = await readEnv('settings');
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
     { ...base, DEV_STACK_DIR: directory, DEV_REAL_PROVIDER: settings['DEV_REAL_PROVIDER'] ?? '0',

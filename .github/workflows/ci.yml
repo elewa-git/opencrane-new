@@ -59,6 +59,7 @@ jobs:
           infra/dev-stack/demo-seed.test.ts infra/dev-stack/demo-up.test.ts
           infra/dev-stack/demo-seed-run.test.ts
           infra/dev-stack/stack-real-mode.test.ts infra/dev-stack/fleet-task.test.ts
+          infra/dev-stack/stack-start.test.ts infra/dev-stack/journey-refusal.test.ts
           infra/dev-stack/zitadel-setup.test.ts infra/package/fresh-twice.test.ts
           infra/package/browser-capture.test.ts
 

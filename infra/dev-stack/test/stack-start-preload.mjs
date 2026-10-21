@@ -181,5 +181,6 @@ function load(url, context, nextLoad) {
   if (source !== undefined) return { format: 'module', source, shortCircuit: true };
   return nextLoad(url, context);
 }
-registerHooks({ resolve, load });
+const hooks = { resolve, load };
+registerHooks(hooks);
 snapshot();

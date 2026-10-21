@@ -17,6 +17,12 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 case "$stack_id" in owner) suffix= ;; 1|2) suffix=-$stack_id ;; *) echo 'Stack id must be owner, 1 or 2' >&2; exit 2 ;; esac
+if [ "$action" = journey ]; then
+  if [ "$stack_id" = owner ] || [ "${OPENCRANE_FLEET_TASK+x}" = x ]; then
+    echo 'Automated journeys require a secondary stack and no fleet task' >&2
+    exit 2
+  fi
+fi
 export DEV_STACK_ID="$stack_id"
 DEV_STACK_CLAIM_PID=${DEV_STACK_CLAIM_PID:-$$}
 export DEV_STACK_CLAIM_PID

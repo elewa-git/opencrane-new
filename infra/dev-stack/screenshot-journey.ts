@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import './journey-entry.ts';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';

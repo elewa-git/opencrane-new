@@ -1,3 +1,5 @@
+import './journey-entry.ts';
+import { requireJourneyProviderMode } from './journey-guard.ts';
 import { realModelJourney } from './real-model-journey.ts';
 import { uploadJourney } from './upload-journey.ts';
 import assert from 'node:assert/strict';
@@ -32,6 +34,7 @@ import { SandboxClient } from '../../apps/ops/src/kubernetes.ts';
 import { suspendComputer, type ComputerState } from '../../apps/ops/src/lifecycle.ts';
 
 const settings = await readEnv('settings');
+requireJourneyProviderMode(settings);
 const binding = await readEnv('binding');
 const config = loadAuthConfig(await authEnv());
 const silo = settings['SILO_ID']!;
@@ -450,7 +453,7 @@ try {
     authz.use('person', member, 'model', model.id), authz.use('assistant', computer!.assistant_id, 'model', model.id),
   ]))).every(result => result.allowed), 'new member and assistant model grants');
   console.log('PASS new member and assistant model grants reach OpenFGA before chat');
-  if (process.env['DEV_REAL_PROVIDER'] === '1') {
+  if (settings['DEV_REAL_PROVIDER'] === '1') {
     assert(secondary && browser);
     await realModelJourney(browser.ownerPage, browser.memberPages[0]!, origin, events.store, silo);
   } else {

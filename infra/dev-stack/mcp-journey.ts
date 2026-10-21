@@ -1,3 +1,4 @@
+import './journey-entry.ts';
 // Run after up with fresh or repeat. Replaces only this secondary HTTP process with
 // buildServer using the local HTTPS fixture transport; finish with down.sh --id.
 import assert from 'node:assert/strict';
@@ -11,7 +12,6 @@ import { connectMcpCatalogue, connectMemberFeed } from '@opencrane/projections';
 import { buildServer } from '../../apps/server/src/server.ts';
 import { attachWebSocketServer } from '../../apps/server/src/websocket.ts';
 import { remoteReference } from '../../apps/server/src/integrations/registration.ts';
-import { remoteFixture } from '../../apps/server/test/support/remote-mcp.ts';
 import { enterLoginName, testUsers } from './browser-signin.ts';
 import { authEnv, directory, readEnv, root } from './config.ts';
 import { secondary } from './identity.ts';
@@ -37,6 +37,7 @@ for (let attempt = 0; ; attempt++) {
 }
 await rm(`${directory}/server.pid`);
 
+const { remoteFixture } = await import('../../apps/server/test/support/remote-mcp.ts');
 const remote = await remoteFixture();
 const events = await connectEventStore(await readEnv('command'));
 const feed = await connectMemberFeed(server['DATABASE_URL']!);
