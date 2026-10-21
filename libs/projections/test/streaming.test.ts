@@ -40,7 +40,9 @@ function sourceFor(events: StoredEvent[]): EventSource {
   async function* subscribe(from: number) {
     await Promise.resolve();
     for (const event of events) {
-      if (event.sequence >= from) yield event;
+      if (event.sequence >= from) {
+        yield event;
+      }
     }
   }
   return { head, subscribe };
@@ -54,8 +56,12 @@ function delayedCommits(db: Db): Db {
     return result;
   }
   async function lock<Result>(name: string, work: (locked: Db) => Promise<Result>) {
-    if (!db.lock) return work(delayedCommits(db));
-    async function locked(connection: Db) { return work(delayedCommits(connection)); }
+    if (!db.lock) {
+      return work(delayedCommits(db));
+    }
+    async function locked(connection: Db) {
+      return work(delayedCommits(connection));
+    }
     return db.lock(name, locked);
   }
   return { query: db.query.bind(db), transaction, lock };
@@ -83,7 +89,6 @@ async function projectsLongReply() {
     expect(rows.map(rowData)).toEqual(events.map(storedData));
     expect(rows.at(-1)?.type).toBe('agent.turn_failed');
     expect(await runner.checkpoint(conversations)).toBe(events.length);
-    console.info('Reply projection milliseconds:', Math.round(elapsed));
     expect(elapsed).toBeLessThan(2000);
   } finally {
     await storage.close();
@@ -98,11 +103,15 @@ async function retriesFailedReplyBatch() {
   let fail = true;
   const projection = { ...conversations, apply, applyReplies };
   async function applyReplies(tx: Query, batch: StoredEvent[]) {
-    for (const stored of batch) await apply(tx, stored.event, stored.sequence);
+    for (const stored of batch) {
+      await apply(tx, stored.event, stored.sequence);
+    }
   }
   async function apply(tx: Query, event: EventEnvelope, position: number) {
     await conversations.apply(tx, event, position);
-    if (fail && position === 33) throw new Error('Reply projection interrupted');
+    if (fail && position === 33) {
+      throw new Error('Reply projection interrupted');
+    }
   }
   const logger = createLogger('streaming-test', { level: 'silent' });
   const runner = new ProjectionRunner(storage.db, sourceFor(events), logger);
@@ -147,16 +156,26 @@ async function duplicateReplyBatches() {
   } finally {
     await storage.close();
   }
-  function firstOccurrence(row: StoredEvent) { return row.sequence !== 3 && row.sequence !== 68; }
+  function firstOccurrence(row: StoredEvent) {
+    return row.sequence !== 3 && row.sequence !== 68;
+  }
 }
-function rowPosition(row: { position: number }) { return row.position; }
-function storedPosition(row: StoredEvent) { return row.sequence; }
+function rowPosition(row: { position: number }) {
+  return row.position;
+}
+function storedPosition(row: StoredEvent) {
+  return row.sequence;
+}
 
 it('keeps original positions and ignores duplicate ids within and across racing batches',
   duplicateReplyBatches, 30_000);
 
-function rowData(row: { data: unknown }) { return row.data; }
-function storedData(row: StoredEvent) { return row.event.data; }
+function rowData(row: { data: unknown }) {
+  return row.data;
+}
+function storedData(row: StoredEvent) {
+  return row.event.data;
+}
 
 async function rejectsInvalidMiddleDelta() {
   const storage = await database('pg');
