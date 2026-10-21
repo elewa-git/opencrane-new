@@ -2306,3 +2306,34 @@ async function movesRecipientDraftIntoCreatedChat(): Promise<void> {
 
 it('does not restore a sent recipient draft when starting another chat with the same person',
   movesRecipientDraftIntoCreatedChat);
+
+async function subscribesOnceAfterSending(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  await openExisting(fixture);
+  await settle(fixture);
+  const socketCount = api.sockets.length;
+  expect(api.sentSocketMessages).toHaveLength(1);
+  enterMessage(fixture, 'Confirm the delivery');
+  await waitForText(fixture, 'Message recorded.');
+  await settle(fixture);
+  expect(api.sockets).toHaveLength(socketCount);
+  expect(api.sentSocketMessages).toHaveLength(1);
+  fixture.destroy();
+}
+it('subscribes only once on a socket when a sent message refreshes history',
+  subscribesOnceAfterSending);
+
+async function reconnectsAfterBusyClose(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  await openExisting(fixture);
+  await settle(fixture);
+  const socket = api.sockets.at(-1);
+  socket?.onclose?.(new CloseEvent('close', { code: 1013 }));
+  fixture.detectChanges();
+  expect(root(fixture).textContent).toContain('Reconnecting');
+  expect(root(fixture).textContent).not.toContain('You no longer have access');
+  fixture.destroy();
+}
+it('shows reconnecting after a busy socket closes', reconnectsAfterBusyClose);
