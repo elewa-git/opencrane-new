@@ -85,3 +85,79 @@ set `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; these tests
 connect to PostgreSQL. No root suite or live journey ran. No stack was claimed or
 started, no model call was made, and the owner stack was untouched. Live qualification
 remains NOT RUN. The other test gaps and unfinished demo work remain as described above.
+
+## Interactive owner real mode
+
+21 October 2026. Part of #32. Overall: PARTIAL. This split implements the owner
+startup and seed guards. Source: `00fff28ef4d257b1f1bbd9b121a22fb6e8656a25`.
+Only this receipt follows that source. The complete PDF, ceilings, warm-up and timed rehearsal
+need a separate change to stay within the requested small-change limit.
+
+Base: `523fc7218`, which includes the real-provider switch, demo seed and refreshed
+computer image. Startup test commit `337b51728` failed before the implementation:
+owner mode was refused and the new flag was not accepted. Test commit `ad457a8e3`
+recorded two more failures: owner seed loaded configuration from a non-interactive
+process, and the fleet launcher did not supply its marker. Test commit `dadb7ce33`
+then showed that an unmarked headless stand-in start could still reach setup.
+The fix refuses that case before reading or creating owner data.
+
+The explicit startup flag now requires TTY stdin and refuses any fleet marker,
+including an empty one. The seed applies the same checks before loading owner
+configuration. Fleet children inherit a marker. Real owner startup does not start
+or require the stand-in model. Provider setup still takes a file path and uses the
+existing product API. No event, API, dependency, access check or money rule changed.
+
+Recording fixtures use temporary homes, synthetic credentials, replacement system
+commands and a replacement HTTP boundary. Terminal cases use a disposable pseudo-terminal.
+They cannot reach owner services. Accepted startup stops at the fake Tailscale command;
+it does not prove that a real owner install starts. Tests cover shell flag forwarding,
+fresh and saved real mode, non-interactive refusal, fleet refusal with a terminal,
+seed refusal before configuration and successful seed requests to the recording API.
+
+No live owner command ran. The owner stack, port 44200 and owner data were untouched.
+No secondary slot was claimed, started or released. Temporary fixture files were removed.
+Paid calls by this task: **0; charged 0 cents; held 0 cents**. No daily allowance was used.
+The owner refresh still needs a qualified merged SHA. The guide no longer describes
+owner real mode or the refreshed image as missing; it keeps the remaining live gates.
+
+| Live smoke step | First run | Second run |
+| --- | --- | --- |
+| Warm-up | NOT RUN | NOT RUN |
+| Streaming and reload | NOT RUN | NOT RUN |
+| Scanned PDF facts, preview and download | NOT RUN | NOT RUN |
+| Stop persistence with the real provider | NOT RUN | NOT RUN |
+| Direct delivery | NOT RUN | NOT RUN |
+| Shared-assistant reply | NOT RUN | NOT RUN |
+| Company-limit refusal and restore | NOT RUN | NOT RUN |
+| Complete warm smoke within three minutes | NOT RUN | NOT RUN |
+| Screenshots at 1280 and 390 pixels | NOT RUN | NOT RUN |
+
+Owner refresh, owner real replies, laptop tunnel and real phone access: NOT RUN.
+The earlier stand-in Stop evidence does not qualify Stop with a real model.
+
+All commands below used `nice -n 10`. Node fixtures and event security tests used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; they do not connect
+to PostgreSQL. No database container or full root suite was needed for this slice.
+`npm ci` ran in this worktree, and its NATS and Lychee tools are symlinks to the
+requested checkout. Local check logs are in `/tmp/demo-kit-2-checks/` on the builder host.
+
+| Own check | Result | Duration |
+| --- | --- | --- |
+| `npm ci` | PASS | 26 seconds |
+| Changed and related recording tests, two final runs | PASS; 31 each | 95.61 / 83.29 seconds |
+| Event security rules, unchanged | PASS; 438 tests | 4.88 seconds |
+| Workspace and package typecheck | PASS | 308.58 seconds |
+| Focused TypeScript for seed, guard and changed tests | PASS | 20.88 seconds |
+| Event catalogue | PASS; 149 types | Not timed |
+| Knip | PASS | Not timed |
+| Markdown and changelog checks | PASS | Not timed |
+| Shell syntax, diff whitespace and secret scan | PASS | Not timed |
+| Relocated fleet fixture, two runs | PASS; one each | 0.42 / 0.47 seconds |
+| Initial full lint | FAIL: test outside a TypeScript project | 614.30 seconds |
+| Full lint after moving the fixture | PARTIAL; running at this snapshot | — |
+| Pushed-commit GitHub `ci-ok` | NOT RUN at this snapshot | — |
+
+The fleet test now lives beside the existing dev-stack command fixtures, and CI
+runs it there. The focused TypeScript check passed again after the move. No lint
+rule or project exclusion was changed. The draft PR records the final full-lint
+result and CI result on its pushed commit.
