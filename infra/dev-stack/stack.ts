@@ -32,21 +32,132 @@ const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files'
 if (memoryKeyDirectory) {
   names.push('memory');
 }
+type OwnerStartup = {
+  abort: AbortController;
+  processes: Map<number, string | undefined>;
+  containers: Set<string>;
+  namespaces: Set<string>;
+  serveStarted: boolean;
+};
+let ownerStartup: OwnerStartup | undefined;
+
+function checkStartupInterruption() {
+  ownerStartup?.abort.signal.throwIfAborted();
+}
+
+async function restoreProviderMode(previousMode: string | undefined) {
+  if (!await exists(`${directory}/settings.env`)) return;
+  const settings = await readEnv('settings');
+  if (previousMode === undefined) {
+    delete settings['DEV_REAL_PROVIDER'];
+  } else {
+    settings['DEV_REAL_PROVIDER'] = previousMode;
+  }
+  await writeEnv('settings', settings);
+}
+
+async function stopLaunchedProcesses(startup: OwnerStartup) {
+  for (const [pid, started] of startup.processes) {
+    const current = await fingerprint(pid);
+    if (!current || (started !== undefined && current !== started)) continue;
+    process.kill(-pid, 'SIGTERM');
+    async function stopped() {
+      return await fingerprint(pid) !== current;
+    }
+    await wait(stopped, 'started process');
+  }
+}
+
+async function rollbackOwnerStart(startup: OwnerStartup, previousMode: string | undefined) {
+  const failures: unknown[] = [];
+  async function attempt(operation: () => Promise<unknown>) {
+    try {
+      await operation();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  async function processes() { await stopLaunchedProcesses(startup); }
+  async function containers() {
+    if (startup.containers.size) await compose('stop', ...startup.containers);
+  }
+  async function namespaces() {
+    if (startup.namespaces.size) {
+      await run('kubectl', ['delete', 'namespace', ...startup.namespaces,
+        '--ignore-not-found', '--wait=true', '--timeout=180s']);
+    }
+  }
+  async function serve() {
+    if (startup.serveStarted) {
+      await run('sudo', ['-n', 'tailscale', 'serve', '--https=443', 'off']);
+    }
+  }
+  async function mode() { await restoreProviderMode(previousMode); }
+  // Attempt every cleanup step, including restoration when another stop fails.
+  await attempt(processes);
+  await attempt(containers);
+  await attempt(namespaces);
+  await attempt(serve);
+  await attempt(mode);
+  if (failures.length) throw new AggregateError(failures, 'Owner startup cleanup incomplete');
+}
+
+async function startOwnerReal(fresh: boolean) {
+  let previousMode: string | undefined;
+  if (await exists(`${directory}/settings.env`)) {
+    previousMode = (await readEnv('settings'))['DEV_REAL_PROVIDER'];
+  }
+  const startup: OwnerStartup = {
+    abort: new AbortController(), processes: new Map(), containers: new Set(),
+    namespaces: new Set(), serveStarted: false,
+  };
+  function interrupt() { startup.abort.abort(new Error('Owner startup interrupted')); }
+  ownerStartup = startup;
+  process.on('SIGINT', interrupt);
+  process.on('SIGTERM', interrupt);
+  try {
+    await up(fresh);
+    checkStartupInterruption();
+  } catch (error) {
+    // Finish startup before cleanup so an interrupted operation cannot restart a service.
+    ownerStartup = undefined;
+    await rollbackOwnerStart(startup, previousMode);
+    throw error;
+  } finally {
+    ownerStartup = undefined;
+    process.off('SIGINT', interrupt);
+    process.off('SIGTERM', interrupt);
+  }
+}
 async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
+  checkStartupInterruption();
   // Capture output in private files: database URLs and provider errors can contain secrets.
-  try { return (await exec(command, command === 'kubectl' ? ['--context=k3d-ocn', ...args] : args, { cwd: root, env, timeout, maxBuffer: 8 * 1024 * 1024 })).stdout; }
+  try { return (await exec(command, command === 'kubectl' ? ['--context=k3d-ocn', ...args] : args, { cwd: root, env, timeout, signal: ownerStartup?.abort.signal, maxBuffer: 8 * 1024 * 1024 })).stdout; }
   catch (error) {
     await save('last-error.log', String(error));
     throw new Error(`${command} failed; see the private last-error.log`);
   }
 }
 async function compose(...args: string[]) {
+  if (ownerStartup && args[0] === 'up') {
+    const current = await compose('ps', '--services', '--status', 'running');
+    const running = new Set(current.trim().split('\n'));
+    for (const service of args.slice(1)) {
+      if (!service.startsWith('-') && !running.has(service)) {
+        ownerStartup.containers.add(service);
+      }
+    }
+  }
   return run('docker', ['compose', '--project-name', project, '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml', ...(secondary ? ['-f', 'infra/dev-stack/compose.secondary.yaml'] : []), ...args]);
 }
 async function wait(check: () => Promise<boolean>, name: string) {
   // Allow two minutes for secondary startup on the shared host.
   for (let i = 0; i < (secondary ? 240 : 120); i++) {
-    if (await check()) return;
+    checkStartupInterruption();
+    if (await check()) {
+      checkStartupInterruption();
+      return;
+    }
     await delay(500);
   }
   throw new Error(`Timed out waiting for ${name}`);
@@ -156,13 +267,16 @@ async function slotIsFree() {
   return !await stackProcessIsRunning();
 }
 async function start(name: string, args: string[], env: Record<string, string>) {
+  checkStartupInterruption();
   if (await processId(name)) return;
   const log = await open(`${directory}/${name}.log`, 'a', 0o600);
   try {
     const child = spawn(process.execPath, args, { cwd: name === 'web' ? `${root}/apps/web` : root, env: { ...base, ...(secondary ? { NODE_OPTIONS: `--max-old-space-size=${name === 'web' ? 768 : 256}` } : {}), ...env }, detached: true,
       stdio: ['ignore', log.fd, log.fd] });
+    if (child.pid) ownerStartup?.processes.set(child.pid, undefined);
     await once(child, 'spawn');
     const pid = child.pid!;
+    ownerStartup?.processes.set(pid, await fingerprint(pid));
     if (name === 'web') {
       const niceValue = await processNiceValue(pid);
       // Avoid changing a priority the parent already lowered for this web process.
@@ -259,6 +373,7 @@ async function provisionComputers(settings: Record<string, string>) {
     await save('quota.json', JSON.stringify(quota));
   }
   if (!(await run('kubectl', ['get', 'namespace', namespace, '--ignore-not-found', '-o', 'name'])).trim()) {
+    ownerStartup?.namespaces.add(namespace);
     await run('kubectl', ['create', 'namespace', namespace]);
   }
   if (secondary) {
@@ -273,6 +388,7 @@ async function provisionComputers(settings: Record<string, string>) {
   // only accepts Pods that match the computer template.
   const gatewayNamespace = `${namespace}-gateway`;
   if (!(await run('kubectl', ['get', 'namespace', gatewayNamespace, '--ignore-not-found', '-o', 'name'])).trim()) {
+    ownerStartup?.namespaces.add(gatewayNamespace);
     await run('kubectl', ['create', 'namespace', gatewayNamespace]);
   }
   let modelHost = `host.k3d.internal:${settings['MODEL_GATEWAY_PORT'] ?? '43000'}`;
@@ -340,7 +456,6 @@ async function up(fresh: boolean) {
     if (secondary) await writeEnv('models', {});
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
-  if (real) settings['DEV_REAL_PROVIDER'] = '1';
   await writeEnv('settings', settings);
   // Create custody before Docker can create this mount as root.
   try {
@@ -523,6 +638,11 @@ async function up(fresh: boolean) {
     await startModels();
     console.log('PASS provider setup: switched on managed calls');
   }
+  checkStartupInterruption();
+  if (real) {
+    settings['DEV_REAL_PROVIDER'] = '1';
+    await writeEnv('settings', settings);
+  }
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
     '--port', settings['WEB_PORT']!, '--proxy-config', `${directory}/proxy.json`], { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname, ...(secondary ? { NG_BUILD_MAX_WORKERS: '2' } : {}) });
   await wait(() => healthy(`http://127.0.0.1:${settings['WEB_PORT']}/org/integrations`), 'web');
@@ -530,6 +650,7 @@ async function up(fresh: boolean) {
     const ownership = await serveOwnership(settings);
     if (ownership === 'foreign') throw new Error(`Refusing to replace HTTPS :443 Serve handler: expected ${origin} to map to 127.0.0.1:${settings['WEB_PORT']}`);
     if (ownership === 'absent') {
+      if (ownerStartup) ownerStartup.serveStarted = true;
       await run('sudo', ['-n', 'tailscale', 'serve', '--bg', '--https=443', `http://127.0.0.1:${settings['WEB_PORT']}`]);
     }
   }
@@ -694,7 +815,13 @@ try {
     prepared = directoryPresent;
   }
   switch (action) {
-    case 'up': await up(flags.includes('--fresh')); break;
+    case 'up':
+      if (!secondary && process.env['DEV_REAL_PROVIDER_FILE'] !== undefined) {
+        await startOwnerReal(flags.includes('--fresh'));
+      } else {
+        await up(flags.includes('--fresh'));
+      }
+      break;
     case 'down':
       if (!directoryPresent) {
         if (secondary) console.log('free');
