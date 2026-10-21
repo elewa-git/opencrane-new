@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { dirname } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { readEventAt, type StoredEvent, type AppendCommand } from '@opencrane/event-store';
+import { readEventAt, wireSubject, type StoredEvent, type AppendCommand } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { countReads, event as fixtureEvent, expectNoWholeReads,
   natsFixture } from '@opencrane/event-store/testing';
@@ -9,7 +9,7 @@ import { conversationKeys } from '../src/chat/keys.ts';
 import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
-import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { readChatCommandFacts, readChatFacts } from '../src/chat/chat-summary.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let keys: ReturnType<typeof conversationKeys>;
@@ -396,3 +396,52 @@ async function keepsChatCommandsSeparateFromInvalidMemoryEvidence() {
 }
 it('allows chat and Stop commands while strict memory reads still reject late evidence',
   keepsChatCommandsSeparateFromInvalidMemoryEvidence);
+
+async function refusesAnOldReportId(operation: 'message' | 'stop', warm: boolean) {
+  await setup();
+  const oldReport = event('old-report', 'agent.output_lost', {
+    conversationId: 'chat', turnId: 'message',
+  });
+  // Publish without a broker duplicate entry, as after the duplicate window expires.
+  await nats.connection.request(wireSubject(subject), JSON.stringify(oldReport));
+  if (warm) await readChatFacts(nats.store, 'test', 'chat', 'message');
+  const before = await chatHistory(nats.store, 'test', 'chat');
+  const commandContext = { silo: 'test', memberId: 'admin' };
+  let input;
+  if (operation === 'stop') {
+    input = { id: oldReport.id, conversationId: 'chat', stopTurnId: 'message' };
+  } else {
+    input = { id: oldReport.id, conversationId: 'chat', text: 'Next request' };
+  }
+  await expect(chatCommand(nats.store, keys, commandContext, input)).rejects.toThrow('Id reused');
+  expect(await chatHistory(nats.store, 'test', 'chat')).toEqual(before);
+}
+it.each(['message', 'stop'] as const)(
+  'refuses a %s reusing an old report id with a cold summary',
+  refusesAnOldReportIdWithColdSummary);
+async function refusesAnOldReportIdWithColdSummary(operation: 'message' | 'stop') {
+  await refusesAnOldReportId(operation, false);
+}
+it.each(['message', 'stop'] as const)(
+  'refuses a %s reusing an old report id with a warm summary',
+  refusesAnOldReportIdWithWarmSummary);
+async function refusesAnOldReportIdWithWarmSummary(operation: 'message' | 'stop') {
+  await refusesAnOldReportId(operation, true);
+}
+
+async function keepsTheFirstCommandPosition() {
+  await setup();
+  const original = await readChatCommandFacts(nats.store, 'test', 'chat', 'message');
+  const repeated = event('message', 'message.posted', {
+    conversationId: 'chat', authorId: 'admin', authorKind: 'human', contentType: 'text',
+    ...keys.encrypt('test', 'chat', 'Changed request'),
+  });
+  await nats.connection.request(wireSubject(subject), JSON.stringify(repeated));
+  const warm = await readChatCommandFacts(nats.store, 'test', 'chat', 'message');
+  expect(warm.sequence).toBeGreaterThan(original.sequence);
+  expect(warm.position).toBe(original.position);
+  const cold = await readChatCommandFacts(nats.reader, 'test', 'chat', 'message');
+  expect(cold.position).toBe(original.position);
+}
+it('keeps the first command position when stored history repeats its id',
+  keepsTheFirstCommandPosition);
