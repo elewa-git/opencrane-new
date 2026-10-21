@@ -5,7 +5,7 @@ import { until } from '@opencrane/authz/testing';
 import { record } from '../src/http.ts';
 import { fixture } from './bridge-gate-fixture.ts';
 
-async function stopsWhileReplayingAStreamingReply() {
+async function stopsWhileReplayingAStreamingReply(piece: string) {
   const computer = await fixture();
   const saved = new Map<number, Record<string, unknown>>();
   const closed = Promise.withResolvers<void>();
@@ -13,12 +13,14 @@ async function stopsWhileReplayingAStreamingReply() {
   let streaming = true;
   let pieces = 0;
   let outstanding = 0;
+  let outstandingBytes = 0;
+  let streamingAtStop = false;
   let stopSent = false;
   const rpc = computer.driver.rpc.bind(computer.driver);
   function replyPiece() {
     if (!streaming) return;
     pieces++;
-    const params = { threadId: 'thread-1', itemId: 'reply', delta: 'partial ' };
+    const params = { threadId: 'thread-1', itemId: 'reply', delta: piece };
     computer.channel.notification({ method: 'item/agentMessage/delta', params });
   }
   function modelRpc(method: string, params: Record<string, unknown>) {
@@ -44,7 +46,7 @@ async function stopsWhileReplayingAStreamingReply() {
     computer.pauseAcks();
     const socket = await computer.connect(false);
     function stop() {
-      expect(streaming).toBe(true);
+      streamingAtStop = streaming;
       const frame = { type: 'stop', turnId: 'first', conversationId: 'first' };
       socket.send(JSON.stringify(frame));
     }
@@ -53,14 +55,16 @@ async function stopsWhileReplayingAStreamingReply() {
       const sequence = report['sequence'];
       if (typeof sequence !== 'number') return;
       outstanding++;
+      outstandingBytes += bytes.length;
       // Match the server's bounded queue, with asynchronous persistence still in progress.
-      if (outstanding > 64) {
+      if (outstanding > 64 || outstandingBytes > 1_048_576) {
         socket.close(1013, 'Report queue limit');
         return;
       }
       function persist() {
         timers.delete(timer);
         outstanding--;
+        outstandingBytes -= bytes.length;
         if (socket.readyState !== socket.OPEN) return;
         saved.set(sequence, report);
         const ack = { type: 'ack', sequence, token: 'fresh', expiresAt: Date.now() + 60_000 };
@@ -79,6 +83,7 @@ async function stopsWhileReplayingAStreamingReply() {
     socket.send(JSON.stringify({ type: 'resume', since: 1 }));
     const expired = delay(2000);
     await Promise.race([closed.promise, expired]);
+    expect(streamingAtStop).toBe(true);
     expect(streaming, 'Stop reaches the model while reports are being saved').toBe(false);
     function isClosure(report: Record<string, unknown>) {
       return report['type'] === 'agent.turn_failed';
@@ -89,7 +94,7 @@ async function stopsWhileReplayingAStreamingReply() {
     for (const report of saved.values()) {
       if (report['type'] === 'agent.message_delta') partial += String(report['text']);
     }
-    expect(partial).toBe('partial '.repeat(pieces));
+    expect(partial).toBe(piece.repeat(pieces));
   } finally {
     clearInterval(producer);
     for (const timer of timers) clearTimeout(timer);
@@ -97,5 +102,6 @@ async function stopsWhileReplayingAStreamingReply() {
   }
 }
 
-it('closes a stopped turn within two seconds while replay and streaming reports arrive',
+it.each(['partial ', 'p'.repeat(64_000)])(
+  'closes a stopped turn within two seconds while replay and streaming reports arrive',
   stopsWhileReplayingAStreamingReply);

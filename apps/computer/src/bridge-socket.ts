@@ -249,23 +249,60 @@ export function bridgeSocket(
   replayReports: (since: number, send: (report: BridgeReport) => void) => void,
   approvals?: ReturnType<typeof approvalHolds>,
 ) {
-  function send(report: BridgeReport) {
+  const pending = new Map<number, BridgeReport>();
+  const inFlight = new Map<number, number>();
+  let inFlightBytes = 0;
+
+  function flushReports() {
     const socket = state.socket;
-    if (!state.resumed || !socket || socket.readyState !== socket.OPEN) {
-      return;
+    if (!state.resumed || !socket || socket.readyState !== socket.OPEN) return;
+    // Leave room below the server's 64-report limit so Stop can share this connection.
+    for (const [sequence, report] of pending) {
+      if (inFlight.size >= 32) return;
+      if (socket.bufferedAmount > 1_048_576) {
+        socket.close(1013);
+        return;
+      }
+      const frame = JSON.stringify(wireReport(report));
+      const bytes = Buffer.byteLength(frame);
+      if (inFlightBytes + bytes > 524_288 && inFlight.size > 0) return;
+      pending.delete(sequence);
+      inFlight.set(sequence, bytes);
+      inFlightBytes += bytes;
+      socket.send(frame);
     }
-    if (socket.bufferedAmount > 1_048_576) {
-      socket.close(1013);
-      return;
-    }
-    socket.send(JSON.stringify(wireReport(report)));
   }
+
+  function send(report: BridgeReport) {
+    if (!state.resumed || inFlight.has(report.sequence)) return;
+    pending.set(report.sequence, report);
+    flushReports();
+  }
+
+  function acknowledge(sequence: unknown, value?: Record<string, unknown>) {
+    runner.acknowledge(sequence, value);
+    if (typeof sequence !== 'number') return;
+    inFlightBytes -= inFlight.get(sequence) ?? 0;
+    inFlight.delete(sequence);
+    flushReports();
+  }
+
+  const pacedRunner: TurnRunnerPort = {
+    gate: runner.gate,
+    stopBridge: runner.stopBridge.bind(runner),
+    start: runner.start.bind(runner),
+    interrupt: runner.interrupt.bind(runner),
+    acknowledge,
+  };
 
   function resume(since: unknown) {
     if (typeof since !== 'number' || !Number.isSafeInteger(since) || since < 0
       || since > reportCount()) {
       throw new Error('Sequence gap');
     }
+    pending.clear();
+    inFlight.clear();
+    inFlightBytes = 0;
     state.resumed = true;
     replayReports(since, send);
   }
@@ -285,7 +322,8 @@ export function bridgeSocket(
     maxPayload: 128 * 1024,
     verifyClient,
   });
-  const handleConnection = installConnectionHandler(accepted, state, driver, runner, resume, approvals);
+  const handleConnection = installConnectionHandler(accepted, state, driver, pacedRunner,
+    resume, approvals);
   function advertiseSupport(headers: string[]) {
     if (approvals) headers.push('x-opencrane-approval-waiting: true');
   }
