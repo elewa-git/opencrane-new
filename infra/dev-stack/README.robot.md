@@ -398,7 +398,9 @@ The shared-assistant check adds a model grant to the disposable event store so t
 group can create an assistant. The member starts a private session with it. The direct
 chat sends one message each way and reads the conversation stream to check message
 order. The direct checks count model admission, computer and budget events before and after
-the exchange, so they also run with real providers.
+the exchange, so they also run with real providers. Both chat checks read again for
+up to fifteen seconds when a saved change moves the list (409) or is still applying
+(425). Other HTTP failures stop the check; no write is repeated.
 
 The separate full browser check, excluded from nightly and rehearsals, saves the text
 `journey-placeholder-not-a-provider-key`. It is a

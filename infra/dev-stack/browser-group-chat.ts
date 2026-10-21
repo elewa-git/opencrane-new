@@ -340,10 +340,21 @@ function isKnownConversation(ids: Set<string>, row: ConversationRow): boolean {
 }
 
 export async function readConversations(page: Page, origin: string): Promise<ConversationRow[]> {
-  const response = await page.request.get(`${origin}/api/conversations`);
-  assert.equal(response.status(), 200);
-  const body = await response.json() as { rows: ConversationRow[] };
-  return body.rows;
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const timeout = Math.max(1, deadline - Date.now());
+    const requestOptions = { timeout };
+    const response = await page.request.get(`${origin}/api/conversations`, requestOptions);
+    const status = response.status();
+    if (status === 409 || status === 425) {
+      await delay(250);
+      continue;
+    }
+    assert.equal(status, 200);
+    const body = await response.json() as { rows: ConversationRow[] };
+    return body.rows;
+  }
+  throw new Error('The conversation list did not settle within fifteen seconds');
 }
 
 async function readConversation(page: Page, origin: string,

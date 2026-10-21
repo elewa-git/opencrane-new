@@ -19,7 +19,7 @@ export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
 export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
 export DEMO_ALLOWANCE_CENTS=500
 export COMPUTER_IDLE_MS=14400000
-export P4_JOURNEY_ATTEMPT=demo-rehearsal-r2a
+export P4_JOURNEY_ATTEMPT=demo-rehearsal-final-a
 infra/dev-stack/up.sh --id 1 --fresh
 node --experimental-strip-types infra/dev-stack/demo-seed-run.ts
 node --experimental-strip-types infra/dev-stack/demo-smoke-run.ts
@@ -27,7 +27,7 @@ node --experimental-strip-types infra/dev-stack/demo-pages.ts
 infra/dev-stack/down.sh --id 1
 ```
 
-The second run uses `demo-rehearsal-r2b`. Only product provider setup reads the
+The second run uses `demo-rehearsal-final-b`. Only product provider setup reads the
 paid file. Its value is never printed. Failed proof is copied before cleanup.
 
 ## Fresh-install results
@@ -61,8 +61,9 @@ Startup exited 1 on each attempt; the kit seed and smoke were NOT RUN.
 | [688be242a](failed-688be242a/receipt.json) | Second synthetic colleague's HTTP join returned 409 | 13 | 16 |
 | [c96931aad](failed-c96931aad/receipt.json) | Replay restarted the server before an offline rebuild | 13 | 16 |
 | [abacbe417](failed-abacbe417/receipt.json) | Group display timed out; new history check used the wrong event name | 29 | 51 |
+| [85714c511](failed-85714c511/receipt.json) | Journey read asserted 200 during a documented moving list | 13 | 17 |
 
-The four attempts total 168 cents including holds. The first two passed the real
+The five attempts total 198 cents including holds. The first two passed the real
 streaming, Stop, member and PDF checks. The third also passed seven group checks,
 including zero AI/computer/budget work and access clearing within two seconds.
 [The first failure picture](failed-b3c4c4075/private-reply-390.png) shows the real answer.
@@ -70,8 +71,8 @@ including zero AI/computer/budget work and access clearing within two seconds.
 
 ## Source checks
 
-- PASS: failing-first commits `4e7669ba7`, `4a298440b` and `d39698e9f` precede their fixes.
-- PASS: 24 focused Node tests twice; 17 owner/mode refusal tests twice; changed scripts compile.
+- PASS: failing-first commits `4e7669ba7`, `4a298440b` and `d39698e9f` and `5f1f03943` precede their fixes.
+- PASS: 25 focused Node tests twice; 17 owner/mode refusal tests twice; changed scripts compile.
 - PASS: required lint and workspace typecheck; event catalogue, Knip and changelog checks.
 - PASS: 438 event-security tests with the supplied `PG_TEST_URL`.
 - FAIL: an additional compiler check across every dev-stack script found existing errors in

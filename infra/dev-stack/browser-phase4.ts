@@ -11,6 +11,7 @@ import { grantStream } from '@opencrane/authz';
 import { models, ownershipSubject } from '@opencrane/models';
 import { modelForTask } from '@opencrane/models/routing';
 import { readEvents } from '@opencrane/projections';
+import { readConversations } from './browser-group-chat.ts';
 
 export type Phase4Status = 'PASS' | 'FAIL' | 'NOT PROVEN' | 'PAID / NOT RUN';
 export type Phase4Assertion = {
@@ -787,10 +788,8 @@ function matchesColleagueId(colleague: { memberId: string }): boolean {
 }
 
 async function directConversations(page: Page): Promise<DirectConversation[]> {
-  const response = await page.request.get(`${new URL(page.url()).origin}/api/conversations`);
-  assert.equal(response.status(), 200);
-  const body = await response.json() as { rows: DirectConversation[] };
-  return body.rows;
+  const origin = new URL(page.url()).origin;
+  return readConversations(page, origin);
 }
 
 function matchesParticipants(first: string, second: string, row: DirectConversation): boolean {
