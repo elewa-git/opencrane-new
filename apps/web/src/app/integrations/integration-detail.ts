@@ -1,5 +1,10 @@
+import { initialToolPolicy } from '../tool-policy/tool-policy-choices';
+import { isReadyPublication, isRecord, isOlderPublication, savedSequence }
+  from './publication-ready';
+import { AddFlowSteps } from './add-flow-steps';
+import { InitialReviewConfirmation } from './initial-review-confirmation';
 import {
-  ChangeDetectionStrategy, Component, computed, input, signal,
+  ChangeDetectionStrategy, Component, computed, input, output, signal,
   type OnDestroy, type OnInit,
 } from '@angular/core';
 import {
@@ -12,7 +17,7 @@ import { IntegrationsAccessLost } from './integrations-access-lost';
 import { IntegrationFacts } from './integration-facts';
 import { buildIntegrationFacts, type ToolsReadState } from './integration-facts-map';
 import { needsReview } from './integration-status';
-import { compareToolCatalogues } from './tool-changes';
+import { compareToolCatalogues, initialToolMode } from './tool-changes';
 import { reviewCommand } from './review-command';
 
 type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
@@ -21,13 +26,16 @@ type ChangeState = 'loading' | 'disabled' | 'reviewing' | 'publishing' | 'applyi
 
 @Component({
   selector: 'oc-integration-detail',
-  imports: [SharedState, GrainLoader, IntegrationsAccessLost, IntegrationFacts],
+  imports: [SharedState, GrainLoader, IntegrationsAccessLost, IntegrationFacts,
+    InitialReviewConfirmation, AddFlowSteps],
   templateUrl: './integration-detail.html',
   styleUrl: './integration-detail.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class IntegrationDetail implements OnInit, OnDestroy {
   readonly serverId = input.required<string>();
+  readonly initialPolicy = input<ToolPolicy>();
+  readonly accessEnded = output<Response>();
   readonly view = input<'detail' | 'changes'>('detail');
   protected readonly row = signal<IntegrationRow | undefined>(undefined);
   protected readonly policy = signal<ToolPolicy | undefined>(undefined);
@@ -77,7 +85,8 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   protected canReviewChanges(): boolean {
     const policy = this.policy();
     return this.view() === 'changes' && this.toolsReadState() === 'loaded' &&
-      this.changeState() === 'disabled' && policy?.driftHeld === true &&
+      this.changeState() === 'disabled' && !!policy &&
+      (this.initialPolicy() ? initialToolPolicy(policy) : policy.driftHeld === true) &&
       policy.connectionId !== null && policy.accountMode !== null &&
       policy.catalogue?.tools !== undefined && this.comparison()?.reviewable === true &&
       !this.checkExpired();
@@ -122,7 +131,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const receipt: unknown = await response.json();
       if (this.shouldIgnoreResult()) return;
       const sequence = savedSequence(receipt);
-      if (sequence === null) {
+      if (sequence !== policy.sequence + 1) {
         this.changeState.set('unknown-review');
         return;
       }
@@ -153,7 +162,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       }
       const receipt: unknown = await response.json();
       if (this.shouldIgnoreResult()) return;
-      if (savedSequence(receipt) === null) {
+      if (savedSequence(receipt) !== reviewRevision + 1) {
         this.changeState.set('unknown-publication');
         return;
       }
@@ -177,6 +186,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     const originalId = this.publicationCommandId;
     const url = `/api/org/integrations/changes/${encodeURIComponent(originalId)}`;
     try {
+      if (this.initialPolicy() && !await this.readPublicationPolicy()) return;
       const response = await fetch(url, { headers: { accept: 'application/json' },
         signal: this.request.signal });
       if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) return;
@@ -187,6 +197,18 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     } catch {
       if (!this.shouldIgnoreResult()) this.changeState.set('unknown-publication');
     }
+  }
+
+  private async readPublicationPolicy(): Promise<boolean> {
+    const response = await fetch(this.toolsUrl(), { signal: this.request.signal });
+    if (this.shouldIgnoreResult() || this.isAccessRefusal(response)) return false;
+    if (!response.ok) throw new Error('Tool policy unavailable');
+    const raw: unknown = await response.json();
+    if (this.shouldIgnoreResult()) return false;
+    const policy = toolPolicySchema.parse(raw);
+    if (policy.serverId !== this.serverId()) throw new Error('Different server');
+    this.policy.set(policy);
+    return true;
   }
 
   private setPublicationState(raw: unknown, originalId: string): void {
@@ -201,7 +223,8 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     const policy = this.policy();
     const oldPublication = isOlderPublication(policy) &&
       policy?.publication?.commandId === originalId;
-    if (raw['status'] === 'ready') {
+    const ready = isReadyPublication(raw, policy, this.initialPolicy() !== undefined);
+    if (raw['status'] === 'ready' && ready) {
       this.clearPublicationReference();
       this.changeState.set(oldPublication ? 'disabled' : 'confirmed');
       return;
@@ -269,6 +292,8 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     return `${new Date(value).toLocaleTimeString('en-GB', options)} UTC`;
   }
 
+  protected readonly initialMode = initialToolMode;
+
   protected driftHeld(): boolean {
     return this.policy()?.driftHeld === true;
   }
@@ -294,7 +319,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
 
   private toolComparison() {
     const policy = this.policy();
-    return policy ? compareToolCatalogues(policy) : null;
+    return policy ? compareToolCatalogues(policy, this.initialPolicy() !== undefined) : null;
   }
 
   private integrationFacts() {
@@ -350,18 +375,32 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const toolsRaw: unknown = await toolsResponse.json();
       if (this.shouldIgnoreResult()) return;
       const policy = toolPolicySchema.parse(toolsRaw);
+      this.bindInitialModes(policy);
       this.policy.set(policy);
       this.toolsReadState.set('loaded');
       this.state.set('ready');
       this.refreshing.set(false);
       this.hasRenderedProtectedContent.set(true);
-      if (this.view() === 'changes') {
+      if (this.view() === 'changes' && this.changeState() !== 'conflict') {
         if (this.publicationCommandId) await this.checkPublicationChange();
         else await this.readPublicationStatus();
       }
     } catch {
       if (!this.shouldIgnoreResult()) this.markToolsReadFailed();
     }
+  }
+
+  private bindInitialModes(policy: ToolPolicy): void {
+    const staged = this.initialPolicy();
+    if (!staged || this.publicationCommandId) return;
+    if (policy.sequence !== staged.sequence || policy.policyRevision !== staged.policyRevision ||
+        policy.connectionId !== staged.connectionId ||
+        policy.accountMode !== staged.accountMode ||
+        policy.catalogue?.schemaDigest !== staged.catalogue?.schemaDigest) {
+      this.changeState.set('conflict');
+      return;
+    }
+    policy.tools = staged.tools;
   }
 
   private markToolsReadFailed(): void {
@@ -399,7 +438,8 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       this.changeState.set('disabled');
       return;
     }
-    if (status['status'] === 'ready') {
+    const ready = isReadyPublication(status, policy, this.initialPolicy() !== undefined);
+    if (status['status'] === 'ready' && ready) {
       this.changeState.set('confirmed');
       return;
     }
@@ -434,6 +474,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   isAccessRefusal(response: Response): boolean {
     if (response.status !== 401 && response.status !== 403) return false;
     this.accessLost = true;
+    this.accessEnded.emit(response);
     this.request.abort();
     this.row.set(undefined);
     this.policy.set(undefined);
@@ -463,13 +504,9 @@ export class IntegrationDetail implements OnInit, OnDestroy {
 const publicationStoragePrefix = 'integration-publication:';
 const publicationIdentifier = /^[\w-]{1,200}$/u;
 
-function publicationStorageKey(serverId: string): string {
-  return publicationStoragePrefix + serverId;
-}
-
-function readStoredPublication(serverId: string): string {
+export function readStoredPublication(serverId: string): string {
   try {
-    const stored = sessionStorage.getItem(publicationStorageKey(serverId));
+    const stored = sessionStorage.getItem(publicationStoragePrefix + serverId);
     if (stored && publicationIdentifier.test(stored)) return stored;
     if (stored !== null) removeStoredPublication(serverId);
   } catch {
@@ -480,7 +517,7 @@ function readStoredPublication(serverId: string): string {
 
 function storePublication(serverId: string, commandId: string): void {
   try {
-    sessionStorage.setItem(publicationStorageKey(serverId), commandId);
+    sessionStorage.setItem(publicationStoragePrefix + serverId, commandId);
   } catch {
     // Keep the reference in memory while this page is open.
   }
@@ -488,26 +525,10 @@ function storePublication(serverId: string, commandId: string): void {
 
 function removeStoredPublication(serverId: string): void {
   try {
-    sessionStorage.removeItem(publicationStorageKey(serverId));
+    sessionStorage.removeItem(publicationStoragePrefix + serverId);
   } catch {
     // The page still clears its in-memory reference.
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isOlderPublication(policy: ToolPolicy | undefined): boolean {
-  if (!policy?.driftHeld || !policy.publication) return false;
-  return policy.publication.reviewRevision < policy.policyRevision;
-}
-
-function savedSequence(value: unknown): number | null {
-  if (!isRecord(value) || value['status'] !== 'appended') return null;
-  const sequence = value['sequence'];
-  return typeof sequence === 'number' && Number.isSafeInteger(sequence) && sequence > 0
-    ? sequence : null;
 }
 
 function focusAccessHeading(): void {

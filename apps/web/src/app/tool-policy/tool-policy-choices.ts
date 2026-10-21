@@ -46,3 +46,22 @@ export function choicesDifferentFromSaved(
 function hasName(name: string): (tool: Tool) => boolean {
   return (tool) => tool.name === name;
 }
+
+export function initialToolPolicy(policy: ToolPolicy | undefined): boolean {
+  return !!policy?.catalogue && !policy.driftHeld && !policy.publication && !policy.published;
+}
+
+export function initialModeDisabled(policy: ToolPolicy | undefined, name: string): boolean {
+  for (const declaration of policy?.catalogue?.tools ?? []) {
+    if (declaration.name === name) {
+      return declaration.costCents !== 0 || !declaration.review;
+    }
+  }
+  return initialToolPolicy(policy);
+}
+
+export const TOOL_MODE_OPTIONS: Array<{ value: Tool['mode']; label: string }> = [
+  { value: 'allow', label: 'Allow automatically' },
+  { value: 'ask', label: 'Ask' },
+  { value: 'block', label: 'Block' },
+];

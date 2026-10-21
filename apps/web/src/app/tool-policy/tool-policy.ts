@@ -1,7 +1,9 @@
+import { IntegrationDetail, readStoredPublication } from '../integrations/integration-detail';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import { IntegrationsAccessLost } from '../integrations/integrations-access-lost';
 import { AddFlowSteps } from '../integrations/add-flow-steps';
 import {
+  initialToolPolicy, initialModeDisabled, TOOL_MODE_OPTIONS,
   choicesDifferentFromSaved,
   choicesForCurrentTools,
   choicesWithout,
@@ -33,15 +35,10 @@ type PendingCommand = {
   expectedSequence: number;
 };
 
-const MODE_OPTIONS: Array<{ value: ToolMode; label: string }> = [
-  { value: 'allow', label: 'Allow automatically' },
-  { value: 'ask', label: 'Ask' },
-  { value: 'block', label: 'Block' },
-];
 
 @Component({
   selector: 'oc-tool-policy',
-  imports: [SharedState, IntegrationsAccessLost, AddFlowSteps],
+  imports: [SharedState, IntegrationsAccessLost, AddFlowSteps, IntegrationDetail],
   templateUrl: './tool-policy.html',
   styleUrl: './tool-policy.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,6 +50,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   private hadRenderedTools = false;
 
   readonly serverId = input.required<string>();
+  protected readonly reviewSnapshot = signal<ToolPolicy | undefined>(undefined);
   protected readonly policy = signal<ToolPolicy | undefined>(undefined);
   protected readonly state = signal<ScreenState>('loading');
   protected readonly message = signal('Loading tools…');
@@ -62,7 +60,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   protected readonly showReload = signal(false);
   protected readonly choices = signal(new Map<string, ToolChoice>());
   protected readonly pendingCommand = signal<PendingCommand | undefined>(undefined);
-  protected readonly modeOptions = MODE_OPTIONS;
+  protected readonly modeOptions = TOOL_MODE_OPTIONS;
   protected readonly summary = computed(this.buildSummary.bind(this));
 
   ngOnInit(): void {
@@ -76,7 +74,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   protected choose(tool: Tool, mode: ToolMode): void {
-    if (!this.canEdit(tool)) return;
+    if (!this.canEdit(tool) || this.modeDisabled(tool, mode)) return;
     const nextChoices = new Map(this.choices());
     if (mode === tool.mode) {
       nextChoices.delete(tool.name);
@@ -94,7 +92,24 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   protected canEdit(tool: Tool): boolean {
-    return this.state() === 'ready' && tool.reviewed && this.policy()?.connectionId !== null;
+    return this.state() === 'ready' && (tool.reviewed || this.isInitial()) &&
+      this.policy()?.connectionId !== null;
+  }
+
+  protected isInitial(): boolean {
+    return initialToolPolicy(this.policy());
+  }
+
+  protected modeDisabled(tool: Tool, mode: ToolMode): boolean {
+    return mode !== 'block' && initialModeDisabled(this.policy(), tool.name);
+  }
+
+  protected openReview(): void {
+    const policy = this.policy();
+    if (!policy || !this.isInitial() || this.state() !== 'ready') return;
+    const tools: Tool[] = [];
+    for (const tool of policy.tools) tools.push({ ...tool, mode: this.selected(tool) });
+    this.reviewSnapshot.set({ ...policy, tools });
   }
 
   protected saveDisabled(tool: Tool): boolean {
@@ -247,6 +262,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
       const policy = toolPolicySchema.parse(rawReply);
       if (!this.isCurrent(version)) return;
       this.policy.set(policy);
+      this.restorePublication(policy);
       if (policy.tools.length > 0) this.hadRenderedTools = true;
       const keptChoices = preserveUnchangedChoices
         ? choicesForCurrentTools(previousPolicy, previousChoices, policy)
@@ -264,6 +280,10 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     } finally {
       this.finishRequest(version);
     }
+  }
+
+  private restorePublication(policy: ToolPolicy): void {
+    if (readStoredPublication(this.serverId())) this.reviewSnapshot.set(policy);
   }
 
   private async readPendingCommand(command: PendingCommand): Promise<void> {
@@ -471,8 +491,8 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     }
     const counts = `${allowCount} Allow automatically · ${askCount} Ask · ${blockCount} Block.`;
     if (!policy.published) {
-      return `${counts} Nobody can use these tools yet: this server is not published and access `
-        + 'grants are not available yet.';
+      return `${counts} Nobody can use these tools yet: this server is not published. `
+        + 'Publishing does not create grants.';
     }
     return `${counts} Saved modes apply only to people and assistants who have a current grant. `
       + "Grants can't be read here yet.";
@@ -509,11 +529,12 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     return this.requestVersion === version && this.state() !== 'access';
   }
 
-  private clearOnAccessLoss(response: Response): boolean {
+  protected clearOnAccessLoss(response: Response): boolean {
     if (response.status !== 401 && response.status !== 403) return false;
     this.requestVersion += 1;
     this.abortController?.abort();
     this.abortController = undefined;
+    this.reviewSnapshot.set(undefined);
     this.policy.set(undefined);
     this.choices.set(new Map());
     this.pendingCommand.set(undefined);

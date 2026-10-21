@@ -1,0 +1,38 @@
+@for (tool of policy().catalogue?.tools ?? []; track tool.name) {
+  <p>{{ tool.name }} · Declared cost: {{ tool.costCents === 0 ? '0 euro cents' : 'Not declared' }}</p>
+  <pre>{{ tool.review | json }}</pre>
+}
+<section aria-labelledby="saved-audience">
+  <h2 id="saved-audience">Audience</h2>
+  <p role="status">{{ audienceMessage() }}</p>
+  @for (grant of audience()?.grants ?? []; track grant.granteeId) {
+    <p>{{ grant.displayName }} · {{ grant.granteeKind }} · {{ grant.state }}
+      @if (grant.membershipStatus) { · {{ grant.membershipStatus }} }
+    </p>
+  } @empty {
+    @if (audience()) { <p>No saved grants.</p> }
+  }
+  <p>Both the person asking and the assistant need a current grant.</p>
+  <p>Connection: {{ policy().connectionId }} · Account mode: {{ policy().accountMode }}</p>
+  <p>{{ factsMessage() }}</p>
+  <p>Publishing creates no grants, accounts or approvals. Waiting calls stay unapproved.</p>
+  <button #publishButton type="button" [disabled]="!enabled() || !audience()?.complete"
+    (click)="open()">Publish reviewed tools</button>
+</section>
+<dialog [ocOverlay]="confirming()" #overlay="ocOverlay" [returnFocusTo]="publishButton"
+  [attr.aria-labelledby]="overlay.titleId" (overlayClosed)="confirming.set(false)">
+  <h2 [id]="overlay.titleId" tabindex="-1">Publish {{ name() }}?</h2>
+  <p>Confirm this exact catalogue and its tool modes for connection {{ policy().connectionId }}.</p>
+  <p>Account mode: {{ policy().accountMode }} · Policy revision: {{ policy().policyRevision }}</p>
+  <p class="digest">{{ policy().catalogue?.schemaDigest }}</p>
+  <label><input #acknowledgement type="checkbox" [checked]="acknowledged()"
+    (change)="acknowledged.set(acknowledgement.checked)" />
+    I have reviewed these definitions, declared costs, approval details and saved audience.
+  </label>
+  <p>Calls wait for the matching gateway acknowledgement.</p>
+  <div class="actions">
+    <button type="button" (click)="confirming.set(false)">Cancel</button>
+    <button type="button" [disabled]="!acknowledged() || !enabled()"
+      (click)="confirm()">Confirm publication</button>
+  </div>
+</dialog>

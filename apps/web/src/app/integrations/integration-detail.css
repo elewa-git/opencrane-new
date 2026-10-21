@@ -120,3 +120,5 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   .change-row > * { padding: 4px 0; }
   .change-cell h3 { display: block; margin: 8px 0 4px; font-size: 12px; }
 }
+
+.change-cell summary { min-height: 44px; display: flex; align-items: center; }

@@ -835,3 +835,17 @@ The existing screen receipt records its limits.
 Adding `-- --part2` writes only the new paging and reload captures.
 The [original screen receipt](../../docs/process/screen-p4-22-access/receipt.md) and
 [reload and paging receipt](../../docs/process/screen-p4-22-access2/receipt.md) record the limits.
+
+## Initial tool publication
+
+The tools page stages initial modes in memory and reuses the detail page for step 5.
+The fresh policy must match the staged sequence, catalogue, connection and account mode.
+Definitions and declarations are escaped text. Allow and Ask require declared zero cost
+and approval details. The audience GET must return a complete, current list before
+confirmation. Publishing changes no grants, accounts or approvals.
+Only a publication id enters sessionStorage. Reload checks that original command.
+A Ready reply needs complete acknowledgement fields and the current publication binding.
+The integration facts route is absent on this base; the page says it is unavailable.
+Expanded published-mode and apply details await their frames. No backend policy changed.
+`npm run visual:screen-tools-publish` uses intercepted APIs and no live stack.
+The [screen receipt](../../docs/process/screen-tools-publish/receipt.md) records its limits.

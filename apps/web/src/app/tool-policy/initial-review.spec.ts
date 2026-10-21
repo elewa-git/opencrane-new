@@ -60,6 +60,9 @@ it.each(['cost', 'details'])('keeps initial Allow and Ask blocked without %s', a
   policy.tools[0]!.mode = 'allow';
   const command = await reviewCommand(policy, 'initial-review');
   expect(command.tools[0]?.mode).toBe('block');
+  policy.tools[0]!.mode = 'ask';
+  const ask = await reviewCommand(policy, 'ask-review');
+  expect(ask.tools[0]?.mode).toBe('block');
 });
 
 it('changes the review digest when declared approval details change', async () => {
