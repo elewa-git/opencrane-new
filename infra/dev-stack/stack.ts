@@ -19,6 +19,7 @@ import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 import { checkProviderMode, modelsEnvironment } from './models-environment.ts';
 import { setupDevProvider } from './provider-setup.ts';
+import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
 import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
   verifyPackageOwner } from './packaged.ts';
@@ -313,8 +314,8 @@ async function up(fresh: boolean) {
   const firstStart = fresh || !await exists(`${directory}/settings.env`);
   const credentialFile = process.env['DEV_REAL_PROVIDER_FILE'];
   const real = credentialFile !== undefined;
-  if (real && (!secondary || !credentialFile || process.env['DEV_OWNER_BOOTSTRAP'] === '0')) {
-    throw new Error('Real provider setup requires a secondary with the dev Owner');
+  if (real && (!credentialFile || process.env['DEV_OWNER_BOOTSTRAP'] === '0')) {
+    throw new Error('Real provider setup requires a credential file and the dev Owner');
   }
   if (!firstStart) checkProviderMode(await readEnv('settings'), real);
   const tail = secondary ? { Self: { DNSName: '', TailscaleIPs: [] } } : JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
@@ -432,7 +433,7 @@ async function up(fresh: boolean) {
     revisionHeader: 'x-opencrane-mcp-revision' };
   const approvalRevision = catalogueDigest([approvalJourneyTool()]);
   if (!secondary) await modelFirewall(true);
-  if (!secondary) {
+  if (!secondary && !real) {
     const stubEnvironment = { MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
       MODEL_STUB_MANAGED_FILE: `${directory}/model-managed-stub`,
       MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
@@ -537,7 +538,14 @@ async function up(fresh: boolean) {
   const after = await run('ss', ['-H', '-ltnp']);
   await save('listeners-after.txt', after);
   const pids = await Promise.all(names.map(processId));
-  for (let i = 0; i < names.length; i++) if (!pids[i]) throw new Error(`${names[i]} stopped`);
+  for (let i = 0; i < names.length; i++) {
+    if (real && names[i] === 'model-stub') {
+      continue;
+    }
+    if (!pids[i]) {
+      throw new Error(`${names[i]} stopped`);
+    }
+  }
   const ports = new Set(Object.entries(settings).filter(([name]) => name.endsWith('_PORT')).map(([, port]) => port));
   if (!secondary) ports.add('443');
   const allowed = new Set(['127.0.0.1', '::1', ...tail.Self.TailscaleIPs]);
@@ -571,7 +579,15 @@ async function status() {
     return;
   }
   let ok = true;
+  let real = false;
+  if (await exists(`${directory}/settings.env`)) {
+    const settings = await readEnv('settings');
+    real = settings['DEV_REAL_PROVIDER'] === '1';
+  }
   for (const name of names) {
+    if (real && name === 'model-stub') {
+      continue;
+    }
     const pid = await processId(name);
     console.log(`${name}: ${pid ? `running (${pid})` : 'stopped'}`);
     if (!pid) ok = false;
@@ -593,9 +609,23 @@ async function status() {
 }
 let prepared = false;
 try {
-  const [action, flag, extra] = process.argv.slice(2);
-  if (extra || (flag && !(action === 'up' && flag === '--fresh') &&
-      !(action === 'package-up' && flag))) {
+  const [action, flag] = process.argv.slice(2);
+  const flags = process.argv.slice(3);
+  const ownerRun = flags.includes('--owner-run');
+  if (action === 'up') {
+    for (const option of flags) {
+      if (option !== '--fresh' && option !== '--owner-run') {
+        throw new Error('Unknown startup option');
+      }
+    }
+    if (new Set(flags).size !== flags.length || (ownerRun && secondary)) {
+      throw new Error('Invalid startup options');
+    }
+    if (!secondary && (process.env['DEV_REAL_PROVIDER_FILE'] !== undefined || ownerRun ||
+        process.env['OPENCRANE_FLEET_TASK'] !== undefined)) {
+      requireOwnerRun(ownerRun);
+    }
+  } else if (flags.length > 1 || (flag && action !== 'package-up')) {
     throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
   }
   const directoryPresent = await stat(directory).then(() => true, () => false);
@@ -662,7 +692,7 @@ try {
     prepared = directoryPresent;
   }
   switch (action) {
-    case 'up': await up(flag === '--fresh'); break;
+    case 'up': await up(flags.includes('--fresh')); break;
     case 'down':
       if (!directoryPresent) {
         if (secondary) console.log('free');
@@ -696,7 +726,8 @@ try {
       message = error.message;
     }
     console.error(message);
-  } else if (error instanceof Error && providerSetupFailure) {
+  } else if (error instanceof Error &&
+      (providerSetupFailure || error.message === ownerRunRefusal)) {
     console.error(error.message);
   } else {
     let message: string;

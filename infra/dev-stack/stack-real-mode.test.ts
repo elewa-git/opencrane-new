@@ -88,7 +88,7 @@ async function refusesIneligibleRealMode() {
   ];
   for (const startup of cases) {
     const failure = await startupFailure(startup);
-    assert.equal(failure, 'Error: Real provider setup requires a secondary with the dev Owner');
+    assert.equal(failure, 'Error: Real provider setup requires a credential file and the dev Owner');
   }
 }
 
