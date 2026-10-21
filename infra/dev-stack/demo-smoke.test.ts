@@ -53,11 +53,12 @@ async function requiresCurrentRefusal() {
   const browser = await chromium.launch({ headless: true, channel: 'chromium' });
   try {
     const page = await browser.newPage();
-    page.setDefaultTimeout(100);
+    page.setDefaultTimeout(5000);
     const old = '<article>Earlier attempt</article><article><oc-budget-stop-notice>' +
       'Company limit reached</oc-budget-stop-notice></article>';
     const current = '<article><p>This attempt</p></article>';
     await page.setContent(old + current + '<article>Still waiting</article>');
+    page.setDefaultTimeout(100);
     await assert.rejects(demoRefusal(page, 'This attempt'));
     page.setDefaultTimeout(5000);
     const refused = '<article><oc-budget-stop-notice>Company limit reached' +

@@ -47,9 +47,12 @@ try {
     }
     await writeFile(`${output}/timings.json`, JSON.stringify({ sha, warmMs, attempts }, null, 2));
   } finally {
-    const budget = await demoBudget(options);
-    await writeFile(`${output}/spending.json`, JSON.stringify({ sha, budget }, null, 2));
-    await browser.browser.close();
+    try {
+      const budget = await demoBudget(options);
+      await writeFile(`${output}/spending.json`, JSON.stringify({ sha, budget }, null, 2));
+    } finally {
+      await browser.browser.close();
+    }
   }
   function failed(attempt: typeof attempts[number]) {
     return attempt.result !== 'PASS';
