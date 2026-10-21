@@ -1,240 +1,470 @@
 {
-  "date": "2026-10-13T01:15:57.331645+00:00",
-  "status": "PASS: image release and secondary lifecycle checks; no owner-stack update",
-  "sourceCommit": "2b4d7358fc0729821766e866d6e23de5c193565b",
-  "mainCommit": "5b3e324c3830c8530004487424f56e365444000c",
-  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:2a0fe2d8c956f0b03d4267c476aa514239697d18ca7473dea6674f22c0e78be6",
-  "releaseDigest": "sha256:2a0fe2d8c956f0b03d4267c476aa514239697d18ca7473dea6674f22c0e78be6",
-  "qualificationDigest": "sha256:2a0fe2d8c956f0b03d4267c476aa514239697d18ca7473dea6674f22c0e78be6",
+  "date": "2026-10-20T19:48:52.591173+00:00",
+  "status": "PARTIAL: image, lifecycle and stand-in Stop checks passed; holds remained uncertain; root suite failed and the provider-history timeout repeated alone; original paid-model Stop cause unproven",
+  "sourceCommit": "9ab903795c071e3d7ec43903837c296c6ffc70ac",
+  "mainCommit": "9153c8dabf5eadceb86e242d02a1abb10189908c",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+  "releaseDigest": "sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+  "qualificationDigest": "sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
   "releaseTag": "k3d-ocn-registry:5000/opencrane/computer:p2-1",
   "qualificationTag": "k3d-ocn-registry:5000/opencrane/computer:qualification",
-  "uncompressedBytes": 2913314500,
-  "environment": "Existing k3d-ocn, gVisor, disposable image-probe namespaces and claimed secondary slot 1; private throwaway PostgreSQL 17.6; nice -n 10.",
-  "roundOneFailure": {
-    "cause": "The final private launcher change in 5b3e324c (#368) gave Node the native Codex ELF binary as a JavaScript script. The protected JavaScript wrapper launch added by 16fdb41e (#371) was valid.",
-    "driverLog": "Error: Codex connection closed",
-    "codexLog": [
-      "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex:1",
-      "SyntaxError: Invalid or unexpected token",
-      "Node.js v22.23.1"
-    ],
-    "classification": "Reproduced defect, not a flake or a private-capabilities credential-delivery failure.",
-    "laterFixture": "The later private-turn driver still used the removed POST /credentials endpoint. It now installs a signed throwaway token through authenticated root Pod exec and standard input."
+  "uncompressedBytes": 2913454530,
+  "environment": "Existing k3d-ocn with gVisor; claimed secondary slot 1; throwaway PostgreSQL 17.6; nice -n 10.",
+  "cause": {
+    "originalStop": "Not reproduced with the stand-in on the old image. An image-only cause remains unproven.",
+    "buildFailure": "The image probe omitted turnId from proxy grant and removal requests. The proxy correctly refused the grant with bad input.",
+    "fix": "Only the fixture changed. It now supplies separate turn ids and asserts successful replies. No runtime guard changed."
   },
   "checks": {
-    "repro": {
-      "result": "FAIL",
-      "durationSeconds": 9.31
-    },
-    "red": {
-      "result": "FAIL",
-      "durationSeconds": 1.44
-    },
-    "gate-fixed": {
-      "result": "PASS",
-      "durationSeconds": 1.4
-    },
-    "unit": {
-      "result": "PASS",
-      "durationSeconds": 1.95
-    },
     "build": {
-      "result": "PASS",
-      "durationSeconds": 458.32
+      "check": "build",
+      "result": "FAIL",
+      "exitCode": 1,
+      "durationSeconds": 169.43
     },
-    "credentials-final": {
-      "result": "PASS",
-      "durationSeconds": 45.01
+    "grant-red": {
+      "check": "grant-red",
+      "result": "FAIL",
+      "exitCode": 1,
+      "durationSeconds": 28.7
     },
-    "lifecycle": {
+    "grant-green": {
+      "check": "grant-green",
       "result": "PASS",
-      "durationSeconds": 584.13
+      "exitCode": 0,
+      "durationSeconds": 144.78
     },
-    "root": {
+    "build-final": {
+      "check": "build-final",
       "result": "PASS",
-      "durationSeconds": 3160.29,
-      "passedTests": 4318,
-      "skippedTests": 18,
-      "passedFiles": 268,
-      "skippedFiles": 5
-    },
-    "lint": {
-      "result": "PASS",
-      "durationSeconds": 309.36
+      "exitCode": 0,
+      "durationSeconds": 565.82
     },
     "typecheck": {
+      "check": "typecheck",
       "result": "PASS",
-      "durationSeconds": 187.78
+      "exitCode": 0,
+      "durationSeconds": 262.21
+    },
+    "security-rules": {
+      "check": "security-rules",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 5.09
+    },
+    "credentials": {
+      "check": "credentials",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 63.29
     },
     "events": {
+      "check": "events",
       "result": "PASS",
-      "durationSeconds": 0.83
+      "exitCode": 0,
+      "durationSeconds": 0.87
     },
-    "githubCI": {
-      "result": "NOT RUN",
-      "detail": "The pull request checks report the pushed commit."
-    },
-    "finalDocumentation": {
+    "knip": {
+      "check": "knip",
       "result": "PASS",
-      "durationSeconds": 6.8
+      "exitCode": 0,
+      "durationSeconds": 7.88
+    },
+    "changelog": {
+      "check": "changelog",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 0.53
+    },
+    "lifecycle": {
+      "check": "lifecycle",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 714.81
+    },
+    "lint": {
+      "check": "lint",
+      "result": "FAIL",
+      "exitCode": 1,
+      "durationSeconds": 580.64
+    },
+    "lint-final": {
+      "check": "lint-final",
+      "result": "FAIL",
+      "exitCode": 1,
+      "durationSeconds": 610.96
+    },
+    "lint-release": {
+      "check": "lint-release",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 687.19
+    },
+    "package-licences": {
+      "check": "package-licences",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 0.45
+    },
+    "package-licence-tests": {
+      "check": "package-licence-tests",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 0.88
+    },
+    "root-tests": {
+      "check": "root-tests",
+      "result": "FAIL",
+      "exitCode": 1,
+      "durationSeconds": 9203.27,
+      "tests": {
+        "passed": 6619,
+        "failed": 8,
+        "skipped": 64
+      },
+      "files": {
+        "passed": 340,
+        "failed": 7,
+        "skipped": 6
+      },
+      "cleanupHookFailures": 1,
+      "failures": [
+        {
+          "file": "apps/server/test/memory.test.ts",
+          "case": "rebuilds binding status without any key, model, tool, computer or scheduler port",
+          "detail": "Test timed out in 30000ms."
+        },
+        {
+          "file": "apps/server/test/chat-access-regression.test.ts",
+          "case": "checks legacy participation once and skips modern events during repeated churn reads",
+          "detail": "FGA Error: timeout of 1000ms exceeded while creating the fixture store."
+        },
+        {
+          "file": "apps/server/test/chat-access-regression.test.ts",
+          "case": "keeps child readers available during 100,000 messages and unrelated turn activity",
+          "detail": "Expected an open socket; received a closed socket with code 1013."
+        },
+        {
+          "file": "apps/server/test/memory-mcp.test.ts",
+          "case": "refuses a loaded fact that is expired before any fact append",
+          "detail": "The initial recall returned 403 rather than 200."
+        },
+        {
+          "file": "apps/server/test/budget-stop-status.test.ts",
+          "case": "validates malformed saved Stop data while building work",
+          "detail": "Gateway stopped (exit code 1): Error: readiness server starts."
+        },
+        {
+          "file": "libs/models/test/egress-admission.test.ts",
+          "case": "rechecks destination after the real budget dispatch append retries",
+          "detail": "Expected two publish attempts; received one."
+        },
+        {
+          "file": "libs/models/test/decision-activity.test.ts",
+          "case": "rechecks a warmed 5,000-event provider history within the shared two seconds",
+          "detail": "Test timed out in 30000ms."
+        },
+        {
+          "file": "apps/server/test/member-inventory-volume.test.ts",
+          "case": "returns a bounded review after 10,001 unrelated pending history events",
+          "detail": "Test timed out in 120000ms; cleanup hook also timed out in 10000ms."
+        }
+      ]
+    },
+    "memory-expiry-alone": {
+      "check": "memory-expiry-alone",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 28.4
+    },
+    "member-inventory-alone": {
+      "check": "member-inventory-alone",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 119.58
+    },
+    "child-volume-alone": {
+      "check": "child-volume-alone",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 188.64
+    },
+    "provider-history-alone": {
+      "check": "provider-history-alone",
+      "result": "FAIL",
+      "exitCode": 1,
+      "durationSeconds": 36.73,
+      "detail": "The same 30000ms test timeout repeated with one worker. The failure remains unresolved; no timeout or access deadline changed."
+    },
+    "legacy-access-alone": {
+      "check": "legacy-access-alone",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 22.66
+    },
+    "saved-stop-alone": {
+      "check": "saved-stop-alone",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 20.67
+    },
+    "egress-retry-alone": {
+      "check": "egress-retry-alone",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 17.69
+    },
+    "memory-rebuild-alone": {
+      "check": "memory-rebuild-alone",
+      "result": "FAIL",
+      "exitCode": 1,
+      "durationSeconds": 24.14,
+      "detail": "The selected case returned 404 because an earlier test creates its member and binding. A focused group is checked separately."
+    },
+    "memory-rebuild-group": {
+      "check": "memory-rebuild-group",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 22.83,
+      "tests": 4
+    },
+    "web-tests": {
+      "check": "web-tests",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 91.21,
+      "tests": 1100,
+      "files": 63
+    },
+    "pg-cleanup": {
+      "check": "pg-cleanup",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 0.97
+    },
+    "new-up": {
+      "check": "new-up",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 765.86,
+      "detail": "Fresh stand-in startup journey passed. Its existing approval check was skipped and is not qualified here."
+    },
+    "new-stop": {
+      "check": "new-stop",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 88.66
+    },
+    "new-down": {
+      "check": "new-down",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 43.54
+    },
+    "final-docs": {
+      "check": "final-docs",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 13.04
+    },
+    "github-ci": {
+      "result": "NOT RUN at receipt",
+      "detail": "The draft PR records ci-ok for the final pushed commit."
+    },
+    "final-docs-confirmed": {
+      "check": "final-docs-confirmed",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 11.38
     }
   },
-  "imageChecks": [
-    {
-      "name": "Pod ready",
-      "result": "PASS",
-      "detail": "13402 ms from claim apply, fresh Pod; local registry/layers may be cached"
-    },
-    {
-      "name": "runtime",
-      "result": "PASS",
-      "detail": "CRI confirms gVisor, 512 MiB limit"
-    },
-    {
-      "name": "health",
-      "result": "PASS",
-      "detail": "ready endpoint and ready report after Codex initialisation"
-    },
-    {
-      "name": "storage",
-      "result": "PASS",
-      "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
-    },
-    {
-      "name": "proxy grants",
-      "result": "PASS",
-      "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
-    },
-    {
-      "name": "executor isolation",
-      "result": "PASS",
-      "detail": "real custom exec host and native exec-server: UID 1001, no_new_privs, clean host environment and private filesystem; shell seccomp EPERM for proxy/gateway/IPv6 and process tokens denied"
-    },
-    {
-      "name": "desktop",
-      "result": "PASS",
-      "detail": "UID 1002 + no_new_privs, private home denied; sandbox-enabled Playwright launches real Chromium and renders text"
-    },
-    {
-      "name": "documents",
-      "result": "PASS",
-      "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
-    },
-    {
-      "name": "network policy",
-      "result": "PASS",
-      "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
-    },
-    {
-      "name": "fresh image checks",
-      "result": "PASS",
-      "detail": "all isolation, proxy, desktop, document and network assertions passed"
-    },
-    {
-      "name": "hostile PVC symlink",
-      "result": "PASS",
-      "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
-    },
-    {
-      "name": "hostile PVC fifo",
-      "result": "PASS",
-      "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
-    },
-    {
-      "name": "hostile PVC dangling",
-      "result": "PASS",
-      "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
-    },
-    {
-      "name": "PVC resume",
-      "result": "PASS",
-      "detail": "same PVC, new Pod after native suspension; retained file and safely repaired 0777 volume root"
-    },
-    {
-      "name": "runtime",
-      "result": "PASS",
-      "detail": "CRI confirms gVisor, 512 MiB limit"
-    },
-    {
-      "name": "health",
-      "result": "PASS",
-      "detail": "ready endpoint and ready report after Codex initialisation"
-    },
-    {
-      "name": "storage",
-      "result": "PASS",
-      "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
-    },
-    {
-      "name": "proxy grants",
-      "result": "PASS",
-      "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
-    },
-    {
-      "name": "executor isolation",
-      "result": "PASS",
-      "detail": "real custom exec host and native exec-server: UID 1001, no_new_privs, clean host environment and private filesystem; shell seccomp EPERM for proxy/gateway/IPv6 and process tokens denied"
-    },
-    {
-      "name": "desktop",
-      "result": "PASS",
-      "detail": "UID 1002 + no_new_privs, private home denied; sandbox-enabled Playwright launches real Chromium and renders text"
-    },
-    {
-      "name": "documents",
-      "result": "PASS",
-      "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
-    },
-    {
-      "name": "network policy",
-      "result": "PASS",
-      "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
-    },
-    {
-      "name": "resumed image checks",
-      "result": "PASS",
-      "detail": "all isolation, proxy, desktop, document and network assertions passed"
-    },
-    {
-      "name": "cleanup",
-      "result": "PASS",
-      "detail": "p21-computer deleted"
-    }
-  ],
+  "imageChecks": {
+    "date": "2026-10-20T16:39:41.208Z",
+    "source": "9ab903795c071e3d7ec43903837c296c6ffc70ac",
+    "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+    "receipts": [
+      {
+        "name": "Pod ready",
+        "result": "PASS",
+        "detail": "8183 ms from claim apply, fresh Pod; local registry/layers may be cached"
+      },
+      {
+        "name": "runtime",
+        "result": "PASS",
+        "detail": "CRI confirms gVisor, 512 MiB limit"
+      },
+      {
+        "name": "health",
+        "result": "PASS",
+        "detail": "ready endpoint and ready report after Codex initialisation"
+      },
+      {
+        "name": "storage",
+        "result": "PASS",
+        "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
+      },
+      {
+        "name": "proxy grants",
+        "result": "PASS",
+        "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
+      },
+      {
+        "name": "executor isolation",
+        "result": "PASS",
+        "detail": "real custom exec host and native exec-server: UID 1001, no_new_privs, clean host environment and private filesystem; shell seccomp EPERM for proxy/gateway/IPv6 and process tokens denied"
+      },
+      {
+        "name": "desktop",
+        "result": "PASS",
+        "detail": "UID 1002 + no_new_privs, private home denied; sandbox-enabled Playwright launches real Chromium and renders text"
+      },
+      {
+        "name": "documents",
+        "result": "PASS",
+        "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
+      },
+      {
+        "name": "network policy",
+        "result": "PASS",
+        "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
+      },
+      {
+        "name": "fresh image checks",
+        "result": "PASS",
+        "detail": "all isolation, proxy, desktop, document and network assertions passed"
+      },
+      {
+        "name": "hostile PVC symlink",
+        "result": "PASS",
+        "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
+      },
+      {
+        "name": "hostile PVC fifo",
+        "result": "PASS",
+        "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
+      },
+      {
+        "name": "hostile PVC dangling",
+        "result": "PASS",
+        "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
+      },
+      {
+        "name": "PVC resume",
+        "result": "PASS",
+        "detail": "same PVC, new Pod after native suspension; retained file and safely repaired 0777 volume root"
+      },
+      {
+        "name": "runtime",
+        "result": "PASS",
+        "detail": "CRI confirms gVisor, 512 MiB limit"
+      },
+      {
+        "name": "health",
+        "result": "PASS",
+        "detail": "ready endpoint and ready report after Codex initialisation"
+      },
+      {
+        "name": "storage",
+        "result": "PASS",
+        "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
+      },
+      {
+        "name": "proxy grants",
+        "result": "PASS",
+        "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
+      },
+      {
+        "name": "executor isolation",
+        "result": "PASS",
+        "detail": "real custom exec host and native exec-server: UID 1001, no_new_privs, clean host environment and private filesystem; shell seccomp EPERM for proxy/gateway/IPv6 and process tokens denied"
+      },
+      {
+        "name": "desktop",
+        "result": "PASS",
+        "detail": "UID 1002 + no_new_privs, private home denied; sandbox-enabled Playwright launches real Chromium and renders text"
+      },
+      {
+        "name": "documents",
+        "result": "PASS",
+        "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
+      },
+      {
+        "name": "network policy",
+        "result": "PASS",
+        "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
+      },
+      {
+        "name": "resumed image checks",
+        "result": "PASS",
+        "detail": "all isolation, proxy, desktop, document and network assertions passed"
+      },
+      {
+        "name": "cleanup",
+        "result": "PASS",
+        "detail": "p21-computer deleted"
+      }
+    ]
+  },
   "privateTurns": {
     "result": "PASS",
     "checks": 81,
     "evidence": "../../docs/process/evidence/p4-14/private-turns.json",
     "memoryAdmission": "DISABLED"
   },
-  "security": {
-    "result": "PASS",
-    "tests": 8,
-    "bridgeArguments": "--disable-sigusr1",
-    "bridgeNodeOptions": "absent",
-    "inheritedInspectorOptions": "ignored",
-    "publicCredentialReplacementStatus": 404,
-    "credentialDelivery": "Root-only authenticated Pod exec; no token in replies or logs."
-  },
   "licences": {
     "result": "PASS",
     "packages": 385,
-    "categories": {
-      "application-osi": 39,
-      "debian-main": 339,
-      "application-osi-with-bundled-free": 7
-    },
     "installedNotices": 92,
     "inventory": "licences.json",
     "reviewedMapping": "reviewed-licences.json",
     "sbom": "sbom.spdx.json.gz",
-    "sbomSha256": "b4ae8ef8c629ea6ffbe141bc460a1c8ee4a2b4f9df796bd446f575f82676c125"
+    "sbomSha256": "93ad13cd98c3c60c8175d8dbb9f085007fa2d2a682f122223924a5a73e361d72"
   },
-  "logs": "/tmp/img-release-2",
+  "logs": "/tmp/demo-real-model-stop",
   "notRun": [
     "Real model calls",
     "Owner-stack update or computer restart",
     "Managed-cluster qualification",
-    "Fresh full-stack browser journey"
-  ]
+    "Approval journey (skipped by the existing fresh-stack runner)"
+  ],
+  "security": {
+    "result": "PASS",
+    "tests": 9,
+    "bridgeArguments": "--disable-sigusr1",
+    "bridgeNodeOptions": "absent",
+    "inheritedInspectorOptions": "ignored",
+    "publicCredentialReplacement": "Refused; no replacement value in the response",
+    "credentialDelivery": "Authenticated root Pod exec; no runtime protection changed"
+  },
+  "stopQualification": {
+    "result": "PASS for Stop; FAIL for settlement or release",
+    "oldImage": "The stand-in stopped twice on the old image. An image-only cause of the paid failure is not proven.",
+    "newImage": {
+      "stopMilliseconds": [
+        2056,
+        2156
+      ],
+      "viewportWidths": [
+        390,
+        1280
+      ],
+      "partialReplyAfterReload": "Hello ",
+      "browserLeftStopping": true,
+      "conversationEndReports": 2,
+      "computerEndReports": 2,
+      "bridgeJournalEndReports": 2,
+      "runningPodDigestVerified": true
+    },
+    "money": "Each call retained a 16-cent hold with effect.uncertain reason missing_usage. Neither settled nor released; existing money rules require the hold without final usage.",
+    "oldEvidence": "../../docs/process/demo-real-model-stop/old.json",
+    "newEvidence": "../../docs/process/demo-real-model-stop/new.json"
+  },
+  "cleanup": {
+    "result": "PASS",
+    "slot": 1,
+    "slotReleased": true,
+    "namespaceRemoved": true,
+    "throwawayPostgresAndVolumeRemoved": true,
+    "ownerStackUntouched": true
+  }
 }

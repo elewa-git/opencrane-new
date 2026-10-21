@@ -1,0 +1,1 @@
+- Refresh the computer image with the code that removes a stopped turn's access. Update its qualification fixture to include turn ids and check grant replies before running the isolation tests.

@@ -1,0 +1,176 @@
+{
+  "sourceCommit": "9153c8dabf5eadceb86e242d02a1abb10189908c",
+  "image": "sha256:2a0fe2d8c956f0b03d4267c476aa514239697d18ca7473dea6674f22c0e78be6",
+  "stopResult": "PASS",
+  "settlementResult": "PARTIAL: both dispatched calls retained their holds without final usage",
+  "checks": [
+    {
+      "label": "old",
+      "width": 390,
+      "conversationId": "4645a9ea-ea96-4626-877a-204079dfaa65",
+      "turnId": "8ab0094b-b6bf-4aac-b065-a51b78a81c5d",
+      "ended": true,
+      "stopMs": 1534,
+      "partial": "Hello ",
+      "reloadedPartial": "Hello ",
+      "stopping": 0,
+      "screenshot": "old-390.png",
+      "reports": [
+        {
+          "type": "agent.turn_started",
+          "subject": "conversation-4645a9ea-ea96-4626-877a-204079dfaa65",
+          "data": {
+            "turnId": "8ab0094b-b6bf-4aac-b065-a51b78a81c5d",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "computer.turn_started",
+          "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "data": {
+            "turnId": "8ab0094b-b6bf-4aac-b065-a51b78a81c5d",
+            "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "decision.recorded",
+          "subject": "decision-facff37b-1991-42a7-b05a-c87304d74adb",
+          "data": {
+            "turnId": "8ab0094b-b6bf-4aac-b065-a51b78a81c5d",
+            "reason": "model_allowed",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "agent.message_delta",
+          "subject": "conversation-4645a9ea-ea96-4626-877a-204079dfaa65",
+          "data": {
+            "turnId": "8ab0094b-b6bf-4aac-b065-a51b78a81c5d"
+          }
+        },
+        {
+          "type": "agent.turn_stop_requested",
+          "subject": "conversation-4645a9ea-ea96-4626-877a-204079dfaa65",
+          "data": {
+            "turnId": "8ab0094b-b6bf-4aac-b065-a51b78a81c5d"
+          }
+        },
+        {
+          "type": "agent.turn_failed",
+          "subject": "conversation-4645a9ea-ea96-4626-877a-204079dfaa65",
+          "data": {
+            "turnId": "8ab0094b-b6bf-4aac-b065-a51b78a81c5d",
+            "reason": "bridge_interrupted"
+          }
+        },
+        {
+          "type": "computer.turn_closed",
+          "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "data": {
+            "turnId": "8ab0094b-b6bf-4aac-b065-a51b78a81c5d",
+            "status": "failed",
+            "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        }
+      ],
+      "money": [
+        {
+          "type": "budget.reserved",
+          "reservationId": "5a55b068-77df-4d32-99c5-008e537869f5",
+          "amountCents": 16
+        },
+        {
+          "type": "effect.uncertain",
+          "permitId": "5a55b068-77df-4d32-99c5-008e537869f5",
+          "reason": "missing_usage"
+        }
+      ]
+    },
+    {
+      "label": "old",
+      "width": 1280,
+      "conversationId": "44e43e69-ceb8-4417-8ac5-f65cc6b9bfbc",
+      "turnId": "5a3c0c95-b6ad-4370-9b24-52f6dc603596",
+      "ended": true,
+      "stopMs": 1487,
+      "partial": "Hello ",
+      "reloadedPartial": "Hello ",
+      "stopping": 0,
+      "screenshot": "old-1280.png",
+      "reports": [
+        {
+          "type": "agent.turn_started",
+          "subject": "conversation-44e43e69-ceb8-4417-8ac5-f65cc6b9bfbc",
+          "data": {
+            "turnId": "5a3c0c95-b6ad-4370-9b24-52f6dc603596",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "computer.turn_started",
+          "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "data": {
+            "turnId": "5a3c0c95-b6ad-4370-9b24-52f6dc603596",
+            "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "decision.recorded",
+          "subject": "decision-6dcb4927-d25d-48d3-bb8e-8f665fb67b29",
+          "data": {
+            "turnId": "5a3c0c95-b6ad-4370-9b24-52f6dc603596",
+            "reason": "model_allowed",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        },
+        {
+          "type": "agent.message_delta",
+          "subject": "conversation-44e43e69-ceb8-4417-8ac5-f65cc6b9bfbc",
+          "data": {
+            "turnId": "5a3c0c95-b6ad-4370-9b24-52f6dc603596"
+          }
+        },
+        {
+          "type": "agent.turn_stop_requested",
+          "subject": "conversation-44e43e69-ceb8-4417-8ac5-f65cc6b9bfbc",
+          "data": {
+            "turnId": "5a3c0c95-b6ad-4370-9b24-52f6dc603596"
+          }
+        },
+        {
+          "type": "agent.turn_failed",
+          "subject": "conversation-44e43e69-ceb8-4417-8ac5-f65cc6b9bfbc",
+          "data": {
+            "turnId": "5a3c0c95-b6ad-4370-9b24-52f6dc603596",
+            "reason": "bridge_interrupted"
+          }
+        },
+        {
+          "type": "computer.turn_closed",
+          "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "data": {
+            "turnId": "5a3c0c95-b6ad-4370-9b24-52f6dc603596",
+            "status": "failed",
+            "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+            "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d"
+          }
+        }
+      ],
+      "money": [
+        {
+          "type": "budget.reserved",
+          "reservationId": "c7ff86e7-63ee-4884-87a8-422aba30a9cd",
+          "amountCents": 16
+        },
+        {
+          "type": "effect.uncertain",
+          "permitId": "c7ff86e7-63ee-4884-87a8-422aba30a9cd",
+          "reason": "missing_usage"
+        }
+      ]
+    }
+  ]
+}
