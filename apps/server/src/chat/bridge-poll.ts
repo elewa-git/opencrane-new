@@ -5,7 +5,8 @@ import type { bridgeControl } from './bridge-control.ts';
 import type { Logger } from '@opencrane/observability';
 import { history } from '../../../ops/src/lifecycle.ts';
 import { creationEvent } from './private-session.ts';
-import { chatHistory } from './commands.ts';
+import type { chatHistory } from './commands.ts';
+import { readChatStopRows } from './chat-summary.ts';
 import { agentSession } from './reports.ts';
 import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import { agentTurnStopRequestedDataSchema } from '@opencrane/events';
@@ -198,7 +199,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
         `conversation-${conversation.conversationId}`, Infinity, true);
       const previous = seen.get(conversation.conversationId);
       if (previous?.head === head && !previous.retry) return;
-      const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
+      const rows = await readChatStopRows(options.store, options.silo, conversation.conversationId);
       agentSession(rows);
       function isClosed(row: typeof rows[number]) {
         return row.event.type === 'conversation.closed';

@@ -1,13 +1,15 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { dirname } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { readEventAt, type StoredEvent, type AppendCommand } from '@opencrane/event-store';
+import { readEventAt, wireSubject, type StoredEvent, type AppendCommand } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { countReads, event as fixtureEvent, expectNoWholeReads,
   natsFixture } from '@opencrane/event-store/testing';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
-import { chatHistory } from '../src/chat/commands.ts';
+import { chatCommand, chatHistory } from '../src/chat/commands.ts';
+import { readChatCommandFacts, readChatFacts } from '../src/chat/chat-summary.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let keys: ReturnType<typeof conversationKeys>;
@@ -50,7 +52,9 @@ async function warmReportReadsOnlyNewRows() {
     const base = event(`output-${sequence}`, 'agent.output_lost', {
       conversationId: 'chat', turnId: 'message',
     });
-    events.push({ ...base, report: { computerId: 'computer', sequence, digest: 'a'.repeat(64) } });
+    const report = { computerId: 'computer', sequence, digest: 'a'.repeat(64) };
+    const saved = { ...base, report };
+    events.push(saved);
   }
   await nats.seed(events);
   await record(499, 498);
@@ -332,3 +336,112 @@ async function refusesChangedBatchOriginal(change: 'earlier' | 'later' | 'reorde
 it.each(['earlier', 'later', 'reordered'] as const)(
   'refuses a replay with a changed %s original and an unchanged final report',
   refusesChangedBatchOriginal);
+async function savesStopWithoutRereadingStreamedReports() {
+  await setup();
+  const events: EventEnvelope[] = [];
+  for (let sequence = 1; sequence <= 200; sequence++) {
+    const base = event(`piece-${sequence}`, 'agent.output_lost', {
+      conversationId: 'chat', turnId: 'message',
+    });
+    const report = { computerId: 'computer', sequence, digest: 'a'.repeat(64) };
+    const saved = { ...base, report };
+    events.push(saved);
+  }
+  await nats.seed(events);
+  await record(201, 200);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* delayedRows(...args: Parameters<typeof read>) {
+    for await (const row of read(...args)) {
+      if (args[0] === subject) await delay(12);
+      yield row;
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(delayedRows);
+  const startedAt = performance.now();
+  const input = { id: 'stop', conversationId: 'chat', stopTurnId: 'message' };
+  const commandContext = { silo: 'test', memberId: 'admin' };
+  const saved = await chatCommand(nats.store, keys, commandContext, input);
+  expect(saved.status).toBe('appended');
+  expect(performance.now() - startedAt).toBeLessThan(2000);
+  expect(await chatCommand(nats.store, keys, commandContext, input)).toEqual(saved);
+}
+it('saves Stop within two seconds without rereading an already consumed reply',
+  savesStopWithoutRereadingStreamedReports);
+
+async function keepsChatCommandsSeparateFromInvalidMemoryEvidence() {
+  await setup();
+  const completed = event('completed', 'agent.turn_completed', {
+    conversationId: 'chat', turnId: 'message',
+  });
+  const lateMemory = event('late-memory', 'agent.memory_context_recorded', {
+    conversationId: 'chat', turnId: 'message', requesterId: 'alice', assistantId: 'assistant',
+    computerId: 'computer', generation: 1, threadId: 'thread', inputGeneration: 'context',
+    action: 'prepared', delivery: null, callDigest: null, dispatchDigest: null,
+    additions: [], scopePositions: [], projectionGeneration: 'projection', byteCount: 0,
+    hasOmissions: false, reason: 'none',
+  });
+  lateMemory.source = 'opencrane-server';
+  lateMemory.principal = { kind: 'system', id: 'server' };
+  lateMemory.correlation = {};
+  await nats.seed([completed, lateMemory]);
+  const commandContext = { silo: 'test', memberId: 'admin' };
+  const input = { id: 'next-message', conversationId: 'chat', text: 'Another request' };
+  const saved = await chatCommand(nats.store, keys, commandContext, input);
+  expect(saved.status).toBe('appended');
+  const stop = { id: 'next-stop', conversationId: 'chat', stopTurnId: 'next-message' };
+  const stopped = await chatCommand(nats.store, keys, commandContext, stop);
+  expect(stopped.status).toBe('appended');
+  const reading = readChatFacts(nats.store, 'test', 'chat', 'message');
+  await expect(reading).rejects.toThrow('Memory evidence arrived after the turn closed');
+}
+it('allows chat and Stop commands while strict memory reads still reject late evidence',
+  keepsChatCommandsSeparateFromInvalidMemoryEvidence);
+
+async function refusesAnOldReportId(operation: 'message' | 'stop', warm: boolean) {
+  await setup();
+  const oldReport = event('old-report', 'agent.output_lost', {
+    conversationId: 'chat', turnId: 'message',
+  });
+  // Publish without a broker duplicate entry, as after the duplicate window expires.
+  await nats.connection.request(wireSubject(subject), JSON.stringify(oldReport));
+  if (warm) await readChatFacts(nats.store, 'test', 'chat', 'message');
+  const before = await chatHistory(nats.store, 'test', 'chat');
+  const commandContext = { silo: 'test', memberId: 'admin' };
+  let input;
+  if (operation === 'stop') {
+    input = { id: oldReport.id, conversationId: 'chat', stopTurnId: 'message' };
+  } else {
+    input = { id: oldReport.id, conversationId: 'chat', text: 'Next request' };
+  }
+  await expect(chatCommand(nats.store, keys, commandContext, input)).rejects.toThrow('Id reused');
+  expect(await chatHistory(nats.store, 'test', 'chat')).toEqual(before);
+}
+it.each(['message', 'stop'] as const)(
+  'refuses a %s reusing an old report id with a cold summary',
+  refusesAnOldReportIdWithColdSummary);
+async function refusesAnOldReportIdWithColdSummary(operation: 'message' | 'stop') {
+  await refusesAnOldReportId(operation, false);
+}
+it.each(['message', 'stop'] as const)(
+  'refuses a %s reusing an old report id with a warm summary',
+  refusesAnOldReportIdWithWarmSummary);
+async function refusesAnOldReportIdWithWarmSummary(operation: 'message' | 'stop') {
+  await refusesAnOldReportId(operation, true);
+}
+
+async function keepsTheFirstCommandPosition() {
+  await setup();
+  const original = await readChatCommandFacts(nats.store, 'test', 'chat', 'message');
+  const repeated = event('message', 'message.posted', {
+    conversationId: 'chat', authorId: 'admin', authorKind: 'human', contentType: 'text',
+    ...keys.encrypt('test', 'chat', 'Changed request'),
+  });
+  await nats.connection.request(wireSubject(subject), JSON.stringify(repeated));
+  const warm = await readChatCommandFacts(nats.store, 'test', 'chat', 'message');
+  expect(warm.sequence).toBeGreaterThan(original.sequence);
+  expect(warm.position).toBe(original.position);
+  const cold = await readChatCommandFacts(nats.reader, 'test', 'chat', 'message');
+  expect(cold.position).toBe(original.position);
+}
+it('keeps the first command position when stored history repeats its id',
+  keepsTheFirstCommandPosition);

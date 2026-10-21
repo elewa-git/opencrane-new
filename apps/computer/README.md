@@ -23,7 +23,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes and public keys| computer
-  server["apps/server<br/>the back end"] <-->|turns, files, shared history, stops, signed gates, immediate gate replies, root stop receipts and safe refusal reports| computer
+  server["apps/server<br/>the back end"] <-->|turns, files, shared history, stops, report acknowledgements and signed gates| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer --> supervisor["Root supervisor<br/>protected launch and desktop checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
@@ -86,6 +86,8 @@ server whether it can wait for approval. Older computers receive Allow tools onl
 2. **A person sends a message.** The server sends the turn to the bridge. The bridge loads its reviewed tools, runs it in Codex and sends progress reports back.
 3. **A person uploads a file.** The server passes the scanned file to the bridge. The bridge puts it in the workspace for Codex to read.
 4. **A computer resumes.** Its files remain on its disk. The bridge sends any reports that the server has not confirmed yet.
+   It waits for the server to save small groups of reports before sending more. This keeps
+   the connection open for Stop while a long reply is being saved.
    A stopped turn cannot regain access through a late acknowledgement or pass renewal.
 5. **A trusted root process stops executors.** The supervisor closes executor connections
    and stops tools and private Codex processes. It checks every worker thread, including

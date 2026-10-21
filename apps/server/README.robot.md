@@ -1420,11 +1420,26 @@ Report reads do not load participation history. Turn starts check the small part
 closure summary separately, before deciding whether to start or repeat a turn.
 The report summary's position still belongs only to the conversation stream.
 
-Reports and turn commands share the server's `chat` summary, built on the event
+Browser commands, Stop polling, reports and turn commands share the server's `chat` summary, built on the event
 store's stream summary. The server keeps up to 64 conversations per store connection and rebuilds a dropped summary from
 the first event. Each call reads through the latest saved event before copying
 its facts. History reads have their own ten-second limit and finish before turn
 admission starts its access check.
+
+The summary indexes every saved event id, including reports, and keeps its first
+position. A command that reuses a report id is refused even after NATS forgets
+its duplicate entry. Each compact report id and position counts as 64 bytes plus
+twice the id length in the existing 32 MiB cache budget. Browser command ids
+still count as at least 256 bytes each.
+Stop and terminal rows use 512 bytes each. They contain no reply text. Stop polling
+reads these rows and new events, without rescanning earlier reply pieces.
+Command retries still verify the original saved event. New commands still use one
+conditional append after fresh access checks.
+
+Chat command facts and Stop polling share the report summary, but do not consume
+memory context. A failed memory fold is retained in the summary and counted in
+its size. `readChatFacts` still throws that failure before returning any facts;
+ordinary commands and Stop can continue to read their compact event facts.
 
 The summary keeps the first conversation creation, the first message's raw author
 and execution mode for each event id, closed turn ids, and report positions by

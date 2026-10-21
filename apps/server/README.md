@@ -7,6 +7,11 @@ It is a Node service that accepts browser requests and sends live updates.
 It keeps saving accepted computer reports after a connection drops, so replies
 and Stop results can finish arriving when the computer reconnects.
 It confirms each piece of a reply only after checking that its text was saved.
+Stop uses the same saved chat facts as progress reports, so it does not reload
+every piece of a long reply before saving or delivering the request.
+An invalid old memory record does not block sending or stopping a message.
+Memory operations still refuse that record.
+Messages and Stop refuse an id already used by a different event, including a report.
 A second process handles model access and spending. Both processes use the
 same secret to protect conversation keys in a packaged install.
 
@@ -26,7 +31,7 @@ flowchart LR
   server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks and batches streamed reports and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
   server -->|rechecks remote tool lists and revision promises before expiry through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
-  server -->|records refused turn decisions| nats
+  server -->|records turn decisions and Stop| nats
 ```
 
 Tool discovery records the exact definitions and how long the check remains valid.

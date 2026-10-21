@@ -2,6 +2,23 @@
 
 For people, read [README.md](README.md) first.
 
+## Report delivery while stopping
+
+The bridge keeps at most 32 reports and 512 KiB awaiting acknowledgement on one
+connection. Reports still use their original journal sequence and bytes. New reports
+join the same waiting list as replayed reports. Each acknowledgement frees space;
+Stop and signed control requests do not wait for that space. Reconnecting rebuilds
+the list from the server's saved position and the outstanding grant requests.
+The journal remains the recovery source. Private text is still removed on its
+acknowledgement or when the server's saved position covers it.
+
+`test/report-pressure.test.ts` drives the real computer WebSocket and a stand-in
+model that keeps producing text. Its server fixture enforces the existing bounded
+report queue and delays acknowledgements. Stop must interrupt the model and deliver
+its closure within two seconds, retaining every partial reply piece. See the
+[Stop closure receipt](../../docs/process/demo-kit/stop-throughput.md#stop-closure)
+for live results. Reservations, holds, permissions and memory admission are unchanged.
+
 ## Budget Stop access removal — P3-14 row 5, first part
 
 The runner marks the turn cancelled before removing its model and MCP passes,

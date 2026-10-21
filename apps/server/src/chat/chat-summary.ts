@@ -8,6 +8,9 @@ type Message = { authorId: unknown; executionMode: unknown; position: number };
 type ComputerReports = { lastSequence: number; positions: Map<number, number> };
 type ChatSummary = {
   contentSequence: number;
+  eventPositions: Map<string, number>;
+  eventPositionBytes: number;
+  stopRows: StoredEvent[];
   latestHuman?: { id: string; authorId: unknown } | undefined;
   created: Record<string, unknown> | undefined;
   conversationClosed: boolean;
@@ -17,6 +20,7 @@ type ChatSummary = {
   reports: Map<string, ComputerReports>;
   reportCount: number;
   memoryContexts: Map<string, MemoryContextState>;
+  memoryFailure: string | undefined;
 };
 export type ChatFacts = {
   conversationClosed: boolean;
@@ -33,14 +37,16 @@ export type ChatFacts = {
 const closedTurn = z.object({ turnId: z.string() });
 
 function emptyChat(): ChatSummary {
-  return { contentSequence: 0, created: undefined, conversationClosed: false,
+  return { contentSequence: 0, eventPositions: new Map(), eventPositionBytes: 0, stopRows: [],
+    created: undefined, conversationClosed: false,
     messages: new Map(), closedTurnIds: new Set(), cleanupEndedTurnIds: new Set(),
-    reports: new Map(), reportCount: 0, memoryContexts: new Map() };
+    reports: new Map(), reportCount: 0, memoryContexts: new Map(), memoryFailure: undefined };
 }
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
+  addCommandFacts(summary, row);
   if (event.type === 'agent.memory_context_recorded') {
-    addMemoryContext(summary, row);
+    retainMemoryContext(summary, row);
   }
   let data: Record<string, unknown> | undefined;
   if (event.type === 'conversation.created' || event.type === 'message.posted') {
@@ -65,6 +71,31 @@ function addChat(summary: ChatSummary, row: StoredEvent) {
   closeMemoryContexts(summary, closedTurnId);
   if (event.report) addReport(summary, event.report, row.sequence);
 }
+function addCommandFacts(summary: ChatSummary, row: StoredEvent) {
+  const type = row.event.type;
+  // Check every saved id so a command cannot reuse a report id after broker deduplication expires.
+  if (!summary.eventPositions.has(row.event.id)) {
+    summary.eventPositions.set(row.event.id, row.sequence);
+    summary.eventPositionBytes += eventPositionSize(row);
+  }
+  if (type === 'conversation.created' || type === 'conversation.closed' ||
+      type === 'agent.turn_stop_requested' || type === 'agent.turn_completed' ||
+      type === 'agent.turn_failed') {
+    summary.stopRows.push(row);
+  }
+}
+
+function eventPositionSize(row: StoredEvent) {
+  const type = row.event.type;
+  const compactBytes = 64 + row.event.id.length * 2;
+  if (type === 'conversation.created' || type === 'message.posted' ||
+      type === 'agent.turn_stop_requested') {
+    return Math.max(256, compactBytes);
+  }
+  // Count the id and numeric position without retaining the report or its text.
+  return compactBytes;
+}
+
 function recordClosedTurn(summary: ChatSummary, row: StoredEvent,
   turnId: string | undefined) {
   if (turnId === undefined) return;
@@ -73,6 +104,16 @@ function recordClosedTurn(summary: ChatSummary, row: StoredEvent,
   if (event.type === 'agent.turn_failed' && event.source === 'opencrane-server' &&
       event.principal?.id === 'close-cleanup') {
     summary.cleanupEndedTurnIds.add(turnId);
+  }
+}
+function retainMemoryContext(summary: ChatSummary, row: StoredEvent) {
+  if (summary.memoryFailure !== undefined) return;
+  try {
+    addMemoryContext(summary, row);
+  } catch (error) {
+    // Keep chat commands available, but preserve the refusal for every memory reader.
+    summary.memoryFailure = 'Memory evidence unavailable';
+    if (error instanceof Error) summary.memoryFailure = error.message;
   }
 }
 function addMemoryContext(summary: ChatSummary, row: StoredEvent) {
@@ -141,10 +182,11 @@ function chatSize(summary: ChatSummary) {
   // Count compact replay positions separately so many reply chunks can stay warm.
   return summary.messages.size * 256 + summary.closedTurnIds.size * 128 +
     summary.cleanupEndedTurnIds.size * 128 + summary.reports.size * 256 +
-    summary.reportCount * 64 + memorySize(summary);
+    summary.reportCount * 64 + summary.eventPositionBytes +
+    summary.stopRows.length * 512 + memorySize(summary);
 }
 function memorySize(summary: ChatSummary) {
-  let bytes = 0;
+  let bytes = (summary.memoryFailure?.length ?? 0) * 2;
   for (const context of summary.memoryContexts.values()) {
     bytes += 2048 + context.references.length * 1024;
     for (const saved of context.events.values()) {
@@ -158,6 +200,7 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
   conversationId: string, turnId: string, computerId?: string, reportSequence?: number,
   deadline = performance.now() + 10_000) {
   function take(summary: ChatSummary): ChatFacts {
+    if (summary.memoryFailure !== undefined) throw new Error(summary.memoryFailure);
     const message = summary.messages.get(turnId);
     const reports = computerId === undefined ? undefined : summary.reports.get(computerId);
     let reportPosition: number | undefined;
@@ -181,4 +224,25 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
     if (error instanceof WrongSiloError) throw new Error('Conversation silo mismatch', { cause: error });
     throw error;
   }
+}
+
+export function readChatCommandFacts(store: Pick<EventStore, 'readStream'>, silo: string,
+  conversationId: string, commandId: string, turnId?: string) {
+  function isCreation(row: StoredEvent) { return row.event.type === 'conversation.created'; }
+  function take(summary: ChatSummary) {
+    return {
+      created: summary.stopRows.find(isCreation), closed: summary.conversationClosed,
+      position: summary.eventPositions.get(commandId), sequence: summary.contentSequence,
+      turnPosition: turnId === undefined ? undefined : summary.eventPositions.get(turnId),
+    };
+  }
+  return readStreamSummary(store, silo, `conversation-${conversationId}`, chat,
+    performance.now() + 10_000, take);
+}
+
+export function readChatStopRows(store: Pick<EventStore, 'readStream'>, silo: string,
+  conversationId: string) {
+  function take(summary: ChatSummary) { return [...summary.stopRows]; }
+  return readStreamSummary(store, silo, `conversation-${conversationId}`, chat,
+    performance.now() + 10_000, take);
 }
