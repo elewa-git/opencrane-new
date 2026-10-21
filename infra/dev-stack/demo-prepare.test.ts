@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { prepareDemo } from './demo-prepare.ts';
 
-async function recordingRun(hideReceipts: boolean) {
+async function recordingRun(hideReceipts: boolean, hideConversationReceipt = false) {
   const directory = await mkdtemp(`${tmpdir()}/demo-prepare-`);
   const writes: string[] = [];
   const receipts = new Map<string, unknown>();
@@ -51,6 +51,14 @@ async function recordingRun(hideReceipts: boolean) {
       ? [{ name: 'supplier.pdf', status: 'delivered', textPath: 'uploads/demo/supplier.pdf.md' }]
       : [] };
     if (path.includes('/changes/')) {
+      const missingConversation = !receipts.has('demo-supplier-create-v1');
+      if (path.startsWith('/api/conversations/') &&
+          (missingConversation || hideConversationReceipt)) {
+        response.statusCode = 403;
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ status: 'refused' }));
+        return;
+      }
       result = hideReceipts ? { status: 'unknown' }
         : receipts.get(path.split('/').at(-1)!) ?? { status: 'unknown' };
     }
@@ -68,6 +76,12 @@ async function recordingRun(hideReceipts: boolean) {
   const options = { directory, origin: `http://127.0.0.1:${address.port}`,
     cookie: 'synthetic-session' };
   try {
+    if (hideConversationReceipt) {
+      await assert.rejects(prepareDemo(options, 700), /receipt unavailable/u);
+      await assert.rejects(prepareDemo(options, 700), /receipt unavailable/u);
+      assert.deepEqual(writes, ['/api/org/models', '/api/conversations']);
+      return;
+    }
     if (hideReceipts) {
       await assert.rejects(prepareDemo(options, 700), /outcome unknown/u);
       await assert.rejects(prepareDemo(options, 700), /outcome unknown/u);
@@ -95,3 +109,7 @@ test('preparation never repeats a write when its receipt stays unknown', keepsUn
 
 test('preparation keeps one scanned personal PDF and company cap after lost replies',
   repeatsAfterLostReplies);
+
+async function keepsUnknownConversation() { await recordingRun(false, true); }
+test('preparation never repeats conversation creation after its receipt is refused',
+  keepsUnknownConversation);
