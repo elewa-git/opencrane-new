@@ -163,10 +163,12 @@ async function labelsDepartedGrantHolderAfterReplay() {
   try {
     const before = await get();
     expect(before.statusCode, before.body).toBe(200);
-    const expected = { complete: true, grantTotal: 3, grants: expect.arrayContaining([
-      expect.objectContaining({ granteeKind: 'member', granteeId: 'bob', displayName: 'bob',
-        state: 'granted', membershipStatus: 'departed', eventId: grant.id }),
-    ]) };
+    const expected = { complete: true, grantTotal: 3, grants: [
+      { granteeKind: 'assistant', granteeId: 'helper' },
+      { granteeKind: 'member', granteeId: 'bob', displayName: 'bob',
+        state: 'granted', membershipStatus: 'departed', eventId: grant.id },
+      { granteeKind: 'team', granteeId: 'sales' },
+    ] };
     expect(before.json()).toMatchObject(expected);
     const choices = await get(`${path}/candidates?kind=member`);
     expect(choices.json()).toMatchObject({ rows: [{ id: 'admin' }, { id: 'owner' }] });
