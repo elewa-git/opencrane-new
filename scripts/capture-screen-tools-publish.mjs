@@ -56,6 +56,10 @@ async function serve(route, state) {
       assert.equal(command.policyRevision, 2);
       assert.equal(command.tools[0].mode, 'allow');
       assert.match(command.tools[0].reviewDigest, /^[a-f0-9]{64}$/u);
+      if (state.scenario === 'lost-review') {
+        state.reference = command.commandId;
+        return route.abort();
+      }
       if (state.scenario === 'conflict') return route.fulfill({ status: 409, json: {} });
       return route.fulfill({ json: { status: 'appended', sequence: 4 } });
     }
@@ -83,6 +87,7 @@ async function serve(route, state) {
   else if (path.endsWith('/publication')) body = { status: 'disabled' };
   else if (path.includes('/changes/')) {
     body = { status: 'applying', changeRef: state.reference };
+    if (state.scenario === 'lost-review') body.status = 'unknown';
     if (state.ack) body = { status: 'ready', changeRef: state.reference, generation: 1,
       fragmentDigest: 'f'.repeat(64), recordDigest: 'c'.repeat(64), configDigest: 'd'.repeat(64),
       requestedAt: checkedAt, observedAt: new Date().toISOString() };
@@ -91,6 +96,13 @@ async function serve(route, state) {
     if (state.scenario === 'wrong') body.changeRef = 'another-change';
   } else throw new Error(`Unexpected API path ${path}`);
   return route.fulfill({ json: body });
+}
+
+function containsFocus(panel) {
+  return panel.contains(document.activeElement);
+}
+function hasFocus(element) {
+  return element === document.activeElement;
 }
 
 async function layout(page) {
@@ -116,11 +128,7 @@ async function capture(browser, width, scenario) {
   if (scenario === 'loading') await page.getByText('Loading tools…', { exact: true }).waitFor();
   else if (scenario === 'empty') await page.getByText('No tool list has been read yet.').waitFor();
   else {
-    try { await page.locator('fieldset').waitFor(); }
-    catch {
-      await page.screenshot({ path: '/tmp/screen-tools-failed.png' });
-      throw new Error(`Tools did not load for ${scenario} at ${width}`);
-    }
+    await page.locator('fieldset').waitFor();
     assert(await page.locator('input[value="block"]').isChecked());
     if (scenario !== 'tools') {
       await page.locator('input[value="allow"]').locator('..').click();
@@ -137,13 +145,13 @@ async function capture(browser, width, scenario) {
           await page.getByRole('checkbox').check();
           await confirm.focus();
           await page.keyboard.press('Tab');
-          assert(await page.locator('dialog[open]').evaluate((dialog) => dialog.contains(document.activeElement)));
+          assert(await page.locator('dialog[open]').evaluate(containsFocus));
           await page.keyboard.press('Shift+Tab');
-          assert(await confirm.evaluate((button) => button === document.activeElement));
+          assert(await confirm.evaluate(hasFocus));
           if (scenario === 'confirm') {
             await page.keyboard.press('Escape');
             await opener.waitFor();
-            assert(await opener.evaluate((button) => button === document.activeElement));
+            assert(await opener.evaluate(hasFocus));
             await opener.click();
             assert(await confirm.isDisabled());
           } else {
@@ -152,10 +160,10 @@ async function capture(browser, width, scenario) {
             else if (scenario === 'ready') await confirmedStatus.waitFor();
             else {
               await page.getByRole('button', { name: 'Check status' }).waitFor();
-              if (scenario === 'applying' || scenario === 'lost') {
+              if (['applying', 'lost', 'lost-review'].includes(scenario)) {
                 await page.reload();
                 await page.getByRole('button', { name: 'Check status' }).waitFor();
-                assert.equal(state.posts, 2);
+                assert.equal(state.posts, scenario === 'lost-review' ? 1 : 2);
               }
               assert.equal(await confirmedStatus.count(), 0);
             }
@@ -173,7 +181,7 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 try {
   for (const width of [1280, 390]) {
-    for (const scenario of ['tools', 'review', 'confirm', 'applying', 'lost', 'conflict',
+    for (const scenario of ['lost-review', 'tools', 'review', 'confirm', 'applying', 'lost', 'conflict',
       'refusal', 'empty', 'loading', 'ready', 'malformed', 'stale', 'wrong']) {
       await capture(browser, width, scenario);
     }

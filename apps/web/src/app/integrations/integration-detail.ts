@@ -18,7 +18,7 @@ import { IntegrationFacts } from './integration-facts';
 import { buildIntegrationFacts, type ToolsReadState } from './integration-facts-map';
 import { needsReview } from './integration-status';
 import { compareToolCatalogues, initialToolMode } from './tool-changes';
-import { reviewCommand } from './review-command';
+import { reviewCommand, bindInitialToolModes } from './review-command';
 
 type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
 type ChangeState = 'loading' | 'disabled' | 'reviewing' | 'publishing' | 'applying'
@@ -99,10 +99,11 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       return 'Publishing the reviewed tool list. Calls stay paused until this finishes.';
     }
     if (state === 'unknown-publication') {
-      return 'Publication is uncertain. Calls stay paused. Check the original change status.';
+      return 'The change outcome is uncertain. Calls stay paused. Check the original change status.';
     }
     if (state === 'unknown-review') {
-      return 'The review outcome is unknown. Read the tool details again before another review.';
+      if (!this.initialPolicy()) return 'The review outcome is unknown. Read the tool details again.';
+      return 'The review outcome is unknown. Check the original change before doing anything else.';
     }
     if (state === 'conflict') return 'The tool list changed. Review again after a fresh read.';
     if (state === 'failed') return "Couldn't check publication progress. Calls stay paused.";
@@ -115,12 +116,18 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     if (!policy || !this.canReviewChanges()) return;
     this.changeState.set('reviewing');
     const reviewId = globalThis.crypto.randomUUID();
+    if (this.initialPolicy()) {
+      this.publicationCommandId = reviewId;
+      storePublication(this.serverId(), reviewId);
+      this.changeRef.set(reviewId);
+    }
     try {
       const body = await reviewCommand(policy, reviewId);
       if (this.shouldIgnoreResult()) return;
       const response = await this.sendChange('review', body);
       if (!response || this.shouldIgnoreResult()) return;
       if (response.status === 409) {
+        this.clearPublicationReference();
         this.changeState.set('conflict');
         return;
       }
@@ -375,7 +382,9 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const toolsRaw: unknown = await toolsResponse.json();
       if (this.shouldIgnoreResult()) return;
       const policy = toolPolicySchema.parse(toolsRaw);
-      this.bindInitialModes(policy);
+      if (!bindInitialToolModes(policy, this.initialPolicy(), !!this.publicationCommandId)) {
+        this.changeState.set('conflict');
+      }
       this.policy.set(policy);
       this.toolsReadState.set('loaded');
       this.state.set('ready');
@@ -388,19 +397,6 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     } catch {
       if (!this.shouldIgnoreResult()) this.markToolsReadFailed();
     }
-  }
-
-  private bindInitialModes(policy: ToolPolicy): void {
-    const staged = this.initialPolicy();
-    if (!staged || this.publicationCommandId) return;
-    if (policy.sequence !== staged.sequence || policy.policyRevision !== staged.policyRevision ||
-        policy.connectionId !== staged.connectionId ||
-        policy.accountMode !== staged.accountMode ||
-        policy.catalogue?.schemaDigest !== staged.catalogue?.schemaDigest) {
-      this.changeState.set('conflict');
-      return;
-    }
-    policy.tools = staged.tools;
   }
 
   private markToolsReadFailed(): void {

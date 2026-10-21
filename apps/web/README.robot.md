@@ -132,8 +132,9 @@ An expired catalogue says that calls stay paused. The changes page posts the exa
 catalogue digest, policy revision, connection, account mode and every tool choice to
 `POST /api/org/integrations/:id/review`. A new tool is Block. The next POST to
 `/:id/publication` uses the review receipt's sequence for both `expectedSequence` and
-`reviewRevision`. An unknown review needs a fresh detail read; there is no review
-status endpoint. An unknown publication checks only
+`reviewRevision`. An unknown drift review needs a fresh detail read; there is no review
+status endpoint. An unknown initial review keeps its original id and stays uncertain
+until its status can be proved. An unknown publication checks only
 `GET /api/org/integrations/changes/:commandId` for its original command. The command id
 is saved in session storage before the POST, keyed by server, so reopening checks that
 original change before offering another decision. An unknown or deadline publication
@@ -843,7 +844,7 @@ The fresh policy must match the staged sequence, catalogue, connection and accou
 Definitions and declarations are escaped text. Allow and Ask require declared zero cost
 and approval details. The audience GET must return a complete, current list before
 confirmation. Publishing changes no grants, accounts or approvals.
-Only a publication id enters sessionStorage. Reload checks that original command.
+Only the original review or publication id enters sessionStorage. Reload checks that original command.
 A Ready reply needs complete acknowledgement fields and the current publication binding.
 The integration facts route is absent on this base; the page says it is unavailable.
 Expanded published-mode and apply details await their frames. No backend policy changed.

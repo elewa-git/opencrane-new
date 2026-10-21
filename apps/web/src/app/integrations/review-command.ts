@@ -59,3 +59,14 @@ export async function reviewCommand(policy: ToolPolicy, commandId: string) {
     connectionId: policy.connectionId, accountMode: policy.accountMode,
     policyRevision: policy.policyRevision, tools };
 }
+
+export function bindInitialToolModes(
+  policy: ToolPolicy, staged: ToolPolicy | undefined, recovering: boolean,
+): boolean {
+  if (!staged || recovering) return true;
+  if (policy.sequence !== staged.sequence || policy.policyRevision !== staged.policyRevision ||
+      policy.connectionId !== staged.connectionId || policy.accountMode !== staged.accountMode ||
+      policy.catalogue?.schemaDigest !== staged.catalogue?.schemaDigest) return false;
+  policy.tools = staged.tools;
+  return true;
+}

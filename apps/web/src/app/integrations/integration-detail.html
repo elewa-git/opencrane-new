@@ -160,7 +160,8 @@
         @if (!initialPolicy() && (changeState() === 'conflict' || changeState() === 'unknown-review')) {
           <button class="button primary" type="button" (click)="refresh()">Review again</button>
         }
-        @if (changeState() === 'applying' || changeState() === 'unknown-publication') {
+        @if (changeState() === 'applying' || changeState() === 'unknown-publication'
+          || (initialPolicy() && changeState() === 'unknown-review')) {
           <button class="button secondary" type="button" (click)="checkPublicationChange()">
             Check status
           </button>

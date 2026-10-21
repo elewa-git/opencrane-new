@@ -37,7 +37,9 @@ export class InitialReviewConfirmation implements OnInit, OnDestroy {
     void this.read('facts');
   }
 
-  ngOnDestroy(): void { this.request.abort(); }
+  ngOnDestroy(): void {
+    this.request.abort();
+  }
 
   protected open(): void {
     this.acknowledged.set(false);
