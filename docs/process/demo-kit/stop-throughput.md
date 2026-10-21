@@ -66,7 +66,10 @@ rebuild restored the worker before the live failures above.
 PASS: installation; 542 broader tests including unchanged authority tests and all
 438 security checks; 70 repeated bridge checks; 23 focused tests twice; 71 browser
 tests twice; typecheck, event catalogue and the full lint chain, including knip and
-changelog checks. CI was NOT RUN at this commit; its pushed-head result is in the PR.
+changelog checks. The first CI run on `afe27448d` failed the old report-conflict
+expectation in `chat-summary.test.ts`. Its corrected check now verifies the new
+stream position, the competing event and duplicate recovery. Those 12 tests passed
+twice. The final pushed-head CI result is in the PR.
 Paid calls: **none**. Charged: **0 cents**. Held with real providers: **0 cents**.
 The task limit was 300 cents including holds; the earlier 75 cents is outside it.
 PASS: released slot 1, restored and removed temporary source fixtures, and removed

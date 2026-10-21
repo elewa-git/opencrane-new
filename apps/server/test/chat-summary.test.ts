@@ -249,9 +249,18 @@ async function keepsConditionalAppend(operation: 'report' | 'turn') {
     await nats.seed([concurrent]);
     return append(command);
   }
-  vi.spyOn(nats.store, 'append').mockImplementationOnce(writeAfterHistory);
+  const writes = vi.spyOn(nats.store, 'append').mockImplementationOnce(writeAfterHistory);
   if (operation === 'report') {
-    await expect(record(1, 0)).rejects.toThrow('Report append unavailable');
+    expect(await record(1, 0)).toBe('recorded');
+    expect(writes).toHaveBeenCalledTimes(2);
+    const first = writes.mock.calls[0]![0];
+    const retry = writes.mock.calls[1]![0];
+    expect(retry.expectedSequence).toBeGreaterThan(first.expectedSequence);
+    expect(retry.historyChecked).toBe(true);
+    const concurrent = await readEventAt(nats.store, subject, retry.expectedSequence, Infinity);
+    expect(concurrent?.event.id).toBe('concurrent');
+    expect(await record(1, 0)).toBe('duplicate');
+    expect(writes).toHaveBeenCalledTimes(2);
   } else {
     await expect(turnCommand(nats.store, context, start)).rejects.toThrow(
       'Turn append conflict or unavailable');
