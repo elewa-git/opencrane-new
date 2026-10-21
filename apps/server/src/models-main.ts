@@ -185,9 +185,9 @@ try {
         await delay(100, undefined, { signal: stop.signal });
       }
     } finally {
+      watch.close();
       stop.signal.removeEventListener('abort', closeRelays);
       await egress.close();
-      watch.close();
       await configurationWorker?.close();
       await gateway?.stop();
       await decision.close();
