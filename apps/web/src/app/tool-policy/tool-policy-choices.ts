@@ -48,7 +48,8 @@ function hasName(name: string): (tool: Tool) => boolean {
 }
 
 export function initialToolPolicy(policy: ToolPolicy | undefined): boolean {
-  return !!policy?.catalogue && !policy.driftHeld && !policy.publication && !policy.published;
+  return !!policy?.catalogue && policy.reviewRevision === undefined &&
+    !policy.driftHeld && !policy.publication && !policy.published;
 }
 
 export function initialModeDisabled(policy: ToolPolicy | undefined, name: string): boolean {
