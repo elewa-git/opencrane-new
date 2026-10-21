@@ -2,7 +2,7 @@ import { mkdir, open } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { modelForTask } from '@opencrane/models';
 
-type Options = { origin: string; cookie: string; directory: string };
+type Options = { origin: string; cookie: string; directory: string; signal?: AbortSignal };
 type Command = { path: string; receipt: string; data: Record<string, unknown> };
 
 export function demoStackId(id: string | undefined, ownerRun = false): string {
@@ -44,20 +44,24 @@ function commands(): Command[] {
   return result;
 }
 
-async function request(options: Options, path: string, data?: Record<string, unknown>) {
+export async function request(options: Options, path: string, data?: Record<string, unknown>) {
+  options.signal?.throwIfAborted();
   const headers = { origin: options.origin, cookie: options.cookie,
     'content-type': 'application/json' };
   const init = { headers, method: data ? 'POST' : 'GET',
     body: data ? JSON.stringify(data) : null,
-    signal: AbortSignal.timeout(5000), redirect: 'error' as const };
+    signal: AbortSignal.any([AbortSignal.timeout(5000), ...(options.signal ? [options.signal] : [])]),
+    redirect: 'error' as const };
   try {
-    return await fetch(`${options.origin}${path}`, init);
+    const response = await fetch(`${options.origin}${path}`, init);
+    options.signal?.throwIfAborted();
+    return response;
   } catch {
     throw new Error('Demo seed request unavailable');
   }
 }
 
-async function reserveRequest(directory: string, commandId: string) {
+export async function reserveRequest(directory: string, commandId: string) {
   await mkdir(`${directory}/demo-requests`, { recursive: true, mode: 0o700 });
   try {
     // Keep an attempted request across restarts. A missing receipt never permits a new write.

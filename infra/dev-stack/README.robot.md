@@ -763,7 +763,8 @@ member setup, then four chat turns: arithmetic with streaming/reload, Stop with 
 text/reload, the member's capital-city answer, and an uploaded supplier quote's total and
 delivery date. The PDF goes through the normal malware scan and turn input. Together
 with provider verification this requests five paid turns. Real startup seeds a maximum
-2,000-cent daily/monthly ceiling; this is not a shared cross-stack spending counter.
+2,000-cent daily/monthly ceiling. Set `DEMO_ALLOWANCE_CENTS` before startup to use a
+smaller approved limit, including provider verification. This is not a shared spending counter.
 Run only within the owner's shared daily approval. A failure stops the journey without
 resubmitting a turn. The receipt in `docs/process/demo-real-model/` records source SHA,
 checks and reservation/charge cents; null charges mean an unresolved hold.
@@ -786,8 +787,9 @@ runs fresh startup and seeds. A mismatched, owner or invalid claim stops before 
 or cleanup. Once startup is attempted, startup or seed failure calls `down.sh` for that
 secondary; success keeps it.
 It inherits the full startup journey and makes no claim about three-minute duration.
-The [owner runbook](../../docs/process/demo/README.md) records the unfinished PDF,
-ceiling and smoke work, and the required fresh-install proof. The seed does not rename existing members or make cloud identity changes.
+The [owner runbook](../../docs/process/demo/README.md) keeps owner-mode and fresh-install
+qualification gates. The timed rehearsal below adds PDF and ceiling preparation.
+The seed does not rename existing members or make cloud identity changes.
 Tests use `nice -n 10 node --experimental-strip-types --test infra/dev-stack/demo-*.test.ts`.
 
 The launcher tests record startup and cleanup without starting services. They check
@@ -824,3 +826,56 @@ and stops before external calls. It checks all automated entry points and detect
 removal of the non-start owner flag refusal, duplicate flag check and secondary owner
 flag refusal. CI runs both files with the existing Node fixtures. These are local
 source checks, not live qualification.
+
+## Timed demo rehearsal
+
+The command prepares and rehearses an owned real secondary:
+
+```sh
+DEV_STACK_ID=1 DEMO_ALLOWANCE_CENTS=700 \
+node --experimental-strip-types infra/dev-stack/demo-smoke-run.ts
+```
+
+Replace 700 with the confirmed remaining daily allowance, including startup and holds;
+it must be an integer from 1 to 2000. The company daily and monthly ceilings both
+use that value. No group or assistant ceiling changes. Owner and missing ids are refused.
+
+The command signs in separate browser profiles, reuses the group seed and uploads
+`fixtures/supplier.pdf` through scanning into a fixed personal chat. The quote says
+EUR 1,234.56, delivery 17 November 2026. Request records and original receipts prevent
+unknown writes from being repeated. The PDF list must report delivery before warm-up.
+Warm-up sends one short question to each of the personal and shared computers.
+Preparation and warm-up sit outside the timed checks and still count as paid calls.
+
+Each warm attempt has a 180-second deadline. It checks streaming/reload, PDF facts,
+preview/download bytes, Stop/reload, live direct delivery, a shared reply, and company
+limit refusal/restore. Restoration is attempted even after failure or timeout.
+Two attempts capture the Owner browser at 1280 and 390 pixels; the member stays at 390.
+Private timings, screenshots and spending records go under the slot's `demo-smoke/`.
+Each run saves both previous company ceilings in its own `saved-ceilings.json` before
+changing either. Normal completion, failures, SIGINT and SIGTERM restore them through
+the admin API. Signals stop new work and close the browser before restoration. The
+file is removed only after the API confirms both restored values. If restoration
+cannot finish, the next invocation restores saved files before preparing another run.
+Keep the run folders until any unfinished restoration has completed. SIGKILL and a
+host outage cannot run cleanup; their saved files need that next invocation.
+
+`spending.json` keeps a starting company budget and budget-stream position. It reads
+budget events without appending to the store and matches reservations to message ids
+submitted by this run's browser contexts. `turns.json` saves those ids without prompts
+or credentials. Each recorded call names its reservation, turn, charged cents and
+held cents. Unknown outcomes retain the full hold; confirmed unsent calls show zero
+charge and hold. Earlier calls and other users' turns are excluded from run totals.
+Company totals remain supporting information. Records describe the last observation;
+a still-running turn may create further reservations after that observation. A failed
+final read marks the record PARTIAL and retains the last known charges and holds.
+`timings.json` is written on failures too, including failed warm-up and interrupted
+attempts. A warm-up that was never reached is NOT RUN.
+
+Recording fixtures cover preparation failure after raising 100 cents to 700, both
+interrupt signals during the limit step, a failed restore recovered on the next run,
+and spending and timings after failed warm-up. Separate fixtures reject a failed
+step within 180 seconds and successful steps taking longer than 180 seconds. The CLI
+fixture refuses configuration loading to prove the secondary id check runs first.
+The command does not claim or remove a stack. Use `claim.sh` before startup and
+`down.sh --id` after copying the receipt. Live results are in the demo receipt.

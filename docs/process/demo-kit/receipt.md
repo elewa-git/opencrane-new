@@ -212,3 +212,319 @@ No secondary stack was claimed or started, and no paid model call ran. All tempo
 fixture files were removed. No access, money, memory or key-handling rule changed.
 The provider key still enters setup by file path only. Fresh-install qualification,
 real owner replies, laptop tunnelling and real-phone access remain NOT RUN.
+
+## 21 October 2026 — PDF preparation and timed smoke
+
+Source: `de6b2a800a7a62c3eb9432bc819b88dfc54c541a`, on main
+`523fc7218f4c84addbb8ddccf7fbccd48952e593`. Overall: PARTIAL.
+Test commits `570f96029` and `33fce5529` failed on their missing entry points
+before implementation. Recording fixtures prove that lost replies and unknown
+receipts never cause another write. They also check integer company ceilings,
+the personal PDF upload, unsafe slot refusals and timed result recording.
+Test commit `9ee1fa8e3` adds a browser fixture for repeated limit checks.
+Restoring the old selector made it fail with `Missing expected rejection`.
+The corrected check follows the current message and cannot accept an older refusal.
+
+The checked single-page quote says EUR 1,234.56 and delivery 17 November 2026.
+Preparation uses the existing group seed, authenticated APIs, request records and
+server receipts. It changes only company ceilings. No dependency, event, API or
+access rule changes. The owner-mode work in PR #546 is neither copied nor required.
+
+| Own check | Result | Time |
+| --- | --- | --- |
+| `npm ci`; tool symlinks | PASS | 32 s |
+| Demo and budget-helper tests, final two runs | PASS; 21 each | 33.96 / 30.34 s |
+| Event security rules, unchanged | PASS; 438 tests | 3.03 s |
+| Event catalogue | PASS; 149 types | 0.96 s |
+| Focused strict TypeScript check | PASS | Not timed |
+| Workspace/package typecheck | PASS | Not timed |
+| Standalone Chromium PDF rendering and visual inspection | PASS; one readable page | Not timed |
+| Full lint including knip | PASS on repeat; first run ended with SIGTERM (143) | 733 s |
+| Changelog and Markdown checks | PASS after removing a blank line | Not timed |
+
+Tests use `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and
+`nice -n 10`; these recording fixtures do not connect to PostgreSQL. No root suite
+or database container was started. Full lint and typecheck also use `nice -n 10`.
+
+| Real warm-slot smoke | First attempt | Second attempt |
+| --- | --- | --- |
+| Streaming and reload | NOT RUN | NOT RUN |
+| PDF facts, rendered preview and original download | NOT RUN | NOT RUN |
+| Stop and partial reply after reload | NOT RUN | NOT RUN |
+| Live direct delivery | NOT RUN | NOT RUN |
+| Shared-assistant reply | NOT RUN | NOT RUN |
+| Company-limit refusal and restore | NOT RUN | NOT RUN |
+| Three-minute duration and 1280/390 screenshots | NOT RUN | NOT RUN |
+
+Real preparation, warm-up and smoke timings: NOT RUN. Paid calls: zero;
+charged: 0 cents; held: 0 cents. The remaining shared daily allowance is not
+recorded in the available receipts. Its current value has been requested before
+paid execution. No secondary was claimed or created, so no cleanup is due.
+Real-model Stop diagnosis and fresh-install qualification remain NOT RUN.
+The owner stack, owner refresh, laptop tunnel and real phone remain untouched
+and NOT RUN. Browser viewport checks would not qualify a physical phone.
+
+A later confirmation exposed a 100 ms fixture-load timeout. Only the assertion
+that a refusal is absent now uses that short deadline; page setup uses the normal
+fixture timeout. Both corrected runs passed. No application timeout changed.
+The pull request records GitHub `ci-ok` on the pushed commit.
+
+## 21 October 2026 — paid secondary rehearsal
+
+Overall: PARTIAL. The two three-minute runs failed. This section replaces the
+previous NOT RUN status for paid execution. It does not qualify the demo as done.
+
+At the start, fetch and rebase onto `dc44c6cfc12045494d57504e275c00810476c3ed`
+completed. The base was an ancestor and neither rebase state directory remained.
+One secondary, slot 1, was claimed through `claim.sh`. The owner stack and port
+44200 were untouched. Real startup began at 05:20:38 UTC. Its initial live checks
+passed arithmetic with reload, a later member reply and PDF facts. Stop failed.
+The provider was supplied only by its key-file path to private setup and the
+existing custody API. No credential value is included in this evidence.
+
+The company daily and monthly ceilings were both 600 cents before the first paid
+verification. The event record confirms this at 05:21:25 UTC. The refreshed computer
+image was `sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc`.
+The orchestrator authorised a maximum of 600 cents from the remaining shared daily
+allowance of 2,000 cents. No ceiling above 600 cents was set.
+
+### Findings and small fixes
+
+Each behaviour fix has a separate preceding failing test commit.
+
+| Finding | Failing test | Fix |
+| --- | --- | --- |
+| Real startup seeded a larger cap before paid verification | `d0d3e076f` | `1f55c3e4d`: apply the integer allowance during startup |
+| The new personal chat's receipt endpoint refused access before the chat existed | `f3873dd72` | `2f562698a`: create once, then read its receipt; never repeat an uncertain write |
+| A full bridge queue discarded reports it had already accepted after disconnect | `dc9ff27a4` | `4e410887e`: save the bounded accepted queue after disconnect |
+| Shared warm-up waited in the pending session chooser | `4d72f391a` | `79af6c5c7`: use the existing session status helper |
+| Stop waited for the composer while the reply already offered Stop | `e5c2a88ef` | `819d00fdb`: use the reply's Stop control |
+
+The first Stop request was saved at 05:25:04.481. The computer finished its report
+journal at 05:25:16.275, but the server had saved only 102 of 594 reports at
+05:29:50 and 184 by 05:37:00. Replay filled the 64-report queue and closed the
+connection with code 1013, `Report queue limit`. The old connection check then
+skipped accepted reports. The regression saved only one of 64 accepted reports
+before the fix and all 64 after it. The byte and count limits remain unchanged.
+
+After restarting only this slot's server on the fix, all 594 reports were saved
+by 05:41:38.322. The waiting PDF arrived at 05:42:08.689. The computer journal's
+line 594 was `agent.turn_failed`; gateway usage line 2 recorded `missing_usage`
+for reservation `2e84f204-b6e9-4941-8d00-d450bb06dffb`. Its 16 cents remain held.
+[Stop evidence](stop-diagnosis.json) records the report lines, event positions and
+times without message text. No access, money or memory check was weakened.
+
+### Timed runs
+
+Source: `41ba473efd3f6dd291197535c2ab2fead16e30d9`. Warm-up took 45.723 seconds.
+The server included the bridge fix. These runs preceded the Stop-selector fix.
+Screenshots added a small amount of time to successful steps. The three-minute
+deadline closed both pages and prevented later steps from running.
+
+| Smoke step | 1280 pixels, 05:52:38 UTC | 390 pixels, 05:55:39 UTC |
+| --- | --- | --- |
+| Streaming and reload | PASS, 18.676 s | FAIL, 180.053 s |
+| PDF facts, rendered preview and identical original download | PASS, 22.089 s | NOT RUN |
+| Stop and partial reply after reload | FAIL, 139.379 s | NOT RUN |
+| Live direct delivery | NOT RUN | NOT RUN |
+| Shared-assistant reply | NOT RUN | NOT RUN |
+| Company-limit refusal and restore | NOT RUN | NOT RUN |
+| Whole run within three minutes | FAIL, 180.144 s | FAIL, 180.054 s |
+
+The first timed Stop submitted turn `8a51c5ed-e1a6-41b0-b252-7bcd1a177e4b`
+at 05:53:23.577. It saved no Stop request: the helper waited for the absent
+composer control while the reply offered Stop. Its computer journal grew to
+2,664 reports. Gateway usage line 10 recorded `missing_usage`, leaving 18 cents
+held. The next attempt could not use the supplier chat. The bridge fix alone did
+not make this long reply recover within the smoke deadline. The remaining delay
+needs further work; this rehearsal does not claim a complete Stop fix.
+
+[Raw timed results](paid-timings.json) preserve every result, including NOT RUN.
+[Startup results](paid-startup.json) record the earlier fresh-install checks.
+
+### Separate follow-up steps
+
+These used the same action functions and assertions, one action at a time, with
+its own three-minute deadline. They are not a passing end-to-end smoke.
+
+| Step | 1280 pixels | 390 pixels |
+| --- | --- | --- |
+| Direct delivery | PARTIAL, 13.269 s | FAIL, 180.073 s |
+| Shared-assistant reply and reload | PASS, 40.526 s | PASS, 31.790 s |
+| Company-limit refusal, reload and restore | PASS, 39.785 s | PASS, 36.633 s |
+
+Direct-delivery assertions passed on desktop, but the screenshot immediately
+showed “You no longer have access”. That contradicts a complete PASS. The second
+attempt timed out. No access check was bypassed or relaxed. This remains a blocker.
+Both company-limit checks refused the current prompt, preserved charged and held
+amounts, and restored both company ceilings to 600 cents. Neither made a paid call.
+[Follow-up timings](paid-extra-timings.json) retain the raw assertion results;
+the desktop direct result above also includes the screenshot finding.
+
+The owner stack, owner refresh, laptop tunnel and physical phone remain NOT RUN.
+A 390-pixel Chromium viewport does not qualify a real phone. A fresh install with
+all final fixes and a complete repeated smoke remains NOT RUN.
+
+The final Stop helper was also tried in fresh chats at both widths on source
+`eb9e5a46e`. Both failed waiting for streaming: 136.908 and 137.272 seconds.
+The first request started its paid call later, after its browser timeout. The
+second screenshot reports an uncertain message receipt. No uncertain command
+was resubmitted. [Fresh-chat results](paid-fresh-timings.json) preserve both attempts.
+At 06:09:08 the supplier messages read returned 200; at 06:09:13 it returned 503,
+as did approvals. [HTTP observations](paid-access-responses.json) contain only
+paths, times and status codes. The saved session cookie had not expired.
+
+### Paid calls and screenshots
+
+Final recorded spending: **25 cents charged, 50 cents held; 75 cents total**.
+Three calls have unknown usage, so their full holds remain in the total.
+No call was made after the 600-cent allowance was reached; it was never reached.
+After the limit checks restored 600 cents, the daily ceiling was lowered to the
+25 cents already charged to prevent queued work dispatching during shutdown.
+The budget snapshot confirms that change. Removing a disposable stack does not
+make its outstanding provider usage known or release this task's reported holds.
+
+| Paid call | Initial reservation, cents | Charged, cents | Still held, cents |
+| --- | --- | --- | --- |
+| Provider verification | 1 | 1 | 0 |
+| Startup arithmetic | 16 | 3 | 0 |
+| Startup Stop | 16 | Unknown | 16 |
+| Startup later-member reply | 16 | 3 | 0 |
+| Startup PDF facts | 16 | 3 | 0 |
+| First personal warm-up | 16 | 3 | 0 |
+| Repeated personal warm-up | 17 | 1 | 0 |
+| Shared warm-up | 15 | 3 | 0 |
+| Timed streaming, 1280 | 17 | 1 | 0 |
+| Timed PDF, 1280 | 17 | 1 | 0 |
+| Timed Stop, 1280 | 18 | Unknown | 18 |
+| Separate shared reply, 1280 | 15 | 3 | 0 |
+| Separate shared reply, 390 | 15 | 3 | 0 |
+| Fresh Stop, 1280, dispatched late | 16 | Unknown | 16 |
+
+[Call ledger](paid-calls.json), [budget events](paid-budget-events.json) and
+[gateway usage](paid-gateway-usage.json) retain identifiers and times for each call.
+There was no additional paid call in the second timed attempt, direct delivery,
+either refusal check, or the second fresh Stop attempt before shutdown.
+
+The screenshots were visually checked for secrets and private locations:
+[desktop reply](paid-streaming-1280.png), [desktop PDF](paid-pdf-1280.png),
+[desktop direct failure](paid-direct-step-1280.png),
+[desktop shared reply](paid-shared-step-1280.png),
+[narrow shared reply](paid-shared-step-390.png),
+[desktop refusal](paid-limit-step-1280.png),
+[narrow refusal](paid-limit-step-390.png),
+[narrow reconnect state](paid-access-390.png),
+[desktop fresh Stop failure](paid-fresh-stop-1280.png) and
+[narrow uncertain message](paid-fresh-stop-390.png).
+The separate narrow PDF preview attempt timed out waiting for its Open button;
+there is no passing narrow PDF screenshot. Failure images are evidence of the
+remaining problems, not proof of a successful journey.
+
+### Cleanup and final source checks
+
+Slot cleanup: PASS. `down.sh --id 1` completed and removed the slot's directory,
+including its claim, services, volumes and computer namespaces. This is the
+release operation for slots obtained through `claim.sh`; that script has no
+separate release option. Only this worktree's secondary was removed.
+
+After the live run, main advanced. Fetch and rebase onto
+`a7b564bf41a8de9ddc5a21d43a1142d7958caf65` also completed. Both rebase state
+directories were absent and main was an ancestor. The fix table uses the rebased
+commit ids. The live JSON files retain the SHAs actually used during the runs.
+The final source fixes end at `819d00fdb`; the live evidence commit is `e11b31b23`.
+No further paid run was made after this rebase.
+
+| Own final check | Result | Time |
+| --- | --- | --- |
+| Focused Node tests, serial runs | PASS, 31 tests each | 241.185 / 141.228 s |
+| Bridge pressure regression and existing pressure tests | PASS, 3 tests | 23.14 s |
+| Bridge pressure and replay tests after the final rebase | PASS, 49 tests | 180.65 s |
+| Event security rules, unchanged | PASS, 438 tests | 6.14 s |
+| Event catalogue | PASS, 149 event types | Not timed |
+| Changelog validation | PASS | Not timed |
+
+The earlier broad bridge run failed three time-sensitive replay read-count
+assertions while the stack was busy. The final 49-test run passed unchanged after
+slot cleanup. An earlier parallel Node run also hit two CLI fixture timeouts;
+both final serial runs passed without loosening assertions. The new bridge
+regression passed in both final bridge runs.
+
+Tests, lint and typecheck used `nice -n 10`. The Node fixtures used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; they do not connect
+to that database. Bridge tests used a task-owned PostgreSQL 17.6 container on a
+random localhost port, checked with `pg_isready`, and its actual `PG_TEST_URL`.
+The test database was removed with `docker rm -f -v pgtest-demo-kit-3` after the
+checks. No full root suite ran. Temporary browser sessions and observation
+helpers were removed. The pre-existing tool symlinks were kept.
+
+Required workspace/package typecheck: PASS. The separate strict demo-script
+check first found an optional assistant id that TypeScript could not narrow.
+Commit `4971d53d9` splits the existing validation into presence and personal-id
+checks. It accepts the same ids and changes no request or retry behaviour.
+The focused strict check then passed. Preparation tests passed twice more:
+three tests each, 3.131 / 3.131 seconds. This is the final source-code commit.
+
+Full lint: PASS, including dependency rules, knip, Markdown, links, fixture checks,
+reviewed component licences and changelog validation. ESLint reported zero errors
+and 23 warnings. An earlier lint process was paused during live work and replaced
+with this complete run after cleanup. `git diff --check`: PASS.
+
+The source checks are green; live qualification remains PARTIAL as recorded
+above. GitHub CI on the final pushed commit is reported on the pull request.
+
+## Ceiling recovery and run spending — 21 October 2026
+
+Runtime code and test source: `60d8307a2c0f8353a88d916801d5167a6512c32e`.
+Rebased onto `2ecadcc3e85c66e47db4b2c387ec4eb83e6e6ac7`; the rebase finished.
+The paid rehearsal's changes and records remain. The startup conflict keeps both
+main's owner safeguards and the approved allowance before paid provider setup.
+
+Each rehearsal saves both previous company ceilings in its private output folder
+before changing them. Failures and SIGINT/SIGTERM stop further work and restore
+those values through the admin API. A failed restore keeps its file, and the next
+run restores it before preparation. The file is removed only after both values
+are confirmed. A conditional restore also advances the stream when the values
+already match, preventing an older interrupted write from raising them later.
+
+Spending records start with a company budget and budget-stream position. They
+match reservations to this run's submitted message ids and retain charged and
+held cents separately. Unknown usage stays held. Earlier reservations and other
+users' turns do not count towards this run. Failed warm-up and interrupted smoke
+still write timings. A failed final spending read keeps previously observed
+charges and holds and marks the record PARTIAL.
+
+Failing-test commits preceded each behaviour change. The preparation regression
+first ended at 700 instead of 100 cents after HTTP 503. Signal and restart fixtures,
+missing spending fields, the specific id refusal and a lost charge during a failed
+final read also failed before their fixes. Three temporary removal probes failed
+as intended: accepting a failed step within 180 seconds, accepting passing steps
+after 180 seconds, and loading configuration before checking the secondary id.
+All probe changes were removed.
+
+| Own check | Result |
+| --- | --- |
+| Post-rebase demo, startup and journey-refusal fixtures, two runs | PASS; 64 each, 330.97 / 274.12 seconds |
+| Workspace and package typecheck | PASS |
+| Focused strict TypeScript check on rebased demo scripts and fixtures | PASS |
+| Full lint, including knip | PASS; zero errors, 23 existing warnings |
+| Event catalogue | PASS; 149 types |
+| Changelog check | PASS |
+| Three removal probes | PASS; each removal caused its specific test to fail |
+| Rebase completion and diff whitespace | PASS |
+
+The first focused typecheck found two type issues; both were corrected before the
+final focused check and post-rebase test runs. Earlier targeted passes also passed
+29 and 30 tests. No assertion, access check, money check, memory check or key-handling
+rule was weakened. New recovery and spending tests are included in CI.
+
+All lint, typecheck and test commands used `nice -n 10`. Tests set
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`; these recording
+fixtures do not connect to PostgreSQL. No root suite or database container ran.
+Logs are in `/tmp/demo-kit-3-final-tests-*.log` and `/tmp/demo-kit-3-fix-*.log` on
+this host. The fixtures use synthetic API responses, browser interactions and
+budget events; they do not prove a real-provider journey.
+
+This fix task made no paid calls, charged no money, held no money and claimed no
+slot. The owner stack was untouched. Fresh live qualification for these fixes is
+NOT RUN. The earlier paid rehearsal remains PARTIAL, including its recorded Stop
+and direct-delivery failures. The PR remains draft.

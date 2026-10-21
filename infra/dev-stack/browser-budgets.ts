@@ -193,7 +193,7 @@ function isReservation(row: StoredEvent) {
   return row.event.type === 'budget.reserved';
 }
 
-async function findBudgetNoticeForPrompt(member: Page, prompt: string): Promise<Locator> {
+export async function findBudgetNoticeForPrompt(member: Page, prompt: string): Promise<Locator> {
   const message = member.getByText(prompt, { exact: true });
   await message.waitFor({ state: 'visible' });
   const entry = message.locator('xpath=ancestor::article[1]');

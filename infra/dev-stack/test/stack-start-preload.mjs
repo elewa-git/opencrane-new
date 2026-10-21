@@ -156,8 +156,23 @@ const packages = new Map([
   ['pg', 'export class Pool {}'],
   ['@opencrane/auth', 'export async function tokenIssuer() { return { jwks: {} }; }'],
   ['@opencrane/authz', 'export async function createStore() { return { silo: "fixture", apiUrl: "https://fga.invalid", storeId: "fixture", authorizationModelId: "fixture" }; }'],
-  ['@opencrane/event-store', 'export async function connectEventStore() { return { store: { async head() { return 1; } }, async close() {} }; }'],
-  ['@opencrane/models', 'export function readToolPolicy() {} export function envelope() { throw Error("Unexpected event"); } export async function managedProviderCallsEnabled() { return false; }'],
+  ['@opencrane/event-store', `export async function connectEventStore() {
+    return { store: {
+      async head(subject) { return subject?.startsWith('budget-') ? 0 : 1; },
+      async append({ event }) {
+        globalThis.startFixture.recordBudgetEvent(event);
+        return { status: 'appended' };
+      },
+    }, async close() {} };
+  }`],
+  ['@opencrane/models', `export function readToolPolicy() {}
+    export function envelope(silo, subject, type, data) {
+      return { silo, subject, type, data };
+    }
+    export async function managedProviderCallsEnabled() {
+      globalThis.startFixture.record('provider-verification');
+      return false;
+    }`],
 ]);
 async function setup(path) {
   assert.equal(path, '/synthetic-key-file');
@@ -168,7 +183,11 @@ async function setup(path) {
   const signal = process.env['START_SIGNAL'];
   if (signal) process.emit(signal);
 }
-globalThis.startFixture = { failureAt, setup };
+function recordBudgetEvent(event) {
+  record('initial-budget-event');
+  writeFileSync(`${process.env.HOME}/budget-event.json`, JSON.stringify(event));
+}
+globalThis.startFixture = { failureAt, setup, record, recordBudgetEvent };
 function resolve(specifier, context, nextResolve) {
   if (packages.has(specifier)) return { url: `fixture:${specifier}`, shortCircuit: true };
   return nextResolve(specifier, context);

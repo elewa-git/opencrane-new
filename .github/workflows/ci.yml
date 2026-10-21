@@ -49,6 +49,9 @@ jobs:
       - name: Check the event catalogue matches the registry
         run: npm run check:events
 
+      - name: Install Chromium for demo recording checks
+        run: npx playwright install --with-deps chromium
+
       - name: Check local provider setup and model stub
         run: >-
           nice -n 10 node --experimental-strip-types --test
@@ -60,6 +63,8 @@ jobs:
           infra/dev-stack/demo-seed-run.test.ts
           infra/dev-stack/stack-real-mode.test.ts infra/dev-stack/fleet-task.test.ts
           infra/dev-stack/stack-start.test.ts infra/dev-stack/journey-refusal.test.ts
+          infra/dev-stack/demo-prepare.test.ts infra/dev-stack/demo-smoke.test.ts
+          infra/dev-stack/demo-recovery.test.ts infra/dev-stack/demo-spending.test.ts
           infra/dev-stack/zitadel-setup.test.ts infra/package/fresh-twice.test.ts
           infra/package/browser-capture.test.ts
 

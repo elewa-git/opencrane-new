@@ -1,0 +1,77 @@
+[
+  {
+    "line": 1,
+    "id": "c8344b14-33bd-42ff-a5ff-bf8af4063dca",
+    "inputTokens": 9494,
+    "outputTokens": 37
+  },
+  {
+    "line": 2,
+    "id": "2e84f204-b6e9-4941-8d00-d450bb06dffb",
+    "uncertainReason": "missing_usage"
+  },
+  {
+    "line": 3,
+    "id": "7964369e-75cd-4c63-9ab4-95430541faed",
+    "inputTokens": 9489,
+    "outputTokens": 11
+  },
+  {
+    "line": 4,
+    "id": "772c9b28-0422-4e57-8c21-5b5440a4ecda",
+    "inputTokens": 9753,
+    "outputTokens": 26
+  },
+  {
+    "line": 5,
+    "id": "c9bd2055-9827-4edf-81bc-87ad2c8afb84",
+    "inputTokens": 9692,
+    "outputTokens": 6
+  },
+  {
+    "line": 6,
+    "id": "5473a3dc-7d8f-4638-9390-155f7699979b",
+    "inputTokens": 9923,
+    "outputTokens": 6
+  },
+  {
+    "line": 7,
+    "id": "5961819e-b0dd-4c7e-a87a-a2def47a5a57",
+    "inputTokens": 8615,
+    "outputTokens": 6
+  },
+  {
+    "line": 8,
+    "id": "27ed9d17-8ccb-4431-aac2-0c27b66c33e7",
+    "inputTokens": 10162,
+    "outputTokens": 36
+  },
+  {
+    "line": 9,
+    "id": "f2d1c17c-5741-4022-934d-2a001b948b39",
+    "inputTokens": 10435,
+    "outputTokens": 26
+  },
+  {
+    "line": 10,
+    "id": "b6ef51ef-8f1f-4d68-a688-004294977b9f",
+    "uncertainReason": "missing_usage"
+  },
+  {
+    "line": 11,
+    "id": "1f934865-a66e-48ba-8625-e0ba7f57c72a",
+    "inputTokens": 8729,
+    "outputTokens": 11
+  },
+  {
+    "line": 12,
+    "id": "c15a452f-2794-4fad-bd08-831c89c19f73",
+    "inputTokens": 8776,
+    "outputTokens": 11
+  },
+  {
+    "line": 13,
+    "id": "9f970a33-28e5-4254-9235-20604f2ede9e",
+    "uncertainReason": "missing_usage"
+  }
+]

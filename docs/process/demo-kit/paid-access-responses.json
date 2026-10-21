@@ -1,0 +1,32 @@
+[
+  {
+    "time": "2026-10-21T06:09:02.801Z",
+    "path": "/api/chat",
+    "status": 200
+  },
+  {
+    "time": "2026-10-21T06:09:04.497Z",
+    "path": "/api/conversations",
+    "status": 200
+  },
+  {
+    "time": "2026-10-21T06:09:08.164Z",
+    "path": "/api/conversations/demo-supplier-v1/approvals",
+    "status": 200
+  },
+  {
+    "time": "2026-10-21T06:09:08.538Z",
+    "path": "/api/conversations/demo-supplier-v1/messages",
+    "status": 200
+  },
+  {
+    "time": "2026-10-21T06:09:13.335Z",
+    "path": "/api/conversations/demo-supplier-v1/messages",
+    "status": 503
+  },
+  {
+    "time": "2026-10-21T06:09:13.781Z",
+    "path": "/api/conversations/demo-supplier-v1/approvals",
+    "status": 503
+  }
+]

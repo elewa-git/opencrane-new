@@ -19,7 +19,7 @@ import { connectEventStore } from '@opencrane/event-store';
 import { envelope, managedProviderCallsEnabled } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
-import { checkProviderMode, modelsEnvironment } from './models-environment.ts';
+import { checkProviderMode, modelsEnvironment, startupCeilings } from './models-environment.ts';
 import { setupDevProvider } from './provider-setup.ts';
 import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
@@ -448,6 +448,7 @@ async function up(fresh: boolean) {
   const firstStart = fresh || !await exists(`${directory}/settings.env`);
   const credentialFile = process.env['DEV_REAL_PROVIDER_FILE'];
   const real = credentialFile !== undefined;
+  const ceilings = startupCeilings(real, process.env['DEMO_ALLOWANCE_CENTS']);
   if (real && (!credentialFile || process.env['DEV_OWNER_BOOTSTRAP'] === '0')) {
     throw new Error('Real provider setup requires a credential file and the dev Owner');
   }
@@ -525,8 +526,7 @@ async function up(fresh: boolean) {
     // enough room for both fresh and repeat runs.
     if (!await events.store.head(subject)) {
       const event = envelope(silo, subject, 'budget.ceiling_set', {
-        scope: 'global', dailyCeilingCents: real ? 2000 : 4000,
-        ceilingCents: real ? 2000 : 20000, setBy: 'dev-stack',
+        scope: 'global', ...ceilings, setBy: 'dev-stack',
       });
       if ((await events.store.append({ event, expectedSequence: 0 })).status !== 'appended') throw new Error('Stub budget seed failed');
     }

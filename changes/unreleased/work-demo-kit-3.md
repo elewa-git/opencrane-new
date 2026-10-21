@@ -1,0 +1,7 @@
+- The secondary demo rehearsal prepares a scanned supplier PDF and company spending ceilings, warms both assistants, and records two timed browser checks with screenshots.
+- Fresh real-provider startup honours the approved demo allowance before its first paid check.
+- Demo preparation creates the PDF chat before reading its protected receipt and keeps uncertain attempts from being repeated.
+- Replies keep saving reports that were already accepted when a busy connection closes.
+- Demo warm-up checks a shared session's saved status before opening its chat.
+- The real-model Stop check uses the reply's Stop control while the composer is loading.
+- Demo rehearsals restore both previous company ceilings after failures or interruption and recover unfinished restores before the next run. Private records separate each run's charged and held calls and keep timings when warm-up fails.

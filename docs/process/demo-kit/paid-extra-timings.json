@@ -1,0 +1,221 @@
+{
+  "sha": "3d493ea3b79745e965558ad1ef61d09539cc3ef1",
+  "attempts": [
+    {
+      "name": "direct",
+      "width": 1280,
+      "startedAt": "2026-10-21T06:00:37.575Z",
+      "before": {
+        "sequence": 910,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 19,
+        "monthCents": 19,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "after": {
+        "sequence": 910,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 19,
+        "monthCents": 19,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "elapsedMs": 13269,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "direct",
+          "result": "PASS",
+          "elapsedMs": 13269
+        }
+      ]
+    },
+    {
+      "name": "direct",
+      "width": 390,
+      "startedAt": "2026-10-21T06:00:54.205Z",
+      "before": {
+        "sequence": 910,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 19,
+        "monthCents": 19,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "after": {
+        "sequence": 910,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 19,
+        "monthCents": 19,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "elapsedMs": 180073,
+      "result": "FAIL",
+      "steps": [
+        {
+          "name": "direct",
+          "result": "FAIL",
+          "elapsedMs": 180073
+        }
+      ]
+    },
+    {
+      "name": "shared",
+      "width": 1280,
+      "startedAt": "2026-10-21T06:03:56.893Z",
+      "before": {
+        "sequence": 910,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 19,
+        "monthCents": 19,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "after": {
+        "sequence": 2542,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 22,
+        "monthCents": 22,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "elapsedMs": 40526,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "shared",
+          "result": "PASS",
+          "elapsedMs": 40526
+        }
+      ]
+    },
+    {
+      "name": "shared",
+      "width": 390,
+      "startedAt": "2026-10-21T06:04:41.628Z",
+      "before": {
+        "sequence": 2542,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 22,
+        "monthCents": 22,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "after": {
+        "sequence": 2560,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 25,
+        "monthCents": 25,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "elapsedMs": 31790,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "shared",
+          "result": "PASS",
+          "elapsedMs": 31790
+        }
+      ]
+    },
+    {
+      "name": "limit",
+      "width": 1280,
+      "startedAt": "2026-10-21T06:05:16.288Z",
+      "before": {
+        "sequence": 2560,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 25,
+        "monthCents": 25,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "after": {
+        "sequence": 2567,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 25,
+        "monthCents": 25,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "elapsedMs": 39785,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "limit",
+          "result": "PASS",
+          "elapsedMs": 39785
+        }
+      ]
+    },
+    {
+      "name": "limit",
+      "width": 390,
+      "startedAt": "2026-10-21T06:05:58.876Z",
+      "before": {
+        "sequence": 2567,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 25,
+        "monthCents": 25,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "after": {
+        "sequence": 2574,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "todayCents": 25,
+        "monthCents": 25,
+        "reservedCents": 34,
+        "ceilingCents": 600,
+        "dailyCeilingCents": 600,
+        "ceilings": []
+      },
+      "elapsedMs": 36633,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "limit",
+          "result": "PASS",
+          "elapsedMs": 36633
+        }
+      ]
+    }
+  ]
+}

@@ -2,6 +2,15 @@
 
 For people, read [README.md](README.md) first.
 
+## Report delivery after a connection closes
+
+The server finishes saving reports already accepted into its bounded bridge queue
+after the connection closes. A later connection resumes from that saved position.
+The queue still refuses more than 64 reports or 1 MiB per conversation. Report
+validation, ordering and conditional writes remain required. The regression test
+`test/bridge-pressure-recovery.test.ts` holds a write while the queue fills and
+checks that all 64 accepted reports are saved after the connection closes.
+
 ## Closed chat cleanup
 
 The bridge polls closed agent sessions as well as open ones. It reads the saved

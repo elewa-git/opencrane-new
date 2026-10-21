@@ -4,7 +4,7 @@
 
 This is the owner's refresh and rehearsal guide. The current seed creates two groups
 and one shared assistant through authenticated product APIs. It reuses existing people.
-PDF seeding, automatic ceiling changes and the three-minute smoke command are not built yet.
+A secondary rehearsal also prepares a scanned PDF, sets company ceilings and times the smoke checks.
 
 ## Where it fits
 
@@ -28,7 +28,8 @@ flowchart LR
 
 Existing display names stay as they are. The join command supports a display name;
 there is no rename command for an already joined person. The seed refuses missing people.
-It does not invent replacement identities or overwrite a company limit.
+It does not invent replacement identities. The separate rehearsal sets company ceilings
+to the confirmed allowance in integer cents.
 
 ## Processes it handles
 
@@ -67,6 +68,22 @@ infra/dev-stack/down.sh --id 1
 Use id 2 instead when that is the agreed free slot. Missing and owner ids are refused.
 Startup currently runs the full existing journey, including its paid checks. It is
 not the proposed three-minute smoke. The launcher does not suppress a failed journey.
+
+After startup, this secondary-only command prepares the PDF and ceilings, warms both
+computers, then runs the smoke twice. Set the allowance to the confirmed remaining
+shared cents, including this stack's startup calls and uncertain holds.
+
+```sh
+DEV_STACK_ID=1 DEMO_ALLOWANCE_CENTS=700 \
+node --experimental-strip-types infra/dev-stack/demo-smoke-run.ts
+```
+
+The example 700 is not a spending approval. Copy private receipts and screenshots
+from the slot's `demo-smoke/` directory before running `down.sh --id 1`.
+The command saves both previous company limits and restores them when it finishes
+or stops. If a run still has `saved-ceilings.json`, keep that folder: the next
+invocation finishes its restore before starting another rehearsal. Spending records
+name this run's reservations, charges and holds, and failed warm-up still has timings.
 
 ### OWNER-RUN: refreshing the owner checkout
 
@@ -160,10 +177,10 @@ The seed prints complete links. Use `/workspace`, `/workspace/direct`, `/workspa
 `/org/people?tab=groups`, `/org/models`, `/org/spending` and `/org/history`.
 Only the owner opens organisation settings. Action history uses the current chat id.
 
-The planned three-minute check covers streaming and reload, a scanned supplier PDF's
+The secondary three-minute check covers streaming and reload, a scanned supplier PDF's
 fixed total and delivery date plus preview/download, Stop and reload, live direct delivery,
 a private shared-assistant reply, and company-limit refusal followed by restoration.
-For now those checks are manual and the full timed smoke is **NOT RUN**. Upload only
+Its live qualification is recorded in the linked receipt. Upload only
 into a personal chat; shared-assistant uploads are refused. Use plain-sentence prompts
 that need no internet, tools or memory. Never show the provider key.
 
