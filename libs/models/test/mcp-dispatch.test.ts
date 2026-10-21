@@ -2470,7 +2470,7 @@ it('refuses a saved reload during the final awaited watch read',
 const remoteGuards = ['gateway', 'bytes', 'private', 'metadata', 'mixed', 'empty', 'rebind',
   'untrusted', 'wrong_name', 'redirect', 'oversize', 'session', 'mime', 'reply_fields',
   'undeclared', 'revision', 'dns_timeout', 'permit_timeout', 'held_start', 'lost_start',
-  'deadline'] as const;
+  'deadline', 'watch_admission', 'watch_final'] as const;
 async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
   const context = await publishedFixture('allow', true, mode !== 'undeclared');
@@ -2479,8 +2479,11 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   onTestFinished(remote.close);
   setup.dispatchOptions.routes.length = 0;
   Object.assign(setup.dispatchOptions, { remoteNetwork: remote.network });
-  function noWatch() { throw new Error('Remote calls must use their saved dated check'); }
-  setup.dispatchOptions.requireCatalogue = noWatch;
+  let held = mode === 'watch_admission';
+  function requireCatalogue() {
+    if (held) throw new Error('Catalogue watch unavailable');
+  }
+  setup.dispatchOptions.requireCatalogue = requireCatalogue;
   remote.revision(catalogue.schemaDigest);
   if (mode === 'private') remote.setAnswers(['127.0.0.1']);
   if (mode === 'metadata') remote.setAnswers(['169.254.169.254']);
@@ -2502,7 +2505,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     remote.network.resolve = heldDns;
   }
   const rowsBefore = await setup.nats.store.head();
-  if (mode === 'undeclared') {
+  if (mode === 'undeclared' || mode === 'watch_admission') {
     expect(await gatewayCall(context)).toBe(403);
     expect(remote.dnsCalls()).toBe(0);
   } else if (mode === 'gateway') {
@@ -2519,6 +2522,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       const event = z.object({ type: z.string() }).parse(command.event);
       if (event.type === 'tool.dispatch_started') {
         startSaved.resolve();
+        if (mode === 'watch_final') held = true;
         if (mode === 'lost_start') throw new Error('Save reply lost');
         if (mode === 'held_start') await releaseStart.promise;
       }
@@ -2566,7 +2570,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       const success = ['bytes', 'rebind', 'reply_fields', 'held_start'].includes(mode);
       let expected = success ? 200 : 502;
       if (['private', 'metadata', 'mixed', 'empty', 'dns_timeout', 'permit_timeout',
-        'lost_start'].includes(mode)) expected = 403;
+        'lost_start', 'watch_final'].includes(mode)) expected = 403;
       if (mode === 'deadline') expected = 504;
       const responseBody = await response.text();
       expect(response.status, responseBody).toBe(expected);
