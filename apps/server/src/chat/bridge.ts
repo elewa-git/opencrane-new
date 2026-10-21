@@ -22,7 +22,7 @@ import { turnCommand, TurnAdmissionRejected,
 import { recordBudgetRefusal } from './budget-refusal.ts';
 import { readChatFacts } from './chat-summary.ts';
 import { chatHistory } from './commands.ts';
-import { recordReport, ReportRejected } from './reports.ts';
+import { recordReports, canCombineReports, ReportRejected } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
 import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
@@ -31,11 +31,15 @@ type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Partial<Pick<ChatOptions, 'binding'>> &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
-type ReportQueue = { pending: Promise<void>; count: number; bytes: number };
+type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
+  bytes: number; started: boolean };
+type ReportQueue = { pending: Promise<void>; count: number; bytes: number;
+  last?: ReportBatch };
 const receiptData = z.object({ type: z.literal('file_received') });
 const reportDetails = z.object({
   sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(),
   turnId: z.string(), type: z.string(),
+  text: z.string().optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(), threadId: z.string().optional(),
 });
 
@@ -51,6 +55,17 @@ function messageBytes(raw: RawData) {
   return Buffer.from(raw);
 }
 
+function combineQueuedReport(batch: ReportBatch | undefined, value: unknown,
+  report: z.infer<typeof reportDetails>, bytes: number) {
+  if (!batch || batch.started) return false;
+  if (!canCombineReports(batch.values.at(-1), value, batch.textLength)) return false;
+  batch.values.push(value);
+  batch.sequences.push(report.sequence);
+  batch.textLength += report.text?.length ?? 0;
+  batch.bytes += bytes;
+  return true;
+}
+
 function turnStatus(type: string) {
   if (type === 'agent.turn_started') return 'started';
   if (type === 'agent.turn_completed') return 'completed';
@@ -59,7 +74,7 @@ function turnStatus(type: string) {
 
 async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
   tokens: Tokens | undefined, socket: WebSocket,
-  report: z.infer<typeof reportDetails>, value: unknown) {
+  report: z.infer<typeof reportDetails>, batch: ReportBatch) {
   // Save reports already accepted into the bounded queue after a disconnect.
   // Otherwise a replay can fill the queue again before its saved position advances.
   const context: Parameters<typeof turnCommand>[1] = { silo: options.silo, ...input };
@@ -69,7 +84,7 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
       report.conversationId, report.turnId);
     if (await childRequestHeld(options, facts.created)) throw new ReportRejected('Child request queued');
   }
-  const result = await recordReport(options.store, options.keys, context, value);
+  const result = await recordReports(options.store, options.keys, context, batch.values);
   const acknowledgement: {
     type: string; sequence: number; token?: string; expiresAt?: number;
     model?: string; refused?: string; context?: unknown;
@@ -93,7 +108,12 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
       await releaseTurnCredentials(options, context, tokens, report, binding, acknowledgement);
     }
   }
-  if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(acknowledgement));
+  if (socket.readyState === socket.OPEN) {
+    for (const sequence of batch.sequences) {
+      const reply = { ...acknowledgement, sequence };
+      socket.send(JSON.stringify(reply));
+    }
+  }
 }
 
 async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: WebSocket,
@@ -156,7 +176,7 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
       if (receiptData.safeParse(value).success) return;
       if (approvals.receive(value)) return;
       const report = reportDetails.parse(value);
-      const queue = queues.get(report.conversationId) ??
+      const queue: ReportQueue = queues.get(report.conversationId) ??
         { pending: Promise.resolve(), count: 0, bytes: 0 };
       const newQueueOverLimit = !queues.has(report.conversationId) && queues.size >= 64;
       if (queue.count >= 64 || queue.bytes + bytes.length > 1_048_576 || newQueueOverLimit) {
@@ -166,13 +186,18 @@ function reportReceiver(options: BridgeOptions, input: BridgeInput,
       queues.set(report.conversationId, queue);
       queue.count++;
       queue.bytes += bytes.length;
+      if (combineQueuedReport(queue.last, value, report, bytes.length)) return;
+      const batch: ReportBatch = { values: [value], sequences: [report.sequence],
+        textLength: report.text?.length ?? 0, bytes: bytes.length, started: false };
+      queue.last = batch;
       const previous = report.previousSequence === undefined ? legacyPending : Promise.resolve();
       async function persistReport() {
-        await acknowledgeReport(options, input, tokens, socket, report, value);
+        batch.started = true;
+        await acknowledgeReport(options, input, tokens, socket, report, batch);
       }
       function finishReport() {
-        queue.count--;
-        queue.bytes -= bytes.length;
+        queue.count -= batch.values.length;
+        queue.bytes -= batch.bytes;
         if (!queue.count) queues.delete(report.conversationId);
       }
       const waiting = Promise.all([queue.pending, previous]);

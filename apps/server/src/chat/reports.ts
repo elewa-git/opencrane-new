@@ -7,8 +7,9 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readEventAt, readStreamSummary, type AppendCommand, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
-import { readChatFacts } from './chat-summary.ts';
+import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import type { conversationKeys } from './keys.ts';
+import { chatWrite } from './write-priority.ts';
 
 // Permanent refusals need operator attention; reconnecting cannot repair them.
 export class ReportRejected extends Error {}
@@ -42,70 +43,177 @@ const reportSchema = z.union([
   nativeConsentReportSchema,
   existingReportSchema, toolStartedReportSchema, toolFinishedReportSchema,
 ]);
+type Report = z.infer<typeof reportSchema>;
+type ReportContext = { silo: string; computerId: string; assistantId: string };
+function reportDigest(report: Report) {
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(report));
+  return hash.digest('hex');
+}
+
+export function canCombineReports(first: unknown, next: unknown, textLength: number) {
+  const left = reportSchema.parse(first);
+  const right = reportSchema.parse(next);
+  if (left.type !== 'agent.message_delta' || right.type !== left.type ||
+      left.previousSequence === undefined || right.previousSequence !== left.sequence ||
+      right.sequence <= left.sequence || typeof left.text !== 'string' ||
+      typeof right.text !== 'string' || textLength + right.text.length > 128_000) return false;
+  // Compare every other field so additional report details cannot be mixed silently.
+  const { sequence: leftSequence, previousSequence: leftPrevious, text: leftText,
+    ...leftIdentity } = left;
+  const { sequence: rightSequence, previousSequence: rightPrevious, text: rightText,
+    ...rightIdentity } = right;
+  void leftSequence;
+  void leftPrevious;
+  void leftText;
+  void rightSequence;
+  void rightPrevious;
+  void rightText;
+  return JSON.stringify(leftIdentity) === JSON.stringify(rightIdentity);
+}
+
+export async function recordReports(store: EventStore, keys: ReturnType<typeof conversationKeys>,
+  context: ReportContext, values: unknown[]) {
+  const reports: Report[] = [];
+  let text = '';
+  for (const value of values) {
+    const report = reportSchema.parse(value);
+    const previous = reports.at(-1);
+    if (previous && !canCombineReports(previous, report, text.length)) {
+      throw new ReportRejected('Report batch mismatch');
+    }
+    text += 'text' in report ? report.text ?? '' : '';
+    reports.push(report);
+  }
+  const last = reports.at(-1);
+  if (!last || reports.length > 64) throw new ReportRejected('Invalid report batch');
+  if (reports.length === 1) return recordReport(store, keys, context, last);
+  const combined = { ...last, text };
+  return recordReport(store, keys, context, combined, reports);
+}
+
 export async function reportPosition(store: EventStore, silo: string, computerId: string) {
   const sequences = new Set<number>();
   for await (const { event } of readEvents(store, 1, await store.head())) {
-    if (event.silo === silo && event.report?.computerId === computerId) sequences.add(event.report.sequence);
+    if (event.silo === silo && event.report?.computerId === computerId) {
+      sequences.add(event.report.sequence);
+      for (const receipt of event.report.preceding ?? []) sequences.add(receipt.sequence);
+    }
   }
   let position = 0;
   while (sequences.has(position + 1)) position++;
   return position;
 }
-export async function recordReport(store: EventStore, keys: ReturnType<typeof conversationKeys>, context: { silo: string; computerId: string; assistantId: string }, value: unknown) {
+export async function recordReport(store: EventStore, keys: ReturnType<typeof conversationKeys>,
+  context: ReportContext, value: unknown, batch?: Report[],
+  deadline = performance.now() + 10_000): Promise<'duplicate' | 'recorded'> {
   const report = reportSchema.parse(value);
   if (report.assistantId !== context.assistantId) throw new ReportRejected('Assistant mismatch');
-  const digestHash = createHash('sha256');
-  digestHash.update(JSON.stringify(report));
-  const digest = digestHash.digest('hex');
+  const digest = reportDigest(batch?.at(-1) ?? report);
+  const first = batch?.[0] ?? report;
   const facts = await readChatFacts(store, context.silo, report.conversationId,
-    report.turnId, context.computerId, report.sequence);
+    report.turnId, context.computerId, first.sequence, deadline);
   const created = agentSessionData(facts.created);
-  if (created.assistantId !== context.assistantId || !facts.message) {
-    throw new ReportRejected('Unrequested report');
-  }
-  validateReportContextClass(report, created);
-  if (report.requesterId) {
-    const author = z.object({ authorId: z.string() }).parse(facts.message);
-    if (author.authorId !== report.requesterId) throw new ReportRejected('Requester mismatch');
-  }
+  const authorId = reportAuthor(report, context.assistantId, created, facts.message);
   const subject = `conversation-${report.conversationId}`;
   if (facts.reportPosition !== undefined) {
-    const previous = await readEventAt(store, subject, facts.reportPosition,
-      performance.now() + 10_000);
-    if (previous) {
-      verifyReportReplay(previous, report, digest);
-    } else {
-      verifyDigest(undefined, digest);
-    }
-    return 'duplicate' as const;
+    return verifyRecordedReport(store, keys, context, report, batch, facts.reportPosition, digest);
   }
-  await requireSharedReportTurn(store, context, report, created, facts.message.authorId);
+  await requireSharedReportTurn(store, context, report, created, authorId);
   let previousSequence = facts.lastReportSequence;
-  let expectedPrevious = report.previousSequence;
+  let expectedPrevious = first.previousSequence;
   if (expectedPrevious === undefined) {
     previousSequence = await reportPosition(store, context.silo, context.computerId);
     expectedPrevious = report.sequence - 1;
   }
   if (expectedPrevious !== previousSequence) throw new ReportRejected('Report sequence gap');
+  const event = reportEvent(report, context, keys, batch, digest);
+  const command: AppendCommand = { expectedSequence: facts.sequence, historyChecked: true, event };
+  const append = store.append.bind(store, command);
+  const result = await chatWrite(store, subject, 'report', append);
+  if (result.status === 'conflict' && performance.now() < deadline) {
+    // Reload after a competing Stop or message. Never repeat an uncertain append.
+    return recordReport(store, keys, context, value, batch, deadline);
+  }
+  if (result.status === 'rejected') throw new ReportRejected('Report append rejected');
+  if (result.status !== 'appended') throw new Error('Report append unavailable');
+  const committed = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
+  verifyDigest(committed, digest, event.id);
+  if (batch) {
+    // A concurrent append may save different groups with the same final report.
+    // Check every original against its saved receipt before acknowledging the batch.
+    await verifyAppendedBatch(store, context, batch, committed!);
+  }
+  return 'recorded' as const;
+}
+
+async function verifyAppendedBatch(store: EventStore, context: ReportContext,
+  batch: Report[], committed: StoredEvent) {
+  for (const original of batch) {
+    function matchesSequence(receipt: { sequence: number }) {
+      return receipt.sequence === original.sequence;
+    }
+    const receipt = committed.event.report;
+    let saved: StoredEvent | undefined = committed;
+    if (receipt?.sequence !== original.sequence && !receipt?.preceding?.some(matchesSequence)) {
+      const deadline = performance.now() + 10_000;
+      const facts = await readChatFacts(store, context.silo, original.conversationId,
+        original.turnId, context.computerId, original.sequence, deadline);
+      saved = undefined;
+      if (facts.reportPosition !== undefined) {
+        saved = await readEventAt(store, committed.event.subject, facts.reportPosition, deadline);
+      }
+    }
+    if (!saved) throw new ReportRejected('Report sequence reused');
+    verifyReportReplay(saved, original, reportDigest(original));
+  }
+}
+
+function reportAuthor(report: Report, assistantId: string,
+  created: ReturnType<typeof agentSessionData>, message: ChatFacts['message']) {
+  if (created.assistantId !== assistantId || !message) {
+    throw new ReportRejected('Unrequested report');
+  }
+  validateReportContextClass(report, created);
+  if (report.requesterId) {
+    const author = z.object({ authorId: z.string() }).parse(message);
+    if (author.authorId !== report.requesterId) throw new ReportRejected('Requester mismatch');
+  }
+  return message.authorId;
+}
+
+async function verifyRecordedReport(store: EventStore, keys: ReturnType<typeof conversationKeys>,
+  context: ReportContext, report: Report, batch: Report[] | undefined, position: number,
+  digest: string) {
+  if (batch) {
+    // Replay can split a previously saved batch. Check every original digest and position.
+    for (const original of batch) await recordReport(store, keys, context, original);
+    return 'duplicate' as const;
+  }
+  const subject = `conversation-${report.conversationId}`;
+  const previous = await readEventAt(store, subject, position, performance.now() + 10_000);
+  if (previous) verifyReportReplay(previous, report, digest);
+  else verifyDigest(undefined, digest);
+  return 'duplicate' as const;
+}
+
+function reportEvent(report: Report, context: ReportContext,
+  keys: ReturnType<typeof conversationKeys>, batch: Report[] | undefined, digest: string) {
+  const subject = `conversation-${report.conversationId}`;
   const data = reportData(report, context.silo, context.assistantId, keys);
   const commandHash = createHash('sha256');
   commandHash.update(`${context.computerId}:${report.sequence}`);
   const id = `bridge-${commandHash.digest('hex')}`;
+  const earlier = batch?.slice(0, -1);
+  const preceding = earlier?.map(receiptFor);
   const event = {
     id, commandId: id, type: report.type, silo: context.silo, subject,
     source: 'computer-bridge', principal: { kind: 'agent' as const, id: context.assistantId },
     time: new Date().toISOString(),
-    report: { computerId: context.computerId, sequence: report.sequence, digest }, data,
+    report: { computerId: context.computerId, sequence: report.sequence, digest,
+      ...(preceding ? { preceding } : {}) }, data,
   };
-  const command: AppendCommand = { expectedSequence: facts.sequence, historyChecked: true, event };
-  const result = await store.append(command);
-  if (result.status === 'rejected') throw new ReportRejected('Report append rejected');
-  if (result.status !== 'appended') throw new Error('Report append unavailable');
-  const committed = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
-  let saved: StoredEvent | undefined;
-  if (committed?.event.id === id) saved = committed;
-  verifyDigest(saved, digest);
-  return 'recorded' as const;
+  return event;
 }
 
 async function requireSharedReportTurn(store: EventStore,
@@ -217,7 +325,10 @@ function isLostOutputReplay(previous: StoredEvent, report: z.infer<typeof report
     'agent.reasoning_summarised', 'agent.output_lost'].includes(previous.event.type);
 }
 
-function verifyDigest(row: StoredEvent | undefined, digest: string) {
+function verifyDigest(row: StoredEvent | undefined, digest: string, expectedId?: string) {
+  if (expectedId !== undefined && row?.event.id !== expectedId) {
+    throw new ReportRejected('Report sequence reused');
+  }
   if (row?.event.report?.digest !== digest) throw new ReportRejected('Report sequence reused');
 }
 export function agentSession(rows: StoredEvent[]) {
@@ -234,5 +345,19 @@ export function agentSessionData(data: unknown) {
 }
 
 function verifyReportReplay(previous: StoredEvent, report: z.infer<typeof reportSchema>, digest: string) {
-  if (!isLostOutputReplay(previous, report)) verifyDigest(previous, digest);
+  if (isLostOutputReplay(previous, report)) return;
+  const receipt = previous.event.report;
+  if (receipt?.sequence === report.sequence) {
+    verifyDigest(previous, digest);
+    return;
+  }
+  function matchesSequence(saved: { sequence: number }) {
+    return saved.sequence === report.sequence;
+  }
+  const saved = receipt?.preceding?.find(matchesSequence);
+  if (saved?.digest !== digest) throw new ReportRejected('Report sequence reused');
+}
+
+function receiptFor(report: Report) {
+  return { sequence: report.sequence, digest: reportDigest(report) };
 }

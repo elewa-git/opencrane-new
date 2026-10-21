@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, live updates and access closures| server["apps/server<br/>the back end"]
+  web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, one subscription per connection, reconnects and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
@@ -152,6 +152,9 @@ Publishing and its result use a short status card. An uncertain result keeps Che
 near the top. Overlapping checks keep the latest result and the newer saved tool policy.
 
 ## Processes it handles
+
+Direct chats reconnect after a busy server closes their connection. Refreshing
+a saved message keeps the current subscription instead of opening it twice.
 
 1. **A person signs in.** The website checks whether they already have a session.
    Otherwise, it sends them to the sign-in service after a short cancellable wait.

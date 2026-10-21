@@ -36,6 +36,21 @@ export const principalSchema = z
 
 export type Principal = z.infer<typeof principalSchema>;
 
+const reportReceipt = z.object({ sequence: z.int().positive(),
+  digest: z.string().regex(/^[a-f0-9]{64}$/u) }).strict();
+const report = reportReceipt.extend({ computerId: z.string().min(1),
+  preceding: z.array(reportReceipt).min(1).max(63).optional() }).strict().refine(orderedReports);
+function orderedReports(value: z.infer<typeof reportReceipt> & {
+  preceding?: z.infer<typeof reportReceipt>[] | undefined;
+}) {
+  let previous = 0;
+  for (const receipt of value.preceding ?? []) {
+    if (receipt.sequence <= previous || receipt.sequence >= value.sequence) return false;
+    previous = receipt.sequence;
+  }
+  return true;
+}
+
 // Builds the envelope schema for one event type, given the zod schema for
 // its `data` payload. Every event in the registry is built this way, so
 // the envelope shape never drifts between event types.
@@ -60,7 +75,7 @@ export function eventEnvelopeSchema<DataSchema extends z.ZodType>(dataSchema: Da
       silo: z.string().min(1),
       principal: principalSchema.optional(),
       correlation: correlationIdsSchema.default({}),
-      report: z.object({ computerId: z.string().min(1), sequence: z.int().positive(), digest: z.string().regex(/^[a-f0-9]{64}$/u) }).strict().optional(),
+      report: report.optional(),
       data: dataSchema,
     })
     .strict();

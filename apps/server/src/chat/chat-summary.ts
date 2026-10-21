@@ -123,9 +123,13 @@ function addReport(summary: ChatSummary, report: NonNullable<StoredEvent['event'
     summary.reports.set(report.computerId, reports);
   }
   reports.lastSequence = report.sequence;
-  if (!reports.positions.has(report.sequence)) {
-    reports.positions.set(report.sequence, position);
-    summary.reportCount++;
+  const preceding = report.preceding ?? [];
+  const receipts = [...preceding, report];
+  for (const receipt of receipts) {
+    if (!reports.positions.has(receipt.sequence)) {
+      reports.positions.set(receipt.sequence, position);
+      summary.reportCount++;
+    }
   }
 }
 const chat: SummaryKind<ChatSummary> = {

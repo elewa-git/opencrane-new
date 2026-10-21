@@ -3476,3 +3476,26 @@ receipt checks and bounded shutdown. The process still supplies no `egressDecisi
 normal startup leaves gateway CONNECT and command-worker networking off. No setting
 is added. The [models contract](../../libs/models/README.robot.md#relay-startup-and-revocation-checks-part-of-61)
 records the closure checks and the remaining outage-watchdog and crash-recovery work.
+
+## Streamed reply batches
+
+The bridge combines only adjacent queued `agent.message_delta` reports with identical
+turn, chat, assistant, requester, thread, message and execution details. It keeps the
+64-report, 1 MiB and 64-chat queue limits, and limits combined text to 128,000 characters.
+There is no timer waiting for a batch. Starts, completions, tools and legacy reports
+stay separate. One conditional append saves encrypted combined text and each original
+sequence and digest. Only then does the bridge acknowledge every included report.
+Replay checks original digests even when it arrives in different groups. After an
+append, the server checks every original against saved receipts before acknowledging
+it. A concurrent writer can save the same final report with different earlier text;
+that mismatch is refused. Receipts saved across separate events remain valid.
+A definite
+append conflict reloads history within ten seconds; uncertain writes are not resubmitted.
+Stop waits only for report appends already running, then holds new report appends
+until its history and access checks and single conditional append finish. This
+priority is local to the server process; conditional appends still decide conflicts.
+The separate Stop poll sends manual requests as well as spending Stops, without
+waiting for ordinary turn or file delivery.
+Access, turn admission, reservations and memory checks keep their existing paths.
+`bridge-throughput.test.ts` drives 2,700 reports through a real socket and NATS,
+checks a competing Stop append, replay identity and recovered text.

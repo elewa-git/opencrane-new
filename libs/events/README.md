@@ -27,7 +27,7 @@ the hash of encrypted survey bytes.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests and start failures, hosted image check requests and results, registration, startup, saved turns and closed chat failures, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch, not-sent outcomes and cancellation reasons| events["libs/events<br/>checks records and previews dates"]
-  store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and reports| events
+  store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and original report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup subscriptions, nightly memory reviews and records, and cleanup results| events
   others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission, saved starts and permit-bound remote outcomes, native refusals, personal connection references and blocks, expired saves, control intent and pause outcomes, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
@@ -168,6 +168,9 @@ Native request refusal records identify the request and turn without saving comm
 or prompts. They grant no access and do not appear in the chat display.
 
 ## Processes it handles
+
+A saved reply can include receipts for several small pieces of text. Each receipt
+keeps its original number and digest so a repeated piece can be checked.
 
 Saved personal connection revocations and replacements name the background cleanup
 reaction. Replaying those records never deletes stored credentials.

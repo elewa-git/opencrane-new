@@ -578,3 +578,17 @@ async function holdsSavedOutcome(phase: 'paused' | 'failed') {
   expect(fixture.frames.filter(isTurnOrFile)).toEqual([]);
 }
 it.each(['paused', 'failed'] as const)('holds a new chat turn after saved %s', holdsSavedOutcome);
+
+it('sends a manual Stop without waiting for ordinary conversation delivery', async () => {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  const turn = await startFixtureTurn(test);
+  await test.append('conversation-chat', 'agent.turn_stop_requested', {
+    conversationId: 'chat', turnId: turn.turnId, requestedBy: 'alice',
+  });
+  await test.pollStops();
+  await test.flushFrames();
+  expect(test.frames.filter(isStop)).toEqual([
+    expect.objectContaining({ turnId: turn.turnId, conversationId: 'chat' }),
+  ]);
+});

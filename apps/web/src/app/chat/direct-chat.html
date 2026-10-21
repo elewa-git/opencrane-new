@@ -202,6 +202,9 @@
             }
           </div>
         }
+        @if (connectionState() === 'reconnecting' && pageState() === 'ready') {
+          <p role="status">Reconnecting… Saved messages are kept.</p>
+        }
         @if (pageError() && pageState() === 'ready') {
           <div class="refresh-error"><span>{{ pageError() }} Previously loaded conversations are kept.</span>
             <button class="button secondary" type="button" [attr.aria-disabled]="refreshing()"
