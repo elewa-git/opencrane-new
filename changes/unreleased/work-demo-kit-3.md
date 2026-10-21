@@ -1,3 +1,4 @@
 - The secondary demo rehearsal prepares a scanned supplier PDF and company spending ceilings, warms both assistants, and records two timed browser checks with screenshots.
 - Fresh real-provider startup honours the approved demo allowance before its first paid check.
 - Demo preparation creates the PDF chat before reading its protected receipt and keeps uncertain attempts from being repeated.
+- Replies and Stop results can recover after fast model output fills the bridge queue; accepted reports are saved even after the connection closes.

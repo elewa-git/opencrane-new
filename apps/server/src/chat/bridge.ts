@@ -60,7 +60,8 @@ function turnStatus(type: string) {
 async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
   tokens: Tokens | undefined, socket: WebSocket,
   report: z.infer<typeof reportDetails>, value: unknown) {
-  if (socket.readyState !== socket.OPEN) return;
+  // Save reports already accepted into the bounded queue after a disconnect.
+  // Otherwise a replay can fill the queue again before its saved position advances.
   const context: Parameters<typeof turnCommand>[1] = { silo: options.silo, ...input };
   if (options.binding) context.binding = options.binding;
   if (report.type === 'agent.turn_started') {
