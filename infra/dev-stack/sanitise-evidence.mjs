@@ -130,7 +130,7 @@ function sanitise() {
   const content = readFileSync(source, 'utf8');
   let redacted = redactKnownSecrets(content, secrets);
   redacted = redactPatterns(redacted);
-  if (!['failure.log', 'last-error.log'].includes(basename(source))) {
+  if (!['failure.log', 'last-error.log', 'receipt.json'].includes(basename(source))) {
     const lines = redacted.split('\n');
     const endsWithNewline = lines.at(-1) === '';
     if (endsWithNewline) {

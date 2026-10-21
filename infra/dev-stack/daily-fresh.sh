@@ -2,14 +2,16 @@
 set -u
 umask 077
 
-unset P4_JOURNEY_ATTEMPT DEV_REAL_PROVIDER_FILE
+unset P4_JOURNEY_ATTEMPT DEV_REAL_PROVIDER_FILE DEV_REAL_PROVIDER MODEL_KEY_FILE
+unset DEMO_ALLOWANCE_CENTS
+export P4_JOURNEY_ATTEMPT="nightly-$(date -u +%Y%m%dT%H%M%S)-$(node -p 'crypto.randomUUID()')"
 
 script_directory=$(CDPATH='' cd "$(dirname "$0")" && pwd -P)
 repository_root=$(CDPATH='' cd "$script_directory/../.." && pwd -P)
 ledger_directory="$HOME/.opencrane/daily-fresh"
 ledger_file="$ledger_directory/ledger.md"
 started_at=$(date +%s)
-main_commit=$(git -C "$repository_root" rev-parse origin/main 2>/dev/null || printf 'unknown')
+main_commit=$(git -C "$repository_root" rev-parse HEAD 2>/dev/null || printf 'unknown')
 stack_id=
 failed_step='claim.sh'
 run_result=FAIL
@@ -30,20 +32,19 @@ write_receipt() {
   receipt_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
   mkdir -p "$ledger_directory"
   chmod 700 "$ledger_directory"
-  printf '%s | main commit %s | %s | %s | failed step %s | duration %ss\n' \
+  printf '%s | main commit %s | %s | %s | failed step %s | duration %ss | attempt %s\n' \
     "$receipt_time" "$main_commit" "$run_result" "$receipt_note" \
-    "$failed_step" "$duration" >> "$ledger_file"
+    "$failed_step" "$duration" "$P4_JOURNEY_ATTEMPT" >> "$ledger_file"
   chmod 600 "$ledger_file"
 }
 
 preserve_failure_artifacts() {
-  local evidence_time evidence_directory stack_directory screenshot private_log log_name
+  local evidence_directory stack_directory screenshot private_log log_name
   if [ "$run_result" != FAIL ] || [ -z "$stack_id" ]; then
     return
   fi
 
-  evidence_time=$(date -u '+%Y-%m-%dT%H-%M-%SZ')
-  evidence_directory="$ledger_directory/$evidence_time"
+  evidence_directory="$ledger_directory/$P4_JOURNEY_ATTEMPT"
   stack_directory="$HOME/.config/opencrane/dev-stack-$stack_id"
   mkdir -p "$evidence_directory"
   chmod 700 "$evidence_directory"
@@ -72,7 +73,33 @@ preserve_failure_artifacts() {
     chmod 600 "$evidence_directory/$(basename "$screenshot")"
   done
 
+  preserve_group_artifacts "$stack_directory" "$evidence_directory"
   receipt_note="failure evidence $evidence_directory"
+}
+
+preserve_group_artifacts() {
+  local source_directory target_directory source_file relative_file target_file
+  source_directory="$1/p4-journey/$P4_JOURNEY_ATTEMPT"
+  target_directory="$2/p4-journey/$P4_JOURNEY_ATTEMPT"
+  if [ ! -d "$source_directory" ] || [ -L "$1/p4-journey" ] || [ -L "$source_directory" ]; then
+    return
+  fi
+  while IFS= read -r source_file; do
+    relative_file=${source_file#"$source_directory/"}
+    target_file="$target_directory/$relative_file"
+    mkdir -p "$(dirname "$target_file")"
+    chmod 700 "$(dirname "$target_file")"
+    case "$source_file" in
+      *.png) cp "$source_file" "$target_file" ;;
+      */receipt.json)
+        if ! node "$script_directory/sanitise-evidence.mjs" "$1" "$source_file" \
+            "$repository_root" > "$target_file" 2>/dev/null; then
+          printf '%s\n' 'Receipt withheld: sanitisation failed.' > "$target_file"
+        fi
+        ;;
+    esac
+    chmod 600 "$target_file"
+  done < <(find "$source_directory" -type f \( -name '*.png' -o -name receipt.json \))
 }
 
 clean_up() {
@@ -102,6 +129,7 @@ if stack_id=$("$script_directory/claim.sh"); then
   case "$stack_id" in
     1|2) ;;
     *)
+      stack_id=
       run_result=FAIL
       failed_step='claim.sh returned an invalid slot'
       exit 1

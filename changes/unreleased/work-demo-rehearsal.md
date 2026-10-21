@@ -1,0 +1,1 @@
+Nightly fresh installs now check groups, private shared sessions, direct chats and group messages, and keep failed journey receipts before removing the test stack. Demo rehearsals also check the remaining history, invitation and model pages.

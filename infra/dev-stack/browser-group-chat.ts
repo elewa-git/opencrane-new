@@ -204,6 +204,11 @@ export async function browserGroupChat(options: GroupChatOptions): Promise<void>
     const reason = errorMessage(error);
     markUnprovenAssertions(options.assertions, reason);
   }
+  for (const assertion of options.assertions) {
+    if (assertion.id.startsWith('group_chat.') && assertion.status !== 'PASS') {
+      throw new Error('Group chat checks did not all pass');
+    }
+  }
 }
 
 function initialiseAssertions(assertions: Phase4Assertion[]): void {

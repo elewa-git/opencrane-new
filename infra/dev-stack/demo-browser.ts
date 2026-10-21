@@ -135,7 +135,14 @@ export async function demoBrowser(owner: Page, member: Page, options: Options,
       options.signal?.throwIfAborted();
       owner.setDefaultTimeout(remainingMs);
       member.setDefaultTimeout(remainingMs);
-      await run();
+      try {
+        await run();
+      } finally {
+        await owner.screenshot({ path: `${output}/${run.name}-owner-${attempt}.png` });
+        await member.setViewportSize({ width: attempt, height: attempt === 390 ? 844 : 900 });
+        await member.screenshot({ path: `${output}/${run.name}-member-${attempt}.png` });
+        await member.setViewportSize({ width: 390, height: 844 });
+      }
     }
     return { name: run.name, run: bounded };
   }

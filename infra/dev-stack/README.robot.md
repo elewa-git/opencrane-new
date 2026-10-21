@@ -178,17 +178,23 @@ The install script copies this launcher to `~/.opencrane/daily-fresh/run.sh`.
 `daily-fresh.sh` claims a secondary id using `claim.sh`, then runs `up.sh --fresh`
 with that id. Secondary model services use the local stub. The run makes no paid
 model calls. An EXIT trap calls `down.sh --id` with only the id returned by the
-claim. A failed startup still reaches that cleanup.
+claim, after accepting only 1 or 2. A failed startup still reaches that cleanup.
+Each invocation replaces an inherited attempt with `nightly-<UTC time>-<UUID>` in
+`P4_JOURNEY_ATTEMPT`. It clears inherited real-provider settings, `MODEL_KEY_FILE`
+and `DEMO_ALLOWANCE_CENTS` before any child starts. No paid key is read.
+The narrow group checks run with the stand-in and never change providers or owners.
+A failed or unfinished group-chat assertion fails the journey. Before cleanup, nested
+receipts and pictures from this attempt are kept under the private failure folder.
 
 If `claim.sh` cannot return an id, the script records `SKIPPED` with the reason
 `no free slot` and exits successfully. Every run adds one UTC line to
-`~/.opencrane/daily-fresh/ledger.md`. The line records the known `origin/main`
-commit, result, failed step and duration. On failure, it copies `last-error.log`,
+`~/.opencrane/daily-fresh/ledger.md`. The line records the checked-out source
+commit, result, failed step, duration and attempt. On failure, it copies `last-error.log`,
 `failure.log`, the last 100 lines of each other process log, and any journey failure
-screenshots into a folder named for that UTC run time before `down.sh` removes the
+screenshots into a folder named for that attempt before `down.sh` removes the
 stack files. Before writing a log, `sanitise-evidence.mjs` replaces known slot
-passwords, generated environment secrets, private keys and supplied `MODEL_KEY_FILE`
-and `ZITADEL_KEY_FILE` values with `[REDACTED]`. It also removes URL credentials,
+passwords, generated environment secrets, private keys and the supplied
+`ZITADEL_KEY_FILE` value with `[REDACTED]`. It also removes URL credentials,
 bearer tokens, authorisation headers and values with sensitive setting or JSON field
 names. Secret files are read only by the sanitiser. A failed sanitisation writes
 only `Log withheld: sanitisation failed.`. It skips `zitadel-*` files. The receipt line names that folder. The
@@ -372,7 +378,8 @@ The owner's own browser sign-in remains a manual check and is **NOT RUN** by the
 
 ### Organisation browser checks
 
-`journey.ts` calls `browser-phase4.ts` and `browser-group-chat.ts` after the existing
+`journey.ts` calls the groups-only checks in `browser-phase4.ts` and
+`browser-group-chat.ts` after the existing
 browser checks. Both modules reuse the signed-in owner and member pages. The group
 chat check creates a conversation from the To line with two colleagues, checks the
 mode before the first message, and sends ordinary messages to each member. It waits
@@ -387,10 +394,11 @@ server and checks that replay keeps the group mode and participants.
 The shared-assistant check adds a model grant to the disposable event store so the
 group can create an assistant. The member starts a private session with it. The direct
 chat sends one message each way and reads the conversation stream to check message
-order. The model stub exposes `/journey-counts`; the journey compares its model request
-count before and after the direct exchange.
+order. The direct checks count model admission, computer and budget events before and after
+the exchange, so they also run with real providers.
 
-The provider check saves the text `journey-placeholder-not-a-provider-key`. It is a
+The separate full browser check, excluded from nightly and rehearsals, saves the text
+`journey-placeholder-not-a-provider-key`. It is a
 fake value, never a provider credential. The check confirms that the input clears and
 that the text is absent from the page, browser storage, provider events and process
 logs. The local server keeps the key in a private folder inside the disposable stack,
@@ -850,7 +858,8 @@ Preparation and warm-up sit outside the timed checks and still count as paid cal
 Each warm attempt has a 180-second deadline. It checks streaming/reload, PDF facts,
 preview/download bytes, Stop/reload, live direct delivery, a shared reply, and company
 limit refusal/restore. Restoration is attempted even after failure or timeout.
-Two attempts capture the Owner browser at 1280 and 390 pixels; the member stays at 390.
+Two attempts capture both browsers at 1280 and 390 pixels after each step;
+the member sends at 390 pixels. Failed steps also attempt to save pictures.
 Private timings, screenshots and spending records go under the slot's `demo-smoke/`.
 Each run saves both previous company ceilings in its own `saved-ceilings.json` before
 changing either. Normal completion, failures, SIGINT and SIGTERM restore them through
@@ -879,3 +888,13 @@ step within 180 seconds and successful steps taking longer than 180 seconds. The
 fixture refuses configuration loading to prove the secondary id check runs first.
 The command does not claim or remove a stack. Use `claim.sh` before startup and
 `down.sh --id` after copying the receipt. Live results are in the demo receipt.
+
+## Remaining demo pages
+
+After the seed and smoke command, `DEV_STACK_ID=1 P4_JOURNEY_ATTEMPT=<attempt>
+node --experimental-strip-types infra/dev-stack/demo-pages.ts` checks Action history,
+the seeded group, an unopened invitation, Model answered with no key field, and
+Change history for limits and groups. It captures 1280px and 390px pictures under
+`demo-pages/<attempt>/` in the owned secondary directory. The invitation field is
+masked in pictures. It makes no model calls. A failed check writes FAIL in
+`pages.json` and exits unsuccessfully. Repeating it creates another invitation.

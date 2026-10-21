@@ -108,6 +108,7 @@ async function sanitisesRetainedLogs(withhold = false) {
   const authEnvironment = withhold ? 'invalid environment file' : validEnvironment;
   await writeFile(`${slot}/auth.env`, authEnvironment);
   await writeFile(`${slot}/passwords.json`, '{"server":"database-canary"}');
+  await writeFile(`${slot}/model-stub-key`, 'model-canary\n');
   await writeFile(`${home}/model-key`, 'model-canary\n');
   await writeFile(`${home}/zitadel-key`, 'zitadel-canary\n');
   const content = `${lines.join('\n')}\n`;
@@ -131,7 +132,7 @@ async function sanitisesRetainedLogs(withhold = false) {
     const evidence = entries.find(isEvidence);
     assert.ok(evidence);
     for (const name of ['failure.log', 'last-error.log', 'server.log']) {
-      const retained = await readFile(`${ledger}/${evidence}/${name}`, 'utf8');
+      const retained: string = await readFile(`${ledger}/${evidence}/${name}`, 'utf8');
       if (withhold) {
         assert.equal(retained, 'Log withheld: sanitisation failed.\n');
         continue;

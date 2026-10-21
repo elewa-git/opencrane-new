@@ -77,8 +77,8 @@ async function runPhase4Journey() {
   let journeyFailure: unknown;
   try {
     await browserPhase4({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
-      origin, directory, attempt: phase4Attempt, silo, modelStubPort: settings['MODEL_STUB_PORT']!,
-      secondaryStack: secondary,
+      origin, directory, attempt: phase4Attempt, silo,
+      secondaryStack: secondary, scope: 'groups',
       store: events.store, append, assertions: phase4Assertions });
     const groupMembers = await groupChatMembers();
     await browserGroupChat({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
@@ -568,9 +568,9 @@ try {
         budgetAssistant.assistantId, budgetAssistant.groupId);
     }
   }
+  }
   const phase4Requested = process.env['P4_JOURNEY_ATTEMPT'] !== undefined;
   if (secondary && browser && phase4Requested) await runPhase4Journey();
-  }
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });
