@@ -131,7 +131,8 @@ export async function prepareDemo(options: Options, allowanceCents: number,
     await demoCeiling(options, `demo-ceiling-${saved.commandId}`, allowanceCents, allowanceCents);
     return await preparePersonalPdf(options);
   } catch (error) {
-    const restoring = { ...options, signal: undefined };
+    const restoring = { origin: options.origin, cookie: options.cookie,
+      directory: options.directory };
     await restoreDemoCeilings(restoring, output);
     throw error;
   }

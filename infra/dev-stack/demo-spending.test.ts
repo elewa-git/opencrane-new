@@ -42,3 +42,28 @@ async function recordsFailedWarmUp() {
 }
 test('a failed warm-up records its own charged and held calls, starting snapshot and timings',
   recordsFailedWarmUp);
+
+async function restoresCompletedRun() {
+  const fixture = await demoRecording();
+  fixture.allowPreparation();
+  const browser = browserRecording();
+  const output = `${fixture.options.directory}/demo-smoke/completed`;
+  try {
+    await runDemoSmoke(browser, fixture.options, 700, output,
+      'fixture-sha', spendingRecording(browser.callCount), 'fixture');
+    assert.equal(fixture.budget.ceilingCents, 100);
+    assert.equal(fixture.budget.dailyCeilingCents, 80);
+    const timings = JSON.parse(await readFile(`${output}/timings.json`, 'utf8'));
+    assert.equal(timings.warmResult, 'PASS');
+    assert.equal(timings.attempts.length, 2);
+    for (const attempt of timings.attempts) assert.equal(attempt.result, 'PASS');
+    const spending = JSON.parse(await readFile(`${output}/spending.json`, 'utf8'));
+    assert.equal(spending.callCount, 3);
+    assert.equal(spending.chargedCents, 4);
+    assert.equal(spending.heldCents, 25);
+  } finally {
+    await fixture.close();
+  }
+}
+test('completed smoke attempts restore the original ceilings and keep run spending',
+  restoresCompletedRun);

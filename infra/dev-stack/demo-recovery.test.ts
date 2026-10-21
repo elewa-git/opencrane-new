@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { prepareDemo } from './demo-prepare.ts';
@@ -25,7 +26,6 @@ test('preparation restores 100-cent ceilings after raising to 700 then receiving
 
 async function interruptedLimit(signal: NodeJS.Signals) {
   const { spawn } = await import('node:child_process');
-  const { once } = await import('node:events');
   const fixture = await demoRecording();
   fixture.allowPreparation();
   const output = `${fixture.options.directory}/demo-smoke/interrupted`;
