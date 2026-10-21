@@ -17,6 +17,7 @@ import { authEnv, directory, readEnv, root } from './config.ts';
 import { secondary } from './identity.ts';
 
 assert(secondary, 'MCP qualification requires a claimed secondary stack');
+const { remoteFixture } = await import('../../apps/server/test/support/remote-mcp.ts');
 const run = process.argv[2];
 assert(run === 'fresh' || run === 'repeat', 'Choose fresh or repeat evidence');
 assert.equal(await readFile(`${directory}/stack-owner`, 'utf8'), root);
@@ -37,7 +38,6 @@ for (let attempt = 0; ; attempt++) {
 }
 await rm(`${directory}/server.pid`);
 
-const { remoteFixture } = await import('../../apps/server/test/support/remote-mcp.ts');
 const remote = await remoteFixture();
 const events = await connectEventStore(await readEnv('command'));
 const feed = await connectMemberFeed(server['DATABASE_URL']!);
