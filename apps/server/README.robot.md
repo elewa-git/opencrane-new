@@ -1432,6 +1432,11 @@ reads these rows and new events, without rescanning earlier reply pieces.
 Command retries still verify the original saved event. New commands still use one
 conditional append after fresh access checks.
 
+Chat command facts and Stop polling share the report summary, but do not consume
+memory context. A failed memory fold is retained in the summary and counted in
+its size. `readChatFacts` still throws that failure before returning any facts;
+ordinary commands and Stop can continue to read their compact event facts.
+
 The summary keeps the first conversation creation, the first message's raw author
 and execution mode for each event id, closed turn ids, and report positions by
 computer and report sequence. It keeps no message or reply text. The newest stored

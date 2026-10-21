@@ -238,3 +238,25 @@ PASS: released slot 1; removed the task's PostgreSQL container with its volume,
 temporary source fixtures, instrumented local image tags and registry forwarder.
 The clean pinned image remains available. The requested tool symlinks remain.
 No owner resources were removed.
+
+### CI correction
+
+FAIL: the first CI run on `5d2a84fc0` exposed a shared-summary regression.
+`chat-http.test.ts` could no longer post a later message after an old memory record
+that strict memory reads reject. That record must still refuse memory operations,
+but previously did not block ordinary chat commands. A new failing-first test,
+`313ce3bc6`, reproduces that error. The summary now retains the memory refusal
+and throws it only when execution or memory facts are requested. Chat commands
+and Stop read their own facts. The refusal text counts towards the cache limit.
+
+PASS: the corrected summary, Stop regressions and strict memory tests: 68 tests
+twice. The previously failing HTTP journey also passed with a fresh test database.
+PASS: server typecheck, focused lint, knip and documentation checks after the fix.
+Its container and volume were removed. This correction does not change valid
+streaming replies; the live measurements above remain tied to their stated SHA.
+NOT RUN: another paid call after this correction; the single confirmation limit
+is preserved. Final pushed-head checks are reported in the PR.
+
+The first CI run also failed `upload.test.ts` because the MinIO image registry
+refused its pull after exceeding a request quota. That failure is not on the
+permitted rerun list and was not rerun on that head.

@@ -19,6 +19,7 @@ type ChatSummary = {
   reports: Map<string, ComputerReports>;
   reportCount: number;
   memoryContexts: Map<string, MemoryContextState>;
+  memoryFailure: string | undefined;
 };
 export type ChatFacts = {
   conversationClosed: boolean;
@@ -38,13 +39,13 @@ function emptyChat(): ChatSummary {
   return { contentSequence: 0, commandPositions: new Map(), stopRows: [],
     created: undefined, conversationClosed: false,
     messages: new Map(), closedTurnIds: new Set(), cleanupEndedTurnIds: new Set(),
-    reports: new Map(), reportCount: 0, memoryContexts: new Map() };
+    reports: new Map(), reportCount: 0, memoryContexts: new Map(), memoryFailure: undefined };
 }
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
   addCommandFacts(summary, row);
   if (event.type === 'agent.memory_context_recorded') {
-    addMemoryContext(summary, row);
+    retainMemoryContext(summary, row);
   }
   let data: Record<string, unknown> | undefined;
   if (event.type === 'conversation.created' || event.type === 'message.posted') {
@@ -92,6 +93,16 @@ function recordClosedTurn(summary: ChatSummary, row: StoredEvent,
   if (event.type === 'agent.turn_failed' && event.source === 'opencrane-server' &&
       event.principal?.id === 'close-cleanup') {
     summary.cleanupEndedTurnIds.add(turnId);
+  }
+}
+function retainMemoryContext(summary: ChatSummary, row: StoredEvent) {
+  if (summary.memoryFailure !== undefined) return;
+  try {
+    addMemoryContext(summary, row);
+  } catch (error) {
+    // Keep chat commands available, but preserve the refusal for every memory reader.
+    summary.memoryFailure = 'Memory evidence unavailable';
+    if (error instanceof Error) summary.memoryFailure = error.message;
   }
 }
 function addMemoryContext(summary: ChatSummary, row: StoredEvent) {
@@ -164,7 +175,7 @@ function chatSize(summary: ChatSummary) {
     summary.stopRows.length * 512 + memorySize(summary);
 }
 function memorySize(summary: ChatSummary) {
-  let bytes = 0;
+  let bytes = (summary.memoryFailure?.length ?? 0) * 2;
   for (const context of summary.memoryContexts.values()) {
     bytes += 2048 + context.references.length * 1024;
     for (const saved of context.events.values()) {
@@ -178,6 +189,7 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
   conversationId: string, turnId: string, computerId?: string, reportSequence?: number,
   deadline = performance.now() + 10_000) {
   function take(summary: ChatSummary): ChatFacts {
+    if (summary.memoryFailure !== undefined) throw new Error(summary.memoryFailure);
     const message = summary.messages.get(turnId);
     const reports = computerId === undefined ? undefined : summary.reports.get(computerId);
     let reportPosition: number | undefined;

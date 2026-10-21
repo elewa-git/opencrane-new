@@ -9,6 +9,8 @@ and Stop results can finish arriving when the computer reconnects.
 It confirms each piece of a reply only after checking that its text was saved.
 Stop uses the same saved chat facts as progress reports, so it does not reload
 every piece of a long reply before saving or delivering the request.
+An invalid old memory record does not block sending or stopping a message.
+Memory operations still refuse that record.
 A second process handles model access and spending. Both processes use the
 same secret to protect conversation keys in a packaged install.
 
