@@ -23,7 +23,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
-  server["apps/server<br/>back end"] -->|reads tables, including closed assistant chats for cleanup, bounded lists and join times| pg["PostgreSQL<br/>database"]
+  server["apps/server<br/>back end"] -->|reads tables, including closed assistant chats for cleanup, bounded grant lists with membership status, choices and join times| pg["PostgreSQL<br/>database"]
   projections -->|keeps native refusal audits and child requests outside feeds; saves public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and reads unfinished child requests| projections
@@ -32,6 +32,9 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+Remote tool grant lists include each person's membership status. A departure keeps
+the saved grant history, so the server can label the person as departed.
 
 The chat index keeps closed assistant chats available to the back end. The back
 end uses their saved events to finish waiting and running work after a restart.
@@ -123,6 +126,7 @@ stays inside the projection.
 - Keep old conversation participant records separate from new participant changes.
 - Keep the latest model grant for each person, group or assistant, including revoked history.
 - Keep assistant names and personal owners' display names for access choices.
+- Read remote tool grant references from the member inventory, including revoked grants.
 - Copy tool progress, dispatch records and tool access decisions into each conversation's feed.
   Keep the call id so the page can match a decision to its tool call.
   Index message ids so an authorised caller can find one source message quickly.

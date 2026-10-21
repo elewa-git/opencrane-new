@@ -40,7 +40,7 @@ export { rebuildGroupProjection } from './group-rebuild.ts';
 
 export { providers, readProviders, applyProvider, type ProviderState } from './providers.ts';
 export { rebuildProviderProjection } from './provider-rebuild.ts';
-export { modelAccess, readModelGrantRows, readModelAccessCandidates,
+export { modelAccess, readModelGrantRows, readModelAccessCandidates, readToolGrantReferences,
   type ModelGrantState } from './model-access.ts';
 export { rebuildModelAccessProjection } from './model-access-rebuild.ts';
 

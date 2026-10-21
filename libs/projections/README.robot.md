@@ -169,6 +169,26 @@ The members worker also maintains the flat-group view (`groups`, `group_members`
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
 without reactions. See the [group contract](../../docs/api/groups.md).
 
+## Remote tool grant references
+
+`readToolGrantReferences` selects at most 101 references for one silo and exact
+server-grant subject from `inventory_inputs`. It shares model-access names and
+joins, including the person's saved membership status as `membershipStatus`.
+The server labels a removed person `departed` without changing the saved grant.
+The query returns null membership status for groups and assistants.
+The server returns at most 100 rows, using the extra row only to detect
+overflow. It resolves exact event positions and decides grant/revoke and receipt
+state in TypeScript. No MCP table or new projection worker is needed.
+
+The members worker already retains typed and historical broad revokes in this
+index. Its ordinary rebuild restores these references. Existing installations
+need the inventory backfill described below before an empty list is complete.
+`apps/server/test/integration-access-reads.test.ts` compares HTTP results before
+and after member and model-access replay, including a departed person whose grant
+was never revoked. Rebuilding calls no outside service.
+`test/tool-grant-references.test.ts` checks the database limit and silo selection
+with 102 local grants and a foreign grant on the same subject.
+
 ## Model access reads
 
 The members worker also fills `model_access_grants` and
