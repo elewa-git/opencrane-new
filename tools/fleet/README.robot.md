@@ -19,7 +19,8 @@ of that machine. Do not use this setup on a machine that holds personal or produ
 The launcher exports `OPENCRANE_FLEET_TASK`. If it is absent, the task name becomes
 its value; an existing value, including an empty one, is preserved. Owner-only
 startup and demo seed commands refuse the presence of this variable, even with
-TTY stdin. The recording test replaces Codex with a disposable shell script.
+TTY stdin. The [recording test](../../infra/dev-stack/fleet-task.test.ts) replaces
+Codex with a disposable shell script.
 
 ## Saved files
 
