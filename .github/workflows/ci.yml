@@ -9,9 +9,10 @@ on:
 permissions:
   contents: read
 
-# Cancel older pull request runs while letting every main push finish.
+# Cancel older pull request runs when a new commit arrives.
+# Give each main push and manual run its own group.
 concurrency:
-  group: ci-${{ github.head_ref || github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
