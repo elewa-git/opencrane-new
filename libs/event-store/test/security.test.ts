@@ -17,14 +17,20 @@ async function consumerFixture() {
   onTestFinished(isolated.close);
   const manager = await jetstreamManager(isolated.connection);
   for (const role of ['projection', 'dispatcher']) {
-    const name = role === 'projection' ? 'projection-members' : 'handler-dispatcher';
-    await manager.consumers.add('EVENTS', {
-      durable_name: name,
-      filter_subject: 'ev.>',
-      ack_policy: role === 'projection' ? AckPolicy.None : AckPolicy.Explicit,
-    });
+    const options = consumerOptions(role);
+    await manager.consumers.add('EVENTS', options);
   }
   return isolated;
+}
+
+function consumerOptions(role: string) {
+  const name = role === 'projection' ? 'projection-members' : 'handler-dispatcher';
+  const ackPolicy = role === 'projection' ? AckPolicy.None : AckPolicy.Explicit;
+  return {
+    durable_name: name,
+    filter_subject: 'ev.>',
+    ack_policy: ackPolicy,
+  };
 }
 
 // Core publish errors arrive asynchronously. Assert NATS's actual refusal,
