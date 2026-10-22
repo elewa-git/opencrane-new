@@ -3761,6 +3761,17 @@ Lint used `NODE_OPTIONS=--max-old-space-size=8192` and reported zero errors with
 24 existing length warnings. All commands used `nice -n 10`. Logs are
 `lint-final.log`, `typecheck-clean.log` and `events-final.log` under the same prefix.
 
+The shared `origin/main` advanced to `2dc248199` during validation. The final
+rebase completed without conflicts. Comparing the full feature patch before and
+after rebase with `cmp` confirmed identical bytes. That main commit changes only
+frontend code, its browser journey and related documentation; the backend code
+used by the tests above is unchanged.
+PASS after rebase: ESLint on the changed frontend files, all web typechecks,
+dependency checks, Knip, documentation and links, fixture boundaries, licence
+checks, changelog validation and the event catalogue. The upstream browser journey
+script retains its existing ESLint exclusion. Logs use
+`/tmp/tools-access-gateway-rebase-`: `lint-code.log`, `web-typecheck.log` and `gates.log`.
+
 ## Shared test ports
 
 The nine former `freePort` copies now use `@opencrane/event-store/testing`.
