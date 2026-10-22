@@ -1,0 +1,1 @@
+- Free nightly checks can save the Owner's tool review before reaching the group checks. The read-only test tool now declares the review details required by Allow; product access and review rules are unchanged.

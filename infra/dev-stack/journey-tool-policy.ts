@@ -20,6 +20,11 @@ export function journeyTool(name: string, readOnly: boolean, review?: Tool['revi
     reviewed: false, readOnly, destructive: !readOnly, costCents: 0 };
   if (review) {
     tool.review = review;
+  } else if (readOnly) {
+    // Declare safe review details even for read-only fixtures selected as Allow.
+    tool.review = { action: 'Read fixture data',
+      consequence: 'Returns fixture data without changing it.',
+      targetArgument: 'target', fields: ['target'], stepUp: false };
   }
   return tool;
 }
