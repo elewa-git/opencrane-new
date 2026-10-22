@@ -388,8 +388,17 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     }
     const writes = vi.spyOn(store, 'append');
     writes.mockImplementation(delayFirstAllow);
+    // Complete catch-up so the saved-Allow delay is reached on a busy host too.
+    await readDecisionGrants(store, 'test', 'gpt-6-luna', Infinity);
     const warmed = await decide(setup);
-    expect([200, 403]).toContain(warmed.status);
+    expect(warmed.status, warmed.text).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    const warmUpDecision = z.object({ requestId: z.string() }).parse(JSON.parse(warmed.text));
+    const warmUpDecisions = await history(store, `decision-${warmUpDecision.requestId}`, 'test');
+    expect(warmUpDecisions).toHaveLength(1);
+    expect(warmUpDecisions[0]?.event).toMatchObject({
+      type: 'decision.recorded', data: { outcome: 'deny', reason: 'request_refused' },
+    });
     expect(fullReads).toEqual([false]);
     const catchUpDeadline = performance.now() + 120_000;
     let ready = warmed;
