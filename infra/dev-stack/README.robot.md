@@ -401,8 +401,8 @@ not the click or the Owner's participant list. The receipt records milliseconds 
 `historyRefused`, `fileRefused` and `ownerList`. Saving and updating access are one event
 append to `participation-*`; both timings are when the journey reads that saved event.
 These observations are upper bounds, with 20 ms polling plus request time. Negative
-values mean the observer finished before the HTTP response. A missing observation is
-`NOT RUN` and fails access timing. The Owner list has its own observation and does not
+values mean the observer finished before the HTTP response. A missing access observation is
+`NOT RUN` and fails the check. The Owner list has its own observation and does not
 set the two-second result. The removed browser has a ready conversation WebSocket before
 removal. The next history and file-list reads start after acceptance and must return 403.
 The file route already returns 403 for a group chat before removal; the receipt records
