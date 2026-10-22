@@ -2,6 +2,53 @@
 
 For people, read [README.md](README.md) first.
 
+## Child retry tests and duplicate messages
+
+Only the four tests that retry after the JetStream duplicate window use a private
+fixture with a two-second window. `test/support/duplicate-window.ts` checks that
+normal creation used 120 seconds, then updates that private EVENTS stream through
+the NATS test connection. Production still uses 120 seconds; there is no new
+production setting. All other tests in those files keep the normal window.
+The shared `child-fixture.ts` and `child-summon.ts` helpers are unchanged.
+
+Each shortened test publishes the same valid event twice and checks that NATS
+stores it once. It then repeats that publish until NATS stores a new message,
+with a five-second limit. Only then does it retry the child command and check
+the saved result. The probe uses its own assistant subject and does not change
+chat history or the permissions rebuilt by the tests.
+
+Own checks, 22 October 2026, based on `8a334f3ee`, with Node 22.23.3:
+
+- Test-first commit `c3b0b0976`: all four selected cases failed because the
+  stream still had the normal 120-second window.
+- PASS: the first complete four-file run passed all 102 tests.
+- FAIL: the second run passed 100 of those 102 tests. Child review returned 503
+  instead of 200 in `keeps outage queued then completes missing saves` and
+  `hides failed status like an unknown request for removed`. These were not retried.
+  The untouched baseline also failed nine recovery cases, including the latter.
+- PASS: all four shortened cases passed in both complete runs. The second run
+  also passed all 438 event security tests.
+- PASS: removing the saved-failure guard made the shortened recovery case fail
+  with six records instead of five. The production file was restored afterwards.
+
+The table shows seconds from each JSON report's file start and end times. It
+excludes initial file setup. All three batches used two workers and `nice -n 10`
+on the same busy host, with disposable NATS, OpenFGA and PostgreSQL databases.
+The throwaway PostgreSQL container and its volumes were removed afterwards.
+
+| Test file | Before | After, first run | After, second run |
+| --- | --- | --- | --- |
+| child-recovery.test.ts | 292.22 (FAIL) | 184.62 | 202.34 (FAIL) |
+| child-first-input.test.ts | 169.85 | 58.45 | 56.76 |
+| child-summon.test.ts | 167.26 | 46.20 | 57.01 |
+| child-requests.test.ts | 144.68 | 24.34 | 28.78 |
+
+The recovery times include failed cases, so they are not a successful-run benchmark.
+Local reports are `/tmp/ci-test-waits-before.json`,
+`/tmp/ci-test-waits-after-1.json` and `/tmp/ci-test-waits-after-2.json`.
+The red and mutation reports use the same prefix with `red` and `mutation`.
+Full root tests and fresh-install qualification: NOT RUN.
+
 ## Saved turn failure reasons
 
 The bridge report reader accepts `stop_interrupted`, `model_error` and

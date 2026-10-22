@@ -12,7 +12,12 @@ export async function shortenDuplicateWindow(nats: NatsFixture) {
   const info = await nats.connection.request('$JS.API.STREAM.INFO.EVENTS');
   const stream = streamSchema.parse(info.json());
   expect(stream.config.duplicate_window).toBe(120_000_000_000);
-  expect(stream.config.duplicate_window).toBe(2_000_000_000);
+  // Change only this private stream, after normal fixture creation has finished.
+  const config = { ...stream.config, duplicate_window: 2_000_000_000 };
+  const payload = new TextEncoder().encode(JSON.stringify(config));
+  const response = await nats.connection.request('$JS.API.STREAM.UPDATE.EVENTS', payload);
+  const updated = streamSchema.parse(response.json());
+  expect(updated.config.duplicate_window).toBe(2_000_000_000);
 }
 
 export async function waitForDuplicateWindow(nats: NatsFixture) {
