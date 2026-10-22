@@ -1,0 +1,45 @@
+{
+  "rows": [
+    {
+      "serverId": "journey-0b41bcb7-36c1-4957-94b0-48ad3fae7474",
+      "name": "Journey MCP",
+      "source": {
+        "kind": "catalogue",
+        "label": "Catalogue",
+        "detail": "catalogue:dev"
+      },
+      "version": "1.0.0",
+      "accountModel": "Not provided",
+      "toolsAllowed": 1,
+      "toolsTotal": 2,
+      "status": {
+        "kind": "ready",
+        "label": "Ready",
+        "detail": "Published 22 Oct 2026, 17:36"
+      }
+    }
+  ],
+  "events": [
+    {
+      "type": "mcp.server_registered",
+      "sequence": 300,
+      "time": "2026-10-22T17:36:39.931Z",
+      "kind": "hosted"
+    },
+    {
+      "type": "mcp.server_discovered",
+      "sequence": 301,
+      "time": "2026-10-22T17:36:39.961Z"
+    },
+    {
+      "type": "mcp.server_reviewed",
+      "sequence": 302,
+      "time": "2026-10-22T17:36:40.256Z"
+    },
+    {
+      "type": "mcp.server_published",
+      "sequence": 303,
+      "time": "2026-10-22T17:36:40.289Z"
+    }
+  ]
+}
