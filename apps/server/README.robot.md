@@ -137,7 +137,9 @@ The diagnostic logs are `/tmp/ci-test-waits-fix-diagnostic.log`,
 
 `test/recovery-stop.test.ts` checks restart recovery with the real journal, runner,
 report writer and browser transcript. Other integration tests use the computer and
-operator test helpers. Tests cannot import another application’s source directly.
+operator test helpers. The demo tool tests use `test/inventory.ts` to check their
+public catalogue with the real inventory parser. Tests cannot import another
+application’s source directly.
 
 ## Saved turn failure reasons
 

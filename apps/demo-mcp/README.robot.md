@@ -47,7 +47,8 @@ it binds 127.0.0.1 for local checks only. SIGTERM/SIGINT close the listener.
 The [runbook](../../docs/process/demo-tool-server/runbook.md) records deployment blockers and
 start, stop and status commands for the transient user systemd unit. Systemd owns the process;
 no shell keeps a numeric PID or signal trap. The unit is collected when the process exits.
-Tests exercise the real inventory parser, protocol refusals before effects, metadata, revision
+Tests use the server’s `test/inventory.ts` helper for its real inventory parser.
+They exercise protocol refusals before effects, metadata, revision
 checks, concurrent accepted calls, id echo, JSON HTTP replies and reset on restart.
 The oversized, malformed UTF-8 and tools/list argument fixtures otherwise satisfy the request
 contract, so each test fails when its corresponding guard is removed. Tests need no external

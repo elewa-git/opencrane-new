@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { createDemoServer } from '../src/server.ts';
-import { discoverInventory } from '../../server/src/integrations/inventory.ts';
+import { discoverInventory } from '../../server/test/inventory.ts';
 
 const version = '2026-07-28';
 const metadata = { 'io.modelcontextprotocol/protocolVersion': version };

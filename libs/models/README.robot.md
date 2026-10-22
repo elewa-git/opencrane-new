@@ -15,6 +15,7 @@ inside the run's private temporary directory. The existing cleanup removes that
 directory. No capture output is kept outside it. Ordinary tests check both output
 paths, the permissions and removal without needing the capture image.
 See [the commands and results](../../docs/process/p3-5-pr12capture/receipt.md).
+
 ## Test dependencies
 
 The conversation activity, direct-mode, participation and delegation replay tests live

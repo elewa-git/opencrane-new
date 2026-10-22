@@ -17,6 +17,7 @@ flowchart LR
   apps --> server["server: product back end"]
   apps --> odoo["odoo-mcp: Odoo tools"]
   server -.->|remote MCP when deployed| demo
+  demo -.->|tests use the inventory helper| server
 ```
 
 ## What it is responsible for
@@ -36,6 +37,7 @@ flowchart LR
 
 ## How to run or test it
 
+Tests use the server’s test helper to check the demo catalogue with the real inventory parser.
 Without TLS settings, startup binds only to the local machine on port 18445.
 
 ```sh
