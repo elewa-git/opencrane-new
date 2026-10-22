@@ -395,8 +395,9 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     });
     expect(fullReads).toEqual([false]);
     resumeGrantHistory.resolve();
-    // Join catch-up directly instead of sending more admission requests to warm it.
-    await readDecisionGrants(store, 'test', 'gpt-6-luna', performance.now() + 15_000);
+    // Keep the existing two-minute history budget outside the measured admission.
+    const grantHistoryDeadline = performance.now() + 120_000;
+    await readDecisionGrants(store, 'test', 'gpt-6-luna', grantHistoryDeadline);
     const readyHeaders = await setup.issue();
     const ready = await decide(setup, setup.options.decisionUrl, readyHeaders);
     expect(ready.status, ready.text).toBe(200);

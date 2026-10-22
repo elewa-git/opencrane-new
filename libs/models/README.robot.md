@@ -2958,7 +2958,7 @@ The port-conflict tests occupy a real readiness port and check the reported caus
 The admission benchmarks pause the first grant read until the cold request is refused.
 That request must return 403, record Deny and hold no money. Background event delivery
 stops before loading grant history. Catch-up is joined directly, with a separate
-15-second limit; no admission retry loop is used. One successful warm-up precedes
+two-minute limit, as before; no admission retry loop is used. One successful warm-up precedes
 the measurement. Both calls must return 200. The measured call adds exactly one
 reservation, reads no old grants and finishes within two seconds. Neither successful
 hold is settled. The separate saved-Allow timeout test retains its 503 refusal and
