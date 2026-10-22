@@ -398,3 +398,59 @@ Sanitised failure logs and pictures are retained under
 `~/.opencrane/daily-fresh/nightly-20261022T113052-2100b0dc-351a-4fb5-a5cb-9e1eb47b7cf1/`.
 Generated screenshots from other core checks were archived privately and removed from
 this branch's diff.
+
+## Group display
+
+PRODUCT CHANGE: yes. Source: `197a42a0439158bfea95986cf0540bd46c4426ae`.
+Qualification is in progress on 22 October 2026. The three fresh nightly runs use
+one claimed secondary slot, `1`, with the free stand-in model. Paid calls and paid
+euro cents are zero. The owner stack and port 44200 are outside this work.
+
+The send reply confirms a saved event but contains no message row. DirectChat then
+reads history. Previously, a 425 ended that read without retrying. The initial socket
+only opened after a successful history read, so a new group could have neither its
+saved message nor a live feed. A live update that required catch-up had the same gap:
+its one failed history read left no later retry. List reads also stopped on 409 or 425.
+
+The product now retries these history and first-page list reads every 100 ms, at most
+50 times, with a ten-second request limit. Cancelling a read cancels its next wait.
+Creation uses this same history reader. Writes keep their existing retry rules.
+A 403 still returns immediately and clears protected data. Server access checks and
+the authority tests are unchanged. Each live group send must appear within two seconds
+of its accepted response. Its receipt keeps the command id and display time so the
+worker's completion time can be compared with the page observation.
+
+The failing data-service test was committed first as `55bdab7b6`: four cases returned
+425 or 409 instead of the next available history or list row. The page regression also
+failed before the fix. PASS: 82 focused web tests twice, 14 infra tests twice, 438 event
+security tests once with the supplied `PG_TEST_URL`, workspace typecheck, focused infra
+typecheck using the repository settings, event catalogue, Knip and changelog checks.
+Lint is still running. The full local root suite is NOT RUN, as requested. No dependency
+was added. The first ad-hoc infra typecheck omitted repository compiler settings and
+reported errors in unchanged libraries; the check using those settings passed.
+
+| Nightly step | Run 1 | Run 2 | Run 3 |
+| --- | --- | --- | --- |
+| Fresh startup and stand-in provider | NOT RUN | NOT RUN | NOT RUN |
+| Group creation and mode kept after send | NOT RUN | NOT RUN | NOT RUN |
+| Messages with no AI, computer or budget activity | NOT RUN | NOT RUN | NOT RUN |
+| Later participant sees only messages after joining | NOT RUN | NOT RUN | NOT RUN |
+| Removed participant loses the view within two seconds | NOT RUN | NOT RUN | NOT RUN |
+| Leaving clears access and updates participants | NOT RUN | NOT RUN | NOT RUN |
+| People picker and denied selection | NOT RUN | NOT RUN | NOT RUN |
+| Unsupported recipients refused without a saved draft | NOT RUN | NOT RUN | NOT RUN |
+| Replay keeps group participants and mode | NOT RUN | NOT RUN | NOT RUN |
+| Remaining nightly checks | NOT RUN | NOT RUN | NOT RUN |
+| Claimed slot cleanup | NOT RUN | NOT RUN | NOT RUN |
+
+The earlier provider 404 was the result lookup after `POST /api/org/providers`
+returned 503. In that attempt the server answered health checks before the dispatcher
+finished applying `ownership.seeded`: creation returned at 07:56:47.614 UTC and that
+access update completed at 07:56:47.719. Provider creation requires applied membership;
+the status route returns 404 when no event carries the original command id. This is a
+separate product startup readiness problem. The journey correctly refused to repeat an
+unknown write. These retained logs identify the timing but contain no exception detail.
+Provider behaviour is unchanged in this PR.
+
+Paid answers, member disk isolation and physical-phone checks remain NOT RUN.
+GitHub CI will be reported for the final pushed head.
