@@ -15,6 +15,7 @@ applied-event checks still run on every attempt. Unavailable dependencies still 
 ownership receipt while the Owner already has admin permission. It checks 425 without
 a create event, then 404 after ownership applies, then one accepted create on repeated
 submission. See [the provider API](../../docs/api/providers.md#evidence-and-recovery).
+The [startup check](../../docs/process/demo-provider-start.md) records local results and limits.
 
 ## Child retry tests and duplicate messages
 
