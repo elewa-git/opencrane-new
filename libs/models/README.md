@@ -464,6 +464,9 @@ import { modelForTask } from '@opencrane/models/routing';
 const model = modelForTask('chat_turn');
 ```
 
+Decision cost tests wait for old grant history to finish loading before measuring
+a later call. They still require each measured call to finish within two seconds.
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): exact prices, limits, settings, event rules and test detail.
