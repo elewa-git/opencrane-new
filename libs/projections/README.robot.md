@@ -157,6 +157,22 @@ null columns until `npm run replay -- audit` replays their events. Run this once
 after upgrading, then use `npm run replay -- audit --verify` to compare every
 rebuilt row, including the new columns, with the live table.
 
+`tool.dispatch_started` and `tool.dispatch_recorded` use their strict event schemas.
+Both join the saved request's decision. Approval references attach approval records,
+but never attach another dispatch attempt. The existing metadata allowlist excludes
+call text, arguments, replies, credentials and adapter binding details.
+A start is a recorded hand-off, with no confirmed outcome. Recorded dispatch maps
+`outcome_unknown` to `unknown`, `not_dispatched` to `not_dispatched`, and `responded`
+to `recorded`. A response is not business success. Generic gateway evidence cannot
+override the saved dispatch outcome. Neither event invents a reservation or settlement.
+
+Existing installations must run `npm run replay -- audit` after upgrading to include
+previously saved dispatch events. Follow it with `npm run replay -- audit --verify`.
+The first rebuild replaces the earlier rows; verification then compares the rebuilt
+rows. Replay makes no tool call and changes no event, approval or transport record.
+`apps/server/test/audit-dispatch.test.ts` covers authorised reads, each outcome,
+duplicate delivery, old rows, replay, access loss, isolation and bounded detail pages.
+
 `readAudit` reads 20 anchors by default, at most 50. Each row includes its
 anchor and at most 20 related records, plus `hasMoreEvidence` when more exist.
 `readAuditDetail` pages the same related records by descending event position,

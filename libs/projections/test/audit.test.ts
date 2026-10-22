@@ -421,6 +421,12 @@ async function rejectsUnsafeDispatchData(): Promise<void> {
         await expect(applying).rejects.toThrow('Invalid dispatch audit event');
       }
     }
+    const recorded = fixture('tool.dispatch_recorded', 'invalid-adapter');
+    const data = z.record(z.string(), z.unknown()).parse(recorded.data);
+    const invalid = { ...recorded, data: { ...data,
+      evidence: 'adapter_response_received', outcome: 'responded' } };
+    await expect(auditTrail.apply(db.db, invalid, 1))
+      .rejects.toThrow('Invalid dispatch audit event');
     const rows = await db.db.query('SELECT * FROM audit_entries');
     expect(rows.rows).toEqual([]);
   } finally {

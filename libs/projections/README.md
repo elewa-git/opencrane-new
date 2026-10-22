@@ -25,7 +25,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses the database test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
+  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history with saved tool evidence, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads spending choices with a time limit, and tables including closed assistant chats for cleanup, bounded grant lists with membership status, choices and join times| pg["PostgreSQL<br/>database"]
   projections -->|keeps native refusal audits and child requests outside feeds; saves ordered reply batches, public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
@@ -110,6 +110,8 @@ stays inside the projection.
 - Keeps the time of that choice and each night's reviewed fact references, so the
   back end can show whether any facts are waiting.
 - Keeps control references and affected-turn counts in history without private turn details.
+- Keeps saved tool hand-offs and transport observations in Change history. A response
+  records transport evidence; it does not prove a business change succeeded.
 - Keeps a short, dated change history. Each row can open more saved evidence in small pages.
 - Keep tool discovery separate from an owner or admin’s recorded review.
   Require a new review when the connection or account mode changes.

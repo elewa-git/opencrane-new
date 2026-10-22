@@ -1,0 +1,1 @@
+- Change history includes saved tool hand-offs and transport observations, without treating a response as business success or inventing a charge. Rebuild the audit projection after upgrading to include existing histories.

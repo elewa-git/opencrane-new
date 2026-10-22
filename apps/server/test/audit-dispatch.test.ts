@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { Writable } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
@@ -25,7 +26,7 @@ let runner: ProjectionRunner;
 let logs: string;
 
 function event(type: string, subject: string, data: Record<string, unknown>) {
-  const example = getEventDefinition(type)!.example as Record<string, unknown>;
+  const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(type)!.example);
   return envelope('test', subject, type, { ...example, ...data });
 }
 async function append(saved: EventEnvelope) {
@@ -91,7 +92,7 @@ function dispatchEvents(outcome?: Outcome) {
   const subject = `decision-${requestId}`;
   const approvalId = randomUUID();
   const decision = event('decision.recorded', subject, {
-    requestId, route: 'mcp', outcome: 'allow', reason: 'policy_allow',
+    requestId, permitId: requestId, route: 'mcp', outcome: 'allow', reason: 'policy_allow',
     requesterId: 'admin', conversationId: 'conversation', turnId: 'turn',
     serverId: 'server', toolName: 'write', callId: 'call', logicalRequestId: 'a'.repeat(64),
   });
@@ -99,12 +100,17 @@ function dispatchEvents(outcome?: Outcome) {
   const binding = { connectionId: 'installed', generation: 1,
     recordDigest: 'b'.repeat(64), reviewRevision: 1 };
   const start = event('tool.dispatch_started', subject, {
-    requestId, serverId: 'server', ...binding, adapter: 'remote_https',
+    requestId, serverId: 'server', ...binding,
+    ...(outcome === 'not_dispatched' ? {} : { adapter: 'remote_https' }),
   });
   start.id = `${requestId}:tool-dispatch-started`;
   let evidence = 'adapter_transport_uncertain';
-  if (outcome === 'responded') evidence = 'adapter_response_received';
-  if (outcome === 'not_dispatched') evidence = 'dispatch_refused';
+  if (outcome === 'responded') {
+    evidence = 'adapter_response_received';
+  }
+  if (outcome === 'not_dispatched') {
+    evidence = 'dispatch_refused';
+  }
   const adapter = { ...binding, decisionId: decision.id, startId: start.id };
   const observation = event('tool.dispatch_recorded', subject, {
     requestId, approvalId, conversationId: 'conversation', turnId: 'turn',
@@ -115,10 +121,15 @@ function dispatchEvents(outcome?: Outcome) {
   observation.id = `${requestId}:tool-dispatch`;
   return { requestId, decision, start, observation, approvalId };
 }
-function recordId(record: AuditRecord) { return record.eventId; }
-async function list(requestId: string) {
-  const reply = await app.inject({ url: `/api/org/history?requestId=${requestId}`,
-    headers: headers() });
+function recordId(record: AuditRecord) {
+  return record.eventId;
+}
+async function list(requestId: string, outcome?: string) {
+  let url = `/api/org/history?requestId=${requestId}`;
+  if (outcome !== undefined) {
+    url += `&outcome=${outcome}`;
+  }
+  const reply = await app.inject({ url, headers: headers() });
   expect(reply.statusCode).toBe(200);
   expect(reply.headers['cache-control']).toBe('no-store');
   expect(reply.body).not.toContain(canary);
@@ -126,7 +137,9 @@ async function list(requestId: string) {
 }
 async function detail(id: string, before?: number) {
   let url = `/api/org/history/${id}?limit=7`;
-  if (before !== undefined) url += `&before=${before}`;
+  if (before !== undefined) {
+    url += `&before=${before}`;
+  }
   const reply = await app.inject({ url, headers: headers() });
   expect(reply.statusCode).toBe(200);
   expect(reply.body).not.toContain(canary);
@@ -150,6 +163,7 @@ async function savedOutcome(outcome: Outcome) {
   expect(row.records[1]).toMatchObject({ type: 'tool.dispatch_started', status: 'recorded' });
   expect(row.records[2]).toMatchObject({ type: 'tool.dispatch_recorded', status: expectedStatus });
   expect(row.outcome).toBe(expectedStatus);
+  expect(await list(saved.requestId, expectedStatus)).toEqual(before);
   expect(row.reservedCents).toBeUndefined();
   expect(row.settledCents).toBeUndefined();
   const firstDetail = await detail(saved.decision.id);
@@ -165,6 +179,10 @@ async function savedOutcome(outcome: Outcome) {
   await rebuildAuditProjection(pgDb(dbs.queue), nats.store, logger, { verify: true });
   expect(await list(saved.requestId)).toEqual(before);
   expect(await detail(saved.decision.id)).toEqual(firstDetail);
+  await dbs.queue.query("DELETE FROM audit_entries WHERE event_type LIKE 'tool.dispatch_%'");
+  const rebuilt = await rebuildAuditProjection(pgDb(dbs.queue), nats.store, logger);
+  expect(rebuilt.changed).toBe(true);
+  expect(await list(saved.requestId)).toEqual(before);
   expect(appends).not.toHaveBeenCalled();
   expect(await nats.store.head()).toBe(head);
   const rows = await dbs.queue.query('SELECT * FROM audit_entries');
@@ -194,6 +212,12 @@ async function boundedUnknown() {
     await append(generic);
     expected.push(generic.id);
   }
+  const genericEffect = event('effect.observed', 'effect-later', {
+    permitId: saved.requestId, outcome: 'success', costCents: 0,
+    tool: canary, destination: canary,
+  });
+  await append(genericEffect);
+  expected.push(genericEffect.id);
   await runner.run(auditTrail);
   const page = await list(saved.requestId);
   expect(page.rows).toHaveLength(1);
@@ -222,18 +246,28 @@ async function isolatesAttempts() {
   await append(saved.start);
   await append(saved.observation);
   // Reuse an approval but keep the second attempt's own request authoritative.
-  const otherData = other.observation.data as Record<string, unknown>;
+  const otherData = z.record(z.string(), z.unknown()).parse(other.observation.data);
   other.observation.data = { ...otherData, approvalId: saved.approvalId };
   other.observation.correlation = { request: saved.requestId, permit: saved.requestId };
   await append(other.observation);
+  const approval = event('approval.decided', `approval-${saved.approvalId}`, {
+    approvalId: saved.approvalId, reason: canary,
+  });
+  await append(approval);
   const foreign = { ...saved.observation, id: randomUUID(), silo: 'other' };
   await append(foreign);
   await runner.run(auditTrail);
   const records = (await detail(saved.decision.id)).records;
   expect(records.map(recordId)).toEqual([
-    saved.observation.id, saved.start.id, saved.decision.id,
+    approval.id, saved.observation.id, saved.start.id, saved.decision.id,
   ]);
   expect((await list(saved.requestId)).rows).toHaveLength(1);
+  for (const path of ['', `/${saved.decision.id}`]) {
+    const foreignReply = await app.inject({ url: `/api/org/history${path}`,
+      headers: headers('admin', 'other-org') });
+    expect(foreignReply.statusCode).toBe(403);
+    expect(foreignReply.body).not.toContain(saved.decision.id);
+  }
   for (const member of ['member', 'admin']) {
     if (member === 'admin') {
       await append(event('member.role_changed', 'member-admin', {
