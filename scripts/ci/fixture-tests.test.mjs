@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -95,10 +95,34 @@ function checksFixtureEntriesOnEveryVerification() {
     writeFileSync(join(reports, 'expected.json'), JSON.stringify(listed));
     writeFileSync(join(reports, 'groups/files.json'), JSON.stringify(files));
     assert.equal(verify().status, 0);
-    writeFileSync(resolve(directory, newTest), "import { chromium } from 'playwright';");
-    const refused = verify();
-    assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /Add this test to fixtureFiles/);
+    const helper = resolve(directory, 'apps/server/test/helper.mjs');
+    const childScript = resolve(directory, 'scripts/browser.mjs');
+    mkdirSync(dirname(childScript), directoryOptions);
+    writeFileSync(helper, "import './new-browser.test.ts';\nexport * from './browser.mjs';");
+    writeFileSync(resolve(directory, 'apps/server/test/browser.mjs'),
+      "import { chromium } from 'playwright';");
+    writeFileSync(childScript, "require('playwright');");
+    const sources = [
+      "import { chromium } from 'playwright';",
+      "import './helper.mjs';",
+      "execFile(process.execPath, ['scripts/browser.mjs']);",
+      "await import('./browser.mjs');",
+    ];
+    for (const source of sources) {
+      writeFileSync(resolve(directory, newTest), source);
+      const refused = verify();
+      assert.notEqual(refused.status, 0, source);
+      assert.match(refused.stderr, /Add this test to fixtureFiles/, source);
+    }
+    writeFileSync(resolve(directory, 'apps/server/test/browser.mjs'),
+      "const image = 'ocn-upload-computer:test';");
+    writeFileSync(resolve(directory, newTest), "import './helper.mjs';");
+    const imageRefused = verify();
+    assert.notEqual(imageRefused.status, 0);
+    assert.match(imageRefused.stderr, /Add this test to fixtureFiles/);
+    writeFileSync(childScript, "const browser = 'ordinary data';");
+    writeFileSync(resolve(directory, newTest), "spawn('node', ['scripts/browser.mjs']);");
+    assert.equal(verify().status, 0);
   } finally {
     const cleanupOptions = { recursive: true, force: true };
     rmSync(directory, cleanupOptions);
@@ -113,3 +137,62 @@ test('refuses missing files', rejectsMissingFile);
 test('refuses duplicate files', rejectsDuplicateFile);
 test('refuses unexpected files', rejectsUnexpectedFile);
 test('checks new fixture use whenever CI verifies file lists', checksFixtureEntriesOnEveryVerification);
+
+function detectsRealChatBrowserScripts() {
+  const file = 'apps/web/test/chat-browser.test.ts';
+  const source = readFileSync(file, 'utf8');
+  assert.equal(needsFixtures(source, file), true);
+  const scripts = [
+    'scripts/check-chat-browser.mjs',
+    'scripts/check-chat-production.mjs',
+    'scripts/check-fold-loader.mjs',
+  ];
+  for (const script of scripts) {
+    const launch = `execFile(process.execPath, ['${script}']);`;
+    assert.equal(needsFixtures(launch, file), true, script);
+  }
+  assert.ok(fixtureFiles.includes(file));
+}
+
+function verifiesRealChatBrowserAssignment() {
+  const directory = mkdtempSync(join(tmpdir(), 'ci-chat-files-'));
+  const script = resolve('scripts/ci/test-files.mjs');
+  const chatTest = 'apps/web/test/chat-browser.test.ts';
+  const files = [...new Set([...fixtureFiles, chatTest])];
+  const directoryOptions = { recursive: true };
+  const executionOptions = { cwd: directory, encoding: 'utf8' };
+  function listedFile(file) {
+    return { file: resolve(directory, file) };
+  }
+  try {
+    for (const file of files) {
+      const target = resolve(directory, file);
+      mkdirSync(dirname(target), directoryOptions);
+      writeFileSync(target, '');
+    }
+    const chatScripts = [
+      chatTest,
+      'scripts/check-chat-browser.mjs',
+      'scripts/check-chat-production.mjs',
+      'scripts/check-fold-loader.mjs',
+    ];
+    for (const file of chatScripts) {
+      const target = resolve(directory, file);
+      mkdirSync(dirname(target), directoryOptions);
+      writeFileSync(target, readFileSync(file, 'utf8'));
+    }
+    const reports = join(directory, '.tools/ci');
+    mkdirSync(join(reports, 'groups'), directoryOptions);
+    const listed = files.map(listedFile);
+    writeFileSync(join(reports, 'expected.json'), JSON.stringify(listed));
+    writeFileSync(join(reports, 'groups/files.json'), JSON.stringify(files));
+    const result = spawnSync('node', [script, 'verify'], executionOptions);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    const cleanupOptions = { recursive: true, force: true };
+    rmSync(directory, cleanupOptions);
+  }
+}
+
+test('detects Chromium through the real chat browser scripts', detectsRealChatBrowserScripts);
+test('accepts the real chat browser suite in the fixture list', verifiesRealChatBrowserAssignment);
