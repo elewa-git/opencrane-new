@@ -1,0 +1,1 @@
+- Fresh development stacks wait up to five minutes for a cold website build to answer HTTP requests before running browser checks. Startup reports the readiness time and fails promptly if the website process stops.

@@ -5,6 +5,7 @@ import * as files from 'node:fs/promises';
 import { registerHooks, syncBuiltinESMExports } from 'node:module';
 import childProcess from 'node:child_process';
 import { promisify } from 'node:util';
+import timers from 'node:timers/promises';
 
 const directory = process.env['DEV_STACK_DIR'];
 const recordFile = `${process.env.HOME}/operations`;
@@ -13,6 +14,20 @@ let nextPid = 900000;
 let switchedOn = false;
 let failureRaised = false;
 const containers = new Set();
+const webReadyMs = process.env['START_WEB_READY_MS'];
+let elapsedMs = 0;
+let webPid;
+
+if (webReadyMs) {
+  async function advanceClock(milliseconds) {
+    elapsedMs += milliseconds;
+  }
+  function clockNow() {
+    return elapsedMs;
+  }
+  timers.setTimeout = advanceClock;
+  Object.defineProperty(performance, 'now', { value: clockNow });
+}
 
 function record(message) {
   appendFileSync(recordFile, `${message}\n`);
@@ -68,6 +83,7 @@ function spawnFixture(_command, args) {
   child.pid = nextPid++;
   child.unref = function unref() {};
   running.set(child.pid, args.join(' '));
+  if (args.includes('serve')) webPid = child.pid;
   snapshot();
   function spawned() { child.emit('spawn'); }
   queueMicrotask(spawned);
@@ -78,6 +94,8 @@ const originalRead = files.readFile;
 async function readFixture(path, ...args) {
   const match = /^\/proc\/(\d+)\/stat$/u.exec(String(path));
   if (!match) return originalRead(path, ...args);
+  const webExitMs = process.env['START_WEB_EXIT_MS'];
+  if (webExitMs && elapsedMs >= Number(webExitMs)) running.delete(webPid);
   if (!running.has(Number(match[1]))) {
     const error = new Error('Fixture process stopped');
     error.code = 'ENOENT';
@@ -103,6 +121,10 @@ Object.defineProperty(process.stdin, 'isTTY', { value: true });
 async function fetchFixture(url) {
   record(`health ${url}`);
 
+  if (webPid && String(url).endsWith('/org/integrations') && webReadyMs) {
+    if (elapsedMs < Number(webReadyMs)) return new Response('building', { status: 503 });
+    record(`website-ready ${elapsedMs}`);
+  }
   return new Response('ready');
 }
 globalThis.fetch = fetchFixture;

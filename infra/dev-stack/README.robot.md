@@ -27,11 +27,75 @@ These scripts do not touch `pg-test` or the `ocn` registry/MinIO; on `ocn` they
 own the `opencrane-<silo>` computer and `opencrane-<silo>-gateway` relay namespaces.
 Run at most three stacks per host: the stable owner and secondary ids `1` and `2`.
 Operations use a separate `flock` per id; different stacks run concurrently.
-Secondary readiness waits allow two minutes for startup on the shared host.
+Service readiness waits allow two minutes on secondary stacks and one minute on the owner.
+Website readiness has its own five-minute deadline, measured with a monotonic clock.
+It still requires a successful HTTP response from `/org/integrations` on the Angular
+server, started with the generated proxy configuration. If the recorded website process
+stops, startup fails promptly and points to the private `web.log`, without printing
+its contents. A successful check prints
+`PASS website readiness: <milliseconds>ms`, measured from the request to start or reuse
+the website process.
+The origin check and browser journeys run afterwards. Fresh starts still clear the cache.
+
+The retained 22 October provider-start run built the website in 208.291 seconds, then
+listened on slot 1's port 25106. Its previous two-minute wait had already failed.
+The same day's upload-list run retained only `Building...` and a web timeout, so it does
+not establish that run's eventual build time. The cache change in #578 only enabled
+Angular caching in CI; fresh secondary starts remove this cache before the build.
+No new web dependency was introduced by that change. Keep the cold-build allowance
+separate from the other services' deadlines.
+
+`nice -n 10 node --experimental-strip-types --test infra/dev-stack/stack-start.test.ts`
+checks a simulated 208.291-second build, a website that never becomes ready and an exited
+website process. It also checks owner rollback with synthetic processes; it never starts
+or changes the live owner stack.
+
 Repeated startup stops the secondary model container before migration and starts
 it again afterwards, alongside the restarted server and dispatcher. Fresh secondary
 stacks seed a 100,000-cent daily/monthly budget event for the stub-only journeys.
 Stop leaves uncertain reservations; repeat runs retain them and the same ledger.
+
+## Website startup check, 22 October 2026
+
+Source: `db18a7bf1882515421a8955010e898183fcb183f`. Both attempts ran
+`nice -n 10 infra/dev-stack/daily-fresh.sh` with `ZITADEL_KEY_FILE` pointing to the
+existing private credential file. The launcher claimed secondary slot 1 with `claim.sh`,
+ran `up.sh --fresh` with the free stand-in model, then removed the slot and its volumes.
+No separate test suite or repository build from this task ran during either attempt.
+
+- First attempt: **FAIL** before website startup. The provider create request returned
+  HTTP 503, then its receipt request returned HTTP 404. Website and browser checks:
+  **NOT RUN**. Private sanitised logs are in
+  `~/.opencrane/daily-fresh/nightly-20261022T211218-233b6bf6-5e86-4319-a7c1-78840cb8eb99/`.
+- Second attempt: website readiness **PASS**, **56,406 ms** from launch to the successful
+  HTTP check. Angular reported **51.681 seconds** for the cold build and listened on
+  `127.0.0.1:25106`. The generated proxy and origin check were used.
+- Browser checks **PARTIAL**: the run passed sign-in, a streamed stand-in reply, reload,
+  Stop, upload and preview assertions, then timed out after 120 seconds waiting for the
+  attached PDF's answer in `browser-upload.ts`. The whole fresh run remains **FAIL**.
+  Later browser journeys and replay checks: **NOT RUN**. Private sanitised logs and
+  screenshots are in
+  `~/.opencrane/daily-fresh/nightly-20261022T211505-1d48d147-b640-4a88-9e05-da853665efd4/`.
+- Cleanup **PASS** for both attempts: slot 1's generated directory was removed and no
+  Compose containers remained for `opencrane-dev-1`. The owner stack was not used.
+
+The earlier provider-start task retained its eventual **208.291-second** Angular build
+in `/home/jente/.fleet/demo-provider-start/events.jsonl`. The upload-list failure logs
+are under `~/.opencrane/daily-fresh/nightly-20261022T193759-c67e4dbf-24db-4d87-9faf-333d9bbb15fc/`.
+The earlier task also recorded a host load average of 28.53 after that build. The website
+still uses two build workers and a 768 MiB JavaScript heap on a secondary stack. That
+measurement justifies allowing five minutes even though the second attempt here was faster.
+This check does not qualify every demo journey or a paid model.
+
+Local checks: **PASS**, 18 startup and model-environment tests twice, 438 event-security
+tests once and the event catalogue check (149 event types). The regression failed before
+the fix in test-only commit `7b26ad748`. All checks used `nice -n 10`; the event-security
+run set the requested `PG_TEST_URL` and did not use a database.
+Workspace typecheck and the focused strict typecheck for the changed startup code: **PASS**.
+Repository lint, including Knip, Markdown, links, licences and changelog checks: **PASS**
+with `NODE_OPTIONS=--max-old-space-size=6144`. The initial lint attempt exhausted Node's
+default 4 GiB heap before reaching the later checks. CI already gives lint an 8 GiB heap.
+Full root suite: **NOT RUN**.
 
 ## Parallel journeys
 

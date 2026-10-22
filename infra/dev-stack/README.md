@@ -18,7 +18,7 @@ flowchart LR
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
   stack -->|sets up or checks test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
-  stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
+  stack -->|starts programs and checks website readiness| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
   stack -->|retries provider requests while access applies; checks tool reviews and times group access loss| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
@@ -32,6 +32,7 @@ also check resource changes made through the Pod resize endpoint. Their tests
 use temporary namespaces on a claimed spare stack. Startup does not install them yet.
 
 - Start and stop the local services and OpenCrane processes.
+  Wait for the website to answer before starting browser checks.
   Memory reads need an existing private key directory configured at startup.
 - Create private local credentials for the services.
 - Set up four sign-in test users for each spare stack. Check that the sign-in apps
@@ -89,7 +90,9 @@ The stack never forwards it. The approval journey is skipped while publication
 and call checks are being connected.
 
 1. **A developer starts OpenCrane.** The scripts start the databases and services, then
-   start the server, workers and website. A spare stack start also runs the core browser check.
+   start the server, workers and website. Startup waits up to five minutes for the website
+   to answer HTTP requests, and stops if its process exits. A spare stack start also runs
+   the core browser check after the website is ready.
    Computers update in place after their next pause and keep their home files.
    Admission checks allow only the checked image and settings.
 2. **A developer checks a change.** A browser signs in, sends a chat message and checks

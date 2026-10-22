@@ -168,9 +168,10 @@ async function compose(...args: string[]) {
   }
   return run('docker', ['compose', '--project-name', project, '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml', ...(secondary ? ['-f', 'infra/dev-stack/compose.secondary.yaml'] : []), ...args]);
 }
-async function wait(check: () => Promise<boolean>, name: string) {
-  // Allow two minutes for secondary startup on the shared host.
-  for (let i = 0; i < (secondary ? 240 : 120); i++) {
+async function wait(check: () => Promise<boolean>, name: string,
+  timeoutMs = secondary ? 120_000 : 60_000) {
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
     checkStartupInterruption();
     if (await check()) {
       checkStartupInterruption();
@@ -661,9 +662,19 @@ async function up(fresh: boolean) {
     settings['DEV_REAL_PROVIDER'] = '1';
     await writeEnv('settings', settings);
   }
+  const websiteStartedAt = performance.now();
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
     '--port', settings['WEB_PORT']!, '--proxy-config', `${directory}/proxy.json`], { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname, ...(secondary ? { NG_BUILD_MAX_WORKERS: '2' } : {}) });
-  await wait(() => healthy(`http://127.0.0.1:${settings['WEB_PORT']}/org/integrations`), 'web');
+  async function websiteReady() {
+    if (!await processId('web')) {
+      throw new Error('Website process stopped before readiness; inspect private web.log');
+    }
+    return healthy(`http://127.0.0.1:${settings['WEB_PORT']}/org/integrations`);
+  }
+  // Allow the cold Angular build to finish: a loaded shared host took 208 seconds.
+  await wait(websiteReady, 'web', 300_000);
+  const websiteReadyMs = Math.round(performance.now() - websiteStartedAt);
+  console.log(`PASS website readiness: ${websiteReadyMs}ms`);
   if (!secondary) {
     const ownership = await serveOwnership(settings);
     if (ownership === 'foreign') throw new Error(`Refusing to replace HTTPS :443 Serve handler: expected ${origin} to map to 127.0.0.1:${settings['WEB_PORT']}`);
