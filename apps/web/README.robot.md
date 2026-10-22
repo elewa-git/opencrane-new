@@ -914,3 +914,13 @@ Grant order never supplies the relationship. The link stays hidden while the rea
 is pending, when it fails, or when no assistant can be checked. The server rule is unchanged.
 Published editing, groups and multi-save recovery await their frames.
 `npm run visual:screen-tools-access` captures intercepted replies at both widths.
+
+## Upload readiness
+
+`chat/upload.ts` keeps the upload promise pending after HTTP 201 until the file-list
+GET succeeds. It reuses `fetchConversationRead`: HTTP 425 or 409 retries every
+100 ms for at most 50 attempts, within a ten-second request limit. Other failures
+return immediately. The upload's abort function cancels both the POST and these
+reads. The existing chat delivery check still controls workspace readiness.
+The tests in `chat/upload.spec.ts` hold the file-list reply to check that accepting
+the POST alone does not mark the upload ready.

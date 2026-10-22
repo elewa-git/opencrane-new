@@ -30,6 +30,7 @@ let options: FileOptions;
 let app: ReturnType<typeof buildServer>;
 const cleanup: (() => Promise<unknown>)[] = [];
 let scannerPort: number;
+let runner: ProjectionRunner;
 
 function respondWithInvalidVerdict(socket: Socket) {
   // Exceed the scanner's local response bound without a verdict terminator.
@@ -120,7 +121,7 @@ async function startUploadFixture() {
   await seedUploadHistory(nats.store, auth, db);
   const loggerOptions = { level: 'silent' as const };
   const logger = createLogger('upload-failures', loggerOptions);
-  const runner = new ProjectionRunner(db, nats.store, logger);
+  runner = new ProjectionRunner(db, nats.store, logger);
   await runner.initialise(members);
   await runner.run(members);
   const file = {
@@ -292,6 +293,76 @@ async function emptyUpload() {
 }
 it('refuses an empty upload with typed 400 at the upload and HTTP boundaries', emptyUpload);
 
+it('reports an upload still applying instead of returning an incomplete list',
+  listsUploadAfterProjectionCatchesUp);
+
+async function listsUploadsWithoutReplayingProjectedHistory() {
+  const conversationId = 'projected-history';
+  const createdData = {
+    conversationId, assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
+  };
+  const created = envelope('test', `conversation-${conversationId}`,
+    'conversation.created', createdData);
+  const creation = { event: created, expectedSequence: 0 };
+  expect((await options.store.append(creation)).status).toBe('appended');
+  await memberAuthorisation(options.binding).handler.handle(created, options.db);
+  await runner.run(files);
+  const file = {
+    conversationId, fileId: 'projected-upload', name: 'notes.txt', mime: 'text/plain',
+    size: bytes.length, sha256: 'a'.repeat(64), objectKey: 'test/projected-upload',
+    uploadedBy: 'alice',
+  };
+  await fileCommand(options.store, 'test', 'alice', 'projected-upload', 'file.uploaded', file);
+  await runner.run(conversations);
+  const projectedThrough = await runner.checkpoint(conversations);
+  const readStream = options.store.readStream.bind(options.store);
+  async function* refuseProjectedHistory(subject: string, fromSequence = 1,
+    deadline = Infinity, includeConversationCloses = false) {
+    for await (const row of readStream(subject, fromSequence, deadline,
+      includeConversationCloses)) {
+      // Keep the creation available for access checks, but refuse a replay of old content.
+      if (subject === `conversation-${conversationId}` && row.sequence <= projectedThrough &&
+          row.event.type !== 'conversation.created') {
+        throw new Error('Projected chat history must not be replayed for a file list');
+      }
+      yield row;
+    }
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(refuseProjectedHistory);
+  const upload = uploadRequest('projected-history');
+  const request = { url: `/api/conversations/${conversationId}/files`, headers: upload.headers };
+  const applying = await app.inject(request);
+  expect(applying.statusCode, applying.body).toBe(425);
+  expect(applying.json()).toEqual({ status: 'applying' });
+  await runner.run(files);
+  const available = await app.inject(request);
+  expect(available.statusCode, available.body).toBe(200);
+  expect(available.json()).toMatchObject({ rows: [{ fileId: 'projected-upload' }] });
+}
+it('checks unapplied uploads without replaying projected chat history',
+  listsUploadsWithoutReplayingProjectedHistory);
+
+async function keepsMissingWorkerCheckpointApplying(name: string) {
+  const checkpoint = await options.db.query<{ sequence: string }>(
+    'SELECT sequence FROM projection_checkpoints WHERE name = $1', [name]);
+  const sequence = checkpoint.rows[0]?.sequence;
+  expect(sequence).toBeDefined();
+  await options.db.query('DELETE FROM projection_checkpoints WHERE name = $1', [name]);
+  try {
+    const upload = uploadRequest('missing-checkpoint');
+    const request = { url: upload.url, headers: upload.headers };
+    const response = await app.inject(request);
+    expect(response.statusCode, response.body).toBe(425);
+    expect(response.json()).toEqual({ status: 'applying' });
+    expect(response.headers['cache-control']).toBe('no-store');
+  } finally {
+    await options.db.query('INSERT INTO projection_checkpoints (name, sequence) VALUES ($1, $2)',
+      [name, sequence]);
+  }
+}
+it.each(['files', 'conversations'])('keeps a missing %s worker checkpoint applying',
+  keepsMissingWorkerCheckpointApplying);
+
 async function refusesFilesAfterRemovalAndInvitation() {
   const store = options.store;
   const removal = { memberId: 'alice', removedBy: 'owner' };
@@ -330,3 +401,52 @@ async function refusesFilesAfterRemovalAndInvitation() {
 }
 it('refuses file reads, uploads and commands after removal followed by an invitation',
   refusesFilesAfterRemovalAndInvitation);
+
+async function listsUploadAfterProjectionCatchesUp() {
+  const created = envelope('test', 'conversation-lagged', 'conversation.created', {
+    conversationId: 'lagged', assistantId: 'assistant', createdBy: 'alice',
+    mode: 'agent_session',
+  });
+  const command = { event: created, expectedSequence: 0 };
+  expect((await options.store.append(command)).status).toBe('appended');
+  await memberAuthorisation(options.binding).handler.handle(created, options.db);
+  await runner.run(conversations);
+  await runner.run(files);
+  const putObject = vi.spyOn(options.objects, 'putObject');
+  putObject.mockResolvedValue({ etag: 'fixture', versionId: null });
+  const request = { ...uploadRequest('projection-lag'),
+    url: '/api/conversations/lagged/files' };
+  const listRequest = { url: request.url, headers: request.headers };
+  const empty = await app.inject(listRequest);
+  expect(empty.statusCode).toBe(200);
+  expect(empty.json()).toEqual({ rows: [] });
+  const upload = await app.inject(request);
+  expect(upload.statusCode).toBe(201);
+  const saved = upload.json<{ sequence: number; fileId: string }>();
+  const checkpoint = await runner.checkpoint(files);
+  expect(checkpoint).toBeLessThan(saved.sequence);
+  const stored = await options.store.readEvent(saved.sequence);
+  expect(stored.event.type).toBe('file.uploaded');
+
+  const applying = await app.inject(listRequest);
+  expect(applying.statusCode, applying.body).toBe(425);
+  expect(applying.json()).toEqual({ status: 'applying' });
+  expect(applying.headers['cache-control']).toBe('no-store');
+
+  await runner.run(files);
+  const available = await app.inject(listRequest);
+  expect(available.statusCode).toBe(200);
+  expect(available.json()).toMatchObject({ rows: [{ fileId: saved.fileId }] });
+
+  function infectedScan() {
+    return Promise.resolve('infected' as const);
+  }
+  options.scan = infectedScan;
+  const infectedRequest = { ...request,
+    headers: { ...request.headers, 'idempotency-key': 'rejected-after-upload' } };
+  const infected = await app.inject(infectedRequest);
+  expect(infected.statusCode).toBe(422);
+  const stillAvailable = await app.inject(listRequest);
+  expect(stillAvailable.statusCode).toBe(200);
+  expect(stillAvailable.json()).toMatchObject({ rows: [{ fileId: saved.fileId }] });
+}

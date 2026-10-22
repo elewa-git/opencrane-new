@@ -28,7 +28,7 @@ flowchart LR
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
+  server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, file lists and worker progress, facts, models, tools, publication status, nightly memory status and paged change history| postgres
   server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks and batches streamed reports, saves Stop, restart or failure reasons and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
   server -->|rechecks remote tool lists and revision promises before expiry through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
@@ -79,6 +79,13 @@ saved closure records at startup. It closes relays when stopping. Outside networ
 remains switched off while outage and crash handling await qualification.
 
 ## What it is responsible for
+
+File lists use the saved read tables before checking newer events. Old messages
+do not have to be replayed just to find out whether uploads are ready.
+
+File lists return a waiting response while their read table catches up with a saved
+upload. The website checks again before showing the upload as Ready. Other chat
+activity does not hold up the list.
 
 Remote tool grant reads show a person's membership separately from their saved grant.
 A departed person keeps their grant history and cannot use tools.

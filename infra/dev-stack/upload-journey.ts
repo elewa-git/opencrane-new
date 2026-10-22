@@ -15,7 +15,14 @@ export async function uploadJourney(server: string, headers: { origin: string; c
   const deadline = Date.now()+120_000;
   let textPath = '';
   while (!textPath) {
-    const list = await fetch(url, { headers }); assert.equal(list.status, 200);
+    const list = await fetch(url, { headers });
+    if (list.status === 425) {
+      await list.body?.cancel();
+      assert(Date.now() < deadline, 'File list did not finish applying');
+      await delay(100);
+      continue;
+    }
+    assert.equal(list.status, 200);
     const { rows } = await list.json() as { rows: Array<{ fileId: string; status: string; textPath?: string }> };
     assert.equal(rows.length, 1, 'Infected bytes never appear in the list');
     textPath = rows.find(file => file.fileId === fileId && file.status === 'delivered')?.textPath ?? '';

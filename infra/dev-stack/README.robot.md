@@ -712,6 +712,10 @@ file access. Receipts and screenshots go to `docs/process/p3-18-live/`.
 
 ## Browser upload qualification
 
+`upload-journey.ts` accepts the file-list API's HTTP 425 while the files projection
+is applying. It retries within its existing two-minute delivery limit. HTTP 200
+still requires exactly one clean upload; an empty list remains a failure.
+
 The browser starts a draft, attaches `project.pdf` through the native file picker,
 waits for delivery, previews the promoted original and asks for its project code.
 The prompt does not contain the answer. The stub requests `exec_command` and only

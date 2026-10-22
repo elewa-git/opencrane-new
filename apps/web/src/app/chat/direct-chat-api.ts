@@ -154,7 +154,7 @@ export async function changeParticipant(conversationId: string,
 
 // Retry only conversation reads whose saved rows or permissions are still being applied.
 // Keep POSTs and access refusals outside this retry loop.
-async function fetchConversationRead(url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function fetchConversationRead(url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const timeout = AbortSignal.timeout(10_000);
   const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   const request = { ...init, signal };

@@ -1325,6 +1325,21 @@ See the [qualification receipt](../../docs/process/p3-3-mcp-discover.md).
 
 ## Conversation uploads
 
+GET checks for `file.uploaded` events not yet covered by the `files` checkpoint.
+`src/files/list.ts` reads both worker checkpoints and matching uploads from
+`conversation_feed` in one database snapshot. It then reads the conversation event
+stream only after the later of the `files` and `conversations` checkpoints. This
+avoids replaying old messages when checking an empty or already available list.
+Rejected uploads, delivery receipts and other chat activity do not hold up the list.
+A missing or invalid checkpoint stays applying. Until the files worker covers an
+upload, GET returns HTTP 425 with `{status: "applying"}` and `Cache-Control: no-store`.
+It returns no partial list. POST still confirms the saved event with HTTP 201.
+The route uses the existing read access check once, without a write authority fence.
+The regressions in `test/file-upload-failures.test.ts` hold back the files worker
+and check the immediate read before and after running it. They also keep old
+content unavailable to prove that the list uses projected history. The unchanged
+100,000-message tests check personal and child readers during unrelated turns.
+
 The [upload API](../../docs/architecture/upload-api.md) documents raw-byte POST
 and replayable GET on `/api/conversations/:conversationId/files`. Enable it with
 the chat configuration, `MINIO_URL` and `MINIO_CREDENTIALS_FILE` (a rotating,

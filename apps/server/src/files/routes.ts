@@ -26,6 +26,7 @@ import {
   parseFileInput,
 } from './refusals.ts';
 import { inspectFile } from './types.ts';
+import { fileListApplying } from './list.ts';
 
 export interface FileOptions extends Omit<ChatOptions, 'keys'> {
   objects: Client;
@@ -192,6 +193,10 @@ async function handleFileRequest(
     const context = await authorise(options, config, request, reply);
     const { memberId, conversationId, joinPosition, createdBy } = context;
     if (request.method === 'GET') {
+      if (await fileListApplying(options, conversationId)) {
+        const response = { status: 'applying' };
+        return reply.code(425).send(response);
+      }
       const rows = await visibleFiles(options, conversationId, memberId, joinPosition, createdBy);
       const response = { rows };
       return reply.send(response);
