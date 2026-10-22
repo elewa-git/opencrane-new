@@ -14,9 +14,15 @@ import { journeyTool } from '../../../infra/dev-stack/journey-tool-policy.ts';
 
 async function fixture(originalRemote = false) {
   const nats = await natsFixture();
-  onTestFinished(nats.close);
+  async function closeNats() {
+    await nats.close();
+  }
+  onTestFinished(closeNats);
   const storage = await databases();
-  onTestFinished(storage.close);
+  async function closeStorage() {
+    await storage.close();
+  }
+  onTestFinished(closeStorage);
   const db = pgDb(storage.queue);
   await mcpCatalogue.create(db);
   const serverId = 'journey-rows';
