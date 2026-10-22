@@ -5,8 +5,8 @@ For people, read [README.md](README.md) first.
 ## Saved turn endings
 
 The runner reports `stop_interrupted` only when a cancelled turn receives an
-interrupted terminal report. Other runner failures use `model_error`; a refused
-private tool keeps `restricted_tool_refused` even when Stop was also received.
+interrupted terminal report. Provider and preparation failures use `model_error`;
+a refused private tool keeps `restricted_tool_refused` even when Stop was also received.
 Receiving Stop alone does not change a provider failure into a stopped reply.
 These values use the existing `reason` field. The journal retains them on replay.
 Restart recovery saves `bridge_restarted`, even if Stop was saved but not delivered.

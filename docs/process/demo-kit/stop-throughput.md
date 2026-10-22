@@ -730,3 +730,51 @@ All lint stages, typecheck, event catalogue and changelog lint passed after this
 The first lint wrapper stopped at an extra blank line in this receipt. Removed that line
 and reran documentation, links, fixture, licence and changelog checks successfully.
 Code, dependency and Knip checks had already passed, with 24 existing code warnings.
+
+### Restart before Stop delivery
+
+22 October 2026. Product source `ecfa7c148`; failing-first commit `da79ac93e`.
+The regression starts a memory-free turn, saves partial text and the member's Stop,
+then reopens the real report journal before delivering Stop to the runner. Recovery
+previously wrote a failure with no reason. The server saved `bridge_interrupted`, so
+the older-history display rule incorrectly hid the crash as stopped.
+
+Recovery now writes `bridge_restarted` in the existing reason field. The journal
+retains it after another reload, and the server saves it unchanged. Both the live
+transcript calculation and a new calculation from saved rows keep “Reply failed”
+and the exact partial text. The other reason-less runner write, an execution-mode
+mismatch, now writes `model_error` before running anything. All remaining computer
+failure writes already use the shared failure helper, which supplies a reason.
+Server close cleanup already writes `conversation_closed`. The server's default for
+older reason-less reports and the browser's older-history rule are unchanged.
+
+The [removal check and both final test logs](stop-label/recovery-checks.txt) show
+the hidden failure returning without the reason and both passing repeats.
+Used this worktree and disposable NATS fixtures, with no live stack or model call.
+The commands set the requested
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and use `nice -n 10`
+and one Vitest worker. These tests do not run a projection or need a new database.
+
+| Check | Result | Observed result |
+| --- | --- | --- |
+| Failing-first regression | PASS | Before the fix, both transcript calculations incorrectly showed stopped, kept partial text and omitted “Reply failed”. The mismatch lacked its reason, and the server rejected `bridge_restarted`. Three tests failed and 23 passed. |
+| Remove the recovery reason temporarily | PASS | The regression again showed stopped instead of failed, live and after reload. Restored the product file byte for byte afterwards. |
+| Changed tests twice | PASS | All 464 tests passed on each run: `apps/web/test/recovery-stop.test.ts`, `apps/computer/test/turn-model.test.ts`, `apps/server/test/tool-reports.test.ts` and `libs/events/test/security-rules.test.ts`. |
+| Old report compatibility | PASS | A reason-less report still saves `bridge_interrupted`; the browser compatibility rule is unchanged. |
+| Journal reload and report duplicates | PASS | The restart reason survives another journal reload, and the server recognises repeat delivery. |
+| Protected event-security tests | PASS | All 438 tests passed unchanged on both runs. The new reason also passes the real event append validation. |
+| Full root suite and live stack | NOT RUN | Left the narrow live verification to the orchestrator, as requested. |
+
+The first typecheck found that this integration test could not import browser code
+from the computer package's Node module settings. Moved the test into the existing
+browser test folder, without changing its assertions. That folder now includes the
+Node 22 promise types used by the real report writer. No product module settings,
+access, money or memory checks changed. No new dependency, event type or field was added.
+
+Typecheck, event catalogue, Knip and changelog lint: PASS. The catalogue still
+contains 149 event types. The first full lint wrapper was stopped after the test
+moved folders. The fresh full run passed with an 8 GiB Node heap limit,
+24 existing code warnings and no errors. Dependency checks, documentation, local links,
+fixture checks, licence checks and changelog lint all passed. The final changed-file
+code lint also passed. Fetch and rebase completed; `origin/main` at `12fe8ec912`
+is an ancestor of the branch, and neither rebase directory exists.
