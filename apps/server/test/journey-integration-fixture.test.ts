@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { it, onTestFinished } from 'vitest';
-import type { mcpServerRegisteredDataSchema } from '@opencrane/events';
 import { databases } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
@@ -9,6 +8,7 @@ import { mcpCatalogue, pgDb } from '@opencrane/projections';
 import { mapMcpCatalogueRows, type McpCatalogueRow }
   from '../../../libs/projections/src/mcp-catalogue.ts';
 import { remoteCatalogueWatch } from '../src/integrations/remote-catalogue-watch.ts';
+import { startupContractRejection } from '../src/integrations/startup-credentials.ts';
 import { journeyIntegrationRegistration } from '../../../infra/dev-stack/journey-integration-fixture.ts';
 import { journeyTool } from '../../../infra/dev-stack/journey-tool-policy.ts';
 
@@ -25,13 +25,16 @@ async function fixture(originalRemote = false) {
     const event = envelope('test', subject, type, data);
     event.principal = { kind: 'human', id: 'owner' };
     const expectedSequence = await nats.store.head(subject);
-    const result = await nats.store.append({ event, expectedSequence });
+    const command = { event, expectedSequence };
+    const result = await nats.store.append(command);
     assert.equal(result.status, 'appended');
     await mcpCatalogue.apply(db, event, result.sequence);
   }
-  let registration: ReturnType<typeof mcpServerRegisteredDataSchema.parse> = journeyIntegrationRegistration(serverId);
+  let registration: Record<string, unknown>;
+  registration = journeyIntegrationRegistration(serverId);
   if (originalRemote) {
-    registration = { ...registration, kind: 'remote', locator: 'https://mcp.example.test/mcp' };
+    registration = { serverId, kind: 'remote', locator: 'https://mcp.example.test/mcp',
+      catalogueRef: 'catalogue:dev', registeredBy: 'dev-only-bootstrap' };
   }
   await append('mcp.server_registered', registration);
   const tools = [journeyTool('read', true), journeyTool('write', false)];
@@ -52,20 +55,24 @@ async function fixture(originalRemote = false) {
       reviewDigest: toolReviewDigest(tool), mode };
   }
   const choices = tools.map(choice);
-  await append('mcp.server_reviewed', { serverId, connectionId: 'installed',
+  const review = { serverId, connectionId: 'installed',
     accountMode: 'none', tools: choices,
     policyRevision: policy.policyRevision, catalogueDigest: catalogue.schemaDigest,
-    reviewedBy: 'owner' });
-  await append('mcp.server_published', { serverId, publishedBy: 'owner' });
+    reviewedBy: 'owner' };
+  await append('mcp.server_reviewed', review);
+  const publication = { serverId, publishedBy: 'owner' };
+  await append('mcp.server_published', publication);
 
   let attempts = 0;
-  function unreachable() {
+  function unreachable(): never {
     attempts += 1;
     throw new Error('UNREACHABLE_SECRET_CANARY');
   }
-  async function requireLeader() {}
-  const watch = remoteCatalogueWatch(db, nats.store, 'test', requireLeader,
-    { resolve: unreachable });
+  function requireLeader() {
+    return Promise.resolve();
+  }
+  const network = { resolve: unreachable };
+  const watch = remoteCatalogueWatch(db, nats.store, 'test', requireLeader, network);
   onTestFinished(watch.close);
   async function row() {
     // Replay the watcher's saved events, just as the running projection does.
@@ -96,6 +103,10 @@ async function originalInterleaving() {
     'mcp.server_registered', 'mcp.server_discovered', 'mcp.server_reviewed',
     'mcp.server_published', 'mcp.catalogue_checked', 'mcp.catalogue_checked',
   ]);
+  for (const saved of rows.slice(4)) {
+    assert(typeof saved.event.data === 'object' && saved.event.data !== null);
+    assert.equal(Reflect.get(saved.event.data, 'outcome'), 'failed');
+  }
   const policy = await readToolPolicy(setup.nats.store, 'test', 'journey-rows');
   assert.equal(policy.expiresAt, null);
   assert.equal((await setup.row())?.status.kind, 'disabled');
@@ -106,19 +117,21 @@ it('a remote check after injected publication saves failures and removes Ready',
   originalInterleaving);
 
 async function stableJourneyRows() {
+  const registration = journeyIntegrationRegistration('journey-rows');
+  assert.equal(startupContractRejection(registration.locator,
+    registration.credentialContract), undefined);
   const setup = await fixture();
   assert.equal((await setup.row())?.status.kind, 'ready');
   // Let monitoring run between publication and the startup journey's next row read.
-  await setup.watch.check().catch(checkFailed);
+  const checks = [setup.watch.check()];
+  const results = await Promise.allSettled(checks);
   const row = await setup.row();
   assert.equal(row?.status.kind, 'ready');
   assert.equal(row.name, 'Journey MCP');
   assert.equal(row.version, '1.0.0');
   assert.equal(row.toolsTotal, 2);
   assert.equal(row.toolsAllowed, 1);
+  assert.equal(results[0]?.status, 'fulfilled');
   assert.equal(setup.attemptCount(), 0);
-}
-function checkFailed() {
-  // Assert the saved row below even when the old remote fixture cannot be reached.
 }
 it('the typed-row journey fixture remains Ready when remote monitoring runs', stableJourneyRows);

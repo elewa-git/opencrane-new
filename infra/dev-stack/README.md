@@ -48,6 +48,8 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 - Run browser checks against real local services. The approval journey is currently skipped.
 - Declare review details for read-only test tools before the Owner selects Allow.
   Discovery leaves every tool blocked until the exact review is saved.
+- Check integration list rows with a hosted display fixture. The fixture makes no
+  tool calls and has no remote URL for the catalogue watcher to check.
 - Check group chats from the To line, participant access, direct chats, shared assistants and
   provider key saving in a fresh stack.
 - Keep one extra computer place so a saved-data repeat can start a new shared assistant.

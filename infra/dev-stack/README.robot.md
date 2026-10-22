@@ -380,6 +380,15 @@ computer; native suspend/resume and a deleted Pod retain a file on its PVC. It
 also fetches the web page over tailnet HTTPS.
 Each invocation adds invitation/join events for the two test members and a new MCP row;
 fresh runs remove this local business state.
+The typed integration-row fixture registers a hosted image reference without an
+installation request. Its per-call credential contract needs no startup credential.
+It seeds discovery, saves the exact tool review through the
+Owner API, and records legacy publication. No container starts and no tool is called.
+The existing remote watcher selects only remote registrations, so it cannot invalidate
+this display fixture. This check does not qualify remote discovery or hosted installation.
+`apps/server/test/journey-integration-fixture.test.ts` records the old remote fixture's
+publication followed by failed checks, then requires the current fixture to remain Ready
+after the real watcher runs. It uses disposable NATS and PostgreSQL services.
 Failure exits non-zero. Private logs identify a failed stage without printing
 credentials. `status` reports the host processes, Compose and Tailscale service.
 The owner's own browser sign-in remains a manual check and is **NOT RUN** by these scripts.
