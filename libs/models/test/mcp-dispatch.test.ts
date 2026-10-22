@@ -681,7 +681,8 @@ async function watchesCatalogue(failure: 'drift append' | 'drift saved' | 'faile
     const value = await permit(setup, headers);
     const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
     const capture = vi.fn().mockResolvedValue(before.catalogue);
-    const options = { serverIds: ['fixture'], capture, requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+    const requireLeader = setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions);
+    const options = { serverIds: ['fixture'], capture, timeoutMs: 500, requireLeader };
     watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
     setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
     expect((await send(setup, value)).status).toBe(403);
@@ -743,6 +744,7 @@ async function watchesCatalogue(failure: 'drift append' | 'drift saved' | 'faile
         }
         capture.mockImplementation(stallCapture);
       }
+      const checkStartedAt = performance.now();
       const checking = watch.check('fixture');
       let refused: Promise<unknown>;
       if (failure === 'drift saved') refused = checking;
@@ -753,6 +755,7 @@ async function watchesCatalogue(failure: 'drift append' | 'drift saved' | 'faile
       await refused;
       if (failure === 'drift append') expect(driftAppendAttempted).toBe(true);
       if (failure === 'stalled') {
+        expect(performance.now() - checkStartedAt).toBeLessThan(3000);
         stalled.resolve(before.catalogue!);
         await pause(0);
       }
@@ -1026,7 +1029,7 @@ async function refusesOldApprovalAfterRecovery(testCase: typeof recoveryApproval
     const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
     const capture = vi.fn();
     capture.mockResolvedValue(initial.catalogue);
-    const options = { serverIds: ['fixture'], capture,
+    const options = { serverIds: ['fixture'], capture, timeoutMs: 500,
       requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
     watch = mcpCatalogueWatch(setup.nats.store, 'test', options);
     setup.dispatchOptions.requireCatalogue = watch.requireCurrent;

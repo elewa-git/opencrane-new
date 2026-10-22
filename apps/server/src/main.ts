@@ -26,6 +26,7 @@ startTelemetry({ serviceName: 'opencrane-server' });
 
 const port = Number(process.env['PORT'] ?? 8080);
 const host = process.env['HOST'] ?? '0.0.0.0';
+const heartbeatIntervalMs = Number(process.env['WS_HEARTBEAT_INTERVAL_MS'] ?? 15_000);
 
 const graceMs = Number(process.env['SHUTDOWN_GRACE_MS'] ?? 10_000);
 if (!Number.isSafeInteger(graceMs) || graceMs < 1 || graceMs > 2_147_483_647) {
@@ -146,7 +147,8 @@ if (events && silo) {
 }
 const closeChildRecovery = chat ? startChildRecovery(chat, createLogger('child-recovery')) : undefined;
 const address = await app.listen({ port, host });
-const sockets = attachWebSocketServer(app.server, app.log, authConfig, realtime);
+const sockets = attachWebSocketServer(app.server, app.log, authConfig, realtime,
+  undefined, heartbeatIntervalMs);
 installShutdown(app, sockets, graceMs, async () => {
   await closeChildRecovery?.();
   await closeBridges?.();

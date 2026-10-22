@@ -1,0 +1,1 @@
+- Speed up stalled tool-list and browser heartbeat tests with shorter timer settings. Production keeps its 30-second tool-list timeout and 15-second heartbeat interval.

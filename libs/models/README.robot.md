@@ -2809,6 +2809,12 @@ server ids; removal aborts active capture and retains any unresolved local drift
 Each capture compares the latest remote revision declaration with the saved one before
 renewing dates. A withdrawn or changed declaration saves the latest discovery as a changed
 catalogue, even with identical tool hashes. The hold starts before saving that event.
+`mcpCatalogueWatch` accepts an optional `timeoutMs`. It defaults to 30000 ms,
+as before, and bounds both the abort timer and event-store read deadline. It must
+be a positive integer no larger than 2147483647. Production callers omit it; the
+stalled-capture dispatch tests pass 500 ms. Failed-check saving keeps its separate
+two-second deadline. Approval invalidation, retry delays and expiry rules are unchanged.
+
 Short positive TTLs are checked after one quarter of their lifetime. Longer TTLs keep the
 30-second refresh margin and the inventory's 300000 ms cap. Zero TTL remains refused.
 

@@ -681,6 +681,13 @@ The callback is `/auth/callback`.
 See [auth configuration and defaults](../../libs/auth/src/config.ts), including
 client-secret indirection, scopes, cookie settings and provider claim names.
 `HOST` defaults to `0.0.0.0`, `PORT` to `8080`, `LOG_LEVEL` to `info`.
+`WS_HEARTBEAT_INTERVAL_MS` sets the `/ws` heartbeat interval. The unchanged default
+is 15000 ms. It must be a positive integer no larger than 2147483647. Embedded
+servers can pass the same interval as the sixth `attachWebSocketServer` argument.
+The heartbeat test uses 500 ms and still uses real sockets and timers: unanswered
+pings close at the next tick, while answered pings keep the connection open. Other
+realtime tests keep the production default, including the paused-consumer test.
+
 `OTEL_EXPORTER_OTLP_ENDPOINT` enables optional trace export when set.
 Disabling secure cookies or allowing insecure OIDC HTTP is only for local testing.
 

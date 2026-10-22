@@ -523,6 +523,10 @@ Desktop and Codex processes cannot replace these passes through HTTP.
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.
 
+The server checks browser connections with a heartbeat every 15 seconds by default.
+Tests can shorten the interval. A missed reply still closes the connection on the
+next heartbeat.
+
 ## How to run or test it
 
 Child-chat retry tests use private event stores to check lost replies and repeated
