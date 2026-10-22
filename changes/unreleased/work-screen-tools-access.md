@@ -1,1 +1,2 @@
 - Admins can choose named people and assistants while adding a tool server. Each grant waits for its saved record and access checks before another save or publication review. Uncertain results keep their original status check after reload.
+- Tool access explanations require a chosen person and one of their checked assistants. Phone tool-mode controls keep a 44-pixel minimum size.

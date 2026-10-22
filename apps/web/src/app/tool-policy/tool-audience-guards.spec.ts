@@ -25,6 +25,13 @@ function receipt() {
     projection: { content: 'current', iam: 'current' } };
 }
 
+function address(input: RequestInfo | URL): string {
+  if (input instanceof Request) {
+    return input.url;
+  }
+  return input.toString();
+}
+
 function response(body: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(body), { status }));
 }
@@ -39,13 +46,17 @@ function mount() {
 
 function root(fixture: ComponentFixture<ToolAudience>): HTMLElement {
   const element: unknown = fixture.nativeElement;
-  if (!(element instanceof HTMLElement)) throw new Error('Expected audience editor');
+  if (!(element instanceof HTMLElement)) {
+    throw new Error('Expected audience editor');
+  }
   return element;
 }
 
 function button(element: HTMLElement, label: string) {
   for (const candidate of element.querySelectorAll('button')) {
-    if (candidate.textContent?.trim() === label) return candidate;
+    if (candidate.textContent?.trim() === label) {
+      return candidate;
+    }
   }
   throw new Error(`Missing button: ${label}`);
 }
@@ -73,12 +84,22 @@ it.each(['schema', 'server', 'id', 'operation'])(
   'rejects a receipt with a mismatched %s and keeps its original status check',
   async function rejectsReceipt(mismatch) {
     const changed = receipt();
-    if (mismatch === 'schema') changed.sequence = 0;
-    if (mismatch === 'server') changed.serverId = 'another-server';
-    if (mismatch === 'id') changed.commandId = 'another-command';
-    if (mismatch === 'operation') changed.operation = 'grant.revoked';
+    if (mismatch === 'schema') {
+      changed.sequence = 0;
+    }
+    if (mismatch === 'server') {
+      changed.serverId = 'another-server';
+    }
+    if (mismatch === 'id') {
+      changed.commandId = 'another-command';
+    }
+    if (mismatch === 'operation') {
+      changed.operation = 'grant.revoked';
+    }
     function read(input: RequestInfo | URL) {
-      if (String(input).includes('/changes/')) return response(changed);
+      if (address(input).includes('/changes/')) {
+        return response(changed);
+      }
       return response(access());
     }
     vi.spyOn(globalThis, 'fetch').mockImplementation(read);
@@ -95,7 +116,9 @@ it.each(['schema', 'server', 'id', 'operation'])(
 
 it('rejects an access list older than the confirmed receipt', async function rejectsOldList() {
   function read(input: RequestInfo | URL) {
-    if (String(input).includes('/changes/')) return response(receipt());
+    if (address(input).includes('/changes/')) {
+      return response(receipt());
+    }
     return response(access(4));
   }
   vi.spyOn(globalThis, 'fetch').mockImplementation(read);
@@ -113,9 +136,11 @@ it.each([401, 403])('purges protected audience and candidate rows after %s',
   async function purgesRows(status) {
     let candidateReads = 0;
     function read(input: RequestInfo | URL) {
-      if (String(input).includes('/candidates')) {
+      if (address(input).includes('/candidates')) {
         candidateReads += 1;
-        if (candidateReads > 1) return response({}, status);
+        if (candidateReads > 1) {
+          return response({}, status);
+        }
         return response({ rows: [{ id: 'colleague', displayName: 'Private colleague' }],
           next: 'colleague', loadedAt: checkedAt,
           projection: { content: 'current', sequence: 5 } });
@@ -142,7 +167,7 @@ it.each([401, 403])('purges protected audience and candidate rows after %s',
 it('requires an explicit person and offers only that person’s assistants',
   async function selectsValidPair() {
     function read(input: RequestInfo | URL) {
-      const path = String(input);
+      const path = address(input);
       if (path.startsWith('/api/members/')) {
         let assistants: { assistantId: string; grant: string }[] = [];
         if (path.includes('/bea/')) {

@@ -47,6 +47,29 @@
 } @else if (state() === 'failed' || state() === 'needs_input' || state() === 'applying') {
   <button type="button" [disabled]="busy()" (click)="refresh()">Refresh audience</button>
 }
+<h3>Explain access</h3>
+<label>Person
+  <select aria-label="Person to explain" [value]="explanationPerson()" [disabled]="locked()"
+    (change)="selectExplanationPerson($any($event.target).value)">
+    <option value="">Choose a person</option>
+    @for (person of explanationPeople(); track person.granteeId) {
+      <option [value]="person.granteeId">{{ person.displayName }}</option>
+    }
+  </select>
+</label>
+@if (explanationAssistants().length) {
+  <label>Assistant
+    <select aria-label="Assistant to explain" [value]="explanationAssistant()"
+      [disabled]="locked()" (change)="selectExplanationAssistant($any($event.target).value)">
+      <option value="">Choose an assistant</option>
+      @for (assistant of explanationAssistants(); track assistant.id) {
+        <option [value]="assistant.id">{{ assistant.displayName }}</option>
+      }
+    </select>
+  </label>
+}
 @if (explanation(); as address) {
   <p><a [href]="address">Why do this person and assistant need access?</a></p>
+} @else {
+  <p>{{ explanationMessage() }}</p>
 }

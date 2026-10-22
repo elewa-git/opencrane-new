@@ -2,17 +2,27 @@ import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, injec
   input, output, signal, type OnDestroy, type OnInit } from '@angular/core';
 import { z } from 'zod';
 import { modelAccessResponseSchema, modelAccessGrantSchema, modelAccessCandidatesResponseSchema,
-  modelAccessChangeSchema, modelAccessCommandSchema } from '@opencrane/protocol';
+  modelAccessChangeSchema, modelAccessCommandSchema, memberAccessSchema } from '@opencrane/protocol';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
 
 const progress = z.enum(['current', 'applying']);
-const accessSchema = modelAccessResponseSchema.pick({ expectedSequence: true, loadedAt: true,
-  canManage: true }).extend({ serverId: z.string(), complete: z.boolean(),
-  grantTotal: z.number().nullable(), projection: z.object({ content: progress, iam: progress,
-    sequence: z.number() }), grants: z.array(modelAccessGrantSchema.extend({
-      iam: progress, membershipStatus: z.string().nullable(),
-    })).max(100) });
-const changeSchema = modelAccessChangeSchema.omit({ modelId: true }).extend({ serverId: z.string() });
+const nullableText = z.string().nullable();
+const nullableNumber = z.number().nullable();
+const accessProjectionSchema = z.object({ content: progress, iam: progress, sequence: z.number() });
+const audienceGrantSchema = modelAccessGrantSchema.extend({
+  iam: progress, membershipStatus: nullableText,
+});
+const audienceGrantsSchema = z.array(audienceGrantSchema);
+const boundedGrantsSchema = audienceGrantsSchema.max(100);
+const accessFieldsSchema = modelAccessResponseSchema.pick({
+  expectedSequence: true, loadedAt: true, canManage: true,
+});
+const accessSchema = accessFieldsSchema.extend({
+  serverId: z.string(), complete: z.boolean(), grantTotal: nullableNumber,
+  projection: accessProjectionSchema, grants: boundedGrantsSchema,
+});
+const changeFieldsSchema = modelAccessChangeSchema.omit({ modelId: true });
+const changeSchema = changeFieldsSchema.extend({ serverId: z.string() });
 const referenceSchema = modelAccessCommandSchema.pick({ commandId: true, action: true });
 type Candidate = z.infer<typeof modelAccessCandidatesResponseSchema>;
 type Edit = { action: 'grant' | 'revoke'; granteeKind: 'member' | 'assistant';
@@ -22,7 +32,8 @@ type Edit = { action: 'grant' | 'revoke'; granteeKind: 'member' | 'assistant';
   selector: 'oc-tool-audience', imports: [SharedState], templateUrl: './tool-audience.html',
   styleUrl: '../models/model-access-editor.css',
   styles: ['button { max-width: 100%; overflow-wrap: anywhere; }',
-    'a { display: inline-flex; align-items: center; min-height: 44px; }'],
+    'a { display: inline-flex; align-items: center; min-height: 44px; }',
+    'select { min-height: 44px; max-width: 100%; }'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ToolAudience implements OnInit, OnDestroy {
@@ -45,7 +56,12 @@ export class ToolAudience implements OnInit, OnDestroy {
   protected readonly locked = computed(this.isLocked.bind(this));
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly request = new AbortController();
+  protected readonly explanationPerson = signal('');
+  protected readonly explanationAssistant = signal('');
+  protected readonly explanationAssistants = signal<{ id: string; displayName: string }[]>([]);
+  protected readonly explanationMessage = signal('Choose a person and assistant to explain access.');
   private candidateRead = 0;
+  private explanationRead = 0;
 
   constructor() {
     effect(this.reportReady.bind(this));
@@ -89,6 +105,7 @@ export class ToolAudience implements OnInit, OnDestroy {
       return false;
     }
     const list = parsed.data;
+    this.clearExplanation();
     this.list.set(list);
     if (!list.complete || list.expectedSequence < sequence
       || list.projection.content !== 'current' || list.projection.iam !== 'current') {
@@ -115,8 +132,14 @@ export class ToolAudience implements OnInit, OnDestroy {
       return;
     }
     const rows = new Map<string, Candidate['rows'][number]>();
-    if (after) for (const row of this.candidates()?.rows ?? []) rows.set(row.id, row);
-    for (const row of parsed.data.rows) rows.set(row.id, row);
+    if (after) {
+      for (const row of this.candidates()?.rows ?? []) {
+        rows.set(row.id, row);
+      }
+    }
+    for (const row of parsed.data.rows) {
+      rows.set(row.id, row);
+    }
     this.candidates.set({ ...parsed.data, rows: [...rows.values()] });
   }
   protected alreadyGranted(id: string): boolean {
@@ -189,20 +212,100 @@ export class ToolAudience implements OnInit, OnDestroy {
     this.busy.set(false);
     this.focus();
   }
-  protected explanation(): string | undefined {
-    let person = '';
-    let assistant = '';
+  protected explanationPeople() {
+    const people = [];
     for (const row of this.list()?.grants ?? []) {
-      if (row.state !== 'granted') continue;
-      if (row.granteeKind === 'member' && !person) person = row.granteeId;
-      if (row.granteeKind === 'assistant' && !assistant) assistant = row.granteeId;
+      if (row.state === 'granted' && row.granteeKind === 'member') {
+        people.push(row);
+      }
     }
-    const edit = this.edit();
-    if (edit) {
-      if (edit.granteeKind === 'member') person = edit.granteeId;
-      else assistant = edit.granteeId;
+    return people;
+  }
+  private offersExplanationPerson(personId: string): boolean {
+    for (const person of this.explanationPeople()) {
+      if (person.granteeId === personId) {
+        return true;
+      }
     }
-    if (!person || !assistant || !this.toolName()) return undefined;
+    return false;
+  }
+  protected async selectExplanationPerson(personId: string): Promise<void> {
+    if (this.locked()) {
+      return;
+    }
+    this.clearExplanation();
+    if (!this.offersExplanationPerson(personId)) {
+      return;
+    }
+    this.explanationPerson.set(personId);
+    this.explanationMessage.set('Checking this person’s assistants…');
+    const read = ++this.explanationRead;
+    this.busy.set(true);
+    const path = `/api/members/${encodeURIComponent(personId)}/access`;
+    const reply = await this.fetchReply(path);
+    this.busy.set(false);
+    if (!reply || read !== this.explanationRead) {
+      return;
+    }
+    const parsed = memberAccessSchema.safeParse(reply.data);
+    this.explanationMessage.set('This person’s assistants could not be checked. Choose again.');
+    if (reply.code !== 200 || !parsed.success) {
+      return;
+    }
+    // Accept dated assistant context only when its membership and grant reads succeeded.
+    const unrelatedSections = new Set(['use_availability', 'tool_policy', 'tool_limits']);
+    for (const section of parsed.data.unavailableSections) {
+      if (!unrelatedSections.has(section)) {
+        return;
+      }
+    }
+    const assistants = [];
+    for (const row of parsed.data.rows) {
+      if (row.resourceType !== 'mcp_server' || row.resourceId !== this.serverId()) {
+        continue;
+      }
+      for (const assistant of row.eligibility.assistants) {
+        const displayName = this.assistantName(assistant.assistantId);
+        assistants.push({ id: assistant.assistantId, displayName });
+      }
+    }
+    this.explanationAssistants.set(assistants);
+    this.explanationMessage.set(assistants.length
+      ? 'Choose an assistant to explain access.' : 'No assistants are available for this person.');
+  }
+  protected selectExplanationAssistant(assistantId: string): void {
+    if (this.locked()) {
+      return;
+    }
+    this.explanationAssistant.set('');
+    for (const assistant of this.explanationAssistants()) {
+      if (assistant.id === assistantId) {
+        this.explanationAssistant.set(assistantId);
+        return;
+      }
+    }
+  }
+  private assistantName(assistantId: string): string {
+    for (const row of this.list()?.grants ?? []) {
+      if (row.granteeKind === 'assistant' && row.granteeId === assistantId) {
+        return row.displayName;
+      }
+    }
+    return assistantId;
+  }
+  private clearExplanation(): void {
+    this.explanationRead += 1;
+    this.explanationPerson.set('');
+    this.explanationAssistant.set('');
+    this.explanationAssistants.set([]);
+    this.explanationMessage.set('Choose a person and assistant to explain access.');
+  }
+  protected explanation(): string | undefined {
+    const person = this.explanationPerson();
+    const assistant = this.explanationAssistant();
+    if (this.locked() || !person || !assistant || !this.toolName()) {
+      return undefined;
+    }
     const query = new URLSearchParams({ requester: person, assistant, tool: this.toolName() });
     return `/org/integrations/${encodeURIComponent(this.serverId())}/access/explanation?${query}`;
   }
@@ -227,6 +330,10 @@ export class ToolAudience implements OnInit, OnDestroy {
     }
   }
   private async call(suffix: string, command?: unknown) {
+    const path = `/api/org/integrations/${encodeURIComponent(this.serverId())}/access${suffix}`;
+    return this.fetchReply(path, command);
+  }
+  private async fetchReply(path: string, command?: unknown) {
     const signal = AbortSignal.any([this.request.signal, AbortSignal.timeout(10_000)]);
     const options: RequestInit = { signal, cache: 'no-store' };
     if (command) {
@@ -235,10 +342,10 @@ export class ToolAudience implements OnInit, OnDestroy {
       options.body = JSON.stringify(command);
     }
     try {
-      const response = await fetch(`/api/org/integrations/${encodeURIComponent(this.serverId())}`
-        + `/access${suffix}`, options);
+      const response = await fetch(path, options);
       if (response.status === 401 || response.status === 403) {
         this.request.abort();
+        this.clearExplanation();
         this.list.set(undefined);
         this.candidates.set(undefined);
         this.edit.set(undefined);

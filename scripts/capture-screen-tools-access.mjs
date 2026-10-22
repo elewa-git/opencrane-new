@@ -39,6 +39,17 @@ async function serve(state, route) {
     return serveWebBuild(route, resolve('apps/web/dist/web/browser'));
   }
   if (url.pathname.endsWith('/tools')) return route.fulfill({ json: policy });
+  if (url.pathname.startsWith('/api/members/')) {
+    const assistants = [];
+    if (url.pathname === '/api/members/bea/access') {
+      assistants.push({ assistantId: 'helper', grant: 'allowed' });
+    }
+    const row = { resourceType: 'mcp_server', resourceId: 'fixture', relation: 'use', sources: [],
+      eligibility: { person: 'allowed', assistants, availability: 'unavailable' } };
+    const body = { checkedAt: time, complete: false,
+      unavailableSections: ['use_availability'], rows: [row] };
+    return route.fulfill({ json: body });
+  }
   if (request.method() === 'POST') {
     assert(url.pathname.endsWith('/access/changes'));
     state.posts += 1;
@@ -82,6 +93,10 @@ async function serve(state, route) {
     body.grants = [grant, { ...grant, granteeKind: 'assistant', granteeId: 'helper',
       displayName: 'Sales assistant', source: 'assistant', membershipStatus: null,
       eventId: 'assistant-grant', sequence: state.posts ? 5 : 3 }];
+  }
+  if (state.scene === 'audience') {
+    const person = { ...grant, granteeId: 'bea', displayName: 'Bea', eventId: 'bea-grant' };
+    body.grants.splice(1, 0, person);
   }
   if (state.scene === 'overflow') body.grants = [{ ...grant, displayName: 'A'.repeat(200) }];
   if (state.scene === 'empty') body.grants = [];
@@ -146,7 +161,8 @@ try {
       }
       await page.evaluate(waitForFonts);
       assert(await page.evaluate(pageHasNoOverflow));
-      const controls = page.locator('oc-tool-audience button:visible, .modes label:visible');
+      const controls = page.locator(
+        'oc-tool-audience button:visible, oc-tool-audience select:visible, .modes label:visible');
       for (const button of await controls.all()) {
         const box = await button.boundingBox();
         assert(box && box.height >= 44 && box.width >= 44);
@@ -165,11 +181,12 @@ Date: ${time}. Source: ${source}.
 Environment: built web app, intercepted APIs and a fresh browser context per case. No live install.
 Command: \`npm run visual:screen-tools-access\`.
 
-PASS: 28 captures at 1280/390, reduced motion, keyboard selection, focus, 44px audience controls and no overflow.
+PASS: 28 captures at 1280/390, reduced motion, keyboard selection, focus, 44px audience buttons, explanation selectors and mode controls, and no overflow.
+PASS: Alex offers no assistant and no explanation link. Choosing Bea and her assistant gives the matching explanation link.
 PASS: each save sends once and reads its original receipt. Content and IAM Applying both block review. Saved reads access again. Reload keeps the original status check. Conflict, no-effect, unknown, empty, outage, stale cursor and 401/403 clearing match the expected states.
 [Desktop](audience-1280.png) and [phone](audience-390.png) show the saved audience.
 
-PARTIAL: INT-31 uses existing chips and shared states. Tool rows and shell keep the earlier publication layout. The existing INT-33 page explains the pair. Published editing and groups are outside this part.
+PARTIAL: INT-31 uses existing chips and shared states. Tool rows and shell keep the earlier publication layout. The existing INT-33 page receives an explicitly chosen, checked pair. Published editing and groups are outside this part.
 NOT RUN: fresh-install audience journey, live grant confirmation or gateway, model calls and local full root suite.
 `;
 await writeFile(resolve(output, 'receipt.md'), receipt);

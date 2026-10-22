@@ -892,6 +892,10 @@ require Refresh audience. Unknown checks only the original id, including after r
 An audience read outage holds Review access; only an unresolved grant also holds tool mode saves.
 Only the id and grant/revoke action enter sessionStorage; names stay in memory.
 Any 401/403 clears the parent and editor, including replies from an older candidate read.
-INT-31 uses existing chip styles and shared states; INT-33 explains the selected pair.
+INT-31 uses existing chip styles and shared states. The explanation requires explicit
+person and assistant choices. `/api/members/:memberId/access` supplies assistants from
+the selected server row. It uses the same member inventory as the explanation route.
+Grant order never supplies the relationship. The link stays hidden while the read
+is pending, when it fails, or when no assistant can be checked. The server rule is unchanged.
 Published editing, groups and multi-save recovery await their frames.
 `npm run visual:screen-tools-access` captures intercepted replies at both widths.
