@@ -121,6 +121,11 @@ async function recordsAndRecovers() {
   expect((await request('POST', 'primary', command)).json()).toEqual(saved.json());
   expect((await request('GET')).json()).toMatchObject({ draining: false });
   await runner.run(providers);
+  // Reorder physical storage to check replay without relying on the order of stored rows.
+  await dbs.queue.query(`CREATE INDEX provider_drain_test_order
+    ON providers (silo DESC, provider_id DESC)`);
+  await dbs.queue.query('CLUSTER providers USING provider_drain_test_order');
+  await dbs.queue.query('DROP INDEX provider_drain_test_order');
   const original = await dbs.queue.query('SELECT * FROM providers');
   const options = { verify: true };
   await rebuildProviderProjection(pgDb(dbs.queue), nats.reader,
