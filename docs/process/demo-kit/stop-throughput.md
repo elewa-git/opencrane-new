@@ -708,3 +708,25 @@ the report saved by the server. Every assertion is unchanged. No product code ch
 Both repeats passed all 99 tests in `workspace.spec.ts` and `chat-state.spec.ts`.
 Full lint, typecheck, event catalogue and changelog lint passed again after this
 fixture correction. Lint still has 24 existing warnings and zero errors.
+
+### Standalone browser fixture correction
+
+CI on `3abe9c49d` passed its checks job, including the complete Angular web suite,
+but two root test shards found older Stop fixtures outside that suite. A local run
+reproduced both failures. The standalone state test omitted the ending reason; the
+browser fixture used `interrupted`. Both now use the saved `stop_interrupted` reason.
+Every assertion and all product code remain unchanged in this correction.
+
+PASS after correction: all 499 tests in eight targeted root test files, twice.
+This includes standalone state replay, Chromium frame/keyboard/Stop/reload paths,
+production CSP and folding checks, alongside the server, bridge and unchanged event-security
+checks. Both 99-test Angular repeats also passed. Tests use the requested `PG_TEST_URL`,
+one worker and `nice -n 10`; browser fixtures use their own temporary servers.
+
+The `3abe9c49d` CI run ended with checks and test shards 2 and 3 passing. Shards 1 and 4
+failed only on the two fixtures corrected here, so `ci-ok` was FAIL for that earlier head.
+
+All lint stages, typecheck, event catalogue and changelog lint passed after this correction.
+The first lint wrapper stopped at an extra blank line in this receipt. Removed that line
+and reran documentation, links, fixture, licence and changelog checks successfully.
+Code, dependency and Knip checks had already passed, with 24 existing code warnings.
