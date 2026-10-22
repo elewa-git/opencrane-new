@@ -7,6 +7,7 @@
     ".": {
       "entry": [
         "scripts/ci/run-tests.mjs",
+        "scripts/ci/refresh-timings.mjs",
         "scripts/ci/*.test.mjs"
       ],
       "project": [

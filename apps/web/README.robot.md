@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+Angular's disk cache is enabled locally and in CI. The fixture test runner builds
+the development app once before tests start their own Angular servers.
+This keeps cold compilation outside their existing startup deadlines.
+
 Personal and shared-assistant sessions derive turn outcomes in `chat-state.ts`.
 The conversation feed keeps `agent.turn_stop_requested` followed by the bridge's
 `agent.turn_failed` report. A saved Stop request only gives a stopped outcome when
