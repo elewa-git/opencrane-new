@@ -1,3 +1,4 @@
+import { ToolAudience } from './tool-audience';
 import { IntegrationDetail } from '../integrations/integration-detail';
 import { readStoredPublication } from '../integrations/publication-reference';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
@@ -39,7 +40,7 @@ type PendingCommand = {
 
 @Component({
   selector: 'oc-tool-policy',
-  imports: [SharedState, IntegrationsAccessLost, AddFlowSteps, IntegrationDetail],
+  imports: [SharedState, IntegrationsAccessLost, AddFlowSteps, IntegrationDetail, ToolAudience],
   templateUrl: './tool-policy.html',
   styleUrl: './tool-policy.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,8 +49,9 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   private readonly document = inject(DOCUMENT);
   private abortController: AbortController | undefined;
   private requestVersion = 0;
-  private hadRenderedTools = false;
 
+  protected readonly audienceReady = signal(false);
+  protected readonly audiencePending = signal(false);
   readonly serverId = input.required<string>();
   protected readonly reviewSnapshot = signal<ToolPolicy | undefined>(undefined);
   protected readonly policy = signal<ToolPolicy | undefined>(undefined);
@@ -93,7 +95,8 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   protected canEdit(tool: Tool): boolean {
-    return this.state() === 'ready' && (tool.reviewed || this.isInitial()) &&
+    return this.state() === 'ready' && !this.audiencePending()
+      && (tool.reviewed || this.isInitial()) &&
       this.policy()?.connectionId !== null;
   }
 
@@ -109,7 +112,8 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
 
   protected openReview(): void {
     const policy = this.policy();
-    if (!policy || !canReviewUnpublished(policy) || this.state() !== 'ready') return;
+    if (!policy || !canReviewUnpublished(policy) || this.state() !== 'ready'
+      || !this.audienceReady()) return;
     const tools: Tool[] = [];
     for (const tool of policy.tools) tools.push({ ...tool, mode: this.selected(tool) });
     this.reviewSnapshot.set({ ...policy, tools });
@@ -118,7 +122,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   protected saveDisabled(tool: Tool): boolean {
     const policy = this.policy();
     if (!policy || !tool.reviewed || policy.connectionId === null) return true;
-    return this.state() !== 'ready' || this.selected(tool) === tool.mode;
+    return !this.canEdit(tool) || this.selected(tool) === tool.mode;
   }
 
   protected toolDescriptionId(tool: Tool): string {
@@ -186,7 +190,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
 
   protected async save(tool: Tool): Promise<void> {
     const policy = this.policy();
-    if (!policy || !this.canSave(tool, policy)) return;
+    if (!policy || this.saveDisabled(tool)) return;
     const command = this.createCommand(tool, policy);
     this.pendingCommand.set(command);
     this.changeReference.set(command.commandId);
@@ -199,8 +203,8 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     const version = this.beginRequest();
     try {
       const response = await fetch(this.toolsUrl(), this.postOptions(command));
-      if (!this.isCurrent(version)) return;
       if (this.clearOnAccessLoss(response)) return;
+      if (!this.isCurrent(version)) return;
       if (response.status === 409) {
         this.showConflict('The tools changed before your save',
           'Your save was based on an older copy of these tools. Nothing was saved and '
@@ -251,8 +255,8 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     const version = this.beginRequest();
     try {
       const response = await fetch(this.toolsUrl(), this.getOptions());
-      if (!this.isCurrent(version)) return;
       if (this.clearOnAccessLoss(response)) return;
+      if (!this.isCurrent(version)) return;
       if (!response.ok) {
         if (response.status === 400 && !this.pendingCommand()) {
           this.showNotReadyFailure();
@@ -266,7 +270,6 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
       if (!this.isCurrent(version)) return;
       this.policy.set(policy);
       this.restorePublication(policy);
-      if (policy.tools.length > 0) this.hadRenderedTools = true;
       const keptChoices = preserveUnchangedChoices
         ? choicesForCurrentTools(previousPolicy, previousChoices, policy)
         : new Map<string, ToolChoice>();
@@ -277,7 +280,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
       this.statusKind.set(successMessage ? 'needs_input' : 'ready');
       this.message.set(successMessage);
       this.detail.set('');
-      this.focusStatusRegion();
+      this.focusStatusRegion(previousPolicy !== undefined);
     } catch {
       if (this.isCurrent(version)) this.showPolicyReadFailure();
     } finally {
@@ -299,8 +302,8 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     const version = this.beginRequest();
     try {
       const response = await fetch(this.toolsUrl(), this.getOptions());
-      if (!this.isCurrent(version)) return;
       if (this.clearOnAccessLoss(response)) return;
+      if (!this.isCurrent(version)) return;
       if (!response.ok) {
         this.showCheckFailure();
         return;
@@ -431,11 +434,6 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     };
   }
 
-  private canSave(tool: Tool, policy: ToolPolicy): boolean {
-    return this.state() === 'ready' && tool.reviewed && policy.connectionId !== null
-      && this.selected(tool) !== tool.mode;
-  }
-
   private postOptions(command: PendingCommand): RequestInit {
     return {
       method: 'POST',
@@ -459,7 +457,8 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     return toolPolicySchema.parse(rawReply.policy);
   }
 
-  private focusStatusRegion(): void {
+  private focusStatusRegion(moveFocus = true): void {
+    if (!moveFocus) return;
     // Remove the pressed button before moving focus to the status message.
     globalThis.setTimeout(this.focusToolStatusRegion, 0);
   }
@@ -547,7 +546,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     this.statusKind.set('access_changed');
     this.message.set('Access changed. Ask an Owner or Admin.');
     this.detail.set('');
-    if (this.hadRenderedTools) globalThis.setTimeout(this.focusAccessHeading, 0);
+    globalThis.setTimeout(this.focusAccessHeading, 0);
     return true;
   }
 

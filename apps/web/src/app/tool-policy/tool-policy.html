@@ -109,13 +109,20 @@
           }
         </section>
       }
-      @if (canReviewUnpublished(policy) && policy.tools.length > 0) {
-        <button class="review-action" type="button" [disabled]="state() !== 'ready'"
-          (click)="openReview()">
-          Review before publishing
-        </button>
+      @if (canReviewUnpublished(policy)) {
+        <oc-tool-audience [serverId]="serverId()" [toolName]="policy.tools[0]?.name ?? ''"
+          [disabled]="state() !== 'ready'" (ready)="audienceReady.set($event)"
+          (pendingChange)="audiencePending.set($event)"
+          (accessEnded)="clearOnAccessLoss($event)" />
       }
-      @if (!isInitial()) {
+      @if (canReviewUnpublished(policy) && policy.tools.length > 0) {
+        <button class="review-action" type="button" [disabled]="state() !== 'ready' || !audienceReady()"
+          (click)="openReview()">
+          Review access
+        </button>
+        <a class="review-back" [href]="'/org/integrations/' + serverId()">Back</a>
+      }
+      @if (!canReviewUnpublished(policy)) {
       <section class="audience" aria-labelledby="audience-heading">
         <h2 id="audience-heading">Audience</h2>
         <oc-shared-state kind="not_configured" message="Not available yet"
