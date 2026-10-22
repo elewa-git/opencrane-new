@@ -17,18 +17,33 @@ const metadata = z.strictObject({
   'io.modelcontextprotocol/protocolVersion': z.literal(version),
   'io.modelcontextprotocol/clientCapabilities':
     z.record(z.string(), z.unknown()).refine(boundedCapabilities).optional(),
-  'io.modelcontextprotocol/clientInfo': z.strictObject({ name: boundedText,
-    version: boundedText, title: boundedText.optional() }).optional(),
-  threadId: boundedText.min(1).optional(), callId: z.string().refine(isToolCallText).optional(),
-  sessionId: boundedText.min(1).optional(), windowId: z.string().min(1).max(402).optional(),
-  itemId: boundedText.min(1).optional(), progressToken: z.union([z.int(), boundedText]).optional(),
-  'x-codex-turn-metadata': z.record(z.string().max(200),
-    z.union([z.string().max(2000), z.number(), z.boolean()])).refine(boundedEntries).optional(),
+  'io.modelcontextprotocol/clientInfo': z.strictObject({
+    name: boundedText,
+    version: boundedText,
+    title: boundedText.optional(),
+  }).optional(),
+  threadId: boundedText.min(1).optional(),
+  callId: z.string().refine(isToolCallText).optional(),
+  sessionId: boundedText.min(1).optional(),
+  windowId: z.string().min(1).max(402).optional(),
+  itemId: boundedText.min(1).optional(),
+  progressToken: z.union([z.int(), boundedText]).optional(),
+  'x-codex-turn-metadata': z.record(
+    z.string().max(200),
+    z.union([z.string().max(2000), z.number(), z.boolean()]),
+  ).refine(boundedEntries).optional(),
 });
 const identifier = z.object({ id: z.union([boundedText, z.int()]) });
-const requestSchema = z.strictObject({ jsonrpc: z.literal('2.0'), id: identifier.shape.id,
-  method: z.string(), params: z.strictObject({ _meta: metadata,
-    name: z.string().optional(), arguments: z.unknown().optional() }) });
+const requestSchema = z.strictObject({
+  jsonrpc: z.literal('2.0'),
+  id: identifier.shape.id,
+  method: z.string(),
+  params: z.strictObject({
+    _meta: metadata,
+    name: z.string().optional(),
+    arguments: z.unknown().optional(),
+  }),
+});
 
 export function createDemoServer(https?: { cert: Buffer; key: Buffer }) {
   const transport = https === undefined ? {} : { https };

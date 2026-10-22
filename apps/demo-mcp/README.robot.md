@@ -26,6 +26,9 @@ Every argument is named in the safe review fields. No arbitrary text is accepted
 `x-opencrane-mcp-revision` must equal the existing `catalogueDigest` of complete lossless
 per-tool definition digests. The fixed catalogue cannot change through HTTP. Revision checking,
 argument validation and the fixture change run synchronously, without an intervening await.
+The header guards against changed tool definitions, not changed fixture state. Two concurrent
+accepted calls with the same digest each apply once and return effectCount 1 then 2 on a fresh
+process. There is no fixture-state precondition.
 One accepted write increments effectCount once, even if it sets the same slot. Repeated requests
 are new calls: an uncertain result must not be retried. There is no durable deduplication claim.
 Only synthetic memory changes; nothing is written to the event store, database or supplier.
@@ -41,9 +44,14 @@ The quote starts at 12500 euro cents, morning, zero effects; every process start
 
 Both TLS paths must be supplied together. With TLS, the listener binds 0.0.0.0; otherwise
 it binds 127.0.0.1 for local checks only. SIGTERM/SIGINT close the listener.
-The [runbook](../../docs/process/demo-tool-server/runbook.md) records deployment blockers.
+The [runbook](../../docs/process/demo-tool-server/runbook.md) records deployment blockers and
+start, stop and status commands for the transient user systemd unit. Systemd owns the process;
+no shell keeps a numeric PID or signal trap. The unit is collected when the process exits.
 Tests exercise the real inventory parser, protocol refusals before effects, metadata, revision
-checks, id echo, JSON HTTP replies and reset on restart. They need no external services.
+checks, concurrent accepted calls, id echo, JSON HTTP replies and reset on restart.
+The oversized, malformed UTF-8 and tools/list argument fixtures otherwise satisfy the request
+contract, so each test fails when its corresponding guard is removed. Tests need no external
+services.
 Source and reused `@opencrane/events`: repository AGPL-3.0-or-later. Fastify 5.12.5 and
 Zod 4.6.5: MIT, checked in installed LICENSE files. Node uses its standard library.
 No new third-party dependency, runtime image or product API/event is introduced.

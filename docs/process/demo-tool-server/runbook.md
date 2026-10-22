@@ -21,35 +21,61 @@ to add credentials. Register with `accountMode: none`, with no bearer, company o
 No self-signed production CA, resolver/trust bypass, Funnel, rented host, network/daemon changes
 or owner-stack changes are part of this work. Missing reachability stays a blocker.
 
-## PID-owned lifecycle, after the missing inputs are supplied
+## Systemd-owned lifecycle, after the missing inputs are supplied
 
 These are future operator steps, not a deployment receipt. Choose an unused port; do not stop
-its current owner. Run from `/home/jente/dev/wt/demo-tool-server` in Bash. The shell records the
-PID of the Node process it starts, and stops only that PID. Do not use process-name matching.
-A stopped shell loses ownership evidence: do not reuse an old PID file to kill a later process.
+its current owner. Run from `/home/jente/dev/wt/demo-tool-server` in Bash as the process owner.
+The transient user unit `opencrane-demo-mcp.service` owns the process. Stopping the unit never
+uses a saved numeric PID. No shell signal trap is installed, and the shell may close after
+startup. Systemd removes the unit when the process exits, including after startup failure.
+
+The VPS supports user systemd services. Some task shells inherit root's session address;
+these settings select the current user's existing session instead. If the bus check fails,
+stop here and restore that user's session before starting the service.
+
+```sh
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+systemctl --user list-units --no-pager --no-legend >/dev/null
+```
+
+Start the service only after the hostname and certificate paths have been approved:
 
 ```sh
 # Set these to approved existing file paths. Never put PEM values here.
 export TLS_CERT_PATH=/approved/path/to/fullchain.pem
 export TLS_KEY_PATH=/approved/path/to/private-key.pem
 export PORT=18445
-node --experimental-strip-types apps/demo-mcp/src/main.ts &
-demo_pid=$!
-trap 'kill -TERM "$demo_pid" 2>/dev/null || true; wait "$demo_pid" || true' EXIT INT TERM
+systemd-run --user --unit=opencrane-demo-mcp --collect --service-type=exec \
+  --property=Restart=no --working-directory="$PWD" \
+  --setenv="PORT=$PORT" --setenv="TLS_CERT_PATH=$TLS_CERT_PATH" \
+  --setenv="TLS_KEY_PATH=$TLS_KEY_PATH" \
+  "$(command -v node)" --experimental-strip-types apps/demo-mcp/src/main.ts
 ```
 
-Keep this shell open while checking the listener and DNS from the authorised callers.
-When finished, stop the process from the same shell:
+Starting an existing unit refuses rather than replacing its process. A successful start
+command confirms that Node launched; the status and authorised reachability checks still
+need to confirm that the server is listening. Check status with:
 
 ```sh
-kill -TERM "$demo_pid"
-wait "$demo_pid"
-trap - EXIT INT TERM
+systemctl --user status opencrane-demo-mcp.service --no-pager
 ```
 
+Stop with:
+
+```sh
+systemctl --user stop opencrane-demo-mcp.service
+```
+
+After exit, status or stop may report that the unit is not loaded. There is then no demo
+process to stop. Do not fall back to a stored PID or process-name search. The unit does not
+restart the server automatically, so an unexpected exit cannot silently reset the fixture.
+
 Startup emits no settings or credentials; failures report only a fixed message.
-For local-only checks, leave both TLS settings unset. Loopback HTTP is test-only and cannot
-be registered. No public listener was started by this build.
+For local-only checks, omit both TLS `--setenv` options and use `env -u TLS_CERT_PATH
+-u TLS_KEY_PATH` before the Node command. This also removes any TLS settings inherited from
+the user service manager. Loopback HTTP is test-only and cannot be registered.
+No public listener was started by this build.
 
 ## Later qualification
 
@@ -59,3 +85,8 @@ Declarations alone grant no access. Changes to reviewed definitions must stay he
 Fresh-chat approval and one-send evidence belong to part 8; no journey is drafted here.
 Never retry an uncertain write. The effect counter proves only what this live process accepted;
 restart resets it and cannot resolve an earlier lost response.
+
+The `x-opencrane-mcp-revision` header identifies the tool catalogue, not the fixture state.
+It refuses calls against changed tool definitions. Two concurrent calls using the same current
+revision can both succeed: each changes the fixture once, returning effect counts 1 then 2
+on a fresh process. There is no state precondition or protection against repeated calls.

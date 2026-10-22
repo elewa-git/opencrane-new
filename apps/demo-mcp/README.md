@@ -30,6 +30,8 @@ flowchart LR
 1. **Discovery.** A caller receives the complete tool list without signing in.
 2. **Read.** The read tool returns the synthetic quote and number of accepted changes.
 3. **Change.** The write tool checks the catalogue revision, then changes the slot once.
+   The revision identifies the tool definitions, not the quote's current state. Two calls
+   with the same revision can both succeed; each adds one to the effect count.
    Restarting the process resets the fixture. No supplier or product record changes.
 
 ## How to run or test it
