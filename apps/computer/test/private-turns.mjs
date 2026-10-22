@@ -552,6 +552,7 @@ try {
     await drive('stop', { frame: { type: 'stop', turnId: active.id, conversationId: active.id } });
     await ended(active);
     check('J3 Stop failed terminal', terminal(active.id)?.type === 'agent.turn_failed');
+    check('J3 Stop explicit reason', terminal(active.id)?.reason === 'stop_interrupted');
     check('J3 Stop bounded cleanup', performance.now() - stoppedAt <= 5000);
     await delay(500);
     check('J3 Stop no repeat', (await provider('requests')).length === beforeRequests);
