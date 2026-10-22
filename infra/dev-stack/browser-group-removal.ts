@@ -19,6 +19,9 @@ export async function checkGroupRemoval(options: RemovalOptions) {
   const { owner, removed, origin, conversationId, name, oldMessage, store } = options;
   const path = `/api/conversations/${conversationId}`;
   const accessSubject = `participation-${conversationId}`;
+  const participantList = owner.locator('.participant-list').first();
+  const selectedName = participantList.getByText(name, { exact: true });
+  await selectedName.waitFor();
   const before = await store.head(accessSubject);
   const feed = watchFeed(removed, conversationId);
   try {
