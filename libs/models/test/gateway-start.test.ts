@@ -16,7 +16,7 @@ it('keeps provider-route JWT refusals in the gateway audit', keepsProviderJwtFai
 
 const STDERR_AFTER_EXIT_MS = 150;
 
-const mockState = vi.hoisted(() => ({ exitBeforeStderrDrain: false }));
+const mockState = vi.hoisted(() => ({ exitBeforeStderrDrain: false, withContext: false }));
 
 vi.mock('node:child_process', () => ({
   spawn: () => {
@@ -30,7 +30,13 @@ vi.mock('node:child_process', () => ({
         spawned.exitCode = 1;
         child.emit('exit', 1, null);
         setTimeout(() => {
-          stderr.write('Error: Address already in use\n');
+          if (mockState.withContext) {
+            stderr.write('Error: readiness server starts\n\nCaused by:\n');
+            stderr.write('    Address already in use (os error 98)\n');
+            stderr.write('fixture-credential-must-stay-private');
+          } else {
+            stderr.write('Error: Address already in use\n');
+          }
           stdout.end();
           stderr.end();
           child.emit('close', 1, null);
@@ -43,14 +49,15 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-it('drains stderr before building the gateway failure', async () => {
+it.each([false, true])('drains stderr and keeps safe bind details (context: %s)', async withContext => {
   mockState.exitBeforeStderrDrain = true;
+  mockState.withContext = withContext;
   const directory = await mkdtemp(`${tmpdir()}/gateway-start-stderr-`);
   const binary = resolve(`spikes/s0-1c-real-model-smoke/.tools/agentgateway-${
     process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64'
   }`);
   try {
-    await expect(startGateway({
+    const pending = startGateway({
       binary,
       configFile: `${directory}/config.json`,
       usageFile: `${directory}/usage.jsonl`,
@@ -59,7 +66,9 @@ it('drains stderr before building the gateway failure', async () => {
       readinessPort: 1,
       decisionUrl: 'http://127.0.0.1:1',
       issuer: 'https://test.invalid',
-    })).rejects.toThrow('Gateway stopped (exit code 1): Error: Address already in use');
+    });
+    await expect(pending).rejects.toThrow('Address already in use');
+    await expect(pending).rejects.not.toThrow('fixture-credential-must-stay-private');
   } finally {
     mockState.exitBeforeStderrDrain = false;
     await rm(directory, { recursive: true, force: true });
