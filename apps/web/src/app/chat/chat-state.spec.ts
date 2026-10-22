@@ -369,7 +369,8 @@ function assertStoppedReply(stoppingTurnId: string): void {
       data: { turnId: 'request', reason: 'bridge_interrupted' } },
   ];
 
-  const stopped = transcript(rows, 'me', stoppingTurnId).find(isAgentTurn)!;
+  const turns = transcript(rows, 'me', stoppingTurnId);
+  const stopped = turns.find(isAgentTurn)!;
 
   expect(stopped.state).toBe('stopped');
   expect(stopped.text).toBe('The kept partial reply');
