@@ -59,3 +59,27 @@ async function refusesLateAccessLoss(context: TestContext) {
 }
 
 test('fails when the removed page clears after two seconds', refusesLateAccessLoss);
+
+async function startsTheNextReadAfterAcceptance(context: TestContext) {
+  context.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  async function accept() {
+    await new Promise(function wait(resolve) {
+      setTimeout(resolve, 600);
+    });
+    return Date.now();
+  }
+  let readAt: number | undefined;
+  async function historyRefused(accepted: Promise<number>) {
+    await accepted;
+    readAt = Date.now();
+  }
+  const resultPromise = measureRemoval(accept, { historyRefused });
+  await setImmediate();
+  context.mock.timers.tick(600);
+  await setImmediate();
+  const result = await resultPromise;
+  assert.equal(readAt, 600, 'A refusal before removal cannot prove that the next read is refused');
+  assert.equal(result.hops['historyRefused'], 0);
+}
+
+test('checks the next API read after the removal response', startsTheNextReadAfterAcceptance);
