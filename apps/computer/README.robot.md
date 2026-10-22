@@ -999,6 +999,17 @@ These are source checks with Docker/runc, not pinned gVisor or fresh-install qua
 
 ## Native request replies
 
+PR 12a2 adds `codex-on-request-proof.mjs`, a strict qualification command. It exits
+non-zero when any required live request is absent, even when source tests pass.
+The saved-thread capture uses the existing image and mounts current source read-only.
+Its test-only non-persistent accept reaches the production proxy and pinned gateway.
+The requester command then rejects the saved Ask approval. Production still refuses native consent.
+The source test requires all seven saved requests, their exact methods, kinds and ids,
+and matching replies and continuations. Each Ask decision records the native request
+id and Codex thread and turn ids. Removing any saved request fails the test.
+Commands, per-condition results and remaining blockers are in
+[the capture receipt](../../docs/process/p3-5-pr12capture/receipt.md).
+
 PR 12a keeps memory-free and private thread starts on `never`. PR 12b will change
 only memory-free starts and turns. `native-requests.ts` answers server requests
 once per id for each Codex connection, even without a running turn or after a stop.

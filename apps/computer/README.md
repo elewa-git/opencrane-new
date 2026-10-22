@@ -124,6 +124,11 @@ new image.
 Repository CI builds a separate test image once for the tests that need it.
 The [CI test guide](../../scripts/ci/README.md) explains how those files are grouped.
 
+A separate local capture checks native consent on saved Codex threads. It uses a
+stub model and a disposable gateway. Missing shell or file requests remain unproven;
+the capture does not enable approvals in normal turns. Its saved checks require every
+expected request and its matching reply and continuation.
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): image details, settings, security limits and test commands.
