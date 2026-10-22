@@ -936,7 +936,9 @@ full event payloads. `test/decision-cost.test.ts` checks 10,000 members on one
 model and another eight models with 1,000 members each in one process. After
 warm-up, two rounds of real HTTP decisions use only later grant reads and finish
 within two seconds. The 3,000-grant and 15,000-edit tests delay the first saved
-Allow by 2.2 seconds to force a refused warm-up reservation. Each measures one
+Allow by 2.2 seconds to force a refused warm-up reservation. They stop background
+event delivery before loading the grant history, as the other admission benchmarks
+do. Grant history still loads through the real event store. Each measures one
 later call and requires exactly one new reservation. Earlier refused warm-ups
 must be settled at zero; the successful warm-up keeps its hold. The measured
 call still has its own two-second assertion. These tests also cover

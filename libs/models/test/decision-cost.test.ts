@@ -363,6 +363,8 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     yield* read(...args);
   }
   try {
+    // Keep background event delivery from competing with the admission measurement.
+    await setup.stopDispatch();
     const events = [];
     for (let index = 0; index < grantEvents; index++) {
       let granteeId = `other-${index}`;
