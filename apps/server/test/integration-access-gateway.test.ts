@@ -345,7 +345,20 @@ async function preservesAccess() {
   await context.grant('member');
   await context.grant('assistant');
   await allowed(context);
+  const before = await readToolPolicy(context.setup.nats.store, 'test', 'fixture');
+  const captures = context.remote.calls.length;
+  function restoreClock() {
+    vi.useRealTimers();
+  }
+  onTestFinished(restoreClock);
+  // Advance Date alone to make the next capture due while real service timers keep running.
+  vi.setSystemTime(Date.now() + 270_000);
   await context.watch.check();
+  expect(context.remote.calls).toHaveLength(captures + 2);
+  const after = await readToolPolicy(context.setup.nats.store, 'test', 'fixture');
+  expect(after.sequence).toBeGreaterThan(before.sequence);
+  expect(after.policyRevision).toBe(before.policyRevision);
+  expect(after.checkedAt).not.toBe(before.checkedAt);
   await allowed(context);
   async function output() {
     const data = { conversationId: 'conversation', turnId: 'turn', messageId: 'progress',
