@@ -417,13 +417,22 @@ it.each(['memoryId', 'scopeId'])('rejects a receipt for another %s', async field
   expect(matching('/facts/one')).toHaveLength(1);
 });
 
+function emptyIdentityReply(url: string, init?: RequestInit): Promise<Response> {
+  const call = { url, init };
+  calls.push(call);
+  let body: unknown = { facts: [], returnedCount: 0, nextCursor: null };
+  if (url.endsWith('/scopes')) body = { scopes: [] };
+  const reply = response(200, body);
+  return Promise.resolve(reply);
+}
 function changeIdentity(change: string): void {
+  vi.stubGlobal('fetch', vi.fn(emptyIdentityReply));
   if (change === 'requester') fixture.componentRef.setInput('requesterId', 'second');
   else void fixture.componentInstance['chooseScope']('other');
   fixture.detectChanges();
 }
 function noEditorText(): void {
-  expect(root.textContent).not.toMatch(/Corrected in your memory|My draft|New private text/);
+  expect(root.textContent).not.toMatch(/Corrected in your memory|My draft|Private original text|New private text/);
   expect(root.querySelector('textarea')).toBeNull();
   noPrivateAnnouncements();
 }

@@ -224,7 +224,9 @@ a saved message keeps the current subscription instead of opening it twice.
     unknown write keeps its original command available for a read-only status check.
     Memory is not saved in browser storage. People can edit the text of their own facts.
     A changed fact needs review before another save. An uncertain correction offers a
-    status check for the original request. Losing access clears the draft.
+    status check for the original request. Losing access clears the draft. After a correction,
+    Edit waits for the latest detail. The editor shows the revision that its next Save sends.
+    If the fact’s text is unavailable, the message says so without claiming it was forgotten.
 15. **A person forgets one of their facts.** The Memory panel asks them to review the effect
     before sending one request. The fact disappears when the server confirms it is hidden.
     The panel shows whether cleanup is pending, complete or unavailable. An uncertain reply

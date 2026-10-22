@@ -28,8 +28,10 @@ export class MemoryEdit implements OnDestroy {
   protected readonly draft = signal('');
   protected readonly error = signal('');
   protected readonly receipt = signal<Receipt | undefined>(undefined);
+  protected readonly refreshing = signal(false);
+  protected readonly missingReason = signal('');
   protected opener: HTMLElement | undefined;
-  private revision: Fact | undefined;
+  protected revision: Fact | undefined;
   private commandId = '';
   private alive = true;
   private readonly viewport = window.visualViewport;
@@ -51,7 +53,8 @@ export class MemoryEdit implements OnDestroy {
   }
 
   protected open(event: Event): void {
-    if (!this.enabled() || this.state() !== 'closed' && this.state() !== 'accepted') return;
+    if (this.refreshing() || !this.enabled()) return;
+    if (this.state() !== 'closed' && this.state() !== 'accepted') return;
     if (event.currentTarget instanceof HTMLElement) this.opener = event.currentTarget;
     this.revision = this.fact();
     this.draft.set(this.revision.text);
@@ -78,8 +81,11 @@ export class MemoryEdit implements OnDestroy {
     if (this.state() !== 'editing' || this.validation() || !this.revision) return;
     const fact = this.revision;
     this.commandId = `mem_${crypto.randomUUID()}`;
-    const body = JSON.stringify({ commandId: this.commandId, expectedRevision: fact.revision,
-      text: this.draft(), kind: fact.kind, pinned: fact.pinned, expiresAt: fact.expiresAt });
+    const payload = {
+      commandId: this.commandId, expectedRevision: fact.revision, text: this.draft(),
+      kind: fact.kind, pinned: fact.pinned, expiresAt: fact.expiresAt,
+    };
+    const body = JSON.stringify(payload);
     await this.send(`${detailUrl(this.scopeId(), fact.memoryId)}/correct`, body);
   }
 
@@ -100,14 +106,23 @@ export class MemoryEdit implements OnDestroy {
     try {
       const response = await fetch(url, options);
       if (!this.alive) return;
-      if ([401, 403, 404].includes(response.status)) { this.accessLost.emit(); return; }
-      if (response.status === 409) { this.state.set('conflict'); return; }
+      if ([401, 403, 404].includes(response.status)) {
+        this.accessLost.emit();
+        return;
+      }
+      if (response.status === 409) {
+        this.state.set('conflict');
+        return;
+      }
       if (response.status === 422) {
         this.error.set('Nothing was saved');
         this.state.set('editing');
         return;
       }
-      if (!response.ok) { this.state.set('unknown'); return; }
+      if (!response.ok) {
+        this.state.set('unknown');
+        return;
+      }
       const result: unknown = await response.json();
       if (this.alive) await this.applyBody(result);
     } catch {
@@ -129,8 +144,11 @@ export class MemoryEdit implements OnDestroy {
       this.state.set('unknown');
       return;
     }
-    this.receipt.set({ revision: body['revision'], acceptedAt: body['acceptedAt'],
-      cleanupStatus: String(body['cleanupStatus']) });
+    const receipt: Receipt = {
+      revision: body['revision'], acceptedAt: body['acceptedAt'],
+      cleanupStatus: String(body['cleanupStatus']),
+    };
+    this.receipt.set(receipt);
     this.draft.set('');
     this.revision = undefined;
     this.state.set('accepted');
@@ -143,11 +161,17 @@ export class MemoryEdit implements OnDestroy {
     if (!accepted) this.state.set('reading');
     const url = detailUrl(this.scopeId(), this.fact().memoryId);
     const controller = new AbortController();
+    this.refreshing.set(true);
     const reply = await readJson(url, controller.signal);
     if (!this.alive) return;
+    this.refreshing.set(false);
     const result = detailResult(reply);
-    if (result.kind === 'access') { this.accessLost.emit(); return; }
+    if (result.kind === 'access') {
+      this.accessLost.emit();
+      return;
+    }
     if (result.kind === 'missing') {
+      this.missingReason.set(result.reason);
       this.draft.set('');
       this.revision = undefined;
       this.state.set('missing');
@@ -155,7 +179,9 @@ export class MemoryEdit implements OnDestroy {
       if (result.kind === 'ok' && result.detail.canCorrect === true) {
         this.revision = result.detail.fact;
         this.state.set('editing');
-      } else this.state.set('conflict');
+      } else {
+        this.state.set('conflict');
+      }
     }
     this.refreshed.emit(result);
   }

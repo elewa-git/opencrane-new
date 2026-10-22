@@ -47,9 +47,11 @@ async function serveMemory(page, scenario, posts) {
     } else if (path.includes('/changes/')) body = receipt('forgotten');
     else if (path.endsWith('/facts/fact-one')) {
       detailReads += 1;
-      if (scenario === 'forgotten-detail' && detailReads > 1) {
+      if (['forgotten-detail', 'unavailable'].includes(scenario) && detailReads > 1) {
+        let reason = 'forgotten';
+        if (scenario === 'unavailable') reason = 'quarantined';
         body = { status: 'unavailable', scopeId: scope.scopeId, memoryId: fact.memoryId,
-          revision: 4, reason: 'forgotten' };
+          revision: 4, reason };
       } else {
         let current = fact;
         if (editing && detailReads > 1) current = { ...fact, revision: 4,
@@ -194,7 +196,7 @@ async function captureWidth(browser, width) {
 }
 
 async function captureEditWidth(browser, width) {
-  for (const scenario of ['accepted', 'conflict', 'forgotten-detail']) {
+  for (const scenario of ['accepted', 'conflict', 'forgotten-detail', 'unavailable']) {
     const posts = [];
     const page = await openPage(browser, width, scenario, posts);
     try {
@@ -217,6 +219,18 @@ async function captureEditWidth(browser, width) {
           assert.equal(await page.locator('oc-memory-edit textarea').count(), 0);
           await assertFactHidden(page);
         }
+        if (scenario === 'unavailable') {
+          await sheet.getByRole('button', { name: 'Refresh and review' }).click();
+          const unavailableMessage = sheet.getByText(
+            'This fact’s text is no longer available. Your edit wasn’t applied.');
+          await unavailableMessage.waitFor();
+          const sheetText = await sheet.textContent();
+          assert(!sheetText.includes('forgotten'));
+          const fields = page.locator('oc-memory-edit textarea');
+          assert.equal(await fields.count(), 0);
+          const rows = page.locator('button.fact');
+          assert.equal(await rows.count(), 1);
+        }
         await capture(page, `MEM-35-${scenario}`, width);
       }
       assert.equal(posts.length, 1);
@@ -238,11 +252,17 @@ try {
 ` +
     `PASS: intercepted replies at 1280px and 390px, reduced motion. Captured edit,
 ` +
-    `accepted receipt, conflict and forgotten detail. One POST per save. Receipts
+    `accepted receipt, conflict, forgotten and unavailable detail. One POST per save. Receipts
 ` +
-    `held no fact text; forgotten text left inputs, rows and announcements.
+    `held no fact text; forgotten text left inputs, rows and announcements. Unavailable detail kept its row.
 ` +
     `Dialog actions were at least 44px; no horizontal overflow, browser storage or address change.
+` +
+    `The desktop editor keeps the shared centred ModalSheet, as the forget sheet does.
+` +
+    `The reference uses a right-hand drawer. That cross-screen change is deferred.
+` +
+    `MEM-35 messages use plain status text without the reference alert-card style.
 ` +
     `NOT RUN: fresh-install journey, real keyboard and assistive technology. No dev stack or model call.
 ` +

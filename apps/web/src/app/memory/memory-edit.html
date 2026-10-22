@@ -1,5 +1,5 @@
 @if (enabled()) {
-  <button type="button" class="edit-open" (click)="open($event)">Edit</button>
+  <button type="button" class="edit-open" [disabled]="refreshing()" (click)="open($event)">Edit</button>
 }
 @if (state() !== 'closed' && state() !== 'accepted') {
 <oc-modal-sheet [open]="state() !== 'closed' && state() !== 'accepted'" title="Edit fact"
@@ -8,18 +8,23 @@
   [returnFocusTo]="opener" (closed)="cancel()">
   <p>Only you · Your memory</p>
   @if (state() === 'editing') {
-    <p>Current revision r{{ fact().revision }} · {{ fact().savedAt | date:'d MMM yyyy, HH:mm':'UTC' }} UTC</p>
+    <p>Current revision r{{ revision?.revision }} ·
+      {{ revision?.savedAt | date:'d MMM yyyy, HH:mm':'UTC' }} UTC</p>
     <label>Fact<textarea rows="5" [value]="draft()" (input)="textChanged($event)"
       aria-describedby="edit-error" [attr.aria-invalid]="validation() ? 'true' : null"></textarea></label>
     <h3>Preview</h3><p class="preview">{{ draft() }}</p>
-    <p>Replaces r{{ fact().revision }} in your memory</p>
+    <p>Replaces r{{ revision?.revision }} in your memory</p>
     <p id="edit-error" role="alert">{{ validation() || error() }}</p>
   } @else if (state() === 'conflict') {
     <p role="status">This fact changed before your edit was saved</p>
   } @else if (state() === 'unknown') {
     <p role="status">Outcome unknown</p>
   } @else if (state() === 'missing') {
-    <p role="status">This fact was forgotten. Your edit wasn’t applied.</p>
+    @if (missingReason() === 'forgotten') {
+      <p role="status">This fact was forgotten. Your edit wasn’t applied.</p>
+    } @else {
+      <p role="status">This fact’s text is no longer available. Your edit wasn’t applied.</p>
+    }
   } @else { <p role="status">Checking memory…</p> }
   <div overlayFooter class="edit-actions">
     @if (state() === 'editing') {
