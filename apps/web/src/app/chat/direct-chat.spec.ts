@@ -2337,3 +2337,36 @@ async function reconnectsAfterBusyClose(): Promise<void> {
   fixture.destroy();
 }
 it('shows reconnecting after a busy socket closes', reconnectsAfterBusyClose);
+
+async function displaysFirstGroupMessageAfterApplyingRead(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  let posted = false;
+  let applyingReads = 0;
+  let changingLists = 0;
+  function temporarilyApplying(request: RequestRecord): Response | undefined {
+    if (request.method === 'POST' && request.url.includes('/messages')) posted = true;
+    if (!posted || request.method !== 'GET') return undefined;
+    if (request.url.includes('/messages') && applyingReads++ === 0) return reply({}, 425);
+    if (request.url === '/api/conversations' && changingLists++ === 0) return reply({}, 409);
+    return undefined;
+  }
+  api.override(temporarilyApplying);
+  const options = root(fixture).querySelectorAll<HTMLButtonElement>('.colleague-option');
+  options[0]?.click();
+  options[1]?.click();
+  fixture.detectChanges();
+  vi.useFakeTimers();
+  enterMessage(fixture, 'First saved group message');
+  await vi.advanceTimersByTimeAsync(1_000);
+  fixture.detectChanges();
+  expect(root(fixture).querySelector('.transcript')?.textContent)
+    .toContain('First saved group message');
+  expect(api.sockets).toHaveLength(1);
+  expect(root(fixture).textContent).not.toContain('unavailable right now');
+  expect(messagePosts(api)).toHaveLength(1);
+  fixture.destroy();
+}
+
+it('shows the first saved group message and opens live updates after applying reads',
+  displaysFirstGroupMessageAfterApplyingRead);
