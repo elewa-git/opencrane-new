@@ -1,2 +1,3 @@
 - Stopped assistant replies keep their partial text and show only the stopped label, both live and after a page reload. Failed replies still show “Reply failed”.
 - A Stop request no longer hides a later tool refusal or model failure. New end reports distinguish a confirmed Stop interruption; older saved Stop interruptions keep their display.
+- A bridge restart keeps “Reply failed” and partial text even when Stop was saved before it reached the runner. Older saved interruptions keep their previous display.

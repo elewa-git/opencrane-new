@@ -226,12 +226,13 @@ class TurnRunner {
 
   private recover() {
     for (const report of [...this.journal.reports]) {
-      // Fail private work because its old thread and process died with the bridge.
+      // Fail unfinished work because its old process died with the bridge.
       // Re-running it would start new work without the member asking.
+      // Keep a saved but undelivered Stop from disguising a restart as a stopped reply.
       if (this.isStarted(report)
         && (report.executionMode === 'restricted' || this.mayHaveExecuted(report))
         && !this.isFinished(report.turnId)) {
-        this.journal.append(report, 'agent.turn_failed');
+        this.journal.append(report, 'agent.turn_failed', { reason: 'bridge_restarted' });
       }
     }
   }
@@ -291,7 +292,7 @@ class TurnRunner {
     }
     const previousStart = this.lastStartedReport(input.id);
     if (previousStart && (previousStart.executionMode ?? 'memory_free') !== input.executionMode) {
-      this.appendReport(input, 'agent.turn_failed');
+      this.appendReport(input, 'agent.turn_failed', { reason: 'model_error' });
       return;
     }
     // Reserve the conversation before thread/start so concurrent delivery cannot start it twice.

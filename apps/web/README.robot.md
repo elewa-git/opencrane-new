@@ -6,13 +6,18 @@ Personal and shared-assistant sessions derive turn outcomes in `chat-state.ts`.
 The conversation feed keeps `agent.turn_stop_requested` followed by the bridge's
 `agent.turn_failed` report. A saved Stop request only gives a stopped outcome when
 the failure reason is `stop_interrupted`, or `bridge_interrupted` from an older bridge.
-`model_error` and `restricted_tool_refused` keep their failure activity even after Stop.
+`model_error`, `restricted_tool_refused` and `bridge_restarted` keep their failure
+activity even after Stop.
 The derived `stopped` state keeps partial text and suppresses the synthetic
 “Reply failed” activity, live and after reload.
 Only a derived `failed` turn gets that activity. Old feed rows need no migration
 or replay change. `agent.output_lost` without text keeps “Didn't complete · nothing
 was repeated”. Human group chats use the separate direct-chat view and start no
 agent turn. Regression coverage is in `chat-state.spec.ts`.
+`test/recovery-stop.test.ts` uses the real journal, runner and report writer to
+check a saved Stop that never reaches the runner before restart. It checks the
+transcript both as the failure arrives and after loading the saved rows again.
+The Node test configuration includes the Node 22 promise types used by the report writer.
 
 This Angular app provides the organisation settings shell, MCP register and Memory panel.
 `/welcome/survey` is a separate page without a chat composer. It reads

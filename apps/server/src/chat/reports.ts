@@ -20,7 +20,7 @@ const existingReportSchema = z.object({ sequence: z.int().positive(), previousSe
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   sharingClass: z.literal('shared_only').optional(),
   reason: z.enum(['bridge_interrupted', 'restricted_tool_refused',
-    'stop_interrupted', 'model_error']).optional(),
+    'stop_interrupted', 'model_error', 'bridge_restarted']).optional(),
   type: z.enum(['agent.output_lost', 'agent.command_ran', 'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
 }).strict();
 const toolReportFields = {

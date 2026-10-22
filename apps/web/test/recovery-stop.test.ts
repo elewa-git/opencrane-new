@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { chatRowSchema } from '@opencrane/protocol';
-import { reportJournal, type BridgeReport } from '../src/report-journal.ts';
-import { parseTurn, turnRunner } from '../src/turn-runner.ts';
+import { reportJournal, type BridgeReport } from '../../computer/src/report-journal.ts';
+import { parseTurn, turnRunner } from '../../computer/src/turn-runner.ts';
 import { chatCommand, chatHistory } from '../../server/src/chat/commands.ts';
 import { chatDisplayData, hasDisplayText } from '../../server/src/chat/display.ts';
 import { conversationKeys } from '../../server/src/chat/keys.ts';
 import { recordReport } from '../../server/src/chat/reports.ts';
-import { transcript } from '../../web/src/app/chat/chat-state.ts';
+import { transcript } from '../src/app/chat/chat-state.ts';
 
 async function keepsRecoveryFailureAfterUndeliveredStop() {
   const nats = await natsFixture();
@@ -43,9 +43,10 @@ async function keepsRecoveryFailureAfterUndeliveredStop() {
   }
   function displayRow(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
     const event = row.event;
-    const data = chatDisplayData(event.type, event.data);
+    const displayData = chatDisplayData(event.type, event.data);
+    let data: unknown = displayData;
     if (hasDisplayText(event.type)) {
-      data.text = keys.decrypt('test', 'chat', event.data);
+      data = { ...displayData, text: keys.decrypt('test', 'chat', event.data) };
     }
     return chatRowSchema.parse({ id: event.id, position: row.sequence,
       type: event.type, time: event.time, data });

@@ -6,7 +6,7 @@ The back end for OpenCrane sign-in, conversations and organisation settings.
 It is a Node service that accepts browser requests and sends live updates.
 It keeps saving accepted computer reports after a connection drops, so replies
 and Stop results can finish arriving when the computer reconnects.
-Saved end reasons distinguish a Stop interruption from a model failure or tool refusal.
+Saved end reasons distinguish a Stop interruption from a restart, model failure or tool refusal.
 It confirms each piece of a reply only after checking that its text was saved.
 Stop uses the same saved chat facts as progress reports, so it does not reload
 every piece of a long reply before saving or delivering the request.
@@ -29,7 +29,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, facts, models, tools, publication status, nightly memory status and paged change history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks and batches streamed reports, saves Stop or failure reasons and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
+  server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks and batches streamed reports, saves Stop, restart or failure reasons and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
   server -->|rechecks remote tool lists and revision promises before expiry through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
   server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
   server -->|records turn decisions and Stop| nats

@@ -4,8 +4,9 @@ For people, read [README.md](README.md) first.
 
 ## Saved turn failure reasons
 
-The bridge report reader accepts `stop_interrupted` and `model_error` in the
-existing `reason` field and saves them unchanged. Reports from older bridges
+The bridge report reader accepts `stop_interrupted`, `model_error` and
+`bridge_restarted` in the existing `reason` field and saves them unchanged.
+A restart failure stays visible even if a Stop request was saved before the crash. Reports from older bridges
 that omit a reason still save `bridge_interrupted`. Repeated reports keep the
 original digest check. `tool-reports.test.ts` checks both saving and duplicates.
 
