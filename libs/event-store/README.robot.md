@@ -242,6 +242,16 @@ omitted server defaults where stated and never repairs an existing stream.
 
 Root `npm test` fetches the pinned test server automatically after `npm ci`.
 OpenSSL must be on PATH to generate a fresh test CA and one-day certificates.
+`natsFixture()` shares one pending certificate generation in its loaded test module.
+It keeps the generated files in memory and copies them into each fixture's private
+directory with mode `0600`. Changing or removing those copies cannot change later
+fixtures. Each fixture still has its own NATS server, port and JetStream storage.
+`natsFixture({ freshCertificates: true })` generates a separate CA and credentials
+for trust refusal tests. Direct `certificates(directory, days)` calls still generate
+fresh credentials, including the development stack's 30-day certificates.
+Test stream creation retries once on `TimeoutError`, waits 100 ms between attempts,
+and reports any second failure. A failed creation closes the fixture before throwing.
+Other setup failures are not retried. Production request timeouts remain 250 ms.
 For focused tests, run `sh scripts/fetch-nats.sh`, then
 `npx vitest run libs/event-store/test`. Tests launch random-port NATS servers
 and prove conditional races, scoped retries, ordered reads, restart/outage

@@ -103,6 +103,9 @@ sh scripts/fetch-nats.sh
 npx vitest run libs/event-store/test
 ```
 
+Test fixtures reuse certificates to reduce setup time. Each fixture still starts
+its own NATS server and keeps its own files and event history.
+
 ```ts
 import { wireSubject } from '@opencrane/event-store';
 

@@ -7,7 +7,7 @@ import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { connect, createServer, type Socket } from "node:net";
 import { resolve } from "node:path";
 import { TimeoutError, type NatsConnection } from "@nats-io/transport-node";
-import { certificates } from "./certificates.ts";
+import { certificates, sharedCertificates } from "./certificates.ts";
 import { jetstream, jetstreamManager } from "@nats-io/jetstream";
 import { wireSubject } from "../src/contract.ts";
 import { getEventDefinition, type EventEnvelope } from "@opencrane/events";
@@ -109,9 +109,13 @@ export function event(
   };
 }
 
-export async function natsFixture({ provision = true } = {}) {
+export async function natsFixture({ provision = true, freshCertificates = false } = {}) {
   const directory = await mkdtemp(resolve(".tools/nats-test-"));
-  await certificates(directory);
+  if (freshCertificates) {
+    await certificates(directory);
+  } else {
+    await sharedCertificates(directory);
+  }
   const publicKeys = Object.fromEntries(await Promise.all(
     ["command", "projection", "dispatcher", "computer", "gateway"].map(async (role) =>
       [`NATS_${role.toUpperCase()}_NKEY`, await readFile(`${directory}/${role}.pub`, "utf8")] as const),
@@ -173,7 +177,23 @@ export async function natsFixture({ provision = true } = {}) {
   const dispatcherConnection = await client("dispatcher");
   const readerStore = await createEventStore(readerConnection);
   const store = await createEventStore(connection);
-  if (provision) await ensureFixtureStream(store);
+  async function close() {
+    for (const connection of connections) {
+      await connection.close();
+    }
+    if (running.process.exitCode === null && running.process.signalCode === null) {
+      running.process.kill("SIGTERM");
+      await running.exited;
+    }
+    await proxy.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+  try {
+    if (provision) await ensureFixtureStream(store);
+  } catch (error) {
+    await close();
+    throw error;
+  }
   return {
     store,
     pauseResponses: proxy.pauseResponses,
@@ -210,37 +230,19 @@ export async function natsFixture({ provision = true } = {}) {
         }
       }
     },
-    async close() {
-      await Promise.all(connections.map((connection) => connection.close()));
-      if (
-        running.process.exitCode === null &&
-        running.process.signalCode === null
-      ) {
-        running.process.kill("SIGTERM");
-        await running.exited;
-      }
-      await proxy.close();
-      await rm(directory, { recursive: true, force: true });
-    },
+    close,
   };
 }
 
 async function ensureFixtureStream(store: EventStore) {
-  const deadline = Date.now() + 10_000;
-  let lastTimeout: TimeoutError | undefined;
-  while (Date.now() < deadline) {
-    try {
-      await store.ensureStream({ replicas: 1 });
-      return;
-    } catch (error) {
-      if (!(error instanceof TimeoutError)) throw error;
-      lastTimeout = error;
-      // A fresh test server can miss the 250 ms JetStream request limit under CI load.
-      await delay(100);
-    }
+  try {
+    await store.ensureStream({ replicas: 1 });
+  } catch (error) {
+    if (!(error instanceof TimeoutError)) throw error;
+    // Retry only setup: a fresh test server can miss the 250 ms request limit under load.
+    await delay(100);
+    await store.ensureStream({ replicas: 1 });
   }
-  if (lastTimeout) throw lastTimeout;
-  throw new Error("Timed out while creating the test JetStream stream");
 }
 
 export interface ReadCall {
