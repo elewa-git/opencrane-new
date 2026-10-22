@@ -97,3 +97,62 @@ GitHub CI is reported on the draft PR for its pushed head. No older nightly SHA 
 review returned HTTP 409. It retained sanitised failure logs before cleanup; paid calls: zero.
 Slot 1 was held through cleanup after each install. The owner stack, port 44200 and its data
 were untouched. No dependency, product event or protected authority/security test changed.
+
+## Harness corrections, 22 October 2026
+
+The restarted-server health read now has an abort timeout equal to the time left in
+its two-minute deadline. It retries connection failures and HTTP 502, 503 and 504.
+Other HTTP failures stop the journey at once. The nightly fixture now reads, trims
+and splits its attempt file in separate named steps, with expanded validation loops.
+
+PASS: removing the health abort signal or the immediate HTTP refusal makes its new
+test fail. Removing the private reply completion wait, the empty-answer check, or
+just the whitespace trim makes the corresponding test fail. Removing 425 recovery
+or the conversation-list status check also makes its test fail. All guards were restored.
+The tests were committed before the health behaviour changed.
+
+Source checked: `07d7be8173cb9fef065f73bf56378efd5b5d9293`. PASS: 33 changed-file Node tests twice,
+lint, workspace typecheck, an extra compile check for the changed harness files, the
+149-type event catalogue, Knip and changelog checks. The Node tests used one worker,
+`nice -n 10` and the supplied `PG_TEST_URL`. The first test and lint attempts ended
+with SIGTERM before a verdict; complete reruns supply the results recorded here.
+
+### Picture check
+
+Checked `unopened-invite-1280.png` and `unopened-invite-390.png` in each folder below:
+
+| Folder | What the pictures show |
+| --- | --- |
+| `rehearsal-a/pages/` | Desktop: the chosen owner test user and synthetic users. Mobile: synthetic invite address only. |
+| `rehearsal-b/pages/` | Desktop: the chosen owner test user and synthetic users. Mobile: synthetic invite address only. |
+| `prior-d89186d28-a/pages/` | Desktop: the chosen owner test user and synthetic users. Mobile: synthetic invite address only. |
+| `failed-abacbe417/` | Desktop: the chosen owner test user and synthetic users. Mobile: synthetic invite address only. |
+
+The desktop people tables show `jente@elewa.ke`, `audit-other-member@example.test`,
+`p4-5-later-participant@example.test`, `opencrane2-dev-ci-1-member@example.test` and
+`opencrane2-dev-ci-1-owner@example.test`. Every invitation uses
+`rehearsal@example.invalid`; its link is already covered. The owner's decision of
+22 October permits the chosen owner test address in these private test pictures.
+No other real address appears, so no picture or masking change was needed.
+
+Also checked `group-1280.png` and `group-390.png` in those four folders, and the retained
+`groups-list`, `groups-search`, `groups-created`, `groups-detail`, `groups-removed`,
+`groups-removal-review`, `shared-assistant-choice`, `shared-assistant-create`,
+`shared-assistant-create-response`, `shared-assistant-created`, `shared-assistant-review`,
+`direct-chat-recipient`, `group-picker`, `group-denied-selection` and `group-join-position`
+pictures under `rehearsal-a/groups/`, `rehearsal-b/groups/` and
+`prior-d89186d28-a/groups/` (including their `group-chat/` folders). These show names,
+member ids or synthetic data; no further real address appears.
+
+### Remaining guard checks
+
+Removal checks NOT RUN in this round: groups-only exclusion of provider and ownership checks;
+direct-chat model, computer and budget event-count refusals; conversation-list
+deadline and request timeout; provider-binding deadline and slow final read;
+restart process identity, both processes stopped during replay and restart order;
+nightly current-attempt and symlink restrictions, redaction or withholding failures,
+and receipts longer than 100 lines. These remain follow-ups.
+
+Paid rehearsals and live journeys: NOT RUN in this round, as requested. Earlier live
+results and spending above are unchanged. The orchestrator's narrow health verify
+remains separate from these local checks.
