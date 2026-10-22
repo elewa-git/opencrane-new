@@ -30,6 +30,7 @@ let options: FileOptions;
 let app: ReturnType<typeof buildServer>;
 const cleanup: (() => Promise<unknown>)[] = [];
 let scannerPort: number;
+let runner: ProjectionRunner;
 
 function respondWithInvalidVerdict(socket: Socket) {
   // Exceed the scanner's local response bound without a verdict terminator.
@@ -120,7 +121,7 @@ async function startUploadFixture() {
   await seedUploadHistory(nats.store, auth, db);
   const loggerOptions = { level: 'silent' as const };
   const logger = createLogger('upload-failures', loggerOptions);
-  const runner = new ProjectionRunner(db, nats.store, logger);
+  runner = new ProjectionRunner(db, nats.store, logger);
   await runner.initialise(members);
   await runner.run(members);
   const file = {
@@ -330,3 +331,42 @@ async function refusesFilesAfterRemovalAndInvitation() {
 }
 it('refuses file reads, uploads and commands after removal followed by an invitation',
   refusesFilesAfterRemovalAndInvitation);
+
+async function listsUploadAfterProjectionCatchesUp() {
+  const created = envelope('test', 'conversation-lagged', 'conversation.created', {
+    conversationId: 'lagged', assistantId: 'assistant', createdBy: 'alice',
+    mode: 'agent_session',
+  });
+  const command = { event: created, expectedSequence: 0 };
+  expect((await options.store.append(command)).status).toBe('appended');
+  await memberAuthorisation(options.binding).handler.handle(created, options.db);
+  await runner.run(conversations);
+  await runner.run(files);
+  const putObject = vi.spyOn(options.objects, 'putObject');
+  putObject.mockResolvedValue({ etag: 'fixture', versionId: null });
+  const request = { ...uploadRequest('projection-lag'),
+    url: '/api/conversations/lagged/files' };
+  const listRequest = { url: request.url, headers: request.headers };
+  const empty = await app.inject(listRequest);
+  expect(empty.statusCode).toBe(200);
+  expect(empty.json()).toEqual({ rows: [] });
+  const upload = await app.inject(request);
+  expect(upload.statusCode).toBe(201);
+  const saved = upload.json<{ sequence: number; fileId: string }>();
+  const checkpoint = await runner.checkpoint(files);
+  expect(checkpoint).toBeLessThan(saved.sequence);
+  const stored = await options.store.readEvent(saved.sequence);
+  expect(stored.event.type).toBe('file.uploaded');
+
+  const applying = await app.inject(listRequest);
+  expect(applying.statusCode, applying.body).toBe(425);
+  expect(applying.json()).toEqual({ status: 'applying' });
+  expect(applying.headers['cache-control']).toBe('no-store');
+
+  await runner.run(files);
+  const available = await app.inject(listRequest);
+  expect(available.statusCode).toBe(200);
+  expect(available.json()).toMatchObject({ rows: [{ fileId: saved.fileId }] });
+}
+it('reports an upload still applying instead of returning an incomplete list',
+  listsUploadAfterProjectionCatchesUp);
