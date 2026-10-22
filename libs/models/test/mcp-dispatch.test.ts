@@ -15,7 +15,7 @@ import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
 import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
 import { freePort } from './gateway-delivery-fixture.ts';
-import type { AppendCommand } from '@opencrane/event-store';
+import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, onTestFinished, vi } from 'vitest';
@@ -2608,22 +2608,22 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       vi.restoreAllMocks();
     }
   }
-  const rows = [];
+  const rows: StoredEvent[] = [];
   const last = await setup.nats.store.head();
   for (let position = rowsBefore + 1; position <= last; position++) {
     rows.push(await setup.nats.store.readEvent(position));
   }
   const encoded = JSON.stringify(rows);
   if (mode === 'watch_final') {
-    function recorded(row: typeof rows[number]) {
+    function recorded(row: StoredEvent) {
       return row.event.type === 'tool.dispatch_recorded';
     }
     const observations = rows.filter(recorded);
     expect(observations).toHaveLength(1);
-    expect(observations[0]!.event.data).toMatchObject({
-      outcome: 'not_dispatched', evidence: 'adapter_dispatch_refused',
-      adapter: { connectionId: 'installed', generation: context.record.generation },
-    });
+    const expectedRefusal = { outcome: 'not_dispatched',
+      evidence: 'adapter_dispatch_refused',
+      adapter: { connectionId: 'installed', generation: context.record.generation } };
+    expect(observations[0]!.event.data).toMatchObject(expectedRefusal);
   } else {
     expect(encoded).not.toContain('not_dispatched');
   }

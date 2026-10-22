@@ -236,17 +236,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     } catch (error) {
-      if (route.locator && observe) {
-        // Record proof only after a confirmed start and before opening any connection.
-        await observe('not_dispatched');
-      }
-      if (permit.gatewayBinding && !route.locator) {
-        // Close the saved start before replying. No upstream connection has been opened.
-        const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
-          evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
-          durationMs: Math.ceil(performance.now() - startedAt) };
-        await recordToolObservation(actor, observation);
-      }
+      await recordRefusedStart(permit, observe, startedAt);
       throw error;
     }
     if (target) {
@@ -254,6 +244,25 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       return;
     }
     forward(route, permit, body, res, memoryContext);
+  }
+
+  async function recordRefusedStart(permit: Permit, observe: RemoteObserver | undefined,
+    startedAt: number) {
+    if (permit.route.locator) {
+      // Record proof only after a confirmed start and before opening any connection.
+      if (observe) {
+        await observe('not_dispatched');
+      }
+      return;
+    }
+    if (!permit.gatewayBinding) {
+      return;
+    }
+    // Close the saved start before replying. No upstream connection has been opened.
+    const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
+      evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
+      durationMs: Math.ceil(performance.now() - startedAt) };
+    await recordToolObservation(actor, observation);
   }
 
   async function requirePublishedPositions(permit: Permit, admittedPosition: number,
