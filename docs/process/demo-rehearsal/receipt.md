@@ -285,8 +285,9 @@ journey waited for the Owner's list before inspecting the removed page. It could
 therefore fail after the page had already cleared. The old 2,244 ms receipt does
 not establish the page's actual clearing time. The two paid rehearsals measured
 1,112 ms with the same product code, but used that old timer too. The slowest
-response-relative access observation was 163 ms. These figures cannot establish the two-second request-to-clear limit because they omit time before the response.
-The request-based measurement below replaces this timing claim.
+response-relative access observation was 163 ms. These figures omit time before the
+response, so they cannot show whether the page cleared within two seconds of sending
+removal. The measurement from the browser request below replaces this timing claim.
 
 Run 2 failed before removal because the first group message did not become visible
 in the Owner's page within the existing 15-second wait. Retained worker logs show
@@ -317,3 +318,83 @@ Sanitised receipts and run records are retained outside the repository in
 `~/.opencrane/group-removal-timing/2026-10-22/`. Failed attempts also retain sanitised
 logs and pictures in their matching `~/.opencrane/daily-fresh/<attempt>/` folders.
 GitHub CI is reported separately on the draft PR's final pushed head.
+
+## Removal timing from the browser request (22 October 2026)
+
+Status: PARTIAL for removal timing. The single fresh nightly run is FAIL. It stopped
+before removal, so every removal measurement is NOT RUN. No failing group check was
+relaxed or retried.
+
+The run used source `8998eb51c61d5857d9a5ca14eeb524c6ff0d7a90`, from 11:30:52 to
+11:47:50 UTC. Its attempt was
+`nightly-20261022T113052-2100b0dc-351a-4fb5-a5cb-9e1eb47b7cf1`.
+`infra/dev-stack/claim.sh` reserved secondary slot 2, and the nightly reused that
+claim. Its browser port was 25206. The owner stack on port 44200 was not used.
+
+The command was `nice -n 10 infra/dev-stack/daily-fresh.sh`, with `ZITADEL_KEY_FILE`
+pointing to the existing private file. The nightly cleared paid settings, started
+with `--fresh` and used the free stand-in model. Paid model calls and paid cents
+were zero. Its exit status was 1. Cleanup released slot 2: its directory was removed
+and no containers remained for Compose project `opencrane-dev-2`.
+
+The expected result was that all group checks pass. Access observations must finish
+within two seconds of the browser sending removal. The response and the observation
+of the saved event have separate times. The Owner list must update within ten seconds.
+The live connection selected at sending must close; closing an earlier connection
+cannot satisfy the check.
+
+| Check | This run |
+| --- | --- |
+| Fresh startup and stand-in provider setup | PASS |
+| Group administration, private shared reply and direct chat | PASS |
+| Group mode before the first message and after sending | PASS |
+| People picker and refused unauthorised participant selection | PASS |
+| Unsupported people-and-assistant combination refused without a saved draft | PASS |
+| Group journey overall | FAIL: Participants button did not appear within 15 seconds |
+| Later participant visibility and messages with zero AI, computer and budget work | NOT RUN after that failure |
+| Removal, leaving and replay checks | NOT RUN after that failure |
+
+The failure occurred while opening the Owner's conversation before adding the later
+participant. The existing 15-second wait for the Participants button expired. The
+reason the button stayed absent was not established. The original group receipt keeps
+five assertions as `NOT PROVEN` and records `journey.execution` as FAIL. These rows do
+not count as passes. The two-second removal result was not reached.
+
+| Observation | Milliseconds from the browser sending removal |
+| --- | --- |
+| Removal sent | NOT RUN |
+| Removal response accepted | NOT RUN |
+| Saved removal observed | NOT RUN |
+| Updated access stream observed | NOT RUN |
+| Selected live connection closed | NOT RUN |
+| Removed page cleared, with no message rows | NOT RUN |
+| Next history read refused | NOT RUN |
+| Next file-list read refused | NOT RUN |
+| Owner participant list updated | NOT RUN |
+
+Revocation of previously readable files, an open computer viewer and pending approval
+remains NOT RUN for this people-only chat. This attempt does not qualify three
+consecutive nightly passes.
+
+PASS: thirteen focused tests twice, repository lint, workspace and focused infra
+TypeScript checks, the event catalogue, Knip and the changelog check. Tests used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`. Tests, lint and
+TypeScript checks ran under `nice -n 10`. The full root suite is NOT RUN, as requested.
+
+The failing tests were committed before the fix. The browser fixture saves at 0 ms,
+responds at 700 ms and clears at 2,400 ms; the corrected helper returns failed.
+An Owner-list observer that throws also returns failed. A closed earlier socket does
+not complete the replacement's observation, which waits until its own close at 1,200 ms.
+The slow-list control still passes with page clearing at 1,100 ms and the list at 3,000 ms.
+
+After the run, the branch was rebased onto `8a334f3ee6ae32325f7fc97c2539016f08ddeb87`.
+That update changed CI settings only. A tree comparison confirmed that runtime code,
+regression tests and documentation were unchanged by this rebase. The run's source SHA
+above is retained; it has not been replaced with the later commit's SHA.
+
+The sanitised receipt is retained at
+`~/.opencrane/group-removal-timing/2026-10-22-request-clock/receipt.json`.
+Sanitised failure logs and pictures are retained under
+`~/.opencrane/daily-fresh/nightly-20261022T113052-2100b0dc-351a-4fb5-a5cb-9e1eb47b7cf1/`.
+Generated screenshots from other core checks were archived privately and removed from
+this branch's diff.
