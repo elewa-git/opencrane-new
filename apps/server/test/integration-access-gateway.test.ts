@@ -6,7 +6,7 @@ import { grantStream } from '@opencrane/authz';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { gatewayConfigurationWorker, history, prepareGatewayConfiguration,
-  publishToolPolicy, readToolPolicy, reviewToolPolicy } from '@opencrane/models';
+  publishToolPolicy, readToolPolicy, reviewToolPolicy, readApproval, decideApproval } from '@opencrane/models';
 import { fixture, fga } from '@opencrane/models/testing';
 import { remoteFixture } from '@opencrane/models/testing/remote-mcp';
 import { groups, members, mcpCatalogue } from '@opencrane/projections';
@@ -48,11 +48,11 @@ function upstreamReply(method: string) {
   return { ...cache, tools: [tool] };
 }
 
-async function publication(setup: Setup) {
+async function publication(setup: Setup, mode: 'allow' | 'ask') {
   const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
   function choice(tool: NonNullable<NonNullable<typeof policy.catalogue>['tools']>[number]) {
     return { name: tool.name, revision: tool.revision,
-      reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+      reviewDigest: toolReviewDigest(tool), mode };
   }
   const choices = policy.catalogue!.tools!.map(choice);
   const review = { commandId: 'review', expectedSequence: policy.sequence,
@@ -85,7 +85,7 @@ async function publication(setup: Setup) {
   return record;
 }
 
-async function gatewayFixture() {
+async function gatewayFixture(mode: 'allow' | 'ask' = 'allow') {
   const setup = await fixture();
   onTestFinished(setup.close.bind(setup));
   const remote = await remoteFixture();
@@ -116,7 +116,7 @@ async function gatewayFixture() {
   setup.dispatchOptions.routes.length = 0;
   setup.dispatchOptions.remoteNetwork = remote.network;
   setup.dispatchOptions.requireCatalogue = watch.requireCurrent;
-  const record = await publication(setup);
+  const record = await publication(setup, mode);
   const commands = serverCommands(setup);
   const call = gatewayCall.bind(undefined, setup);
   return { setup, remote, watch, record, ...commands, call };
@@ -160,16 +160,17 @@ function serverCommands(setup: Setup) {
       statusUrl = `/api/groups/sales/changes/${commandId}`;
     }
     const statusRequest = { method: 'GET' as const, url: statusUrl, headers };
-    async function originalReceipt() {
+    async function originalReceipt(applied = apply) {
       const response = await app.inject(statusRequest);
       expect(response.statusCode).toBe(200);
       const status = response.json<unknown>();
       const expected = { ...receipt, projection: {
-        content: 'current', iam: apply ? 'current' : 'applying' } };
+        content: 'current', iam: applied ? 'current' : 'applying' } };
       expect(status).toMatchObject(expected);
     }
     await expect.poll(originalReceipt).toBeUndefined();
-    return original;
+    const currentReceipt = originalReceipt.bind(undefined, true);
+    return { original, currentReceipt };
   }
   async function grant(kind: string, action = 'grant', apply = true) {
     const ids: Record<string, string> = { member: 'alice', assistant: 'assistant', team: 'sales' };
@@ -189,7 +190,7 @@ function serverCommands(setup: Setup) {
   return { grant, membership, team };
 }
 
-async function gatewayCall(setup: Setup) {
+async function gatewayCall(setup: Setup, approvalId?: string) {
   const callId = randomUUID();
   const body = { jsonrpc: '2.0', id: callId, method: 'tools/call',
     params: { name: 'read', arguments: { id: 'record' }, _meta: {
@@ -199,7 +200,8 @@ async function gatewayCall(setup: Setup) {
   const raw = JSON.stringify(body);
   const token = await setup.sign(setup.t, 'decision-service');
   const headers = { ...setup.headers, 'x-turn-token': token,
-    'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'read' };
+    'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'read',
+    ...(approvalId ? { 'x-opencrane-approval-id': approvalId } : {}) };
   const request = { method: 'POST', headers, body: raw };
   const before = await setup.nats.store.head();
   const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
@@ -265,7 +267,8 @@ async function requiresBothSides(first: string) {
 it.each(['member', 'assistant', 'team'])(
   'requires both grant sides through the published route, starting with %s', requiresBothSides, 60_000);
 
-async function heldCall(context: Context, change: () => Promise<unknown>, expected = 403) {
+async function heldCall(context: Context, change: () => Promise<unknown>, expected = 403,
+  approvalId?: string) {
   const append = context.setup.nats.store.append.bind(context.setup.nats.store);
   let changedAt = 0;
   async function changeAfterStart(command: AppendCommand) {
@@ -282,7 +285,7 @@ async function heldCall(context: Context, change: () => Promise<unknown>, expect
   const before = context.remote.received.length;
   const connections = context.remote.connections();
   try {
-    const result = await context.call();
+    const result = await context.call(approvalId);
     expect(changedAt).toBeGreaterThan(0);
     expect(performance.now() - changedAt).toBeLessThan(2000);
     expect(result.status).toBe(expected);
@@ -290,7 +293,9 @@ async function heldCall(context: Context, change: () => Promise<unknown>, expect
     expect(result.evidence[0]!.event.data).toMatchObject(admission);
     expect(result.evidence[1]!.event.type).toBe('tool.dispatch_started');
     if (expected === 403) {
-      expect(result.evidence).toHaveLength(2);
+      expect.soft(result.evidence).toHaveLength(3);
+      const refusal = { outcome: 'not_dispatched', evidence: 'adapter_dispatch_refused' };
+      expect.soft(result.evidence[2]?.event.data).toMatchObject(refusal);
       expect(context.remote.received).toHaveLength(before);
       expect(context.remote.connections()).toBe(connections);
     } else {
@@ -414,3 +419,77 @@ async function keepsSeparateDirectGrant() {
 }
 it('keeps a separate direct grant after team membership removal is applied',
   keepsSeparateDirectGrant, 60_000);
+
+async function approveCall(context: Context, approvalId: string, action: 'approved' | 'retry') {
+  const setup = context.setup;
+  const current = await readApproval(setup.nats.store, 'test', approvalId);
+  async function fresh() {
+    const permission = await setup.auth.use('person', 'alice', 'mcp_server', 'fixture');
+    expect(permission.allowed).toBe(true);
+  }
+  return decideApproval(setup.nats.store, 'test', approvalId, 'alice', action,
+    true, fresh, current, setup.actor.now());
+}
+
+async function recoversUnsentApproval() {
+  const context = await gatewayFixture('ask');
+  const setup = context.setup;
+  await context.grant('member');
+  await context.grant('assistant');
+  const requested = await context.call();
+  expect(requested.status).toBe(403);
+  const approvalId = requested.evidence[0]!.event.correlation.approval!;
+  expect(approvalId).toBeDefined();
+  expect((await approveCall(context, approvalId, 'approved')).status).toBe('appended');
+  try {
+    const pauseIam = fga.pause.bind(fga);
+    await heldCall(context, pauseIam, 403, approvalId);
+  } finally {
+    await fga.resume();
+  }
+  const approval = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(approval).toMatchObject({ state: 'outcome_unknown', canRetry: true });
+  expect(approval.uses).toHaveLength(1);
+  expect((await approveCall(context, approvalId, 'retry')).status).toBe('appended');
+  expect((await approveCall(context, approvalId, 'retry')).status).toBe('conflict');
+  const before = context.remote.received.length;
+  const first = context.call(approvalId);
+  const second = context.call(approvalId);
+  const replies = await Promise.all([first, second]);
+  function status(reply: Awaited<ReturnType<typeof context.call>>) {
+    return reply.status;
+  }
+  const statuses = replies.map(status);
+  expect(statuses.sort()).toEqual([200, 403]);
+  expect(context.remote.received).toHaveLength(before + 1);
+  const used = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(used).toMatchObject({ state: 'outcome_unknown', canRetry: false });
+  expect(used.uses).toHaveLength(2);
+  const connections = context.remote.connections();
+  expect((await context.call(approvalId)).status).toBe(403);
+  expect(context.remote.received).toHaveLength(before + 1);
+  expect(context.remote.connections()).toBe(connections);
+  const budget = await history(setup.nats.store, 'budget-test', 'test');
+  function reserved(row: StoredEvent) {
+    return row.event.type === 'budget.reserved';
+  }
+  expect(budget.filter(reserved)).toHaveLength(0);
+}
+it('restores one approval retry after IAM refuses a saved start without sending',
+  recoversUnsentApproval, 60_000);
+
+async function restoresGrant() {
+  const context = await gatewayFixture();
+  await context.grant('member');
+  await context.grant('assistant');
+  await allowed(context);
+  await context.grant('member', 'revoke');
+  await denied(context);
+  const restored = await context.grant('member', 'grant', false);
+  await denied(context);
+  await context.setup.auth.handler.handle(restored.original.event, context.setup.db);
+  await expect.poll(restored.currentReceipt).toBeUndefined();
+  await allowed(context);
+}
+it('restores a revoked grant only after its original content and IAM receipts are current',
+  restoresGrant, 60_000);

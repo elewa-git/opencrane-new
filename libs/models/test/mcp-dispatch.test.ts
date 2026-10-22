@@ -2614,7 +2614,19 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     rows.push(await setup.nats.store.readEvent(position));
   }
   const encoded = JSON.stringify(rows);
-  expect(encoded).not.toContain('not_dispatched');
+  if (mode === 'watch_final') {
+    function recorded(row: typeof rows[number]) {
+      return row.event.type === 'tool.dispatch_recorded';
+    }
+    const observations = rows.filter(recorded);
+    expect(observations).toHaveLength(1);
+    expect(observations[0]!.event.data).toMatchObject({
+      outcome: 'not_dispatched', evidence: 'adapter_dispatch_refused',
+      adapter: { connectionId: 'installed', generation: context.record.generation },
+    });
+  } else {
+    expect(encoded).not.toContain('not_dispatched');
+  }
   if (['lost_start', 'watch_final'].includes(mode)) expect(remote.connections()).toBe(0);
   if (['redirect', 'untrusted', 'wrong_name', 'lost_start', 'watch_final'].includes(mode)) {
     expect(encoded).toContain('tool.dispatch_started');

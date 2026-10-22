@@ -26,3 +26,19 @@ function checksAdapterEvidence() {
   }
 }
 it('requires strict adapter bindings and matching remote outcomes', checksAdapterEvidence);
+
+function checksUnsentAdapterEvidence() {
+  const refused = { ...example, outcome: 'not_dispatched',
+    evidence: 'adapter_dispatch_refused', adapter };
+  expect(toolDispatchRecordedDataSchema.safeParse(refused).success).toBe(true);
+  const invalid = [
+    { ...refused, adapter: undefined },
+    { ...refused, outcome: 'responded' },
+    { ...refused, outcome: 'outcome_unknown' },
+    { ...refused, requestId: '00000000-0000-4000-8000-000000000002' },
+  ];
+  for (const value of invalid) {
+    expect(toolDispatchRecordedDataSchema.safeParse(value).success).toBe(false);
+  }
+}
+it('binds proved remote non-dispatch to the original start', checksUnsentAdapterEvidence);
