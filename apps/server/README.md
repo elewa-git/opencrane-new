@@ -547,6 +547,10 @@ next heartbeat.
 
 ## How to run or test it
 
+Memory race tests keep an old revision while a competing write finishes. They
+wait for that write before checking the stale revision, so the test checks the
+conflict response without depending on how quickly the runner schedules requests.
+
 Child-chat retry tests use private event stores to check lost replies and repeated
 requests. Most tests keep the normal period during which NATS ignores repeated messages.
 Recovery tests restore team access only when a test removed it.

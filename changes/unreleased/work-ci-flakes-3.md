@@ -1,0 +1,1 @@
+- Memory correction race tests now wait for the competing write before checking the stale revision. Decision cost tests finish cold grant loading before measuring admission, without retrying admissions or changing production deadlines.

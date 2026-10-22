@@ -327,21 +327,16 @@ describe('personal HTTP correction', function correctionCases() {
       async function* secondHistory(subject: string, from?: number, deadline?: number) {
         yield* read(subject, from, deadline);
         if (subject === `scope-${identity.scopeId}` && from === 1) {
-          expect(appends).toBe(1);
+          // Keep the old revision, then finish the first write before checking for a conflict.
+          // Otherwise Forget can correctly refuse the still-occupied write slot as busy.
+          release.resolve();
+          await firstResult;
         }
       }
       const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(held);
       const first = correct(identity.memoryId, `race-${operation}-first`);
       const firstResult = first.then();
       await entered.promise;
-      const acquire = memoryAdmission.acquireMemoryWrite;
-      async function releaseAtAdmission(...args: Parameters<typeof acquire>) {
-        const admission = acquire(...args);
-        release.resolve();
-        return admission;
-      }
-      const admissionSpy = vi.spyOn(memoryAdmission, 'acquireMemoryWrite');
-      admissionSpy.mockImplementation(releaseAtAdmission);
       const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(secondHistory);
       try {
         let second;
@@ -352,12 +347,7 @@ describe('personal HTTP correction', function correctionCases() {
         expect(replies[1].statusCode, replies[1].body).toBe(409);
         expect(keys.status({ ...identity, revision: 4 })).toBe('available');
         expect(appends).toBe(1);
-      } finally {
-        release.resolve();
-        admissionSpy.mockRestore();
-        readSpy.mockRestore();
-        appendSpy.mockRestore();
-      }
+      } finally { release.resolve(); readSpy.mockRestore(); appendSpy.mockRestore(); }
       expect((await forget(identity.memoryId, `race-${operation}-final`, 4)).statusCode).toBe(200);
       expect((await correct(identity.memoryId, `race-${operation}-restore`, 4)).statusCode).toBe(409);
     });

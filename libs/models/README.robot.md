@@ -2,6 +2,18 @@
 
 For people, read [README.md](README.md) first.
 
+## Decision cost fixture scheduling
+
+`test/decision-cost.test.ts` pauses the first cold grant read until admission
+returns 403. It checks one saved Deny and no reservations. After releasing the
+read, it waits directly for `readDecisionGrants` with the existing two-minute
+history budget. One successful warm-up precedes the measured admission. There is
+no admission retry loop. Successful calls must still take less than two seconds,
+read no old grant rows and keep their reservations unsettled. Background dispatch
+stops before the volume seed. Production defaults are unchanged.
+This reuses the grant warm-up fix from PR #582, which was still open at this branch's base.
+[Own checks and the other 503 causes](../../docs/process/evidence/ci-flakes-3.md).
+
 ## Saved-thread native consent capture
 
 `test/codex-native-capture.test.ts` runs only with `CODEX_CAPTURE_IMAGE` set to the

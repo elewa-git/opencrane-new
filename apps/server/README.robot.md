@@ -17,6 +17,15 @@ a create event, then 404 after ownership applies, then one accepted create on re
 submission. See [the provider API](../../docs/api/providers.md#evidence-and-recovery).
 The [startup check](../../docs/process/demo-provider-start.md) records local results and limits.
 
+## Memory race scheduling
+
+`test/memory.test.ts` pauses the first correction at append, then reads the second
+request's history at the old revision. It lets the first request finish before
+returning that history. The second request must return 409 with no second append.
+Without this ordering, Forget can reach the occupied member/scope slot and receive
+503 `memory_busy`, as the existing admission contract requires. No production
+limit is changed. [Own checks and the other 503 causes](../../docs/process/evidence/ci-flakes-3.md).
+
 ## Child retry tests and duplicate messages
 
 Only the four tests that retry after the JetStream duplicate window use a private
