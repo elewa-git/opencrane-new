@@ -34,6 +34,7 @@ data from it.
 | --- | --- | --- |
 | Browser app | [apps/web](apps/web/README.md) | Sign in, chat, watch the assistant's screen and manage organisation settings. |
 | Back end | [apps/server](apps/server/README.md) | Check access, record changes and send work to computers. It also runs the [models process](GLOSSARY.md#models-process), a separate program that checks AI spending and starts [agentgateway](GLOSSARY.md#agentgateway-ai-gateway), the AI gateway. |
+| Tool servers | [apps/demo-mcp](apps/demo-mcp/README.md) | Offer a synthetic quote and delivery slot for credential-free tool demos. |
 | Background workers | [apps/ops](apps/ops/README.md) | Keep the read tables and permissions up to date, start and pause computers, and rebuild data from the event log. |
 | Personal computers | [apps/computer](apps/computer/README.md) | Build each person's isolated computer, where [Codex](GLOSSARY.md#codex), the AI agent, does the work. |
 | Event core | [libs/events](libs/events/README.md) | Define each kind of event and the data it carries. |

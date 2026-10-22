@@ -1,0 +1,1 @@
+- Add a credential-free demo tool server with a synthetic quote, a delivery-slot change, explicit zero-cost review details and revision checks before changes. Public hosting and chat qualification remain pending.

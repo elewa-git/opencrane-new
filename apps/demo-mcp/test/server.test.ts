@@ -7,7 +7,7 @@ const metadata = { 'io.modelcontextprotocol/protocolVersion': version };
 const quote = { quoteId: 'DEMO-001' };
 const change = { ...quote, slot: 'afternoon' };
 let server: ReturnType<typeof createDemoServer>;
-let revision: string;
+let revision = '';
 
 function wire(method = 'tools/call', name = 'change_delivery_slot', args: unknown = change) {
   const params = method === 'tools/call' ? { _meta: metadata, name, arguments: args }
@@ -82,7 +82,7 @@ it('echoes ids and changes only this process once per accepted call', async func
 });
 
 const refusals = [
-  { label: 'missing revision', patch: { 'x-opencrane-mcp-revision': '' } },
+  { label: 'empty revision', patch: { 'x-opencrane-mcp-revision': '' } },
   { label: 'wrong revision', patch: { 'x-opencrane-mcp-revision': '0'.repeat(64) } },
   { label: 'header version', patch: { 'mcp-protocol-version': '2025-03-26' } },
   { label: 'method disagreement', patch: { 'mcp-method': 'tools/list' } },
@@ -130,3 +130,37 @@ it.each(['GET', 'DELETE'] as const)('refuses %s without a session', async functi
   expect(response.headers['mcp-session-id']).toBeUndefined();
   expect(await readFixture()).toMatchObject({ effectCount: 0 });
 });
+
+it.each(['initialize', 'initialise', 'notifications/initialized', 'resources/list'])(
+  'refuses unsupported %s even when headers agree', async function (method) {
+    const response = await server.inject({ method: 'POST', url: '/',
+      headers: headers(method, ''), payload: wire(method) });
+    expect(response.json()).toHaveProperty('error');
+    expect(await readFixture()).toMatchObject({ effectCount: 0 });
+  });
+
+it('requires a revision and serves JSON over a real local socket', async function () {
+  const address = await server.listen({ host: '127.0.0.1', port: 0 });
+  const withoutRevision: Record<string, string> = headers();
+  delete withoutRevision['x-opencrane-mcp-revision'];
+  const refused = await fetch(address, { method: 'POST', headers: withoutRevision,
+    body: JSON.stringify(wire()) });
+  expect(await refused.json()).toMatchObject({ error: { message: 'revision_mismatch' } });
+  expect(await readFixture()).toMatchObject({ effectCount: 0 });
+  const response = await fetch(address, { method: 'POST', headers: headers(),
+    body: JSON.stringify({ ...wire(), id: 7 }) });
+  expect(response.headers.get('content-type')).toContain('application/json');
+  expect(response.headers.get('mcp-session-id')).toBeNull();
+  expect(await response.json()).toMatchObject({ id: 7,
+    result: { structuredContent: { effectCount: 1 } } });
+});
+
+it.each(['read_fixture_quote', 'change_delivery_slot', 'unknown_tool'])(
+  'checks arguments and tool names for %s with matching headers', async function (name) {
+    const response = await server.inject({ method: 'POST', url: '/',
+      headers: headers('tools/call', name),
+      payload: wire('tools/call', name, { ...quote, extra: 'sensitive-marker' }) });
+    expect(response.json()).toHaveProperty('error');
+    expect(response.body).not.toContain('sensitive-marker');
+    expect(await readFixture()).toMatchObject({ effectCount: 0 });
+  });
