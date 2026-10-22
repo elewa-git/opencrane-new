@@ -5,14 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
-function installChromium(dependencyStatus, installStatus = 0, cacheOptions = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'ci-chromium-'));
-  const log = join(directory, 'calls.jsonl');
-  const cacheDirectory = join(directory, 'archives');
-  mkdirSync(cacheDirectory);
-  if (cacheOptions.present) {
-    writeFileSync(join(cacheDirectory, 'fonts-test.deb'), 'cached package');
-  }
+function writeFakeCommands(directory) {
   const fakeNpx = `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
@@ -61,6 +54,17 @@ process.exit(result.status);
   writeFileSync(join(directory, 'apt-get'), fakeApt, fileOptions);
   writeFileSync(join(directory, 'timeout'), fakeTimeout, fileOptions);
   writeFileSync(join(directory, 'sudo'), '#!/usr/bin/env bash\nexec "$@"\n', fileOptions);
+}
+
+function installChromium(dependencyStatus, installStatus = 0, cacheOptions = {}) {
+  const directory = mkdtempSync(join(tmpdir(), 'ci-chromium-'));
+  const log = join(directory, 'calls.jsonl');
+  const cacheDirectory = join(directory, 'archives');
+  mkdirSync(cacheDirectory);
+  if (cacheOptions.present) {
+    writeFileSync(join(cacheDirectory, 'fonts-test.deb'), 'cached package');
+  }
+  writeFakeCommands(directory);
   const environment = { ...process.env, PATH: `${directory}:${process.env.PATH}`,
     CI_CALLS: log, CI_DEPENDENCY_STATUS: String(dependencyStatus),
     CI_INSTALL_STATUS: String(installStatus), CHROMIUM_DEB_CACHE: cacheDirectory,
@@ -124,11 +128,13 @@ function installsCachedPackagesWithoutDownloads() {
   const result = installChromium(1, 0, { present: true });
   assert.equal(result.status, 0, result.stderr);
   const archive = join(result.cacheDirectory, 'fonts-test.deb');
+  const archiveOption = `Dir::Cache::archives=${result.cacheDirectory}`;
   assert.deepEqual(result.calls, [
     ['playwright', 'install-deps', '--dry-run', 'chromium'],
-    ['timeout', '--kill-after=10s', '180s', 'apt-get', 'install', '--yes',
+    ['timeout', '--kill-after=10s', '180s', 'apt-get', '--option', archiveOption,
+      'install', '--yes', '--no-install-recommends', '--no-download', archive],
+    ['apt-get', '--option', archiveOption, 'install', '--yes',
       '--no-install-recommends', '--no-download', archive],
-    ['apt-get', 'install', '--yes', '--no-install-recommends', '--no-download', archive],
     ['playwright', 'install-deps', '--dry-run', 'chromium'],
     ['playwright', 'install', 'chromium'],
   ]);
