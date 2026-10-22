@@ -352,7 +352,10 @@ it.each(['computer-assistant', 'conversation-conversation', grantStream('model',
   refusesRestoredHistory, 40_000);
 
 async function freshDecisionHeaders(setup: Fixture) {
-  return setup.issue();
+  const headers = await setup.issue();
+  // Keep the normal lifetime but issue from the real clock after lengthy fixture preparation.
+  const turnToken = await setup.sign(setup.t, 'decision-service');
+  return { ...headers, 'x-turn-token': turnToken };
 }
 
 async function refreshesExpiredFixtureCredentials() {
