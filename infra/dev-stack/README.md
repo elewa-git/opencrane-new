@@ -95,7 +95,8 @@ and call checks are being connected.
    assistants and saving a provider key. Group chat checks cover the mode before the first
    message, who can read each message, quiet ordinary sends, and access clearing after a
    person leaves. Removal timing watches the open page, live connection and API reads
-   together, from the successful removal response. Audit checks follow older pages when newer grants fill the first page.
+   together, from when the browser sends removal. The Owner list must also update,
+   with a longer wait. Audit checks follow older pages when newer grants fill the first page.
    Budget checks use a real group and shared assistant, and restore
    their test limits even if a browser step fails.
 3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.

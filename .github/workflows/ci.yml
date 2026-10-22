@@ -123,6 +123,7 @@ jobs:
           infra/dev-stack/model-stub.test.ts infra/dev-stack/models-environment.test.ts
           infra/dev-stack/provider-setup.test.ts infra/dev-stack/daily-fresh.test.ts
           infra/dev-stack/browser-group-chat.test.ts infra/dev-stack/group-removal-timing.test.ts
+          infra/dev-stack/browser-group-removal.test.ts
           infra/dev-stack/journey-tool-policy.test.ts
           infra/dev-stack/browser-budgets.test.ts
           infra/dev-stack/browser-audit.test.ts

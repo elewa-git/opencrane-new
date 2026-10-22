@@ -251,8 +251,8 @@ The attempts were, in order:
 - `nightly-20261022T074257-4caa3f98-b4fe-4aee-b54b-b5f3a5aea1cb`
 - `nightly-20261022T075541-7cf07d9a-2dd9-4c9a-9a4b-d52f9a98ccc2`
 
-The timer now starts at the successful removal HTTP response. Observers are already
-watching the removed person's open page, live connection and saved access event.
+These historical runs started their timer at the successful removal HTTP response.
+Observers were already watching the removed person's open page, live connection and saved access event.
 Their next history and file-list reads start after that response, alongside the
 Owner's list observation. Run 2 and run 3 also check that the Owner's list initially
 shows the person. Run 1 observed the list change after acceptance, at 716 ms.
@@ -284,9 +284,9 @@ Cause of the old measurement: the clock started before the Remove click, and the
 journey waited for the Owner's list before inspecting the removed page. It could
 therefore fail after the page had already cleared. The old 2,244 ms receipt does
 not establish the page's actual clearing time. The two paid rehearsals measured
-1,112 ms with the same product code, but used that old timer too. The corrected
-run did not reproduce a product timing breach; its slowest access observation
-was 163 ms.
+1,112 ms with the same product code, but used that old timer too. The slowest
+response-relative access observation was 163 ms. These figures cannot establish the two-second request-to-clear limit because they omit time before the response.
+The request-based measurement below replaces this timing claim.
 
 Run 2 failed before removal because the first group message did not become visible
 in the Owner's page within the existing 15-second wait. Retained worker logs show

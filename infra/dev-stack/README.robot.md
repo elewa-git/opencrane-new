@@ -395,22 +395,28 @@ This leaves room for the demo assistant inside the six-computer slot limit.
 It adds a third seeded member and
 checks that earlier messages stay hidden from that member. The check also removes a
 member, asks another member to leave, and records how quickly each screen clears.
-Removal observers start before Remove. Their zero is the successful removal HTTP response,
-not the click or the Owner's participant list. The receipt records milliseconds for
-`removalAccepted`, `removalSaved`, `accessStreamUpdated`, `liveFeedClosed`, `pageCleared`,
-`historyRefused`, `fileRefused` and `ownerList`. Saving and updating access are one event
-append to `participation-*`; both timings are when the journey reads that saved event.
-These observations are upper bounds, with 20 ms polling plus request time. Negative
-values mean the observer finished before the HTTP response. A missing access observation is
-`NOT RUN` and fails the check. The Owner list has its own observation and does not
-set the two-second result. The removed browser has a ready conversation WebSocket before
-removal. The next history and file-list reads start after acceptance and must return 403.
+Removal observers start before Remove. Their zero is the browser's removal request event,
+which starts before the server can save removal. The receipt records milliseconds for
+`removalSent`, `removalAccepted`, `removalSaved`, `accessStreamUpdated`, `liveFeedClosed`,
+`pageCleared`, `historyRefused`, `fileRefused` and `ownerList`. The HTTP response and the
+saved-event observation stay separate. Saving and updating access are one event append
+to `participation-*`; both timings are when the journey reads that saved event.
+Page and saved-event observations are upper bounds, with 20 ms polling plus request time.
+The live-feed time is the observed close of the connection open when removal is sent;
+a previously closed connection cannot satisfy it. A missing observation is `NOT RUN`
+and fails the check. Access observations must finish within two seconds of sending.
+The Owner list must update within its separate ten-second limit. The removed browser
+has a ready conversation WebSocket before removal. The next history and file-list reads
+start after the successful response and must return 403.
 The file route already returns 403 for a group chat before removal; the receipt records
 that baseline. Its later refusal does not qualify revocation of previously readable files.
 This people-only chat has no computer viewer or pending approval, so those checks are
 not qualified by this journey.
 `group-removal-timing.test.ts` uses a fake clock to keep a slow Owner list independent
 of the removed page and API reads, and to refuse a page that clears after two seconds.
+It also fails an unreadable Owner list. `browser-group-removal.test.ts` checks that a
+700 ms response cannot hide a 2,400 ms page clear, and that a replacement connection
+must close even when an earlier connection has already closed.
 It checks the long-name and no-match picker states, refuses an unauthorised add, and
 refuses a people-and-assistant choice without saving a conversation. It stops the server and conversation worker for an offline replay, then restarts both
 and checks server health directly. Each health read gets the time left in the two-minute

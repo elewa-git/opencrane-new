@@ -13,7 +13,6 @@ function removalFixture(options: FixtureOptions) {
   const removed = new EventEmitter();
   const replacement = new EventEmitter();
   const response = Promise.withResolvers<unknown>();
-  const request = Promise.withResolvers<unknown>();
   const origin = 'http://fixture.invalid';
   const conversationId = 'fixture-chat';
   const participantUrl = `${origin}/api/conversations/${conversationId}/participants`;
@@ -56,17 +55,11 @@ function removalFixture(options: FixtureOptions) {
   }
   async function click() {
     owner.emit('request', removalRequest);
-    request.resolve(removalRequest);
     setTimeout(receiveResponse, 700);
     setTimeout(closeReplacement, options.closeAt);
   }
   async function waitForResponse(predicate: (value: unknown) => boolean) {
     const value = await response.promise;
-    assert.equal(predicate(value), true);
-    return value;
-  }
-  async function waitForRequest(predicate: (value: unknown) => boolean) {
-    const value = await request.promise;
     assert.equal(predicate(value), true);
     return value;
   }
@@ -119,7 +112,7 @@ function removalFixture(options: FixtureOptions) {
   async function get() {
     return { status: refusedStatus, dispose };
   }
-  Object.assign(owner, { locator: ownerLocator, waitForResponse, waitForRequest });
+  Object.assign(owner, { locator: ownerLocator, waitForResponse });
   Object.assign(removed, { reload, getByText, locator: removedLocator, request: { get } });
   async function head() {
     savedPositionReads += 1;
@@ -151,7 +144,10 @@ async function includesResponseDelayInTheBound(context: TestContext) {
   const result = await pending;
   assert.equal(result.cleared, false,
     'Save at 0 ms, response at 700 ms and page clear at 2,400 ms must fail');
+  assert.equal(result.hops['removalSentMs'], 0);
   assert.equal(result.hops['removalAcceptedMs'], 700);
+  assert.equal(result.hops['removalSavedMs'], 0);
+  assert.equal(result.hops['liveFeedClosedMs'], 100);
   assert.equal(result.hops['pageClearedMs'], 2_400);
 }
 

@@ -12,7 +12,7 @@ async function ignoresTheOwnersSlowList(context: TestContext) {
   }
   async function accept() {
     await at(600);
-    return Date.now();
+    return { sentAt: 0, acceptedAt: Date.now() };
   }
   async function ownerList() {
     await at(3_000);
@@ -30,19 +30,19 @@ async function ignoresTheOwnersSlowList(context: TestContext) {
     await setImmediate();
   }
   const result = await resultPromise;
-  assert.equal(result.hops['pageCleared'], 500);
-  assert.equal(result.hops['historyRefused'], 100);
-  assert.equal(result.hops['ownerList'], 2_400);
+  assert.equal(result.hops['pageCleared'], 1_100);
+  assert.equal(result.hops['historyRefused'], 700);
+  assert.equal(result.hops['ownerList'], 3_000);
   assert.equal(result.passed, true, 'A slow Owner list must not fail timely access loss');
 }
 
-test('times access loss from acceptance while the Owner list updates independently',
+test('times access loss from sending while the Owner list updates independently',
   ignoresTheOwnersSlowList);
 
 async function refusesLateAccessLoss(context: TestContext) {
   context.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
   async function accept() {
-    return Date.now();
+    return { sentAt: 0, acceptedAt: Date.now() };
   }
   async function pageCleared() {
     await new Promise(function wait(resolve) {
@@ -66,7 +66,7 @@ async function startsTheNextReadAfterAcceptance(context: TestContext) {
     await new Promise(function wait(resolve) {
       setTimeout(resolve, 600);
     });
-    return Date.now();
+    return { sentAt: 0, acceptedAt: Date.now() };
   }
   let readAt: number | undefined;
   async function historyRefused(accepted: Promise<number>) {
@@ -79,14 +79,15 @@ async function startsTheNextReadAfterAcceptance(context: TestContext) {
   await setImmediate();
   const result = await resultPromise;
   assert.equal(readAt, 600, 'A refusal before removal cannot prove that the next read is refused');
-  assert.equal(result.hops['historyRefused'], 0);
+  assert.equal(result.hops['historyRefused'], 600);
 }
 
 test('checks the next API read after the removal response', startsTheNextReadAfterAcceptance);
 
 async function refusesAMissingOwnerList() {
   async function accept() {
-    return Date.now();
+    const timestamp = Date.now();
+    return { sentAt: timestamp, acceptedAt: timestamp };
   }
   async function ownerList() {
     throw new Error('The Owner list could not be read');
