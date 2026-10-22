@@ -29,6 +29,23 @@ afterAll(cleanup);
 async function resetAccess() {
   vi.restoreAllMocks();
   for (const teamId of ['owners', 'payer']) {
+    await restoreTeamAccess(teamId);
+  }
+}
+async function restoreTeamAccess(teamId: string) {
+  const membershipSchema = z.object({ memberId: z.string() });
+  let removed = false;
+  for await (const row of context.nats.store.readStream(`team-${teamId}`)) {
+    if (row.event.type !== 'team.member_added' && row.event.type !== 'team.member_removed') {
+      continue;
+    }
+    const membership = membershipSchema.parse(row.event.data);
+    if (membership.memberId === 'alice') {
+      removed = row.event.type === 'team.member_removed';
+    }
+  }
+  // Restore actual removals without making every later access check read extra receipts.
+  if (removed) {
     await context.append(`team-${teamId}`, 'team.member_added',
       { teamId, memberId: 'alice', addedBy: 'alice' });
   }
