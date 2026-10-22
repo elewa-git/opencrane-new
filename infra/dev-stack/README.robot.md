@@ -178,17 +178,23 @@ The install script copies this launcher to `~/.opencrane/daily-fresh/run.sh`.
 `daily-fresh.sh` claims a secondary id using `claim.sh`, then runs `up.sh --fresh`
 with that id. Secondary model services use the local stub. The run makes no paid
 model calls. An EXIT trap calls `down.sh --id` with only the id returned by the
-claim. A failed startup still reaches that cleanup.
+claim, after accepting only 1 or 2. A failed startup still reaches that cleanup.
+Each invocation replaces an inherited attempt with `nightly-<UTC time>-<UUID>` in
+`P4_JOURNEY_ATTEMPT`. It clears inherited real-provider settings, `MODEL_KEY_FILE`
+and `DEMO_ALLOWANCE_CENTS` before any child starts. No paid key is read.
+The narrow group checks run with the stand-in and never change providers or owners.
+A failed or unfinished group-chat assertion fails the journey. Before cleanup, nested
+receipts and pictures from this attempt are kept under the private failure folder.
 
 If `claim.sh` cannot return an id, the script records `SKIPPED` with the reason
 `no free slot` and exits successfully. Every run adds one UTC line to
-`~/.opencrane/daily-fresh/ledger.md`. The line records the known `origin/main`
-commit, result, failed step and duration. On failure, it copies `last-error.log`,
+`~/.opencrane/daily-fresh/ledger.md`. The line records the checked-out source
+commit, result, failed step, duration and attempt. On failure, it copies `last-error.log`,
 `failure.log`, the last 100 lines of each other process log, and any journey failure
-screenshots into a folder named for that UTC run time before `down.sh` removes the
+screenshots into a folder named for that attempt before `down.sh` removes the
 stack files. Before writing a log, `sanitise-evidence.mjs` replaces known slot
-passwords, generated environment secrets, private keys and supplied `MODEL_KEY_FILE`
-and `ZITADEL_KEY_FILE` values with `[REDACTED]`. It also removes URL credentials,
+passwords, generated environment secrets, private keys and the supplied
+`ZITADEL_KEY_FILE` value with `[REDACTED]`. It also removes URL credentials,
 bearer tokens, authorisation headers and values with sensitive setting or JSON field
 names. Secret files are read only by the sanitiser. A failed sanitisation writes
 only `Log withheld: sanitisation failed.`. It skips `zitadel-*` files. The receipt line names that folder. The
@@ -372,25 +378,35 @@ The owner's own browser sign-in remains a manual check and is **NOT RUN** by the
 
 ### Organisation browser checks
 
-`journey.ts` calls `browser-phase4.ts` and `browser-group-chat.ts` after the existing
+`journey.ts` calls the groups-only checks in `browser-phase4.ts` and
+`browser-group-chat.ts` after the existing
 browser checks. Both modules reuse the signed-in owner and member pages. The group
 chat check creates a conversation from the To line with two colleagues, checks the
 mode before the first message, and sends ordinary messages to each member. It waits
 for earlier computer starts to finish, then counts AI, computer and budget events
-around those sends. It adds a third seeded member and
+around those sends. Synthetic colleagues use the existing event fixture and
+`personalAssistant: none`; they need no personal computer for group messages.
+This leaves room for the demo assistant inside the six-computer slot limit.
+It adds a third seeded member and
 checks that earlier messages stay hidden from that member. The check also removes a
 member, asks another member to leave, and records how quickly each screen clears.
 It checks the long-name and no-match picker states, refuses an unauthorised add, and
-refuses a people-and-assistant choice without saving a conversation. It restarts the
-server and checks that replay keeps the group mode and participants.
+refuses a people-and-assistant choice without saving a conversation. It stops the server and conversation worker for an offline replay, then restarts both
+and checks server health directly. Each health read gets the time left in the two-minute
+startup deadline as its abort timeout. Connection failures and HTTP 502, 503 and 504
+allow another read. Other HTTP failures stop the journey immediately. Replay must
+keep the group mode and participants.
 
 The shared-assistant check adds a model grant to the disposable event store so the
 group can create an assistant. The member starts a private session with it. The direct
 chat sends one message each way and reads the conversation stream to check message
-order. The model stub exposes `/journey-counts`; the journey compares its model request
-count before and after the direct exchange.
+order. The direct checks count model admission, computer and budget events before and after
+the exchange, so they also run with real providers. Both chat checks read again for
+up to fifteen seconds when a saved change moves the list (409) or is still applying
+(425). Other HTTP failures stop the check; no write is repeated.
 
-The provider check saves the text `journey-placeholder-not-a-provider-key`. It is a
+The separate full browser check, excluded from nightly and rehearsals, saves the text
+`journey-placeholder-not-a-provider-key`. It is a
 fake value, never a provider credential. The check confirms that the input clears and
 that the text is absent from the page, browser storage, provider events and process
 logs. The local server keeps the key in a private folder inside the disposable stack,
@@ -752,7 +768,8 @@ The isolation test supplies synthetic inherited keys whose values match expected
 text. Reading either key changes that text during sanitisation and fails the test.
 
 Setup still uses the product reachability check, exact consented quote, registry models,
-explicit default, drain and switch-on. A lost write response permits only a GET of the
+explicit default, drain and switch-on. The initial default-binding read waits through a temporary 503 within its existing
+thirty-second deadline. A lost write response permits only a GET of the
 original command receipt. Recovery requires the expected operation. An absent or unknown
 receipt never causes another POST. Incomplete setup stops; repeat startup cannot silently
 create another provider or change modes. Keep the opt-in on ordinary restarts. A fresh
@@ -850,7 +867,8 @@ Preparation and warm-up sit outside the timed checks and still count as paid cal
 Each warm attempt has a 180-second deadline. It checks streaming/reload, PDF facts,
 preview/download bytes, Stop/reload, live direct delivery, a shared reply, and company
 limit refusal/restore. Restoration is attempted even after failure or timeout.
-Two attempts capture the Owner browser at 1280 and 390 pixels; the member stays at 390.
+Two attempts capture both browsers at 1280 and 390 pixels after each step;
+the member sends at 390 pixels. Failed steps also attempt to save pictures.
 Private timings, screenshots and spending records go under the slot's `demo-smoke/`.
 Each run saves both previous company ceilings in its own `saved-ceilings.json` before
 changing either. Normal completion, failures, SIGINT and SIGTERM restore them through

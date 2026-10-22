@@ -11,6 +11,7 @@ import { grantStream } from '@opencrane/authz';
 import { models, ownershipSubject } from '@opencrane/models';
 import { modelForTask } from '@opencrane/models/routing';
 import { readEvents } from '@opencrane/projections';
+import { readConversations } from './browser-group-chat.ts';
 
 export type Phase4Status = 'PASS' | 'FAIL' | 'NOT PROVEN' | 'PAID / NOT RUN';
 export type Phase4Assertion = {
@@ -33,8 +34,8 @@ type BrowserPhase4Options = {
   directory: string;
   attempt: string;
   silo: string;
-  modelStubPort: string;
   secondaryStack: boolean;
+  scope: 'groups' | 'all';
   store: EventStore;
   append: AppendFixture;
   assertions: Phase4Assertion[];
@@ -70,6 +71,9 @@ export async function browserPhase4(options: BrowserPhase4Options): Promise<void
     assistantId);
   await qualifyDirectChat(options, ownerPage, memberMobile, memberDesktop,
     attemptDirectory);
+  if (options.scope === 'groups') {
+    return;
+  }
   await qualifyProvider(options, ownerPage, attemptDirectory);
   if (options.secondaryStack) {
     await qualifyOwnershipTransfer(options, ownerPage, attemptDirectory);
@@ -369,7 +373,7 @@ async function qualifySharedAssistant(
   const responseScreens = await captureAtBothWidths(ownerPage, output,
     'shared-assistant-create-response');
   const createEvidence = { responseStatus: createResponse.status(),
-    assistantId: createCommand.assistantId, commandKeys: createCommand.keys,
+    assistantId: createCommand.assistantId, requestFields: createCommand.keys,
     hasStage: createCommand.keys.includes('stage'), groupId: createCommand.groupId,
     payingGroupId: createCommand.payingGroupId, name: createCommand.name,
     grantIds: createCommand.grantIds };
@@ -459,15 +463,17 @@ async function qualifySharedAssistant(
   return created.assistantId;
 }
 
-async function waitForSharedAssistantReply(page: Page, output: string): Promise<void> {
-  const reply = page.getByText('Hello from your computer.', { exact: true });
+export async function waitForSharedAssistantReply(page: Page, output: string): Promise<void> {
+  const reply = page.getByRole('article', { name: 'Agent reply', exact: true }).last();
   try {
-    await reply.waitFor({ timeout: 120_000 });
+    await reply.getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
+    const text = await reply.locator('.prose').innerText();
+    assert(text.trim().length > 0, 'The private assistant must return a non-empty answer');
   } catch (error) {
     const failureScreenshot = resolve(output, 'shared-assistant-private-chat-failure.png');
     await page.screenshot({ path: failureScreenshot, fullPage: false });
     const mainText = await page.locator('main').innerText();
-    throw new Error(`The private chat did not show the stub reply. Screen text: `
+    throw new Error(`The private chat did not finish its reply. Screen text: `
       + mainText.slice(0, 500), { cause: error });
   }
 }
@@ -667,7 +673,7 @@ async function qualifyDirectChat(
   memberDesktop: Page,
   output: string,
 ): Promise<void> {
-  const beforeModelCount = await modelRequestCount(options.modelStubPort);
+  const beforeActivityCount = await agentActivityCount(options.store);
   await memberMobile.setViewportSize({ width: 390, height: 844 });
   await startDirectDraft(memberMobile, options.origin);
   const recipientText = await memberMobile.locator('main').innerText();
@@ -729,15 +735,15 @@ async function qualifyDirectChat(
     && posted[1]?.data['authorId'] === ownerId;
   const controls = await memberDesktop.locator('main').innerText();
   const hasAgentControls = /assistant|model|memory|stop reply/iu.test(controls);
-  const afterModelCount = await modelRequestCount(options.modelStubPort);
-  const requestDelta = afterModelCount - beforeModelCount;
+  const afterActivityCount = await agentActivityCount(options.store);
+  const activityDelta = afterActivityCount - beforeActivityCount;
   const agentEventCount = history.filter(isAgentEvent).length;
-  const countsAreZero = requestDelta === 0 && agentEventCount === 0 && !hasAgentControls;
+  const countsAreZero = activityDelta === 0 && agentEventCount === 0 && !hasAgentControls;
   const memberScreens = await captureAtBothWidths(memberDesktop, output, 'direct-chat-exchange');
-  const exchangeEvidence = { memberMessages: posted.length, modelRequests: requestDelta,
+  const exchangeEvidence = { memberMessages: posted.length, agentActivity: activityDelta,
     assistantRequests: agentEventCount, messageOrder: orderIsCorrect };
   const exchangeStatement = 'Both people exchange ordered messages. No assistant turn, '
-    + 'model request or agent control appears.';
+    + 'model admission or agent control appears.';
   record(options.assertions, 'direct_chat.exchange_and_no_agent',
     orderIsCorrect && countsAreZero,
     exchangeStatement, exchangeEvidence, memberScreens);
@@ -784,10 +790,8 @@ function matchesColleagueId(colleague: { memberId: string }): boolean {
 }
 
 async function directConversations(page: Page): Promise<DirectConversation[]> {
-  const response = await page.request.get(`${new URL(page.url()).origin}/api/conversations`);
-  assert.equal(response.status(), 200);
-  const body = await response.json() as { rows: DirectConversation[] };
-  return body.rows;
+  const origin = new URL(page.url()).origin;
+  return readConversations(page, origin);
 }
 
 function matchesParticipants(first: string, second: string, row: DirectConversation): boolean {
@@ -827,13 +831,20 @@ function isAgentEvent(row: { type: string }): boolean {
   return row.type !== 'message.posted' && row.type !== 'conversation.created';
 }
 
-async function modelRequestCount(port: string): Promise<number> {
-  const response = await fetch(`http://127.0.0.1:${port}/journey-counts`, {
-    signal: AbortSignal.timeout(5000),
-  });
-  assert.equal(response.status, 200, 'The local model stub must provide its request count');
-  const body = await response.json() as { modelRequests: number };
-  return body.modelRequests;
+async function agentActivityCount(store: EventStore): Promise<number> {
+  const head = await store.head();
+  if (!head) {
+    return 0;
+  }
+  let count = 0;
+  for await (const stored of readEvents(store, 1, head)) {
+    const type = stored.event.type;
+    if (type === 'decision.recorded' || type.startsWith('computer.') ||
+        type.startsWith('budget.')) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 async function qualifyProvider(

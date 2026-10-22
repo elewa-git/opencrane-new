@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|prepares demos, restores limits and records spending| apps
+  stack -->|rehearses demos and checks group chats nightly| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -101,7 +101,8 @@ and call checks are being connected.
    slot before startup or cleanup. A failed request for another id keeps the existing stack.
 4. **The daily check runs.** A user timer updates a detached checkout of `main`, then starts
    `up.sh --fresh` in a claimed spare stack. The local model stub keeps it free of paid model
-   calls. Saved failure logs have known secrets and credential patterns removed.
+   calls. Each run checks groups, private shared sessions, direct chats and group messages.
+   Saved failure logs have known secrets and credential patterns removed.
    A result line and any failure evidence go in the user's home directory.
 
 ## Secondary stack slots
@@ -141,7 +142,8 @@ The daily timer runs at 03:17 UTC. Before each run, its launcher updates the det
 file changes. It claims a spare stack, starts it fresh with the local model stub, and removes
 that stack when the run ends. If both spare stacks are busy, it records that it skipped the
 run. Saved logs have known secrets and credential patterns removed. Logs are withheld
-if sanitisation fails. Results and saved failure files go in `~/.opencrane/daily-fresh/`, outside the repository.
+if sanitisation fails. Failed group receipts and pictures are kept before cleanup. Results and saved failure
+files go in `~/.opencrane/daily-fresh/`, outside the repository.
 
 Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user timer.
 

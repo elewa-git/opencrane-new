@@ -90,18 +90,22 @@ async function recordsSetup() {
 }
 test('provider setup uses ordered authenticated product calls and stops at each refusal', recordsSetup);
 
-async function waitsForSeededDefault(loseReply = false, absent = false) {
+async function waitsForSeededDefault(loseReply = false, absent = false, unavailable = false) {
   let saves = 0;
   let savedCommand = '';
   let recovered = false;
   let bindingReads = 0;
   let selections = 0;
+  let paidTests = 0;
   async function handle(request: import('node:http').IncomingMessage,
     response: import('node:http').ServerResponse) {
     let contents = '';
     for await (const chunk of request) contents += String(chunk);
     const input = contents ? JSON.parse(contents) : {};
     response.setHeader('content-type', 'application/json');
+    if (input.action === 'test') {
+      paidTests += 1;
+    }
     if (request.method === 'POST' && request.url?.endsWith('/key')) {
       saves++;
       savedCommand = input.commandId;
@@ -121,6 +125,11 @@ async function waitsForSeededDefault(loseReply = false, absent = false) {
     const isBindings = request.url === '/api/org/providers/dev-stub/bindings';
     if (isBindings && request.method === 'GET') {
       bindingReads++;
+      if (unavailable && bindingReads === 1) {
+        response.writeHead(503);
+        response.end('sensitive-value /private/location');
+        return;
+      }
       const rows = bindingReads === 1 ? [] : [{ kind: 'silo_default', position: 5 }];
       const expectedProviderSequence = bindingReads === 1 ? 4 : 5;
       response.end(JSON.stringify({ rows, expectedProviderSequence }));
@@ -159,6 +168,7 @@ async function waitsForSeededDefault(loseReply = false, absent = false) {
     assert(recovered, 'Read the original save command');
     assert.equal(saves, 1, 'An unknown write is never sent twice');
     assert.equal(bindingReads, 2);
+    assert.equal(paidTests, 1, 'The binding read never repeats the paid test');
     assert.equal(selections, 1, 'Wait for the scheduled binding before the single owner selection');
   } finally {
     server.closeAllConnections();
@@ -177,6 +187,12 @@ function absentReceiptTest() {
   return waitsForSeededDefault(true, true);
 }
 
+function temporaryBindingTest() {
+  return waitsForSeededDefault(false, false, true);
+}
+
+test('waits for a temporarily unavailable provider binding without repeating writes',
+  temporaryBindingTest);
 test('waits for the first provider binding before explicitly selecting the default', seededDefaultTest);
 test('a lost save reply is recovered by reading its original receipt', lostReplyTest);
 test('an absent receipt after a lost response never repeats the unknown write', absentReceiptTest);

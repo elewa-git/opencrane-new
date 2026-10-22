@@ -77,8 +77,8 @@ async function runPhase4Journey() {
   let journeyFailure: unknown;
   try {
     await browserPhase4({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
-      origin, directory, attempt: phase4Attempt, silo, modelStubPort: settings['MODEL_STUB_PORT']!,
-      secondaryStack: secondary,
+      origin, directory, attempt: phase4Attempt, silo,
+      secondaryStack: secondary, scope: 'groups',
       store: events.store, append, assertions: phase4Assertions });
     const groupMembers = await groupChatMembers();
     await browserGroupChat({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
@@ -124,7 +124,7 @@ async function groupChatMembers() {
     sub: otherSubject, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 3600,
   })}`;
   identities.set(otherMember, { sub: otherSubject, cookie: otherCookie });
-  await ensureMember(otherMember, 'member');
+  await ensureNamedMember(otherMember, 'Audit colleague');
   await until(async () => (await authz.check(otherMember, 'member')).allowed,
     'second group colleague OpenFGA');
 
@@ -147,52 +147,93 @@ async function openSyntheticGroupPage(cookie: string) {
 }
 
 async function restartServerAndReplay(): Promise<void> {
-  await restartStackServer();
+  await restartStackProcess('server', restartConversationWorker);
+}
+
+async function restartConversationWorker(): Promise<void> {
+  await restartStackProcess('conversations', replayConversations);
+}
+
+async function replayConversations(): Promise<void> {
   const environment = { ...base, ...await readEnv('projection') };
   await promisify(execFile)('npm', ['run', 'start', '-w', 'apps/ops', '--', 'conversations',
     '--confirm-conversations-stopped'], { cwd: root, env: environment, timeout: 120_000 });
 }
 
-async function restartStackServer(): Promise<void> {
-  const pidPath = `${directory}/server.pid`;
+async function restartStackProcess(
+  name: 'server' | 'conversations', whileStopped: () => Promise<void>,
+): Promise<void> {
+  const pidPath = `${directory}/${name}.pid`;
   const processRecord = (await readFile(pidPath, 'utf8')).trim().split(' ');
-  const serverPid = Number(processRecord[0]);
-  assert(Number.isInteger(serverPid) && serverPid > 1, 'The stack server PID is missing');
-  const statBeforeStop = await readFile(`/proc/${serverPid}/stat`, 'utf8');
+  const previousPid = Number(processRecord[0]);
+  assert(Number.isInteger(previousPid) && previousPid > 1, 'The stack process PID is missing');
+  const statBeforeStop = await readFile(`/proc/${previousPid}/stat`, 'utf8');
   const startToken = statStartToken(statBeforeStop);
-  assert.equal(startToken, processRecord[1], 'The stack server process changed');
-  const commandLine = (await readFile(`/proc/${serverPid}/cmdline`, 'utf8'))
+  assert.equal(startToken, processRecord[1], 'The stack process changed');
+  const commandLine = (await readFile(`/proc/${previousPid}/cmdline`, 'utf8'))
     .split('\0').filter(Boolean);
-  assert(commandLine.some(isServerEntrypoint), 'The stack server PID is not the server process');
-  const environmentEntries = (await readFile(`/proc/${serverPid}/environ`, 'utf8'))
+  const expectedEntrypoint = matchesStackEntrypoint.bind(null, name);
+  assert(commandLine.some(expectedEntrypoint), 'The stack PID has the wrong entry point');
+  if (name === 'conversations') {
+    assert(commandLine.includes(name), 'The stack PID is not the conversations worker');
+  }
+  const environmentEntries = (await readFile(`/proc/${previousPid}/environ`, 'utf8'))
     .split('\0').filter(Boolean);
-  const serverEnvironment = Object.fromEntries(environmentEntries.map(splitEnvironmentEntry));
-  const serverWorkingDirectory = await readFile(`/proc/${serverPid}/cwd`, 'utf8').catch(() => root);
-  process.kill(-serverPid, 'SIGTERM');
-  await until(async () => !await processExists(serverPid), 'old stack server stopped');
+  const processEnvironment = Object.fromEntries(environmentEntries.map(splitEnvironmentEntry));
+  const workingDirectory = await readFile(`/proc/${previousPid}/cwd`, 'utf8').catch(() => root);
+  process.kill(-previousPid, 'SIGTERM');
+  await until(async () => !await processExists(previousPid), `old ${name} process stopped`);
   await rm(pidPath, { force: true });
+  // Rebuild with both readers and the worker stopped before either restarts.
+  await whileStopped();
 
-  const log = await open(`${directory}/server.log`, 'a', 0o600);
+  const log = await open(`${directory}/${name}.log`, 'a', 0o600);
   try {
     const restarted = spawn(commandLine[0]!, commandLine.slice(1), {
-      cwd: serverWorkingDirectory, env: serverEnvironment, detached: true,
+      cwd: workingDirectory, env: processEnvironment, detached: true,
       stdio: ['ignore', log.fd, log.fd],
     });
     await once(restarted, 'spawn');
     const restartedPid = restarted.pid!;
     const restartedToken = await untilValue(() => processStartToken(restartedPid),
-      'new stack server process started');
+      `new ${name} process started`);
     await writeFile(pidPath, `${restartedPid} ${restartedToken}`, { mode: 0o600 });
     restarted.unref();
-    await until(async () => (await fetch(`${server}/healthz`).catch(returnUnavailable)).ok,
-      'restarted stack server health');
+    if (name === 'server') {
+      const healthUrl = `http://127.0.0.1:${settings['SERVER_PORT']}/healthz`;
+      const deadline = Date.now() + 120_000;
+      async function serverReady() {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) {
+          throw new Error('Timed out: restarted stack server health');
+        }
+        const signal = AbortSignal.timeout(remainingMs);
+        const requestOptions = { signal, redirect: 'manual' as const };
+        let response: Response;
+        try {
+          response = await fetch(healthUrl, requestOptions);
+        } catch (error) {
+          if (signal.aborted) {
+            throw new Error('Timed out: restarted stack server health');
+          }
+          response = returnUnavailable(error);
+        }
+        if (response.ok) return true;
+        if ([502, 503, 504].includes(response.status)) return false;
+        throw new Error(`restarted stack server health: HTTP ${response.status}`);
+      }
+      await until(serverReady, 'restarted stack server health');
+    }
   } finally {
     await log.close();
   }
 }
 
-function isServerEntrypoint(argument: string): boolean {
-  return argument.endsWith('apps/server/src/main.ts');
+function matchesStackEntrypoint(name: 'server' | 'conversations', argument: string): boolean {
+  if (name === 'server') {
+    return argument.endsWith('apps/server/src/main.ts');
+  }
+  return argument.endsWith('apps/ops/src/worker.ts');
 }
 
 function splitEnvironmentEntry(entry: string): [string, string] {
@@ -228,7 +269,12 @@ async function untilValue<T>(read: () => Promise<T | undefined>, label: string):
   throw new Error(`Timed out: ${label}`);
 }
 
-function returnUnavailable(): Response {
+function returnUnavailable(error: unknown): Response {
+  if (!(error instanceof TypeError)) throw error;
+  const cause = error.cause as { code?: string } | undefined;
+  const connectionErrors = ['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT',
+    'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'];
+  if (!cause?.code || !connectionErrors.includes(cause.code)) throw error;
   return new Response(null, { status: 503 });
 }
 
@@ -315,8 +361,9 @@ async function ensureNamedMember(memberId: string, displayName: string) {
     invitedIdentity: { issuer: config.issuerUrl, sub: identities.get(memberId)?.sub ?? `dev-${memberId}` },
     expiresAt: new Date(Date.now() + 3600_000).toISOString() }, 'dev-stack-journey',
   '378127409465593948');
+  // Skip personal computers for these colleagues so the demo assistant fits in this slot.
   await append('member.joined', `member-${memberId}`, { memberId, invitationId,
-    displayName, email, role: 'member' }, 'dev-stack-journey',
+    displayName, email, role: 'member', personalAssistant: 'none' }, 'dev-stack-journey',
   identities.get(memberId)?.sub ?? `dev-${memberId}`);
   await until(() => activeMember(memberId), `seeded member projection ${memberId}`);
 }
@@ -568,9 +615,9 @@ try {
         budgetAssistant.assistantId, budgetAssistant.groupId);
     }
   }
+  }
   const phase4Requested = process.env['P4_JOURNEY_ATTEMPT'] !== undefined;
   if (secondary && browser && phase4Requested) await runPhase4Journey();
-  }
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });
