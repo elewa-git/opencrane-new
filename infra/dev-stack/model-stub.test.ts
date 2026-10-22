@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
+import { turnInput } from '../../apps/computer/src/turn-input.ts';
 
 const exec = promisify(execFile);
 const stubPath = new URL('./model-stub.ts', import.meta.url).pathname;
@@ -217,3 +218,54 @@ async function handlesMissingCredential() {
 }
 test('missing and empty credential files never match or disclose a bearer or file location',
   { timeout: 15_000 }, handlesMissingCredential);
+
+async function readsPdfWhenInlineTextIsUnavailable() {
+  const environment = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_GENERATION: randomUUID(),
+    MODEL_STUB_MCP_REVISION: catalogueDigest([approvalJourneyTool()]) };
+  const options = { env: environment, stdio: ['ignore', 'pipe', 'pipe'] as const };
+  const stub = spawn(process.execPath, ['--experimental-strip-types', stubPath], options);
+  function unavailableText(): Promise<Buffer> {
+    return Promise.reject(new Error('Attachment text unavailable'));
+  }
+  function emptyText() {
+    return Promise.resolve(Buffer.alloc(0));
+  }
+  try {
+    const [readyOutput] = await once(stub.stdout, 'data');
+    assert(Buffer.isBuffer(readyOutput));
+    const port = /Stub ready (\d+)/u.exec(readyOutput.toString())?.[1];
+    assert(port, 'The disposable stub must report its listening port');
+    const endpoint = `http://127.0.0.1:${port}/v1/responses`;
+    const files = [{ fileId: 'pdf', name: 'project.pdf', mime: 'application/pdf' }];
+    for (const read of [unavailableText, emptyText]) {
+      const text = await turnInput('What is the project code in the attached PDF?',
+        'conversation', files, read);
+      const user = { type: 'message', role: 'user', content: [{ type: 'input_text', text }] };
+      const request = { method: 'POST', body: JSON.stringify({ input: [user] }) };
+      const response = await fetch(endpoint, request);
+      assert.equal(response.status, 200);
+      const events = await response.text();
+      assert.match(events, /"type":"custom_tool_call"/u,
+        'Missing inline text must request a file read rather than answer with a failure');
+      assert(events.includes('cat /workspace/uploads/conversation/pdf/project.pdf.md'));
+      assert(!events.includes('PDF reading failed.'));
+
+      const result = { type: 'custom_tool_call_output', call_id: 'read-pdf',
+        output: [{ type: 'input_text', text: 'Project code: Hazel-83.' }] };
+      const followUp = { method: 'POST', body: JSON.stringify({ input: [user, result] }) };
+      const answer = await fetch(endpoint, followUp);
+      const completed = await answer.text();
+      assert(completed.includes('The project code is Hazel-83.'));
+      assert(completed.includes('event: response.completed'));
+      assert(!completed.includes('"type":"custom_tool_call"'),
+        'A completed read must answer rather than request the same file again');
+    }
+  } finally {
+    const stopped = once(stub, 'exit');
+    stub.kill('SIGTERM');
+    await stopped;
+  }
+}
+test('the PDF stand-in reads the converted file when inline text is unavailable or empty',
+  { timeout: 15_000 }, readsPdfWhenInlineTextIsUnavailable);
