@@ -1,0 +1,2 @@
+- Keep computer CI image checks reliable when temporary paths contain `-i` or a signed gate crosses a second boundary.
+- Stop computer image installation when the required Linux Codex package cannot be downloaded, retry package fetches and check the native host immediately after installation.

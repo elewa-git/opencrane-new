@@ -117,6 +117,9 @@ npm run test:image -w apps/computer
 npm run typecheck -w apps/computer
 ```
 
+The image build requires the Linux Codex programs. A missing download stops the build
+before image checks begin.
+
 Both image commands need Docker and the dev stack's local Kubernetes cluster.
 `build:image` also runs the image tests and updates `sandbox-template.json` with the
 new image.

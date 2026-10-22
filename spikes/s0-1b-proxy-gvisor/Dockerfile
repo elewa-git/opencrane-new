@@ -1,7 +1,9 @@
 FROM mirror.gcr.io/library/node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
 WORKDIR /spike
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && ln -s /spike/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
+RUN npm ci --omit=dev --fetch-retries=5 && \
+    test -x /spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host && \
+    ln -s /spike/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
 COPY .state/tool-user /usr/local/bin/tool-user
 COPY common.mjs computer.mjs services.mjs probe.mjs driver.mjs ./
 RUN rm -rf /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/corepack && \
