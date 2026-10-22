@@ -2450,7 +2450,7 @@ async function closeDuringHistoryRetry(code: number) {
   await vi.advanceTimersByTimeAsync(0);
   expect(reads).toHaveLength(1);
   socket.onclose(new CloseEvent('close', { code }));
-  return { api, fixture, reads, finishApplying() { applying = false; } };
+  return { api, fixture, reads, finishApplying(this: void) { applying = false; } };
 }
 
 async function stopsHistoryOnSocketClose(code: number): Promise<void> {

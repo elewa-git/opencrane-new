@@ -22,7 +22,7 @@ import {
   newDirectCommandId, requestedDirectConversationId, updateDirectConversationAddress,
 } from './direct-chat-address';
 import {
-  appendDirectMessage, directColleagueById, directConversationById, directConversationTitle,
+  appendDirectMessage, directConversationById, directConversationTitle,
   directConversations, directInitials,
   directConversationHeaderTitle, directConversationMode, directDraftKey, directMessageText,
   directPendingNavigationTitle,
@@ -30,7 +30,7 @@ import {
   formatDirectTime,
   exceedsDirectRecipientLimit, focusDirectComposer, hasDirectMessage,
   directConversationsAfterParticipantEvent, isDirectTranscriptNearNewest,
-  otherParticipant, readDirectUpdate, scrollDirectTranscript,
+  directReceivedMessageNotice, readDirectUpdate, scrollDirectTranscript,
   directAuthorName, directIsOwnMessage, directRecipientName, groupAuthorName,
   trapDirectDialogFocus,
 } from './direct-chat-display';
@@ -312,13 +312,8 @@ export class DirectChat implements OnInit, OnDestroy {
     if (this.pendingNavigationBlocked()) return;
     const conversation = directConversationById(this.conversations(), conversationId);
     if (!conversation || (conversation.mode !== 'direct' && conversation.mode !== 'group')) return;
-    let selectedColleague: Colleague | undefined;
-    if (conversation.mode === 'direct') {
-      const otherId = otherParticipant(conversation.participantIds, this.currentMemberId);
-      if (!otherId) return;
-      const candidate = directColleagueById(this.knownColleagues(), otherId);
-      selectedColleague = candidate ?? { memberId: otherId, displayName: null };
-    }
+    const selectedColleague = this.people.forConversation(conversation, this.currentMemberId);
+    if (conversation.mode === 'direct' && !selectedColleague) return;
     const changed = this.selectedConversationId() !== conversationId;
     if (changed) this.rememberDraft();
     this.colleague.set(selectedColleague);
@@ -658,13 +653,9 @@ export class DirectChat implements OnInit, OnDestroy {
     this.position = update.row.position;
     this.scrollToNewest = this.followNewest;
     if (hasDirectMessage(this.messages(), this.recordedMessage())) this.recordedMessage.set('');
-    if (update.row.type === 'message.posted'
-      && !directIsOwnMessage(update.row, this.currentMemberId)) {
-      const authorName = this.selectedConversation()?.mode === 'group'
-        ? groupAuthorName(update.row, this.currentMemberId, this.knownColleagues())
-        : directRecipientName(this.colleague());
-      this.statusText.set(`New message from ${authorName}`);
-    }
+    const notice = directReceivedMessageNotice(update.row, this.currentMemberId,
+      this.selectedConversation(), this.colleague(), this.knownColleagues());
+    if (notice) this.statusText.set(notice);
   }
 
   private shouldFollowTranscript(conversationId: string): boolean {

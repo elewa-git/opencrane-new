@@ -1,7 +1,10 @@
 import { signal } from '@angular/core';
+import type { ChatConversation } from '@opencrane/protocol';
 import type { Colleague } from './recipient-picker';
 import { searchColleagues } from './direct-chat-api';
-import { mergeDirectColleagues } from './direct-chat-display';
+import {
+  directColleagueById, mergeDirectColleagues, otherParticipant,
+} from './direct-chat-display';
 
 type ReadState = 'idle' | 'loading' | 'ready' | 'failed';
 
@@ -37,6 +40,14 @@ export class DirectChatColleagues {
     }
     this.state.set('failed');
     if (result.kind === 'access_changed') this.accessChanged();
+  }
+
+  forConversation(conversation: ChatConversation, memberId: string): Colleague | undefined {
+    if (conversation.mode !== 'direct') return undefined;
+    const otherId = otherParticipant(conversation.participantIds, memberId);
+    if (!otherId) return undefined;
+    const colleague = directColleagueById(this.known(), otherId);
+    return colleague ?? { memberId: otherId, displayName: null };
   }
 
   clear(): void {
