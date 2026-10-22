@@ -351,6 +351,33 @@ it.each(['computer-assistant', 'conversation-conversation', grantStream('model',
   'refuses %s history restored below its summary without reserving more money',
   refusesRestoredHistory, 40_000);
 
+async function freshDecisionHeaders(setup: Fixture) {
+  return setup.issue();
+}
+
+async function refreshesExpiredFixtureCredentials() {
+  const setup = await fixture();
+  try {
+    // Reproduce preparation outlasting the turn token without waiting two minutes.
+    setup.credentialTime(-121);
+    const staleHeaders = await setup.issue();
+    const refused = await decide(setup, setup.options.decisionUrl, staleHeaders);
+    expect(refused.status, refused.text).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    await waitForDecisionGrants(setup, performance.now() + 15_000);
+    const headers = await freshDecisionHeaders(setup);
+    const ready = await decide(setup, setup.options.decisionUrl, headers);
+    expect(ready.status, ready.text).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refreshes an expired fixture turn token before warming admission',
+  refreshesExpiredFixtureCredentials);
+
 async function waitForDecisionGrants(setup: Fixture, deadline: number) {
   const grants = await readDecisionGrants(setup.nats.store, 'test', 'gpt-6-luna', deadline);
   const granteeSchema = z.object({ granteeId: z.string(), granteeKind: z.string() });
@@ -443,7 +470,7 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     await setup.nats.seed(events);
     vi.spyOn(store, 'readStream').mockImplementation(recordGrantRead);
     // Stop cold history before access checks so its refusal cannot reach a saved Allow.
-    const coldHeaders = await setup.issue();
+    const coldHeaders = await freshDecisionHeaders(setup);
     const warmed = await decide(setup, setup.options.decisionUrl, coldHeaders);
     expect(coldReadPaused).toBe(true);
     expect(warmed.status, warmed.text).toBe(403);
@@ -459,14 +486,14 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     // Keep the existing two-minute history budget outside the measured admission.
     const grantHistoryDeadline = performance.now() + 120_000;
     await waitForDecisionGrants(setup, grantHistoryDeadline);
-    const readyHeaders = await setup.issue();
+    const readyHeaders = await freshDecisionHeaders(setup);
     const ready = await decide(setup, setup.options.decisionUrl, readyHeaders);
     expect(ready.status, ready.text).toBe(200);
     expect(setup.actor.state.reservations).toHaveLength(1);
     const reservationsBefore = setup.actor.state.reservations.length;
     const summaryPosition = await store.head(subject);
     const reads = countReads(store);
-    const headers = await setup.issue();
+    const headers = await freshDecisionHeaders(setup);
     const began = performance.now();
     const result = await decide(setup, setup.options.decisionUrl, headers);
     expect(result.status, result.text).toBe(200);
