@@ -495,3 +495,65 @@ containers and volumes were absent after cleanup.
 
 Paid answers, member disk isolation and physical-phone checks remain NOT RUN.
 GitHub CI is reported separately for the final pushed head.
+
+## Upload list after Ready (22 October 2026)
+
+Status: PARTIAL. The regression tests pass. The single fresh nightly attempt is
+FAIL at web startup, before the upload checks. Three fresh upload passes remain
+for this card.
+
+The upload POST saved `file.uploaded` and returned HTTP 201 before the files worker
+updated `conversation_files`. The old GET then returned HTTP 200 with an empty
+list. Test-first commit `d736efcc4` reproduced that exact result with real NATS,
+PostgreSQL and OpenFGA. Test-first commit `40b56de48` showed that the browser upload
+operation completed without checking whether the file list was available.
+
+GET now returns HTTP 425 while the `files` checkpoint is behind the latest upload
+in that conversation. Other chat activity and rejected uploads do not hold up the
+list. The page uses the existing bounded read retries before completing its upload
+operation. Cancellation stops those reads, and HTTP 403 is not retried. The existing
+workspace delivery check still controls Ready. No event, dependency or authority
+check changed.
+
+PASS: the final changed tests twice, with 10 server tests and 87 browser tests per
+run; all 438 event-security tests once; workspace typecheck; focused journey and
+final server/web typechecks; event catalogue; Knip; changelog check. Full repository
+lint: PASS, with 24 warnings in unchanged code. Tests, typechecks, lint and browser
+builds used `nice -n 10`.
+The server tests used throwaway PostgreSQL containers selected through `PG_TEST_URL`;
+both containers and their volumes were removed. The event-security run used the
+requested database on port 55432. The full root suite is NOT RUN.
+
+The first lint run found three test-fixture errors. Those were corrected. A separate
+dependency check found a type-import cycle in the file-list helper; its final check
+passed after the helper used the existing chat options type. The last change affects
+TypeScript types only. The two authority test files and event-security test are
+unchanged.
+
+The nightly used source `f7b81491d5e9ec24f657a8d8b1c57a09a0815428`, from
+19:37:59 to 19:46:32 UTC. Its attempt was
+`nightly-20261022T193759-c67e4dbf-24db-4d87-9faf-333d9bbb15fc`.
+`infra/dev-stack/claim.sh` reserved secondary slot 2. The command was
+`nice -n 10 infra/dev-stack/daily-fresh.sh`, with `ZITADEL_KEY_FILE` pointing to the
+existing private file. The nightly selected the free stand-in model and requested
+a fresh install. The owner stack and port 44200 were untouched.
+
+| Check | Result |
+| --- | --- |
+| Owner bootstrap and provider setup | PASS |
+| Web readiness on port 25206 | FAIL: startup wait expired |
+| Personal chat and browser upload | NOT RUN |
+| HTTP upload, delivery and malware checks | NOT RUN |
+| Later group and replay checks | NOT RUN |
+| Slot cleanup | PASS |
+
+The retained failure is `Timed out waiting for web`. The sanitised `web.log`
+contains only a build-start line; it does not establish why the build did not finish.
+Repository lint was running at low priority during startup. This work ran no test suite or
+separate repository build alongside the nightly. No second attempt was made.
+Cleanup removed the slot directory, Compose containers and volumes.
+
+Sanitised failure logs remain under
+`~/.opencrane/daily-fresh/nightly-20261022T193759-c67e4dbf-24db-4d87-9faf-333d9bbb15fc/`.
+The final type-import correction happened after this attempt and does not change
+runtime behaviour. This run gives no live upload qualification credit.
