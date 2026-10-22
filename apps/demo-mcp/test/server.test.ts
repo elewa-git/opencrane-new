@@ -32,16 +32,18 @@ async function readFixture() {
     payload: wire('tools/call', 'read_fixture_quote', quote) });
   return response.json<{ result: { structuredContent: unknown } }>().result.structuredContent;
 }
-beforeEach(async function prepare() {
+async function prepare() {
   server = createDemoServer();
   const inventory = await discoverInventory(inventoryCall);
   revision = inventory.schemaDigest;
-});
-afterEach(async function close() {
+}
+beforeEach(prepare);
+async function close() {
   await server.close();
-});
+}
+afterEach(close);
 
-it('offers complete public discovery and exact zero-cost review declarations', async function () {
+async function describePublicTools() {
   const inventory = await discoverInventory(inventoryCall);
   expect(inventory.rejectedTools).toEqual([]);
   expect(inventory.tools).toHaveLength(2);
@@ -60,9 +62,10 @@ it('offers complete public discovery and exact zero-cost review declarations', a
   const catalogue: unknown = JSON.parse(await inventoryCall('tools/list'));
   expect(catalogue).toMatchObject({ resultType: 'complete', ttlMs: 300000, cacheScope: 'public' });
   expect(catalogue).not.toHaveProperty('nextCursor');
-});
+}
+it('offers complete public discovery and exact zero-cost review declarations', describePublicTools);
 
-it('echoes ids and changes only this process once per accepted call', async function () {
+async function changeOnceAndReset() {
   expect(await readFixture()).toMatchObject({ ...quote, amountCents: 12500,
     slot: 'morning', effectCount: 0 });
   const payload = wire();
@@ -79,7 +82,8 @@ it('echoes ids and changes only this process once per accepted call', async func
   await server.close();
   server = createDemoServer();
   expect(await readFixture()).toMatchObject({ slot: 'morning', effectCount: 0 });
-});
+}
+it('echoes ids and changes only this process once per accepted call', changeOnceAndReset);
 
 const refusals = [
   { label: 'empty revision', patch: { 'x-opencrane-mcp-revision': '' } },
@@ -91,13 +95,14 @@ const refusals = [
   { label: 'credential', patch: { authorization: 'Bearer sensitive-marker' } },
   { label: 'media type', patch: { 'content-type': 'text/plain' } },
 ];
-it.each(refusals)('refuses $label before an effect', async function ({ patch }) {
+async function refuseHeaders({ patch }: (typeof refusals)[number]) {
   const response = await server.inject({ method: 'POST', url: '/',
     headers: { ...headers(), ...patch }, payload: JSON.stringify(wire()) });
   expect(response.json()).toHaveProperty('error');
   expect(response.body).not.toContain('sensitive-marker');
   expect(await readFixture()).toMatchObject({ effectCount: 0 });
-});
+}
+it.each(refusals)('refuses $label before an effect', refuseHeaders);
 
 const invalidBodies = [
   JSON.stringify(wire('initialize')), JSON.stringify(wire('initialise')),
@@ -114,32 +119,84 @@ const invalidBodies = [
   JSON.stringify({ ...wire(), params: { ...wire().params, _meta: { ...metadata, extra: true } } }),
   JSON.stringify({ ...wire(), params: { ...wire().params,
     _meta: { ...metadata, progressToken: 'x'.repeat(201) } } }),
-  JSON.stringify({ ...wire('tools/list'), params: { _meta: metadata, arguments: change } }),
-  Buffer.from([0xff, 0xfe]), ' '.repeat(16385),
 ];
-it.each(invalidBodies)('refuses invalid input %# before an effect', async function (payload) {
+async function refuseInvalidBody(payload: string) {
   const response = await server.inject({ method: 'POST', url: '/', headers: headers(), payload });
   expect(response.json()).toHaveProperty('error');
   expect(response.body).not.toContain('sensitive-marker');
   expect(await readFixture()).toMatchObject({ effectCount: 0 });
-});
+}
+it.each(invalidBodies)('refuses invalid input %# before an effect', refuseInvalidBody);
 
-it.each(['GET', 'DELETE'] as const)('refuses %s without a session', async function (method) {
+async function refuseOversizedCall() {
+  const payload = JSON.stringify(wire()) + ' '.repeat(16384);
+  const response = await server.inject({ method: 'POST', url: '/', headers: headers(), payload });
+  expect.soft(await readFixture()).toMatchObject({ effectCount: 0 });
+  expect(response.json()).toHaveProperty('error');
+}
+it('refuses an otherwise valid call padded past the byte limit', refuseOversizedCall);
+
+async function refuseMalformedUtf8() {
+  const payload = Buffer.from(JSON.stringify(wire()));
+  // Corrupt the id so replacement decoding would leave an otherwise valid call.
+  payload[payload.indexOf('demo-request')] = 0xff;
+  const response = await server.inject({ method: 'POST', url: '/', headers: headers(), payload });
+  expect.soft(await readFixture()).toMatchObject({ effectCount: 0 });
+  expect(response.json()).toHaveProperty('error');
+}
+it('refuses malformed UTF-8 inside a JSON string before an effect', refuseMalformedUtf8);
+
+async function refuseListArguments() {
+  const payload = {
+    ...wire('tools/list'),
+    params: { _meta: metadata, arguments: { unexpected: true } },
+  };
+  const response = await server.inject({
+    method: 'POST', url: '/', headers: headers('tools/list', ''), payload,
+  });
+  expect.soft(await readFixture()).toMatchObject({ effectCount: 0 });
+  expect(response.json()).toHaveProperty('error');
+}
+it('refuses tools/list arguments even when headers agree', refuseListArguments);
+
+async function acceptConcurrentCalls() {
+  const firstCall = server.inject({
+    method: 'POST', url: '/', headers: headers(), payload: { ...wire(), id: 'first' },
+  });
+  const secondCall = server.inject({
+    method: 'POST', url: '/', headers: headers(), payload: { ...wire(), id: 'second' },
+  });
+  const [firstResponse, secondResponse] = await Promise.all([firstCall, secondCall]);
+  expect(firstResponse.json()).toMatchObject({
+    id: 'first', result: { isError: false, structuredContent: { ...change, effectCount: 1 } },
+  });
+  expect(secondResponse.json()).toMatchObject({
+    id: 'second', result: { isError: false, structuredContent: { ...change, effectCount: 2 } },
+  });
+  expect(await readFixture()).toMatchObject({ ...change, effectCount: 2 });
+  const inventory = await discoverInventory(inventoryCall);
+  expect(inventory.schemaDigest).toBe(revision);
+}
+it('accepts two concurrent calls with the same catalogue revision once each', acceptConcurrentCalls);
+
+async function refuseSessionMethod(method: 'GET' | 'DELETE') {
   const response = await server.inject({ method, url: '/' });
   expect(response.statusCode).toBe(405);
   expect(response.headers['mcp-session-id']).toBeUndefined();
   expect(await readFixture()).toMatchObject({ effectCount: 0 });
-});
+}
+it.each(['GET', 'DELETE'] as const)('refuses %s without a session', refuseSessionMethod);
 
+async function refuseUnsupportedMethod(method: string) {
+  const response = await server.inject({ method: 'POST', url: '/',
+    headers: headers(method, ''), payload: wire(method) });
+  expect(response.json()).toHaveProperty('error');
+  expect(await readFixture()).toMatchObject({ effectCount: 0 });
+}
 it.each(['initialize', 'initialise', 'notifications/initialized', 'resources/list'])(
-  'refuses unsupported %s even when headers agree', async function (method) {
-    const response = await server.inject({ method: 'POST', url: '/',
-      headers: headers(method, ''), payload: wire(method) });
-    expect(response.json()).toHaveProperty('error');
-    expect(await readFixture()).toMatchObject({ effectCount: 0 });
-  });
+  'refuses unsupported %s even when headers agree', refuseUnsupportedMethod);
 
-it('requires a revision and serves JSON over a real local socket', async function () {
+async function serveLocalSocket() {
   const address = await server.listen({ host: '127.0.0.1', port: 0 });
   const withoutRevision: Record<string, string> = headers();
   delete withoutRevision['x-opencrane-mcp-revision'];
@@ -153,14 +210,16 @@ it('requires a revision and serves JSON over a real local socket', async functio
   expect(response.headers.get('mcp-session-id')).toBeNull();
   expect(await response.json()).toMatchObject({ id: 7,
     result: { structuredContent: { effectCount: 1 } } });
-});
+}
+it('requires a revision and serves JSON over a real local socket', serveLocalSocket);
 
+async function refuseInvalidArguments(name: string) {
+  const response = await server.inject({ method: 'POST', url: '/',
+    headers: headers('tools/call', name),
+    payload: wire('tools/call', name, { ...quote, extra: 'sensitive-marker' }) });
+  expect(response.json()).toHaveProperty('error');
+  expect(response.body).not.toContain('sensitive-marker');
+  expect(await readFixture()).toMatchObject({ effectCount: 0 });
+}
 it.each(['read_fixture_quote', 'change_delivery_slot', 'unknown_tool'])(
-  'checks arguments and tool names for %s with matching headers', async function (name) {
-    const response = await server.inject({ method: 'POST', url: '/',
-      headers: headers('tools/call', name),
-      payload: wire('tools/call', name, { ...quote, extra: 'sensitive-marker' }) });
-    expect(response.json()).toHaveProperty('error');
-    expect(response.body).not.toContain('sensitive-marker');
-    expect(await readFixture()).toMatchObject({ effectCount: 0 });
-  });
+  'checks arguments and tool names for %s with matching headers', refuseInvalidArguments);
