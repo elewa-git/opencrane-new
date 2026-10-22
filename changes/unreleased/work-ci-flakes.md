@@ -1,3 +1,2 @@
-- Keep CI image checks reliable when temporary paths contain `-i`, a signed gate crosses a second boundary, or admission warm-up needs extra reservations. Preserve the two-second admission check and verify zero-cent release for refused warm-ups.
+- Keep computer CI image checks reliable when temporary paths contain `-i` or a signed gate crosses a second boundary.
 - Stop computer image installation when the required Linux Codex package cannot be downloaded, retry package fetches and check the native host immediately after installation.
-- Keep background event delivery out of the long-grant admission benchmarks while retaining their real event history and timing limits.
