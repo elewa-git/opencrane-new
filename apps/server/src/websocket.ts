@@ -42,16 +42,26 @@ function toUtf8(raw: Buffer | ArrayBuffer | Buffer[]): string {
   return Buffer.from(raw).toString('utf8');
 }
 
-function heartbeat(socket: WebSocket) {
+function heartbeat(socket: WebSocket, intervalMs: number) {
   let alive = true;
-  socket.on('pong', () => { alive = true; });
-  const timer = setInterval(() => {
-    if (!alive || socket.readyState !== socket.OPEN) { socket.terminate(); return; }
+  function markAlive() {
+    alive = true;
+  }
+  function checkAlive() {
+    if (!alive || socket.readyState !== socket.OPEN) {
+      socket.terminate();
+      return;
+    }
     alive = false;
     socket.ping();
-  }, 15_000);
+  }
+  socket.on('pong', markAlive);
+  const timer = setInterval(checkAlive, intervalMs);
   timer.unref();
-  socket.once('close', () => clearInterval(timer));
+  function stopHeartbeat() {
+    clearInterval(timer);
+  }
+  socket.once('close', stopHeartbeat);
 }
 
 export function attachWebSocketServer(
@@ -60,7 +70,12 @@ export function attachWebSocketServer(
   authConfig: AuthConfig,
   realtime?: RealtimeOptions,
   sessionNow: () => Date = () => new Date(),
+  heartbeatIntervalMs = 15_000,
 ): WebSocketServer {
+  if (!Number.isSafeInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 1 ||
+      heartbeatIntervalMs > 2_147_483_647) {
+    throw new Error('WebSocket heartbeat interval must be a positive timer-safe integer');
+  }
   // Check the Origin as well as the session cookie. SameSite=Lax blocks other
   // sites, but a sibling subdomain is still the same site and could use the
   // cookie to open a socket. This deployment has one front-end origin, taken
@@ -115,7 +130,7 @@ export function attachWebSocketServer(
     const subscribe = memberSubscription(socket, session, authConfig, logger, realtime);
     const chat = conversationSubscription(socket, session, authConfig, realtime?.chat);
     let subscribed = false;
-    heartbeat(socket);
+    heartbeat(socket, heartbeatIntervalMs);
     let windowStart = Date.now();
     let messages = 0;
     socket.on('message', (raw: Buffer | ArrayBuffer | Buffer[]) => {

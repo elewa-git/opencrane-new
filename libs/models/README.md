@@ -37,6 +37,9 @@ the first use time and adds another dated use; use alone never proves success.
 
 Approval cards include the turn they belong to. The chat hides decisions after that turn stops.
 
+The tool-list watcher allows 30 seconds for each check by default. Tests can use
+a shorter timeout while checking the same failure and recovery behaviour.
+
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
 Remote calls also need the running catalogue watch at admission and just before sending.
 A new hold refuses an already permitted call before it reaches the remote server.

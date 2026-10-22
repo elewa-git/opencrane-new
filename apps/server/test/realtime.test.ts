@@ -294,16 +294,9 @@ it('drops live deltas for a paused consumer and replays every missing position o
 // Allow 15 seconds for reconnecting, plus time to fill TCP buffers and save
 // large rows on a busy machine.
 }, 60_000);
-it('terminates a peer that does not answer heartbeats', async () => {
+async function checksHeartbeatPeers() {
   await useShortHeartbeats();
-  const client = await connect('oidc-alice', 'org-acme', false);
-  const closed = once(client.ws, 'close');
-  expect((await closed)[0]).toBe(1006);
-}, 5000);
-
-async function keepsAnsweringPeerConnected() {
-  await useShortHeartbeats();
-  const client = await connect();
+  const answering = await connect();
   const answered = Promise.withResolvers<void>();
   let pings = 0;
   function receivedPing() {
@@ -312,11 +305,16 @@ async function keepsAnsweringPeerConnected() {
       answered.resolve();
     }
   }
-  client.ws.on('ping', receivedPing);
+  answering.ws.on('ping', receivedPing);
+  const silent = await connect('oidc-alice', 'org-acme', false);
+  const connectedAt = performance.now();
+  const closed = once(silent.ws, 'close');
+  expect((await closed)[0]).toBe(1006);
   await answered.promise;
-  expect(client.ws.readyState).toBe(WebSocket.OPEN);
+  expect(answering.ws.readyState).toBe(WebSocket.OPEN);
+  expect(performance.now() - connectedAt).toBeLessThan(3000);
 }
-it('keeps a peer connected while it answers heartbeats', keepsAnsweringPeerConnected, 5000);
+it('terminates a peer that does not answer heartbeats', checksHeartbeatPeers, 20_000);
 
 async function refusesStaleAuthority(change: 'member.role_changed' | 'member.removed') {
   await append('bob');

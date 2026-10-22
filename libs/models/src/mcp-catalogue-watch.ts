@@ -10,9 +10,14 @@ interface Options {
   serverIds: string[];
   capture: (serverId: string, signal: AbortSignal) => Promise<Catalogue>;
   requireLeader: () => Promise<void>;
+  timeoutMs?: number;
 }
 
 export function mcpCatalogueWatch(store: EventStore, silo: string, options: Options) {
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2_147_483_647) {
+    throw new Error('Catalogue watch timeout must be a positive timer-safe integer');
+  }
   const servers = new Map<string, ReturnType<typeof newWatch>>();
   if (options.serverIds.length > 32) throw new Error('Catalogue watch limit');
   for (const serverId of options.serverIds) {
@@ -93,7 +98,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       holdWatch(state);
       controller.abort(new Error('Catalogue watch timeout'));
     }
-    const timer = setTimeout(expire, 30_000);
+    const timer = setTimeout(expire, timeoutMs);
     async function run() {
       try {
         const refreshing = refresh(serverId, state, controller.signal);
@@ -122,7 +127,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
 
   async function refresh(serverId: string, state: ReturnType<typeof newWatch>,
     signal: AbortSignal) {
-    const deadline = performance.now() + 30_000;
+    const deadline = performance.now() + timeoutMs;
     await options.requireLeader();
     let policy = await readToolPolicy(store, silo, serverId, deadline);
     let invalidated = state.held;
