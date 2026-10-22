@@ -210,14 +210,20 @@ async function namesNightlyAttempts() {
   try {
     await exec(fixture.command, fixture.options);
     await exec(fixture.command, fixture.options);
-    const attempts = (await readFile(`${fixture.home}/attempts`, 'utf8')).trim().split('\n');
+    const attemptsFile = await readFile(`${fixture.home}/attempts`, 'utf8');
+    const attemptsText = attemptsFile.trim();
+    const attempts = attemptsText.split('\n');
     assert.equal(attempts.length, 2);
     assert.notEqual(attempts[0], attempts[1]);
-    for (const attempt of attempts) assert.match(attempt, /^nightly-[a-zA-Z0-9-]+$/u);
+    for (const attempt of attempts) {
+      assert.match(attempt, /^nightly-[a-zA-Z0-9-]+$/u);
+    }
     const cleanup = await readFile(`${fixture.home}/cleanup`, 'utf8');
     assert.equal(cleanup, '--id 2\n--id 2\n');
     const ledger = await readFile(`${fixture.home}/.opencrane/daily-fresh/ledger.md`, 'utf8');
-    for (const attempt of attempts) assert.ok(ledger.includes(attempt));
+    for (const attempt of attempts) {
+      assert.ok(ledger.includes(attempt));
+    }
   } finally {
     await rm(fixture.home, { recursive: true, force: true });
   }

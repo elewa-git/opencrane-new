@@ -201,9 +201,26 @@ async function restartStackProcess(
     restarted.unref();
     if (name === 'server') {
       const healthUrl = `http://127.0.0.1:${settings['SERVER_PORT']}/healthz`;
+      const deadline = Date.now() + 120_000;
       async function serverReady() {
-        const response = await fetch(healthUrl).catch(returnUnavailable);
-        return response.ok;
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) {
+          throw new Error('Timed out: restarted stack server health');
+        }
+        const signal = AbortSignal.timeout(remainingMs);
+        const requestOptions = { signal, redirect: 'manual' as const };
+        let response: Response;
+        try {
+          response = await fetch(healthUrl, requestOptions);
+        } catch (error) {
+          if (signal.aborted) {
+            throw new Error('Timed out: restarted stack server health');
+          }
+          response = returnUnavailable(error);
+        }
+        if (response.ok) return true;
+        if ([502, 503, 504].includes(response.status)) return false;
+        throw new Error(`restarted stack server health: HTTP ${response.status}`);
       }
       await until(serverReady, 'restarted stack server health');
     }
@@ -252,7 +269,12 @@ async function untilValue<T>(read: () => Promise<T | undefined>, label: string):
   throw new Error(`Timed out: ${label}`);
 }
 
-function returnUnavailable(): Response {
+function returnUnavailable(error: unknown): Response {
+  if (!(error instanceof TypeError)) throw error;
+  const cause = error.cause as { code?: string } | undefined;
+  const connectionErrors = ['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT',
+    'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'];
+  if (!cause?.code || !connectionErrors.includes(cause.code)) throw error;
   return new Response(null, { status: 503 });
 }
 

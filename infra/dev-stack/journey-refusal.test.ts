@@ -220,6 +220,7 @@ async function restartHealthFixture(statuses: Array<number | 'connection' | 'han
       const cause = { code: 'ECONNREFUSED' };
       throw new TypeError('fetch failed', { cause });
     }
+    assert(typeof result === 'number', 'The health fixture must supply an HTTP status');
     return new Response(null, { status: result });
   }
   async function readFixtureFile(path: string) {
