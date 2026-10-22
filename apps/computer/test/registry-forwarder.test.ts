@@ -72,16 +72,15 @@ async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT', phase = 'download')
   let curlScript = '#!/bin/sh\ncase "$*" in\n *v2*) exit 0;;\nesac\necho waiting\nsleep 60\n';
   if (phase === 'contents') {
     dockerScript = `#!/bin/sh
-case "$*" in
- *--rm*-i*)
+if [ "$1 $2 $3" = "run --rm -i" ]; then
   cat >/dev/null &
   reader_pid=$!
   echo image-check-ready
   wait "$reader_pid"
   sleep 60
-  ;;
- inspect*) echo 127.0.0.1;;
-esac
+elif [ "$1" = "inspect" ]; then
+  echo 127.0.0.1
+fi
 `;
     curlScript = '#!/bin/sh\nexit 0\n';
     for (const name of ['sha256sum', 'tar']) {
@@ -98,6 +97,7 @@ esac
   let output = '';
   function collect(chunk: Buffer) { output += chunk.toString(); }
   child.stdout.on('data', collect);
+  child.stderr.on('data', collect);
   let socket: Socket | undefined;
   try {
     let readinessSignal = 'waiting';
@@ -107,7 +107,9 @@ esac
     // Allow a heavily loaded CI worker a full minute to start the shell and both child processes.
     const deadline = Date.now() + 60_000;
     while (!output.includes(readinessSignal) || !output.includes('Forwarding')) {
-      if (Date.now() > deadline) throw new Error('Build fixture did not start');
+      if (Date.now() > deadline) {
+        throw new Error(`Build fixture did not start:\n${output}`);
+      }
       await delay(20);
     }
     child.kill(signal);

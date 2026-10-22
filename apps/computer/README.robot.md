@@ -398,6 +398,14 @@ stack or pre-existing image is required. This test image is never published;
 release builds keep the reviewed S0.5 base by default. Run the same preparation
 before `npm test` on a clean Linux amd64 development machine. Hosted CI caches
 the build layers, including the base and compiler stages, with Docker Bake.
+The shared Codex lockfile requires the Linux x64 package directly. npm must fail
+if that download fails. The spike image retries fetches five times and checks
+that `codex-code-mode-host` is executable immediately after installation.
+`test/codex-install.test.ts` installs that lockfile with optional packages omitted
+and checks the executable. The already reviewed Apache-2.0 pin is unchanged.
+`test/registry-forwarder.test.ts` keeps `-i` in its temporary volume path. Its
+Docker stand-in matches the three exact interactive-run arguments, so a path
+cannot select the wrong check. Startup failures include both output streams.
 The scanner fixture builds `infra/clamav` from its pinned public digest, including
 offline signatures and excluding UnRAR.
 
@@ -935,7 +943,9 @@ delivery. It accepts only an ES256 gate with `kid: lifecycle`, audience and
 be at most five seconds ahead. The signed silo, computer, assistant, generation
 and Pod UID must match the saved identity. A missing key or any mismatch closes
 the socket with code 1008 and the fixed reason `Invalid bridge message`, before
-any stop or cleanup. The signed gate never enters errors, logs or receipts.
+any stop or cleanup. The future-issue test signs 60 seconds ahead with a 30-second
+lifetime, then waits across a second boundary before sending. It allows five
+seconds for socket closure without changing the gate's five-second clock allowance. The signed gate never enters errors, logs or receipts.
 
 `bridge_gate` carries only `type` and `gate`. Verified claims supply `takeoverId`,
 the saved positive `generation` and at most 64 unique `affectedTurnIds`.

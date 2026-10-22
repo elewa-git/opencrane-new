@@ -935,7 +935,12 @@ summary's latest position. Processes must restart after an event-store restore.
 full event payloads. `test/decision-cost.test.ts` checks 10,000 members on one
 model and another eight models with 1,000 members each in one process. After
 warm-up, two rounds of real HTTP decisions use only later grant reads and finish
-within two seconds. It also covers 3,000 grantees, 15,000 edits to one grantee,
+within two seconds. The 3,000-grant and 15,000-edit tests delay the first saved
+Allow by 2.2 seconds to force a refused warm-up reservation. Each measures one
+later call and requires exactly one new reservation. Earlier refused warm-ups
+must be settled at zero; the successful warm-up keeps its hold. The measured
+call still has its own two-second assertion. These tests also cover
+3,000 grantees, 15,000 edits to one grantee,
 revocations before and after the summary read, delayed team receipts and restored
 history. `test/decision-fence.test.ts` keeps all #198 refusal and harmless cases,
 including zero-cent release after an allow audit and disconnection.

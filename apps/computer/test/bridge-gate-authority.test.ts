@@ -47,7 +47,7 @@ async function longLifetime(test: TestBridge) {
 }
 async function futureIssued(test: TestBridge) {
   const now = Math.floor(Date.now() / 1000);
-  const gate = await customGate(test, {}, { issuedAt: now + 6, expiresAt: now + 30 });
+  const gate = await customGate(test, {}, { issuedAt: now + 60, expiresAt: now + 90 });
   // Cross a second boundary before sending, as signing can on a busy worker.
   await delay(1100);
   return gate;
@@ -132,7 +132,7 @@ async function refusesFirstGate(input: GateCase, resume: boolean) {
     function socketClosed() {
       return socket.readyState === socket.CLOSED;
     }
-    await until(socketClosed, 1000);
+    await until(socketClosed, 5000);
     const closeValues: unknown[] = await closed;
     const code = closeValues[0];
     const reason = closeValues[1];

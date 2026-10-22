@@ -432,6 +432,9 @@ Workers keep copies belonging to other silos without checking or changing them.
 
 ## How to run or test it
 
+The admission timing tests keep the two-second limit for a checked call. They also
+check that refused warm-up calls release their money at zero euro cents.
+
 ```sh
 npm test -- libs/models
 npm run typecheck -w libs/models

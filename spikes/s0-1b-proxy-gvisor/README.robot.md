@@ -174,7 +174,13 @@ gateway.
 
 [LICENCES.md](LICENCES.md) records the image/dependency inspection. Base Node and
 agentgateway image references are pinned by digest; Codex's two Linux packages
-are integrity-pinned in `package-lock.json`. The runner resolves its locally
+are integrity-pinned in `package-lock.json`. The Linux x64 alias is a direct
+required dependency, so npm refuses a missing download instead of silently
+omitting it. The Docker build uses `--fetch-retries=5` and checks that the native
+host is executable immediately after `npm ci`. The version, integrity hash and
+reviewed Apache-2.0 licence stay the same. The computer package's
+`test/codex-install.test.ts` forces optional packages to be absent and checks
+that the required host still installs. The runner resolves its locally
 built image to a digest before creating either Pod. Host pushes use
 `127.0.0.1:5001`; cluster pulls use `k3d-ocn-registry:5000`.
 

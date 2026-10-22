@@ -398,6 +398,7 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     expect(ready.status, ready.text).toBe(200);
     expect(delayed).toBe(true);
     writes.mockRestore();
+    const reservationsBefore = setup.actor.state.reservations.length;
     const summaryPosition = await store.head(subject);
     const reads = countReads(store);
     const headers = await setup.issue();
@@ -416,7 +417,13 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
       expect(call.rows).toBe(0);
     }
     console.info(JSON.stringify({ grantEvents, milliseconds, grantReads }));
-    expect(setup.actor.state.reservations).toHaveLength(2);
+    expect(setup.actor.state.reservations).toHaveLength(reservationsBefore + 1);
+    expect(setup.actor.state.reservations.at(-1)?.settledCents).toBeUndefined();
+    // Keep the successful warm-up hold; refused warm-ups must release theirs at zero.
+    const refusedReservations = setup.actor.state.reservations.slice(0, reservationsBefore - 1);
+    for (const reservation of refusedReservations) {
+      expect(reservation.settledCents).toBe(0);
+    }
     expect(setup.received()).toBe(0);
   } finally {
     vi.restoreAllMocks();
