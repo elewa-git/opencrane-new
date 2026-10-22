@@ -37,9 +37,7 @@ beforeEach(async () => {
   await append('alice', 'member.invited', { invitationId: 'invite-alice',
     invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-alice' } });
   await append('alice', 'member.joined', { invitationId: 'invite-alice', role: 'admin' });
-  const binding = authz.binding;
-  server = await startServer({ ...env, ...nats.env(), DATABASE_URL: dbs.queue.options.connectionString,
-    OPENFGA_API_URL: binding.apiUrl, OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
+  server = await startRealtimeServer();
 // Fixture setup includes certificates, PostgreSQL and a real server process.
 }, 60_000);
 afterEach(async () => {
@@ -58,6 +56,24 @@ afterEach(async () => {
     }
   }
 });
+async function startRealtimeServer(heartbeatIntervalMs?: number) {
+  const binding = authz.binding;
+  const settings: NodeJS.ProcessEnv = { ...env, ...nats.env(),
+    DATABASE_URL: dbs.queue.options.connectionString,
+    OPENFGA_API_URL: binding.apiUrl,
+    OPENFGA_STORE_ID: binding.storeId,
+    OPENFGA_MODEL_ID: binding.authorizationModelId };
+  if (heartbeatIntervalMs !== undefined) {
+    settings['WS_HEARTBEAT_INTERVAL_MS'] = String(heartbeatIntervalMs);
+  }
+  return startServer(settings);
+}
+
+async function useShortHeartbeats() {
+  await server.stop();
+  server = await startRealtimeServer(500);
+}
+
 async function append(id: string, type = 'member.joined', data = {}, project = true, iam = true) {
   const raw = event(`realtime-${++sequence}`, `member-${id}`, type);
   const parsed = parseEventByType({ ...raw, principal: { kind: 'human', id: `oidc-${id}` }, data: { ...raw.data, ...data } });
@@ -279,10 +295,28 @@ it('drops live deltas for a paused consumer and replays every missing position o
 // large rows on a busy machine.
 }, 60_000);
 it('terminates a peer that does not answer heartbeats', async () => {
+  await useShortHeartbeats();
   const client = await connect('oidc-alice', 'org-acme', false);
   const closed = once(client.ws, 'close');
   expect((await closed)[0]).toBe(1006);
-}, 35_000);
+}, 5000);
+
+async function keepsAnsweringPeerConnected() {
+  await useShortHeartbeats();
+  const client = await connect();
+  const answered = Promise.withResolvers<void>();
+  let pings = 0;
+  function receivedPing() {
+    pings += 1;
+    if (pings === 3) {
+      answered.resolve();
+    }
+  }
+  client.ws.on('ping', receivedPing);
+  await answered.promise;
+  expect(client.ws.readyState).toBe(WebSocket.OPEN);
+}
+it('keeps a peer connected while it answers heartbeats', keepsAnsweringPeerConnected, 5000);
 
 async function refusesStaleAuthority(change: 'member.role_changed' | 'member.removed') {
   await append('bob');
