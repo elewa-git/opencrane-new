@@ -1,7 +1,8 @@
+import { shortenDuplicateWindow, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { setTimeout as delay } from 'node:timers/promises';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
@@ -198,6 +199,18 @@ it.each([{ assistantId: 'other' }, { payingGroupId: 'other' },
   'refuses changed reviewed choices %j', refusesChoices);
 
 async function retriesLostReply() {
+  const previous = { nats, storage, fga, options, auth, runner, directory };
+  await initialise();
+  try {
+    await shortenDuplicateWindow(nats);
+    await retriesLostReplyAfterExpiry();
+  } finally {
+    vi.restoreAllMocks();
+    await close();
+    ({ nats, storage, fga, options, auth, runner, directory } = previous);
+  }
+}
+async function retriesLostReplyAfterExpiry() {
   const prepared = await prepare();
   await applyCreation(prepared);
   const original = nats.store.append.bind(nats.store);
@@ -210,13 +223,13 @@ async function retriesLostReply() {
   await expect(addChildFirstInput(options, 'alice', prepared.input)).rejects.toThrow('Lost reply');
   appendSpy.mockRestore();
   const rows = await chatHistory(nats.store, 'test', prepared.data.childConversationId);
-  await delay(120_100);
+  await waitForDuplicateWindow(nats);
   const retry = { ...prepared.input, requestId: 'another-request' };
   expect(await addChildFirstInput(options, 'alice', retry)).toEqual(rows[1]);
   expect(await chatHistory(nats.store, 'test', prepared.data.childConversationId)).toEqual(rows);
 }
 it('returns the saved id, position and ciphertext after a lost reply beyond deduplication',
-  retriesLostReply, 180_000);
+  retriesLostReply);
 async function concurrentCalls() {
   const prepared = await prepare();
   await applyCreation(prepared);

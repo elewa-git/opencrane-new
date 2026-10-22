@@ -525,6 +525,10 @@ tools. Older computers receive Allow tools only, so either update order is safe.
 
 ## How to run or test it
 
+Child-chat retry tests use private event stores to check lost replies and repeated
+requests. Most tests keep the normal period during which NATS ignores repeated messages.
+Recovery tests restore team access only when a test removed it.
+
 ```sh
 npm start -w apps/server
 npm run models -w apps/server

@@ -2,6 +2,122 @@
 
 For people, read [README.md](README.md) first.
 
+## Child retry tests and duplicate messages
+
+Only the four tests that retry after the JetStream duplicate window use a private
+fixture with a two-second window. `test/support/duplicate-window.ts` checks that
+normal creation used 120 seconds, then updates that private EVENTS stream through
+the NATS test connection. Production still uses 120 seconds; there is no new
+production setting. All other tests in those files keep the normal window.
+The shared `child-fixture.ts` and `child-summon.ts` helpers are unchanged.
+
+Each shortened test publishes the same valid event twice and checks that NATS
+stores it once. It then repeats that publish until NATS stores a new message,
+with a five-second limit. Only then does it retry the child command and check
+the saved result. The probe uses its own assistant subject and does not change
+chat history or the permissions rebuilt by the tests.
+
+Own checks, 22 October 2026, based on `8a334f3ee`, with Node 22.23.3:
+
+- Test-first commit `c3b0b0976`: all four selected cases failed because the
+  stream still had the normal 120-second window.
+- PASS: the first complete four-file run passed all 102 tests.
+- FAIL: the second run passed 100 of those 102 tests. Child review returned 503
+  instead of 200 in `keeps outage queued then completes missing saves` and
+  `hides failed status like an unknown request for removed`. These were not retried.
+  The untouched baseline also failed nine recovery cases, including the latter.
+- PASS: all four shortened cases passed in both complete runs. The second run
+  also passed all 438 event security tests.
+- PASS: removing the saved-failure guard made the shortened recovery case fail
+  with six records instead of five. The production file was restored afterwards.
+
+The table shows seconds from each JSON report's file start and end times. It
+excludes initial file setup. All three batches used two workers and `nice -n 10`
+on the same busy host, with disposable NATS, OpenFGA and PostgreSQL databases.
+The throwaway PostgreSQL container and its volumes were removed afterwards.
+
+| Test file | Before | After, first run | After, second run |
+| --- | --- | --- | --- |
+| child-recovery.test.ts | 292.22 (FAIL) | 184.62 | 202.34 (FAIL) |
+| child-first-input.test.ts | 169.85 | 58.45 | 56.76 |
+| child-summon.test.ts | 167.26 | 46.20 | 57.01 |
+| child-requests.test.ts | 144.68 | 24.34 | 28.78 |
+
+The recovery times include failed cases, so they are not a successful-run benchmark.
+Local reports are `/tmp/ci-test-waits-before.json`,
+`/tmp/ci-test-waits-after-1.json` and `/tmp/ci-test-waits-after-2.json`.
+The red and mutation reports use the same prefix with `red` and `mutation`.
+Full root tests and fresh-install qualification: NOT RUN.
+
+### Recovery fixture cleanup
+
+The recovery tests share two teams. Their old cleanup added Alice to both teams
+again after every case, even when neither membership had changed. Later checks
+then reread those extra events and checked each OpenFGA receipt within the same
+two-second access deadline. The 503 happened when that deadline expired before
+reading participation. The shortened duplicate window uses a separate fixture.
+
+Cleanup now reads the saved team membership and restores Alice only after a
+removal. It still applies each restoration through the normal event and permission
+handler. The product deadlines, access checks and existing assertions are unchanged.
+
+Own checks for this fix, 22 October 2026:
+
+- PASS: the unchanged recovery file passed 35/35 during diagnosis. The fault
+  depends on time spent checking receipts.
+- Expected FAIL: test-first commit `ff6e477c3` showed that two cleanups without a removal
+  added four events. The regression passed after the fixture fix.
+- Expected FAIL: a temporary diagnostic ran 30 old cleanups and added 35 ms to
+  each OpenFGA receipt lookup. Child review returned 503 after 67 receipt checks
+  and 3.15 seconds. Its captured `TimeoutError` came from the participation read
+  in `chat/access.ts`, using the deadline from `chat/child-requests.ts`.
+- PASS: the same diagnostic returned 200 with the fixed cleanup. The temporary
+  diagnostic and error logging were removed afterwards.
+- PASS: full typecheck, event catalogue check, knip, changelog lint and all 438
+  event security tests. Every command ran under `nice -n 10`.
+- PARTIAL: the first full-lint attempt was stopped to use CI's 6 GiB Node
+  heap allowance. Its log is `/tmp/ci-test-waits-fix-lint-default-heap.log`.
+- PASS: full lint completed with `NODE_OPTIONS=--max-old-space-size=6144`.
+  ESLint reported zero errors and 24 warnings in unchanged files. The final log
+  is `/tmp/ci-test-waits-fix-lint.log`.
+
+The four complete files then passed three consecutive runs under load. All used
+`nice -n 10`, two workers, Node 22.23.3 and a throwaway PostgreSQL database set
+through `PG_TEST_URL`. Every fixture kept its normal access and money checks.
+
+| Run | Four changed files | Other test run |
+| --- | --- | --- |
+| 1 | PASS: 103/103 | FAIL: memory and chat access, 306/307 |
+| 2 | PASS: 103/103 | PASS: recovery, 36/36 |
+| 3 | PASS: 103/103 | PASS: recovery, 36/36 |
+
+The first other run passed all 240 memory tests. Its unchanged
+`chat-access-regression.test.ts` failed the long-session socket timing assertion:
+2767.61 ms against a limit of 1500 ms. It was not retried or changed. That run
+continued alongside runs 2 and 3, each of which also had its own recovery process.
+The four-file sequence passed; the extra load-test results remain PARTIAL because
+of this performance failure.
+
+The file times below use the JSON reports' start and end times, excluding initial
+file setup. They are local timings under load, not measured CI savings.
+
+| Test file | Run 1, seconds | Run 2, seconds | Run 3, seconds |
+| --- | --- | --- | --- |
+| child-recovery.test.ts | 89.49 | 141.33 | 128.76 |
+| child-first-input.test.ts | 36.36 | 73.16 | 50.17 |
+| child-summon.test.ts | 31.91 | 38.63 | 42.99 |
+| child-requests.test.ts | 19.51 | 24.66 | 24.38 |
+
+Reports use `/tmp/ci-test-waits-fix-changed-<run>.json` and
+`/tmp/ci-test-waits-fix-load-<run>.json`, with runs numbered 1 to 3. Their matching
+`.log` files contain the command and output. The throwaway PostgreSQL container
+and its volumes were removed after all test processes finished.
+
+The diagnostic logs are `/tmp/ci-test-waits-fix-diagnostic.log`,
+`/tmp/ci-test-waits-fix-red.log`, `/tmp/ci-test-waits-fix-green-focused.log`,
+`/tmp/ci-test-waits-fix-cause-before.log` and
+`/tmp/ci-test-waits-fix-cause-after.log`.
+
 ## Saved turn failure reasons
 
 The bridge report reader accepts `stop_interrupted`, `model_error` and
