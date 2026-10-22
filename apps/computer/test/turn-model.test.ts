@@ -40,7 +40,9 @@ function modelFixture(initialModel: unknown, executionMode: 'restricted' | 'memo
   }
   function keepSessionOpen() {}
   const closed = new Promise<void>(keepSessionOpen);
-  function privateSession() { return Promise.resolve({ rpc, close, closed }); }
+  function privateSession() {
+    return Promise.resolve({ rpc, close, closed });
+  }
   const driver: TurnDriver = { rpc, grant, credential, privateSession,
     journal: `${directory}/reports` };
   const journal = reportJournal(driver);
@@ -229,7 +231,9 @@ async function recordsTerminalReason(testCase: TerminalReasonCase) {
     const reopened = reportJournal(test.driver);
     reopened.load();
     const replayed: BridgeReport[] = [];
-    function send(report: BridgeReport) { replayed.push(report); }
+    function send(report: BridgeReport) {
+      replayed.push(report);
+    }
     reopened.replay(0, new Map(), send);
     expect(replayed.at(-1)).toEqual(terminal);
   } finally {

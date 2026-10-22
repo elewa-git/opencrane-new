@@ -265,7 +265,8 @@ it('keeps a stop request pending and accepts tool finishes until the turn ends',
   expect(turn?.tools[0]?.status).toBe('completed');
 
   rows.push({ id: 'ended', position: 5, type: 'agent.turn_failed',
-    time: '2026-10-09T10:00:04Z', data: { turnId: 'message' } });
+    time: '2026-10-09T10:00:04Z',
+    data: { turnId: 'message', reason: 'bridge_interrupted' } });
   const stoppedTurn = transcript(rows, 'me').find(isAgentTurn);
   expect(stoppedTurn?.state).toBe('stopped');
   expect(stoppedTurn?.endedAt).toBe('2026-10-09T10:00:04Z');
@@ -328,7 +329,8 @@ it('shows started budget work as stopping until its ending report arrives', () =
   ];
   expect(transcript(rows, 'me').find(isAgentTurn)?.state).toBe('stopping');
   rows.push({ id: 'ended', position: 4, type: 'agent.turn_failed',
-    time: '2026-10-09T10:00:03Z', data: { turnId: 'message' } });
+    time: '2026-10-09T10:00:03Z',
+    data: { turnId: 'message', reason: 'bridge_interrupted' } });
   const stoppedTurn = transcript(rows, 'me').find(isAgentTurn);
   expect(stoppedTurn?.state).toBe('stopped');
   expect(stoppedTurn?.tools).toEqual([]);

@@ -2,6 +2,16 @@
 
 For people, read [README.md](README.md) first.
 
+## Saved turn endings
+
+The runner reports `stop_interrupted` only when a cancelled turn receives an
+interrupted terminal report. Other runner failures use `model_error`; a refused
+private tool keeps `restricted_tool_refused` even when Stop was also received.
+Receiving Stop alone does not change a provider failure into a stopped reply.
+These values use the existing `reason` field. The journal retains them on replay.
+Older reports with no reason still use the server's `bridge_interrupted` default.
+`turn-model.test.ts` checks terminal causes and journal reload.
+
 ## Report delivery while stopping
 
 The bridge keeps at most 32 reports and 512 KiB awaiting acknowledgement on one

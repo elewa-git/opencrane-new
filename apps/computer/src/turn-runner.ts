@@ -457,9 +457,9 @@ class TurnRunner {
     return true;
   }
 
-  private failTurn(input: Turn) {
+  private failTurn(input: Turn, reason: 'model_error' | 'stop_interrupted' = 'model_error') {
     if (!this.isFinished(input.id)) {
-      const extra: Partial<BridgeReport> = {};
+      const extra: Partial<BridgeReport> = { reason };
       if (this.state.refusedTools.has(input.id)) extra.reason = 'restricted_tool_refused';
       this.appendReport(input, 'agent.turn_failed', extra);
     }
@@ -748,7 +748,12 @@ class TurnRunner {
     const turn = record(params['turn']);
     if (!this.confirmedTerminal(input, turn)) return;
     if (this.state.refusedTools.has(input.id) || turn['status'] !== 'completed') {
-      this.failTurn(input);
+      let reason: 'model_error' | 'stop_interrupted' = 'model_error';
+      // Require an interrupted end report: receiving Stop alone does not explain a failure.
+      if (turn['status'] === 'interrupted' && this.state.cancelled.has(input.id)) {
+        reason = 'stop_interrupted';
+      }
+      this.failTurn(input, reason);
       return;
     }
     this.appendReport(input, 'agent.turn_completed');

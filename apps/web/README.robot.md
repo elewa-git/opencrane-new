@@ -4,8 +4,11 @@ For people, read [README.md](README.md) first.
 
 Personal and shared-assistant sessions derive turn outcomes in `chat-state.ts`.
 The conversation feed keeps `agent.turn_stop_requested` followed by the bridge's
-`agent.turn_failed` interruption report. The derived `stopped` state keeps partial
-text and suppresses the synthetic “Reply failed” activity, live and after reload.
+`agent.turn_failed` report. A saved Stop request only gives a stopped outcome when
+the failure reason is `stop_interrupted`, or `bridge_interrupted` from an older bridge.
+`model_error` and `restricted_tool_refused` keep their failure activity even after Stop.
+The derived `stopped` state keeps partial text and suppresses the synthetic
+“Reply failed” activity, live and after reload.
 Only a derived `failed` turn gets that activity. Old feed rows need no migration
 or replay change. `agent.output_lost` without text keeps “Didn't complete · nothing
 was repeated”. Human group chats use the separate direct-chat view and start no
