@@ -41,7 +41,7 @@ function readGroup(file) {
 function checkFixtureUse(files) {
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
-    if (needsFixtures(source) && !fixtureFiles.includes(file)) {
+    if (needsFixtures(source, file) && !fixtureFiles.includes(file)) {
       throw new Error(`Add this test to fixtureFiles: ${file}`);
     }
   }

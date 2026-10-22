@@ -26,8 +26,9 @@ flowchart LR
 ## Processes it handles
 
 Each test job saves a small list of its files. The final `ci-ok` job compares
-those lists with all the files Vitest finds. It also refuses a test that imports
-Playwright or uses the image helpers without joining the fixture job.
+those lists with all the files Vitest finds. It also follows local helper imports
+and scripts launched by tests. A test that reaches Playwright or the image helpers
+must join the fixture job.
 
 ## How to run or test it
 

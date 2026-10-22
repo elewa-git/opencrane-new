@@ -1,1 +1,2 @@
 - Run image and browser tests together so the four other CI test jobs avoid that setup. Refuse missing or duplicate test files, keep image caches separate, and save main test reports for later timing updates.
+- Keep chat browser tests in the Chromium job, and check local helpers and child scripts for browser and computer image use.

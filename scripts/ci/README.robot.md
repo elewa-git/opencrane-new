@@ -1,9 +1,9 @@
 # CI test contracts
 
 `fixture-tests.mjs` owns the file list and the arguments passed to Vitest.
-It includes the ten image/browser files from the timing report, plus approvals
-and live-view-k3d because they import Playwright behind existing opt-in flags.
-Those flags and skips are unchanged. No test retries are added.
+It includes 13 files. Approvals and live-view-k3d import Playwright behind
+existing opt-in flags. The chat browser suite launches three scripts that use
+Chromium. Those flags and skips are unchanged. No test retries are added.
 
 `run-tests.mjs` calls `npm test`, preserving its pretest tool downloads.
 `test-files.mjs record <group>` reads Vitest's JSON report and saves relative paths.
@@ -12,7 +12,10 @@ from the checks job and all downloaded file lists. The final gate needs only Nod
 it does not repeat the npm install. Missing, duplicate and unexpected files fail.
 Missing reports and failed jobs also fail `ci-ok`. No jobs are allowed to skip.
 The check for missing fixture entries runs during every successful CI run,
-including main pushes; it is not only a unit test.
+including main pushes; it is not only a unit test. The guard follows literal
+relative JavaScript/TypeScript paths and repository-root `scripts/` paths through
+helpers and child scripts. It stops at repeated files so circular imports finish.
+It does not evaluate computed paths or run the referenced code.
 
 The JSON report includes files whose existing tests are skipped. This check proves
 file selection, not execution of opt-in journeys. Angular tests and infrastructure

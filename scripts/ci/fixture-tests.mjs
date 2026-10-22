@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+
 export const fixtureFiles = [
   'apps/computer/test/display-attacks.test.ts',
   'apps/computer/test/supervisor-identity.test.ts',
@@ -11,12 +14,43 @@ export const fixtureFiles = [
   'apps/server/test/provider-login.test.ts',
   'apps/server/test/screenshot-browser.test.ts',
   'apps/server/test/upload.test.ts',
+  'apps/web/test/chat-browser.test.ts',
 ];
 
-export function needsFixtures(source) {
+export function needsFixtures(source, file, visited = new Set()) {
   const browserImport = /\b(?:from\s*|(?:import|require)\s*\()\s*['"]playwright(?:\/[^'"]*)?['"]/;
   const imageUse = /\b(?:uploadComputer|screenshotDesktop)\b|ocn-upload-computer:test/;
-  return browserImport.test(source) || imageUse.test(source);
+  if (browserImport.test(source) || imageUse.test(source)) {
+    return true;
+  }
+  if (!file) {
+    return false;
+  }
+  const absoluteFile = resolve(file);
+  if (visited.has(absoluteFile)) {
+    return false;
+  }
+  // Stop circular helper imports from repeating the same source files.
+  visited.add(absoluteFile);
+  // Follow literal local paths, including scripts passed to a child Node process.
+  const localPath = /['"`]((?:\.{1,2}\/|scripts\/)[^'"`\s]+\.(?:[cm]?js|tsx?))['"`]/g;
+  for (const match of source.matchAll(localPath)) {
+    const reference = match[1];
+    let target;
+    if (reference.startsWith('.')) {
+      target = resolve(dirname(absoluteFile), reference);
+    } else {
+      target = resolve(reference);
+    }
+    if (!existsSync(target)) {
+      continue;
+    }
+    const dependency = readFileSync(target, 'utf8');
+    if (needsFixtures(dependency, target, visited)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function testArguments(group) {
