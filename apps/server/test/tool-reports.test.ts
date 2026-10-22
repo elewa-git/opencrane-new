@@ -116,3 +116,31 @@ async function refusesForgedReport(test: (typeof forgedReports)[number]) {
   await refusesUnrequestedToolReport(test.change, test.reason);
 }
 it.each(forgedReports)('refuses a forged tool report $change without appending', refusesForgedReport);
+
+async function recordsTerminalCause(reason: string) {
+  const nats = await natsFixture();
+  const directory = await mkdtemp(`${tmpdir()}/terminal-cause-`);
+  try {
+    const keys = conversationKeys(directory);
+    keys.provision('test', 'chat');
+    const person = { silo: 'test', memberId: 'alice' };
+    await chatCommand(nats.store, keys, person,
+      { id: 'create', conversationId: 'chat', assistantId: 'assistant' });
+    await chatCommand(nats.store, keys, person,
+      { id: 'message', conversationId: 'chat', text: 'Reply' });
+    const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
+    const report = { sequence: 1, conversationId: 'chat', turnId: 'message',
+      assistantId: 'assistant', type: 'agent.turn_failed', reason };
+    expect(await recordReport(nats.store, keys, context, report)).toBe('recorded');
+    expect(await recordReport(nats.store, keys, context, report)).toBe('duplicate');
+    const rows = await chatHistory(nats.store, 'test', 'chat');
+    expect(rows.at(-1)?.event.data).toEqual({ conversationId: 'chat', turnId: 'message',
+      reason });
+  } finally {
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+it.each(['stop_interrupted', 'model_error', 'bridge_interrupted'])(
+  'saves and recognises a repeated terminal report with reason %s', recordsTerminalCause);

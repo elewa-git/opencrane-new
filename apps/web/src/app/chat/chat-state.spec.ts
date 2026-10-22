@@ -380,3 +380,62 @@ function assertStoppedReply(stoppingTurnId: string): void {
 
 it.each(['request', ''])('shows only the stopped outcome live and after reload: %s',
   assertStoppedReply);
+
+interface FailureAfterStopCase {
+  reason: string;
+  stopRequested: boolean;
+  stopped: boolean;
+  detail: string;
+}
+
+const failureAfterStopCases: FailureAfterStopCase[] = [
+  { reason: 'restricted_tool_refused', stopRequested: true, stopped: false,
+    detail: 'Tool access refused' },
+  { reason: 'model_error', stopRequested: true, stopped: false, detail: 'Run interrupted' },
+  { reason: 'stop_interrupted', stopRequested: true, stopped: true, detail: '' },
+  { reason: 'bridge_interrupted', stopRequested: true, stopped: true, detail: '' },
+  { reason: 'bridge_interrupted', stopRequested: false, stopped: false,
+    detail: 'Run interrupted' },
+];
+
+function assertFailureAfterStop(testCase: FailureAfterStopCase): void {
+  const rows: ChatRow[] = [
+    { id: 'request', position: 1, type: 'message.posted',
+      time: '2026-10-22T10:00:00Z', data: { authorId: 'me', text: 'Write a long reply' } },
+    { id: 'started', position: 2, type: 'agent.turn_started',
+      time: '2026-10-22T10:00:01Z', data: { turnId: 'request' } },
+    { id: 'partial', position: 3, type: 'agent.message_delta',
+      time: '2026-10-22T10:00:02Z',
+      data: { turnId: 'request', messageId: 'reply', text: 'The kept partial reply' } },
+  ];
+  if (testCase.stopRequested) {
+    rows.push({ id: 'stop', position: 4, type: 'agent.turn_stop_requested',
+      time: '2026-10-22T10:00:03Z', data: { turnId: 'request', reason: 'requester_stop' } });
+  }
+  rows.push({ id: 'ended', position: 5, type: 'agent.turn_failed',
+    time: '2026-10-22T10:00:04Z', data: { turnId: 'request', reason: testCase.reason } });
+
+  let stoppingTurnId = '';
+  if (testCase.stopRequested) stoppingTurnId = 'request';
+  const live = transcript(rows, 'me', stoppingTurnId).find(isAgentTurn)!;
+  const reloaded = transcript(rows, 'me').find(isAgentTurn)!;
+  expect(live).toEqual(reloaded);
+  expect(live.text).toBe('The kept partial reply');
+  if (testCase.stopped) {
+    expect(live.state).toBe('stopped');
+    expect(turnOutcome(live)).toBe('Stopped · partial reply kept');
+    expect(live.tools).toEqual([]);
+  } else {
+    expect(live.state).toBe('failed');
+    expect(turnOutcome(live)).toBe('Reply did not complete · partial reply kept');
+    expect(live.tools).toEqual([
+      { id: 'ended', label: 'Reply failed', detail: testCase.detail, failed: true,
+        time: '2026-10-22T10:00:04Z' },
+    ]);
+  }
+}
+
+it.each(failureAfterStopCases)(
+  'keeps the saved failure outcome live and on replay: $reason, Stop=$stopRequested',
+  assertFailureAfterStop,
+);
