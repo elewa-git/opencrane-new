@@ -106,6 +106,7 @@ and call checks are being connected.
 4. **The daily check runs.** A user timer updates a detached checkout of `main`, then starts
    `up.sh --fresh` in a claimed spare stack. The local model stub keeps it free of paid model
    calls. Each run checks groups, private shared sessions, direct chats and group messages.
+   The sender must see each group message within two seconds of its saved reply.
    Saved failure logs have known secrets and credential patterns removed.
    A result line and any failure evidence go in the user's home directory.
 

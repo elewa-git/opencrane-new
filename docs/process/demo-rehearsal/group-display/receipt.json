@@ -1,0 +1,168 @@
+{
+  "date": "2026-10-22",
+  "productChange": true,
+  "productCommit": "197a42a0439158bfea95986cf0540bd46c4426ae",
+  "failingTestCommit": "55bdab7b6",
+  "qualifyingRuns": [
+    2,
+    3,
+    4
+  ],
+  "runs": [
+    {
+      "run": "1",
+      "startedAt": "2026-10-22T09:26:56Z",
+      "finishedAt": "2026-10-22T09:33:38Z",
+      "exitCode": 1,
+      "stackId": "1",
+      "fresh": true,
+      "modelMode": "stand-in",
+      "paidCalls": 0,
+      "paidCents": 0,
+      "sourceSha": "197a42a0439158bfea95986cf0540bd46c4426ae",
+      "cleaned": true,
+      "result": "FAIL",
+      "groupSteps": {
+        "group_chat.create_and_lock_mode": "NOT RUN",
+        "group_chat.messages_and_no_activity": "NOT RUN",
+        "group_chat.add_join_position": "NOT RUN",
+        "group_chat.remove_clears_access": "NOT RUN",
+        "group_chat.leave_clears_access": "NOT RUN",
+        "group_chat.people_picker_states": "NOT RUN",
+        "group_chat.unsupported_combination": "NOT RUN",
+        "group_chat.replay_preserves_group": "NOT RUN"
+      },
+      "timings": [],
+      "groupPictureCount": 0
+    },
+    {
+      "run": "2",
+      "startedAt": "2026-10-22T09:34:50Z",
+      "finishedAt": "2026-10-22T09:50:26Z",
+      "exitCode": 0,
+      "stackId": "1",
+      "fresh": true,
+      "modelMode": "stand-in",
+      "paidCalls": 0,
+      "paidCents": 0,
+      "sourceSha": "41cf3ff1d005d3921f1d91944812d5990d020644",
+      "cleaned": true,
+      "result": "PASS",
+      "groupSteps": {
+        "group_chat.create_and_lock_mode": "PASS",
+        "group_chat.messages_and_no_activity": "PASS",
+        "group_chat.add_join_position": "PASS",
+        "group_chat.remove_clears_access": "PASS",
+        "group_chat.leave_clears_access": "PASS",
+        "group_chat.people_picker_states": "PASS",
+        "group_chat.unsupported_combination": "PASS",
+        "group_chat.replay_preserves_group": "PASS"
+      },
+      "timings": [
+        {
+          "step": "first",
+          "projectedAtMs": 1792662420934,
+          "displayedAtMs": 1792662421394,
+          "displayAfterProjectionMs": 460,
+          "displayAfterReplyMs": 536
+        },
+        {
+          "step": "later",
+          "projectedAtMs": 1792662441197,
+          "displayedAtMs": 1792662442230,
+          "displayAfterProjectionMs": 1033,
+          "displayAfterReplyMs": 1207
+        }
+      ],
+      "groupPictureCount": 0,
+      "removalMs": 1478,
+      "leaveMs": 619
+    },
+    {
+      "run": "3",
+      "startedAt": "2026-10-22T09:51:10Z",
+      "finishedAt": "2026-10-22T10:07:23Z",
+      "exitCode": 0,
+      "stackId": "1",
+      "fresh": true,
+      "modelMode": "stand-in",
+      "paidCalls": 0,
+      "paidCents": 0,
+      "sourceSha": "41cf3ff1d005d3921f1d91944812d5990d020644",
+      "cleaned": true,
+      "result": "PASS",
+      "groupSteps": {
+        "group_chat.create_and_lock_mode": "PASS",
+        "group_chat.messages_and_no_activity": "PASS",
+        "group_chat.add_join_position": "PASS",
+        "group_chat.remove_clears_access": "PASS",
+        "group_chat.leave_clears_access": "PASS",
+        "group_chat.people_picker_states": "PASS",
+        "group_chat.unsupported_combination": "PASS",
+        "group_chat.replay_preserves_group": "PASS"
+      },
+      "timings": [
+        {
+          "step": "first",
+          "projectedAtMs": 1792663466594,
+          "displayedAtMs": 1792663466964,
+          "displayAfterProjectionMs": 370,
+          "displayAfterReplyMs": 465
+        },
+        {
+          "step": "later",
+          "projectedAtMs": 1792663479360,
+          "displayedAtMs": 1792663479617,
+          "displayAfterProjectionMs": 257,
+          "displayAfterReplyMs": 389
+        }
+      ],
+      "groupPictureCount": 20,
+      "removalMs": 1453,
+      "leaveMs": 489
+    },
+    {
+      "run": "4",
+      "startedAt": "2026-10-22T10:07:26Z",
+      "finishedAt": "2026-10-22T10:19:51Z",
+      "exitCode": 0,
+      "stackId": "1",
+      "fresh": true,
+      "modelMode": "stand-in",
+      "paidCalls": 0,
+      "paidCents": 0,
+      "sourceSha": "41cf3ff1d005d3921f1d91944812d5990d020644",
+      "cleaned": true,
+      "result": "PASS",
+      "groupSteps": {
+        "group_chat.create_and_lock_mode": "PASS",
+        "group_chat.messages_and_no_activity": "PASS",
+        "group_chat.add_join_position": "PASS",
+        "group_chat.remove_clears_access": "PASS",
+        "group_chat.leave_clears_access": "PASS",
+        "group_chat.people_picker_states": "PASS",
+        "group_chat.unsupported_combination": "PASS",
+        "group_chat.replay_preserves_group": "PASS"
+      },
+      "timings": [
+        {
+          "step": "first",
+          "projectedAtMs": 1792664248436,
+          "displayedAtMs": 1792664248779,
+          "displayAfterProjectionMs": 343,
+          "displayAfterReplyMs": 472
+        },
+        {
+          "step": "later",
+          "projectedAtMs": 1792664261218,
+          "displayedAtMs": 1792664261389,
+          "displayAfterProjectionMs": 171,
+          "displayAfterReplyMs": 339
+        }
+      ],
+      "groupPictureCount": 20,
+      "removalMs": 1004,
+      "leaveMs": 560
+    }
+  ]
+}

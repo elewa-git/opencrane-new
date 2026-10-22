@@ -8,7 +8,10 @@ import { WebSocketService } from '../core/websocket.service';
 
 type ReplyOverride = (request: RequestRecord) => Response | Promise<Response> | undefined;
 
-type RequestRecord = { url: string; method: string; body?: Record<string, unknown> };
+type RequestRecord = {
+  url: string; method: string; body?: Record<string, unknown>;
+  signal: AbortSignal | null | undefined;
+};
 
 const alice = { memberId: 'alice', displayName: 'Alex Kim' };
 const colleagues = [
@@ -203,8 +206,8 @@ function readRequest(input: RequestInfo | URL, init?: RequestInit): RequestRecor
   const method = init?.method ?? 'GET';
   let body: Record<string, unknown> | undefined;
   if (typeof init?.body === 'string') body = objectValue(JSON.parse(init.body) as unknown);
-  if (body) return { url, method, body };
-  return { url, method };
+  if (body) return { url, method, body, signal: init?.signal };
+  return { url, method, signal: init?.signal };
 }
 
 function createFetchFixture() {
@@ -214,6 +217,7 @@ function createFetchFixture() {
   const sockets: SocketLike[] = [];
   const sentSocketMessages: string[] = [];
   const closedSockets: SocketLike[] = [];
+  let openNewSockets = true;
   const savedConversations = [conversation('existing', 'bob')];
   const savedMessages = new Map<string, ReturnType<typeof eventRow>[]>([
     ['existing', [eventRow(1, 'bob', 'Is the Tuesday slot still open?'),
@@ -261,7 +265,19 @@ function createFetchFixture() {
     }
     if (url.pathname === '/api/conversations' && request.method === 'POST') {
       const body = request.body ?? {};
-      savedConversations.push(conversation(String(body['conversationId']), String(body['colleagueId'])));
+      const created = conversation(String(body['conversationId']), String(body['colleagueId']));
+      if (body['mode'] === 'group') {
+        created.mode = 'group';
+        created.participantIds = [];
+        const rawParticipants = body['participantIds'];
+        if (Array.isArray(rawParticipants)) {
+          const participantIds: unknown[] = rawParticipants;
+          for (const participantId of participantIds) {
+            if (typeof participantId === 'string') created.participantIds.push(participantId);
+          }
+        }
+      }
+      savedConversations.push(created);
       return reply({ status: 'appended', sequence: 1 });
     }
     if (url.pathname.endsWith('/messages') && request.method === 'GET') {
@@ -308,7 +324,7 @@ function createFetchFixture() {
     function openSocket(): void {
       socket.onopen?.(new Event('open'));
     }
-    queueMicrotask(openSocket);
+    if (openNewSockets) queueMicrotask(openSocket);
     return socket;
   }
   return {
@@ -345,6 +361,7 @@ function createFetchFixture() {
       savedMessages.set('group-chat', [eventRow(1, 'bob', 'Hello everyone')]);
     },
     socketFactory,
+    pauseSocketOpening() { openNewSockets = false; },
     failNextMessageReply() { messageFailure = 'lost'; },
     holdNextMessageReply(resolve: () => void) { notifyMessageStarted = resolve; },
     releaseMessageReply() {
@@ -2337,3 +2354,177 @@ async function reconnectsAfterBusyClose(): Promise<void> {
   fixture.destroy();
 }
 it('shows reconnecting after a busy socket closes', reconnectsAfterBusyClose);
+
+async function displaysFirstGroupMessageAfterApplyingRead(): Promise<void> {
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  let posted = false;
+  let applyingReads = 0;
+  let changingLists = 0;
+  function temporarilyApplying(request: RequestRecord): Response | undefined {
+    if (request.method === 'POST' && request.url.includes('/messages')) posted = true;
+    if (!posted || request.method !== 'GET') return undefined;
+    if (request.url.includes('/messages') && applyingReads++ === 0) return reply({}, 425);
+    if (request.url === '/api/conversations' && changingLists++ === 0) return reply({}, 409);
+    return undefined;
+  }
+  api.override(temporarilyApplying);
+  const options = root(fixture).querySelectorAll<HTMLButtonElement>('.colleague-option');
+  options[0]?.click();
+  options[1]?.click();
+  fixture.detectChanges();
+  vi.useFakeTimers();
+  enterMessage(fixture, 'First saved group message');
+  await vi.advanceTimersByTimeAsync(1_000);
+  fixture.detectChanges();
+  expect(root(fixture).querySelector('.transcript')?.textContent)
+    .toContain('First saved group message');
+  expect(api.sockets).toHaveLength(1);
+  expect(root(fixture).textContent).not.toContain('unavailable right now');
+  expect(messagePosts(api)).toHaveLength(1);
+  fixture.destroy();
+}
+
+it('shows the first saved group message and opens live updates after applying reads',
+  displaysFirstGroupMessageAfterApplyingRead);
+
+
+async function catchesUpAfterOneLiveGap(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mountWithoutReady(api, 'group-chat');
+  await waitForText(fixture, 'Hello everyone');
+  await settle(fixture);
+  const socket = api.sockets.at(-1);
+  if (!socket?.onmessage) throw new Error('Expected a conversation socket');
+  let reads = 0;
+  const saved = eventRow(4, 'bob', 'Message after a live gap');
+  function applyingThenCurrent(request: RequestRecord): Response | undefined {
+    if (request.method !== 'GET' || !request.url.includes('/messages')) return undefined;
+    reads += 1;
+    if (reads === 1) return reply({}, 425);
+    return reply({ rows: [eventRow(1, 'bob', 'Hello everyone'), saved],
+      position: 4, generation: 1, computerState: 'not_applicable' });
+  }
+  api.override(applyingThenCurrent);
+  vi.useFakeTimers();
+  const update = { version: 1, topic: 'conversation', type: 'event',
+    conversationId: 'group-chat', position: 4, generation: 1, row: saved };
+  socket.onmessage(new MessageEvent('message', { data: JSON.stringify(update) }));
+  await vi.advanceTimersByTimeAsync(1_000);
+  fixture.detectChanges();
+  expect(root(fixture).querySelector('.transcript')?.textContent)
+    .toContain('Message after a live gap');
+  expect(reads).toBe(2);
+  fixture.destroy();
+}
+
+it('catches up a single live update after the projection briefly refuses the read',
+  catchesUpAfterOneLiveGap);
+
+
+async function closeDuringHistoryRetry(code: number) {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mountWithoutReady(api, 'group-chat');
+  await waitForText(fixture, 'Hello everyone');
+  await settle(fixture);
+  const socket = api.sockets.at(-1);
+  if (!socket?.onmessage || !socket.onclose) throw new Error('Expected a group socket');
+  const saved = eventRow(4, 'alice', 'Saved while the socket was closed');
+  const reads: RequestRecord[] = [];
+  let applying = true;
+  function historyReply(request: RequestRecord): Response | undefined {
+    if (request.method !== 'GET' || !request.url.includes('/messages')) return undefined;
+    reads.push(request);
+    if (applying) return reply({}, 425);
+    return reply({ rows: [eventRow(1, 'bob', 'Hello everyone'), saved],
+      position: 4, generation: 1, computerState: 'not_applicable' });
+  }
+  api.override(historyReply);
+  api.pauseSocketOpening();
+  vi.useFakeTimers();
+  const update = { version: 1, topic: 'conversation', type: 'event',
+    conversationId: 'group-chat', position: 4, generation: 1, row: saved };
+  socket.onmessage(new MessageEvent('message', { data: JSON.stringify(update) }));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(reads).toHaveLength(1);
+  socket.onclose(new CloseEvent('close', { code }));
+  return { api, fixture, reads, finishApplying(this: void) { applying = false; } };
+}
+
+async function stopsHistoryOnSocketClose(code: number): Promise<void> {
+  const { fixture, reads } = await closeDuringHistoryRetry(code);
+  expect(reads[0]?.signal?.aborted).toBe(true);
+  await vi.advanceTimersByTimeAsync(1_000);
+  fixture.detectChanges();
+  expect(reads).toHaveLength(1);
+  expect(root(fixture).querySelector('.transcript')?.textContent).toContain('Hello everyone');
+  fixture.destroy();
+}
+
+it.each([1000, 1006, 1013])('stops history retries immediately on socket close %i',
+  stopsHistoryOnSocketClose);
+
+async function catchesUpAfterClosedRetry(): Promise<void> {
+  const { api, fixture, reads, finishApplying } = await closeDuringHistoryRetry(1013);
+  await vi.advanceTimersByTimeAsync(1_000);
+  fixture.detectChanges();
+  finishApplying();
+  const replacement = api.sockets.at(-1);
+  expect(api.sockets).toHaveLength(2);
+  replacement?.onopen?.(new Event('open'));
+  fixture.detectChanges();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  expect(root(fixture).querySelector('.transcript')?.textContent)
+    .toContain('Saved while the socket was closed');
+  expect(reads).toHaveLength(2);
+  expect(reads[1]?.signal?.aborted).toBe(false);
+  expect(api.sentSocketMessages).toHaveLength(2);
+  expect(JSON.parse(api.sentSocketMessages[1] ?? '{}')).toMatchObject({ since: 4 });
+  fixture.destroy();
+}
+
+it('reads saved group messages again after a socket closes during history retries',
+  catchesUpAfterClosedRetry);
+
+async function abortsReplacedHistory(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mountWithoutReady(api, 'group-chat');
+  await waitForText(fixture, 'Hello everyone');
+  await settle(fixture);
+  const socket = api.sockets.at(-1);
+  if (!socket?.onmessage) throw new Error('Expected a group socket');
+  const held = deferredReply();
+  const reads: RequestRecord[] = [];
+  const saved = eventRow(4, 'alice', 'Current saved message');
+  function historyReply(request: RequestRecord): Response | Promise<Response> | undefined {
+    if (request.method !== 'GET' || !request.url.includes('/messages')) return undefined;
+    reads.push(request);
+    if (reads.length === 1) return held.promise;
+    return reply({ rows: [saved], position: 4, generation: 1,
+      computerState: 'not_applicable' });
+  }
+  api.override(historyReply);
+  const resync = { version: 1, topic: 'conversation', type: 'resync',
+    conversationId: 'group-chat', position: 4, generation: 1 };
+  const incoming = new MessageEvent('message', { data: JSON.stringify(resync) });
+  socket.onmessage(incoming);
+  await settle(fixture);
+  expect(reads[0]?.signal?.aborted).toBe(false);
+  socket.onmessage(incoming);
+  expect(reads[0]?.signal?.aborted).toBe(true);
+  await waitForText(fixture, 'Current saved message');
+  held.release(reply({ rows: [eventRow(3, 'bob', 'Replaced history reply')],
+    position: 3, generation: 1, computerState: 'not_applicable' }));
+  await settle(fixture);
+  expect(reads).toHaveLength(2);
+  expect(root(fixture).querySelector('.transcript')?.textContent).toContain('Current saved message');
+  expect(root(fixture).textContent).not.toContain('Replaced history reply');
+  fixture.destroy();
+}
+
+it('aborts an older history read before replacing it and ignores its late reply',
+  abortsReplacedHistory);

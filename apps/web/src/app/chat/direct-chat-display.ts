@@ -121,6 +121,17 @@ export function directColleagueById<T extends { memberId: string }>(
   return undefined;
 }
 
+export function directReceivedMessageNotice(
+  row: ChatRow, memberId: string, conversation: ChatConversation | undefined,
+  colleague: Colleague | undefined, colleagues: Colleague[],
+): string | undefined {
+  if (row.type !== 'message.posted' || directIsOwnMessage(row, memberId)) return undefined;
+  const authorName = conversation?.mode === 'group'
+    ? groupAuthorName(row, memberId, colleagues)
+    : directRecipientName(colleague);
+  return `New message from ${authorName}`;
+}
+
 export function directMessageText(row: ChatRow): string {
   if (row.type !== 'message.posted') return '';
   return typeof row.data['text'] === 'string' ? row.data['text'] : '';
