@@ -2,10 +2,10 @@ import { By } from '@angular/platform-browser';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryEdit } from './memory-edit';
-import { isObject } from './memory-panel-data';
+import { isObject, type Fact } from './memory-panel-data';
 import { MemoryPanel } from './memory-panel';
 
-const fact = { memoryId: 'one', revision: 7, text: 'Private original text', kind: 'preference',
+const fact: Fact = { memoryId: 'one', revision: 7, text: 'Private original text', kind: 'preference',
   pinned: true, expiresAt: '2027-01-01T00:00:00Z', savedAt: '2026-10-02T10:00:00Z' };
 const updated = { ...fact, revision: 8, text: 'New private text' };
 const detail = { scopeId: 'scope', fact, sources: [], canForget: true, canCorrect: true };
@@ -54,11 +54,12 @@ function saveDraft(): void {
   input('My draft');
   click('Save correction');
 }
+function hasSettled(): void {
+  fixture.detectChanges();
+  expect(root.textContent).not.toMatch(/Checking memory…|Loading memory…|Searching memory…/);
+}
 async function settled(): Promise<void> {
-  await vi.waitFor(() => {
-    fixture.detectChanges();
-    expect(root.textContent).not.toMatch(/Checking memory…|Loading memory…|Searching memory…/);
-  });
+  await vi.waitFor(hasSettled);
 }
 async function setup(kind = 'person', body: unknown = detail): Promise<void> {
   calls = [];
@@ -300,4 +301,196 @@ it('resizes the phone sheet when the keyboard reduces the visible height', async
   fixture.detectChanges();
   const editor = root.querySelector<HTMLElement>('oc-memory-edit');
   expect(editor?.style.getPropertyValue('--oc-sheet-height')).toBe('420px');
+});
+
+it.each([
+  ['quarantined', 'conflict'], ['quarantined', 'accepted'],
+  ['destroyed', 'conflict'], ['destroyed', 'accepted'],
+  ['forgotten', 'conflict'], ['forgotten', 'accepted'],
+])(
+  'keeps the %s reason after %s', async (reason, outcome) => {
+    await setup();
+    const unavailable = { status: 'unavailable', reason };
+    post = () => Promise.resolve(response(outcome === 'conflict' ? 409 : 200, accepted));
+    latest = () => Promise.resolve(response(200, unavailable));
+    saveDraft();
+    await settled();
+    if (outcome === 'conflict') {
+      click('Refresh and review');
+      await settled();
+    }
+    const sheet = root.querySelector('oc-memory-edit');
+    if (reason === 'forgotten') {
+      expect(sheet?.textContent).toContain('This fact was forgotten. Your edit wasn’t applied.');
+      expect(root.querySelector('button.fact')).toBeNull();
+    } else {
+      expect(sheet?.textContent).toContain(
+        'This fact’s text is no longer available. Your edit wasn’t applied.');
+      expect(sheet?.textContent).not.toContain('forgotten');
+      expect(root.querySelector('button.fact')?.textContent).toContain(fact.text);
+    }
+    expect(sheet?.querySelector('textarea')).toBeNull();
+    expect(sheet?.querySelector('.preview')).toBeNull();
+    expect(sheet?.textContent).not.toContain('My draft');
+    noPrivateAnnouncements();
+  });
+
+function editorComponent(): MemoryEdit {
+  const editor: unknown = fixture.debugElement.query(By.directive(MemoryEdit))?.componentInstance;
+  if (!(editor instanceof MemoryEdit)) throw new Error('Missing editor');
+  return editor;
+}
+function acceptanceStarted(): void {
+  fixture.detectChanges();
+  expect(root.textContent).toContain('Corrected in your memory · r8');
+  expect(matching('/facts/one')).toHaveLength(2);
+}
+function replyTurn(finish: () => void): void { setTimeout(finish, 0); }
+async function finishReplies(): Promise<void> {
+  await new Promise<void>(replyTurn);
+  fixture.detectChanges();
+}
+
+it('keeps Edit disabled until the accepted detail resolves and saves the displayed revision', async () => {
+  await setup();
+  const pending = deferred();
+  latest = () => pending.promise;
+  saveDraft();
+  await vi.waitFor(acceptanceStarted);
+  expect(buttons('Edit')[0]?.disabled).toBe(true);
+  const editor = fixture.debugElement.query(By.directive(MemoryEdit));
+  editor.query(By.css('.edit-open')).triggerEventHandler('click', new Event('click'));
+  fixture.detectChanges();
+  expect(root.querySelector('oc-memory-edit textarea')).toBeNull();
+  const nextFact = { ...updated, savedAt: '2026-10-21T11:30:00Z' };
+  const nextDetail = { ...detail, fact: nextFact };
+  pending.resolve(response(200, nextDetail));
+  await finishReplies();
+  expect(buttons('Edit')[0]?.disabled).toBe(false);
+  click('Edit');
+  expect(root.textContent).toContain('Current revision r8 · 21 Oct 2026, 11:30 UTC');
+  expect(root.textContent).toContain('Replaces r8 in your memory');
+  input('Second correction');
+  click('Save correction');
+  await settled();
+  expect(postBody(1)).toContain('"expectedRevision":8');
+});
+
+it('keeps both revision labels and the saved date on the command snapshot', async () => {
+  await setup();
+  click('Edit');
+  const newerFact = { ...updated, savedAt: '2026-10-21T11:30:00Z' };
+  fixture.componentInstance['selectedFact'].set(newerFact);
+  fixture.detectChanges();
+  expect(root.textContent).toContain('Current revision r7 · 2 Oct 2026, 10:00 UTC');
+  expect(root.textContent).toContain('Replaces r7 in your memory');
+  click('Save correction');
+  await settled();
+  expect(postBody(0)).toContain('"expectedRevision":7');
+});
+
+it.each([false, undefined])('refuses renewed editing when canCorrect is %s', async canCorrect => {
+  await setup();
+  post = () => Promise.resolve(response(409, {}));
+  const readOnlyDetail = { ...detail, fact: updated, canCorrect };
+  latest = () => Promise.resolve(response(200, readOnlyDetail));
+  saveDraft();
+  await settled();
+  click('Refresh and review');
+  await settled();
+  expect(root.textContent).toContain('This fact changed before your edit was saved');
+  expect(root.querySelector('oc-memory-edit textarea')).toBeNull();
+  expect(buttons('Save correction')).toHaveLength(0);
+  expect(buttons('Edit')).toHaveLength(0);
+  expect(matching('/correct')).toHaveLength(1);
+});
+
+it.each(['memoryId', 'scopeId'])('rejects a receipt for another %s', async field => {
+  await setup();
+  const unrelated = { ...accepted, [field]: 'another' };
+  post = () => Promise.resolve(response(200, unrelated));
+  saveDraft();
+  await settled();
+  expect(root.textContent).toContain('Outcome unknown');
+  expect(root.textContent).not.toContain('Corrected in your memory');
+  expect(root.querySelector('.edit-receipt')).toBeNull();
+  expect(matching('/facts/one')).toHaveLength(1);
+});
+
+function changeIdentity(change: string): void {
+  if (change === 'requester') fixture.componentRef.setInput('requesterId', 'second');
+  else void fixture.componentInstance['chooseScope']('other');
+  fixture.detectChanges();
+}
+function noEditorText(): void {
+  expect(root.textContent).not.toMatch(/Corrected in your memory|My draft|New private text/);
+  expect(root.querySelector('textarea')).toBeNull();
+  noPrivateAnnouncements();
+}
+
+it.each(['scope', 'requester'])('ignores a late refused POST after a %s change', async change => {
+  await setup();
+  const pending = deferred();
+  post = () => pending.promise;
+  const editor = editorComponent();
+  const accessLost = vi.spyOn(editor.accessLost, 'emit');
+  const refreshed = vi.spyOn(editor.refreshed, 'emit');
+  saveDraft();
+  changeIdentity(change);
+  await finishReplies();
+  const count = calls.length;
+  pending.resolve(response(403, {}));
+  await finishReplies();
+  expect(accessLost).not.toHaveBeenCalled();
+  expect(refreshed).not.toHaveBeenCalled();
+  expect(calls).toHaveLength(count);
+  noEditorText();
+});
+
+it.each(['scope', 'requester'])('ignores a late POST body after a %s change', async change => {
+  await setup();
+  const pending = deferred();
+  const delayed = response(200, accepted);
+  async function readBody(): Promise<unknown> {
+    const reply = await pending.promise;
+    return reply.json();
+  }
+  const read = vi.spyOn(delayed, 'json').mockImplementation(readBody);
+  post = () => Promise.resolve(delayed);
+  const editor = editorComponent();
+  const accessLost = vi.spyOn(editor.accessLost, 'emit');
+  const refreshed = vi.spyOn(editor.refreshed, 'emit');
+  saveDraft();
+  function bodyStarted(): void { expect(read).toHaveBeenCalledOnce(); }
+  await vi.waitFor(bodyStarted);
+  changeIdentity(change);
+  await finishReplies();
+  const count = calls.length;
+  pending.resolve(response(200, accepted));
+  await finishReplies();
+  expect(accessLost).not.toHaveBeenCalled();
+  expect(refreshed).not.toHaveBeenCalled();
+  expect(calls).toHaveLength(count);
+  noEditorText();
+});
+
+it.each(['scope', 'requester'])('ignores a late detail after a %s change', async change => {
+  await setup();
+  const pending = deferred();
+  latest = () => pending.promise;
+  const editor = editorComponent();
+  const accessLost = vi.spyOn(editor.accessLost, 'emit');
+  const refreshed = vi.spyOn(editor.refreshed, 'emit');
+  saveDraft();
+  await vi.waitFor(acceptanceStarted);
+  changeIdentity(change);
+  await finishReplies();
+  const count = calls.length;
+  const nextDetail = { ...detail, fact: updated };
+  pending.resolve(response(200, nextDetail));
+  await finishReplies();
+  expect(accessLost).not.toHaveBeenCalled();
+  expect(refreshed).not.toHaveBeenCalled();
+  expect(calls).toHaveLength(count);
+  noEditorText();
 });
