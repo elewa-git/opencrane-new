@@ -1,9 +1,9 @@
+import { freePort } from '@opencrane/event-store/testing';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { appendFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID, generateKeyPairSync } from 'node:crypto';
 import { once } from 'node:events';
-import { createServer } from 'node:net';
 import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -120,18 +120,6 @@ async function runningModelsFixture(nats: Awaited<ReturnType<typeof natsFixture>
   });
   await waitForReadiness(child, readinessPort);
   return { child, directory, usageFile, readinessPort, gatewayPort, controlPort, initialUsageId };
-}
-
-async function freePort() {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('No free port');
-  const port = address.port;
-  server.close();
-  await once(server, 'close');
-  return port;
 }
 
 async function waitForReadiness(child: ChildProcess, port: number) {

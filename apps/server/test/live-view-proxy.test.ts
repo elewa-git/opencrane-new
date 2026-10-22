@@ -1,8 +1,8 @@
+import { freePort } from '@opencrane/event-store/testing';
 import { nextBinaryMessage } from './support/rfb-viewer.ts';
 import { grantStream } from '@opencrane/authz';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -15,13 +15,6 @@ import { until } from '@opencrane/authz/testing';
 import { history } from '@opencrane/models';
 import { viewFixture } from './support/view-fixture.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
-
-async function freePort() {
-  const server = createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No test port');
-  await new Promise<void>(resolve => server.close(() => resolve()));
-  return address.port;
-}
 
 it.each(['web', 'dev-stack'])('opens the viewer through the configured %s frontend proxy', async source => {
   const port = await freePort(), origin = `http://127.0.0.1:${port}`;

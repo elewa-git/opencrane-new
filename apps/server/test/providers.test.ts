@@ -1,3 +1,4 @@
+import { freePort } from '@opencrane/event-store/testing';
 import { z } from 'zod';
 import { budgetCallDispatchAdmittedDataSchema, decisionRecordedDataSchema, parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
 import { createEventStore, type StoredEvent } from '@opencrane/event-store';
@@ -86,8 +87,8 @@ async function initialise() {
   await once(upstream, 'listening');
   const upstreamAddress = upstream.address();
   if (!upstreamAddress || typeof upstreamAddress === 'string') throw new Error('Missing upstream');
-  const port = await freePort();
-  const readinessPort = await freePort();
+  let port = await freePort();
+  let readinessPort = await freePort();
   actor = new BudgetActor(nats.store, 'acme');
   await actor.start(100, 100, 'installation-default');
   secrets = providerSecrets(secretDirectory);
@@ -97,9 +98,26 @@ async function initialise() {
     0, undefined, verificationOptions);
   await writeFile(`${secretDirectory}/legacy-key`, 'fixture-only');
   const binary = resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64');
-  gateway = await startGateway({ binary, port, readinessPort, decisionUrl: decision.url,
+  const gatewayOptions = { binary, port, readinessPort, decisionUrl: decision.url,
     issuer, upstream: `127.0.0.1:${upstreamAddress.port}`, keyFile: `${secretDirectory}/legacy-key`,
-    configFile: `${secretDirectory}/gateway.json`, usageFile: `${secretDirectory}/usage.jsonl` });
+    configFile: `${secretDirectory}/gateway.json`, usageFile: `${secretDirectory}/usage.jsonl` };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      gateway = await startGateway(gatewayOptions);
+      break;
+    } catch (error) {
+      const addressInUse = error instanceof Error &&
+        /address (?:already )?in use/iu.test(error.message);
+      if (!addressInUse || attempt >= 2) {
+        throw error;
+      }
+      port = await freePort();
+      readinessPort = await freePort();
+      gatewayOptions.port = port;
+      gatewayOptions.readinessPort = readinessPort;
+      verificationOptions.gatewayUrl = `http://127.0.0.1:${port}`;
+    }
+  }
   database = pgDb(dbs.queue);
   app = buildServer(config, { providers: {
     silo: 'acme', store: nats.store, binding, db: database, feed: { memberId }, secrets,
@@ -261,18 +279,7 @@ it('checks reachability through the real gateway separately from a model answer'
 function closeUpstream(resolve: () => void) {
   upstream.close(resolve);
 }
-async function freePort() {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Missing port');
-  function closeServer(resolve: () => void) {
-    server.close(resolve);
-  }
-  await new Promise<void>(closeServer);
-  return address.port;
-}
+
 function recordUpstream(req: import('node:http').IncomingMessage,
   res: import('node:http').ServerResponse) {
   upstreamCount++;

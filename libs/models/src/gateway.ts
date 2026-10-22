@@ -265,6 +265,24 @@ export type GatewayModelRoute =
   | { managedCalls: true; keyFile?: string }
   | { managedCalls?: false; keyFile: string };
 
+function safeGatewayStderr(line: string) {
+  const trimmed = line.trim();
+  // Expose only known startup failures. Other diagnostics can contain private request data.
+  if (/\baddress (?:already )?in use\b/iu.test(trimmed)) {
+    if (trimmed.startsWith('Error:')) {
+      return 'Error: Address already in use';
+    }
+    return 'Address already in use';
+  }
+  if (trimmed === 'Error: readiness server starts' || trimmed === 'Caused by:') {
+    return trimmed;
+  }
+  if (!trimmed) {
+    return '';
+  }
+  return '[gateway detail withheld]';
+}
+
 export async function startGateway(options: GatewayModelRoute & {
   binary: string; configFile: string; usageFile: string;
   port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string;
@@ -283,16 +301,15 @@ export async function startGateway(options: GatewayModelRoute & {
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', RUST_LOG: 'info', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let writes = Promise.resolve(), failed = false;
-  let errorLine = '';
-  let stderrBuffer = '';
-  child.stderr.setEncoding('utf8');
-  child.stderr.on('data', (chunk: string) => {
-    stderrBuffer += chunk;
-    const lines = stderrBuffer.split('\n');
-    stderrBuffer = lines.pop() ?? '';
-    const match = lines.find(line => /\bError:/u.test(line));
-    if (match) errorLine = match.trim();
-  });
+  const stderrTail: string[] = [];
+  const stderr = createInterface({ input: child.stderr });
+  function recordStderr(line: string) {
+    stderrTail.push(safeGatewayStderr(line));
+    if (stderrTail.length > 10) {
+      stderrTail.shift();
+    }
+  }
+  stderr.on('line', recordStderr);
   const lines = createInterface({ input: child.stdout });
   // Adapted from S0.1c: never persist raw gateway diagnostics, credentials or request bodies.
   lines.on('line', line => {
@@ -303,14 +320,14 @@ export async function startGateway(options: GatewayModelRoute & {
     writes = writes.then(() => appendFile(options.usageFile, `${JSON.stringify(parsed.data)}\n`, { mode: 0o600 }))
       .catch(() => { failed = true; child.kill('SIGTERM'); });
   });
-  child.stderr.on('end', () => {
-    if (!errorLine && /\bError:/u.test(stderrBuffer)) errorLine = stderrBuffer.trim();
-  });
   // Exit can precede the final stdout records; close waits for the pipes to drain.
   const closed = once(child, 'close');
   const stop = async (signal: NodeJS.Signals = 'SIGTERM') => {
     if (child.exitCode === null && child.signalCode === null) child.kill(signal);
-    await closed; await writes; lines.close();
+    await closed;
+    await writes;
+    lines.close();
+    stderr.close();
   };
   options.onChildSpawn?.(child, stop);
   try {
@@ -318,7 +335,8 @@ export async function startGateway(options: GatewayModelRoute & {
       if (child.exitCode !== null || child.signalCode !== null || failed) {
         await stop();
         const status = child.signalCode ? `signal ${child.signalCode}` : `exit code ${child.exitCode}`;
-        const diagnostic = errorLine ? `: ${errorLine}` : '';
+        const detail = stderrTail.join('\n').trim();
+        const diagnostic = detail ? `: ${detail}` : '';
         throw new Error(`Gateway stopped (${status})${diagnostic}`);
       }
       try {

@@ -1,3 +1,4 @@
+import { freePort } from '@opencrane/event-store/testing';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, cp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -11,16 +12,6 @@ function listeningPort(server: Server) {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing TCP address');
   return address.port;
-}
-
-async function freePort() {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const port = listeningPort(server);
-  server.close();
-  await once(server, 'close');
-  return port;
 }
 
 async function hasExited(child: ChildProcess, deadline = 3000) {

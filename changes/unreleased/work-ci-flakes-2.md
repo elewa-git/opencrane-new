@@ -1,0 +1,1 @@
+Tests avoid outgoing-connection ports and retry busy listener ports. Gateway startup failures keep safe bind details so port-conflict retries can work. Admission timing tests check the measured call’s reservation and require refused warm-ups to release their money at zero euro cents, while keeping the two-second limit.

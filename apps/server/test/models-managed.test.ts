@@ -1,8 +1,8 @@
+import { freePort } from '@opencrane/event-store/testing';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { expect, it, onTestFinished } from 'vitest';
@@ -12,18 +12,6 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { managedFixture, credential } from '../../../libs/models/test/managed-fixture.ts';
 
 type Setup = Awaited<ReturnType<typeof managedFixture>>;
-
-async function freePort() {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('No free port');
-  const closed = once(server, 'close');
-  server.close();
-  await closed;
-  return address.port;
-}
 
 async function startModels(setup: Setup, patch: NodeJS.ProcessEnv = {}) {
   await setup.stopDispatch();

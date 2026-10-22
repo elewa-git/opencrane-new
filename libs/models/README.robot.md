@@ -2942,3 +2942,21 @@ fresh-install qualification: NOT RUN. Next for #49 is row 4, company opt-in and 
 and Ask. It cannot fill missing declarations. Exact review uses the same requirement
 in `reviewedToolChoices`; the projection checks it again when applying mode events.
 History still loads before the two-second authority check. No access streams changed.
+
+## Shared test ports
+
+The nine former `freePort` copies now use `@opencrane/event-store/testing`.
+Each Vitest worker uses 200 ports, starting at `20000 + VITEST_POOL_ID * 200`.
+Workers 0 to 24 are supported. The helper skips `EADDRINUSE` and stops after
+200 attempts. This keeps ports below 25000, away from the secondary dev stacks
+at 25100 and 25200 and the Linux outgoing range starting at 32768.
+Separate test runs can share worker ids, so listeners are checked before use.
+
+`startGateway` keeps the last ten stderr lines after removing private details.
+Only recognised startup and bind failures reach errors; other lines are withheld.
+The port-conflict tests occupy a real readiness port and check the reported cause.
+The admission benchmarks delay the first saved Allow by 2.2 seconds to force a
+refused warm-up. Background event delivery stops before loading grant history.
+The measured call adds exactly one reservation. Earlier refused warm-ups settle
+at zero euro cents; the successful warm-up and measured call keep their holds.
+The measured call still has a two-second limit.

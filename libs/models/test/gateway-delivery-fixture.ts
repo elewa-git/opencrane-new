@@ -1,3 +1,5 @@
+export { freePort } from '@opencrane/event-store/testing';
+import { freePort } from '@opencrane/event-store/testing';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -7,20 +9,6 @@ import { resolve } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { onTestFinished } from 'vitest';
 import { startGateway } from '../src/gateway.ts';
-
-export async function freePort() {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  const closed = once(server, 'close');
-  server.close();
-  await closed;
-  if (!address || typeof address === 'string') {
-    throw new Error('No fixture port');
-  }
-  return address.port;
-}
 
 export async function gatewayFixture() {
   const directory = await mkdtemp(`${tmpdir()}/gateway-reload-`);

@@ -330,3 +330,12 @@ The server retries definite conflicts after reading new rows and checking result
 validity and access again. The adapter performs no result or access decision itself.
 The NATS publish regression inserts a loss immediately before sending the write and
 requires a conflict with no parent entry. Read access checks stay unchanged.
+
+## Shared test ports
+
+The nine former `freePort` copies now use `@opencrane/event-store/testing`.
+Each Vitest worker uses 200 ports, starting at `20000 + VITEST_POOL_ID * 200`.
+Workers 0 to 24 are supported. The helper skips `EADDRINUSE` and stops after
+200 attempts. This keeps ports below 25000, away from the secondary dev stacks
+at 25100 and 25200 and the Linux outgoing range starting at 32768.
+Separate test runs can share worker ids, so listeners are checked before use.
