@@ -48,6 +48,8 @@ read the paid file. Its value was never printed. Proof was copied before cleanup
 | Change history for limits and groups | PASS | PASS |
 | All eight group checks, including zero AI/computer/budget work | PASS | PASS |
 
+The older journey leaves its separate paid-answer and member-disk-isolation rows unproved.
+Real answers are proved by product setup and smoke; disk isolation is outside this script.
 Both receipts contain UTC times, full source SHA and pictures at 1280px and 390px.
 Image identifiers are saved for [install A](rehearsal-a/images.txt) and [B](rehearsal-b/images.txt). Startup through final logout took 806 and 715 seconds. Smoke runs
 at 1280/390 took 55,112/55,769 ms and 55,792/54,444 ms; warm-up took 20,644/23,536 ms.
@@ -84,12 +86,14 @@ kit seed and smoke. Later failed proof remains available; none substitutes for t
 - PASS: required lint and workspace typecheck; event catalogue, Knip and changelog checks.
 - PASS: 438 event-security tests with the supplied `PG_TEST_URL`.
 - PASS: nightly fixtures cover unique attempts, paid settings cleared, failure retained before cleanup,
-  failed-journey propagation and claimed-id-only cleanup. Live nightly stand-in install: NOT RUN.
+  failed-journey propagation and claimed-id-only cleanup. Live nightly stand-in install: FAIL.
 - FAIL: an additional compiler check across every dev-stack script found existing errors in
   `mcp-journey.ts`, `wake-latency.ts` and `zitadel-setup.test.ts`, outside this change.
 
 [Source check details](checks.json) distinguish the required workspace checks from that extra check.
 Checks and tests used `nice -n 10`. No local full root test suite or fleet batch ran.
 GitHub CI is reported on the draft PR for its pushed head. No older nightly SHA qualifies it.
+[The free nightly install](nightly-failed/receipt.json) failed before groups: the existing tool
+review returned HTTP 409. It retained sanitised failure logs before cleanup; paid calls: zero.
 Slot 1 was held through cleanup after each install. The owner stack, port 44200 and its data
 were untouched. No dependency, product event or protected authority/security test changed.
