@@ -223,9 +223,10 @@ async function readsPdfWhenInlineTextIsUnavailable() {
   const environment = { ...process.env, MODEL_STUB_PORT: '0',
     MODEL_STUB_MCP_GENERATION: randomUUID(),
     MODEL_STUB_MCP_REVISION: catalogueDigest([approvalJourneyTool()]) };
-  const options = { env: environment, stdio: ['ignore', 'pipe', 'pipe'] as const };
+  const stdio: ['ignore', 'pipe', 'pipe'] = ['ignore', 'pipe', 'pipe'];
+  const options = { env: environment, stdio };
   const stub = spawn(process.execPath, ['--experimental-strip-types', stubPath], options);
-  function unavailableText(): Promise<Buffer> {
+  function unavailableText(): Promise<never> {
     return Promise.reject(new Error('Attachment text unavailable'));
   }
   function emptyText() {
@@ -242,7 +243,8 @@ async function readsPdfWhenInlineTextIsUnavailable() {
       const text = await turnInput('What is the project code in the attached PDF?',
         'conversation', files, read);
       const user = { type: 'message', role: 'user', content: [{ type: 'input_text', text }] };
-      const request = { method: 'POST', body: JSON.stringify({ input: [user] }) };
+      const payload = { input: [user] };
+      const request = { method: 'POST', body: JSON.stringify(payload) };
       const response = await fetch(endpoint, request);
       assert.equal(response.status, 200);
       const events = await response.text();
@@ -250,16 +252,28 @@ async function readsPdfWhenInlineTextIsUnavailable() {
         'Missing inline text must request a file read rather than answer with a failure');
       assert(events.includes('cat /workspace/uploads/conversation/pdf/project.pdf.md'));
       assert(!events.includes('PDF reading failed.'));
+      const callId = /"call_id":"([^"]+)"/u.exec(events)?.[1];
+      assert(callId, 'The file read must have a call id for its later result');
 
-      const result = { type: 'custom_tool_call_output', call_id: 'read-pdf',
+      const result = { type: 'custom_tool_call_output', call_id: callId,
         output: [{ type: 'input_text', text: 'Project code: Hazel-83.' }] };
-      const followUp = { method: 'POST', body: JSON.stringify({ input: [user, result] }) };
+      const followUpPayload = { input: [user, result] };
+      const followUp = { method: 'POST', body: JSON.stringify(followUpPayload) };
       const answer = await fetch(endpoint, followUp);
       const completed = await answer.text();
       assert(completed.includes('The project code is Hazel-83.'));
       assert(completed.includes('event: response.completed'));
       assert(!completed.includes('"type":"custom_tool_call"'),
         'A completed read must answer rather than request the same file again');
+
+      const failedResult = { ...result, output: [{ type: 'input_text', text: 'File unavailable' }] };
+      const failedPayload = { input: [user, failedResult] };
+      const failedRead = { method: 'POST', body: JSON.stringify(failedPayload) };
+      const failedAnswer = await fetch(endpoint, failedRead);
+      const refused = await failedAnswer.text();
+      assert(refused.includes('PDF reading failed.'));
+      assert(!refused.includes('"type":"custom_tool_call"'),
+        'A failed file read must finish without inventing a fact or repeating the read');
     }
   } finally {
     const stopped = once(stub, 'exit');

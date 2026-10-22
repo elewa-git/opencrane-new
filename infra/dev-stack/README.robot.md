@@ -718,8 +718,12 @@ still requires exactly one clean upload; an empty list remains a failure.
 
 The browser starts a draft, attaches `project.pdf` through the native file picker,
 waits for delivery, previews the promoted original and asks for its project code.
-The prompt does not contain the answer. The stub requests `exec_command` and only
-answers Willow-47 after Codex returns the MarkItDown text. The journey also checks
+The question does not contain the answer. The stub uses the inline MarkItDown text
+when it contains the requested fact. Otherwise it requests a file read through `exec`
+and answers only after Codex returns the fact. A completed read takes priority over
+the original inline text. An unsuccessful read ends with a failure rather than
+inventing the fact or requesting the same file repeatedly. The HTTP upload proof
+always requests the file read, even when inline text is present. The journey also checks
 reload, EICAR/type/size refusals and text/image previews, at 1280px and 390px.
 It drops the first upload response after the server handles it, clicks Retry and
 checks that only one attachment exists. The size check selects a real sparse file
@@ -733,6 +737,52 @@ The ordinary journey never uses a paid provider.
 Its login fixture retries Chromium `ERR_NETWORK_CHANGED` at most twice; recovery
 after submitted credentials must still have a valid server session, followed by
 the normal identity, organisation and cookie assertions.
+
+`model-stub.test.ts` sends the computer's real `turnInput` output to a disposable
+HTTP stand-in. Unavailable and empty inline text must request the converted file.
+A later tool result supplies a different project code, which must appear in the
+completed answer. A failed read must finish without repeating the request.
+
+### PDF answer investigation, 22 October 2026
+
+The retained failure came from source `db18a7bf1882515421a8955010e898183fcb183f`,
+attempt `nightly-20261022T211505-1d48d147-b640-4a88-9e05-da853665efd4`.
+Its private logs and `chat-failure.png` are under `~/.opencrane/daily-fresh/` in
+that attempt's directory. The picture shows “PDF reading failed.” and “Done”.
+The page had updated; it was waiting for the expected answer rather than a late reply.
+
+The files worker log records these observations. The intervals include worker
+scheduling time and do not separate network delivery from PDF conversion.
+The computer acknowledges delivery only after conversion finishes.
+
+| Observation | UTC time | Interval |
+| --- | --- | --- |
+| Uploaded file | 21:19:57.532 | Start of delivery and conversion |
+| Delivered file | 21:20:32.315 | 34.783 seconds after upload |
+| Posted question | 21:20:38.044 | Start of the answer check |
+| Started turn | 21:20:39.134 | 1.090 seconds after the question |
+| Admitted model call | 21:20:43.467 | 4.333 seconds after turn start |
+| First reply piece | 21:20:43.805 | 0.338 seconds after admission |
+| Completed turn | 21:20:44.708 | 6.664 seconds after the question |
+
+The stand-in treated the attachment preamble as usable inline text. When that
+text lacked the fact, it skipped its file read and returned the failure above.
+It also preferred the original inline text over a later file-read result.
+The exact model input was not retained, so the reason that attempt lacked the
+inline fact is unknown. The regression reproduces the same response with the
+computer's supported unavailable-text input, without a live stack.
+Commit `1d0b9e9ee` contains the failing test before the fix.
+
+A diagnostic fresh start from `9367396af` on claimed slot 1 passed both browser
+PDF answers when inline text was available. A disposable Docker computer also
+delivered and converted the original PDF and answered from its text. A separate
+gateway fixture preserved that text. Those checks do not reproduce the original
+missing-text condition. The diagnostic browser run was interrupted after both
+PDF answers and its slot was released. Temporary diagnostics recorded only
+booleans about the input; they were removed before committing.
+
+The fix changes only the development model fixture. The browser still requires
+the expected project code and a completed reply within its existing two minutes.
 
 ## Budget journey cleanup
 
