@@ -4,9 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+# Cancel older pull request runs while letting every main push finish.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -38,9 +44,9 @@ jobs:
         run: sh scripts/fetch-lychee.sh && .tools/lychee --version
 
       - name: Lint
-        # Give typed ESLint room: the whole repo now needs more than the default heap.
+        # Public runners have 16 GB of memory.
         env:
-          NODE_OPTIONS: --max-old-space-size=4096
+          NODE_OPTIONS: --max-old-space-size=8192
         run: npm run lint
 
       - name: Typecheck
