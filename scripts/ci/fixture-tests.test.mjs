@@ -19,6 +19,7 @@ function partitionsTests() {
   }
   assert.ok(!fixtures.some(isShardArgument));
   assert.ok(fixtures.includes('--maxWorkers=1'));
+  assert.ok(fixtures.includes('apps/web/test/chat-browser.test.ts'));
 }
 
 function isShardArgument(argument) {

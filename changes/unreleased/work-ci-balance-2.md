@@ -1,0 +1,1 @@
+- Balance CI test shards using saved durations, keep full checks for uncertain documentation changes, and prepare Angular fixtures before testing and prevent competing builds.

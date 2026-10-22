@@ -224,6 +224,9 @@ npm run build -w apps/web
 npm run typecheck -w apps/web
 ```
 
+Builds reuse compiled files locally and in CI. Browser fixture checks prepare a
+development build before starting their test servers.
+
 The desktop viewer first asks for access, then connects its socket and display.
 It clears the picture when permission expires or the session closes.
 

@@ -57,6 +57,8 @@ export function testArguments(group) {
   const argumentsList = [];
   if (group === 'fixtures') {
     argumentsList.push(...fixtureFiles);
+    // Give each Angular build the runner instead of competing with another test file.
+    argumentsList.push('--maxWorkers=1');
   } else if (['1', '2', '3', '4'].includes(group)) {
     argumentsList.push(`--shard=${group}/4`);
     for (const file of fixtureFiles) {

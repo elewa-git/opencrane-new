@@ -15,7 +15,40 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.select.outcome == 'success' && steps.select.outputs.mode || 'full' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Decide using the base commit's rules
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo 'mode=full' >> "$GITHUB_OUTPUT"
+          elif ! git cat-file -e "$BASE_SHA:scripts/ci/select.mjs" 2>/dev/null; then
+            echo '::notice::The base commit has no decision script; running every check.'
+            echo 'mode=full' >> "$GITHUB_OUTPUT"
+          else
+            git show "$BASE_SHA:scripts/ci/select.mjs" > "$RUNNER_TEMP/ci-select.mjs"
+            node "$RUNNER_TEMP/ci-select.mjs" "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA"
+          fi
+
   checks:
+    needs: select
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,11 +65,13 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: List every root test file
+        if: needs.select.outputs.mode != 'docs'
         run: |
           mkdir -p .tools/ci
           nice -n 10 npx vitest list --filesOnly --json > .tools/ci/expected.json
 
       - uses: actions/upload-artifact@v4
+        if: needs.select.outputs.mode != 'docs'
         with:
           name: expected-test-files
           path: .tools/ci/expected.json
@@ -45,6 +80,7 @@ jobs:
           retention-days: 7
 
       - name: Check shipped npm dependencies
+        if: needs.select.outputs.mode != 'docs'
         timeout-minutes: 5
         run: |
           npm audit --omit=dev --audit-level=high
@@ -58,24 +94,30 @@ jobs:
         run: sh scripts/fetch-lychee.sh && .tools/lychee --version
 
       - name: Lint
+        if: needs.select.outputs.mode != 'docs'
         # Public runners have 16 GB of memory.
         env:
           NODE_OPTIONS: --max-old-space-size=8192
         run: nice -n 10 npm run lint
 
       - name: Typecheck
+        if: needs.select.outputs.mode != 'docs'
         run: nice -n 10 npm run typecheck
 
       - name: Check the event catalogue matches the registry
+        if: needs.select.outputs.mode != 'docs'
         run: npm run check:events
 
       - name: Install Chromium for demo recording checks
+        if: needs.select.outputs.mode != 'docs'
         run: npx playwright install --with-deps chromium
 
       - name: Check CI test grouping
+        if: needs.select.outputs.mode != 'docs'
         run: nice -n 10 node --test scripts/ci/*.test.mjs
 
       - name: Check local provider setup and model stub
+        if: needs.select.outputs.mode != 'docs'
         run: >-
           nice -n 10 node --experimental-strip-types --test
           infra/dev-stack/model-stub.test.ts infra/dev-stack/models-environment.test.ts
@@ -95,12 +137,27 @@ jobs:
 
       # apps/web builds and tests through the Angular CLI, so it needs its own steps.
       - name: Build apps/web
+        if: needs.select.outputs.mode != 'docs'
         run: nice -n 10 npm run build -w apps/web
 
       - name: Test apps/web
+        if: needs.select.outputs.mode != 'docs'
         run: nice -n 10 npm run test -w apps/web
 
+      - name: Check documentation
+        if: needs.select.outputs.mode == 'docs'
+        run: |
+          nice -n 10 npm run lint:docs
+          nice -n 10 npm run lint:links
+          nice -n 10 npm run lint:changelog
+
+      - name: Keep event security rules checked on docs-only pull requests
+        if: ${{ !cancelled() && needs.select.outputs.mode == 'docs' }}
+        run: nice -n 10 npx vitest run libs/events/test/security-rules.test.ts --maxWorkers=2
+
   test:
+    needs: select
+    if: ${{ !cancelled() && needs.select.outputs.mode != 'docs' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -169,6 +226,8 @@ jobs:
           retention-days: 7
 
   fixtures:
+    needs: select
+    if: ${{ !cancelled() && needs.select.outputs.mode != 'docs' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     services:
@@ -182,6 +241,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
     env:
+      NG_BUILD_MAX_WORKERS: '2'
       PG_TEST_URL: postgres://postgres:test-only@127.0.0.1:5432/postgres
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
@@ -249,7 +309,7 @@ jobs:
 
   ci-ok:
     if: always()
-    needs: [checks, test, fixtures]
+    needs: [select, checks, test, fixtures]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -261,30 +321,27 @@ jobs:
           node-version: 22
 
       - uses: actions/download-artifact@v4
+        if: needs.select.outputs.mode != 'docs'
         with:
           name: expected-test-files
           path: .tools/ci
 
       - uses: actions/download-artifact@v4
+        if: needs.select.outputs.mode != 'docs'
         with:
           pattern: test-files-*
           path: .tools/ci/groups
           merge-multiple: true
 
       - name: Require every root test file exactly once
+        if: needs.select.outputs.mode != 'docs'
         run: node scripts/ci/test-files.mjs verify
 
       - name: Require checks, shards and fixture tests to pass
         if: always()
         env:
+          CI_DECISION: ${{ needs.select.outputs.mode }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           TEST_RESULT: ${{ needs.test.result }}
           FIXTURES_RESULT: ${{ needs.fixtures.result }}
-        run: |
-          if [ "$CHECKS_RESULT" != "success" ] || [ "$TEST_RESULT" != "success" ] ||
-             [ "$FIXTURES_RESULT" != "success" ]; then
-            echo "Checks result: $CHECKS_RESULT"
-            echo "Test shards result: $TEST_RESULT"
-            echo "Fixture tests result: $FIXTURES_RESULT"
-            exit 1
-          fi
+        run: node scripts/ci/select.mjs gate
