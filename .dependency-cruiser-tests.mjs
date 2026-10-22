@@ -2,7 +2,7 @@ import production from './.dependency-cruiser.cjs';
 
 const { options } = production;
 
-const applications = ['computer', 'odoo-mcp', 'ops', 'server', 'web'];
+const applications = ['computer', 'demo-mcp', 'odoo-mcp', 'ops', 'server', 'web'];
 
 function testImportRule(application) {
   return {
