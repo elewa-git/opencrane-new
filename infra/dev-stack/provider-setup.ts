@@ -22,6 +22,19 @@ type Reply = {
   projection?: { content: string; iam: string }; outcome?: string;
 };
 
+async function accessApplying(response: Response) {
+  if (response.status !== 425) {
+    return false;
+  }
+  try {
+    const result: unknown = await response.json();
+    return typeof result === 'object' && result !== null &&
+      'status' in result && result.status === 'access_applying';
+  } catch {
+    return false;
+  }
+}
+
 export async function setupProvider(options: SetupOptions) {
   const providerId = options.real ? 'dev-openai' : 'dev-stub';
   const name = options.real ? 'OpenAI demo' : 'Local model stub';
@@ -29,23 +42,32 @@ export async function setupProvider(options: SetupOptions) {
   const headers = { origin: options.origin, cookie: options.cookie,
     'content-type': 'application/json' };
   async function request(step: string, path: string, input?: Record<string, unknown>) {
+    const deadline = Date.now() + 30_000;
     const init = { headers, method: input ? 'POST' : 'GET',
       ...(input ? { body: JSON.stringify(input) } : {}),
       signal: AbortSignal.timeout(30_000), redirect: 'error' as const };
-    let response: Response;
-    try {
-      response = await fetch(`${options.server}${path}`, init);
-    } catch {
-      throw new Error(`Provider setup ${step}: unavailable`);
+    while (Date.now() < deadline) {
+      let response: Response;
+      try {
+        response = await fetch(`${options.server}${path}`, init);
+      } catch {
+        throw new Error(`Provider setup ${step}: unavailable`);
+      }
+      // Repeat the same command only after the server confirms that access is still applying.
+      if (await accessApplying(response)) {
+        await delay(100);
+        continue;
+      }
+      if (!response.ok) {
+        throw new Error(`Provider setup ${step}: ${response.status}`);
+      }
+      try {
+        return await response.json() as Reply;
+      } catch {
+        throw new Error(`Provider setup ${step}: invalid`);
+      }
     }
-    if (!response.ok) {
-      throw new Error(`Provider setup ${step}: ${response.status}`);
-    }
-    try {
-      return await response.json() as Reply;
-    } catch {
-      throw new Error(`Provider setup ${step}: invalid`);
-    }
+    throw new Error(`Provider setup ${step}: timeout`);
   }
   async function save(step: string, path: string, input: Record<string, unknown>, verify = false) {
     const commandId = randomUUID();

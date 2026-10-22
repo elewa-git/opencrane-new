@@ -197,6 +197,105 @@ test('waits for the first provider binding before explicitly selecting the defau
 test('a lost save reply is recovered by reading its original receipt', lostReplyTest);
 test('an absent receipt after a lost response never repeats the unknown write', absentReceiptTest);
 
+async function retriesApplyingCreate() {
+  const attempts: string[] = [];
+  const methods: string[] = [];
+  async function handle(request: import('node:http').IncomingMessage,
+    response: import('node:http').ServerResponse) {
+    let contents = '';
+    for await (const chunk of request) contents += String(chunk);
+    methods.push(`${request.method} ${request.url}`);
+    response.setHeader('content-type', 'application/json');
+    if (request.method === 'POST' && request.url === '/api/org/providers') {
+      attempts.push(contents);
+      if (attempts.length === 1) {
+        response.writeHead(425);
+        response.end(JSON.stringify({ status: 'access_applying' }));
+        return;
+      }
+      response.end(JSON.stringify({ status: 'appended', revision: 1 }));
+      return;
+    }
+    if (request.url?.includes('/changes/')) {
+      response.end(JSON.stringify({ revision: 1,
+        projection: { content: 'current', iam: 'current' } }));
+      return;
+    }
+    response.writeHead(403);
+    response.end('sensitive-value /private/location');
+  }
+  const server = createServer(handle);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
+    cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
+  async function run() {
+    await setupProvider(options);
+  }
+  try {
+    await assert.rejects(run, { message: 'Provider setup save: 403' });
+    assert.equal(attempts.length, 2);
+    assert.equal(attempts[1], attempts[0], 'Retry the exact command, including its id');
+    assert.deepEqual(methods.slice(0, 2), [
+      'POST /api/org/providers', 'POST /api/org/providers',
+    ]);
+    assert.match(methods[2]!, /^GET \/api\/org\/providers\/dev-stub\/changes\//u);
+    assert.equal(methods.length, 4);
+  } finally {
+    server.closeAllConnections();
+    const closed = once(server, 'close');
+    server.close();
+    await closed;
+  }
+}
+test('setup retries the exact create only when the product reports access still applying',
+  retriesApplyingCreate);
+
+async function refusesUnclearApplyingReplies() {
+  for (const failure of ['wrong-status', 'invalid', 'unavailable']) {
+    const methods: string[] = [];
+    function handle(request: import('node:http').IncomingMessage,
+      response: import('node:http').ServerResponse) {
+      methods.push(request.method!);
+      request.resume();
+      response.setHeader('content-type', 'application/json');
+      if (request.method === 'GET') {
+        response.writeHead(404);
+      } else {
+        response.writeHead(failure === 'unavailable' ? 503 : 425);
+      }
+      const body = failure === 'invalid' ? 'sensitive-value /private/location'
+        : JSON.stringify({ status: 'unavailable' });
+      response.end(body);
+    }
+    const server = createServer(handle);
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
+      cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
+    async function run() {
+      await setupProvider(options);
+    }
+    try {
+      const code = failure === 'unavailable' ? 404 : 425;
+      await assert.rejects(run, { message: `Provider setup create: ${code}` });
+      const expected = failure === 'unavailable' ? ['POST', 'GET'] : ['POST'];
+      assert.deepEqual(methods, expected, 'Only a definite access-applying reply permits retry');
+    } finally {
+      server.closeAllConnections();
+      const closed = once(server, 'close');
+      server.close();
+      await closed;
+    }
+  }
+}
+test('unclear 425 replies and an unknown 503 write never repeat the create',
+  refusesUnclearApplyingReplies);
+
 async function refusesUnsafeReplies() {
   for (const failure of ['redirect', 'transport', 'json']) {
     let requests = 0;

@@ -36,6 +36,12 @@ verification are refused. No prices, exchange rates or models are invented.
 
 ## Evidence and recovery
 
+HTTP 425 with `{ status: "access_applying" }` means the caller's saved membership or
+ownership is still being applied to permissions. A create returns this before saving
+any event. Wait briefly and retry the exact input with the same command id. These
+retries still require current Owner/Admin access. Other 425 replies give no such promise.
+HTTP 503 and transport failures remain uncertain outcomes and require a status read.
+
 Receipts contain `status: "appended"`, `providerId`, `revision`, `sequence` and
 `changeId` and the recorded `operation`. Check that operation before confirming
 a lost reply. Clear the key field on acceptance, including a reconciled accepted
