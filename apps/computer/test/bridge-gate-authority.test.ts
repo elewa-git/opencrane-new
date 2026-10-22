@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -46,7 +47,10 @@ async function longLifetime(test: TestBridge) {
 }
 async function futureIssued(test: TestBridge) {
   const now = Math.floor(Date.now() / 1000);
-  return customGate(test, {}, { issuedAt: now + 6, expiresAt: now + 30 });
+  const gate = await customGate(test, {}, { issuedAt: now + 6, expiresAt: now + 30 });
+  // Cross a second boundary before sending, as signing can on a busy worker.
+  await delay(1100);
+  return gate;
 }
 async function wrongSignature(test: TestBridge) {
   const valid = await test.signedGate();

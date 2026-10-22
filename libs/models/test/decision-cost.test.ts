@@ -373,6 +373,19 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     }
     await setup.nats.seed(events);
     vi.spyOn(store, 'readStream').mockImplementation(recordGrantRead);
+    const append = store.append.bind(store);
+    let delayed = false;
+    async function delayFirstAllow(command: Parameters<typeof append>[0]) {
+      const result = await append(command);
+      if (!delayed && modelAllowSchema.safeParse(command.event).success) {
+        delayed = true;
+        // Force one warm-up call past its access deadline after it reserves money.
+        await delay(2200);
+      }
+      return result;
+    }
+    const writes = vi.spyOn(store, 'append');
+    writes.mockImplementation(delayFirstAllow);
     const warmed = await decide(setup);
     expect([200, 403]).toContain(warmed.status);
     expect(fullReads).toEqual([false]);
@@ -383,6 +396,8 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
       ready = await decide(setup, setup.options.decisionUrl, headers);
     }
     expect(ready.status, ready.text).toBe(200);
+    expect(delayed).toBe(true);
+    writes.mockRestore();
     const summaryPosition = await store.head(subject);
     const reads = countReads(store);
     const headers = await setup.issue();

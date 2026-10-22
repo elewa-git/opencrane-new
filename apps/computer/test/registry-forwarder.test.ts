@@ -61,7 +61,8 @@ async function stopsWithOpenConnection() {
 }
 
 async function interruptsBuild(signal: 'SIGTERM' | 'SIGINT', phase = 'download') {
-  const directory = await mkdtemp(join(tmpdir(), 'computer-build-stop-'));
+  // Keep -i in the volume path to distinguish it from Docker's interactive argument.
+  const directory = await mkdtemp(join(tmpdir(), 'computer-build-stop-i'));
   const bin = join(directory, 'bin');
   const port = await freePort();
   await mkdir(bin);
