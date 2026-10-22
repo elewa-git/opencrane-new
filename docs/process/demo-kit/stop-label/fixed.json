@@ -1,0 +1,91 @@
+{
+  "source": "89ab910bf314069856d482814f675eb77f7be559",
+  "mode": "fixed",
+  "startedAt": "2026-10-22T01:19:59.662Z",
+  "slot": 1,
+  "provider": "stand-in",
+  "checks": [
+    {
+      "kind": "fixed",
+      "width": 390,
+      "conversationId": "92281c52-563c-4044-ad00-2d0ec26d6b2d",
+      "partialCharacters": 5564,
+      "failedLabels": 0,
+      "result": "PASS",
+      "saved": {
+        "counts": {
+          "conversation.created": 1,
+          "message.posted": 1,
+          "agent.turn_started": 1,
+          "agent.message_delta": 125,
+          "agent.turn_stop_requested": 1,
+          "agent.turn_failed": 1
+        },
+        "endings": [
+          {
+            "type": "agent.turn_stop_requested",
+            "turnId": "f67fbf99-628d-4ea0-b27d-84fcfbf34943",
+            "reason": null
+          },
+          {
+            "type": "agent.turn_failed",
+            "turnId": "f67fbf99-628d-4ea0-b27d-84fcfbf34943",
+            "reason": "bridge_interrupted"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "fixed",
+      "width": 1280,
+      "conversationId": "b7706044-16e2-4fc3-b12b-a126c151e7e2",
+      "partialCharacters": 5902,
+      "failedLabels": 0,
+      "result": "PASS",
+      "saved": {
+        "counts": {
+          "conversation.created": 1,
+          "message.posted": 1,
+          "agent.turn_started": 1,
+          "agent.message_delta": 154,
+          "agent.turn_stop_requested": 1,
+          "agent.turn_failed": 1
+        },
+        "endings": [
+          {
+            "type": "agent.turn_stop_requested",
+            "turnId": "3a23de76-1741-4948-bf30-39a8c08b1d95",
+            "reason": null
+          },
+          {
+            "type": "agent.turn_failed",
+            "turnId": "3a23de76-1741-4948-bf30-39a8c08b1d95",
+            "reason": "bridge_interrupted"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "failed",
+      "width": 390,
+      "conversationId": "9532fc3b-8e64-4299-8bd4-5ce54ef7d23b",
+      "result": "PASS",
+      "saved": {
+        "counts": {
+          "conversation.created": 1,
+          "message.posted": 1,
+          "agent.turn_started": 1,
+          "agent.turn_failed": 1
+        },
+        "endings": [
+          {
+            "type": "agent.turn_failed",
+            "turnId": "ea4bcda8-5a5a-44b7-99a3-4754631b8ae8",
+            "reason": "bridge_interrupted"
+          }
+        ]
+      }
+    }
+  ],
+  "finishedAt": "2026-10-22T01:20:33.983Z"
+}

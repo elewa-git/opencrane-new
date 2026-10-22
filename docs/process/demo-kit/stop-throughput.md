@@ -561,3 +561,77 @@ changelog lint are checked again with this receipt before committing.
 NOT RUN in this repair round: a live stack, fresh-install journey, paid calls or
 the full root suite locally. The earlier live results keep their stated sources
 and limits. The PR comment records CI for the pushed head and its `ci-ok` result.
+
+## Stop label
+
+22 October 2026. Part of #32. Product source:
+`89ab910bf314069856d482814f675eb77f7be559`; base `06a0e47ac`.
+Failing-first commit: `1ab6fe03b`. The two new cases failed before the fix:
+each kept the stopped outcome and partial text but also added “Reply failed”.
+
+### Cause and fix
+
+A stopped turn saves `agent.turn_stop_requested`, followed by
+`agent.turn_failed` with reason `bridge_interrupted`. The conversation projection
+copies both events into `conversation_feed`; it has no saved turn-outcome column.
+Those rows correctly record the request and the bridge ending its work.
+The browser derived `stopped` from them, then separately added a “Reply failed”
+activity for every failure event except a budget stop. The two labels disagreed.
+
+The activity now uses the turn's already-derived state. Only `failed` adds
+“Reply failed”. This fixes personal and shared-assistant sessions without changing
+events, saved rows, replay, access checks or provider behaviour. Human group chats
+use the separate direct-chat view and do not start agent turns.
+
+### Live checks
+
+Used only claimed secondary slot **1**, with a fresh install and the free stand-in.
+The browser used the existing short-lived development Owner session format; product
+APIs still checked access. No paid provider was configured or called. A temporary
+stand-in fixture emitted 26-character pieces every 20 ms for long replies and
+returned HTTP 400 for the failure check. Its source was restored after loading;
+its process ends with this slot. No fixture change is part of the product fix.
+
+[Original-guard reproduction](stop-label/baseline.json) confirms both labels live
+and after reload, with 8,632 kept characters. It temporarily restored the old guard
+on the stated source, then restored the fix before the checks below.
+[Fixed results](stop-label/fixed.json), [shared results](stop-label/shared.json) and
+[group results](stop-label/group.json) retain times, character counts and saved event
+names/reasons. They contain no credentials or reply contents.
+
+| Step | Result | Evidence |
+| --- | --- | --- |
+| Long reply, Stop, 390px first | PASS | 5,564 characters; zero “Reply failed” labels. [Before reload](stop-label/fixed-before-reload-390.png). |
+| Reload at 390px | PASS | Exact same text and only the stopped label. [After reload](stop-label/fixed-after-reload-390.png). |
+| Long reply, Stop, 1280px second | PASS | 5,902 characters; zero “Reply failed” labels. [Before reload](stop-label/fixed-before-reload-1280.png). |
+| Reload at 1280px | PASS | Exact same text and only the stopped label. [After reload](stop-label/fixed-after-reload-1280.png). |
+| Provider failure without Stop | PASS | “Reply failed” remains [live](stop-label/failed-before-reload-390.png) and [after reload](stop-label/failed-after-reload-390.png). Saved failure report, no Stop request. |
+| Shared assistant at 390px | PASS | 4,706 characters and only stopped, [live](stop-label/shared-before-reload-390.png) and [after reload](stop-label/shared-after-reload-390.png). |
+| Human group chat at 390px | PASS | Message survives reload; no agent turn or reply outcome. [Picture](stop-label/group-390.png). |
+| Lost output without text | PASS | State test keeps “Didn't complete · nothing was repeated”. Live computer-loss check: NOT RUN. |
+| Bundled startup journey | FAIL | Services started, but the existing tool review returned HTTP 409 at “Owner saves the exact tool review”. The targeted checks above used those live services. |
+| First shared-check helper | FAIL | It waited for the composer without using Check status. [Receipt](stop-label/shared-first-attempt.json) and [picture](stop-label/shared-failure-390.png). The corrected helper uses the existing picker-status journey function; its repeat passed above. |
+| Physical phone and Safari | NOT RUN | Pictures use Chromium windows. |
+| Slot release and cleanup | PASS | `down.sh --id 1` removed this slot’s services, computers, data and claim. The owner stack and port 44200 were untouched. |
+
+### Source checks
+
+- PASS: `npm ci` in this worktree; requested NATS and Lychee symlinks in `.tools/`.
+- PASS: all 23 tests in `chat-state.spec.ts`, twice after the fix. Existing failure
+  and lost-output cases explicitly check their labels. The first failing run had
+  21 passes and the two expected stopped-label failures.
+- PASS: 438 event-security tests once and the existing conversation-projection test.
+  Used throwaway PostgreSQL 17.6 at
+  `postgres://postgres:test-only@127.0.0.1:53526/postgres`, following the later database
+  setup rule. Removed `pgtest-demo-stop-label` and its volume afterwards.
+- PASS: workspace/package typecheck, event catalogue (149 types), and separate Knip.
+- PASS: full lint, including documentation, links, licences and changelog lint;
+  24 existing code warnings and zero errors. Its first wrapper ended with signal 143
+  after reaching changelog lint. Changelog lint passed separately, then the full
+  repeat passed with an 8 GiB Node heap limit and the same lowered CPU priority.
+- NOT RUN: full root suite locally. Tests, lint and typecheck used `nice -n 10`.
+  No authority or event-security test changed; no dependency or event/API name was added.
+
+The package READMEs and diagram describe the corrected outcome. The release note is
+`changes/unreleased/work-demo-stop-label.md`; the later repository rule keeps
+`CHANGELOG.md` unchanged. GitHub CI is reported for the pushed draft-PR head.
