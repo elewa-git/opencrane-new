@@ -102,6 +102,7 @@ it('keeps a completed turn incomplete when the private reply output was lost', (
   expect(agentTurn?.state).toBe('lost');
   expect(agentTurn?.executionMode).toBe('restricted');
   expect(agentTurn?.text).toBe('');
+  expect(turnOutcome(agentTurn!)).toBe("Didn't complete · nothing was repeated");
 });
 
 it('keeps raw failure codes out of tool details', () => {
@@ -112,6 +113,8 @@ it('keeps raw failure codes out of tool details', () => {
       data: { turnId: 'request', reason: 'computer_lost' } },
   ];
   const lost = transcript(rows, 'me').at(-1)!;
+  expect(lost.state).toBe('failed');
+  expect(lost.tools[0]?.label).toBe('Reply failed');
   expect(lost.reason).toBe('computer_lost');
   expect(lost.tools[0]?.detail).toBe('Computer was lost');
   rows[1]!.data.reason = 'model_error';
@@ -349,3 +352,31 @@ it('keeps a completed turn completed when a late Stop request is replayed', () =
 function isAgentTurn(turn: { author: string }): boolean {
   return turn.author === 'agent';
 }
+
+function assertStoppedReply(stoppingTurnId: string): void {
+  const rows: ChatRow[] = [
+    { id: 'request', position: 1, type: 'message.posted',
+      time: '2026-10-22T10:00:00Z', data: { authorId: 'me', text: 'Write a long reply' } },
+    { id: 'started', position: 2, type: 'agent.turn_started',
+      time: '2026-10-22T10:00:01Z', data: { turnId: 'request' } },
+    { id: 'partial', position: 3, type: 'agent.message_delta',
+      time: '2026-10-22T10:00:02Z',
+      data: { turnId: 'request', messageId: 'reply', text: 'The kept partial reply' } },
+    { id: 'stop', position: 4, type: 'agent.turn_stop_requested',
+      time: '2026-10-22T10:00:03Z',
+      data: { turnId: 'request', reason: 'requester_stop' } },
+    { id: 'ended', position: 5, type: 'agent.turn_failed',
+      time: '2026-10-22T10:00:04Z',
+      data: { turnId: 'request', reason: 'bridge_interrupted' } },
+  ];
+
+  const stopped = transcript(rows, 'me', stoppingTurnId).find(isAgentTurn)!;
+
+  expect(stopped.state).toBe('stopped');
+  expect(stopped.text).toBe('The kept partial reply');
+  expect(turnOutcome(stopped)).toBe('Stopped · partial reply kept');
+  expect(stopped.tools).toEqual([]);
+}
+
+it.each(['request', ''])('shows only the stopped outcome live and after reload: %s',
+  assertStoppedReply);
