@@ -83,3 +83,18 @@ async function startsTheNextReadAfterAcceptance(context: TestContext) {
 }
 
 test('checks the next API read after the removal response', startsTheNextReadAfterAcceptance);
+
+async function refusesAMissingOwnerList() {
+  async function accept() {
+    return Date.now();
+  }
+  async function ownerList() {
+    throw new Error('The Owner list could not be read');
+  }
+  async function pageCleared() {}
+  const result = await measureRemoval(accept, { ownerList, pageCleared });
+  assert.equal(result.hops['ownerList'], null);
+  assert.equal(result.passed, false, 'An unreadable Owner list must fail the group check');
+}
+
+test('fails when the Owner list observation throws', refusesAMissingOwnerList);
