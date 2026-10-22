@@ -3,584 +3,109 @@
 ## What this is
 
 The back end for OpenCrane sign-in, conversations and organisation settings.
-It is a Node service that accepts browser requests and sends live updates.
-It keeps saving accepted computer reports after a connection drops, so replies
-and Stop results can finish arriving when the computer reconnects.
-Saved end reasons distinguish a Stop interruption from a restart, model failure or tool refusal.
-It confirms each piece of a reply only after checking that its text was saved.
-Stop uses the same saved chat facts as progress reports, so it does not reload
-every piece of a long reply before saving or delivering the request.
-An invalid old memory record does not block sending or stopping a message.
-Memory operations still refuse that record.
-Messages and Stop refuse an id already used by a different event, including a report.
-A second process handles model access and spending. Both processes use the
-same secret to protect conversation keys in a packaged install.
+It runs as a Node.js service. The website sends it requests to sign in, chat, upload
+files and manage the organisation.
+The server checks who is asking and what they may do, saves each change in the
+[event log](../../GLOSSARY.md#event-log-event-store), and passes chat work to each
+assistant's [computer](../../GLOSSARY.md#computer).
+A second program here, the [models process](../../GLOSSARY.md#models-process), checks
+AI calls against spending limits and tool rules.
 
 ## Where it fits
 
-This is the back-end layer. `apps/web` sends it requests and live connections. It uses shared code in `libs/`, records changes in NATS (the event log), and reads PostgreSQL tables that `apps/ops` keeps current. It also sends work to `apps/computer`, the computer for each personal or group assistant.
+This package is the back-end layer. [apps/web](../web/README.md) is the website;
+[apps/computer](../computer/README.md) runs one computer for each personal or group
+assistant. [apps/ops](../ops/README.md) runs background workers that apply saved
+changes to permissions and database tables. The server reads those tables, but the
+event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  server -.->|integration tests use the transcript helper| web
-  web["apps/web<br/>the website"] -->|requests, provider retries and retries after proved unsent calls, control status, dated approvals, model and remote tool grants, membership status and choices, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
-  mcp -.->|demo tests use the inventory helper| server
-  server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops, turn decisions and relay closures| nats["NATS<br/>event log"]
-  nats -->|summaries of spending choices, original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
-  nats -->|new events| ops["apps/ops<br/>background workers"]
-  ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, file lists and worker progress, facts, models, tools, publication status, nightly memory status and paged change history| postgres
-  server -->|delivers turns, shared history, files, passes and public keys; stops work in closed chats, checks and batches streamed reports, saves Stop, restart or failure reasons and repairs missing turn endings| computer["apps/computer<br/>personal or group assistant"]
-  server -->|rechecks remote tool lists and revision promises before expiry through checked HTTPS| mcp["MCP servers<br/>configured tool backends"]
-  server -.->|sends spending Stops before files, turns and approval replies; keeps other chats moving during file receipts and Stop checks| computer
-  server -->|records turn decisions and Stop| nats
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>the back end"]
+  server -.-> libs["libs/*<br/>shared code"]
+  server -->|saves changes| nats["NATS<br/>the event log"]
+  nats -->|saved changes| ops["apps/ops<br/>background workers"]
+  ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
+  server -->|reads data| postgres
+  server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
+  computer -->|AI and tool calls| gateway["agentgateway<br/>the AI gateway"]
+  gateway -->|checks permission| server
 ```
 
-Tool discovery records the exact definitions and how long the check remains valid.
-The models process keeps checking registered remote servers, including ones added after
-startup. Missing checks and changed definitions hold calls until the required checks
-and review are complete. A restart begins with calls held.
-Checks also pause calls if a server withdraws or changes its promise to check tool revisions.
-A slow membership read pauses calls after one second. Healthy servers with short-lived
-lists are checked again before those lists expire.
-It saves each tool’s declared zero cost and approval details, including whether approval
-needs recent sign-in. A tool with incomplete details is excluded. An admin must review
-both before enabling any tool, including reads. Missing declarations keep it blocked.
-Successful discovery without credentials saves a stable connection reference;
-it does not create a personal or company account.
-Descriptions are untrusted text. They never become instructions for the server.
-The models process checks each configured tool call again before sending it. Its backend
-must compare the approved tool list and running instance before executing the call.
-The models process also supplies the running gateway's confirmed configuration for each
-published call check. Saved configuration alone cannot enable a call after restart.
-Published remote calls use the shared HTTPS transport after checking the saved destination.
-The remote server must promise to refuse calls for a changed tool list.
-Memory discovery, recall and remember use this same check. The models process checks every
-previously loaded memory reference before allowing another call. The memory backend also
-checks each signed context once and keeps the existing scope and write-proof rules.
-Turn summaries share the models library’s memory fold. They rebuild saved reference
-records without loading fact text.
-Before renewing a turn pass, the server checks every loaded fact and current memory access.
-It checks access again after the last memory read, within the original time limit.
-It checks again after signing. A correction, forget, expiry or loss of access returns no pass.
-They keep personal and shared references separate and cannot restart a turn or grant access.
-Closing the conversation also ends its memory context, while keeping those references.
-Recall saves its references before returning text. A failed or uncertain save returns no
-text or proof. A lost reply keeps its saved references and cannot be sent again.
-An agent can save a personal fact only when it names every loaded fact as a dependency.
-Any loaded group or assistant note prevents that write. Native memory stays disabled.
-The server checks access again after reading the latest memory references. Removing and
-restoring a grant during the write still refuses it.
-
-Approval replies keep the dates and cancellation reasons recorded in the event log.
-An approval belonging to another person or silo gets the same refusal as a missing one.
-
-The models process prepares connection relays inside its leader lock and recovers
-saved closure records at startup. It closes relays when stopping. Outside networking
-remains switched off while outage and crash handling await qualification.
+[Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
+[OpenFGA](../../GLOSSARY.md#openfga-permissions-service) checks permissions.
+The [AI gateway](../../GLOSSARY.md#agentgateway-ai-gateway) sends model and tool calls
+only after the models process allows them.
 
 ## What it is responsible for
 
-File lists use the saved read tables before checking newer events. Old messages
-do not have to be replayed just to find out whether uploads are ready.
-
-File lists return a waiting response while their read table catches up with a saved
-upload. The website checks again before showing the upload as Ready. Other chat
-activity does not hold up the list.
-
-Remote tool grant reads show a person's membership separately from their saved grant.
-A departed person keeps their grant history and cannot use tools.
-
-When a chat closes, the back end ends waiting requests and asks the computer to
-stop work already under way. It keeps checking saved events after a restart.
-It can repair a missing record that says a computer turn ended. Other chats on
-the same computer continue. This also works for older closes saved with chat
-participation. If a shared computer reports a start after cleanup ended the
-request, the server records a refusal tied to that turn and accepts its failure.
-
-The server sends spending changes to the models process. It checks each chosen
-group and shared assistant before saving. Personal assistants cannot receive a new
-cap. The saved installation payer needs no group record. An unavailable choice
-asks the admin to correct the editor; lost admin access still clears the page.
-Owners and admins can read small pages of named groups and active shared assistants.
-Each choice includes its saved revision and whether a cap is set, absent or unavailable.
-The server checks current access after loading the page.
-
-The back end reads unfinished child requests from a table kept by the conversations
-worker. It checks each saved request and current access before continuing the child.
-A proven refusal is saved and stops recovery. Only the requester can read its status.
-Temporary access outages remain queued. Failed requests cannot be retried yet.
-
-Closed chats keep displayed output as it stood when the chat closed. Later assistant
-reports, decisions, tool dispatches, child publications and agent or system posts
-remain saved, but do not appear in history or live updates. Human posts remain visible.
-Saved human posts remain readable. The list keeps showing Closed. History checks
-current participation after loading, before opening the saved text.
-
-Record a budget refusal before telling the computer that a chat turn cannot start.
-The member sees the saved spending notice even when no model call was made.
-Reconnecting recovers the notice from the saved refusal if the computer restarted
-before the notice was saved.
-
-The models process follows the recorded switch-on when choosing how to call a provider.
-After switch-on it uses the checked call's saved provider key. A leftover fallback key
-setting stops startup. Configuration reloads keep the same mode.
-
-It asks the root supervisor to stop executors after the computer accepts a signed
-work gate. It saves pausing after checking both receipts, then saves paused only when
-the current bridge and root supervisor both prove quiet. This grants no control.
-
-Personal memory writes refuse access withdrawn before the fact is saved, including a
-removed write grant or a disabled assistant. They keep the original access time limit.
-
-When a closed shared chat refuses a delayed turn, the server accepts the computer's
-matching failure report. The turn stays closed and other chats keep their connection.
-Reports containing output still need a saved, admitted turn.
-
-Members can review a saved child answer and publish its text to the parent chat.
-They can also publish a saved reply from a running turn or write an interim update.
-The entry credits the person who publishes it. Files are unavailable.
-Publication refuses an answer if its turn fails or its output is lost before the
-parent entry is saved. Unrelated child messages still allow publication.
-
-Give Owners and Admins a member directory and current management flags for
-active people. An ordinary Member receives only a small header for one person.
-
-The provider list reports that model access routes are available. Those routes let
-admins read and change grants for people, groups and assistants.
-Provider requests report when saved membership or ownership is still being applied.
-A caller can wait briefly and repeat the same command id after that reply.
-
-The chat connection notifies authorised readers when a spending Stop is saved for
-an original request they can see. A status read supplies the saved reason and work
-state, including after reconnect. The notice carries no spending amounts. If loading
-an update takes more than ten seconds, the connection closes so the client can
-reconnect and read the saved status.
-
-The bridge sends a saved spending Stop before files, new work or approval replies
-for that turn. It checks for new Stops after waiting for a connection or preparing
-work, then reads again immediately before sending a turn. It repeats an unfinished
-Stop after a lost message or reconnection. Work stopped by a spending limit stays
-stopped when that limit rises. Other turns on the same computer can continue.
-While a chat's Stop check is unfinished, delivery waits for that chat and keeps
-other chats moving. Receiving a file receipt does not start the same check again.
-
-Let owners and admins request publication of an exact reviewed tool list.
-The request alone does not enable calls.
-
-Tool access explanations show why a person and their assistant have access.
-Members can read their own explanation for servers they can access.
-Owners and admins can read others. Guessed private servers and tools receive
-the same refusal. Missing-grant replies contain permission reasons only.
-Missing account support and unavailable permission checks have separate reasons.
-These reads explain saved access. They do not approve or start a tool call.
-
-Member access and departure reviews use indexed stream names to read saved grants,
-groups and assistants. Removed access stays incomplete until permission receipts
-arrive. Reviews stop above 100 groups or 500 distinct people. After an upgrade,
-reviews stay incomplete until the inventory index has been rebuilt.
-
-Reviews use indexed history changes and report incomplete results when new streams
-have not been checked. Unrelated read receipts do not require reading the event log.
-
-- Saves a member's welcome survey answers as encrypted records. Resumes confirmed
-  progress, checks restarts and returns original saved receipts. Calls no model.
-- Lets members read their own private tool-instance status and original change results.
-  Saves an explicit owner stop request. Accepts reports from a registered worker for
-  one exact run. Keeps only a digest of each worker pass and removes it at expiry.
-  Expiry and replacement stop observation retries. Starting an instance remains unavailable.
-- Lets owners and admins stop another member's private tool instance and read only
-  their own original stop changes. A member cannot use these organisation routes.
-
-- Let owners and admins save one destination rule and read its original receipt.
-  A change reference keeps its original rule and arguments when a request is repeated.
-
-- Checks hosted startup credential requirements before offering a connection.
-  Compatible records stay available for review; startup processes cannot run yet.
-  Existing memory calls keep their usual access checks.
-
-- Records a member’s chosen assistant and paying group for nightly memory upkeep.
-  Checks their access and explicit cost acceptance. Returns the saved choice and
-  its status. Nightly execution remains disabled.
-- Preview bounded facts for a saved private turn without sending text to a computer.
-  Facts with expired or unusable supporting facts are left out.
-
-- Read saved control status, including paused and failed requests, for chat participants.
-  Keep requests to take control switched off.
-- Record control intent for the current requester when enabled. Refuse new work while it is pending.
-  Keep authorised viewing, explicit stops and approval denial available.
-- Accept an owner or admin’s review of exact saved tool definitions and free tool use.
-  Refuse old reviews and changes to another connection.
-
-- Read recorded child participants without reading the whole conversation.
-- Match child output to the server-admitted computer turn and thread before saving it.
-- Record the shared-only class for restricted child turns and verify it on each
-  start report.
-
-- Returns missing approval details and accepts requester retries after verified non-dispatch.
-- Lets admins review a departure, remove access and recover the saved removal receipt.
-  Reports whether cleanup is still applying, complete or unknown from saved events.
-  Other members can keep posting messages and updating chat tables during removal.
-- Records owner appointments as requests. Counts a successor only after confirmation.
-- Lets owners and admins save provider choices and pauses, count affected assistants
-  and recover saved results. Conflicting requests cannot report an unsaved change
-  as saved. Ordinary calls keep their existing setup.
-- Serves personal facts, the bound assistant's notes and its group facts after checking
-  the gateway pass, saved grants, current permissions and the recorded turn mode.
-  Refuses agent writes until saved records cover every fact loaded into the turn.
-- After managed calls are switched on, records the assistant's provider choice or the
-  silo default for each new turn. A turn keeps that model when its pass is renewed.
-  The switch-on command waits for existing holds and sends to settle or release.
 - Signs people in and keeps their browser session.
-- Uses the shared organisation check for session routes and WebSocket connections.
-  Production refuses extra sign-in identities. Development can allow named identities
-  from another organisation, but session routes still need a configured organisation.
-- Uses one member check for chat, approval and file requests. It checks the signed-in
-  identity, current membership and chat access. Writes must come from this website.
-  These replies tell browsers and caches not to save them. Missing approvals and
-  approvals the person cannot access receive the same refusal.
-- Checks permissions before returning private information or changing data.
-- Loads group and ownership results before checking current access. Slow history
-  reads can finish, and a removal during loading prevents the reply.
-- Lists and searches a person's own memory and permitted group or assistant notes.
-  Returns fact detail and checks each source separately, hiding denied references.
-  Checks chat access and the latest join before looking up one source message. Describes a member statement
-  without naming its author. Reports destroyed or quarantined facts without text.
-  Checks write permission before inspecting a fact. Records human facts and checks
-  the original command when a reply is lost. Checks chat access before looking up
-  a source message. Slow permission checks leave database connections free. The server
-  shares a few write slots between members. A member can save one fact at a time
-  and have one more write waiting, across all their scopes and sign-in sessions.
-  This leaves room for another person. Busy writers receive a prompt reply.
-  Lets people correct their own facts when their supporting facts and keys remain available.
-  Recovers interrupted corrections and removes finished reservations after a lost reply or forget.
-  Keeps the fact's key while a delayed write could still be saved.
-  These reads need the memory worker and its existing private key directory.
-  It returns current facts only after the read table has caught up with their events.
-- Accepts bound and email invitations after a recent sign-in with a verified email, while
-  the inviter is still an owner or admin. Records whether a personal assistant was requested.
-- Checks an invitation email and explains that the person is confirmed when they accept.
-- Changes Member and Admin roles after checking current access. Owners use the ownership route.
-  Role changes and team turns read membership history before the short write check.
-  Reports a competing appointment as applying until its permissions have been updated.
-- Records and renews email invitations for owners and admins. Reads saved command results.
-- Returns member headers to members and the email directory to current owners and admins.
-- Explains recorded access and reviews departure effects without private content.
-  Reports incomplete reviews while access changes are being applied, and returns only
-  counts and dates for private history. A complete review lets admins remove access.
-- Keeps checking member access while a live connection is open.
-- Records changes as events and reads the current state from PostgreSQL.
-- Keeps the original provider choice when repeating or closing a recorded turn.
-  Checks current membership before repeating a start and passes the saved model
-  to the turn-token issuer and the computer that runs the turn.
-- Handles conversations, approvals, file uploads, computer access and organisation history.
-- Loads change history and its detail before checking the person's current admin access.
-  Checks saved participation changes before returning private content.
-  Checks closing events even while read tables are catching up. Keeps the last
-  checked position, so later checks read only new events.
-  Gives late participants only files and screenshots saved since their latest join.
-- Offers a personal assistant only reviewed, free tools that both the person and assistant can use.
-- Returns spending records to current owners and admins. It reads the records first,
-  then checks access, so a longer read does not use up the write access time limit.
-  Resolving a hold also reads its history first and rechecks access before saving.
-- Starts personal turns using the latest default paying group. It keeps a small
-  summary with the provider switch-on state and reads each new spending event once.
-  Refuses renewal when a spending stop affected the saved turn. Raising the limit
-  can allow new work, but cannot reopen that turn. Checks access before reporting
-  a spending refusal, so a removed member cannot learn the payer’s spending state.
-- Records tool starts and finishes as events and returns them in the conversation feed.
-- Tells a computer whether it supports approval messages and when a waiting
-  approval has been decided or ended. A changed tool policy also ends a waiting approval.
-  Each approval card names its turn, so the chat can hide decisions when that work stops.
-  A failed catalogue check ends old approvals even if a later check succeeds first.
-  Reads each approval separately, so a slow read leaves other chats free to continue.
-  Spaces out failed reads and tells the computer when it cannot accept another wait.
-- Keeps recall references readable when a conversation closes during their save.
-  The context stays ended, and the recall returns no facts or proof.
-- Records streamed replies using a chat summary. After its first use, it reads only
-  new events and checks one saved event. It handles repeats without saving them again.
-- Starts, closes and replays turns using the shared computer summary. It reads new
-  events first and keeps the conditional write at the position it checked.
-  Both summaries drop older entries when their memory budget is reached. A
-  summary that is too large is dropped on its own, leaving other chats warm.
-- Lets silo members create a group chat from reviewed people and exchange messages
-  without starting assistant work. Offers only groups they belong to.
-- Lets group chat creators add or remove people, and lets other participants leave.
-  Refuses stale edits and keeps saved retries from adding someone again.
-  Lets people recover their own saved child chat leave result without reopening the chat.
-- Lets two silo members exchange private messages without starting assistant work.
-  Tells the browser when a new chat is waiting for its permissions, so it can keep the draft.
-- Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
-  and starts [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), the AI gateway that
-  every model request passes through.
-- Lets admins connect a model provider, store its key safely and check that the key works.
-- Lets owners hand over ownership and admins manage groups. The website has no page for this yet.
-- Lets owners and admins read model grants and list same-silo people, groups or assistants
-  that a grant could name. HTTP clients can give or revoke one grant and check its result.
-  Admins can remove a departed person's grant. An empty revoke saves no change.
-  Provider choices and configured uses say “Not available yet” until those records exist.
-- Lets admins create a group assistant with selected tools and a fixed paying group.
-- Lets owners and admins give or revoke remote tool access for one person, group or assistant.
-  Each change has its own saved reference and separate table and permission progress.
-  They can read saved grant sources and browse people, groups and assistants in small pages.
-  These reads do not say whether a tool is ready for an assistant to use.
-- Keeps each member's group chat private while they share the assistant's computer.
-- Provides the one-time command used to claim a new installation.
+- Checks current membership and permissions before returning private information or saving a change.
+- Handles chats, assistant work, live replies, stop requests and tool approvals.
+- Checks uploads and saves clean files and authorised screenshots.
+- Serves assistant desktops to people who may view them.
+- Handles members, groups, ownership, model providers, tool servers and spending settings.
+- Returns permitted change history, saved results and memory facts.
+- Runs the separate models process that checks AI calls, records costs and starts the gateway.
 
-Private team turns receive earlier completed replies from the same member. The
-computer starts a fresh Codex process for each private team turn. Disk isolation is
-not yet proven on a live computer; private chat memory stays off until it is.
+## Folders
 
-The reviewed tool list includes each tool's Allow mode. The computer and gateway
-use it to refuse calls if the tool changes to Ask during the turn.
-
-An owner or admin can pause new model turns before a provider change. Running
-turns keep their original path. Starting or cancelling the pause saves an event.
-Owner and admin spending reads include saved budget stop reasons and UTC resets.
-A zero limit, or a limit lowered to the money already spent or held, stops affected
-model reservations as soon as the change is saved. Applying stops to every running
-computer and tool call is still planned. Owners and admins can record provider
-switch-on after choosing a default and draining legacy turns. Existing holds and
-sends must settle or release first. A lost reply can be recovered, but retrying the
-command refuses if later evidence has reopened a hold. The status read still shows
-the original saved change; that refusal does not undo switch-on. Changes during the
-retry's reads also refuse it. An accepted zero-cost resolution with proof that the
-call was not sent releases a reopened hold. Conflicting costs keep it blocked.
-Both results survive restart and replay.
-
-A person can forget their own saved fact through HTTP. Group members can also forget
-group facts and notes from their group’s assistant when they have both read and write
-grants. Personal notes require the assistant’s owner and both grants. The server hides
-the fact immediately and reports whether cleanup is pending, unavailable or finished.
-A lost reply can be checked after restart with current rights, without another change.
+| Folder | What it does |
+| --- | --- |
+| [assistants](src/assistants/README.md) | Sets up shared assistants and lists the ones a person may use. |
+| [audit](src/audit/README.md) | Returns permitted organisation and conversation change history. |
+| [auth](src/auth/README.md) | Handles browser sign-in, sign-out and session status. |
+| [chat](src/chat/README.md) | Saves conversations and carries assistant work, replies, stops and approvals. |
+| [computers](src/computers/README.md) | Provides desktop views, screenshots and control-preparation status. |
+| [effects](src/effects/README.md) | Reviews call costs and resolves supported uncertain outcomes. |
+| [egress](src/egress/README.md) | Saves rules for connections to outside destinations. |
+| [files](src/files/README.md) | Checks, scans, stores and delivers conversation files. |
+| [integrations](src/integrations/README.md) | Registers and reviews tool servers, manages tool access and serves spending settings. |
+| [members](src/members/README.md) | Manages invitations, membership, groups, roles and ownership. |
+| [memory](src/memory/README.md) | Reads, saves, corrects and forgets permitted remembered facts. |
+| [models](src/models/README.md) | Manages access to AI models for people, groups and assistants. |
+| [onboarding](src/onboarding/README.md) | Saves and resumes a member's private welcome survey. |
+| [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 ## Processes it handles
 
-The server combines small pieces of the same streamed reply before saving them.
-It gives Stop priority over progress waiting to be saved.
-It acknowledges each piece only after the combined text is saved.
+1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.
+   [Members](src/members/README.md) handles the first owner's claim or a later invitation.
+2. **A person sends a message.** [Chat](src/chat/README.md) saves it and sends assistant
+   work to the right computer. Replies return as live updates. People can also chat
+   with each other without starting assistant work.
+3. **An assistant makes a call.** The gateway asks the models process whether the
+   person, assistant, tool and budget allow it. The process sets money aside before
+   a call, then charges its real cost and releases unused money.
+4. **An admin changes settings.** The server checks their rights and saves the change.
+   Background workers apply it. A saved result lets the website check a lost reply
+   without repeating the change.
+5. **A person reviews their data.** The server checks current access before returning
+   chat history, memory facts, files, desktop pictures or change history.
 
-An admin saves one remote tool grant. After a lost reply, they check the original reference.
-The check never resends the change. A draft server's grants cannot publish its tools.
-
-A lost spending-limit reply can be checked by its original command id. Owners and
-admins see the saved amount and stop status. The original caller can still see a
-minimal confirmation after losing that role, while they remain a member.
-The check saves nothing and makes no AI call.
-
-A member can review a child chat from their own group message, then save its first input.
-A background worker completes missing child creation and first input after a restart.
-It checks the saved request and current permissions each time. These children stay queued;
-they cannot start assistant work yet.
-
-Owners and admins can read whether a saved publication is Applying, Ready, Disabled
-or Unknown. Ready requires matching saved gateway and server receipts. Checking a
-change never sends configuration or calls the gateway. The original command id also
-recovers hosted registration results without confusing them with publication.
-
-When a saved event closes a chat, the server refuses new turn passes and rebuilt
-context. It still acknowledges delayed reports, so another person's chat can keep
-using the same computer connection. An admitted turn stays recorded until cleanup
-can confirm it ended. Public closing and freezing displayed output are not built yet.
-
-A participant can read why a chat turn stopped for spending. Only the person who
-asked for that turn sees its limit and call amounts. The reply distinguishes held,
-charged and released calls, and calls that might have been sent.
-Reading the saved result starts no work.
-Failed reads still check access before reporting that the result is unavailable.
-
-The models process shares a PostgreSQL lock with the preparation worker while
-replacing the gateway file. It delivers the latest saved configuration and checks its
-reply while it holds the budget worker lease. Startup settings supply no tool routes.
-Reviewed tool calls stay unavailable until generation checks are connected.
-
-After saved control intent, the server sends a signed request to stop computer work.
-An idle computer receives it too. Slow chat reads, file uploads and report replay do
-not delay this request. If a turn finishes while the request is being signed, the
-server checks it again before telling the computer to resume reports.
-The server checks the computer's immediate reply and keeps it only for that connection.
-It can then ask the root supervisor to stop executors while reports still wait to resume.
-This does not grant desktop control or save proof that all computer work has stopped.
-
-A child chat can link back to its source only when the reader can still read that
-parent message. Otherwise it returns a restricted result without parent details.
-
-A shared child chat's creator can invite someone after acknowledging that all shared
-history will be visible. The invite gives access only to that child. The creator can
-remove others, and others can leave. Saved removals stop reads and live connections
-before the permissions service catches up.
-
-An owner or admin can register a hosted image and read the result using the original
-command id. The image stays Checking until a valid image check result is recorded.
-Registration does not fetch an image, discover tools or start a process.
-
-Internal child-chat commands review a person’s own group message, save their chosen
-people and assistant, and create the named child. A separate command waits for its
-permissions to apply, then copies only the reviewed message under the child’s own key.
-Repeating a request returns the same saved records. The reviewed start route and recovery
-worker use these commands. They do not start assistant work.
-
-A person continues a shared child chat. The server gives the assistant completed
-exchanges from that child, including replies to other people. It leaves out parent
-history, private sessions, files and unfinished text. A first turn uses only the
-reviewed source message already saved in the child.
-
-A queued message cannot start after an applicable spending stop, even if the limit
-has since risen or the default payer has changed. Admission uses the payer and
-position saved when the message was queued. It checks again after saving the computer
-start and before issuing a turn pass.
-These checks do not change access to read the chat or view the desktop.
-
-The models process checks each configured tool server at startup and before its saved
-list expires. Calls pause when a check fails or finds a change. A changed server stays
-paused until a new review and publication receive a matching gateway receipt while checks
-are fresh. Publication preparation alone never releases the hold. The worker sends the
-latest current configuration; a Ready read is not built yet.
-
-The person who set up nightly memory upkeep can read its blocked and missed history.
-These reads contain dates and fact references, with no saved memory text or new work.
-The same status shows whether the scope is clean or has facts waiting for a future
-night. It shows the next 02:00 UTC boundary for waiting facts.
-
-1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie. If the sign-in details are too large
-   for a browser cookie, it shows a clear error.
-2. **The first owner claims a new installation.** An operator runs the one-time command,
-   which prints a token. The first person signs in and enters that token on the claim page.
-   The server checks it and records them as the owner.
-3. **An admin prepares an invitation.** The server checks the email input. The person
-   is confirmed when they accept; the server does not look them up in Zitadel.
-   An admin can save or renew an email invitation and recover their own saved result.
-   Another admin cannot read that command receipt. Refusal records keep only a
-   hash of the command id, a fixed-length value used to find a saved result. Organisation history checks
-   current access and tells browsers and HTTP caches not to save its replies.
-   The server finds matching emails in its member table and checks their events.
-   Acceptance finds account records in the member table and checks their events.
-   It reads newer events too, so delayed background work cannot hide an active account.
-   It records the signed-in account and keeps concurrent invitations from admitting it twice.
-   If an admin renews the invitation during acceptance, the person must accept the
-   renewed invitation. The old invitation cannot grant its earlier role.
-4. **A person chats with an assistant.** The server sends the turn to that person's
-   computer and passes the assistant's progress back to the browser as it arrives. The
-  person can stop the turn. A personal turn may include a short list of reviewed
-  tools. The gateway checks permission again each time one is used. The chat watcher
-  leaves finished chats alone while another reply is pending. It sends a waiting turn
-  again until the computer accepts it, and
-   sends it again after reconnecting. It retries short service outages so pending
-   messages can still reach the computer. Personal memory-free turns include only tools
-   that have been reviewed, cost nothing and are available to both the person and assistant.
-   Ask tools also need a review describing the action the person will approve.
-   Private team turns stay restricted and do not receive tools.
-   The watcher reuses computer history while it is unchanged. It checks for changes
-   again before sending a turn or file, so new control intent holds waiting work.
-   While a computer has not acknowledged a file, the watcher still sends spending
-   Stops and checks approvals. A slow chat history read delays only that chat’s Stop
-   check. Shutdown waits for unfinished checks. It sends each file once per connection and waits for
-   the receipt before sending that chat’s turn.
-   Open chat pages repeat permission checks when silo or team membership changes.
-   Removing someone from a team closes their private chat with that team's assistant
-   within two seconds. If OpenFGA takes too long to apply another change, the page
-   reconnects after five seconds and resumes receiving messages. The server checks
-   each open chat's feed position every 100 ms and reads chat content only after it
-   changes. Computer state follows lifecycle events and stays in recovery until a
-   new ready event appears. The worker saves this state in the computer read table,
-   so each chat update reads a small record. Sleeping and waking computers show starting.
-5. **A group uses a shared assistant.** An admin chooses its tools and paying group.
-   Each member gets a private chat and a private turn by default. Private turns have
-   no local tools. A member can choose a memory-free turn to use the group's shared
-   computer disk and browser. That turn has no earlier private context. A member who
-   loses spending access can still read and stop their work.
-6. **Two people chat.** The server checks who can read their direct conversation,
-   then returns messages and live updates. Busy chats and slow reads keep working.
-   A removed participant loses access even before the permissions service catches up.
-   A person who joins later sees messages from their latest join onwards.
-   Group creators can edit the people list. Other participants can leave.
-   Lists reuse permission facts within the request and check for changes after each
-   answer from the permissions service.
-7. **An admin adds a tool server.** The server checks the remote address, lists its
-   tools and leaves them blocked until an admin reviews them. Remote discovery uses
-   the public address checks shared by `libs/models`.
-   Published calls require permission for both the person and the assistant. Removing
-   either grant stops new calls and calls waiting to be sent, even while IAM, the
-   permissions service, is still applying the change. Giving the grant again allows
-   calls once the saved content and permission updates are current.
-   A member can read their own private instance and request its stop through HTTP.
-   Reading status never starts it or releases credentials. A missing result stays unknown.
-8. **An assistant asks an AI model for help.** The request goes through agentgateway, the
-   AI gateway. The gateway asks the models process whether the budget allows it, and only
-   then sends it on to the model provider.
-9. **A person watches the assistant's desktop.** The server holds one place while the
-   connection opens and until the session stops. It checks their conversation
-   access and desktop grant. A confirmed member removal or conversation permission denial
-   ends the view straight away, even if another access read is slow. A later invitation
-   on a removed member’s event stream does not restore desktop or file access.
-10. **An admin opens groups or ownership.** The server loads the records, then checks
-    current access before replying. Slow histories can finish. A removal during
-    loading denies the reply; unrelated chat activity does not interrupt it.
-
-11. **A member continues the welcome survey.** The server checks their current
-    membership and saves one step. Reloading returns confirmed answers. Editing
-    an earlier answer clears later current steps. Restarting keeps encrypted history.
-12. **A person opens their conversation list.** The server returns a small page ordered
-    by activity they can see. Recent and Archived follow the person's saved choice.
-    Search checks only visible titles. Continuations refer only to visible chats.
-    Lists that reach the fixed scan limit return an incomplete reply so hidden chats
-    cannot create extra pages. Ordinary late joiners see their join time, including in
-    personal sessions. Group lists also show current participants without earlier
-    creation details. The website loads the first page; paging controls are planned.
-13. **A person archives a chat or marks messages read.** The server saves only that
-    person's choice. Other devices see the same choice after the read tables catch up.
-    A lost reply can be checked with the original request id. Leaving and joining
-    again starts fresh choices. These actions start no assistant work or spending.
-
-The server renews computer passes through authenticated Kubernetes access as root.
-It sends the signing public key with the pass so the computer can check its signature
-and save its identity.
-Desktop and Codex processes cannot replace these passes through HTTP.
-
-The server checks whether each computer can wait for approval before offering Ask
-tools. Older computers receive Allow tools only, so either update order is safe.
-
-The server checks browser connections with a heartbeat every 15 seconds by default.
-Tests can shorten the interval. A missed reply still closes the connection on the
-next heartbeat.
+Requests to take control of a desktop, starting private tool instances and running
+nightly memory upkeep remain switched off. Their folder guides explain what can be
+saved and read today. [Chat](src/chat/README.md) also describes the remaining limits
+on starting newly requested side conversations and closing chats through HTTP.
 
 ## How to run or test it
-
-Memory race tests keep an old revision while a competing write finishes. They
-wait for that write before checking the stale revision, so the test checks the
-conflict response without depending on how quickly the runner schedules requests.
-A separate test holds the first correction open and requires a conflict while its
-write slot is still occupied.
-
-Child-chat retry tests use private event stores to check lost replies and repeated
-requests. Most tests keep the normal period during which NATS ignores repeated messages.
-Recovery tests restore team access only when a test removed it.
-
-Tests share a port picker that keeps listeners away from outgoing connections
-and the secondary dev stacks. It tries another port if one is already busy.
-Integration tests use the other applications’ test helpers to check their work together.
-Demo tool tests use `test/inventory.ts` to check their catalogue with the real inventory parser.
 
 ```sh
 npm start -w apps/server
 npm run models -w apps/server
-npm run typecheck -w apps/server
+nice -n 10 npm run typecheck -w apps/server
 ```
 
-These need the dev stack's settings. To run the whole system, use
-infra/dev-stack/up.sh (see [infra/dev-stack](../../infra/dev-stack/README.md)).
+These commands need the dev stack's settings. The full system starts with
+`infra/dev-stack/up.sh`, as described in the
+[dev stack guide](../../infra/dev-stack/README.md).
+[README.robot.md](README.robot.md) lists required settings and exact test commands.
 
 ## Where to read more
 
-- [README.robot.md](README.robot.md): settings, request details, limits and test commands.
-- [apps/web](../web/README.md) sends browser requests to this service.
-- [apps/ops](../ops/README.md) reads events and updates the tables this service reads.
+- [README.robot.md](README.robot.md): request contracts, settings, limits and test detail.
+- [apps/web](../web/README.md): the website that sends browser requests.
+- [apps/ops](../ops/README.md): workers that apply saved changes.
+- [libs/models](../../libs/models/README.md): AI access, tool rules and spending decisions.
 - [Why NATS holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
-- [The shared words used in these guides](../../GLOSSARY.md).
-
-Hosted image admission reports dated check results. All four checks must pass before
-an image is admitted. Admission grants no tool access and starts no process.
-
-Spending choices stay available as assistants do more work. A busy database returns a temporary
-unavailable reply, after the server checks current access.
+- [Glossary](../../GLOSSARY.md): shared words used in these guides.
