@@ -14,6 +14,6 @@
     "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
     "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
     "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
-    "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc"
+    "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0"
   }
 }

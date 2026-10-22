@@ -120,6 +120,8 @@ npm run typecheck -w apps/computer
 Both image commands need Docker and the dev stack's local Kubernetes cluster.
 `build:image` also runs the image tests and updates `sandbox-template.json` with the
 new image.
+The release checks require a stopped reply to report why it ended. This keeps the
+saved partial reply distinct from a model failure after the page reloads.
 
 Repository CI builds a separate test image once for the tests that need it.
 The [CI test guide](../../scripts/ci/README.md) explains how those files are grouped.

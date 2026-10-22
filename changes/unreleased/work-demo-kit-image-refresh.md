@@ -1,0 +1,1 @@
+- Refresh the computer image so stopped demo replies save an explicit end reason and keep their partial text after reload, while model failures remain visible.
