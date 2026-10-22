@@ -146,7 +146,8 @@ try {
       }
       await page.evaluate(waitForFonts);
       assert(await page.evaluate(pageHasNoOverflow));
-      for (const button of await editor.locator('button:visible').all()) {
+      const controls = page.locator('oc-tool-audience button:visible, .modes label:visible');
+      for (const button of await controls.all()) {
         const box = await button.boundingBox();
         assert(box && box.height >= 44 && box.width >= 44);
       }
