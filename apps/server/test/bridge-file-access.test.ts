@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import type { EventEnvelope } from '@opencrane/events';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { bridgeChannel } from '../../computer/src/channel.ts';
+import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { chatCommand } from '../src/chat/commands.ts';

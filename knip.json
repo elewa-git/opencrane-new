@@ -145,6 +145,7 @@
       ],
       "project": [
         "src/**/*.ts",
+        "test/server.ts",
         "test/codex-mcp*.mjs"
       ],
       "ignoreBinaries": [

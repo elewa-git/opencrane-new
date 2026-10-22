@@ -2,6 +2,7 @@
 const libraries = ['libs/events', 'libs/auth', 'libs/observability', 'libs/protocol', 'libs/event-store', 'libs/projections', 'libs/handlers', 'libs/authz', 'libs/models'];
 const publicEntrypoints = {
   'libs/events': '^libs/events/src/(index|tool-call|lossless-json|mcp-catalogue)\\.ts$',
+  'libs/projections': '^libs/projections/(src/index|test/database)\\.ts$',
   'libs/models': '^libs/models/(src/(index|routing)|test/(fixture|support/remote-mcp))\\.ts$',
   'libs/event-store': '^libs/event-store/(src/index|test/testing)\\.ts$',
   'libs/authz': '^libs/authz/(src/index|test/services)\\.ts$',

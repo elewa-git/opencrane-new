@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { expect, it } from 'vitest';
 import { until } from '@opencrane/authz/testing';
-import { bridgeChannel } from '../../computer/src/channel.ts';
+import { bridgeChannel } from '../../computer/test/server.ts';
 
 async function keepsRequesterContextsSeparate() {
   const directory = await mkdtemp(`${tmpdir()}/shared-runtime-`);

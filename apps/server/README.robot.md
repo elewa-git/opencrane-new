@@ -133,6 +133,12 @@ The diagnostic logs are `/tmp/ci-test-waits-fix-diagnostic.log`,
 `/tmp/ci-test-waits-fix-cause-before.log` and
 `/tmp/ci-test-waits-fix-cause-after.log`.
 
+## Test dependencies
+
+`test/recovery-stop.test.ts` checks restart recovery with the real journal, runner,
+report writer and browser transcript. Other integration tests use the computer and
+operator test helpers. Tests cannot import another application’s source directly.
+
 ## Saved turn failure reasons
 
 The bridge report reader accepts `stop_interrupted`, `model_error` and

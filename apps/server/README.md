@@ -22,6 +22,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
+  server -.->|integration tests use the transcript helper| web
   web["apps/web<br/>the website"] -->|requests, provider retries and retries after proved unsent calls, control status, dated approvals, model and remote tool grants, membership status and choices, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
   server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops, turn decisions and relay closures| nats["NATS<br/>event log"]
@@ -548,6 +549,7 @@ Recovery tests restore team access only when a test removed it.
 
 Tests share a port picker that keeps listeners away from outgoing connections
 and the secondary dev stacks. It tries another port if one is already busy.
+Integration tests use the other applications’ test helpers to check their work together.
 
 ```sh
 npm start -w apps/server

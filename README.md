@@ -175,6 +175,11 @@ nice -n 10 npm ci
 nice -n 10 npm run lint
 ```
 
+Typed lint shares one TypeScript program across Node packages and keeps three for the
+website. This avoids loading the same library types in each package.
+The dependency check also rejects tests that import another application’s source
+directly; integration tests use small helpers in the application being tested.
+
 Follow the [dev stack guide](infra/dev-stack/README.md) to set up the required
 services and computer cluster. Start the stack once those prerequisites are ready:
 

@@ -9,7 +9,7 @@ import { tokenIssuer, computerCredentials } from '@opencrane/auth';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { openfga } from '@opencrane/authz/testing';
 import { BudgetActor, startDecision, history, envelope } from '@opencrane/models';
-import { proxy } from '../../computer/src/proxy.ts';
+import { proxy } from '../../computer/test/server.ts';
 
 it('aborts the client when the model upstream cuts an SSE response short', async () => {
   const fixture = await proxyStreamFixture(true);

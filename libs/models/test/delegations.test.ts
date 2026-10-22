@@ -3,8 +3,8 @@ import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { budgets, readBudget, totals } from '@opencrane/models';
-import { delegations, ProjectionRunner } from '../src/index.ts';
-import { database } from './database.ts';
+import { delegations, ProjectionRunner } from '@opencrane/projections';
+import { database } from '@opencrane/projections/testing';
 
 async function rebuildsTasksWithoutEffects() {
   const nats = await natsFixture();

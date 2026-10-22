@@ -3,14 +3,14 @@ import { createServer } from 'node:http';
 import { generateKeyPairSync } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { tokenIssuer } from '@opencrane/auth';
-import { bridgeChannel } from '../../computer/src/channel.ts';
+import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { WebSocket, WebSocketServer } from 'ws';
 import * as modelAuthority from '@opencrane/models';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { recordReport } from '../src/chat/reports.ts';
 import { watchBridges } from '../src/chat/bridge.ts';
-import { SandboxClient } from '../../ops/src/kubernetes.ts';
+import { SandboxClient } from '../../ops/test/server.ts';
 import { once } from 'node:events';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -28,7 +28,7 @@ import {
   ProjectionRunner, readEvents, readGroups,
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { lifecycleHandlers } from '../../ops/src/lifecycle.ts';
+import { lifecycleHandlers } from '../../ops/test/server.ts';
 import { buildServer } from '../src/server.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import * as privateHistory from '../src/chat/private-context.ts';

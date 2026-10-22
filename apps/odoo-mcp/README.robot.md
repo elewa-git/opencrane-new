@@ -5,6 +5,11 @@ This completes the read half of row 1, part of [#53](https://github.com/elewa-gi
 Odoo remains an ordinary MCP server. The product and dispatcher contain no Odoo-specific code
 and supply no saved snapshot. Writes stay closed.
 
+## Test dependencies
+
+All lossless JSON imports use `@opencrane/events/lossless-json` directly.
+The tool server does not depend on the models package.
+
 ## HTTP
 
 `npm start -w apps/odoo-mcp` binds 127.0.0.1; `PORT` defaults to 3000.
@@ -45,7 +50,7 @@ remained unchanged between them, and cannot authorise a write here.
 Tests use real HTTP to the standalone adapter. They need no private files or external service,
 so root Vitest and ordinary CI can run them on a fresh checkout.
 Source: AGPL-3.0-or-later. Reused packages: Fastify and Zod (MIT), and
-`@opencrane/models` (AGPL-3.0-or-later) for lossless JSON. No new third-party package is added.
+`@opencrane/events/lossless-json` (AGPL-3.0-or-later) for lossless JSON. No new third-party package is added.
 Fixture-free HTTP tests cover exact snapshots, source hashes, escaping, record bounds,
 missing records, ACL refusals, fixed requests, per-call credentials and the shared deadline.
 The opt-in `ODOO_FIXTURE_TEST=1` test reads existing fixture orders via 127.0.0.1:18069.

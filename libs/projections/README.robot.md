@@ -30,7 +30,7 @@ have no root or parent index entry and grant no authority. The projection does n
 verify native ancestry, issue tokens, reserve money or spawn work.
 `ProjectionRunner.rebuild(delegations)` rebuilds both tables offline with readers
 and workers stopped. No online replay command or browser read route is added here.
-`test/delegations.test.ts` uses disposable NATS/PostgreSQL and rebuilds the existing
+`libs/models/test/delegations.test.ts` uses disposable NATS/PostgreSQL and rebuilds the existing
 budget projection alongside the hierarchy, preserving 240 settled and 110 held cents.
 
 The public entrypoint is `src/index.ts`:
@@ -184,6 +184,12 @@ wrapping key stops decryption; rotating it requires rewrapping existing keys.
 The members worker also maintains the flat-group view (`groups`, `group_members`,
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
 without reactions. See the [group contract](../../docs/api/groups.md).
+
+## Test dependencies
+
+`@opencrane/projections/testing` exports the existing `database` test helper. It creates
+and drops a private database per test, or a local PGlite directory. The four replay
+tests that import models live under `libs/models/test` to avoid a test dependency cycle.
 
 ## Remote tool grant references
 
@@ -445,10 +451,10 @@ SQL only stores the results. Live updates and offline rebuild use the same funct
 Startup refuses older metadata tables without all four closing columns and names the existing
 offline replay command. Rebuild restores activity and closing details, and increases generation.
 
-`test/conversation-activity.test.ts` uses real NATS and disposable PostgreSQL databases.
+`libs/models/test/conversation-activity.test.ts` uses real NATS and disposable PostgreSQL databases.
 It checks late token/tool/terminal reports, completed messages, repeated closes, old-table
 upgrade refusal and equality of live and rebuilt metadata and feed rows. Run with `PG_TEST_URL`
-set: `nice -n 10 npx vitest run libs/projections/test/conversation-activity.test.ts`.
+set: `nice -n 10 npx vitest run libs/models/test/conversation-activity.test.ts`.
 Fresh-install lifecycle journeys remain NOT RUN.
 
 ## Hosted tool review

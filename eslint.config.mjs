@@ -22,7 +22,13 @@ export default tseslint.config(
         ...globals.node,
       },
       parserOptions: {
-        projectService: true,
+        // Share Node packages so they reuse one copy of imported library types.
+        project: [
+          './tsconfig.lint.json',
+          './apps/web/tsconfig.app.json',
+          './apps/web/tsconfig.spec.json',
+          './apps/web/test/tsconfig.json',
+        ],
         tsconfigRootDir: import.meta.dirname,
       },
     },

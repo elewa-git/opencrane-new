@@ -6,11 +6,11 @@ import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { until as waitUntil } from '@opencrane/authz/testing';
-import { bridgeChannel } from '../../computer/src/channel.ts';
-import { reportJournal, type BridgeReport } from '../../computer/src/report-journal.ts';
-import type { PrivateSession, TurnDriver, Turn } from '../../computer/src/turn-runner.ts';
-import { parseTurn } from '../../computer/src/turn-runner.ts';
-import { PRIVATE_TURN_NOTE, CONTEXT_PREAMBLE, privateTurnInput } from '../../computer/src/turn-input.ts';
+import { bridgeChannel } from '../../computer/test/server.ts';
+import { reportJournal, type BridgeReport } from '../../computer/test/server.ts';
+import type { PrivateSession, TurnDriver, Turn } from '../../computer/test/server.ts';
+import { parseTurn } from '../../computer/test/server.ts';
+import { PRIVATE_TURN_NOTE, CONTEXT_PREAMBLE, privateTurnInput } from '../../computer/test/server.ts';
 
 function until(check: () => boolean | Promise<boolean>) {
   return waitUntil(check, 1500);

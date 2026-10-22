@@ -4,7 +4,7 @@ import { z } from 'zod';
 import Fastify from 'fastify';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { createHash } from 'node:crypto';
-import { losslessJson } from '@opencrane/models';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { createAdapter } from '../src/server.ts';
 
 const upstream = Fastify();

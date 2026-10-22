@@ -96,10 +96,9 @@ jobs:
 
       - name: Lint
         if: needs.select.outputs.mode != 'docs'
-        # Public runners have 16 GB of memory.
         env:
-          NODE_OPTIONS: --max-old-space-size=8192
-        run: nice -n 10 npm run lint
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: /usr/bin/time -v nice -n 10 npm run lint
 
       - name: Typecheck
         if: needs.select.outputs.mode != 'docs'

@@ -222,7 +222,7 @@ it('claim reactions seed ownership once and replay identity, IAM, assistant and 
   const { createStore, memberAuthorisation, rebuildMembers } = await import('@opencrane/authz');
   const { connectMemberFeed, members, pgDb, ProjectionRunner } = await import('@opencrane/projections');
   const { BudgetActor, ownershipSeedHandler, modelGrantHandler, models } = await import('@opencrane/models');
-  const { lifecycleHandlers } = await import('../../ops/src/lifecycle.ts');
+  const { lifecycleHandlers } = await import('../../ops/test/server.ts');
   const { createLogger } = await import('@opencrane/observability');
   const dbs = await databases(), fga = await openfga();
   const db = pgDb(dbs.queue);

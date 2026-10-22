@@ -289,7 +289,7 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       await link.deliver(conflictFile, conflictBytes);
       expect(await computer.read(conflictPath)).toBe('Member notes kept on first delivery');
       link.socket.terminate(); await once(link.socket, 'close'); await link.settled();
-      const { suspendComputer, resumeComputer } = await import('../../ops/src/lifecycle.ts');
+      const { suspendComputer, resumeComputer } = await import('../../ops/test/server.ts');
       const latest = (await history(nats.store, 'computer-assistant', 'test')).at(-1)!.event;
       expect((await suspendComputer(nats.store, { computerId: 'computer', assistantId: 'assistant', latest })).type).toBe('computer.suspended');
       await computer.pause(); await computer.resume(); await computer.restart();
@@ -344,7 +344,7 @@ it('does not resend acknowledged uploads after reconnect even when workspace byt
   const { createHash } = await import('node:crypto');
   const { mkdtemp, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
-  const { bridgeChannel } = await import('../../computer/src/channel.ts');
+  const { bridgeChannel } = await import('../../computer/test/server.ts');
   const { natsFixture } = await import('@opencrane/event-store/testing');
   const { connectBridge } = await import('../src/chat/bridge.ts');
   const { chatCommand, chatHistory } = await import('../src/chat/commands.ts');

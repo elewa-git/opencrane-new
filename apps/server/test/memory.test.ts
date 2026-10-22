@@ -8,7 +8,7 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { HandlerRuntime } from '@opencrane/handlers';
-import { memoryCleanupHandler } from '../../ops/src/memory-cleanup.ts';
+import { memoryCleanupHandler } from '../../ops/test/server.ts';
 import { until } from '../../../libs/handlers/test/helpers.ts';
 import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
   pgDb, ProjectionRunner, conversations } from '@opencrane/projections';

@@ -1,7 +1,7 @@
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { createHash } from 'node:crypto';
-import { losslessJson } from '@opencrane/models';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { z } from 'zod';
 
 export interface Upstream { origin: string; database: string }

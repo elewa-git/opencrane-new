@@ -1,0 +1,1 @@
+- Lint uses fewer TypeScript programs to reduce memory and repeated work while keeping typed checks. CI prints peak lint memory. Application tests reject direct imports into another application’s source.
