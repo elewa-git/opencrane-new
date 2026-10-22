@@ -127,3 +127,26 @@ async function slowWebsiteBecomesReady() {
 
 test('startup waits for a cold website build that takes longer than two minutes',
   slowWebsiteBecomesReady);
+
+async function websiteNeverBecomesReady() {
+  const result = await ownerStart({ webReadyMs: 600_000 });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.failure, /Timed out waiting for web/u);
+  assert.doesNotMatch(result.output, /Stack ready:|PASS website readiness/u);
+  assertRestored(result);
+}
+
+test('startup still fails and rolls back when the website never becomes ready',
+  websiteNeverBecomesReady);
+
+async function websiteExitsDuringBuild() {
+  const result = await ownerStart({ webReadyMs: 208_291, webExitMs: 1_000 });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.failure, /Website process stopped before readiness/u);
+  assert.doesNotMatch(result.output, /Stack ready:|PASS website readiness/u);
+  const healthChecks = result.operations.match(/health .*\/org\/integrations/gu) ?? [];
+  assert.equal(healthChecks.length, 2, result.operations);
+  assertRestored(result);
+}
+
+test('startup fails promptly when the website exits during its build', websiteExitsDuringBuild);

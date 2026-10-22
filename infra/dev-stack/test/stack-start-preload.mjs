@@ -94,6 +94,8 @@ const originalRead = files.readFile;
 async function readFixture(path, ...args) {
   const match = /^\/proc\/(\d+)\/stat$/u.exec(String(path));
   if (!match) return originalRead(path, ...args);
+  const webExitMs = process.env['START_WEB_EXIT_MS'];
+  if (webExitMs && elapsedMs >= Number(webExitMs)) running.delete(webPid);
   if (!running.has(Number(match[1]))) {
     const error = new Error('Fixture process stopped');
     error.code = 'ENOENT';

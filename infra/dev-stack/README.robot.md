@@ -27,7 +27,26 @@ These scripts do not touch `pg-test` or the `ocn` registry/MinIO; on `ocn` they
 own the `opencrane-<silo>` computer and `opencrane-<silo>-gateway` relay namespaces.
 Run at most three stacks per host: the stable owner and secondary ids `1` and `2`.
 Operations use a separate `flock` per id; different stacks run concurrently.
-Secondary readiness waits allow two minutes for startup on the shared host.
+Service readiness waits allow two minutes on secondary stacks and one minute on the owner.
+Website readiness has its own five-minute deadline, measured with a monotonic clock.
+It still requires a successful HTTP response from `/org/integrations` through the generated
+proxy configuration. If the recorded website process stops, startup fails immediately and
+points to the private `web.log`, without printing its contents. A successful check prints
+`PASS website readiness: <milliseconds>ms`, measured from just before the website starts.
+The origin check and browser journeys run afterwards. Fresh starts still clear the cache.
+
+The retained 22 October provider-start run built the website in 208.291 seconds, then
+listened on slot 1's port 25106. Its previous two-minute wait had already failed.
+The same day's upload-list run retained only `Building...` and a web timeout, so it does
+not establish that run's eventual build time. The cache change in #578 only enabled
+Angular caching in CI; fresh secondary starts remove this cache before the build.
+No new web dependency was introduced by that change. Keep the cold-build allowance
+separate from the other services' deadlines.
+
+`nice -n 10 node --experimental-strip-types --test infra/dev-stack/stack-start.test.ts`
+checks a simulated 208.291-second build, a website that never becomes ready and an exited
+website process. It also checks owner rollback with synthetic processes; it never starts
+or changes the live owner stack.
 Repeated startup stops the secondary model container before migration and starts
 it again afterwards, alongside the restarted server and dispatcher. Fresh secondary
 stacks seed a 100,000-cent daily/monthly budget event for the stub-only journeys.
