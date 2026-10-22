@@ -571,17 +571,24 @@ each kept the stopped outcome and partial text but also added “Reply failed”
 
 ### Cause and fix
 
-A stopped turn saves `agent.turn_stop_requested`, followed by
-`agent.turn_failed` with reason `bridge_interrupted`. The conversation projection
-copies both events into `conversation_feed`; it has no saved turn-outcome column.
-Those rows correctly record the request and the bridge ending its work.
-The browser derived `stopped` from them, then separately added a “Reply failed”
-activity for every failure event except a budget stop. The two labels disagreed.
+A Stop request records what the person asked for. It does not prove why the turn
+ended. The first version treated every later failure as stopped and hid its failure
+activity. That also hid tool refusals and provider failures that raced with Stop.
 
-The activity now uses the turn's already-derived state. Only `failed` adds
-“Reply failed”. This fixes personal and shared-assistant sessions without changing
-events, saved rows, replay, access checks or provider behaviour. Human group chats
-use the separate direct-chat view and do not start agent turns.
+The bridge now saves `stop_interrupted` only after a cancelled turn receives an
+interrupted terminal report. Other runner failures save `model_error`. A tool refusal
+keeps `restricted_tool_refused` even if Stop was also received. These are values of
+the existing `reason` field, with no new event or field. The server checks and saves
+them unchanged. Journal reload and duplicate delivery keep the same report.
+
+The browser requires the saved ending reason as well as Stop before showing the
+stopped outcome. Older `bridge_interrupted` reports following Stop keep their previous
+display. Other failures keep “Reply failed” and their detail, live and after reload.
+The first activity fix still adds “Reply failed” only for a derived `failed` turn.
+No saved rows need rewriting. Human group chats use the separate direct-chat view.
+
+The original live evidence below predates this correction. Its failure check had no
+Stop request. The correction checks are recorded after that evidence.
 
 ### Live checks
 
@@ -635,3 +642,59 @@ names/reasons. They contain no credentials or reply contents.
 The package READMEs and diagram describe the corrected outcome. The release note is
 `changes/unreleased/work-demo-stop-label.md`; the later repository rule keeps
 `CHANGELOG.md` unchanged. GitHub CI is reported for the pushed draft-PR head.
+
+### Failure reasons after Stop
+
+22 October 2026. Product source `3c1d08655aca126b4aa265366e87db9bfb0fc72a`.
+Test-first commit `5d9152441` precedes this fix. The first runs failed on the two
+hidden browser failures, three missing bridge reasons and two rejected server reasons.
+The refusal case already kept its bridge reason; the new browser check exposed where
+that reason was lost from the display.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Stop then tool refusal, live calculation and replay | PASS | Keeps “Reply failed” and “Tool access refused”, with partial text. |
+| Stop then provider failure, live calculation and replay | PASS | Keeps “Reply failed”; the bridge saves `model_error`. |
+| Stop-caused ending, live calculation and replay | PASS | Saves `stop_interrupted`, keeps partial text and shows only the stopped outcome. |
+| Older Stop plus `bridge_interrupted` | PASS | Keeps the previous stopped display. |
+| No Stop plus `bridge_interrupted` | PASS | Keeps “Reply failed”. |
+| Remove the browser reason check temporarily | PASS | Both unrelated-failure regressions fail. Restored the check afterwards. |
+| Remove the bridge terminal-status check temporarily | PASS | Stop plus provider failure incorrectly saves `stop_interrupted`, and its regression fails. Restored the check afterwards. |
+| Changed tests and nearby bridge checks | PASS | All 28 web state tests twice; all 495 tests in six server, bridge and event-security files twice. Uses the requested `PG_TEST_URL`, `nice -n 10` and one worker. |
+| Journal reload and duplicate report delivery | PASS | New reasons remain identical after reload; the server saves each report once and recognises its duplicate. |
+| Protected event-security tests | PASS | All 438 tests pass unchanged, including reason-code validation. |
+| Typecheck, event catalogue, Knip and changelog lint | PASS | All workspaces and package types; 149 event types agree. |
+| Full root suite | NOT RUN | Only the named test files ran. |
+
+Used only claimed secondary slot **1**, with a fresh stand-in stack and no paid calls.
+A temporary image added the two changed bridge files to the existing pinned computer
+image. Its digest was
+`sha256:b4f6fa8b0e61bec490254a1f7fdc2b8cc35d8fac652d993d7c9a9b43c7e851c7`.
+The slot kept its strict image checks with that expected digest. The computer upgrade
+used the slot's lifecycle account. The first administrator request and an incomplete
+container patch were refused; neither refusal changed the computer.
+
+The existing stand-in pauses after “Hello ” for the prompt “Say hello again.”
+Both widths kept six characters, saved `stop_interrupted`, had zero “Reply failed”
+activities, and kept identical text after reload. The pictures show the stopped label.
+[Results](stop-label/recheck/results.json),
+[390px before reload](stop-label/recheck/before-reload-390.png),
+[390px after reload](stop-label/recheck/after-reload-390.png),
+[1280px before reload](stop-label/recheck/before-reload-1280.png) and
+[1280px after reload](stop-label/recheck/after-reload-1280.png).
+
+Startup preparation first failed because this worktree had no local Zitadel key path.
+The repeat used the existing configured key file. Provider setup passed with the free
+stand-in. The bundled wider startup journey is PARTIAL: it was ended after the targeted
+Stop checks passed. Its generated changes to existing pictures and records were restored.
+The tool-refusal and provider-failure races were checked in tests; they were NOT RUN live.
+
+Cleanup PASS: `down.sh --id 1` removed the slot's services, namespace, data and claim.
+Removed the temporary image references from Docker and the cluster, the temporary registry
+tag, the local forwarding process and the temporary helper files. The registry does not
+allow manifest deletion; untagged build data remains as cache. No shared cache was cleared.
+The owner stack and port 44200 were untouched. No access, spending or memory check changed.
+
+Full lint PASS, with 24 existing warnings and zero errors. Documentation and local
+links also passed after this receipt was updated. Fetch and rebase completed;
+`origin/main` is an ancestor of this branch, with no rebase left in progress.
