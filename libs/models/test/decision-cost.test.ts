@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { countReads, expectNoWholeReads } from '@opencrane/event-store/testing';
 import { grantStream } from '@opencrane/authz';
+import { until } from '@opencrane/authz/testing';
 import { BudgetActor, envelope, history } from '../src/actor.ts';
 import { totals } from '../src/state.ts';
 import { startDecision } from '../src/decision.ts';
@@ -350,6 +351,54 @@ it.each(['computer-assistant', 'conversation-conversation', grantStream('model',
   'refuses %s history restored below its summary without reserving more money',
   refusesRestoredHistory, 40_000);
 
+async function waitForDecisionGrants(setup: Fixture, deadline: number) {
+  await readDecisionGrants(setup.nats.store, 'test', 'gpt-6-luna', deadline);
+}
+
+async function waitsForGrantReceiptBeforeWarmUp() {
+  const setup = await fixture();
+  const receiptChecked = Promise.withResolvers<'receipt checked'>();
+  const applied = setup.auth.applied.bind(setup.auth);
+  let waiting: Promise<'finished'> | undefined;
+  try {
+    await setup.stopDispatch();
+    const subject = grantStream('model', 'gpt-6-luna');
+    const grant = { resourceType: 'model', resourceId: 'gpt-6-luna',
+      granteeId: 'alice', granteeKind: 'member', grantedBy: 'alice' };
+    const event = await setup.append(subject, 'grant.given', grant);
+    expect(await applied(event.id)).toBe(false);
+    async function observeReceipt(eventId: string) {
+      const result = await applied(eventId);
+      if (eventId === event.id && !result) receiptChecked.resolve('receipt checked');
+      return result;
+    }
+    const appliedSpy = vi.spyOn(setup.auth, 'applied');
+    appliedSpy.mockImplementation(observeReceipt);
+    async function prepareWarmUp(): Promise<'finished'> {
+      await waitForDecisionGrants(setup, performance.now() + 15_000);
+      return 'finished';
+    }
+    waiting = prepareWarmUp();
+    const first = await Promise.race([waiting, receiptChecked.promise]);
+    expect(first).toBe('receipt checked');
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    await setup.auth.handler.handle(event, setup.db);
+    await waiting;
+    expect(await applied(event.id)).toBe(true);
+    const ready = await decide(setup);
+    expect(ready.status, ready.text).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+    expect(setup.received()).toBe(0);
+  } finally {
+    await waiting;
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('waits for the latest model grant receipt before warming admission',
+  waitsForGrantReceiptBeforeWarmUp);
+
 async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee: boolean) {
   const setup = await fixture();
   const store = setup.nats.store;
@@ -397,7 +446,7 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     resumeGrantHistory.resolve();
     // Keep the existing two-minute history budget outside the measured admission.
     const grantHistoryDeadline = performance.now() + 120_000;
-    await readDecisionGrants(store, 'test', 'gpt-6-luna', grantHistoryDeadline);
+    await waitForDecisionGrants(setup, grantHistoryDeadline);
     const readyHeaders = await setup.issue();
     const ready = await decide(setup, setup.options.decisionUrl, readyHeaders);
     expect(ready.status, ready.text).toBe(200);
