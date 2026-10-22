@@ -274,7 +274,11 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
     return;
   }
   if (row.type === 'agent.turn_failed') {
-    turn.state = turn.stopRequested || turn.state === 'stopping' ? 'stopped' : 'failed';
+    const stopRequested = turn.stopRequested || turn.state === 'stopping';
+    // Keep older saved interruptions readable; newer reports name Stop separately.
+    const stoppedReason = row.data.reason === 'stop_interrupted'
+      || row.data.reason === 'bridge_interrupted';
+    turn.state = stopRequested && stoppedReason ? 'stopped' : 'failed';
     turn.endedAt = row.time;
     turn.endReportedAt = row.time;
     markRunningCallsUnconfirmed(turn);
@@ -307,7 +311,8 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
   if ((row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished')
     && turn.state !== 'working' && turn.state !== 'stopping') return;
   if (row.type === 'agent.turn_failed') {
-    if (turn.budgetStop) return;
+    // Use the derived outcome: an interrupted Stop report is not a failed reply.
+    if (turn.state !== 'failed') return;
     turn.tools.push({ id: row.id, label: 'Reply failed',
       detail: failureDetail(row.data.reason), failed: true, time: row.time });
     return;

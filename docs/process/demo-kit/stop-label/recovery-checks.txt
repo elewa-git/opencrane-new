@@ -1,0 +1,108 @@
+Restart after a saved but undelivered Stop
+Removal check: temporarily omitted bridge_restarted from recovery.
+The test still lived under apps/computer/test during this check.
+Restored the product file byte for byte before both final passing runs.
+
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test/recovery-stop.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/demo-stop-label
+
+ ❯ apps/computer/test/recovery-stop.test.ts (1 test | 1 failed) 1713ms
+   × keeps Reply failed and partial text live and after reload when recovery precedes Stop delivery 1710ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/computer/test/recovery-stop.test.ts > keeps Reply failed and partial text live and after reload when recovery precedes Stop delivery
+ FAIL  apps/computer/test/recovery-stop.test.ts > keeps Reply failed and partial text live and after reload when recovery precedes Stop delivery
+AssertionError: expected { id: 'message', …(11) } to match object { state: 'failed', …(3) }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "reason": "bridge_restarted",
+-   "state": "failed",
++   "reason": "bridge_interrupted",
++   "state": "stopped",
+    "text": "Partial reply before restart",
+-   "tools": [
+-     {
+-       "detail": "Run interrupted",
+-       "failed": true,
+-       "label": "Reply failed",
+-     },
+-   ],
++   "tools": [],
+  }
+
+ ❯ keepsRecoveryFailureAfterUndeliveredStop apps/computer/test/recovery-stop.test.ts:102:33
+    100|     expect(reloadedTranscript).toEqual(live);
+    101|     for (const turns of [live, reloadedTranscript]) {
+    102|       expect.soft(turns.at(-1)).toMatchObject({ state: 'failed',
+       |                                 ^
+    103|         text: 'Partial reply before restart', reason: 'bridge_restarte…
+    104|         tools: [{ label: 'Reply failed', detail: 'Run interrupted', fa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  apps/computer/test/recovery-stop.test.ts > keeps Reply failed and partial text live and after reload when recovery precedes Stop delivery
+AssertionError: expected undefined to be 'bridge_restarted' // Object.is equality
+
+- Expected:
+"bridge_restarted"
+
++ Received:
+undefined
+
+ ❯ keepsRecoveryFailureAfterUndeliveredStop apps/computer/test/recovery-stop.test.ts:106:28
+    104|         tools: [{ label: 'Reply failed', detail: 'Run interrupted', fa…
+    105|     }
+    106|     expect(failure.reason).toBe('bridge_restarted');
+       |                            ^
+    107|   } finally {
+    108|     await nats.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  07:13:21
+   Duration  8.72s (transform 59%, import 20%, tests 20%)
+
+  Transform  transforming modules took 4.96s · 59% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+First final passing run, after moving the test into apps/web/test:
+npm notice run npx
+npm notice run 'vitest' run apps/web/test/recovery-stop.test.ts apps/computer/test/turn-model.test.ts apps/server/test/tool-reports.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/demo-stop-label
+
+
+ Test Files  4 passed (4)
+      Tests  464 passed (464)
+   Start at  07:14:20
+   Duration  22.16s (tests 59%, transform 22%, import 19%)
+
+
+Second final passing run:
+npm notice run npx
+npm notice run 'vitest' run apps/web/test/recovery-stop.test.ts apps/computer/test/turn-model.test.ts apps/server/test/tool-reports.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/demo-stop-label
+
+
+ Test Files  4 passed (4)
+      Tests  464 passed (464)
+   Start at  07:15:11
+   Duration  24.78s (tests 54%, transform 26%, import 20%)
+
+  Transform  transforming modules took 6.08s · 26% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

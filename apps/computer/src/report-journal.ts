@@ -25,7 +25,8 @@ export interface BridgeReport {
   text?: string;
   executionMode?: 'restricted' | 'memory_free';
   sharingClass?: 'shared_only';
-  reason?: 'restricted_tool_refused' | 'unsupported_native_consent';
+  reason?: 'restricted_tool_refused' | 'unsupported_native_consent'
+    | 'stop_interrupted' | 'model_error' | 'bridge_restarted';
   memoryOnly?: boolean;
 }
 
@@ -272,7 +273,11 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
   }
   const reason = value['reason'];
   if (reason !== undefined) {
-    if (reason !== 'restricted_tool_refused' && reason !== 'unsupported_native_consent') throw new Error('Invalid journal reason');
+    if (reason !== 'restricted_tool_refused' && reason !== 'unsupported_native_consent'
+      && reason !== 'stop_interrupted' && reason !== 'model_error'
+      && reason !== 'bridge_restarted') {
+      throw new Error('Invalid journal reason');
+    }
     report.reason = reason;
   }
   const memoryOnly = value['memoryOnly'];

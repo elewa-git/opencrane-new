@@ -561,3 +561,220 @@ changelog lint are checked again with this receipt before committing.
 NOT RUN in this repair round: a live stack, fresh-install journey, paid calls or
 the full root suite locally. The earlier live results keep their stated sources
 and limits. The PR comment records CI for the pushed head and its `ci-ok` result.
+
+## Stop label
+
+22 October 2026. Part of #32. Product source:
+`89ab910bf314069856d482814f675eb77f7be559`; base `06a0e47ac`.
+Failing-first commit: `1ab6fe03b`. The two new cases failed before the fix:
+each kept the stopped outcome and partial text but also added “Reply failed”.
+
+### Cause and fix
+
+A Stop request records what the person asked for. It does not prove why the turn
+ended. The first version treated every later failure as stopped and hid its failure
+activity. That also hid tool refusals and provider failures that raced with Stop.
+
+The bridge now saves `stop_interrupted` only after a cancelled turn receives an
+interrupted terminal report. Other runner failures save `model_error`. A tool refusal
+keeps `restricted_tool_refused` even if Stop was also received. These are values of
+the existing `reason` field, with no new event or field. The server checks and saves
+them unchanged. Journal reload and duplicate delivery keep the same report.
+
+The browser requires the saved ending reason as well as Stop before showing the
+stopped outcome. Older `bridge_interrupted` reports following Stop keep their previous
+display. Other failures keep “Reply failed” and their detail, live and after reload.
+The first activity fix still adds “Reply failed” only for a derived `failed` turn.
+No saved rows need rewriting. Human group chats use the separate direct-chat view.
+
+The original live evidence below predates this correction. Its failure check had no
+Stop request. The correction checks are recorded after that evidence.
+
+### Live checks
+
+Used only claimed secondary slot **1**, with a fresh install and the free stand-in.
+The browser used the existing short-lived development Owner session format; product
+APIs still checked access. No paid provider was configured or called. A temporary
+stand-in fixture emitted 26-character pieces every 20 ms for long replies and
+returned HTTP 400 for the failure check. Its source was restored after loading;
+its process ends with this slot. No fixture change is part of the product fix.
+
+[Original-guard reproduction](stop-label/baseline.json) confirms both labels live
+and after reload, with 8,632 kept characters. It temporarily restored the old guard
+on the stated source, then restored the fix before the checks below.
+[Fixed results](stop-label/fixed.json), [shared results](stop-label/shared.json) and
+[group results](stop-label/group.json) retain times, character counts and saved event
+names/reasons. They contain no credentials or reply contents.
+
+| Step | Result | Evidence |
+| --- | --- | --- |
+| Long reply, Stop, 390px first | PASS | 5,564 characters; zero “Reply failed” labels. [Before reload](stop-label/fixed-before-reload-390.png). |
+| Reload at 390px | PASS | Exact same text and only the stopped label. [After reload](stop-label/fixed-after-reload-390.png). |
+| Long reply, Stop, 1280px second | PASS | 5,902 characters; zero “Reply failed” labels. [Before reload](stop-label/fixed-before-reload-1280.png). |
+| Reload at 1280px | PASS | Exact same text and only the stopped label. [After reload](stop-label/fixed-after-reload-1280.png). |
+| Provider failure without Stop | PASS | “Reply failed” remains [live](stop-label/failed-before-reload-390.png) and [after reload](stop-label/failed-after-reload-390.png). Saved failure report, no Stop request. |
+| Shared assistant at 390px | PASS | 4,706 characters and only stopped, [live](stop-label/shared-before-reload-390.png) and [after reload](stop-label/shared-after-reload-390.png). |
+| Human group chat at 390px | PASS | Message survives reload; no agent turn or reply outcome. [Picture](stop-label/group-390.png). |
+| Lost output without text | PASS | State test keeps “Didn't complete · nothing was repeated”. Live computer-loss check: NOT RUN. |
+| Bundled startup journey | FAIL | Services started, but the existing tool review returned HTTP 409 at “Owner saves the exact tool review”. The targeted checks above used those live services. |
+| First shared-check helper | FAIL | It waited for the composer without using Check status. [Receipt](stop-label/shared-first-attempt.json) and [picture](stop-label/shared-failure-390.png). The corrected helper uses the existing picker-status journey function; its repeat passed above. |
+| Physical phone and Safari | NOT RUN | Pictures use Chromium windows. |
+| Slot release and cleanup | PASS | `down.sh --id 1` removed this slot’s services, computers, data and claim. The owner stack and port 44200 were untouched. |
+
+### Source checks
+
+- PASS: `npm ci` in this worktree; requested NATS and Lychee symlinks in `.tools/`.
+- PASS: all 23 tests in `chat-state.spec.ts`, twice after the fix. Existing failure
+  and lost-output cases explicitly check their labels. The first failing run had
+  21 passes and the two expected stopped-label failures.
+- PASS: 438 event-security tests once and the existing conversation-projection test.
+  Used throwaway PostgreSQL 17.6 at
+  `postgres://postgres:test-only@127.0.0.1:53526/postgres`, following the later database
+  setup rule. Removed `pgtest-demo-stop-label` and its volume afterwards.
+- PASS: workspace/package typecheck, event catalogue (149 types), and separate Knip.
+- PASS: full lint, including documentation, links, licences and changelog lint;
+  24 existing code warnings and zero errors. Its first wrapper ended with signal 143
+  after reaching changelog lint. Changelog lint passed separately, then the full
+  repeat passed with an 8 GiB Node heap limit and the same lowered CPU priority.
+- NOT RUN: full root suite locally. Tests, lint and typecheck used `nice -n 10`.
+  No authority or event-security test changed; no dependency or event/API name was added.
+
+The package READMEs and diagram describe the corrected outcome. The release note is
+`changes/unreleased/work-demo-stop-label.md`; the later repository rule keeps
+`CHANGELOG.md` unchanged. GitHub CI is reported for the pushed draft-PR head.
+
+### Failure reasons after Stop
+
+22 October 2026. Product source `3c1d08655aca126b4aa265366e87db9bfb0fc72a`.
+Test-first commit `5d9152441` precedes this fix. The first runs failed on the two
+hidden browser failures, three missing bridge reasons and two rejected server reasons.
+The refusal case already kept its bridge reason; the new browser check exposed where
+that reason was lost from the display.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Stop then tool refusal, live calculation and replay | PASS | Keeps “Reply failed” and “Tool access refused”, with partial text. |
+| Stop then provider failure, live calculation and replay | PASS | Keeps “Reply failed”; the bridge saves `model_error`. |
+| Stop-caused ending, live calculation and replay | PASS | Saves `stop_interrupted`, keeps partial text and shows only the stopped outcome. |
+| Older Stop plus `bridge_interrupted` | PASS | Keeps the previous stopped display. |
+| No Stop plus `bridge_interrupted` | PASS | Keeps “Reply failed”. |
+| Remove the browser reason check temporarily | PASS | Both unrelated-failure regressions fail. Restored the check afterwards. |
+| Remove the bridge terminal-status check temporarily | PASS | Stop plus provider failure incorrectly saves `stop_interrupted`, and its regression fails. Restored the check afterwards. |
+| Changed tests and nearby bridge checks | PASS | All 28 web state tests twice; all 495 tests in six server, bridge and event-security files twice. Uses the requested `PG_TEST_URL`, `nice -n 10` and one worker. |
+| Journal reload and duplicate report delivery | PASS | New reasons remain identical after reload; the server saves each report once and recognises its duplicate. |
+| Protected event-security tests | PASS | All 438 tests pass unchanged, including reason-code validation. |
+| Typecheck, event catalogue, Knip and changelog lint | PASS | All workspaces and package types; 149 event types agree. |
+| Full root suite | NOT RUN | Only the named test files ran. |
+
+Used only claimed secondary slot **1**, with a fresh stand-in stack and no paid calls.
+A temporary image added the two changed bridge files to the existing pinned computer
+image. Its digest was
+`sha256:b4f6fa8b0e61bec490254a1f7fdc2b8cc35d8fac652d993d7c9a9b43c7e851c7`.
+The slot kept its strict image checks with that expected digest. The computer upgrade
+used the slot's lifecycle account. The first administrator request and an incomplete
+container patch were refused; neither refusal changed the computer.
+
+The existing stand-in pauses after “Hello ” for the prompt “Say hello again.”
+Both widths kept six characters, saved `stop_interrupted`, had zero “Reply failed”
+activities, and kept identical text after reload. The pictures show the stopped label.
+[Results](stop-label/recheck/results.json),
+[390px before reload](stop-label/recheck/before-reload-390.png),
+[390px after reload](stop-label/recheck/after-reload-390.png),
+[1280px before reload](stop-label/recheck/before-reload-1280.png) and
+[1280px after reload](stop-label/recheck/after-reload-1280.png).
+
+Startup preparation first failed because this worktree had no local Zitadel key path.
+The repeat used the existing configured key file. Provider setup passed with the free
+stand-in. The bundled wider startup journey is PARTIAL: it was ended after the targeted
+Stop checks passed. Its generated changes to existing pictures and records were restored.
+The tool-refusal and provider-failure races were checked in tests; they were NOT RUN live.
+
+Cleanup PASS: `down.sh --id 1` removed the slot's services, namespace, data and claim.
+Removed the temporary image references from Docker and the cluster, the temporary registry
+tag, the local forwarding process and the temporary helper files. The registry does not
+allow manifest deletion; untagged build data remains as cache. No shared cache was cleared.
+The owner stack and port 44200 were untouched. No access, spending or memory check changed.
+
+Full lint PASS, with 24 existing warnings and zero errors. Documentation and local
+links also passed after this receipt was updated. Fetch and rebase completed;
+`origin/main` is an ancestor of this branch, with no rebase left in progress.
+
+### Workspace fixture correction
+
+The first CI run on `de0a962ee` failed two workspace tests. Both Stop endings omitted
+the required saved failure reason. A local run reproduced the same two failures, with
+69 other workspace tests passing. The fixtures now supply `stop_interrupted`, matching
+the report saved by the server. Every assertion is unchanged. No product code changed.
+Both repeats passed all 99 tests in `workspace.spec.ts` and `chat-state.spec.ts`.
+Full lint, typecheck, event catalogue and changelog lint passed again after this
+fixture correction. Lint still has 24 existing warnings and zero errors.
+
+### Standalone browser fixture correction
+
+CI on `3abe9c49d` passed its checks job, including the complete Angular web suite,
+but two root test shards found older Stop fixtures outside that suite. A local run
+reproduced both failures. The standalone state test omitted the ending reason; the
+browser fixture used `interrupted`. Both now use the saved `stop_interrupted` reason.
+Every assertion and all product code remain unchanged in this correction.
+
+PASS after correction: all 499 tests in eight targeted root test files, twice.
+This includes standalone state replay, Chromium frame/keyboard/Stop/reload paths,
+production CSP and folding checks, alongside the server, bridge and unchanged event-security
+checks. Both 99-test Angular repeats also passed. Tests use the requested `PG_TEST_URL`,
+one worker and `nice -n 10`; browser fixtures use their own temporary servers.
+
+The `3abe9c49d` CI run ended with checks and test shards 2 and 3 passing. Shards 1 and 4
+failed only on the two fixtures corrected here, so `ci-ok` was FAIL for that earlier head.
+
+All lint stages, typecheck, event catalogue and changelog lint passed after this correction.
+The first lint wrapper stopped at an extra blank line in this receipt. Removed that line
+and reran documentation, links, fixture, licence and changelog checks successfully.
+Code, dependency and Knip checks had already passed, with 24 existing code warnings.
+
+### Restart before Stop delivery
+
+22 October 2026. Product source `ecfa7c148`; failing-first commit `da79ac93e`.
+The regression starts a memory-free turn, saves partial text and the member's Stop,
+then reopens the real report journal before delivering Stop to the runner. Recovery
+previously wrote a failure with no reason. The server saved `bridge_interrupted`, so
+the older-history display rule incorrectly hid the crash as stopped.
+
+Recovery now writes `bridge_restarted` in the existing reason field. The journal
+retains it after another reload, and the server saves it unchanged. Both the live
+transcript calculation and a new calculation from saved rows keep “Reply failed”
+and the exact partial text. The other reason-less runner write, an execution-mode
+mismatch, now writes `model_error` before running anything. All remaining computer
+failure writes already use the shared failure helper, which supplies a reason.
+Server close cleanup already writes `conversation_closed`. The server's default for
+older reason-less reports and the browser's older-history rule are unchanged.
+
+The [removal check and both final test logs](stop-label/recovery-checks.txt) show
+the hidden failure returning without the reason and both passing repeats.
+Used this worktree and disposable NATS fixtures, with no live stack or model call.
+The commands set the requested
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and use `nice -n 10`
+and one Vitest worker. These tests do not run a projection or need a new database.
+
+| Check | Result | Observed result |
+| --- | --- | --- |
+| Failing-first regression | PASS | Before the fix, both transcript calculations incorrectly showed stopped, kept partial text and omitted “Reply failed”. The mismatch lacked its reason, and the server rejected `bridge_restarted`. Three tests failed and 23 passed. |
+| Remove the recovery reason temporarily | PASS | The regression again showed stopped instead of failed, live and after reload. Restored the product file byte for byte afterwards. |
+| Changed tests twice | PASS | All 464 tests passed on each run: `apps/web/test/recovery-stop.test.ts`, `apps/computer/test/turn-model.test.ts`, `apps/server/test/tool-reports.test.ts` and `libs/events/test/security-rules.test.ts`. |
+| Old report compatibility | PASS | A reason-less report still saves `bridge_interrupted`; the browser compatibility rule is unchanged. |
+| Journal reload and report duplicates | PASS | The restart reason survives another journal reload, and the server recognises repeat delivery. |
+| Protected event-security tests | PASS | All 438 tests passed unchanged on both runs. The new reason also passes the real event append validation. |
+| Full root suite and live stack | NOT RUN | Left the narrow live verification to the orchestrator, as requested. |
+
+The first typecheck found that this integration test could not import browser code
+from the computer package's Node module settings. Moved the test into the existing
+browser test folder, without changing its assertions. That folder now includes the
+Node 22 promise types used by the real report writer. No product module settings,
+access, money or memory checks changed. No new dependency, event type or field was added.
+
+Typecheck, event catalogue, Knip and changelog lint: PASS. The catalogue still
+contains 149 event types. The first full lint wrapper was stopped after the test
+moved folders. The fresh full run passed with an 8 GiB Node heap limit,
+24 existing code warnings and no errors. Dependency checks, documentation, local links,
+fixture checks, licence checks and changelog lint all passed. The final changed-file
+code lint also passed. Fetch and rebase completed; `origin/main` at `12fe8ec912`
+is an ancestor of the branch, and neither rebase directory exists.

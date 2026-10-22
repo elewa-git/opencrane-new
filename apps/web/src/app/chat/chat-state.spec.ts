@@ -102,6 +102,7 @@ it('keeps a completed turn incomplete when the private reply output was lost', (
   expect(agentTurn?.state).toBe('lost');
   expect(agentTurn?.executionMode).toBe('restricted');
   expect(agentTurn?.text).toBe('');
+  expect(turnOutcome(agentTurn!)).toBe("Didn't complete · nothing was repeated");
 });
 
 it('keeps raw failure codes out of tool details', () => {
@@ -112,6 +113,8 @@ it('keeps raw failure codes out of tool details', () => {
       data: { turnId: 'request', reason: 'computer_lost' } },
   ];
   const lost = transcript(rows, 'me').at(-1)!;
+  expect(lost.state).toBe('failed');
+  expect(lost.tools[0]?.label).toBe('Reply failed');
   expect(lost.reason).toBe('computer_lost');
   expect(lost.tools[0]?.detail).toBe('Computer was lost');
   rows[1]!.data.reason = 'model_error';
@@ -262,7 +265,8 @@ it('keeps a stop request pending and accepts tool finishes until the turn ends',
   expect(turn?.tools[0]?.status).toBe('completed');
 
   rows.push({ id: 'ended', position: 5, type: 'agent.turn_failed',
-    time: '2026-10-09T10:00:04Z', data: { turnId: 'message' } });
+    time: '2026-10-09T10:00:04Z',
+    data: { turnId: 'message', reason: 'bridge_interrupted' } });
   const stoppedTurn = transcript(rows, 'me').find(isAgentTurn);
   expect(stoppedTurn?.state).toBe('stopped');
   expect(stoppedTurn?.endedAt).toBe('2026-10-09T10:00:04Z');
@@ -325,7 +329,8 @@ it('shows started budget work as stopping until its ending report arrives', () =
   ];
   expect(transcript(rows, 'me').find(isAgentTurn)?.state).toBe('stopping');
   rows.push({ id: 'ended', position: 4, type: 'agent.turn_failed',
-    time: '2026-10-09T10:00:03Z', data: { turnId: 'message' } });
+    time: '2026-10-09T10:00:03Z',
+    data: { turnId: 'message', reason: 'bridge_interrupted' } });
   const stoppedTurn = transcript(rows, 'me').find(isAgentTurn);
   expect(stoppedTurn?.state).toBe('stopped');
   expect(stoppedTurn?.tools).toEqual([]);
@@ -349,3 +354,90 @@ it('keeps a completed turn completed when a late Stop request is replayed', () =
 function isAgentTurn(turn: { author: string }): boolean {
   return turn.author === 'agent';
 }
+
+function assertStoppedReply(stoppingTurnId: string): void {
+  const rows: ChatRow[] = [
+    { id: 'request', position: 1, type: 'message.posted',
+      time: '2026-10-22T10:00:00Z', data: { authorId: 'me', text: 'Write a long reply' } },
+    { id: 'started', position: 2, type: 'agent.turn_started',
+      time: '2026-10-22T10:00:01Z', data: { turnId: 'request' } },
+    { id: 'partial', position: 3, type: 'agent.message_delta',
+      time: '2026-10-22T10:00:02Z',
+      data: { turnId: 'request', messageId: 'reply', text: 'The kept partial reply' } },
+    { id: 'stop', position: 4, type: 'agent.turn_stop_requested',
+      time: '2026-10-22T10:00:03Z', data: { turnId: 'request' } },
+    { id: 'ended', position: 5, type: 'agent.turn_failed',
+      time: '2026-10-22T10:00:04Z',
+      data: { turnId: 'request', reason: 'bridge_interrupted' } },
+  ];
+
+  const turns = transcript(rows, 'me', stoppingTurnId);
+  const stopped = turns.find(isAgentTurn)!;
+
+  expect(stopped.state).toBe('stopped');
+  expect(stopped.text).toBe('The kept partial reply');
+  expect(turnOutcome(stopped)).toBe('Stopped · partial reply kept');
+  expect(stopped.tools).toEqual([]);
+}
+
+it.each(['request', ''])('shows only the stopped outcome live and after reload: %s',
+  assertStoppedReply);
+
+interface FailureAfterStopCase {
+  reason: string;
+  stopRequested: boolean;
+  stopped: boolean;
+  detail: string;
+}
+
+const failureAfterStopCases: FailureAfterStopCase[] = [
+  { reason: 'restricted_tool_refused', stopRequested: true, stopped: false,
+    detail: 'Tool access refused' },
+  { reason: 'model_error', stopRequested: true, stopped: false, detail: 'Run interrupted' },
+  { reason: 'stop_interrupted', stopRequested: true, stopped: true, detail: '' },
+  { reason: 'bridge_interrupted', stopRequested: true, stopped: true, detail: '' },
+  { reason: 'bridge_interrupted', stopRequested: false, stopped: false,
+    detail: 'Run interrupted' },
+];
+
+function assertFailureAfterStop(testCase: FailureAfterStopCase): void {
+  const rows: ChatRow[] = [
+    { id: 'request', position: 1, type: 'message.posted',
+      time: '2026-10-22T10:00:00Z', data: { authorId: 'me', text: 'Write a long reply' } },
+    { id: 'started', position: 2, type: 'agent.turn_started',
+      time: '2026-10-22T10:00:01Z', data: { turnId: 'request' } },
+    { id: 'partial', position: 3, type: 'agent.message_delta',
+      time: '2026-10-22T10:00:02Z',
+      data: { turnId: 'request', messageId: 'reply', text: 'The kept partial reply' } },
+  ];
+  if (testCase.stopRequested) {
+    rows.push({ id: 'stop', position: 4, type: 'agent.turn_stop_requested',
+      time: '2026-10-22T10:00:03Z', data: { turnId: 'request', reason: 'requester_stop' } });
+  }
+  rows.push({ id: 'ended', position: 5, type: 'agent.turn_failed',
+    time: '2026-10-22T10:00:04Z', data: { turnId: 'request', reason: testCase.reason } });
+
+  let stoppingTurnId = '';
+  if (testCase.stopRequested) stoppingTurnId = 'request';
+  const live = transcript(rows, 'me', stoppingTurnId).find(isAgentTurn)!;
+  const reloaded = transcript(rows, 'me').find(isAgentTurn)!;
+  expect(live).toEqual(reloaded);
+  expect(live.text).toBe('The kept partial reply');
+  if (testCase.stopped) {
+    expect(live.state).toBe('stopped');
+    expect(turnOutcome(live)).toBe('Stopped · partial reply kept');
+    expect(live.tools).toEqual([]);
+  } else {
+    expect(live.state).toBe('failed');
+    expect(turnOutcome(live)).toBe('Reply did not complete · partial reply kept');
+    expect(live.tools).toEqual([
+      { id: 'ended', label: 'Reply failed', detail: testCase.detail, failed: true,
+        time: '2026-10-22T10:00:04Z' },
+    ]);
+  }
+}
+
+it.each(failureAfterStopCases)(
+  'keeps the saved failure outcome live and on replay: $reason, Stop=$stopRequested',
+  assertFailureAfterStop,
+);

@@ -1021,7 +1021,8 @@ it('shows stopping until the server ends the turn and keeps later tool reports',
     .toBe('read_order call 1 completed.');
 
   const ended = { id: 'turn-ended', position: 6, type: 'agent.turn_failed',
-    time: '2026-10-04T10:00:05Z', data: { turnId: 'message' } };
+    time: '2026-10-04T10:00:05Z',
+    data: { turnId: 'message', reason: 'stop_interrupted' } };
   sendConversationRow(capture.socket, ended);
   await capture.fixture.whenStable();
   capture.fixture.detectChanges();
@@ -1056,7 +1057,8 @@ it('shows Stop not confirmed after a queued cancellation timeout without ending 
     expect(capture.root.querySelector('oc-chat-composer .stop')).not.toBeNull();
 
     const ended = { id: 'turn-ended', position: 4, type: 'agent.turn_failed',
-      time: '2026-10-04T10:00:05Z', data: { turnId: 'message' } };
+      time: '2026-10-04T10:00:05Z',
+      data: { turnId: 'message', reason: 'stop_interrupted' } };
     sendConversationRow(capture.socket, ended);
     capture.fixture.detectChanges();
     expect(chat.turns().at(-1)?.state).toBe('stopped');

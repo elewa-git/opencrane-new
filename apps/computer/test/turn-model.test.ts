@@ -4,7 +4,8 @@ import { expect, it } from 'vitest';
 import { reportJournal, wireReport, type BridgeReport } from '../src/report-journal.ts';
 import { turnRunner, type TurnDriver } from '../src/turn-runner.ts';
 
-function modelFixture(initialModel: unknown) {
+function modelFixture(initialModel: unknown, executionMode: 'restricted' | 'memory_free'
+  = 'memory_free') {
   const directory = mkdtempSync(`${tmpdir()}/turn-model-`);
   const calls: Record<string, unknown>[] = [];
   const grants: string[] = [];
@@ -14,7 +15,8 @@ function modelFixture(initialModel: unknown) {
     if (method === 'turn/start') {
       calls.push(params);
     }
-    return Promise.resolve({ thread: { id: 'thread' }, turn: { id: 'codex-turn' } });
+    return Promise.resolve({ thread: { id: 'thread', ephemeral: true, path: null },
+      turn: { id: 'codex-turn' } });
   }
   function grant(_thread: string, _conversation: string, token: string) {
     if (token) {
@@ -36,12 +38,18 @@ function modelFixture(initialModel: unknown) {
       queueMicrotask(acknowledge);
     }
   }
-  const driver: TurnDriver = { rpc, grant, credential, journal: `${directory}/reports` };
+  function keepSessionOpen() {}
+  const closed = new Promise<void>(keepSessionOpen);
+  function privateSession() {
+    return Promise.resolve({ rpc, close, closed });
+  }
+  const driver: TurnDriver = { rpc, grant, credential, privateSession,
+    journal: `${directory}/reports` };
   const journal = reportJournal(driver);
   const runner = turnRunner(driver, journal, send, close);
   const input = {
     id: 'turn', conversationId: 'chat', assistantId: 'assistant',
-    executionMode: 'memory_free' as const, text: 'Hello', token: 'initial',
+    executionMode, text: 'Hello', token: 'initial',
     expiresAt: Date.now() + 60_000, taskKind: 'chat_turn', omittedAttachments: 0,
   };
   function setModel(next: unknown) {
@@ -53,7 +61,7 @@ function modelFixture(initialModel: unknown) {
     } });
     rmSync(directory, { recursive: true, force: true });
   }
-  return { runner, input, calls, grants, reports, setModel, finish };
+  return { runner, input, calls, grants, reports, setModel, finish, driver };
 }
 
 async function refusesInvalidModel(model: unknown) {
@@ -186,3 +194,76 @@ function keepsSharedOutputThread() {
   }
 }
 it('keeps the admitted thread on shared output and lost-output recovery', keepsSharedOutputThread);
+
+interface TerminalReasonCase {
+  stop: boolean;
+  status: string;
+  refusedTool: boolean;
+  reason: string;
+}
+
+const terminalReasonCases: TerminalReasonCase[] = [
+  { stop: true, status: 'interrupted', refusedTool: false, reason: 'stop_interrupted' },
+  { stop: true, status: 'failed', refusedTool: false, reason: 'model_error' },
+  { stop: false, status: 'interrupted', refusedTool: false, reason: 'model_error' },
+  { stop: true, status: 'interrupted', refusedTool: true, reason: 'restricted_tool_refused' },
+];
+
+async function recordsTerminalReason(testCase: TerminalReasonCase) {
+  let executionMode: 'restricted' | 'memory_free' = 'memory_free';
+  if (testCase.refusedTool) executionMode = 'restricted';
+  const test = modelFixture('gpt-6-luna', executionMode);
+  try {
+    await test.runner.start(test.input);
+    if (testCase.stop) {
+      await test.runner.interrupt({ turnId: 'turn', conversationId: 'chat' });
+    }
+    if (testCase.refusedTool) {
+      test.runner.complete({ method: 'item/started', params: {
+        threadId: 'thread', item: { type: 'commandExecution' },
+      } });
+    }
+    test.runner.complete({ method: 'turn/completed', params: {
+      threadId: 'thread', turn: { id: 'codex-turn', status: testCase.status },
+    } });
+    const terminal = test.reports.at(-1)!;
+    expect(terminal).toMatchObject({ type: 'agent.turn_failed', reason: testCase.reason });
+    const reopened = reportJournal(test.driver);
+    reopened.load();
+    const replayed: BridgeReport[] = [];
+    function send(report: BridgeReport) {
+      replayed.push(report);
+    }
+    reopened.replay(0, new Map(), send);
+    expect(replayed.at(-1)).toEqual(terminal);
+  } finally {
+    test.finish();
+  }
+}
+
+it.each(terminalReasonCases)(
+  'saves and replays the terminal cause: $status, Stop=$stop, refusal=$refusedTool',
+  recordsTerminalReason,
+);
+
+async function explainsExecutionModeMismatch() {
+  const test = modelFixture('gpt-6-luna');
+  try {
+    const journal = reportJournal(test.driver);
+    journal.append(test.input, 'agent.turn_started', { threadId: 'thread' });
+    const input = { ...test.input, executionMode: 'restricted' as const };
+    function closeSocket() {}
+    function send(report: BridgeReport) {
+      test.reports.push(report);
+    }
+    const runner = turnRunner(test.driver, journal, send, closeSocket);
+    await runner.start(input);
+    expect(test.calls).toEqual([]);
+    expect(test.reports.at(-1)).toMatchObject({ type: 'agent.turn_failed', reason: 'model_error' });
+  } finally {
+    test.finish();
+  }
+}
+
+it('gives an execution-mode mismatch an explicit failure reason before running',
+  explainsExecutionModeMismatch);

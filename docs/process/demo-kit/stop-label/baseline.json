@@ -1,0 +1,41 @@
+{
+  "source": "89ab910bf314069856d482814f675eb77f7be559",
+  "mode": "baseline",
+  "startedAt": "2026-10-22T01:19:32.782Z",
+  "slot": 1,
+  "provider": "stand-in",
+  "checks": [
+    {
+      "kind": "baseline",
+      "width": 390,
+      "conversationId": "8fbb3aa3-f286-4011-b9af-ea9ad5d610de",
+      "partialCharacters": 8632,
+      "failedLabels": 1,
+      "result": "PASS",
+      "saved": {
+        "counts": {
+          "conversation.created": 1,
+          "message.posted": 1,
+          "agent.turn_started": 1,
+          "agent.message_delta": 170,
+          "agent.turn_stop_requested": 1,
+          "agent.turn_failed": 1
+        },
+        "endings": [
+          {
+            "type": "agent.turn_stop_requested",
+            "turnId": "26b04445-6b5e-47e7-a6f1-8f6f9b619e21",
+            "reason": null
+          },
+          {
+            "type": "agent.turn_failed",
+            "turnId": "26b04445-6b5e-47e7-a6f1-8f6f9b619e21",
+            "reason": "bridge_interrupted"
+          }
+        ]
+      }
+    }
+  ],
+  "finishedAt": "2026-10-22T01:19:51.104Z",
+  "workingTreeChange": "Temporarily restored the pre-fix budget-only guard, then restored the fix."
+}

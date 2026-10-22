@@ -1,0 +1,18 @@
+[
+  {
+    "width": 390,
+    "result": "PASS",
+    "partialCharacters": 6,
+    "failureActivities": 0,
+    "reason": "stop_interrupted",
+    "identicalAfterReload": true
+  },
+  {
+    "width": 1280,
+    "result": "PASS",
+    "partialCharacters": 6,
+    "failureActivities": 0,
+    "reason": "stop_interrupted",
+    "identicalAfterReload": true
+  }
+]

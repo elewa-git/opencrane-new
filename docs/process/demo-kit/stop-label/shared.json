@@ -1,0 +1,40 @@
+{
+  "source": "89ab910bf314069856d482814f675eb77f7be559",
+  "mode": "shared",
+  "startedAt": "2026-10-22T01:22:56.045Z",
+  "slot": 1,
+  "provider": "stand-in",
+  "checks": [
+    {
+      "kind": "shared",
+      "width": 390,
+      "conversationId": "55166ecb-4921-4440-b94c-f00ba528ecca",
+      "partialCharacters": 4706,
+      "failedLabels": 0,
+      "result": "PASS",
+      "saved": {
+        "counts": {
+          "conversation.created": 1,
+          "message.posted": 1,
+          "agent.turn_started": 1,
+          "agent.message_delta": 102,
+          "agent.turn_stop_requested": 1,
+          "agent.turn_failed": 1
+        },
+        "endings": [
+          {
+            "type": "agent.turn_stop_requested",
+            "turnId": "ceae9f22-11cf-4ef1-bc95-fe90df915781",
+            "reason": null
+          },
+          {
+            "type": "agent.turn_failed",
+            "turnId": "ceae9f22-11cf-4ef1-bc95-fe90df915781",
+            "reason": "bridge_interrupted"
+          }
+        ]
+      }
+    }
+  ],
+  "finishedAt": "2026-10-22T01:23:15.704Z"
+}

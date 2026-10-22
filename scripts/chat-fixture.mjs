@@ -134,7 +134,7 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
         if (scenario === 'stop-not-confirmed') {
           return fulfil({ status: 'appended', sequence: rows.length });
         }
-        add('agent.turn_failed', { turnId: command.stopTurnId, reason: 'interrupted' });
+        add('agent.turn_failed', { turnId: command.stopTurnId, reason: 'stop_interrupted' });
         return fulfil({ status: 'appended', sequence: rows.length });
       }
       if (!rows.some(row => row.id === command.id)) {

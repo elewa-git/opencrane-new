@@ -1,0 +1,14 @@
+{
+  "source": "89ab910bf314069856d482814f675eb77f7be559",
+  "mode": "shared",
+  "startedAt": "2026-10-22T01:20:43.793Z",
+  "slot": 1,
+  "provider": "stand-in",
+  "checks": [
+    {
+      "result": "FAIL",
+      "reason": "TimeoutError"
+    }
+  ],
+  "finishedAt": "2026-10-22T01:22:46.503Z"
+}
