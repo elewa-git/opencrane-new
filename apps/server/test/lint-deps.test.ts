@@ -20,7 +20,7 @@ async function rejectsCrossAppTestImport() {
     for (const file of files) {
       await symlink(join(repository, file), join(directory, file));
     }
-    const applications = ['computer', 'odoo-mcp', 'ops', 'server', 'web'];
+    const applications = ['computer', 'demo-mcp', 'odoo-mcp', 'ops', 'server', 'web'];
     for (const app of applications) {
       const source = join(directory, 'apps', app, 'src');
       await mkdir(source, { recursive: true });
