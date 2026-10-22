@@ -223,3 +223,178 @@ A separate observer retained the review's HTTP 200 and group receipt before tear
 The slot directory and its Compose containers were removed. The owner stack and port
 44200 were untouched. Paid answers, member disk isolation and physical-phone checks:
 NOT RUN in this attempt. GitHub CI is reported for the pushed PR head.
+
+## Group removal timing
+
+PRODUCT CHANGE: no. Timing qualification: **PARTIAL**. One of the three fresh nightly
+commands reached removal and passed. Two failed earlier, so they cannot establish
+whether removal meets the two-second rule. No measured removal exceeded two seconds.
+The product and its access rules are unchanged. No changelog fragment was added.
+
+On 22 October 2026, all three commands used the same claimed secondary slot, `1`,
+with website `http://127.0.0.1:25106`. Each command was
+`ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key nice -n 10 infra/dev-stack/daily-fresh.sh`.
+Each requested a fresh install. The nightly script cleared paid-provider settings;
+paid calls and paid euro cents were zero. Cleanup passed after every attempt.
+The owner stack and port 44200 were not used. The secondary directory and its
+Compose containers were absent after the last cleanup.
+
+| Run | Source SHA | UTC start–finish | Nightly result | Removal result |
+| --- | --- | --- | --- | --- |
+| 1 | `3ad4f987609059a0652f78a6b45d829b7dccb470` | 07:29:58–07:42:18 | PASS | PASS |
+| 2 | `f588351695d5fd4e1b50caef6379795fbd59ca04` | 07:42:57–07:54:41 | FAIL | NOT RUN |
+| 3 | `f588351695d5fd4e1b50caef6379795fbd59ca04` | 07:55:41–07:57:25 | FAIL | NOT RUN |
+
+The attempts were, in order:
+
+- `nightly-20261022T072958-69f21ebf-707f-40ed-b626-2daa88b800fa`
+- `nightly-20261022T074257-4caa3f98-b4fe-4aee-b54b-b5f3a5aea1cb`
+- `nightly-20261022T075541-7cf07d9a-2dd9-4c9a-9a4b-d52f9a98ccc2`
+
+These historical runs started their timer at the successful removal HTTP response.
+Observers were already watching the removed person's open page, live connection and saved access event.
+Their next history and file-list reads start after that response, alongside the
+Owner's list observation. Run 2 and run 3 also check that the Owner's list initially
+shows the person. Run 1 observed the list change after acceptance, at 716 ms.
+
+| Hop, milliseconds after acceptance | Run 1 | Run 2 | Run 3 |
+| --- | --- | --- | --- |
+| Removal accepted | 0 — PASS | NOT RUN | NOT RUN |
+| Saved removal observed | 15 — PASS | NOT RUN | NOT RUN |
+| Updated access stream observed | 15 — PASS | NOT RUN | NOT RUN |
+| Removed person's live feed closed | 150 — PASS | NOT RUN | NOT RUN |
+| Removed person's page cleared, with no message rows | 163 — PASS | NOT RUN | NOT RUN |
+| Next history read returned 403 (refused) | 129 — PASS | NOT RUN | NOT RUN |
+| Next file-list read returned 403 (refused) | 114 — PASS | NOT RUN | NOT RUN |
+| Owner's participant list updated | 716 — PASS | NOT RUN | NOT RUN |
+| Revocation of previously readable files | NOT RUN | NOT RUN | NOT RUN |
+| Open computer viewer revocation | NOT RUN | NOT RUN | NOT RUN |
+| Pending approval revocation | NOT RUN | NOT RUN | NOT RUN |
+
+Saving removal and updating access are the same event in `participation-*`.
+The server saves it before returning success. The two 15 ms entries record when
+the observer read it, rather than a later product change. Page and API observations
+are upper bounds: they include 20 ms polling and request time. The Owner list does
+not set the two-second access result. A missing access observation fails the check.
+This people-only group chat already returned 403 for files before removal and has
+no computer viewer or pending approval. Its file refusal does not qualify loss of
+previously readable files, and these three parts of the wider owner rule remain NOT RUN.
+
+Cause of the old measurement: the clock started before the Remove click, and the
+journey waited for the Owner's list before inspecting the removed page. It could
+therefore fail after the page had already cleared. The old 2,244 ms receipt does
+not establish the page's actual clearing time. The two paid rehearsals measured
+1,112 ms with the same product code, but used that old timer too. The slowest
+response-relative access observation was 163 ms. These figures omit time before the
+response, so they cannot show whether the page cleared within two seconds of sending
+removal. The measurement from the browser request below replaces this timing claim.
+
+Run 2 failed before removal because the first group message did not become visible
+in the Owner's page within the existing 15-second wait. Retained worker logs show
+that message was saved and processed. The reason it stayed absent from the page
+was not established here. Run 3 stopped earlier: provider creation returned HTTP
+503, then the lookup of that command's result returned 404. Neither attempt removed
+a person. Their removal hops stay NOT RUN; neither failure was retried or hidden.
+
+An earlier preparation attempt, `nightly-20261022T072329-d78c76d3-c268-4633-bef1-d25ff743b3a1`,
+used `385cc6489920ca63f8c7b319749be072efdb839f` from 07:23:29 to 07:28:52 UTC.
+It was deliberately stopped before the group checks to correct when API reads start.
+Its nightly command returned FAIL after interruption; every removal hop is NOT RUN.
+It is separate from the three consecutive commands above.
+
+PASS: failing-first test commits `1fdfb5165` and `81deb1123`; ten focused tests twice;
+438 event-security tests once with the requested `PG_TEST_URL`; workspace typecheck;
+focused infra typecheck; lint; event catalogue (149 types); knip; changelog check.
+The fake clock distinguishes a 500 ms page clear from a 2,400 ms Owner list update,
+requires the next API read to follow acceptance, and fails a 2,001 ms page clear.
+A delayed-observer mutation also failed, reporting 1,100 ms instead of 500 ms.
+All tests, lint and typechecks ran under `nice -n 10`. The full local root suite is NOT RUN.
+An additional broad infra typecheck found existing errors in `mcp-journey.ts`,
+`wake-latency.ts` and `zitadel-setup.test.ts`; that extra check is FAIL. The required
+workspace and focused checks are PASS. The authority tests and event-security test
+were left unchanged.
+
+Sanitised receipts and run records are retained outside the repository in
+`~/.opencrane/group-removal-timing/2026-10-22/`. Failed attempts also retain sanitised
+logs and pictures in their matching `~/.opencrane/daily-fresh/<attempt>/` folders.
+GitHub CI is reported separately on the draft PR's final pushed head.
+
+## Removal timing from the browser request (22 October 2026)
+
+Status: PARTIAL for removal timing. The single fresh nightly run is FAIL. It stopped
+before removal, so every removal measurement is NOT RUN. No failing group check was
+relaxed or retried.
+
+The run used source `8998eb51c61d5857d9a5ca14eeb524c6ff0d7a90`, from 11:30:52 to
+11:47:50 UTC. Its attempt was
+`nightly-20261022T113052-2100b0dc-351a-4fb5-a5cb-9e1eb47b7cf1`.
+`infra/dev-stack/claim.sh` reserved secondary slot 2, and the nightly reused that
+claim. Its browser port was 25206. The owner stack on port 44200 was not used.
+
+The command was `nice -n 10 infra/dev-stack/daily-fresh.sh`, with `ZITADEL_KEY_FILE`
+pointing to the existing private file. The nightly cleared paid settings, started
+with `--fresh` and used the free stand-in model. Paid model calls and paid cents
+were zero. Its exit status was 1. Cleanup released slot 2: its directory was removed
+and no containers remained for Compose project `opencrane-dev-2`.
+
+The expected result was that all group checks pass. Access observations must finish
+within two seconds of the browser sending removal. The response and the observation
+of the saved event have separate times. The Owner list must update within ten seconds.
+The live connection selected at sending must close; closing an earlier connection
+cannot satisfy the check.
+
+| Check | This run |
+| --- | --- |
+| Fresh startup and stand-in provider setup | PASS |
+| Group administration, private shared reply and direct chat | PASS |
+| Group mode before the first message and after sending | PASS |
+| People picker and refused unauthorised participant selection | PASS |
+| Unsupported people-and-assistant combination refused without a saved draft | PASS |
+| Group journey overall | FAIL: Participants button did not appear within 15 seconds |
+| Later participant visibility and messages with zero AI, computer and budget work | NOT RUN after that failure |
+| Removal, leaving and replay checks | NOT RUN after that failure |
+
+The failure occurred while opening the Owner's conversation before adding the later
+participant. The existing 15-second wait for the Participants button expired. The
+reason the button stayed absent was not established. The original group receipt keeps
+five assertions as `NOT PROVEN` and records `journey.execution` as FAIL. These rows do
+not count as passes. The two-second removal result was not reached.
+
+| Observation | Milliseconds from the browser sending removal |
+| --- | --- |
+| Removal sent | NOT RUN |
+| Removal response accepted | NOT RUN |
+| Saved removal observed | NOT RUN |
+| Updated access stream observed | NOT RUN |
+| Selected live connection closed | NOT RUN |
+| Removed page cleared, with no message rows | NOT RUN |
+| Next history read refused | NOT RUN |
+| Next file-list read refused | NOT RUN |
+| Owner participant list updated | NOT RUN |
+
+Revocation of previously readable files, an open computer viewer and pending approval
+remains NOT RUN for this people-only chat. This attempt does not qualify three
+consecutive nightly passes.
+
+PASS: thirteen focused tests twice, repository lint, workspace and focused infra
+TypeScript checks, the event catalogue, Knip and the changelog check. Tests used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`. Tests, lint and
+TypeScript checks ran under `nice -n 10`. The full root suite is NOT RUN, as requested.
+
+The failing tests were committed before the fix. The browser fixture saves at 0 ms,
+responds at 700 ms and clears at 2,400 ms; the corrected helper returns failed.
+An Owner-list observer that throws also returns failed. A closed earlier socket does
+not complete the replacement's observation, which waits until its own close at 1,200 ms.
+The slow-list control still passes with page clearing at 1,100 ms and the list at 3,000 ms.
+
+After the run, the branch was rebased onto `8a334f3ee6ae32325f7fc97c2539016f08ddeb87`.
+That update changed CI settings only. A tree comparison confirmed that runtime code,
+regression tests and documentation were unchanged by this rebase. The run's source SHA
+above is retained; it has not been replaced with the later commit's SHA.
+
+The sanitised receipt is retained at
+`~/.opencrane/group-removal-timing/2026-10-22-request-clock/receipt.json`.
+Sanitised failure logs and pictures are retained under
+`~/.opencrane/daily-fresh/nightly-20261022T113052-2100b0dc-351a-4fb5-a5cb-9e1eb47b7cf1/`.
+Generated screenshots from other core checks were archived privately and removed from
+this branch's diff.
