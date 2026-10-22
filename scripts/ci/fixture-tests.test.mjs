@@ -18,6 +18,7 @@ function partitionsTests() {
     }
   }
   assert.ok(!fixtures.some(isShardArgument));
+  assert.ok(fixtures.includes('--maxWorkers=1'));
 }
 
 function isShardArgument(argument) {
