@@ -10,6 +10,7 @@ export const fixtureFiles = [
   'apps/server/test/bootstrap-browser.test.ts',
   'apps/server/test/bridge-credentials.test.ts',
   'apps/server/test/integrations.test.ts',
+  'apps/server/test/journey-integration-fixture.test.ts',
   'apps/server/test/live-view-k3d.test.ts',
   'apps/server/test/provider-login.test.ts',
   'apps/server/test/screenshot-browser.test.ts',

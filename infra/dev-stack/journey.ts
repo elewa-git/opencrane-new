@@ -17,8 +17,10 @@ import { connectEventStore } from '@opencrane/event-store';
 import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb, readEvents } from '@opencrane/projections';
 import { history as modelHistory, models } from '@opencrane/models';
-import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
+import { integrationsResponseSchema, realtimeMessageSchema, type IntegrationRow,
+  type RealtimeMessage } from '@opencrane/protocol';
 import { journeyTool, reviewJourneyTools } from './journey-tool-policy.ts';
+import { journeyIntegrationRegistration } from './journey-integration-fixture.ts';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
 import { prepareBudgetAssistant } from './budget-fixture.ts';
@@ -48,6 +50,7 @@ const id = randomUUID();
 let ws: WebSocket | undefined;
 let chat: Awaited<ReturnType<typeof chatJourney>> | undefined;
 let browser: Awaited<ReturnType<typeof browserSessions>> | undefined;
+let integrationRow: IntegrationRow | undefined;
 const identities = new Map<string, { sub: string; cookie: string }>();
 const phase4Assertions: Phase4Assertion[] = [];
 const phase4Attempt = process.env['P4_JOURNEY_ATTEMPT'] ?? 'manual';
@@ -573,7 +576,8 @@ try {
   assert((await runKube('exec', computer!.computer_id, '--', 'cat', uploaded.textPath)).stdout.includes('Willow-47'));
   console.log(`PASS assistant/computer lifecycle: join→Ready ${joinReadyMs} ms; resume ${resumeMs} ms; Pod replacement kept disk`);
   const serverId = `journey-${id}`;
-  await append('mcp.server_registered', `mcp-${serverId}`, { serverId, kind: 'remote', locator: 'https://mcp.example.test/mcp', catalogueRef: 'catalogue:dev' });
+  const registration = journeyIntegrationRegistration(serverId);
+  await append('mcp.server_registered', `mcp-${serverId}`, registration);
   assert(browser, 'The integration journey needs the signed-in owner');
   const readTool = journeyTool('read', true);
   const writeTool = journeyTool('write', false);
@@ -585,6 +589,7 @@ try {
     assert.equal(response.status, 200);
     const result = integrationsResponseSchema.parse(await response.json());
     const row = result.rows.find((row) => row.serverId === serverId);
+    integrationRow = row;
     return row?.name === 'Journey MCP' && row.version === '1.0.0' && row.toolsTotal === 2 && row.toolsAllowed === 1 && row.status.kind === 'ready';
   }, 'typed integration rows');
   assert.equal((await fetch(`${server}/api/org/integrations`, { headers: headers(member) })).status, 403);
@@ -631,9 +636,17 @@ try {
 } catch (error) {
   const head = await events.store.head();
   const diagnostic = [];
-  if (head) for await (const { event } of readEvents(events.store, 1, head)) {
+  const integrationEvents = [];
+  if (head) for await (const { event, sequence } of readEvents(events.store, 1, head)) {
     if (event.type.startsWith('budget.') || event.type === 'decision.recorded' || event.type.startsWith('computer.')) diagnostic.push(event);
+    if (event.subject === `mcp-journey-${id}`) {
+      // Keep event order without copying tool definitions or upstream error details.
+      integrationEvents.push({ type: event.type, sequence, time: event.time });
+    }
   }
+  const integrationDiagnostic = { row: integrationRow, events: integrationEvents };
+  await writeFile(`${directory}/integration-row-failure.json`,
+    JSON.stringify(integrationDiagnostic), { mode: 0o600 });
   await writeFile(`${directory}/qualification-failure.log`, JSON.stringify(diagnostic), { mode: 0o600 });
   throw error;
 } finally {
