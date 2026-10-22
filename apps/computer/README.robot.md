@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+Repository CI builds the upload test image in one fixture job. Its base and runtime
+use separate caches, written only by main pushes. See the
+[CI test contracts](../../scripts/ci/README.robot.md) for file coverage and reports.
+
 ## Saved turn endings
 
 The runner reports `stop_interrupted` only when a cancelled turn receives an

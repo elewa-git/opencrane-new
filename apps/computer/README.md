@@ -121,6 +121,9 @@ Both image commands need Docker and the dev stack's local Kubernetes cluster.
 `build:image` also runs the image tests and updates `sandbox-template.json` with the
 new image.
 
+Repository CI builds a separate test image once for the tests that need it.
+The [CI test guide](../../scripts/ci/README.md) explains how those files are grouped.
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): image details, settings, security limits and test commands.

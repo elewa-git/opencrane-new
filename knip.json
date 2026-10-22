@@ -5,7 +5,10 @@
   ],
   "workspaces": {
     ".": {
-      "entry": [],
+      "entry": [
+        "scripts/ci/run-tests.mjs",
+        "scripts/ci/*.test.mjs"
+      ],
       "project": [
         "scripts/**/*.mjs",
         "*.mjs"
