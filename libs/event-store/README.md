@@ -25,6 +25,7 @@ flowchart LR
   models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes, provider switch-on positions, publication receipts and hosted image checks| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves, reads streams, counts names and finds numbered events| nats["NATS JetStream<br/>event service"]
+  tests["Tests in apps and libs"] -.->|chooses test listener ports| store
   store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
 ```
 
@@ -88,6 +89,9 @@ After restoring the event log from a backup, the server and models processes
 restart before serving requests. This clears their saved summaries.
 
 ## How to run or test it
+
+Tests share a port picker that keeps listeners away from outgoing connections
+and the secondary dev stacks. It tries another port if one is already busy.
 
 Run the type check and event-store tests with these commands. The test command
 needs the local NATS test server fetched first. The helper `wireSubject` turns an

@@ -1,3 +1,4 @@
+import { freePort } from '@opencrane/event-store/testing';
 import type { McpDispatchOptions } from '../src/mcp-dispatch.ts';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
@@ -56,11 +57,7 @@ function registerGatewayCleanup(
     afterAll(stopChild);
   }
 }
-async function freePort() {
-  const server = createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
-  await new Promise<void>(resolve => server.close(() => resolve())); return address.port;
-}
+
 export async function waitForModelGrants(auth: ReturnType<typeof memberAuthorisation>, memberId: string, assistantId: string) {
   await until(async () => (await Promise.all(models.filter(m => !m.retired).flatMap(model => [
     auth.use('person', memberId, 'model', model.id), auth.use('assistant', assistantId, 'model', model.id),

@@ -3645,3 +3645,15 @@ waiting for ordinary turn or file delivery.
 Access, turn admission, reservations and memory checks keep their existing paths.
 `bridge-throughput.test.ts` drives 2,700 reports through a real socket and NATS,
 checks a competing Stop append, replay identity and recovered text.
+
+## Shared test ports
+
+The nine former `freePort` copies now use `@opencrane/event-store/testing`.
+Each Vitest worker uses 200 ports, starting at `20000 + VITEST_POOL_ID * 200`.
+Workers 0 to 24 are supported. The helper skips `EADDRINUSE` and stops after
+200 attempts. This keeps ports below 25000, away from the secondary dev stacks
+at 25100 and 25200 and the Linux outgoing range starting at 32768.
+Separate test runs can share worker ids, so listeners are checked before use.
+
+Provider tests retry gateway startup at most twice after a port conflict. Each
+retry updates the provider check URL to use the replacement gateway port.

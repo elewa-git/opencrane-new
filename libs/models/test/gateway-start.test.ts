@@ -16,55 +16,76 @@ it('keeps provider-route JWT refusals in the gateway audit', keepsProviderJwtFai
 
 const STDERR_AFTER_EXIT_MS = 150;
 
-const mockState = vi.hoisted(() => ({ exitBeforeStderrDrain: false }));
+const mockState = vi.hoisted(() => ({ exitBeforeStderrDrain: false, withContext: false }));
 
-vi.mock('node:child_process', () => ({
-  spawn: () => {
-    const child = new EventEmitter(), stdout = new PassThrough(), stderr = new PassThrough();
+function mockGatewayChildProcess() {
+  function spawnGateway() {
+    const child = new EventEmitter();
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    function killGateway() {
+      stdout.end();
+      stderr.end();
+      child.emit('close', 0);
+      return true;
+    }
     const spawned = Object.assign(child, { stdout, stderr, exitCode: null as number | null,
-      signalCode: null as NodeJS.Signals | null,
-      kill() { stdout.end(); stderr.end(); child.emit('close', 0); return true; },
-    });
+      signalCode: null as NodeJS.Signals | null, kill: killGateway });
+    function drainStartupStderr() {
+      if (mockState.withContext) {
+        stderr.write('Error: readiness server starts\n\nCaused by:\n');
+        stderr.write('    Address already in use (os error 98)\n');
+        stderr.write('fixture-credential-must-stay-private');
+      } else {
+        stderr.write('Error: Address already in use\n');
+      }
+      stdout.end();
+      stderr.end();
+      child.emit('close', 1, null);
+    }
+    function exitBeforeStderrDrain() {
+      spawned.exitCode = 1;
+      child.emit('exit', 1, null);
+      // Wait longer than the startup loop's 50 ms poll to expose premature errors.
+      setTimeout(drainStartupStderr, STDERR_AFTER_EXIT_MS);
+    }
     if (mockState.exitBeforeStderrDrain) {
-      setTimeout(() => {
-        spawned.exitCode = 1;
-        child.emit('exit', 1, null);
-        setTimeout(() => {
-          stderr.write('Error: Address already in use\n');
-          stdout.end();
-          stderr.end();
-          child.emit('close', 1, null);
-          // Longer than the startup loop's 50 ms poll, so the old code builds its
-          // error before stderr arrives and this test fails without the fix.
-        }, STDERR_AFTER_EXIT_MS);
-      }, 0);
+      setTimeout(exitBeforeStderrDrain, 0);
     }
     return spawned;
-  },
-}));
+  }
+  return { spawn: spawnGateway };
+}
+vi.mock('node:child_process', mockGatewayChildProcess);
 
-it('drains stderr before building the gateway failure', async () => {
+async function keepsSafeBindDetailsAfterStderrDrain(withContext: boolean) {
   mockState.exitBeforeStderrDrain = true;
+  mockState.withContext = withContext;
   const directory = await mkdtemp(`${tmpdir()}/gateway-start-stderr-`);
   const binary = resolve(`spikes/s0-1c-real-model-smoke/.tools/agentgateway-${
     process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64'
   }`);
+  const options = {
+    binary,
+    configFile: `${directory}/config.json`,
+    usageFile: `${directory}/usage.jsonl`,
+    keyFile: `${directory}/key`,
+    port: 1,
+    readinessPort: 1,
+    decisionUrl: 'http://127.0.0.1:1',
+    issuer: 'https://test.invalid',
+  };
   try {
-    await expect(startGateway({
-      binary,
-      configFile: `${directory}/config.json`,
-      usageFile: `${directory}/usage.jsonl`,
-      keyFile: `${directory}/key`,
-      port: 1,
-      readinessPort: 1,
-      decisionUrl: 'http://127.0.0.1:1',
-      issuer: 'https://test.invalid',
-    })).rejects.toThrow('Gateway stopped (exit code 1): Error: Address already in use');
+    const pending = startGateway(options);
+    await expect(pending).rejects.toThrow('Address already in use');
+    await expect(pending).rejects.not.toThrow('fixture-credential-must-stay-private');
   } finally {
     mockState.exitBeforeStderrDrain = false;
     await rm(directory, { recursive: true, force: true });
   }
-});
+}
+it.each([false, true])('drains stderr and keeps safe bind details (context: %s)',
+  keepsSafeBindDetailsAfterStderrDrain);
 
 it('waits for the request listener even when the readiness listener is already ready', async () => {
   let checks = 0, started = false;

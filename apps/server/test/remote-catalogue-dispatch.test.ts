@@ -1,5 +1,4 @@
-import { createServer } from 'node:net';
-import { once } from 'node:events';
+import { freePort } from '@opencrane/event-store/testing';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as pause } from 'node:timers/promises';
 import type { AppendCommand } from '@opencrane/event-store';
@@ -23,19 +22,6 @@ function advanceToNextCheck() {
   // Freeze Date alone. Vitest polling otherwise advances its fake timer clock too.
   onTestFinished(restoreClock);
   vi.setSystemTime(Date.now() + 270_000);
-}
-
-async function freePort() {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('No fixture port');
-  }
-  server.close();
-  await once(server, 'close');
-  return address.port;
 }
 
 type Setup = Awaited<ReturnType<typeof fixture>>;

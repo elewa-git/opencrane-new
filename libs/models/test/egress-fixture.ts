@@ -1,3 +1,4 @@
+import { freePort } from '@opencrane/event-store/testing';
 import { startEgress } from '../src/egress-startup.ts';
 import { createEgressReceipt } from '../src/egress-receipt.ts';
 import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay.ts';
@@ -317,15 +318,4 @@ export async function egressFixture(enabled = true, guarded = false,
 
 function ignoreSocketError() {
   // Accept a closed tunnel after a refused CONNECT response.
-}
-async function freePort() {
-  const listener = createTcpServer();
-  listener.listen(0, '127.0.0.1');
-  await once(listener, 'listening');
-  const address = listener.address();
-  if (!address || typeof address === 'string') throw new Error('No free port');
-  const closed = once(listener, 'close');
-  listener.close();
-  await closed;
-  return address.port;
 }

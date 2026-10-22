@@ -111,6 +111,9 @@ does not limit how long its reply can wait. Approval waits have their own 15-min
 
 ## How to run or test it
 
+Tests share a port picker that keeps listeners away from outgoing connections
+and the secondary dev stacks. It tries another port if one is already busy.
+
 ```sh
 npm run build:image -w apps/computer
 npm run test:image -w apps/computer

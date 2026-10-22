@@ -357,12 +357,20 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
   const read = store.readStream.bind(store);
   let accessStarted = false;
   const fullReads: boolean[] = [];
+  const resumeGrantHistory = Promise.withResolvers<void>();
+  let coldReadPaused = false;
   async function* recordGrantRead(...args: Parameters<typeof read>) {
     if (args[0] === 'member-alice') accessStarted = true;
-    if (args[0] === subject && args[1] === 1) fullReads.push(accessStarted);
+    if (args[0] === subject && args[1] === 1) {
+      fullReads.push(accessStarted);
+      coldReadPaused = true;
+      await resumeGrantHistory.promise;
+    }
     yield* read(...args);
   }
   try {
+    // Keep background event delivery from competing with the admission measurement.
+    await setup.stopDispatch();
     const events = [];
     for (let index = 0; index < grantEvents; index++) {
       let granteeId = `other-${index}`;
@@ -373,16 +381,28 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     }
     await setup.nats.seed(events);
     vi.spyOn(store, 'readStream').mockImplementation(recordGrantRead);
-    const warmed = await decide(setup);
-    expect([200, 403]).toContain(warmed.status);
+    // Stop cold history before access checks so its refusal cannot reach a saved Allow.
+    const coldHeaders = await setup.issue();
+    const warmed = await decide(setup, setup.options.decisionUrl, coldHeaders);
+    expect(coldReadPaused).toBe(true);
+    expect(warmed.status, warmed.text).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    const warmUpDecision = z.object({ requestId: z.string() }).parse(JSON.parse(warmed.text));
+    const warmUpDecisions = await history(store, `decision-${warmUpDecision.requestId}`, 'test');
+    expect(warmUpDecisions).toHaveLength(1);
+    expect(warmUpDecisions[0]?.event).toMatchObject({
+      type: 'decision.recorded', data: { outcome: 'deny', reason: 'request_refused' },
+    });
     expect(fullReads).toEqual([false]);
-    const catchUpDeadline = performance.now() + 120_000;
-    let ready = warmed;
-    while (ready.status !== 200 && performance.now() < catchUpDeadline) {
-      const headers = await setup.issue();
-      ready = await decide(setup, setup.options.decisionUrl, headers);
-    }
+    resumeGrantHistory.resolve();
+    // Keep the existing two-minute history budget outside the measured admission.
+    const grantHistoryDeadline = performance.now() + 120_000;
+    await readDecisionGrants(store, 'test', 'gpt-6-luna', grantHistoryDeadline);
+    const readyHeaders = await setup.issue();
+    const ready = await decide(setup, setup.options.decisionUrl, readyHeaders);
     expect(ready.status, ready.text).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    const reservationsBefore = setup.actor.state.reservations.length;
     const summaryPosition = await store.head(subject);
     const reads = countReads(store);
     const headers = await setup.issue();
@@ -401,9 +421,12 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
       expect(call.rows).toBe(0);
     }
     console.info(JSON.stringify({ grantEvents, milliseconds, grantReads }));
-    expect(setup.actor.state.reservations).toHaveLength(2);
+    expect(setup.actor.state.reservations).toHaveLength(reservationsBefore + 1);
+    expect(setup.actor.state.reservations.at(-1)?.settledCents).toBeUndefined();
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
     expect(setup.received()).toBe(0);
   } finally {
+    resumeGrantHistory.resolve();
     vi.restoreAllMocks();
     await setup.close();
   }

@@ -533,6 +533,9 @@ Child-chat retry tests use private event stores to check lost replies and repeat
 requests. Most tests keep the normal period during which NATS ignores repeated messages.
 Recovery tests restore team access only when a test removed it.
 
+Tests share a port picker that keeps listeners away from outgoing connections
+and the secondary dev stacks. It tries another port if one is already busy.
+
 ```sh
 npm start -w apps/server
 npm run models -w apps/server

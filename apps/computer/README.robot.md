@@ -1048,3 +1048,12 @@ its own marker, including loaded-resume and private attempts. Default mode refus
 user input; permissions were absent from the JavaScript tool list. The private host
 was disabled and its marker was absent. Live shell/file decline checks
 are NOT RUN because Codex sent neither request. Fresh-install qualification is NOT RUN.
+
+## Shared test ports
+
+The nine former `freePort` copies now use `@opencrane/event-store/testing`.
+Each Vitest worker uses 200 ports, starting at `20000 + VITEST_POOL_ID * 200`.
+Workers 0 to 24 are supported. The helper skips `EADDRINUSE` and stops after
+200 attempts. This keeps ports below 25000, away from the secondary dev stacks
+at 25100 and 25200 and the Linux outgoing range starting at 32768.
+Separate test runs can share worker ids, so listeners are checked before use.
