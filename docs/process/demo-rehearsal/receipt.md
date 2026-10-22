@@ -401,10 +401,12 @@ this branch's diff.
 
 ## Group display
 
-PRODUCT CHANGE: yes. Source: `197a42a0439158bfea95986cf0540bd46c4426ae`.
-Qualification is in progress on 22 October 2026. The three fresh nightly runs use
-one claimed secondary slot, `1`, with the free stand-in model. Paid calls and paid
-euro cents are zero. The owner stack and port 44200 are outside this work.
+PRODUCT CHANGE: yes. Qualification: **PASS**. Runs 2, 3 and 4 passed consecutively,
+including every group check. Run 1 failed before groups and remains in the record.
+Product fix: `197a42a0439158bfea95986cf0540bd46c4426ae`. Qualifying source:
+`41cf3ff1d005d3921f1d91944812d5990d020644`.
+[The run receipt](group-display/receipt.json) keeps each source SHA, step result and
+observed display time.
 
 The send reply confirms a saved event but contains no message row. DirectChat then
 reads history. Previously, a 425 ended that read without retrying. The initial socket
@@ -417,40 +419,79 @@ The product now retries these history and first-page list reads every 100 ms, at
 Creation uses this same history reader. Writes keep their existing retry rules.
 A 403 still returns immediately and clears protected data. Server access checks and
 the authority tests are unchanged. Each live group send must appear within two seconds
-of its accepted response. Its receipt keeps the command id and display time so the
-worker's completion time can be compared with the page observation.
+of its accepted response. Its saved command id connects the page observation to the
+conversation worker’s completion log.
 
 The failing data-service test was committed first as `55bdab7b6`: four cases returned
 425 or 409 instead of the next available history or list row. The page regression also
-failed before the fix. PASS: 82 focused web tests twice, 14 infra tests twice, 438 event
-security tests once with the supplied `PG_TEST_URL`, workspace typecheck, focused infra
-typecheck using the repository settings, event catalogue, Knip and changelog checks.
-Lint is still running. The full local root suite is NOT RUN, as requested. No dependency
-was added. The first ad-hoc infra typecheck omitted repository compiler settings and
-reported errors in unchanged libraries; the check using those settings passed.
+failed before the fix. PASS: 82 focused web tests twice after the fixture corrections,
+14 infra tests twice, 438 event-security tests once with the supplied `PG_TEST_URL`,
+lint, workspace typecheck, focused infra typecheck using the repository settings,
+event catalogue, Knip and changelog checks. All local tests, lint, typechecks and builds ran
+under `nice -n 10`. The full local root suite is NOT RUN, as requested. No dependency
+was added. FAIL: the first ad-hoc infra typecheck omitted repository compiler settings;
+the check using those settings passed. The first lint run found two fixture errors;
+the corrected fixtures and full lint rerun passed.
 
-| Nightly step | Run 1 | Run 2 | Run 3 |
+All four commands used claimed secondary slot `1` and the free stand-in model.
+Each command was `nice -n 10 infra/dev-stack/daily-fresh.sh`, with `ZITADEL_KEY_FILE`
+pointing to the existing private file. Each requested a fresh install. Paid calls and
+paid euro cents were zero. Cleanup passed after each command. The owner stack and
+port 44200 were untouched.
+
+| Run | UTC start–finish | Nightly result | Group result |
 | --- | --- | --- | --- |
-| Fresh startup and stand-in provider | NOT RUN | NOT RUN | NOT RUN |
-| Group creation and mode kept after send | NOT RUN | NOT RUN | NOT RUN |
-| Messages with no AI, computer or budget activity | NOT RUN | NOT RUN | NOT RUN |
-| Later participant sees only messages after joining | NOT RUN | NOT RUN | NOT RUN |
-| Removed participant loses the view within two seconds | NOT RUN | NOT RUN | NOT RUN |
-| Leaving clears access and updates participants | NOT RUN | NOT RUN | NOT RUN |
-| People picker and denied selection | NOT RUN | NOT RUN | NOT RUN |
-| Unsupported recipients refused without a saved draft | NOT RUN | NOT RUN | NOT RUN |
-| Replay keeps group participants and mode | NOT RUN | NOT RUN | NOT RUN |
-| Remaining nightly checks | NOT RUN | NOT RUN | NOT RUN |
-| Claimed slot cleanup | NOT RUN | NOT RUN | NOT RUN |
+| 1 | 09:26:56–09:33:38 | FAIL | NOT RUN |
+| 2 | 09:34:50–09:50:26 | PASS | PASS: all eight |
+| 3 | 09:51:10–10:07:23 | PASS | PASS: all eight |
+| 4 | 10:07:26–10:19:51 | PASS | PASS: all eight |
+
+| Nightly step | Run 1 | Run 2 | Run 3 | Run 4 |
+| --- | --- | --- | --- | --- |
+| Owner bootstrap and stand-in provider | PASS | PASS | PASS | PASS |
+| First personal chat, reload and Stop | PASS | PASS | PASS | PASS |
+| PDF upload list assertion | FAIL | PASS | PASS | PASS |
+| Later computer and action checks | NOT RUN | PASS | PASS | PASS |
+| Group administration, private shared assistant and direct chat | NOT RUN | PASS | PASS | PASS |
+| Group creation and mode kept after send | NOT RUN | PASS | PASS | PASS |
+| Messages with no AI, computer or budget activity | NOT RUN | PASS | PASS | PASS |
+| Later participant sees only messages after joining | NOT RUN | PASS | PASS | PASS |
+| Removed participant loses the view within two seconds | NOT RUN | PASS | PASS | PASS |
+| Leaving clears access and updates participants | NOT RUN | PASS | PASS | PASS |
+| People picker and denied selection | NOT RUN | PASS | PASS | PASS |
+| Unsupported recipients refused without a saved draft | NOT RUN | PASS | PASS | PASS |
+| Replay keeps group participants and mode | NOT RUN | PASS | PASS | PASS |
+| Final replay and web page checks | NOT RUN | PASS | PASS | PASS |
+| Claimed slot cleanup | PASS | PASS | PASS | PASS |
+
+| Observed milliseconds | Run 2 | Run 3 | Run 4 |
+| --- | --- | --- | --- |
+| First message after projection | 460 | 370 | 343 |
+| Later message after projection | 1033 | 257 | 171 |
+| Removed page cleared | 1478 | 1453 | 1004 |
+| Leaving page cleared | 619 | 489 | 560 |
+
+Display times compare the worker’s completion timestamp with Playwright’s observation
+of the visible message on the same host. They include browser observation time.
+Removal times also include waiting for the Owner’s list; each was still below two
+seconds. Run 1 stopped at the upload journey’s immediate file-list assertion: the
+page showed Ready but that read returned zero rows. No group step ran in that attempt.
+Its failed result is retained; no upload code changed.
 
 The earlier provider 404 was the result lookup after `POST /api/org/providers`
 returned 503. In that attempt the server answered health checks before the dispatcher
 finished applying `ownership.seeded`: creation returned at 07:56:47.614 UTC and that
 access update completed at 07:56:47.719. Provider creation requires applied membership;
-the status route returns 404 when no event carries the original command id. This is a
-separate product startup readiness problem. The journey correctly refused to repeat an
-unknown write. These retained logs identify the timing but contain no exception detail.
-Provider behaviour is unchanged in this PR.
+the status route returns 404 when no event carries the original command id. This
+reports a separate product startup readiness problem, rather than a missing route.
+The journey correctly refused to repeat an unknown write. The retained logs have no
+exception detail to identify the exact 503 exception. Provider behaviour is unchanged.
+
+Private receipts and timings are under
+`~/.opencrane/group-display/2026-10-22/`. Runs 3 and 4 also retain group pictures.
+Run 1’s sanitised failure logs and picture remain in its matching `~/.opencrane/daily-fresh/` attempt folder. Generated tracked
+pictures were restored after the runs. The secondary directory and its Compose
+containers and volumes were absent after cleanup.
 
 Paid answers, member disk isolation and physical-phone checks remain NOT RUN.
-GitHub CI will be reported for the final pushed head.
+GitHub CI is reported separately for the final pushed head.
