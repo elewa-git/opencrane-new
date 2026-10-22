@@ -27,13 +27,19 @@ function forcesFullRun() {
 function failsClosed() {
   for (const decision of [undefined, null, '', 'full', 'failed', 'DOCS', 'docs\n']) {
     assert.equal(isDocsDecision(decision), false);
-    assert.equal(jobsPassed(decision, 'success', 'skipped', 'skipped'), false);
-    assert.equal(jobsPassed(decision, 'success', 'success', 'success'), true);
+    assert.equal(jobsPassed(decision, 'success', 'skipped', 'skipped', 'skipped'), false);
+    assert.equal(jobsPassed(decision, 'success', 'success', 'success', 'success'), true);
   }
   assert.equal(isDocsDecision('docs'), true);
-  assert.equal(jobsPassed('docs', 'success', 'skipped', 'skipped'), true);
-  assert.equal(jobsPassed('docs', 'failure', 'skipped', 'skipped'), false);
-  assert.equal(jobsPassed('full', 'success', 'failure', 'success'), false);
+  assert.equal(jobsPassed('docs', 'success', 'skipped', 'skipped', 'skipped'), true);
+  assert.equal(jobsPassed('docs', 'failure', 'skipped', 'skipped', 'skipped'), false);
+  assert.equal(jobsPassed('full', 'success', 'failure', 'success', 'success'), false);
+  for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
+    assert.equal(jobsPassed('full', 'success', 'success', result, 'success'), false);
+    assert.equal(jobsPassed('full', 'success', 'success', 'success', result), false);
+  }
+  assert.equal(jobsPassed('docs', 'success', 'skipped', 'skipped', 'success'), false);
+  assert.equal(jobsPassed('docs', 'success', 'skipped', 'success', 'skipped'), false);
 }
 
 test('allows each documentation rule on pull requests', permitsOnlyDocs);

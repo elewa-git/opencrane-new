@@ -26,21 +26,21 @@ export function isDocsDecision(decision) {
   return decision === 'docs';
 }
 
-export function jobsPassed(decision, checks, tests, fixtures) {
+export function jobsPassed(decision, checks, tests, image, browser) {
   if (checks !== 'success') {
     return false;
   }
   if (isDocsDecision(decision)) {
-    return tests === 'skipped' && fixtures === 'skipped';
+    return tests === 'skipped' && image === 'skipped' && browser === 'skipped';
   }
-  return tests === 'success' && fixtures === 'success';
+  return tests === 'success' && image === 'success' && browser === 'success';
 }
 
 function main() {
   const [eventName, base, head] = process.argv.slice(2);
   if (eventName === 'gate') {
     const passed = jobsPassed(process.env.CI_DECISION, process.env.CHECKS_RESULT,
-      process.env.TEST_RESULT, process.env.FIXTURES_RESULT);
+      process.env.TEST_RESULT, process.env.IMAGE_RESULT, process.env.BROWSER_RESULT);
     if (!passed) {
       throw new Error('Required CI jobs did not pass');
     }

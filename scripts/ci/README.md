@@ -2,8 +2,9 @@
 
 ## What this is
 
-These scripts share the root tests between GitHub Actions jobs. Tests that need
-the computer image or Chromium run together, so other jobs avoid that setup.
+These scripts share the root tests between GitHub Actions jobs. Separate jobs run
+tests that need the computer image and tests that need Chromium. Other test jobs
+avoid that setup.
 
 ## Where it fits
 
@@ -12,14 +13,15 @@ GitHub Actions calls these scripts to choose jobs and share tests. Vitest runs t
 ```mermaid
 flowchart LR
   actions["GitHub Actions<br/>repository checks"] -->|chooses jobs and tests| ci["scripts/ci<br/>test jobs"]
-  ci -->|prepares browser fixtures| web["apps/web<br/>development build"]
+  ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
   ci -->|runs files| vitest["Vitest<br/>root tests"]
-  actions -->|builds once| computer["apps/computer<br/>test image"]
+  actions -->|builds for image tests| computer["apps/computer<br/>test image"]
+  ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
 ```
 
 ## What it is responsible for
 
-- Keep image and browser tests in one job.
+- Run image and browser tests in parallel jobs.
 - Balance four test jobs, called shards, using saved test durations.
 - Skip expensive jobs for documentation changes only when the base commit permits it.
 - Refuse a passing result if a test file is missing or runs twice.
@@ -27,21 +29,29 @@ flowchart LR
 
 ## Processes it handles
 
-The longest files go to the shard with the least work assigned so far. Fixture
-files run one at a time so Angular builds have enough CPU. A development build
-prepares Angular before the browser tests start their own servers.
+The longest files go to the shard with the least work assigned so far. Image
+fixture files use Vitest's usual worker count, based on the runner's CPUs. Browser
+files run one at a time because concurrent Angular servers miss their startup
+deadlines. A development build prepares Angular before tests start their own servers.
+
+The image job also installs Chromium because the screenshot test needs both.
+Chromium setup checks installed system packages first. When they are present,
+it installs only the browser and avoids an apt update or package download.
+The browser job also runs the hosted integration-row journey regression.
 
 Each test job saves a small list of its files. The final `ci-ok` job compares
 those lists with all the files Vitest finds. It follows local helper imports and
 scripts launched by tests. A test that reaches Playwright or the image helpers
-must join the fixture job. Documentation-only pull requests run documentation
-checks and the event security tests. Main pushes always run all jobs.
+must join a fixture group. Both fixture jobs must pass. Documentation-only pull
+requests run documentation checks and the event security tests. Main pushes
+always run all jobs.
 
 ## How to run or test it
 
 ```sh
 nice -n 10 node --test scripts/ci/*.test.mjs
-nice -n 10 node scripts/ci/run-tests.mjs fixtures
+nice -n 10 node scripts/ci/run-tests.mjs fixtures-image
+nice -n 10 node scripts/ci/run-tests.mjs fixtures-browser
 ```
 
 The fixture tests need Docker, PostgreSQL, Chromium and the built test image.

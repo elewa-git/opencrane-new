@@ -42,7 +42,7 @@ function checkFixtureUse(files) {
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
     if (needsFixtures(source, file) && !fixtureFiles.includes(file)) {
-      throw new Error(`Add this test to fixtureFiles: ${file}`);
+      throw new Error(`Add this test to a fixture group: ${file}`);
     }
   }
   for (const file of fixtureFiles) {

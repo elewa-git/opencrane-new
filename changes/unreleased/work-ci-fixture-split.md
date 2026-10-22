@@ -1,0 +1,1 @@
+- Run computer-image and browser fixture tests in parallel CI jobs, use available test workers for image fixtures, and avoid apt updates when Chromium's system packages are already installed.

@@ -25,6 +25,7 @@ function partitionsTests() {
     'apps/server/test/audit-browser.test.ts',
     'apps/server/test/bootstrap-browser.test.ts',
     'apps/server/test/integrations.test.ts',
+    'apps/server/test/journey-integration-fixture.test.ts',
     'apps/server/test/live-view-k3d.test.ts',
     'apps/server/test/provider-login.test.ts',
     'apps/web/test/chat-browser.test.ts',
@@ -39,8 +40,9 @@ function partitionsTests() {
   }
   for (const argumentsList of [image, browser]) {
     assert.ok(!argumentsList.some(isShardArgument));
-    assert.ok(!argumentsList.includes('--maxWorkers=1'));
   }
+  assert.ok(!image.includes('--maxWorkers=1'));
+  assert.ok(browser.includes('--maxWorkers=1'));
 }
 
 function isTestFile(argument) {
@@ -139,14 +141,14 @@ function checksFixtureEntriesOnEveryVerification() {
       writeFileSync(resolve(directory, newTest), source);
       const refused = verify();
       assert.notEqual(refused.status, 0, source);
-      assert.match(refused.stderr, /Add this test to fixtureFiles/, source);
+      assert.match(refused.stderr, /Add this test to a fixture group/, source);
     }
     writeFileSync(resolve(directory, 'apps/server/test/browser.mjs'),
       "const image = 'ocn-upload-computer:test';");
     writeFileSync(resolve(directory, newTest), "import './helper.mjs';");
     const imageRefused = verify();
     assert.notEqual(imageRefused.status, 0);
-    assert.match(imageRefused.stderr, /Add this test to fixtureFiles/);
+    assert.match(imageRefused.stderr, /Add this test to a fixture group/);
     writeFileSync(childScript, "const browser = 'ordinary data';");
     writeFileSync(resolve(directory, newTest), "spawn('node', ['scripts/browser.mjs']);");
     assert.equal(verify().status, 0);
