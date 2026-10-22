@@ -404,7 +404,9 @@ These observations are upper bounds, with 20 ms polling plus request time. Negat
 values mean the observer finished before the HTTP response. A missing observation is
 `NOT RUN` and fails access timing. The Owner list has its own observation and does not
 set the two-second result. The removed browser has a ready conversation WebSocket before
-removal. History and file-list reads must return 403; other refusals do not prove removal.
+removal. The next history and file-list reads start after acceptance and must return 403.
+The file route already returns 403 for a group chat before removal; the receipt records
+that baseline. Its later refusal does not qualify revocation of previously readable files.
 This people-only chat has no computer viewer or pending approval, so those checks are
 not qualified by this journey.
 `group-removal-timing.test.ts` uses a fake clock to keep a slow Owner list independent

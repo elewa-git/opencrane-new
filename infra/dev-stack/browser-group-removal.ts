@@ -25,73 +25,21 @@ export async function checkGroupRemoval(options: RemovalOptions) {
     await removed.reload();
     await removed.getByText(oldMessage, { exact: true }).waitFor();
     await feed.ready;
+    // Record the existing file refusal; this chat mode has no files to revoke.
+    const beforeFiles = await removed.request.get(`${origin}${path}/files`);
+    assert.equal(beforeFiles.status(), 403, 'People-only chats do not offer files');
+    await beforeFiles.dispose();
     const deadline = Date.now() + 10_000;
-    const saved = observeSavedRemoval();
-    async function observeSavedRemoval() {
-      while (Date.now() < deadline) {
-        const position = await store.head(accessSubject);
-        if (position > before) {
-          const row = await store.readEvent(position);
-          assert.equal(row.event.type, 'participant.removed');
-          assert.equal(row.event.subject, accessSubject);
-          return;
-        }
-        await delay(20);
-      }
-      throw new Error('The removal was not saved');
-    }
+    const saved = observeSavedRemoval(store, accessSubject, before, deadline);
     async function removalSaved() {
       await saved;
     }
-    async function pageCleared() {
-      while (Date.now() < deadline) {
-        const transcript = await removed.locator('.transcript').innerText();
-        if (transcript.includes('You no longer have access') && !transcript.includes(oldMessage)) {
-          return;
-        }
-        await delay(20);
-      }
-      throw new Error('The removed page did not clear');
-    }
-    async function ownerList() {
-      const list = owner.locator('.participant-list').first();
-      while (Date.now() < deadline) {
-        if (await list.getByText(name, { exact: true }).count() === 0) return;
-        await delay(50);
-      }
-      throw new Error('The Owner list did not update');
-    }
-    async function historyRefused() {
-      await readUntilRefused(`${path}/messages?since=0`);
-    }
-    async function fileRefused() {
-      await readUntilRefused(`${path}/files`);
-    }
-    async function readUntilRefused(apiPath: string) {
-      while (Date.now() < deadline) {
-        const response = await removed.request.get(`${origin}${apiPath}`, { timeout: 2_000 });
-        const status = response.status();
-        await response.dispose();
-        if (status === 403) return;
-        assert.equal(status, 200, 'Only an access refusal proves removal');
-        await delay(20);
-      }
-      throw new Error('The removed person could still read');
-    }
-    function isRemoval(response: Response) {
-      return response.url() === `${origin}${path}/participants`
-        && response.request().method() === 'POST';
-    }
-    async function accept() {
-      const responsePending = owner.waitForResponse(isRemoval, { timeout: 10_000 });
-      const row = owner.locator('.participant-list').first().locator('li').filter({ hasText: name });
-      const click = row.getByRole('button', { name: 'Remove', exact: true }).click();
-      const response = await responsePending;
-      const acceptedAt = Date.now();
-      assert.equal(response.status(), 200, 'The server accepted the removal');
-      await click;
-      return acceptedAt;
-    }
+    const pageCleared = observePageCleared.bind(null, removed, oldMessage, deadline);
+    const ownerList = observeOwnerList.bind(null, owner, name, deadline);
+    const historyUrl = `${origin}${path}/messages?since=0`;
+    const historyRefused = readUntilRefused.bind(null, removed, historyUrl, deadline);
+    const fileRefused = readUntilRefused.bind(null, removed, `${origin}${path}/files`, deadline);
+    const accept = acceptRemoval.bind(null, owner, `${origin}${path}/participants`, name);
     const observations = {
       removalSaved, accessStreamUpdated: removalSaved, liveFeedClosed: feed.closed,
       pageCleared, historyRefused, fileRefused, ownerList,
@@ -101,10 +49,73 @@ export async function checkGroupRemoval(options: RemovalOptions) {
     for (const [hop, elapsed] of Object.entries(result.hops)) {
       hops[`${hop}Ms`] = elapsed ?? 'NOT RUN';
     }
-    return { cleared: result.passed, hops };
+    return { cleared: result.passed, hops: { ...hops, fileAccessBeforeRemoval: 'refused' } };
   } finally {
     feed.stop();
   }
+}
+
+async function observeSavedRemoval(store: EventStore, subject: string,
+  before: number, deadline: number) {
+  while (Date.now() < deadline) {
+    const position = await store.head(subject);
+    if (position > before) {
+      const row = await store.readEvent(position);
+      assert.equal(row.event.type, 'participant.removed');
+      assert.equal(row.event.subject, subject);
+      return;
+    }
+    await delay(20);
+  }
+  throw new Error('The removal was not saved');
+}
+
+async function observePageCleared(page: Page, oldMessage: string, deadline: number) {
+  while (Date.now() < deadline) {
+    const transcript = await page.locator('.transcript').innerText();
+    const messages = await page.locator('.transcript article.message').count();
+    if (transcript.includes('You no longer have access')
+      && !transcript.includes(oldMessage) && messages === 0) return;
+    await delay(20);
+  }
+  throw new Error('The removed page did not clear');
+}
+
+async function observeOwnerList(page: Page, name: string, deadline: number) {
+  const list = page.locator('.participant-list').first();
+  while (Date.now() < deadline) {
+    if (await list.getByText(name, { exact: true }).count() === 0) return;
+    await delay(50);
+  }
+  throw new Error('The Owner list did not update');
+}
+
+async function readUntilRefused(page: Page, url: string, deadline: number,
+  accepted: Promise<number>) {
+  await accepted;
+  while (Date.now() < deadline) {
+    const response = await page.request.get(url, { timeout: 2_000 });
+    const status = response.status();
+    await response.dispose();
+    if (status === 403) return;
+    assert.equal(status, 200, 'Only an access refusal proves removal');
+    await delay(20);
+  }
+  throw new Error('The removed person could still read');
+}
+
+async function acceptRemoval(page: Page, url: string, name: string) {
+  function isRemoval(response: Response) {
+    return response.url() === url && response.request().method() === 'POST';
+  }
+  const responsePending = page.waitForResponse(isRemoval, { timeout: 10_000 });
+  const row = page.locator('.participant-list').first().locator('li').filter({ hasText: name });
+  const click = row.getByRole('button', { name: 'Remove', exact: true }).click();
+  const response = await responsePending;
+  const acceptedAt = Date.now();
+  assert.equal(response.status(), 200, 'The server accepted the removal');
+  await click;
+  return acceptedAt;
 }
 
 function watchFeed(page: Page, conversationId: string) {
