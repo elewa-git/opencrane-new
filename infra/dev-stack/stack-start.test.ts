@@ -8,6 +8,8 @@ type StartOptions = {
   failure?: string;
   signal?: 'SIGINT' | 'SIGTERM';
   previousMode?: '0' | '1';
+  webReadyMs?: number;
+  webExitMs?: number;
 };
 
 async function ownerStart(start: StartOptions = {}) {
@@ -26,6 +28,8 @@ async function ownerStart(start: StartOptions = {}) {
       DEV_REAL_PROVIDER_FILE: '/synthetic-key-file',
       START_FAILURE: start.failure ?? '',
       START_SIGNAL: start.signal ?? '',
+      START_WEB_READY_MS: start.webReadyMs?.toString() ?? '',
+      START_WEB_EXIT_MS: start.webExitMs?.toString() ?? '',
     };
     const args = ['--experimental-strip-types', '--import',
       './infra/dev-stack/test/stack-start-preload.mjs', 'infra/dev-stack/stack.ts',
@@ -44,7 +48,13 @@ async function ownerStart(start: StartOptions = {}) {
     const services = JSON.parse(serviceText) as {
       processes: string[]; containers: string[]; switchedOn: boolean;
     };
-    return { status: result.status, output: result.stdout + result.stderr,
+    let failure = '';
+    try {
+      failure = await readFile(`${directory}/failure.log`, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    return { status: result.status, output: result.stdout + result.stderr, failure,
       operations, settings, services };
   } finally {
     await rm(home, { recursive: true, force: true });
@@ -107,3 +117,13 @@ async function interruptedStartRestoresMode() {
 
 test('interruptions after switch-on restore the previous mode and stop launched services',
   interruptedStartRestoresMode);
+
+async function slowWebsiteBecomesReady() {
+  const result = await ownerStart({ webReadyMs: 208_291 });
+  assert.equal(result.status, 0, result.output + result.failure);
+  assert.match(result.output, /Stack ready:/u);
+  assert.match(result.operations, /website-ready 208500/u);
+}
+
+test('startup waits for a cold website build that takes longer than two minutes',
+  slowWebsiteBecomesReady);
