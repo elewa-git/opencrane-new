@@ -557,3 +557,54 @@ Sanitised failure logs remain under
 `~/.opencrane/daily-fresh/nightly-20261022T193759-c67e4dbf-24db-4d87-9faf-333d9bbb15fc/`.
 The final type-import correction happened after this attempt and does not change
 runtime behaviour. This run gives no live upload qualification credit.
+
+## File-list reads in long conversations (22 October 2026)
+
+Own checks for the CI repair in draft PR #591, part of #567. Source:
+`fb247762f77406022c30e2ce1697d8246453dbaa`, rebased onto
+`cdd9ae45dd38947cafd527a1eb3d1a0789b2e4a0`. The rebase finished. No rebase remains in progress. This was a local test environment with Node 22.23.3,
+not a fresh installation.
+
+Expected FAIL: both original 100,000-message tests returned the reported HTTP 500
+before the fix. A temporary diagnostic confirmed `TimeoutError` at the event-store
+deadline. The new file-list helper was replaying every old conversation event to
+find uploads. Its ten-second limit expired before that replay finished. The
+route treated the timeout as an unexpected failure. The diagnostic was removed.
+
+Test-first commit `3fea2c775` keeps creation available for access checks and makes
+old content unavailable. It failed with HTTP 500 instead of the expected 425.
+Test-first commit `de455e8fe` checks missing worker checkpoints; the missing
+conversations checkpoint returned 200 instead of 425 before the fix.
+
+The helper now reads both worker checkpoints and projected uploads together,
+then checks only events after the later checkpoint. It keeps missing or invalid
+checkpoints applying. It no longer caches or replays the whole conversation to
+find the latest upload. The original 100,000-message tests and all access, money
+and memory checks are unchanged.
+
+| Final check | First run | Second run |
+| --- | --- | --- |
+| Both original 100,000-message cases | PASS: 2/2 | PASS: 2/2 |
+| Complete server upload-failure file | PASS: 13/13 | PASS: 13/13 |
+| Four focused browser files | PASS: 87/87 | PASS: 87/87 |
+
+The browser files were upload, workspace, upload-refusal and direct-chat-api.
+All tests, lint and typechecks used `nice -n 10`. Server upload tests used the
+requested PostgreSQL test service on port 55432. Diagnosis and the two long-chat
+runs used the throwaway `pgtest-demo-upload-ci` database on port 54675. The container
+and its volume were removed with `docker rm -f -v`. The owner stack was untouched.
+
+PASS: workspace and package typechecks, all 149 event catalogue entries, Knip and
+changelog lint. Full repository lint passed with
+zero errors and 24 warnings in unchanged code. It used the CI heap allowance,
+`NODE_OPTIONS=--max-old-space-size=6144`.
+
+Logs are `/tmp/demo-upload-ci-before.log`, `/tmp/demo-upload-ci-cause.log`,
+`/tmp/demo-upload-ci-red.log` and `/tmp/demo-upload-ci-checkpoint-red.log`.
+Repeated test logs use `/tmp/demo-upload-ci-volume-<run>.log`,
+`/tmp/demo-upload-ci-focused-<run>.log` and `/tmp/demo-upload-ci-web-<run>.log`,
+where run is 1 or 2. Other checks use the same prefix with `lint`, `typecheck`,
+`events`, `knip` or `changelog`.
+
+Full root suite and new fresh-install journeys: NOT RUN. The three fresh upload
+passes remain outstanding. The PR stays draft; CI is not awaited.
