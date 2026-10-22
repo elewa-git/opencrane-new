@@ -15,7 +15,7 @@ const group = process.argv[2];
 const argumentsList = testArguments(group);
 const directoryOptions = { recursive: true };
 mkdirSync('.tools/ci', directoryOptions);
-if (group === 'fixtures') {
+if (group === 'fixtures-image' || group === 'fixtures-browser') {
   // Warm Angular's compiler cache before tests start their own short-lived servers.
   const buildArguments = ['run', 'build', '-w', 'apps/web', '--', '--configuration=development'];
   const buildStatus = runNpm(buildArguments);

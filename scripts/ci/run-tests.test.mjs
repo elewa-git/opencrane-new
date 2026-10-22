@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
-function fixtureRun(buildExit) {
+function fixtureRun(group, buildExit) {
   const directory = mkdtempSync(join(tmpdir(), 'ci-runner-'));
   const binaryDirectory = join(directory, 'bin');
   mkdirSync(binaryDirectory);
@@ -27,7 +27,7 @@ if (process.argv[2] === 'run') {
   }
   try {
     const script = resolve('scripts/ci/run-tests.mjs');
-    const result = spawnSync(process.execPath, [script, 'fixtures'], options);
+    const result = spawnSync(process.execPath, [script, group], options);
     const lines = readFileSync(log, 'utf8').trim().split('\n');
     return { status: result.status, calls: lines.map(parseCall) };
   } finally {
@@ -37,18 +37,22 @@ if (process.argv[2] === 'run') {
 }
 
 function preparesBeforeTesting() {
-  const result = fixtureRun(0);
-  assert.equal(result.status, 0);
-  assert.deepEqual(result.calls[0], ['run', 'build', '-w', 'apps/web', '--',
-    '--configuration=development']);
-  assert.equal(result.calls[1][0], 'test');
-  assert.equal(result.calls.length, 2);
+  for (const group of ['fixtures-image', 'fixtures-browser']) {
+    const result = fixtureRun(group, 0);
+    assert.equal(result.status, 0);
+    assert.deepEqual(result.calls[0], ['run', 'build', '-w', 'apps/web', '--',
+      '--configuration=development']);
+    assert.equal(result.calls[1][0], 'test');
+    assert.equal(result.calls.length, 2);
+  }
 }
 
 function refusesFailedPreparation() {
-  const result = fixtureRun(7);
-  assert.equal(result.status, 7);
-  assert.equal(result.calls.length, 1);
+  for (const group of ['fixtures-image', 'fixtures-browser']) {
+    const result = fixtureRun(group, 7);
+    assert.equal(result.status, 7);
+    assert.equal(result.calls.length, 1);
+  }
 }
 
 test('prepares Angular before starting fixture tests', preparesBeforeTesting);

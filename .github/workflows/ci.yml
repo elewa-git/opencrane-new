@@ -109,9 +109,24 @@ jobs:
         if: needs.select.outputs.mode != 'docs'
         run: npm run check:events
 
+      - name: Read Chromium package cache versions
+        if: needs.select.outputs.mode != 'docs'
+        id: chromium-cache-key
+        run: |
+          playwright_version=$(node -p 'require("playwright/package.json").version')
+          printf 'key=chromium-debs-v1-%s-%s-%s-%s\n' \
+            "$RUNNER_OS" "$RUNNER_ARCH" "$ImageVersion" "$playwright_version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium system packages
+        if: needs.select.outputs.mode != 'docs'
+        uses: actions/cache@v4
+        with:
+          path: .tools/ci/chromium-debs/*.deb
+          key: ${{ steps.chromium-cache-key.outputs.key }}
+
       - name: Install Chromium for demo recording checks
         if: needs.select.outputs.mode != 'docs'
-        run: npx playwright install --with-deps chromium
+        run: bash scripts/ci/install-chromium.sh
 
       - name: Check CI test grouping
         if: needs.select.outputs.mode != 'docs'
@@ -227,7 +242,7 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-  fixtures:
+  fixtures-image:
     needs: select
     if: ${{ !cancelled() && needs.select.outputs.mode != 'docs' }}
     runs-on: ubuntu-latest
@@ -280,22 +295,35 @@ jobs:
             computer.cache-from=type=gha,scope=upload-computer
             computer.cache-to=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'type=gha,scope=upload-computer,mode=max' || '' }}
 
+      - name: Read Chromium package cache versions
+        id: chromium-cache-key
+        run: |
+          playwright_version=$(node -p 'require("playwright/package.json").version')
+          printf 'key=chromium-debs-v1-%s-%s-%s-%s\n' \
+            "$RUNNER_OS" "$RUNNER_ARCH" "$ImageVersion" "$playwright_version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium system packages
+        uses: actions/cache@v4
+        with:
+          path: .tools/ci/chromium-debs/*.deb
+          key: ${{ steps.chromium-cache-key.outputs.key }}
+
       # Browser tests use the Chromium build that matches the pinned playwright package.
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: bash scripts/ci/install-chromium.sh
 
-      - name: Test files needing the computer image or Chromium
-        run: nice -n 10 node scripts/ci/run-tests.mjs fixtures
+      - name: Test files needing the computer image
+        run: nice -n 10 node scripts/ci/run-tests.mjs fixtures-image
 
       - name: Record test files
         if: always()
-        run: node scripts/ci/test-files.mjs record fixtures
+        run: node scripts/ci/test-files.mjs record fixtures-image
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-files-fixtures
-          path: .tools/ci/files-fixtures.json
+          name: test-files-fixtures-image
+          path: .tools/ci/files-fixtures-image.json
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 7
@@ -303,7 +331,88 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          name: vitest-fixtures
+          name: vitest-fixtures-image
+          path: .tools/ci/report.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+  fixtures-browser:
+    needs: select
+    if: ${{ !cancelled() && needs.select.outputs.mode != 'docs' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:17.6-alpine
+        env:
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      NG_BUILD_MAX_WORKERS: '2'
+      PG_TEST_URL: postgres://postgres:test-only@127.0.0.1:5432/postgres
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install pinned NATS server
+        run: sh scripts/fetch-nats.sh
+
+      # Authz tests use disposable Docker containers and the PostgreSQL service above.
+      - name: Verify Docker for real OpenFGA tests
+        run: docker info
+
+      - name: Read Chromium package cache versions
+        id: chromium-cache-key
+        run: |
+          playwright_version=$(node -p 'require("playwright/package.json").version')
+          printf 'key=chromium-debs-v1-%s-%s-%s-%s\n' \
+            "$RUNNER_OS" "$RUNNER_ARCH" "$ImageVersion" "$playwright_version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium system packages
+        uses: actions/cache@v4
+        with:
+          path: .tools/ci/chromium-debs/*.deb
+          key: ${{ steps.chromium-cache-key.outputs.key }}
+
+      # Browser tests use the Chromium build that matches the pinned playwright package.
+      - name: Install Playwright Chromium
+        run: bash scripts/ci/install-chromium.sh
+
+      - name: Test files needing Chromium
+        run: nice -n 10 node scripts/ci/run-tests.mjs fixtures-browser
+
+      - name: Record test files
+        if: always()
+        run: node scripts/ci/test-files.mjs record fixtures-browser
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-files-fixtures-browser
+          path: .tools/ci/files-fixtures-browser.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: vitest-fixtures-browser
           path: .tools/ci/report.json
           if-no-files-found: error
           include-hidden-files: true
@@ -311,7 +420,7 @@ jobs:
 
   ci-ok:
     if: always()
-    needs: [select, checks, test, fixtures]
+    needs: [select, checks, test, fixtures-image, fixtures-browser]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -345,5 +454,6 @@ jobs:
           CI_DECISION: ${{ needs.select.outputs.mode }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           TEST_RESULT: ${{ needs.test.result }}
-          FIXTURES_RESULT: ${{ needs.fixtures.result }}
+          IMAGE_RESULT: ${{ needs.fixtures-image.result }}
+          BROWSER_RESULT: ${{ needs.fixtures-browser.result }}
         run: node scripts/ci/select.mjs gate
