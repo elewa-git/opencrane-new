@@ -296,6 +296,52 @@ it('refuses an empty upload with typed 400 at the upload and HTTP boundaries', e
 it('reports an upload still applying instead of returning an incomplete list',
   listsUploadAfterProjectionCatchesUp);
 
+async function listsUploadsWithoutReplayingProjectedHistory() {
+  const conversationId = 'projected-history';
+  const createdData = {
+    conversationId, assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
+  };
+  const created = envelope('test', `conversation-${conversationId}`,
+    'conversation.created', createdData);
+  const creation = { event: created, expectedSequence: 0 };
+  expect((await options.store.append(creation)).status).toBe('appended');
+  await memberAuthorisation(options.binding).handler.handle(created, options.db);
+  await runner.run(files);
+  const file = {
+    conversationId, fileId: 'projected-upload', name: 'notes.txt', mime: 'text/plain',
+    size: bytes.length, sha256: 'a'.repeat(64), objectKey: 'test/projected-upload',
+    uploadedBy: 'alice',
+  };
+  await fileCommand(options.store, 'test', 'alice', 'projected-upload', 'file.uploaded', file);
+  await runner.run(conversations);
+  const projectedThrough = await runner.checkpoint(conversations);
+  const readStream = options.store.readStream.bind(options.store);
+  async function* refuseProjectedHistory(subject: string, fromSequence = 1,
+    deadline = Infinity, includeConversationCloses = false) {
+    for await (const row of readStream(subject, fromSequence, deadline,
+      includeConversationCloses)) {
+      // Keep the creation available for access checks, but refuse a replay of old content.
+      if (subject === `conversation-${conversationId}` && row.sequence <= projectedThrough &&
+          row.event.type !== 'conversation.created') {
+        throw new Error('Projected chat history must not be replayed for a file list');
+      }
+      yield row;
+    }
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(refuseProjectedHistory);
+  const upload = uploadRequest('projected-history');
+  const request = { url: `/api/conversations/${conversationId}/files`, headers: upload.headers };
+  const applying = await app.inject(request);
+  expect(applying.statusCode, applying.body).toBe(425);
+  expect(applying.json()).toEqual({ status: 'applying' });
+  await runner.run(files);
+  const available = await app.inject(request);
+  expect(available.statusCode, available.body).toBe(200);
+  expect(available.json()).toMatchObject({ rows: [{ fileId: 'projected-upload' }] });
+}
+it('checks unapplied uploads without replaying projected chat history',
+  listsUploadsWithoutReplayingProjectedHistory);
+
 async function refusesFilesAfterRemovalAndInvitation() {
   const store = options.store;
   const removal = { memberId: 'alice', removedBy: 'owner' };
