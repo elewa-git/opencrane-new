@@ -1,40 +1,40 @@
-import { readStreamSummary, type StoredEvent, type SummaryKind } from '@opencrane/event-store';
+import { WrongSiloError } from '@opencrane/event-store';
 import type { ChatOptions } from '../chat/access.ts';
 
-type UploadPosition = { position: number };
-
-function emptyUploadPosition(): UploadPosition {
-  return { position: 0 };
-}
-
-function addUploadPosition(summary: UploadPosition, row: StoredEvent) {
-  if (row.event.type === 'file.uploaded') {
-    summary.position = row.sequence;
-  }
-}
-
-const uploads: SummaryKind<UploadPosition> = {
-  name: 'file-list-uploads',
-  keep: 64,
-  empty: emptyUploadPosition,
-  add: addUploadPosition,
+type FileListOptions = Pick<ChatOptions, 'store' | 'db' | 'silo'>;
+type UploadProgress = {
+  applied: string;
+  projected: string;
+  upload: string | null;
 };
 
-function latestUploadPosition(summary: UploadPosition) {
-  return summary.position;
-}
-
-export async function fileListApplying(
-  options: Pick<ChatOptions, 'store' | 'db' | 'silo'>, conversationId: string,
-) {
-  // Check uploads only, so unrelated chat activity cannot hold up the file list.
+export async function fileListApplying(options: FileListOptions, conversationId: string) {
   const deadline = performance.now() + 10_000;
+  // Read both workers' positions and the matching uploads from one database snapshot.
+  const progress = await options.db.query<UploadProgress>(
+    `SELECT files.sequence AS applied, conversations.sequence AS projected,
+      (SELECT max(position) FROM conversation_feed
+        WHERE silo = $1 AND conversation_id = $2 AND type = 'file.uploaded'
+          AND position > files.sequence AND position <= conversations.sequence) AS upload
+      FROM projection_checkpoints files, projection_checkpoints conversations
+      WHERE files.name = 'files' AND conversations.name = 'conversations'`,
+    [options.silo, conversationId]);
+  const row = progress.rows[0];
+  if (!row) return true;
+  const applied = Number(row.applied);
+  const projected = Number(row.projected);
+  if (!Number.isSafeInteger(applied) || applied < 0 ||
+      !Number.isSafeInteger(projected) || projected < 0) {
+    return true;
+  }
+  if (row.upload !== null) return true;
+
+  // Skip history already covered by either worker. Only newer uploads can hold up this list.
+  const checkedThrough = Math.max(applied, projected);
   const subject = `conversation-${conversationId}`;
-  const position = await readStreamSummary(options.store, options.silo, subject,
-    uploads, deadline, latestUploadPosition);
-  if (position === 0) return false;
-  const checkpoint = await options.db.query<{ sequence: string }>(
-    "SELECT sequence FROM projection_checkpoints WHERE name = 'files'");
-  const applied = Number(checkpoint.rows[0]?.sequence ?? 0);
-  return !Number.isSafeInteger(applied) || applied < position;
+  for await (const stored of options.store.readStream(subject, checkedThrough + 1, deadline)) {
+    if (stored.event.silo !== options.silo) throw new WrongSiloError();
+    if (stored.event.type === 'file.uploaded') return true;
+  }
+  return false;
 }
