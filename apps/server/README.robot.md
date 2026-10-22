@@ -3714,6 +3714,53 @@ passed 33 cases but `lost_start` exceeded its existing ten-second cleanup limit.
 That failure was not rerun or treated as an approved flake. No assertion or timeout
 in that existing suite was changed. The disposable database was removed with its volume.
 
+### Approval recovery and restored grants: own checks
+
+22 October 2026, source `dac6cfce5`, following failing-test commit `811248b0e`.
+These were local test fixtures, not a fresh installation. They used the supplied
+`PG_TEST_URL`, disposable NATS and OpenFGA, the pinned gateway and local HTTPS.
+Every test command used `nice -n 10` and one worker.
+
+- Expected FAIL: the first regression reproduced missing non-dispatch evidence and
+  `canRetry: false` after IAM recovered. The event schema rejected the new evidence.
+- PASS: the complete 13-case gateway matrix and both event-schema cases in two
+  isolated runs. The second run also passed all 438 unchanged event security tests:
+  15 tests in the first run and 453 in the second.
+- PASS: the changed MCP refusal case in the broad run and again in the isolated
+  six-case run. The latter also passed both lost-start cases and all three stopped-turn
+  recovery cases, with no changed assertion or timeout.
+- FAIL: the broad MCP run passed 172 of 173 tests. The unchanged stopped-turn recovery
+  case for a refused MCP pass exceeded 30 seconds. It passed in 6.8 seconds in the
+  later isolated run; the earlier full-file result remains FAIL.
+- FAIL, then fixed: the first matrix run exposed a receipt helper that accepted
+  Vitest's polling argument as its expected state. Binding the expected boolean
+  before polling fixed that helper. An overlapping typecheck found the same mistake.
+- FAIL: the next concurrent matrix run had two successful-control calls return 403
+  and an IAM refusal take 2.43 seconds against the two-second assertion. Lint was
+  paused and the stale typecheck was stopped before the isolated runs above.
+- NOT RUN: the full root suite and fresh-install journeys.
+
+The isolated commands selected `integration-access-gateway.test.ts` and
+`remote-dispatch.test.ts`; the second also selected `security-rules.test.ts`.
+The broader command selected all of `mcp-dispatch.test.ts`. Its isolated follow-up
+selected `watch_final`, `lost_start` and `keeps a stopped free turn from model sends
+after recovery`. Local logs use `/tmp/tools-access-gateway-fix-`: `red-approval.log`,
+`isolated-1.log`, `isolated-2.log`, `dispatch-1.log` and `dispatch-isolated.log`.
+
+The mechanical follow-up `37d586f15` splits refusal recording into named helpers
+and gives the test's saved events an explicit type. This fixes the two complexity
+errors from the first full lint and the event-array error from typecheck.
+PASS: the 15 gateway/schema tests again on this source, then all 12 selected MCP
+start-refusal and lost-start checks. Logs are `final-regressions.log` and
+`final-dispatch.log` under the same prefix. The helper extraction changes no check,
+assertion or deadline.
+
+PASS on `37d586f15`: full `npm run lint` (including Knip and changelog validation),
+full `npm run typecheck`, and `npm run check:events` (149 matching types).
+Lint used `NODE_OPTIONS=--max-old-space-size=8192` and reported zero errors with
+24 existing length warnings. All commands used `nice -n 10`. Logs are
+`lint-final.log`, `typecheck-clean.log` and `events-final.log` under the same prefix.
+
 ## Shared test ports
 
 The nine former `freePort` copies now use `@opencrane/event-store/testing`.
