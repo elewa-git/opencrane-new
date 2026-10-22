@@ -352,7 +352,19 @@ it.each(['computer-assistant', 'conversation-conversation', grantStream('model',
   refusesRestoredHistory, 40_000);
 
 async function waitForDecisionGrants(setup: Fixture, deadline: number) {
-  await readDecisionGrants(setup.nats.store, 'test', 'gpt-6-luna', deadline);
+  const grants = await readDecisionGrants(setup.nats.store, 'test', 'gpt-6-luna', deadline);
+  const granteeSchema = z.object({ granteeId: z.string(), granteeKind: z.string() });
+  for (const row of grants.rows) {
+    const grantee = granteeSchema.parse(row.event.data);
+    const requester = grantee.granteeKind === 'member' && grantee.granteeId === 'alice';
+    const assistant = grantee.granteeKind === 'assistant' && grantee.granteeId === 'assistant';
+    if (!requester && !assistant) continue;
+    async function receiptApplied() {
+      return setup.auth.applied(row.event.id);
+    }
+    const remaining = Math.max(0, deadline - performance.now());
+    await until(receiptApplied, remaining);
+  }
 }
 
 async function waitsForGrantReceiptBeforeWarmUp() {
