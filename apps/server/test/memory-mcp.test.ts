@@ -45,10 +45,12 @@ const recallTool = toolEvidence(recallDeclaration);
 const rememberTool = toolEvidence(rememberDeclaration);
 const changeReview = { action: 'Change saved memory', consequence: 'A fact is replaced or forgotten.',
   targetArgument: 'memoryId', fields: ['memoryId', 'expectedRevision'], stepUp: false };
-const forgetTool = toolEvidence({ name: 'forget', reviewed: true, costCents: 0,
-  review: changeReview });
-const correctTool = toolEvidence({ name: 'correct', reviewed: true, costCents: 0,
-  review: changeReview });
+const forgetDeclaration = { name: 'forget', reviewed: true, costCents: 0,
+  review: changeReview };
+const correctDeclaration = { name: 'correct', reviewed: true, costCents: 0,
+  review: changeReview };
+const forgetTool = toolEvidence(forgetDeclaration);
+const correctTool = toolEvidence(correctDeclaration);
 const memoryCatalogue = catalogueEvidence([recallTool, rememberTool, forgetTool, correctTool]);
 const metadata = { threadId: 'thread', callId: 'memory-call',
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
@@ -2073,8 +2075,9 @@ async function loadChangeFacts(revision: number) {
   const additions = [{ scopeId, memoryId: 'fact_21', revision },
     { scopeId, memoryId: 'fact_22', revision: 1 }];
   const position = await setup.nats.store.head(`scope-${scopeId}`);
-  await seedEvidence({ ...data, action: 'loaded', delivery: 'initial', additions,
-    byteCount: 1, scopePositions: [{ scopeId, position }] });
+  const loaded = { ...data, action: 'loaded', delivery: 'initial', additions,
+    byteCount: 1, scopePositions: [{ scopeId, position }] };
+  await seedEvidence(loaded);
   const token = await signedRecall(setup);
   const parsed = parseMemoryRequest(JSON.stringify(call), headers);
   const context = await verifyMemoryContext(token, setup.identity, parsed);
@@ -2181,6 +2184,64 @@ const changeGrants = [
 ] as const;
 it.each(changeGrants)('checks %s for %s (recorded=%s) before forget', changeGrant);
 
+async function changeGrantDuringLineage(operation: 'correct' | 'forget', restore: boolean) {
+  const request = await changeRequest(operation);
+  const token = await changeToken(request);
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  const scopeSubject = `scope-${scopeId}`;
+  const before = await setup.nats.store.head(scopeSubject);
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  let scopeChecked = false;
+  let originalDeadline: number | undefined;
+  let changed = false;
+  let finished = false;
+  async function* readStream(subject: string, from?: number, deadline?: number,
+    includeConversationCloses?: boolean) {
+    const lineageRead = scopeChecked && !changed && subject === 'conversation-conversation';
+    if (lineageRead) {
+      expect(from).toBe(chat.sequence + 1);
+      expect(includeConversationCloses).toBe(true);
+      expect(deadline).toBe(originalDeadline);
+      changed = true;
+      const fields = { resourceType: 'memory_write', resourceId: scopeId,
+        granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
+      const revoked = await setup.append(grantStream('memory_write', scopeId),
+        'grant.revoked', fields);
+      await setup.auth.handler.handle(revoked, setup.db);
+      if (restore) {
+        await grantWrite('assistant');
+      }
+    }
+    yield* originalRead(subject, from, deadline, includeConversationCloses);
+    // Wait for target validation so the change happens in the final conversation-tail read.
+    if (subject === scopeSubject) {
+      scopeChecked = true;
+      originalDeadline = deadline;
+    }
+    if (lineageRead) {
+      expect(performance.now()).toBeLessThan(originalDeadline!);
+      finished = true;
+    }
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  try {
+    const response = await sendChange(request, token);
+    expect(changed).toBe(true);
+    expect(finished).toBe(true);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(await setup.nats.store.head(scopeSubject)).toBe(before);
+  } finally {
+    reads.mockRestore();
+  }
+}
+const changedLineageGrants = [
+  ['correct', false], ['correct', true], ['forget', false], ['forget', true],
+] as const;
+it.each(changedLineageGrants)(
+  'refuses %s when its write grant changes during the lineage read (restored=%s)',
+  changeGrantDuringLineage);
+
 async function changePolicy(value: 'ask' | 'block') {
   const request = await changeRequest('correct');
   await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
@@ -2190,11 +2251,17 @@ async function changePolicy(value: 'ask' | 'block') {
   const position = await setup.nats.store.head('conversation-conversation');
   const appends = vi.spyOn(setup.nats.store, 'append');
   let reason: string | undefined;
-  if (value === 'ask') reason = 'memory_tool_configuration';
+  if (value === 'ask') {
+    reason = 'memory_tool_configuration';
+    const offeredHeaders = { ...request.requestHeaders, 'x-opencrane-tool-mode': 'allow' };
+    request.requestHeaders = offeredHeaders;
+  }
   await refusedChange(request, reason);
   const response = await setup.call(request.requestHeaders, request.body, route);
   expect(response.status).toBe(403);
-  if (reason) expect(response.text).toContain(reason);
+  if (reason) {
+    expect(JSON.parse(response.text)).toEqual({ status: 'refused', reason });
+  }
   expect(await setup.nats.store.head('conversation-conversation')).toBe(position);
   for (const [command] of appends.mock.calls) {
     const event = z.object({ type: z.string() }).parse(command.event);
@@ -2213,10 +2280,11 @@ async function changeScope(kind: 'group' | 'assistant_notes', loaded: boolean) {
   const otherScope = memoryScopeId('test', kind, owner);
   if (loaded) {
     const saved = await contextRecord();
-    await seedEvidence({ ...saved, action: 'loaded', delivery: 'recall',
+    const loadedEvidence = { ...saved, action: 'loaded', delivery: 'recall',
       callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64), byteCount: 1,
       additions: [{ scopeId: otherScope, memoryId: 'other', revision: 1 }],
-      scopePositions: [{ scopeId: otherScope, position: 0 }] });
+      scopePositions: [{ scopeId: otherScope, position: 0 }] };
+    await seedEvidence(loadedEvidence);
     await refusedChange(request);
   } else {
     request.body.params.arguments['scopeId'] = otherScope;
