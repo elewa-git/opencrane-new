@@ -8,7 +8,8 @@ import { readProviders } from '@opencrane/projections';
 import { providerAuthority, providerCommand, providerReceipt,
   providerDrainCommand, providerDrainStatus, providerSwitchOn, providerSwitchOnChange,
   readActiveMember, MemberAccessRefused, providerBindingCommand, providerDependencies,
-  ProviderRefused, ProviderUnpriced, ProviderConflict, providerHistory, providerSecretRef,
+  ProviderRefused, ProviderUnpriced, ProviderConflict, AuthorityApplying,
+  providerHistory, providerSecretRef,
   type ProviderSecrets, requestProviderVerification, providerTestQuote,
   providerVerificationSchema, providerPermission } from '@opencrane/models';
 import type { GroupOptions } from '../members/group-routes.ts';
@@ -63,6 +64,9 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
         }
         return await action(request, reply, options, memberId);
       } catch (error) {
+        if (error instanceof AuthorityApplying) {
+          return reply.code(425).send({ status: 'access_applying' });
+        }
         const code = errorCode(error);
         const result = { status: code === 503 ? 'unavailable' : 'refused',
           ...(error instanceof ProviderUnpriced ? { reason: 'unknown_price' } : {}) };
