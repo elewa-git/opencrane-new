@@ -141,6 +141,13 @@ operator test helpers. The demo tool tests use `test/inventory.ts` to check thei
 public catalogue with the real inventory parser. Tests cannot import another
 application’s source directly.
 
+### Provider drain replay checks
+
+The drain replay test compares every provider row and field in primary-key order.
+It first rearranges the live table's physical storage with PostgreSQL `CLUSTER`.
+This checks that replay keeps the same content even when database maintenance changes
+where rows are stored. Neither query relies on the order of physical storage.
+
 ## Saved turn failure reasons
 
 The bridge report reader accepts `stop_interrupted`, `model_error` and
