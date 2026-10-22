@@ -245,3 +245,25 @@ it.each(terminalReasonCases)(
   'saves and replays the terminal cause: $status, Stop=$stop, refusal=$refusedTool',
   recordsTerminalReason,
 );
+
+async function explainsExecutionModeMismatch() {
+  const test = modelFixture('gpt-6-luna');
+  try {
+    const journal = reportJournal(test.driver);
+    journal.append(test.input, 'agent.turn_started', { threadId: 'thread' });
+    const input = { ...test.input, executionMode: 'restricted' as const };
+    function closeSocket() {}
+    function send(report: BridgeReport) {
+      test.reports.push(report);
+    }
+    const runner = turnRunner(test.driver, journal, send, closeSocket);
+    await runner.start(input);
+    expect(test.calls).toEqual([]);
+    expect(test.reports.at(-1)).toMatchObject({ type: 'agent.turn_failed', reason: 'model_error' });
+  } finally {
+    test.finish();
+  }
+}
+
+it('gives an execution-mode mismatch an explicit failure reason before running',
+  explainsExecutionModeMismatch);

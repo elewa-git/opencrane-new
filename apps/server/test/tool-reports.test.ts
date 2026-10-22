@@ -117,7 +117,7 @@ async function refusesForgedReport(test: (typeof forgedReports)[number]) {
 }
 it.each(forgedReports)('refuses a forged tool report $change without appending', refusesForgedReport);
 
-async function recordsTerminalCause(reason: string) {
+async function recordsTerminalCause(reason: string | undefined) {
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/terminal-cause-`);
   try {
@@ -135,12 +135,13 @@ async function recordsTerminalCause(reason: string) {
     expect(await recordReport(nats.store, keys, context, report)).toBe('duplicate');
     const rows = await chatHistory(nats.store, 'test', 'chat');
     expect(rows.at(-1)?.event.data).toEqual({ conversationId: 'chat', turnId: 'message',
-      reason });
+      reason: reason ?? 'bridge_interrupted' });
   } finally {
     await nats.close();
     await rm(directory, { recursive: true, force: true });
   }
 }
 
-it.each(['stop_interrupted', 'model_error', 'bridge_interrupted'])(
+it.each(['stop_interrupted', 'model_error', 'bridge_interrupted', 'bridge_restarted',
+  undefined])(
   'saves and recognises a repeated terminal report with reason %s', recordsTerminalCause);
