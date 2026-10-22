@@ -342,6 +342,27 @@ async function listsUploadsWithoutReplayingProjectedHistory() {
 it('checks unapplied uploads without replaying projected chat history',
   listsUploadsWithoutReplayingProjectedHistory);
 
+async function keepsMissingWorkerCheckpointApplying(name: string) {
+  const checkpoint = await options.db.query<{ sequence: string }>(
+    'SELECT sequence FROM projection_checkpoints WHERE name = $1', [name]);
+  const sequence = checkpoint.rows[0]?.sequence;
+  expect(sequence).toBeDefined();
+  await options.db.query('DELETE FROM projection_checkpoints WHERE name = $1', [name]);
+  try {
+    const upload = uploadRequest('missing-checkpoint');
+    const request = { url: upload.url, headers: upload.headers };
+    const response = await app.inject(request);
+    expect(response.statusCode, response.body).toBe(425);
+    expect(response.json()).toEqual({ status: 'applying' });
+    expect(response.headers['cache-control']).toBe('no-store');
+  } finally {
+    await options.db.query('INSERT INTO projection_checkpoints (name, sequence) VALUES ($1, $2)',
+      [name, sequence]);
+  }
+}
+it.each(['files', 'conversations'])('keeps a missing %s worker checkpoint applying',
+  keepsMissingWorkerCheckpointApplying);
+
 async function refusesFilesAfterRemovalAndInvitation() {
   const store = options.store;
   const removal = { memberId: 'alice', removedBy: 'owner' };
