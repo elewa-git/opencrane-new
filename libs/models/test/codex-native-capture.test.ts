@@ -140,16 +140,16 @@ async function captureNative() {
 it.skipIf(!image)('captures native consent through the proxy and gateway Ask', captureNative, 150_000);
 
 async function captureOutput(directory: string, execute: () => Promise<{ stdout: string }>) {
-  void directory;
   let output;
   try {
     output = await execute();
   } catch (error) {
     const failedOutput = z.object({ stdout: z.string() }).parse(error);
-    await writeFile('/tmp/pr12capture.json', failedOutput.stdout);
+    await writeFile(`${directory}/capture.json`, failedOutput.stdout,
+      { mode: 0o600, flag: 'wx' });
     throw error;
   }
-  await writeFile('/tmp/pr12capture.json', output.stdout);
+  await writeFile(`${directory}/capture.json`, output.stdout, { mode: 0o600, flag: 'wx' });
 }
 
 async function keepsCapturePrivate(outcome: string) {
@@ -166,9 +166,11 @@ async function keepsCapturePrivate(outcome: string) {
     await originalWrite(...args);
   }
   const writes = vi.spyOn(captureFiles, 'writeFile').mockImplementation(requirePrivateWrite);
-  async function execute() {
-    if (outcome === 'failure') throw failure;
-    return { stdout };
+  function execute() {
+    if (outcome === 'failure') {
+      return Promise.reject(failure);
+    }
+    return Promise.resolve({ stdout });
   }
   try {
     const capturing = captureOutput(directory, execute);

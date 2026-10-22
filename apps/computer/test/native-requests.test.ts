@@ -107,32 +107,119 @@ function capturesProductionPatchTool() {
 }
 it('captures the production patch tool offered by the routed model', capturesProductionPatchTool);
 
+type SavedRequest = (typeof saved.nativeRequests)[number];
+const mcpApproval = 'mcpServer/elicitation/request';
+const expectedSavedRequests = [
+  { stage: 'mcp', id: 0, method: mcpApproval, kind: 'mcp_tool_call' },
+  { stage: 'loaded_resume_mcp', id: 1, method: mcpApproval, kind: 'mcp_tool_call' },
+  { stage: 'reloaded_mcp', id: 2, method: mcpApproval, kind: 'mcp_tool_call' },
+  { stage: 'loaded_accept', id: 3, method: mcpApproval, kind: 'mcp_tool_call' },
+  { stage: 'reloaded_accept', id: 4, method: mcpApproval, kind: 'mcp_tool_call' },
+  { stage: 'fixture_escalated_shell', id: 5,
+    method: 'item/commandExecution/requestApproval', kind: 'command' },
+  { stage: 'fixture_file_change', id: 6,
+    method: 'item/fileChange/requestApproval', kind: 'file_change' },
+];
+
+function checkSavedObservation(captured: typeof saved, entry: SavedRequest) {
+  function matches(observation: (typeof saved.observations)[number]) {
+    return observation.name === entry.stage;
+  }
+  const observations = captured.observations.filter(matches);
+  expect(observations).toHaveLength(1);
+  const observation = observations[0]!;
+  expect(observation).toMatchObject({ result: 'PASS', requests: 1 });
+  expect(observation.continuation).toHaveLength(1);
+  expect(observation.continuation[0]?.call_id).toBe(`call_${entry.stage}`);
+  const continuation = JSON.stringify(observation.continuation);
+  if (entry.stage.endsWith('_accept')) {
+    expect(continuation).toContain('The turn could not get a new pass. Nothing was sent.');
+  } else if (entry.message.method === mcpApproval) {
+    expect(continuation).toContain('user rejected MCP tool call');
+  } else {
+    expect(observation.markerPresent).toBe(false);
+    expect(continuation).toContain('rejected by user');
+  }
+  function startsTurn(rpc: (typeof saved.rpc)[number]) {
+    return rpc.stage === entry.stage && rpc.method === 'turn/start';
+  }
+  const starts = captured.rpc.filter(startsTurn);
+  expect(starts).toHaveLength(1);
+  expect(starts[0]?.params.threadId).toBe(entry.message.params.threadId);
+}
+
+function checkSavedDecision(captured: typeof saved, entry: SavedRequest) {
+  function matches(decision: (typeof saved.gatewayAsk.decisions)[number]) {
+    return decision.name === entry.stage;
+  }
+  const decisions = captured.gatewayAsk.decisions.filter(matches);
+  expect(decisions).toHaveLength(1);
+  const decision = decisions[0]!;
+  expect(decision).toMatchObject({ decision: 'rejected', beforeDecision: 0,
+    afterDecision: 0, nativeRequestId: entry.message.id,
+    threadId: entry.message.params.threadId, turnId: entry.message.params.turnId });
+  expect(decision.approvalId).toMatch(/^[a-f0-9]{64}$/u);
+}
+
 function checksSavedCapture(captured: typeof saved) {
+  expect(captured.nativeRequests).toHaveLength(expectedSavedRequests.length);
   const replies: unknown[] = [];
-  function send(reply: unknown) { replies.push(reply); }
-  const record = vi.fn();
+  const reports: unknown[] = [];
+  function send(reply: unknown) {
+    replies.push(reply);
+  }
+  function record(message: unknown) {
+    reports.push(message);
+  }
   const handle = nativeRequests(send, record);
-  for (const entry of captured.nativeRequests) {
+  for (const expected of expectedSavedRequests) {
+    function matches(entry: SavedRequest) {
+      return entry.stage === expected.stage;
+    }
+    const entries = captured.nativeRequests.filter(matches);
+    expect(entries).toHaveLength(1);
+    const entry = entries[0]!;
+    expect(entry.message).toMatchObject({ id: expected.id, method: expected.method });
+    const params = entry.message.params;
+    if (expected.kind === 'mcp_tool_call') {
+      expect(params._meta?.codex_approval_kind).toBe(expected.kind);
+      expect(params.serverName).toBe('oc_aaaaaaaaaa');
+    } else if (expected.kind === 'command') {
+      expect(params.kind).toBe(expected.kind);
+    } else {
+      expect(params.itemId).toBe('call_fixture_file_change');
+      expect(params.kind).toBeUndefined();
+    }
     expect(entry.repliesPerId).toBe(1);
-    if (entry.stage.endsWith('_accept')) continue;
+    checkSavedObservation(captured, entry);
+    if (entry.stage.endsWith('_accept')) {
+      expect(entry.reply).toEqual({ id: entry.message.id, result: { action: 'accept' } });
+      checkSavedDecision(captured, entry);
+      continue;
+    }
     const before = replies.length;
-    handle(entry.message);
-    handle(entry.message);
+    expect(handle(entry.message)).toBe(true);
+    expect(handle(entry.message)).toBe(true);
     expect(replies).toHaveLength(before + 1);
     expect(replies.at(-1)).toEqual(entry.reply);
+    expect(reports).toHaveLength(replies.length);
+    expect(reports.at(-1)).toEqual(entry.message);
   }
-  expect(record).toHaveBeenCalledTimes(replies.length);
-  for (const name of ['fixture_escalated_shell', 'fixture_file_change']) {
-    function matches(entry: (typeof captured.observations)[number]) { return entry.name === name; }
-    const observation = captured.observations.find(matches);
-    expect(observation).toMatchObject({ result: 'PASS', requests: 1, markerPresent: false });
-    expect(JSON.stringify(observation?.continuation)).toContain('rejected by user');
+  for (const observation of captured.observations) {
+    function matches(entry: SavedRequest) {
+      return entry.stage === observation.name;
+    }
+    const requests = captured.nativeRequests.filter(matches);
+    expect(observation.requests).toBe(requests.length);
   }
-  expect(captured.gatewayAsk.result).toBe('PASS');
+  expect(captured.gatewayAsk).toMatchObject({ result: 'PASS',
+    beforeDecision: 0, afterDecision: 0 });
   expect(captured.gatewayAsk.decisions).toHaveLength(2);
+  const approvalIds = new Set<string>();
   for (const decision of captured.gatewayAsk.decisions) {
-    expect(decision).toMatchObject({ decision: 'rejected', beforeDecision: 0, afterDecision: 0 });
+    approvalIds.add(decision.approvalId);
   }
+  expect(approvalIds.size).toBe(2);
 }
 function checksCommittedSavedCapture() {
   checksSavedCapture(saved);
@@ -161,16 +248,36 @@ function rejectsChangedSavedEvidence(change: string) {
   const observation = changed.observations[0]!;
   const decision = changed.gatewayAsk.decisions[0]!;
   switch (change) {
-    case 'request id': request.message.id = 99; request.reply.id = 99; break;
-    case 'request method': request.message.method = 'future/request'; break;
-    case 'request kind': request.message.params._meta!.codex_approval_kind = 'other'; break;
-    case 'reply id': changed.nativeRequests[3]!.reply.id = 99; break;
-    case 'accepted reply': changed.nativeRequests[3]!.reply.result!.action = 'decline'; break;
-    case 'observation count': observation.requests = 0; break;
-    case 'continuation': observation.continuation = changed.observations[7]!.continuation; break;
-    case 'decision name': decision.name = 'reloaded_accept'; break;
-    case 'decision id': decision.approvalId = ''; break;
-    default: throw new Error('Unknown fixture mutation');
+    case 'request id':
+      request.message.id = 99;
+      request.reply.id = 99;
+      break;
+    case 'request method':
+      request.message.method = 'future/request';
+      break;
+    case 'request kind':
+      request.message.params._meta!.codex_approval_kind = 'other';
+      break;
+    case 'reply id':
+      changed.nativeRequests[3]!.reply.id = 99;
+      break;
+    case 'accepted reply':
+      changed.nativeRequests[3]!.reply.result!.action = 'decline';
+      break;
+    case 'observation count':
+      observation.requests = 0;
+      break;
+    case 'continuation':
+      observation.continuation = changed.observations[7]!.continuation;
+      break;
+    case 'decision name':
+      decision.name = 'reloaded_accept';
+      break;
+    case 'decision id':
+      decision.approvalId = '';
+      break;
+    default:
+      throw new Error('Unknown fixture mutation');
   }
   function checkChangedCapture() {
     checksSavedCapture(changed);

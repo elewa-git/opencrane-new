@@ -1181,7 +1181,15 @@ async function captureGatewayAsk(thread, runCase) {
       assert.equal(decision.afterDecision, 0);
       await runtimeProxy.approvals.settle(capture.waiting.approvalId, 'denied');
       await running;
-      decisions.push({ name, ...decision });
+      function matchesRequest(entry) {
+        return entry.stage === name;
+      }
+      const requests = capture.nativeRequests.filter(matchesRequest);
+      assert.equal(requests.length, 1);
+      const nativeRequest = requests[0].message;
+      const requestIdentity = { nativeRequestId: nativeRequest.id,
+        threadId: nativeRequest.params.threadId, turnId: nativeRequest.params.turnId };
+      decisions.push({ name, ...requestIdentity, ...decision });
     }
     capture.gatewayAsk = { result: 'PASS', beforeDecision: 0, afterDecision: 0, decisions };
   } finally { relay.close(); }

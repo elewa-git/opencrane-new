@@ -10,6 +10,10 @@ fixtures and the pinned gateway. A Unix socket carries the container's MCP calls
 to that gateway while the container uses `--network none`. Model replies stay local.
 The fixture grants no production consent. It uses the existing requester decision
 command to reject each Ask and checks that the upstream received no tool calls.
+Both successful and failed capture output go to `capture.json` with mode 0600
+inside the run's private temporary directory. The existing cleanup removes that
+directory. No capture output is kept outside it. Ordinary tests check both output
+paths, the permissions and removal without needing the capture image.
 See [the commands and results](../../docs/process/p3-5-pr12capture/receipt.md).
 
 ## Egress socket checks
