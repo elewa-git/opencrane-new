@@ -957,10 +957,10 @@ function independentFact(fact: { memoryId: string }) {
   return fact.memoryId.startsWith('fact_');
 }
 // Avoid loading a full result page just to prepare a write's proof.
-async function recalledRemember(commandId: string, query = 'exactly') {
+async function recalledRemember(commandId: string, query = 'deliver') {
   await grantWrite('member');
   await grantWrite('assistant');
-  const recallArguments = { ...call.params.arguments, query };
+  const recallArguments = { ...call.params.arguments, query, limit: 2 };
   const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
   // Issue the setup recall directly so gateway admission does not spend its short pass.
   const token = await signedRecall(setup, undefined, selectedCall);
@@ -970,6 +970,10 @@ async function recalledRemember(commandId: string, query = 'exactly') {
   const response = await app.inject(request);
   expect(response.statusCode, response.body).toBe(200);
   const page = recallProofSchema.parse(response.json()).result.structuredContent;
+  if (query === 'deliver') {
+    // Keep two loaded facts so a one-fact proof remains incomplete.
+    expect(page.facts).toHaveLength(2);
+  }
   // Choose an original test fact. Earlier tests deliberately erase sources of derived facts.
   const fact = page.facts.find(independentFact)!;
   const dependency = { scopeId, memoryId: fact.memoryId, revision: fact.revision };
