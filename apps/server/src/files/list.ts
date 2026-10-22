@@ -1,5 +1,5 @@
 import { readStreamSummary, type StoredEvent, type SummaryKind } from '@opencrane/event-store';
-import type { FileOptions } from './routes.ts';
+import type { ChatOptions } from '../chat/access.ts';
 
 type UploadPosition = { position: number };
 
@@ -24,7 +24,9 @@ function latestUploadPosition(summary: UploadPosition) {
   return summary.position;
 }
 
-export async function fileListApplying(options: FileOptions, conversationId: string) {
+export async function fileListApplying(
+  options: Pick<ChatOptions, 'store' | 'db' | 'silo'>, conversationId: string,
+) {
   // Check uploads only, so unrelated chat activity cannot hold up the file list.
   const deadline = performance.now() + 10_000;
   const subject = `conversation-${conversationId}`;
