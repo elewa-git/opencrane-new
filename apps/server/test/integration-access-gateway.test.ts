@@ -168,7 +168,8 @@ function serverCommands(setup: Setup) {
         content: 'current', iam: applied ? 'current' : 'applying' } };
       expect(status).toMatchObject(expected);
     }
-    await expect.poll(originalReceipt).toBeUndefined();
+    const initialReceipt = originalReceipt.bind(undefined, apply);
+    await expect.poll(initialReceipt).toBeUndefined();
     const currentReceipt = originalReceipt.bind(undefined, true);
     return { original, currentReceipt };
   }
@@ -226,7 +227,8 @@ type Context = Awaited<ReturnType<typeof gatewayFixture>>;
 async function allowed(context: Context) {
   const before = context.remote.received.length;
   const result = await context.call();
-  expect(result.status).toBe(200);
+  const savedEvidence = JSON.stringify(result.evidence);
+  expect(result.status, savedEvidence).toBe(200);
   expect(context.remote.received).toHaveLength(before + 1);
   const expectedBytes = Buffer.from(result.raw);
   expect(context.remote.received.at(-1)!.raw).toEqual(expectedBytes);

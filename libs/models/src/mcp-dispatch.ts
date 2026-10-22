@@ -57,7 +57,7 @@ interface Permit {
   accessDeadline: number;
   confirmAccess: () => Promise<void>;
 }
-type RemoteObserver = (outcome: 'responded' | 'outcome_unknown') => Promise<void>;
+type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatched') => Promise<void>;
 const remoteErrorSchema = z.strictObject({
   code: z.int(), message: z.string(), data: z.unknown().optional(),
 });
@@ -236,6 +236,10 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     } catch (error) {
+      if (route.locator && observe) {
+        // Record proof only after a confirmed start and before opening any connection.
+        await observe('not_dispatched');
+      }
       if (permit.gatewayBinding && !route.locator) {
         // Close the saved start before replying. No upstream connection has been opened.
         const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
@@ -296,9 +300,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const adapter = { silo: permit.silo, decisionId: permit.budget.decisionId,
       startId: event.id, connectionId: payload.connectionId, generation: payload.generation,
       recordDigest: payload.recordDigest, reviewRevision: payload.reviewRevision! };
-    async function observe(outcome: 'responded' | 'outcome_unknown') {
-      const evidence = outcome === 'responded'
-        ? 'adapter_response_received' : 'adapter_transport_uncertain';
+    async function observe(outcome: 'responded' | 'outcome_unknown' | 'not_dispatched') {
+      const evidence = remoteEvidence(outcome);
       const observation = { id: permit.requestId, toolOutcome: outcome, evidence,
         observedAt: new Date().toISOString(),
         durationMs: Math.ceil(performance.now() - startedAt) } as const;
@@ -487,4 +490,14 @@ function requireRemoteRevision(saved: string | undefined) {
     }
   } catch { /* Refuse malformed declarations without exposing their contents. */ }
   throw new Error('Remote MCP revision unavailable');
+}
+
+function remoteEvidence(outcome: 'responded' | 'outcome_unknown' | 'not_dispatched') {
+  if (outcome === 'not_dispatched') {
+    return 'adapter_dispatch_refused' as const;
+  }
+  if (outcome === 'responded') {
+    return 'adapter_response_received' as const;
+  }
+  return 'adapter_transport_uncertain' as const;
 }

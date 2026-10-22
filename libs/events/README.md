@@ -30,10 +30,13 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and original report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup subscriptions, nightly memory reviews and records, and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission, saved starts and permit-bound remote outcomes, native refusals, personal connection references and blocks, expired saves, control intent and pause outcomes, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission, saved starts, remote outcomes and proof that a remote call was not sent, native refusals, personal connection references and blocks, expired saves, control intent and pause outcomes, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
 ```
+
+A remote tool refusal can record proof that no connection was opened. The record
+names the exact saved start, so it can allow one approval retry.
 
 Approval cancellation records may carry a fixed reason code. Older records without
 a reason stay readable. No review text or tool result belongs in a reason.

@@ -77,7 +77,9 @@ async function recordObservation(actor: BudgetActor, observation: Observation,
   const lastEvent = rows.at(-1)?.event;
   const startId = `${observation.id}:tool-dispatch-started`;
   // Close only this saved start, including when its append reply was lost.
-  if (observation.evidence === 'dispatch_refused' &&
+  const refused = observation.evidence === 'dispatch_refused' ||
+    observation.evidence === 'adapter_dispatch_refused';
+  if (refused &&
       (lastEvent?.type !== 'tool.dispatch_started' || lastEvent.id !== startId)) {
     return;
   }

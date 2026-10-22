@@ -158,8 +158,10 @@ async function verifiedRetry(store: EventStore, silo: string, approvalId: string
     const observation = dispatchRows.at(-1)?.event;
     if (observation?.type === 'tool.dispatch_recorded') {
       const dispatch = toolDispatchRecordedDataSchema.parse(observation.data);
+      const provedUnsent = dispatch.evidence === 'connection_refused' ||
+        dispatch.evidence === 'adapter_dispatch_refused';
       canRetry = dispatch.approvalId === approvalId && dispatch.requestId === permitId &&
-        dispatch.outcome === 'not_dispatched' && dispatch.evidence === 'connection_refused';
+        dispatch.outcome === 'not_dispatched' && provedUnsent;
     }
   }
   return canRetry;

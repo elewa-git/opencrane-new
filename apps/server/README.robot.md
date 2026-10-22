@@ -3690,15 +3690,21 @@ It pauses IAM application after person, assistant or team grant revocation and
 after team membership removal. Both fresh calls and calls held after their saved
 start must refuse within two seconds without another upstream connection or byte.
 Leaving and rejoining a team cannot restore its revoked grant. A separately given
-direct grant survives applied team membership removal.
+direct grant survives applied team membership removal. A revoked grant given again
+stays refused while its original IAM receipt is Applying. It permits exactly one
+call through the generated gateway route once both original receipts are current.
 
 The tests distinguish the saved admission decision, dispatch start and checked
 remote reply. They also check an unchanged catalogue refresh, unrelated chat
 output, stale catalogue refusal and an IAM outage after a saved start. Every
-refusal fixture first sends a successful control through the same published route.
+Allow-mode refusal fixture first sends a successful control through the same published
+route. The Ask-mode case approves a call, pauses IAM after its saved start and checks
+that the refusal opens no connection and sends no bytes. After IAM recovers, the
+requester can enable one retry. A second retry command conflicts, two competing
+calls send exactly once, a later call refuses, and no money reservation is saved.
 No model calls or dev stack are used. Fresh-install qualification remains NOT RUN.
 
-Local evidence, 22 October 2026: PASS — the 11-case matrix twice; the combined
+Initial branch checks, 22 October 2026: PASS — the 11-case matrix twice; the combined
 470-test run with integration-access, remote-catalogue-dispatch and the unchanged
 event security suite; typecheck; event catalogue; Knip; changelog check. All ran
 under `nice -n 10` with disposable services and a supplied `PG_TEST_URL`.

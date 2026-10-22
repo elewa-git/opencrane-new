@@ -14,7 +14,7 @@ export const toolDispatchRecordedDataSchema = z.object({
   outcome: z.enum(['not_dispatched', 'responded', 'outcome_unknown']),
   evidence: z.enum([
     'connection_refused', 'dispatch_refused', 'response_received', 'transport_uncertain',
-    'adapter_response_received', 'adapter_transport_uncertain',
+    'adapter_response_received', 'adapter_transport_uncertain', 'adapter_dispatch_refused',
   ]),
   adapter: z.strictObject({
     decisionId: z.uuid(),
@@ -30,6 +30,9 @@ function validAdapterEvidence(data: {
 }) {
   if (data.adapter && data.adapter.startId !== `${data.requestId}:tool-dispatch-started`) {
     return false;
+  }
+  if (data.evidence === 'adapter_dispatch_refused') {
+    return data.adapter !== undefined && data.outcome === 'not_dispatched';
   }
   if (data.evidence === 'adapter_response_received') {
     return data.adapter !== undefined && data.outcome === 'responded';

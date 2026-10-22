@@ -725,7 +725,9 @@ parse. `tool.dispatch_recorded.adapter` is a strict binding containing `decision
 `startId`, `connectionId`, `generation`, `recordDigest` and `reviewRevision`. The envelope
 supplies the silo. `adapter_response_received` requires this binding and `responded`;
 `adapter_transport_uncertain` requires it and `outcome_unknown`. Generic gateway evidence
-cannot carry the binding. No remote adapter evidence can claim `not_dispatched`.
+cannot carry the binding. `adapter_dispatch_refused` requires the same binding and
+`not_dispatched`. Only a confirmed saved start refused before opening a connection
+can produce this evidence; a lost start reply remains unknown.
 The models process validates these references against the consumed permit and saved start.
 Schema validation alone grants no authority to write an observation.
 

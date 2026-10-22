@@ -25,7 +25,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store<br/>event log"]
+  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, remote outcomes, proof that a remote call was not sent, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store<br/>event log"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -66,7 +66,9 @@ Block saved first refuses admission. For a publication with a saved configuratio
 it checks the saved gateway configuration and tool rules before saving one start record.
 After saving, it queries IAM, the permissions service, again and rechecks access,
 the gateway acknowledgement and both saved positions. An IAM outage refuses the
-call before any remote bytes leave.
+call before any remote bytes leave. After a confirmed saved start, a refusal records
+proof that nothing was sent. The person can request one replacement approval use.
+A successful retry cannot use that proof again, and these free calls hold no money.
 A newer gateway configuration saved while a tool-rule read waits refuses the call,
 even when that server's rules stay the same. A withdrawal or
 an uncertain save reply refuses the call and spends its pass. The start record alone
@@ -79,7 +81,7 @@ refuse calls for a changed tool list. DNS checks happen before saving a start; T
 after the final send checks. Replies are bounded and carry no upstream cookies or redirects.
 The dispatcher saves a checked remote reply against the pass that allowed the call before
 returning it. This proves a reply arrived, even when that reply reports a tool error.
-A remote failure after saving a start leaves the outcome unknown. Gateway replies cannot
+A remote failure after opening a connection leaves the outcome unknown. Gateway replies cannot
 settle these calls. If saving the evidence cannot be confirmed, the reply is unavailable
 and the call is never sent again.
 Legacy publications keep their admission check.

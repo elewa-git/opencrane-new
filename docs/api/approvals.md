@@ -44,7 +44,10 @@ The pinned Linux gateway's refused TCP connection proves `not_dispatched` with
 `evidence: connection_refused`. The models process also records `not_dispatched` with
 `evidence: dispatch_refused` when a check refuses after a confirmed saved start and
 before opening the upstream connection. This latter evidence does not enable an approval
-retry. An HTTP error, tool error text or zero charge never proves non-dispatch.
+retry. For a remote HTTPS call, `adapter_dispatch_refused` carries the exact saved
+start and permit details and proves that no connection was opened. This evidence
+enables one requester retry. A lost start reply remains unknown. An HTTP error,
+tool error text or zero charge never proves non-dispatch.
 
 `agent.native_consent_refused` rows record `mcpServer/elicitation/request`, naming
 the native request, server and bound turn. A known offered server supplies `serverId`.
