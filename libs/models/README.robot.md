@@ -2955,8 +2955,11 @@ Separate test runs can share worker ids, so listeners are checked before use.
 `startGateway` keeps the last ten stderr lines after removing private details.
 Only recognised startup and bind failures reach errors; other lines are withheld.
 The port-conflict tests occupy a real readiness port and check the reported cause.
-The admission benchmarks delay the first saved Allow by 2.2 seconds to force a
-refused warm-up. Background event delivery stops before loading grant history.
-The measured call adds exactly one reservation. Earlier refused warm-ups settle
-at zero euro cents; the successful warm-up and measured call keep their holds.
-The measured call still has a two-second limit.
+The admission benchmarks pause the first grant read until the cold request is refused.
+That request must return 403, record Deny and hold no money. Background event delivery
+stops before loading grant history. Catch-up is joined directly, with a separate
+15-second limit; no admission retry loop is used. One successful warm-up precedes
+the measurement. Both calls must return 200. The measured call adds exactly one
+reservation, reads no old grants and finishes within two seconds. Neither successful
+hold is settled. The separate saved-Allow timeout test retains its 503 refusal and
+requires the unsent hold to settle at zero without releasing an earlier hold.
