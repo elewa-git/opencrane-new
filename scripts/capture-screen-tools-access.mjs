@@ -116,6 +116,17 @@ try {
       await page.goto('https://tools-access.opencrane.test/org/integrations/fixture/tools');
       const editor = page.locator('oc-tool-audience');
       await editor.getByRole('heading', { name: 'Audience', exact: true }).waitFor();
+      if (scene === 'audience') {
+        const link = editor.getByRole('link');
+        assert.equal(await link.count(), 0);
+        await editor.getByRole('combobox', { name: 'Person to explain' }).selectOption('alex');
+        await editor.getByText('No assistants are available for this person.').waitFor();
+        assert.equal(await link.count(), 0);
+        await editor.getByRole('combobox', { name: 'Person to explain' }).selectOption('bea');
+        await editor.getByRole('combobox', { name: 'Assistant to explain' }).selectOption('helper');
+        assert.equal(await link.getAttribute('href'),
+          '/org/integrations/fixture/access/explanation?requester=bea&assistant=helper&tool=read_draft_order');
+      }
       if (['conflict', 'no-effect', 'applying', 'content-applying', 'unknown', 'saved'].includes(scene)) {
         await editor.getByRole('button', { name: 'Assistant', exact: true }).click();
         await editor.getByRole('button', { name: 'Sales assistant', exact: true }).focus();
