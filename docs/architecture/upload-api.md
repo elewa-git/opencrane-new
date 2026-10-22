@@ -59,8 +59,11 @@ third-party document parser will accept every damaged document.
 replayable projection. A row has `conversationId`, `fileId`, `uploadedBy`, `name`,
 `mime`, integer `size` in bytes, `sha256`, `status` (`uploaded` or `delivered`) and
 `path` relative to `/workspace`. A PDF also has `textPath` for its MarkItDown text.
-Rejected and unscanned uploads never appear. The list may lag the POST until
-the projection catches up. Poll until `delivered` before posting a request that
+Rejected and unscanned uploads never appear. While the files projection has not
+applied the conversation's latest saved upload, GET returns HTTP 425 with
+`{status:"applying"}` instead of a partial list. Clients retry this read briefly.
+The website checks this list after POST succeeds, before showing Ready.
+Poll until `delivered` before posting a request that
 mentions the file, and include its `path`/`textPath` in the message. Original and
 converted PDF paths are ready for the later file-view/preview integration.
 

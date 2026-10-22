@@ -20,12 +20,15 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|starts programs and checks website readiness| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|retries provider requests while access applies; checks tool reviews and times group access loss| apps
+  stack -->|checks uploads, provider access, tool reviews and group access loss| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
 
 ## What it is responsible for
+
+The upload check retries a file list that is still applying. Once the list is
+available, it checks the exact file count and waits for workspace delivery.
 
 Separate admission rules check hosted tool images and container settings. Their tests
 also check resource changes made through the Pod resize endpoint. Their tests

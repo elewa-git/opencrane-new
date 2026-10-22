@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, one subscription per connection, catch-up after reconnects and access closures| server["apps/server<br/>the back end"]
+  web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, one subscription per connection, upload list checks, catch-up after reconnects and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows saved Stop outcomes and real failures for replies and screenshots| capture["Reply and screenshot status<br/>workspace and viewer"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
@@ -20,6 +20,9 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+Uploads stay pending while the server prepares their saved file list. The page
+checks again briefly before showing Ready. Leaving the page cancels those checks.
 
 The Spending editor keeps the typed ceiling and payer when a chosen group or shared
 assistant is unavailable. A message beside the editor asks for another choice.

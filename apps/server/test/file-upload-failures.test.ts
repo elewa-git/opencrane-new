@@ -293,6 +293,9 @@ async function emptyUpload() {
 }
 it('refuses an empty upload with typed 400 at the upload and HTTP boundaries', emptyUpload);
 
+it('reports an upload still applying instead of returning an incomplete list',
+  listsUploadAfterProjectionCatchesUp);
+
 async function refusesFilesAfterRemovalAndInvitation() {
   const store = options.store;
   const removal = { memberId: 'alice', removedBy: 'owner' };
@@ -367,6 +370,16 @@ async function listsUploadAfterProjectionCatchesUp() {
   const available = await app.inject(listRequest);
   expect(available.statusCode).toBe(200);
   expect(available.json()).toMatchObject({ rows: [{ fileId: saved.fileId }] });
+
+  async function infectedScan() {
+    return 'infected' as const;
+  }
+  options.scan = infectedScan;
+  const infectedRequest = { ...request,
+    headers: { ...request.headers, 'idempotency-key': 'rejected-after-upload' } };
+  const infected = await app.inject(infectedRequest);
+  expect(infected.statusCode).toBe(422);
+  const stillAvailable = await app.inject(listRequest);
+  expect(stillAvailable.statusCode).toBe(200);
+  expect(stillAvailable.json()).toMatchObject({ rows: [{ fileId: saved.fileId }] });
 }
-it('reports an upload still applying instead of returning an incomplete list',
-  listsUploadAfterProjectionCatchesUp);

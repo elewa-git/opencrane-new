@@ -61,3 +61,41 @@ async function waitsForFileList() {
     expect.objectContaining({ signal: expect.any(AbortSignal) }));
 }
 it('keeps an acknowledged upload pending until the file list finishes applying', waitsForFileList);
+
+async function cancelsFileListRetry() {
+  captureUpload();
+  function applyingFiles() {
+    return Promise.resolve(new Response('{}', { status: 425 }));
+  }
+  const fetcher = vi.spyOn(globalThis, 'fetch');
+  fetcher.mockImplementation(applyingFiles);
+  function ignoreProgress() {}
+  const file = new File(['Meeting at ten.'], 'notes.txt');
+  const upload = sendUpload('conversation', file, 'upload', ignoreProgress);
+  const rejected = expect(upload.completed).rejects.toThrow('Upload acknowledgement unavailable');
+  acknowledgeUpload();
+  function expectFirstRead() {
+    expect(fetcher).toHaveBeenCalledOnce();
+  }
+  await vi.waitFor(expectFirstRead);
+  upload.abort();
+  await rejected;
+  expect(fetcher).toHaveBeenCalledOnce();
+}
+it('cancels file-list retries when an acknowledged upload is aborted', cancelsFileListRetry);
+
+async function refusesFileList() {
+  captureUpload();
+  function refusedFiles() {
+    return Promise.resolve(new Response('{}', { status: 403 }));
+  }
+  const fetcher = vi.spyOn(globalThis, 'fetch');
+  fetcher.mockImplementation(refusedFiles);
+  function ignoreProgress() {}
+  const file = new File(['Meeting at ten.'], 'notes.txt');
+  const upload = sendUpload('conversation', file, 'upload', ignoreProgress);
+  acknowledgeUpload();
+  await expect(upload.completed).rejects.toThrow('Upload acknowledgement unavailable');
+  expect(fetcher).toHaveBeenCalledOnce();
+}
+it('does not retry a refused file-list read or mark its upload ready', refusesFileList);

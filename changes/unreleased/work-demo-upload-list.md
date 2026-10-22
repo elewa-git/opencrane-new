@@ -1,0 +1,1 @@
+- Uploads wait for their saved file list before showing Ready. File-list reads report that they are still applying while the files worker catches up, instead of returning an empty or partial list.
