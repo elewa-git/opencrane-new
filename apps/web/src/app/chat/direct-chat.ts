@@ -112,6 +112,9 @@ export class DirectChat implements OnInit, OnDestroy {
   private readonly subscription = this.socket.received.subscribe(this.receive.bind(this));
   private readonly accessLossSubscription = this.socket.accessLost.subscribe(
     this.clearAfterAccessChange.bind(this));
+  private readonly socketCloseSubscription = this.socket.connectionClosed.subscribe(
+    this.cancelSocketHistory.bind(this));
+  private historyNeedsCatchUp = false;
   private historyRequest: AbortController | undefined;
   private listRequest: AbortController | undefined;
   protected currentMemberId = '';
@@ -153,6 +156,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.readMarker.purge();
     this.subscription.unsubscribe();
     this.accessLossSubscription.unsubscribe();
+    this.socketCloseSubscription.unsubscribe();
     this.socket.disconnect();
   }
 
@@ -443,6 +447,7 @@ export class DirectChat implements OnInit, OnDestroy {
 
   private clearConversationView(): void {
     this.historyRequest?.abort();
+    this.historyNeedsCatchUp = false;
     this.participantManager.reset();
     this.archive.clear();
     this.readMarker.clear();
@@ -492,6 +497,7 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private clearAfterAccessChange(): void {
+    this.historyNeedsCatchUp = false;
     this.people.clear();
     this.historyRequest?.abort();
     this.listRequest?.abort();
@@ -599,11 +605,22 @@ export class DirectChat implements OnInit, OnDestroy {
     return requested;
   }
 
+  private cancelSocketHistory(): void {
+    this.historyRequest?.abort();
+    this.subscribed = false;
+    this.historyNeedsCatchUp = true;
+  }
+
   private subscribeWhenConnected(): void {
     if (!this.selectedConversationId() || this.pageState() === 'access_changed') return;
     // Track socket state before checking its saved id, so opening it runs this effect.
     if (this.socket.state() !== 'open') {
       this.subscribed = false;
+      return;
+    }
+    if (this.historyNeedsCatchUp) {
+      this.historyNeedsCatchUp = false;
+      void this.recoverAfterSocketResync();
       return;
     }
     if (this.historyState() !== 'ready') return;

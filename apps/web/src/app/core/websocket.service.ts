@@ -45,10 +45,13 @@ export class WebSocketService implements OnDestroy {
   private readonly lastMessageSignal = signal<ServerMessage | undefined>(undefined);
   private readonly incoming = new Subject<ServerMessage>();
   private readonly policyClose = new Subject<void>();
+  private readonly connectionClose = new Subject<void>();
   /** Include each checked message, even when several arrive in one render. */
   readonly received = this.incoming.asObservable();
   /** A policy close can arrive without a refusal message. Clear open chats at once. */
   readonly accessLost = this.policyClose.asObservable();
+  /** Cancel work tied to a closed socket before another request can start. */
+  readonly connectionClosed = this.connectionClose.asObservable();
 
   /** The current connection state, for a status indicator. */
   readonly state = this.stateSignal.asReadonly();
@@ -150,6 +153,7 @@ export class WebSocketService implements OnDestroy {
         return;
       }
       this.socket = undefined;
+      this.connectionClose.next();
       if (this.userClosed) {
         this.stateSignal.set('closed');
         return;

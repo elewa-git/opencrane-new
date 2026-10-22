@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, one subscription per connection, reconnects and access closures| server["apps/server<br/>the back end"]
+  web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, one subscription per connection, catch-up after reconnects and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows saved Stop outcomes and real failures for replies and screenshots| capture["Reply and screenshot status<br/>workspace and viewer"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
@@ -68,6 +68,8 @@ assistant check open rather than guessing an answer.
 - Shows group conversations with each message's saved author and resumes live updates
   from the last message shown. Each draft stays with its conversation. A saved message
   means the server recorded it; it does not say that anyone received it.
+  A closed live connection cancels an outstanding message read. Reconnecting reads
+  the saved messages again before resuming live updates.
   If saved messages are still being applied, the page briefly retries the read so they
   appear without a manual refresh.
 - Saves how far someone has read in a direct or group chat after the newest message appears.

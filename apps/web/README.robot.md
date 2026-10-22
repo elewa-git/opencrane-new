@@ -726,7 +726,11 @@ HTTP 425 `access_applying` means a recorded participant is waiting for the creat
 permissions. History and first-page list reads retry 425 and 409 at 100 ms intervals,
 with at most 50 attempts and a ten-second request limit. The same history reader handles
 creation, catch-up after a saved send and live resync. Cancelling the read also cancels
-its next wait. A successful history read opens the socket from the position it loaded,
+its next wait. Every socket close cancels the active history fetch or retry immediately.
+The socket service sends `connectionClosed` before scheduling a reconnect or reporting
+access loss. A replacement connection reads history again before subscribing from the
+newly loaded position. Switching conversations clears that pending catch-up.
+A successful history read opens the socket from the position it loaded,
 so rows applied after that snapshot arrive live. Sends keep their separate waits of
 100, 200, 400, 800, 1600 and 1600 ms. A 403 read remains a refusal and clears protected information. A creation
 status GET with 403 says that no creation record is available, keeps the message and
@@ -888,7 +892,10 @@ Expanded published-mode and apply details await their frames. No backend policy 
 The [screen receipt](../../docs/process/screen-tools-publish/receipt.md) records its limits.
 Direct chats subscribe once per socket. Reloading history after sending a message does
 not resubscribe on that socket. A replacement socket subscribes from the latest position.
-A 1013 busy close shows Reconnecting and keeps saved messages. HTTP 503 remains unavailable;
+A 1013 busy close shows Reconnecting and keeps saved messages. Focused tests cover
+cancellation on closes 1000, 1006 and 1013, saved rows after reconnect, a replaced history
+read, cancellation during a fetch and the real ten-second limit on a stalled fetch.
+HTTP 503 remains unavailable;
 403, explicit refusals and policy closes still clear protected data.
 
 ## Initial tool audience
