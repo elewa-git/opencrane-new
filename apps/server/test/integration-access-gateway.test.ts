@@ -123,13 +123,15 @@ async function gatewayFixture() {
 }
 
 function serverCommands(setup: Setup) {
-  const config = testAuthConfig({ expectedOrgId: 'org-test' });
+  const authOptions = { expectedOrgId: 'org-test' };
+  const config = testAuthConfig(authOptions);
   function memberId() {
     return Promise.resolve('alice');
   }
   const access = { silo: 'test', store: setup.nats.store, db: setup.db,
     binding: setup.binding, feed: { memberId } };
-  const app = buildServer(config, { modelAccess: access, groups: access });
+  const serverOptions = { modelAccess: access, groups: access };
+  const app = buildServer(config, serverOptions);
   async function closeApp() {
     await app.close();
   }
@@ -224,11 +226,13 @@ async function allowed(context: Context) {
   const result = await context.call();
   expect(result.status).toBe(200);
   expect(context.remote.received).toHaveLength(before + 1);
-  expect(context.remote.received.at(-1)!.raw).toEqual(Buffer.from(result.raw));
-  expect(result.evidence[0]!.event.data).toMatchObject({ outcome: 'allow' });
+  const expectedBytes = Buffer.from(result.raw);
+  expect(context.remote.received.at(-1)!.raw).toEqual(expectedBytes);
+  const admission = { outcome: 'allow' };
+  expect(result.evidence[0]!.event.data).toMatchObject(admission);
   expect(result.evidence[1]!.event.type).toBe('tool.dispatch_started');
-  expect(result.evidence[2]!.event.data).toMatchObject({ outcome: 'responded',
-    evidence: 'adapter_response_received' });
+  const finalSend = { outcome: 'responded', evidence: 'adapter_response_received' };
+  expect(result.evidence[2]!.event.data).toMatchObject(finalSend);
   expect(context.setup.received()).toBe(0);
 }
 
@@ -238,7 +242,8 @@ async function denied(context: Context) {
   const result = await context.call();
   expect(result.status).toBe(403);
   expect(result.evidence).toHaveLength(1);
-  expect(result.evidence[0]!.event.data).toMatchObject({ outcome: 'deny' });
+  const admission = { outcome: 'deny' };
+  expect(result.evidence[0]!.event.data).toMatchObject(admission);
   expect(context.remote.received).toHaveLength(before);
   expect(context.remote.connections()).toBe(connections);
 }
@@ -281,7 +286,8 @@ async function heldCall(context: Context, change: () => Promise<unknown>, expect
     expect(changedAt).toBeGreaterThan(0);
     expect(performance.now() - changedAt).toBeLessThan(2000);
     expect(result.status).toBe(expected);
-    expect(result.evidence[0]!.event.data).toMatchObject({ outcome: 'allow' });
+    const admission = { outcome: 'allow' };
+    expect(result.evidence[0]!.event.data).toMatchObject(admission);
     expect(result.evidence[1]!.event.type).toBe('tool.dispatch_started');
     if (expected === 403) {
       expect(result.evidence).toHaveLength(2);
@@ -289,7 +295,8 @@ async function heldCall(context: Context, change: () => Promise<unknown>, expect
       expect(context.remote.connections()).toBe(connections);
     } else {
       expect(context.remote.received).toHaveLength(before + 1);
-      expect(context.remote.received.at(-1)!.raw).toEqual(Buffer.from(result.raw));
+      const expectedBytes = Buffer.from(result.raw);
+      expect(context.remote.received.at(-1)!.raw).toEqual(expectedBytes);
     }
   } finally {
     writer.mockRestore();
@@ -330,7 +337,8 @@ async function revokesBeforeSend(kind: string) {
   }
 }
 it.each(['member', 'assistant', 'team', 'membership'])(
-  'refuses fresh and held calls with IAM application paused after %s removal', revokesBeforeSend, 60_000);
+  'refuses fresh and held calls with IAM application paused after %s removal',
+  revokesBeforeSend, 60_000);
 
 async function preservesAccess() {
   const context = await gatewayFixture();
@@ -346,7 +354,8 @@ async function preservesAccess() {
   }
   await heldCall(context, output, 200);
 }
-it('preserves access after an unchanged refresh and during conversation output', preservesAccess, 60_000);
+it('preserves access after an unchanged refresh and during conversation output',
+  preservesAccess, 60_000);
 
 async function refusesStaleCatalogue() {
   const context = await gatewayFixture();

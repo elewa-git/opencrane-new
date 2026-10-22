@@ -21,7 +21,7 @@ flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews of declared costs and approval details, dated approvals, memory, owners, providers, free reachability, spending and saved call statuses| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
-  models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions"]
+  models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
@@ -64,7 +64,9 @@ Before sending, it obtains one budget permission without holding money for a fre
 It then saves one admission record on the server's tool-rule stream.
 Block saved first refuses admission. For a publication with a saved configuration request,
 it checks the saved gateway configuration and tool rules before saving one start record.
-After saving, it rechecks access, the gateway acknowledgement and both saved positions.
+After saving, it queries IAM, the permissions service, again and rechecks access,
+the gateway acknowledgement and both saved positions. An IAM outage refuses the
+call before any remote bytes leave.
 A newer gateway configuration saved while a tool-rule read waits refuses the call,
 even when that server's rules stay the same. A withdrawal or
 an uncertain save reply refuses the call and spends its pass. The start record alone

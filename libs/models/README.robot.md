@@ -2943,6 +2943,21 @@ and Ask. It cannot fill missing declarations. Exact review uses the same require
 in `reviewedToolChoices`; the projection checks it again when applying mode events.
 History still loads before the two-second authority check. No access streams changed.
 
+## Tool permissions immediately before sending
+
+Ordinary MCP permits call `currentAuthority` again during dispatch, including after
+`tool.dispatch_started` is saved. This queries current IAM permissions and their
+applied event receipts. It reuses the conversation history loaded before admission
+and the original two-second deadline; it reads only the small access streams.
+The existing activity check still catches later turn stops and access changes.
+
+`apps/server/test/integration-access-gateway.test.ts` proves the published HTTPS
+path. Pausing OpenFGA after a saved start previously returned 200 and sent the call.
+The regression requires refusal with no new upstream connection or bytes, alongside
+a successful control, separate admission evidence and fresh-call refusal. The same
+matrix covers product grant and group commands while IAM application is paused.
+Fresh-install qualification is NOT RUN.
+
 ## Shared test ports
 
 The nine former `freePort` copies now use `@opencrane/event-store/testing`.

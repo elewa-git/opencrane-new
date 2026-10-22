@@ -1,0 +1,1 @@
+Published tool calls now recheck IAM before sending, so a permissions-service outage stops an already permitted call. Gateway tests cover person, assistant and team grants, delayed revocations, catalogue freshness and unchanged request bytes.

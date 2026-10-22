@@ -3676,6 +3676,38 @@ Access, turn admission, reservations and memory checks keep their existing paths
 `bridge-throughput.test.ts` drives 2,700 reports through a real socket and NATS,
 checks a competing Stop append, replay identity and recovered text.
 
+## Published tool access qualification
+
+`test/integration-access-gateway.test.ts` uses disposable NATS, PostgreSQL and
+OpenFGA, pinned agentgateway 1.5.0 and a recording local HTTPS server. It reviews
+and publishes the saved catalogue, then waits for the configuration worker's
+live acknowledgement. Grant and group commands use the product HTTP routes.
+Their original content and IAM receipts must be current before the control call.
+
+The matrix checks person-only, assistant-only and team-only refusal, then exactly
+one unchanged call with both grant sides. A team supplies the person's side only.
+It pauses IAM application after person, assistant or team grant revocation and
+after team membership removal. Both fresh calls and calls held after their saved
+start must refuse within two seconds without another upstream connection or byte.
+Leaving and rejoining a team cannot restore its revoked grant. A separately given
+direct grant survives applied team membership removal.
+
+The tests distinguish the saved admission decision, dispatch start and checked
+remote reply. They also check an unchanged catalogue refresh, unrelated chat
+output, stale catalogue refusal and an IAM outage after a saved start. Every
+refusal fixture first sends a successful control through the same published route.
+No model calls or dev stack are used. Fresh-install qualification remains NOT RUN.
+
+Local evidence, 22 October 2026: PASS — the 11-case matrix twice; the combined
+470-test run with integration-access, remote-catalogue-dispatch and the unchanged
+event security suite; typecheck; event catalogue; Knip; changelog check. All ran
+under `nice -n 10` with disposable services and a supplied `PG_TEST_URL`.
+The test-first baseline passed ten matrix cases and failed the final-send IAM
+outage case with 200 instead of 403. FAIL — the extra selected MCP dispatch run
+passed 33 cases but `lost_start` exceeded its existing ten-second cleanup limit.
+That failure was not rerun or treated as an approved flake. No assertion or timeout
+in that existing suite was changed. The disposable database was removed with its volume.
+
 ## Shared test ports
 
 The nine former `freePort` copies now use `@opencrane/event-store/testing`.
