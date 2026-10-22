@@ -33,7 +33,14 @@ type Edit = { action: 'grant' | 'revoke'; granteeKind: 'member' | 'assistant';
   styleUrl: '../models/model-access-editor.css',
   styles: ['button { max-width: 100%; overflow-wrap: anywhere; }',
     'a { display: inline-flex; align-items: center; min-height: 44px; }',
-    'select { min-height: 44px; max-width: 100%; }'],
+    'select { min-height: 44px; max-width: 100%; }',
+    `label {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 100%;
+      margin: 0 12px 12px 0;
+    }`],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ToolAudience implements OnInit, OnDestroy {

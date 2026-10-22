@@ -36,3 +36,12 @@ change was safe. All seven guards remain in the implementation.
 
 The other missing guard tests remain follow-ups in issue #302. Fresh-install
 qualification and the full local root suite were NOT RUN.
+
+## Explanation label size
+
+PASS: CI on `4161fbbff` rejected the new explanation labels. The existing browser
+journey measured an 18-pixel inline label and expected at least 44 pixels. The
+select inside it was already 44 pixels high. Commit `238c3f12f` added the labels
+to the capture measurement before the layout changed. That check also failed.
+The correction gives each label its own column layout. No assertion or timeout
+was changed.
