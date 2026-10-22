@@ -1,0 +1,219 @@
+{
+  "sourceSha": "5e54cdb6514f62e3491d1635ef585fe0f1616c57",
+  "attempt": "nightly-20261022T042814-0c8d0d01-6162-4ec5-abe3-52a2ee5c21af",
+  "stackId": 1,
+  "startedAt": "2026-10-22T04:28:14.186405+00:00",
+  "finishedAt": "2026-10-22T04:39:50.164873+00:00",
+  "command": "ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key nice -n 10 infra/dev-stack/daily-fresh.sh",
+  "fresh": true,
+  "modelMode": "stand-in",
+  "paidCalls": 0,
+  "paidCents": 0,
+  "result": "FAIL",
+  "exitCode": 1,
+  "toolReview": {
+    "status": "PASS",
+    "requests": [
+      {
+        "method": "POST",
+        "path": "/api/org/integrations/journey-f1f42548-c4ab-4003-ab41-a119a4517e10/review",
+        "statusCode": 200
+      }
+    ],
+    "cause": "The read-only fixture selected Allow without required review details."
+  },
+  "assertions": [
+    {
+      "id": "providers.paid_model_answer",
+      "status": "NOT RUN"
+    },
+    {
+      "id": "shared_assistant.member_disk_isolation",
+      "status": "NOT RUN"
+    },
+    {
+      "id": "groups.list",
+      "status": "PASS"
+    },
+    {
+      "id": "groups.create",
+      "status": "PASS"
+    },
+    {
+      "id": "groups.search",
+      "status": "PASS"
+    },
+    {
+      "id": "groups.detail",
+      "status": "PASS"
+    },
+    {
+      "id": "shared_assistant.admin_create",
+      "status": "PASS"
+    },
+    {
+      "id": "shared_assistant.review",
+      "status": "PASS"
+    },
+    {
+      "id": "shared_assistant.create_request",
+      "status": "PASS"
+    },
+    {
+      "id": "shared_assistant.created",
+      "status": "PASS"
+    },
+    {
+      "id": "shared_assistant.computer_ready_for_selection",
+      "status": "PASS"
+    },
+    {
+      "id": "shared_assistant.member_choice",
+      "status": "PASS"
+    },
+    {
+      "id": "shared_assistant.session_recorded",
+      "status": "PASS"
+    },
+    {
+      "id": "shared_assistant.private_chat",
+      "status": "PASS"
+    },
+    {
+      "id": "groups.removal_review",
+      "status": "PASS"
+    },
+    {
+      "id": "groups.remove_member",
+      "status": "PASS"
+    },
+    {
+      "id": "direct_chat.start_390",
+      "status": "PASS"
+    },
+    {
+      "id": "direct_chat.start_1280",
+      "status": "PASS"
+    },
+    {
+      "id": "direct_chat.receive",
+      "status": "PASS"
+    },
+    {
+      "id": "direct_chat.exchange_and_no_agent",
+      "status": "PASS"
+    },
+    {
+      "id": "group_chat.create_and_lock_mode",
+      "status": "PASS",
+      "evidence": {
+        "modeBeforeSend": "group",
+        "modeAfterSend": "group",
+        "conversationId": "direct-6561e077-990c-4cb5-bb70-cd233ed6b9c3"
+      }
+    },
+    {
+      "id": "group_chat.messages_and_no_activity",
+      "status": "PASS",
+      "evidence": {
+        "firstMessageSeen": true,
+        "aiEventsDuringSends": [],
+        "computerEventsDuringSends": [],
+        "budgetEventsDuringSends": []
+      }
+    },
+    {
+      "id": "group_chat.add_join_position",
+      "status": "PASS",
+      "evidence": {
+        "oldMessageVisibleAfterJoin": false
+      }
+    },
+    {
+      "id": "group_chat.remove_clears_access",
+      "status": "FAIL",
+      "evidence": {
+        "clearTimeMs": 2244,
+        "transcriptEmpty": true
+      }
+    },
+    {
+      "id": "group_chat.leave_clears_access",
+      "status": "PASS",
+      "evidence": {
+        "clearTimeMs": 360,
+        "transcriptEmpty": true,
+        "othersSawLeave": true
+      }
+    },
+    {
+      "id": "group_chat.people_picker_states",
+      "status": "PASS",
+      "evidence": {
+        "longNamesShown": true,
+        "noMatchesShown": true,
+        "modeNote": "Direct conversation \u00b7 2 people",
+        "deniedSelectionStatus": 403,
+        "addControlHidden": true
+      }
+    },
+    {
+      "id": "group_chat.unsupported_combination",
+      "status": "PASS",
+      "evidence": {
+        "refused": true,
+        "noDraftWasSaved": true,
+        "savedConversationCount": 1
+      }
+    },
+    {
+      "id": "group_chat.replay_preserves_group",
+      "status": "PASS",
+      "evidence": {
+        "modeBeforeReplay": "group",
+        "modeAfterReplay": "group",
+        "participantIdsBeforeReplay": [
+          "audit-other-member",
+          "zitadel-owner"
+        ],
+        "participantIdsAfterReplay": [
+          "zitadel-owner",
+          "audit-other-member"
+        ]
+      }
+    },
+    {
+      "id": "journey.execution",
+      "status": "FAIL"
+    }
+  ],
+  "afterGroups": {
+    "finalMemberAndCatalogueReplayVerification": "NOT RUN",
+    "finalWebPageCheck": "NOT RUN"
+  },
+  "cleanup": {
+    "status": "PASS",
+    "slotDirectoryRemoved": true,
+    "composeContainersRemaining": 0
+  },
+  "failure": {
+    "id": "group_chat.remove_clears_access",
+    "clearTimeMs": 2244,
+    "transcriptEmpty": true,
+    "measurementLimit": "The observer starts after waiting for the Owner participant list."
+  },
+  "privateEvidence": "/home/jente/.opencrane/daily-fresh/nightly-20261022T042814-0c8d0d01-6162-4ec5-abe3-52a2ee5c21af",
+  "sourceChecks": {
+    "failingFirstCommit": "338ee8f39",
+    "lint": "PASS",
+    "workspaceTypecheck": "PASS",
+    "focusedTypecheck": "PASS",
+    "eventCatalogue149Types": "PASS",
+    "knip": "PASS",
+    "changelog": "PASS",
+    "focusedTestsRunOne14": "PASS",
+    "focusedTestsRunTwo14": "PASS",
+    "eventSecurity438Tests": "PASS",
+    "localFullRootSuite": "NOT RUN"
+  }
+}

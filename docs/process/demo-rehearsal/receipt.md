@@ -156,3 +156,70 @@ and receipts longer than 100 lines. These remain follow-ups.
 Paid rehearsals and live journeys: NOT RUN in this round, as requested. Earlier live
 results and spending above are unchanged. The orchestrator's narrow health verify
 remains separate from these local checks.
+
+## Nightly 409
+
+22 October 2026. Source: `5e54cdb6514f62e3491d1635ef585fe0f1616c57`.
+The 409 fix passed live. The full nightly run is **FAIL** on a later group timing check.
+[The receipt](nightly-409/receipt.json) records every group result and the request path.
+
+The earlier failed request was `POST /api/org/integrations/journey-5b7c672b-70d5-4b95-aabe-4b57a90a8642/review`.
+The API maps a conflicting tool-policy command to 409. The journey selected Allow for
+its read-only fixture but supplied no action, consequence or safe argument fields.
+`reviewedToolChoices` refuses that combination even when its revisions, timestamp
+and review digest match. The fixture now declares those details. Discovery still
+leaves tools blocked, and the write fixture stays blocked.
+
+This was a valid product refusal of an incomplete journey fixture. It was not the
+conversation list's `list_changed` reply or an already-decided action approval.
+The helper generates a fresh command UUID and reads the saved catalogue before
+posting. Waiting or changing the order cannot supply the missing review details.
+Paid rehearsals use the separate real-model branch and skip this stand-in tool fixture.
+No product API, event, access check or one-decision rule changed. HTTP 409 still fails
+this journey immediately.
+
+The failing regression was committed first as `338ee8f39`. It reproduces the missing
+review details through the API's validator without services. It passes after the fix;
+removing those details still refuses Allow even with a matching review digest.
+PASS: 14 focused nightly, cleanup and stand-in tests twice; 438 event-security tests
+once; lint, workspace typecheck, focused TypeScript check, event catalogue, Knip and
+changelog checks. Tests used the supplied `PG_TEST_URL`; checks ran under `nice -n 10`.
+Local full root suite: NOT RUN, as requested. No dependency was added.
+
+The single live command was `nice -n 10 infra/dev-stack/daily-fresh.sh`, with
+`ZITADEL_KEY_FILE` pointing to the existing private file. `claim.sh` reserved secondary
+slot 1, which the nightly command reused. It ran fresh from 04:28:14 to 04:39:50 UTC,
+with attempt `nightly-20261022T042814-0c8d0d01-6162-4ec5-abe3-52a2ee5c21af`.
+The nightly script cleared paid settings. Paid calls and paid cents: zero.
+
+| Nightly step | Result |
+| --- | --- |
+| Fresh startup, sign-in and local provider setup | PASS |
+| Member grants, chat, reload and reconnect | PASS |
+| PDF upload, scan, read and EICAR refusal | PASS |
+| Computer suspend, wake and Pod replacement with saved files | PASS |
+| Exact Owner tool review and integration access checks | PASS: review HTTP 200 |
+| Private action history and budget checks | PASS |
+| Group administration, private shared assistant and direct chat | PASS |
+| Group mode before first send and mode kept after send | PASS |
+| Group messages with zero AI, computer and budget activity | PASS |
+| Later participant sees only messages after joining | PASS |
+| Removed participant clears within two seconds | FAIL: 2,244 ms; transcript empty |
+| Leaving clears access and updates remaining participants | PASS |
+| People picker, long names, no matches and denied selection | PASS |
+| Unsupported recipients refused without a saved draft | PASS |
+| Group replay keeps participants and mode | PASS |
+| Final member/catalogue replay verification and web page check | NOT RUN: group failure stopped the run |
+| Cleanup of the claimed slot | PASS |
+
+All eight group checks ran; seven passed. The removal timer includes waiting for the
+Owner's participant list before observing the removed person's browser. The receipt
+therefore does not establish exactly when that transcript cleared. The two-second
+limit and failed result remain unchanged. No second live attempt ran.
+
+Before cleanup, the nightly command kept sanitised logs, pictures and its group receipt
+under `~/.opencrane/daily-fresh/nightly-20261022T042814-0c8d0d01-6162-4ec5-abe3-52a2ee5c21af/`.
+A separate observer retained the review's HTTP 200 and group receipt before teardown.
+The slot directory and its Compose containers were removed. The owner stack and port
+44200 were untouched. Paid answers, member disk isolation and physical-phone checks:
+NOT RUN in this attempt. GitHub CI is reported for the pushed PR head.
