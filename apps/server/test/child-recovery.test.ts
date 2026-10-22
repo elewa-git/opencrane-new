@@ -35,6 +35,14 @@ async function resetAccess() {
 }
 afterEach(resetAccess);
 
+async function leavesUnchangedTeamAccessAlone() {
+  const before = await context.nats.store.head();
+  await resetAccess();
+  await resetAccess();
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('does not grow team history when fixture access is unchanged', leavesUnchangedTeamAccessAlone);
+
 async function recoveryUsesReadOnlyProjectionAccess() {
   let completedReads = 0;
   async function readOnlyQuery<Row extends Record<string, unknown>>(
