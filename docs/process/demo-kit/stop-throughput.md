@@ -698,3 +698,13 @@ The owner stack and port 44200 were untouched. No access, spending or memory che
 Full lint PASS, with 24 existing warnings and zero errors. Documentation and local
 links also passed after this receipt was updated. Fetch and rebase completed;
 `origin/main` is an ancestor of this branch, with no rebase left in progress.
+
+### Workspace fixture correction
+
+The first CI run on `de0a962ee` failed two workspace tests. Both Stop endings omitted
+the required saved failure reason. A local run reproduced the same two failures, with
+69 other workspace tests passing. The fixtures now supply `stop_interrupted`, matching
+the report saved by the server. Every assertion is unchanged. No product code changed.
+Both repeats passed all 99 tests in `workspace.spec.ts` and `chat-state.spec.ts`.
+Full lint, typecheck, event catalogue and changelog lint passed again after this
+fixture correction. Lint still has 24 existing warnings and zero errors.
