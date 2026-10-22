@@ -280,19 +280,14 @@ Legacy events still parse, but do not gain hosted execution.
 `provider.managed_calls_enabled` records the silo's managed-call mode on `budget-<silo>`.
 Other subjects are rejected. Its data names the reviewed provider, its unchanged revision,
 the changer and the reviewed provider-category position. It carries no key and grants no access.
-The switch-on command is not built yet. It must drain running legacy turns before saving this
-event; schema validation alone cannot prove that condition.
+The server uses `providerSwitchOn` from `libs/models` to save this event after
+checking the drain and unresolved spending. Calls use the managed route after the
+models process restarts with provider storage configured and its fallback key
+setting removed. Checking the event's shape alone does not prove these conditions.
 
-Saving switch-on advances the spending stream. A budget writer using the old position cannot
-save another hold. Safe activation must replace that writer after reading the marker. This event
-has no production command yet.
-The switch-on command is not built yet. It must drain running legacy turns before
-saving this event; schema validation alone cannot prove that condition.
-
-Saving switch-on advances the spending stream. A budget writer using the old
-position cannot save another hold. The actor can read past this marker to settle
-or release holds saved before it, without a restart. It still stops when another
-budget writer has saved a change. This event has no production command yet.
+Saving switch-on advances the spending stream. A writer using the old position
+cannot save another hold. The budget actor can read past the marker to settle or
+release earlier holds without a restart. New holds require a checked managed call.
 
 `provider.managed_calls_drain_set` records `draining`, the expected provider-category
 position and the previous drain position with the provider's current revision.

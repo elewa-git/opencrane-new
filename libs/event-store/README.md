@@ -1,116 +1,82 @@
-# libs/event-store
+# Event store
 
 ## What this is
 
-Store events in NATS JetStream and read them in order.
-An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened.
-This package stores the event log for one silo, OpenCrane's private installation
-for one customer. It checks events before saving them and gives callers an
-ordered way to read them back.
+This package saves OpenCrane's events in a permanent log and reads them back in order.
+An [event](../../GLOSSARY.md#event) is a saved record of something that happened,
+such as a message being sent. NATS JetStream, a service that stores and passes on messages, keeps this log
+for one customer’s private OpenCrane installation, called a
+[silo](../../GLOSSARY.md#silo).
 
 ## Where it fits
 
-OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
-that is never changed. Everything else, such as read tables and permissions, is
-built from that log and can be rebuilt from it. This package keeps that log.
-This package belongs to the event core. `apps/server` and `libs/models` save
-changes through it. `apps/ops` reads the log for background work and saves the
-events its reactions produce. NATS JetStream is the
-service that keeps and carries the saved events. The package checks event shapes
-with `libs/events`.
+This is one of the packages that build everything from the
+[event log](../../GLOSSARY.md#event-log-event-store).
+The [back end](../../apps/server/README.md),
+[AI access library](../models/README.md) and
+[background workers](../../apps/ops/README.md) save changes through it.
+[libs/projections](../projections/README.md) reads it to rebuild database tables.
+[libs/events](../events/README.md) supplies the rules for checking every stored record.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|saves changes with principal, access, retry and cancellation checks, and checks child publication positions and memory owners and keys| store["libs/event-store<br/>checked event writes and stream ownership"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes and reads activity, closes, provider switch-on positions, publication receipts and hosted image checks| store
-  ops["apps/ops<br/>background workers"] -->|reads and saves events| store
-  store -->|saves, reads streams, counts names and finds numbered events| nats["NATS JetStream<br/>event service"]
-  tests["Tests in apps and libs"] -.->|chooses test listener ports| store
-  store -.->|checks private chat choices| events["libs/events<br/>event definitions"]
+  parent["libs/<br/>shared libraries"] --> store["libs/event-store<br/>saved event log"]
+  server["apps/server<br/>back end"] -->|saves changes| store
+  models["libs/models<br/>AI access and spending"] -.->|saves and reads| store
+  ops["apps/ops<br/>background workers"] -->|saves and reads| store
+  projections["libs/projections<br/>read tables"] -.->|reads the log| store
+  store -->|stores the log| nats["NATS JetStream<br/>event service"]
+  store -.->|checks event shapes| events["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
 
-- Save a valid event only if nothing else has changed the same thing since the
-  caller last read it. Otherwise report a conflict, so the caller can reload and
-  try again.
-  Check the whole log position for ownership migration, provider drain changes, provider
-  switch-on, tool publication receipts and child answers. This can refuse a receipt
-  or answer when a relevant change arrives before it is saved.
-- Require the current memory event version for new writes, while still reading old events.
-  Check that its scope id matches its recorded owner, kind and silo before saving it.
-  Apply the same scope and key checks to versioned memory corrections.
-  Refuse repeated dependencies and a key reference that belongs to another memory revision.
-- Refuse hosted image check results unless they name the models system principal.
-- Stop retries when the caller's access time limit expires or permission is withdrawn.
-  Do not retry when the required wait uses all remaining permission time.
-- Recheck a caller's access before saving when requested. Refuse if a saved event
-  arrives between that check and the write.
-- Return the earlier result when a caller repeats the same request.
-- Let callers that have checked their history save a change without reading that
-  history again. A conflict still checks for an earlier copy of the request.
-- Read one saved event by its number, so callers can check an indexed result.
-- Read the history of one thing, such as one member, or follow the whole event
-  log in order.
-- Keep a [stream summary](../../GLOSSARY.md#stream-summary), a few facts built from
-  events in memory. Each use reads new events first. Older summaries are dropped
-  when the stream count or memory budget is reached. An oversized summary is
-  dropped on its own, so other streams keep their saved facts.
-- Check that the NATS event stream keeps its history and cannot be deleted.
-- Require encrypted NATS connections and the right credentials for each role.
-
-Conversation writes check that the saved conversation id matches the subject.
-Creation starts an empty conversation stream, so a new audience adds a new stream
-name. Callers can read the number of saved stream names without listing them or
-reading their events.
-New closing events and participant changes use the participation stream. This keeps
-access checks separate from messages. Older callers can still save closing events
-on the conversation stream, and replay reads both forms. Model decisions read both
-closing formats through their existing conversation activity read.
-New group chats are limited to 97 people so their permission update fits in one write.
-
-Tool catalogue writes check the tool hashes against the saved definitions and require
-the same server id in the event and its subject.
-
-Private chat choices use a separate stream for each person. They require that person's human identity.
+- Save a valid event only if the relevant history has not changed since the caller
+  read it. Report a conflict when another change came first. For some changes,
+  check the whole log position as well as one item's history.
+- Check that saved memory facts belong to the right person or group before saving them.
+- Stop retrying when the caller cancels or its access time limit runs out.
+  Repeat the caller's access check before saving when requested.
+- Return the earlier result when the same request is repeated, rather than save it twice.
+- Read one record, one item's history or the whole log in order.
+- Keep [stream summaries](../../GLOSSARY.md#stream-summary), small sets of facts
+  from an item's history, in memory. Read new events before using them and drop
+  older summaries when their memory allowance is full.
+- Check that the log keeps its history, disallows deletion and uses encrypted
+  connections with the right credentials for each program.
 
 ## Processes it handles
 
-1. **The server records a change.** It sends the new event and the number of the
-   last event it saw for that thing. The store saves it, or reports a conflict if
-   another change came first.
-2. **A worker catches up.** It reads events after its saved position, handles them
-   in order and can continue from that position after it restarts.
-3. **A reader uses a summary.** It adds new events to its saved facts before making
-   a decision. A reader that runs out of time refuses that call. The read continues
-   in the background, so the next call can use its progress.
-
-After restoring the event log from a backup, the server and models processes
-restart before serving requests. This clears their saved summaries.
+1. **The server records a change.** It sends an event and the last position it
+   read for that item. The store checks the record, then saves it or reports a
+   conflict. The caller reloads and checks its decision again after a conflict.
+2. **A worker catches up.** It reads events after its saved position and handles
+   them in order. After a restart, it can continue from that position.
+3. **A reader uses a summary.** The library adds new events before returning the
+   saved facts. A reader that runs out of time refuses the call; catch-up can
+   continue so the next call can use its progress.
 
 ## How to run or test it
 
-Tests share a port picker that keeps listeners away from outgoing connections
-and the secondary dev stacks. It tries another port if one is already busy.
+Tests share a port picker that avoids outgoing connections and the secondary dev stacks.
+It tries another port if one is busy. Each fixture starts its own NATS server and
+keeps its own event history, while reusing certificates to reduce setup time.
 
 Run the type check and event-store tests with these commands. The test command
 needs the local NATS test server fetched first. The helper `wireSubject` turns an
 event stream name into its NATS name:
 
 ```sh
-npm run typecheck -w libs/event-store
+nice -n 10 npm run typecheck -w libs/event-store
 sh scripts/fetch-nats.sh
-npx vitest run libs/event-store/test
+nice -n 10 npx vitest run libs/event-store/test
 ```
-
-Test fixtures reuse certificates to reduce setup time. Each fixture still starts
-its own NATS server and keeps its own files and event history.
 
 ```ts
 import { wireSubject } from '@opencrane/event-store';
 
 const subject = wireSubject('member-alice');
-// subject is 'ev.member.alice'.
+// Expect 'ev.member.alice'.
 ```
 
 ## Where to read more
