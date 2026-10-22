@@ -725,8 +725,12 @@ After enabling models, setup waits up to 30 seconds for `seed-provider-default` 
 record the first binding. It then reads that position for the explicit Owner selection.
 This avoids racing the scheduled binding; it still makes only one selection write
 and refuses any later conflict.
-The first refusal stops startup with only the step and status. A refused fresh setup
-needs diagnosis and another fresh start; it does not retry writes or undo product checks.
+HTTP 425 with `status: access_applying` waits 100 ms and repeats the exact input and
+command id, within the request's original 30-second deadline. This applies to reads too.
+Malformed or different 425 replies stop setup. A lost reply or HTTP 503 reads the original
+command result and never repeats an uncertain write, including when that read is 404.
+Other refusals stop startup with only the step and status. A refused fresh setup
+needs diagnosis and another fresh start. Product access checks still run on every attempt.
 Token-bootstrap qualification (`DEV_OWNER_BOOTSTRAP=0`) skips this setup and the journey.
 
 The server and models share `PROVIDER_SECRETS_DIR`. Startup creates it as the host

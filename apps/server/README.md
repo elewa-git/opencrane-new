@@ -22,7 +22,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, control status, dated approvals, model and remote tool grants, membership status and choices, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
+  web["apps/web<br/>the website"] -->|requests and provider retries, control status, dated approvals, model and remote tool grants, membership status and choices, live updates, spending stop notices, saved call statuses and reconnect recovery; chat output freezes at close| server["apps/server<br/>sign-in, surveys, invitations, chats, groups, ownership, member directory and access, inventory inputs, destination rules and final tool sends"]
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
   server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops, turn decisions and relay closures| nats["NATS<br/>event log"]
   nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
@@ -137,6 +137,8 @@ active people. An ordinary Member receives only a small header for one person.
 
 The provider list reports that model access routes are available. Those routes let
 admins read and change grants for people, groups and assistants.
+Provider requests report when saved membership or ownership is still being applied.
+A caller can wait briefly and repeat the same command id after that reply.
 
 The chat connection notifies authorised readers when a spending Stop is saved for
 an original request they can see. A status read supplies the saved reason and work

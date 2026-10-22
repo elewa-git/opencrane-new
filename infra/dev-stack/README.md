@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|checks tool reviews and times group access loss| apps
+  stack -->|retries provider requests while access applies; checks tool reviews and times group access loss| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -66,7 +66,8 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 
 A fresh stack with the development Owner connects the local model provider through the
 product APIs. It saves a private credential, checks the provider, selects the chat models
-and waits for the first default to be recorded. It then explicitly selects that default
+and repeats the same request if the server says saved access is still being applied.
+It waits for the first default to be recorded. It then explicitly selects that default
 and asks to switch on. When accepted, models restarts with that saved
 credential before any chat check. A refusal stops startup. Free reachability checks
 need no spending settlement. Paid tests and other sends still need confirmed outcomes.

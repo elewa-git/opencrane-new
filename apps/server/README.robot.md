@@ -2,6 +2,20 @@
 
 For people, read [README.md](README.md) first.
 
+## Provider access during startup
+
+Provider routes return HTTP 425 with `{ status: 'access_applying' }` when the existing
+membership check throws `AuthorityApplying`. This includes a saved `ownership.seeded`
+event whose OpenFGA receipt is missing. The create has not reached its append at that
+point. Retrying uses the same input and command id. Membership, admin permission and
+applied-event checks still run on every attempt. Unavailable dependencies still return
+503; a lost or uncertain write still requires reading its original result.
+
+`test/provider-startup.test.ts` uses real NATS, PostgreSQL and OpenFGA. It withholds the
+ownership receipt while the Owner already has admin permission. It checks 425 without
+a create event, then 404 after ownership applies, then one accepted create on repeated
+submission. See [the provider API](../../docs/api/providers.md#evidence-and-recovery).
+
 ## Child retry tests and duplicate messages
 
 Only the four tests that retry after the JetStream duplicate window use a private

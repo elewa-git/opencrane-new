@@ -253,6 +253,49 @@ async function retriesApplyingCreate() {
 test('setup retries the exact create only when the product reports access still applying',
   retriesApplyingCreate);
 
+async function refusesUnclearApplyingReplies() {
+  for (const failure of ['wrong-status', 'invalid', 'unavailable']) {
+    const methods: string[] = [];
+    function handle(request: import('node:http').IncomingMessage,
+      response: import('node:http').ServerResponse) {
+      methods.push(request.method!);
+      request.resume();
+      response.setHeader('content-type', 'application/json');
+      if (request.method === 'GET') {
+        response.writeHead(404);
+      } else {
+        response.writeHead(failure === 'unavailable' ? 503 : 425);
+      }
+      const body = failure === 'invalid' ? 'sensitive-value /private/location'
+        : JSON.stringify({ status: 'unavailable' });
+      response.end(body);
+    }
+    const server = createServer(handle);
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const options = { server: `http://127.0.0.1:${address.port}`, origin: 'http://dev-only',
+      cookie: 'session=dev-only', silo: 'dev', value: 'sensitive-value' };
+    async function run() {
+      await setupProvider(options);
+    }
+    try {
+      const code = failure === 'unavailable' ? 404 : 425;
+      await assert.rejects(run, { message: `Provider setup create: ${code}` });
+      const expected = failure === 'unavailable' ? ['POST', 'GET'] : ['POST'];
+      assert.deepEqual(methods, expected, 'Only a definite access-applying reply permits retry');
+    } finally {
+      server.closeAllConnections();
+      const closed = once(server, 'close');
+      server.close();
+      await closed;
+    }
+  }
+}
+test('unclear 425 replies and an unknown 503 write never repeat the create',
+  refusesUnclearApplyingReplies);
+
 async function refusesUnsafeReplies() {
   for (const failure of ['redirect', 'transport', 'json']) {
     let requests = 0;
