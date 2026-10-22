@@ -12,5 +12,5 @@ RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/a
     chown -R 1001:1001 /home/tool /workspace && chown 1002:1002 /home/desktop && chmod 700 /home/desktop
 WORKDIR /spike
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && ln -s /spike/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex && \
+RUN npm ci --omit=dev --no-audit --no-fund && ln -s /spike/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex && \
     rm -rf /root/.npm /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/corepack

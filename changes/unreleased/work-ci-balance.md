@@ -1,0 +1,1 @@
+- Run image and browser tests together so the four other CI test jobs avoid that setup. Refuse missing or duplicate test files, keep image caches separate, and save main test reports for later timing updates.

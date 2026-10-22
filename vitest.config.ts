@@ -10,6 +10,7 @@ export default defineConfig({
     passWithNoTests: false,
     // Disposable service fixtures need room under load; authority tests assert their own deadlines.
     testTimeout: 30_000,
+    hookTimeout: 30_000,
     // apps/server now logs JSON via pino; keep test output readable.
     env: { LOG_LEVEL: 'silent' },
   },

@@ -29,9 +29,23 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: List every root test file
+        run: |
+          mkdir -p .tools/ci
+          nice -n 10 npx vitest list --filesOnly --json > .tools/ci/expected.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expected-test-files
+          path: .tools/ci/expected.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
 
       - name: Check shipped npm dependencies
+        timeout-minutes: 5
         run: |
           npm audit --omit=dev --audit-level=high
           audit_dir="$(mktemp -d)"
@@ -47,16 +61,19 @@ jobs:
         # Public runners have 16 GB of memory.
         env:
           NODE_OPTIONS: --max-old-space-size=8192
-        run: npm run lint
+        run: nice -n 10 npm run lint
 
       - name: Typecheck
-        run: npm run typecheck
+        run: nice -n 10 npm run typecheck
 
       - name: Check the event catalogue matches the registry
         run: npm run check:events
 
       - name: Install Chromium for demo recording checks
         run: npx playwright install --with-deps chromium
+
+      - name: Check CI test grouping
+        run: nice -n 10 node --test scripts/ci/*.test.mjs
 
       - name: Check local provider setup and model stub
         run: >-
@@ -78,13 +95,14 @@ jobs:
 
       # apps/web builds and tests through the Angular CLI, so it needs its own steps.
       - name: Build apps/web
-        run: npm run build -w apps/web
+        run: nice -n 10 npm run build -w apps/web
 
       - name: Test apps/web
-        run: npm run test -w apps/web
+        run: nice -n 10 npm run test -w apps/web
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -113,13 +131,74 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Install pinned NATS server
         run: sh scripts/fetch-nats.sh
 
       - name: Install socket tracing for offline signature tests
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y strace
+        run: command -v strace || (sudo apt-get update && sudo apt-get install -y strace)
+
+      # Authz tests use disposable Docker containers and the PostgreSQL service above.
+      - name: Verify Docker for real OpenFGA tests
+        run: docker info
+
+      - name: Test shard ${{ matrix.shard }} of 4
+        run: nice -n 10 node scripts/ci/run-tests.mjs ${{ matrix.shard }}
+
+      - name: Record test files
+        if: always()
+        run: node scripts/ci/test-files.mjs record ${{ matrix.shard }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-files-${{ matrix.shard }}
+          path: .tools/ci/files-${{ matrix.shard }}.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: vitest-${{ matrix.shard }}
+          path: .tools/ci/report.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+  fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:17.6-alpine
+        env:
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PG_TEST_URL: postgres://postgres:test-only@127.0.0.1:5432/postgres
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install pinned NATS server
+        run: sh scripts/fetch-nats.sh
 
       # Authz tests use disposable Docker containers and the PostgreSQL service above.
       - name: Verify Docker for real OpenFGA tests
@@ -134,28 +213,78 @@ jobs:
           files: apps/computer/test/upload-bake.hcl
           load: true
           set: |
+            base.cache-from=type=gha,scope=upload-base
+            base.cache-to=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'type=gha,scope=upload-base,mode=max' || '' }}
             computer.cache-from=type=gha,scope=upload-computer
-            computer.cache-to=type=gha,scope=upload-computer,mode=max
+            computer.cache-to=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'type=gha,scope=upload-computer,mode=max' || '' }}
 
       # Browser tests use the Chromium build that matches the pinned playwright package.
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Test shard ${{ matrix.shard }} of 4
-        run: npm test -- --shard=${{ matrix.shard }}/4
+      - name: Test files needing the computer image or Chromium
+        run: nice -n 10 node scripts/ci/run-tests.mjs fixtures
+
+      - name: Record test files
+        if: always()
+        run: node scripts/ci/test-files.mjs record fixtures
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-files-fixtures
+          path: .tools/ci/files-fixtures.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: vitest-fixtures
+          path: .tools/ci/report.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
 
   ci-ok:
     if: always()
-    needs: [checks, test]
+    needs: [checks, test, fixtures]
     runs-on: ubuntu-latest
     steps:
-      - name: Require checks and every test shard to pass
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: expected-test-files
+          path: .tools/ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-files-*
+          path: .tools/ci/groups
+          merge-multiple: true
+
+      - name: Require every root test file exactly once
+        run: node scripts/ci/test-files.mjs verify
+
+      - name: Require checks, shards and fixture tests to pass
+        if: always()
         env:
           CHECKS_RESULT: ${{ needs.checks.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          FIXTURES_RESULT: ${{ needs.fixtures.result }}
         run: |
-          if [ "$CHECKS_RESULT" != "success" ] || [ "$TEST_RESULT" != "success" ]; then
+          if [ "$CHECKS_RESULT" != "success" ] || [ "$TEST_RESULT" != "success" ] ||
+             [ "$FIXTURES_RESULT" != "success" ]; then
             echo "Checks result: $CHECKS_RESULT"
             echo "Test shards result: $TEST_RESULT"
+            echo "Fixture tests result: $FIXTURES_RESULT"
             exit 1
           fi
