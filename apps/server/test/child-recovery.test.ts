@@ -1,3 +1,5 @@
+import { shortenDuplicateWindow, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -408,6 +410,18 @@ async function keepsUncertainWorkQueued(kind: string) {
 it.each(['outage', 'applying'])('keeps %s queued then completes missing saves', keepsUncertainWorkQueued);
 
 async function losesFailureReply() {
+  const previous = context;
+  await setup();
+  try {
+    await shortenDuplicateWindow(context.nats);
+    await losesFailureReplyAfterExpiry();
+  } finally {
+    vi.restoreAllMocks();
+    await context.close();
+    context = previous;
+  }
+}
+async function losesFailureReplyAfterExpiry() {
   const { input, intent } = await savedRequest('conversation.child_requested');
   const row = await reference(input.conversationId);
   await context.append(`conversation-${input.conversationId}`, 'conversation.closed',
@@ -421,7 +435,7 @@ async function losesFailureReply() {
   await expect(recoverChildRequest(context.options, row)).rejects.toThrow('Reply lost');
   fault.mockRestore();
   const before = await chatHistory(context.nats.store, 'test', input.conversationId);
-  await delay(120_100);
+  await waitForDuplicateWindow(context.nats);
   await context.restart();
   await recoverChildRequest(context.options, row);
   await recordChildStartFailure(context.options, String(row['intent_id']), intent,
@@ -430,7 +444,7 @@ async function losesFailureReply() {
   expect(before.filter(isFailure)).toHaveLength(1);
 }
 it('keeps the saved failure after a lost reply beyond the duplicate window',
-  losesFailureReply, 180_000);
+  losesFailureReply);
 
 async function refusesChangedChild() {
   const { input, intent } = await savedRequest('conversation.child_requested');

@@ -1,3 +1,5 @@
+import { shortenDuplicateWindow, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 import { createLogger } from '@opencrane/observability';
 import { watchChildRequests } from '../src/chat/child-recovery.ts';
 import * as authz from '@opencrane/authz';
@@ -10,7 +12,6 @@ import { childRequests, listConversations } from '@opencrane/projections';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { processConversation, assistantSnapshot } from '../src/chat/bridge-conversation.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
-import { setTimeout as delay } from 'node:timers/promises';
 import { conversations } from '@opencrane/projections';
 import { chatHistory } from '../src/chat/commands.ts';
 import { summonFixture } from './support/child-summon.ts';
@@ -79,6 +80,22 @@ async function refusesSignedReview(kind: string) {
 }
 it.each(['tampered', 'expired', 'member'])('refuses %s signed review', refusesSignedReview);
 async function recovers(stage: string) {
+  if (stage !== 'message.posted') {
+    await recoversWithContext(stage);
+    return;
+  }
+  const previous = context;
+  await initialise();
+  try {
+    await shortenDuplicateWindow(context.nats);
+    await recoversWithContext(stage);
+  } finally {
+    vi.restoreAllMocks();
+    await context.close();
+    context = previous;
+  }
+}
+async function recoversWithContext(stage: string) {
   const input = await context.parent();
   const beforeReview = await context.nats.store.head();
   const start = await review(input);
@@ -99,7 +116,7 @@ async function recovers(stage: string) {
   const saved = await context.intent(input.conversationId);
   const existing = await chatHistory(context.nats.store, 'test', saved.childConversationId);
   await context.restart();
-  if (stage === 'message.posted') await delay(120_100);
+  if (stage === 'message.posted') await waitForDuplicateWindow(context.nats);
   let response = await context.request(input.conversationId, 'children', start);
   if (response.statusCode === 425) {
     const rows = await chatHistory(context.nats.store, 'test', saved.childConversationId);
@@ -138,7 +155,7 @@ async function recovers(stage: string) {
   expect(await context.nats.store.head()).toBe(beforeRetry);
 }
 it.each(['conversation.child_requested', 'conversation.created', 'message.posted'])(
-  'recovers after %s across restart, expiry, changed choices and replay', recovers, 180_000);
+  'recovers after %s across restart, expiry, changed choices and replay', recovers);
 
 async function holdsWork() {
   const input = await context.parent();

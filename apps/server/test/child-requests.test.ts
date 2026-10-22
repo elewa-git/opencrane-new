@@ -1,3 +1,5 @@
+import { shortenDuplicateWindow, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';
@@ -5,7 +7,6 @@ import { encodeSession } from '@opencrane/auth';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
-import { setTimeout as delay } from 'node:timers/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { natsFixture, event } from '@opencrane/event-store/testing';
@@ -126,6 +127,18 @@ async function refusesChangedAccess(kind: string) {
 }
 it.each(['closed', 'rejoined'])('refuses a %s parent', refusesChangedAccess);
 async function savesAndReplays() {
+  const previous = { nats, storage, fga, options, auth, runner, directory };
+  await initialise();
+  try {
+    await shortenDuplicateWindow(nats);
+    await savesAndReplaysAfterExpiry();
+  } finally {
+    vi.restoreAllMocks();
+    await close();
+    ({ nats, storage, fga, options, auth, runner, directory } = previous);
+  }
+}
+async function savesAndReplaysAfterExpiry() {
   const input = await parent('group', 'alice', true);
   const initial = await chatHistory(nats.store, 'test', input.conversationId);
   expect(initial).toHaveLength(2);
@@ -155,7 +168,7 @@ async function savesAndReplays() {
     return createRequestedChild(options, 'alice', input);
   }
   await loseReply(create);
-  await delay(120_100);
+  await waitForDuplicateWindow(nats);
   const positionAfterLoss = await nats.store.head();
   const source = { id: input.sourceMessageId, conversationId: input.conversationId,
     text: '@Assistant source canary' };
@@ -184,7 +197,7 @@ async function savesAndReplays() {
   expect(childRows).toHaveLength(1);
 }
 it('freezes one intent and child across lost replies, expired deduplication and replay',
-  savesAndReplays, 180_000);
+  savesAndReplays);
 
 async function refusesMembership(teamId: string) {
   const input = await parent();
