@@ -183,6 +183,11 @@ Each invocation replaces an inherited attempt with `nightly-<UTC time>-<UUID>` i
 `P4_JOURNEY_ATTEMPT`. It clears inherited real-provider settings, `MODEL_KEY_FILE`
 and `DEMO_ALLOWANCE_CENTS` before any child starts. No paid key is read.
 The narrow group checks run with the stand-in and never change providers or owners.
+A read-only tool fixture includes its action, consequence and safe argument fields.
+The core journey selects Allow for that tool and Block for the write tool, using the
+saved catalogue revision and review digest. The review must return HTTP 200. A 409
+stops the journey; it is never treated as a saved review. The focused regression in
+`journey-tool-policy.test.ts` uses the same review validator as the API, without services.
 A failed or unfinished group-chat assertion fails the journey. Before cleanup, nested
 receipts and pictures from this attempt are kept under the private failure folder.
 

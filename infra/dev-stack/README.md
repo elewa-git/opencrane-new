@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes; memory needs configured keys| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|rehearses demos and checks group chats nightly| apps
+  stack -->|reviews test tools and checks group chats nightly| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -46,6 +46,8 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
   Check readiness without sending chat prompts. Restore the saved mode and stop newly
   launched services if the start fails or is interrupted.
 - Run browser checks against real local services. The approval journey is currently skipped.
+- Declare review details for read-only test tools before the Owner selects Allow.
+  Discovery leaves every tool blocked until the exact review is saved.
 - Check group chats from the To line, participant access, direct chats, shared assistants and
   provider key saving in a fresh stack.
 - Keep one extra computer place so a saved-data repeat can start a new shared assistant.
