@@ -956,14 +956,20 @@ async function grantWrite(granteeKind: string) {
 function independentFact(fact: { memoryId: string }) {
   return fact.memoryId.startsWith('fact_');
 }
-async function recalledRemember(commandId: string, query = 'deliver') {
+// Avoid loading a full result page just to prepare a write's proof.
+async function recalledRemember(commandId: string, query = 'exactly') {
   await grantWrite('member');
   await grantWrite('assistant');
   const recallArguments = { ...call.params.arguments, query };
   const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
-  const response = await setup.call(headers, selectedCall, route);
-  expect(response.status, response.text).toBe(200);
-  const page = recallProofSchema.parse(JSON.parse(response.text)).result.structuredContent;
+  // Issue the setup recall directly so gateway admission does not spend its short pass.
+  const token = await signedRecall(setup, undefined, selectedCall);
+  const requestHeaders = { ...headers, 'x-memory-context': token };
+  const request = { method: 'POST' as const, url: route,
+    headers: requestHeaders, payload: selectedCall };
+  const response = await app.inject(request);
+  expect(response.statusCode, response.body).toBe(200);
+  const page = recallProofSchema.parse(response.json()).result.structuredContent;
   // Choose an original test fact. Earlier tests deliberately erase sources of derived facts.
   const fact = page.facts.find(independentFact)!;
   const dependency = { scopeId, memoryId: fact.memoryId, revision: fact.revision };
@@ -1447,6 +1453,8 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       dispatchGeneration: 'memory-instance',
       keyDirectory: dirname(target.options.configFile) };
     backend = buildServer(testAuthConfig(), { memory });
+    // Finish server startup before issuing its two-second recall pass.
+    await backend.ready();
     const recallArguments = { scopeId: selectedId, query: '' };
     const recallBody = { ...call, params: { ...call.params, arguments: recallArguments } };
     const parsed = parseMemoryRequest(JSON.stringify(recallBody), headers);
