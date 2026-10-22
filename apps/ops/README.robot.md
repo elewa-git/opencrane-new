@@ -718,3 +718,22 @@ missing files, changed subscriptions, and dispatch while the first list request 
 Shutdown tests hold that response until after SIGTERM and the runtime has stopped,
 including when the watcher rejects. A test-only module loader injects watcher and scan
 failures. The scan failure test checks automatic shutdown and private error redaction.
+
+## Other worker responsibilities
+
+The owner confirmation reaction checks that the successor is still an active
+member before confirming an appointment. The provider default reaction preserves
+later choices and pauses when delivery repeats.
+
+Only human requests count as waiting computer work. Routine posts do not keep a
+computer busy after its active turns end. The lifecycle worker claims one computer
+per assistant, including shared group assistants.
+
+The [departure rules](#departure-cleanup), [connection cleanup rules](#personal-connection-cleanup)
+and [memory cleanup rules](#verified-memory-key-cleanup) hold the retry and recovery
+details moved out of the package overview. Memory cleanup keeps failed original
+jobs available for an operator to retry. Hidden facts stay hidden while physical
+key removal is pending.
+
+Hosted tools still cannot start through the application. The
+[admission rules](#hosted-mcp-admission) describe the separate Kubernetes checks.

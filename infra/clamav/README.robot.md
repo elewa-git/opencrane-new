@@ -12,8 +12,9 @@ remaining filesystem into a scratch stage so their bytes are absent from every
 shipped layer. Tests build that same Dockerfile and config in disposable containers.
 The daemon image uses Debian main. RAR scanning is unavailable because the
 plug-ins needed for it have a licence that is not open source. See the
-[reviewed image licences](LICENCES.md). Quarantine expires abandoned objects after
-one day; normal completion deletes them immediately.
+[reviewed image licences](LICENCES.md). The server scans upload bytes in memory and
+saves only clean files in the `files` bucket. The dev stack creates a `quarantine` bucket with one-day expiry, but current
+uploads do not use it.
 
 `upstream/clamscan.ts` is copied unchanged from
 [OpenCrane 1 commit 10abd0ef6](https://github.com/elewa-git/opencrane/blob/10abd0ef6/libs/backend/artifacts/scanner/main/src/clamscan.ts).

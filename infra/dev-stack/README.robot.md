@@ -1053,7 +1053,8 @@ still block switch-on. Twice-fresh qualification remains NOT RUN for PR 5e.
 Pod and scale policies with fail-closed image parameters. Apply
 `mcp-lifecycle-rbac.yaml` in that namespace for lifecycle rights. The caller must
 provision `mcp-approved-images`; the lifecycle identity cannot edit it or any policy.
-These files are not installed by `up.sh` yet. See the [test contract](../../apps/ops/README.robot.md#hosted-mcp-admission).
+These files are not installed by `up.sh` yet. Part 8b adds quota, network policies
+and secondary startup installation. See the [test contract](../../apps/ops/README.robot.md#hosted-mcp-admission).
 
 Pod admission includes `pods/resize` for hosted tools and computers. Computer Pod
 resource requests and limits must match the checked sandbox template. The hosted
@@ -1307,48 +1308,208 @@ nice -n 10 node --experimental-strip-types --test \
 
 These fixtures make no paid calls and start no stack. Live qualification remains NOT RUN.
 
-## Hosted MCP connections and resource limits
+## Overview details and related procedures
 
-`node infra/dev-stack/mcp-resources.mjs <silo>-mcp [port [pod:name:port ...]]`
-installs the namespace quota and two NetworkPolicies. The quota permits four Pods,
-requests of 400m CPU / 1 GiB memory, and limits of 4 CPUs / 2 GiB memory. It selects
-all Pods, as do both policies. With no port or bindings, all ingress and egress
-are denied. A declared TCP port permits ingress only from `<silo>-gateway` Pods
-labelled `app=opencrane-gateway`. Both selectors must match.
+The stack prepares the local Kubernetes cluster so background workers can start one
+computer per assistant, including shared group assistants. Hosted tool admission tests use
+temporary namespaces in a claimed spare stack; ordinary startup does not yet
+install those hosted tool policies.
 
-An upstream binding names a Pod in `<silo>`, never a raw IP or another namespace.
-The operator approves that exact Pod by setting `opencrane.ai/mcp-upstream` to its
-Kubernetes UID. The installer reads the Pod and checks its namespace, name, UID
-label, deletion state and absence of host networking. Each egress rule combines
-the namespace selector with that UID label and one TCP port. A replaced Pod needs
-new approval; reusing an address gives no permission. All IP literals, hostnames,
-CIDRs and Tailscale destinations are refused. DNS has no exception. Public remote
-upstreams need a separately reviewed path; this installer supports only in-silo Pods.
-Reapplying with fewer bindings replaces the managed rules and removes withdrawn access.
+The [spare-stack rules](#parallel-journeys) describe ownership, port separation,
+claim reuse and cleanup after a failed Kubernetes connection. The
+[provider setup procedure](#managed-model-calls) describes retries while saved
+access is still being applied. The [daily run procedure](#daily-fresh-run) keeps
+the timer, saved results and failure-log settings in one place.
 
-The lifecycle ServiceAccount cannot create, update, delete or patch the quota,
-network policies or image parameters. It cannot GET or POST `pods/proxy`.
-Health requests in the listener qualification travel from the authorised gateway Pod.
-Kubernetes node administrators remain trusted: NetworkPolicy does not isolate Pods
-from their own node. No application or lifecycle health path may use that exemption.
+The [organisation checks](#organisation-browser-checks) cover participant access,
+direct chats, shared assistants and saving provider keys. The
+[budget cleanup rules](#budget-journey-cleanup) explain how checks restore limits.
+The [demo rehearsal](#timed-demo-rehearsal) explains PDF preparation, warm computers,
+recorded spending and restoration after failures or interruptions.
+>>>>>>> 8f9b137a1 (📚 Explain the root and infrastructure packages in plain words)
 
-The admission installers accept `--render` to print objects without contacting
-Kubernetes. The hosted fixture creates those objects individually, records their
-UIDs and a random ownership label, and checks every namespace and policy before
-cleanup begins. Partial setup and lost create responses retain cleanup records.
-Resize cleanup waits for Pod deletion and zero reported quota usage. The Pod-count
-check gives CPU and memory totals room for five Pods so only the count cap can refuse
-number five. The fixture imports the shared secondary-stack and fleet guard.
+## Earlier development stack guide detail retained during the plain-language update
 
-The maintained Node tests run without Kubernetes:
+# infra/dev-stack
 
-```sh
-nice -n 10 node --experimental-strip-types --test \
-  infra/dev-stack/mcp-resources.test.ts infra/dev-stack/mcp-hosted-fixture.test.ts
+## What this is
+
+A set of scripts that starts a full local copy of OpenCrane for development and testing.
+It brings the services and apps together on a developer machine. It can also run browser
+checks from sign-in through chat, file upload and organisation features.
+
+## Where it fits
+
+This is part of the infrastructure layer. Docker Compose runs its services in containers.
+The stack starts OpenCrane apps against them. It uses the
+[Kubernetes cluster](../../GLOSSARY.md#kubernetes) prepared by [`infra/devbox`](../devbox/README.md).
+
+```mermaid
+flowchart LR
+  infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
+  stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
+  stack -->|sets up or checks test sign-in| zitadel["Zitadel<br/>development organisation"]
+  stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
+  stack -->|starts programs, checks website readiness and PDF answers using attached text or a file read| apps["apps/server, ops, web<br/>OpenCrane programs"]
+  stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
+  stack -->|checks spending, uploads, provider access, rehearsals at both widths, tools and group access loss| apps
+  infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
+  stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
 
-Only the disposable hosted-MCP fixture installs these resources today. General
-lifecycle and secondary startup installation remain deferred until their owning
-startup exists. Hosted dispatch and product deployment stay unavailable.
-The [connection receipt](../../docs/process/p3-6-pr8b/receipt.md) records live
-connections, policy-removal controls and conditions that could not be qualified.
+## What it is responsible for
+
+When the Spending editor fails to appear, the browser check keeps HTTP status codes
+and fixed visibility values for the editor and its loading and access notices.
+It records no screenshots, page text or response contents. The check still fails.
+The nightly launcher retains the private record before cleanup. The cause of the
+intermittent failure is still unknown; this change helps investigate the next failure.
+
+The upload check retries a file list that is still applying. Once the list is
+available, it checks the exact file count and waits for workspace delivery.
+
+Separate admission rules check hosted tool images and container settings. Their tests
+also check resource changes made through the Pod resize endpoint. Their tests
+use temporary namespaces on a claimed spare stack. Startup does not install them yet.
+
+- Start and stop the local services and OpenCrane processes.
+  Wait for the website to answer before starting browser checks.
+  Memory reads need an existing private key directory configured at startup.
+- Create private local credentials for the services.
+- Set up four sign-in test users for each spare stack. Check that the sign-in apps
+  include email claims in their signed tokens.
+- Check existing test sign-in accounts without changing Zitadel during a fresh
+  package run.
+- Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
+- Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
+  Read the converted PDF if the text sent with the question lacks the requested fact.
+- Connect and test that provider as the Owner before a fresh stack starts its chat checks.
+- Optionally use a real OpenAI provider on a spare stack, with a separate paid chat check.
+- Allow an explicit owner real-provider start from an interactive terminal, while refusing fleet tasks.
+  Check readiness without sending chat prompts. Restore the saved mode and stop newly
+  launched services if the start fails or is interrupted.
+- Run browser checks against real local services. The approval journey is currently skipped.
+- Declare review details for read-only test tools before the Owner selects Allow.
+  Discovery leaves every tool blocked until the exact review is saved.
+- Check integration list rows with a hosted display fixture. The fixture makes no
+  tool calls and has no remote URL for the catalogue watcher to check.
+- Check group chats from the To line, participant access, direct chats, shared assistants and
+  provider key saving in a fresh stack.
+- Keep one extra computer place so a saved-data repeat can start a new shared assistant.
+- Measure reply arrival, process memory and open files during live-view checks.
+- Keep up to three separate development stacks on one machine.
+- Seed two demo groups and a shared assistant through product APIs, keeping their ids on repeats.
+- Prepare a scanned personal PDF, bound company spending, warm computers and time demo checks.
+  A smaller approved demo allowance also limits paid calls made during fresh startup.
+  Rehearsals save the previous company limits and restore them when they finish or stop.
+  Private records identify the run's calls, charges and money still held.
+  The separate ten-step rehearsal checks the Models page inside the organisation page.
+  Each rehearsal uses separate invitation addresses and chat messages for its width and attempt.
+  It saves pictures before reporting a step as passed. Its history pictures show the matching rows.
+  It saves failure messages with private values removed, even if a screenshot fails.
+  If restoring company limits also fails, it saves both errors and keeps the checker's error first.
+- Put the package gateway Service IP in the computer settings before a chat turn starts.
+- Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
+  On failure, save the error and recent process logs before removing that stack.
+
+## Processes it handles
+
+A fresh stack with the development Owner connects the local model provider through the
+product APIs. It saves a private credential, checks the provider, selects the chat models
+and repeats the same request if the server says saved access is still being applied.
+It waits for the first default to be recorded. It then explicitly selects that default
+and asks to switch on. When accepted, models restarts with that saved
+credential before any chat check. A refusal stops startup. Free reachability checks
+need no spending settlement. Paid tests and other sends still need confirmed outcomes.
+Later starts read the recorded mode again. An explicit real-provider start reads a private
+credential file only during setup and saves it through the same product API. Real mode on a spare stack
+uses a separate check for streamed answers, Stop, a later member and a supplier PDF.
+Changing an existing stack between real and local providers requires a fresh start.
+Owner real starts require `--owner-run` and an interactive terminal. Fleet tasks are
+refused before owner data is read. Standalone automated journeys also refuse the owner
+id and any fleet marker before reading configuration. Stand-in journeys refuse a saved
+real-mode stack. Owner starts check health, processes and listening addresses, then
+report readiness. The [demo guide](../../docs/process/demo/README.md)
+keeps the remaining live checks explicit.
+
+The models process gets a separate control port for checking loaded configuration.
+The stack never forwards it. The approval journey is skipped while publication
+and call checks are being connected.
+
+1. **A developer starts OpenCrane.** The scripts start the databases and services, then
+   start the server, workers and website. Startup waits up to five minutes for the website
+   to answer HTTP requests, and stops if its process exits. A spare stack start also runs
+   the core browser check after the website is ready.
+   Computers update in place after their next pause and keep their home files.
+   Admission checks allow only the checked image and settings.
+2. **A developer checks a change.** A browser signs in, sends a chat message and checks
+   that the reply remains after a reload. Other checks cover uploads, budgets
+   and the computer screen. The organisation checks also cover groups, direct chats, shared
+   assistants and saving a provider key. Group chat checks cover the mode before the first
+   message, who can read each message, quiet ordinary sends, and access clearing after a
+   person leaves. Removal timing watches the open page, live connection and API reads
+   together, from when the browser sends removal. The Owner list must also update,
+   with a longer wait. Audit checks follow older pages when newer grants fill the first page.
+   Budget checks use a real group and shared assistant, and restore
+   their test limits even if a browser step fails.
+3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.
+   Its services use separate data and ports, and `down.sh --id` removes that stack and
+   releases its id. The demo launcher checks that the returned id matches the requested
+   slot before startup or cleanup. A failed request for another id keeps the existing stack.
+4. **The daily check runs.** A user timer updates a detached checkout of `main`, then starts
+   `up.sh --fresh` in a claimed spare stack. The local model stub keeps it free of paid model
+   calls. Each run checks groups, private shared sessions, direct chats and group messages.
+   The sender must see each group message within two seconds of its saved reply.
+   Saved failure logs have known secrets and credential patterns removed.
+   A result line and any failure evidence go in the user's home directory.
+
+## Secondary stack slots
+
+`claim.sh` gives this worktree one of the two spare slots. Its private owner file records
+the worktree, the claiming process id and the start time. A later claim reuses the same
+slot for this worktree. A claim stays reserved for at least 15 minutes so the stack
+has time to start. After that, another worktree can reclaim it if the claiming process
+has ended and no stack processes, containers or package namespace are running.
+Kubernetes errors keep a package slot busy. `status.sh` reports `free`
+for an unused slot and does not create its owner file. `down.sh` also leaves an unused
+slot alone.
+The spare slot runs either the Compose stack or the local Helm package. Package
+preparation refuses a running Compose stack. If Kubernetes is unavailable during
+cleanup, `down.sh` stops Compose and keeps any package owner record for a later retry.
+Without a package or computer setup record, teardown needs no Kubernetes connection.
+A started Compose stack still removes its recorded computer resources.
+
+## How to run or test it
+
+The local machine needs Docker and Node 22. The owner's main stack is reached over Tailscale,
+a private network between the owner's own devices, so it needs a signed-in Tailscale session.
+The two numbered test stacks are reached only from the machine itself.
+The [developer box](../devbox/README.md) sets up the local Kubernetes cluster.
+
+```sh
+infra/dev-stack/up.sh
+infra/dev-stack/status.sh
+infra/dev-stack/down.sh
+```
+
+`up.sh --fresh` replaces this stack's local data and credentials. For a spare stack,
+it also clears this worktree's website build cache so changed packages are rebuilt.
+
+The daily timer runs at 03:17 UTC. Before each run, its launcher updates the detached
+`~/dev/daily-fresh` checkout to the latest `main` and installs packages only when the lock
+file changes. It claims a spare stack, starts it fresh with the local model stub, and removes
+that stack when the run ends. If both spare stacks are busy, it records that it skipped the
+run. Saved logs have known secrets and credential patterns removed. Logs are withheld
+if sanitisation fails. Failed group receipts and pictures are kept before cleanup. Results and saved failure
+files go in `~/.opencrane/daily-fresh/`, outside the repository.
+
+Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user timer.
+
+## Where to read more
+
+- [README.robot.md](README.robot.md): exact settings, limits, credentials and test details.
+- [Demo guide](../../docs/process/demo/README.md): secondary start and owner refresh prerequisites.
+- [infra/devbox](../devbox/README.md): the local cluster used for computers.
+- [infra/nats](../nats/README.md): the event log's connection rules.
+- [infra/clamav](../clamav/README.md): the file scanner used by uploads.
+- [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).

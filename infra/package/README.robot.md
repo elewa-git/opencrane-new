@@ -108,9 +108,9 @@ in `docs/process/p5-1-local.md`.
 
 The chart runs the member, catalogue, computer, conversation, file, budget and
 audit workers, plus the dispatcher. It starts the model gateway beside the server
-and installs the checked computer template and a zero-size warm pool. A computer
-starts for each chat turn. The installer reads the server Service ClusterIP and
-puts that IP in the computer ConfigMap. The computer policy permits only TCP
+and installs the checked computer template and a zero-size warm pool. One computer
+is claimed per assistant, including shared group assistants, and starts when needed.
+The installer reads the server Service ClusterIP and puts that IP in the computer ConfigMap. The computer policy permits only TCP
 port 43000 to the server Pod and has no DNS egress. The memory worker needs a
 private key directory and is not started by this package. Object storage and
 the scanner are outside this chart.

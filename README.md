@@ -8,50 +8,56 @@ approved tools. The company chooses the [models](GLOSSARY.md#model-and-model-pro
 [tool rules](GLOSSARY.md#tool-rule-allow-ask-block), approvals and [budgets](GLOSSARY.md#budget).
 Each customer's private installation is called a [silo](GLOSSARY.md#silo).
 
-In short: you use the website, and the website talks to the server. The server saves
+People use the website, and the website talks to the server. The server saves
 every change as an [event](GLOSSARY.md#event) in the [event log](GLOSSARY.md#event-log-event-store),
 the one true record. Background workers copy those events into [read tables](GLOSSARY.md#read-table-projection)
-so screens load fast. They also start each person's [computer](GLOSSARY.md#computer)
-when it is needed.
+so screens load fast. They also start each assistant's [computer](GLOSSARY.md#computer)
+when it is needed. A personal assistant has one computer across its chats. A
+[shared group assistant](GLOSSARY.md#shared-assistant-group-assistant) also has one
+computer, shared by the members who use it.
 
 ## Where it fits
 
 This repository holds all of OpenCrane's code: the website, the server, the background
-workers, the recipe for each personal computer, and the code they share. On the
+workers, the recipe for each assistant's computer, and the code they share. On the
 [dev stack](GLOSSARY.md#dev-stack), most services run directly on the developer's
-machine or in Docker [containers](GLOSSARY.md#container-and-pod). The personal computers run in
+machine or in Docker [containers](GLOSSARY.md#container-and-pod). The assistant computers run in
 [Kubernetes](GLOSSARY.md#kubernetes), a system that runs and looks after containers.
 The [planned cluster design](docs/architecture/target.md) describes the intended
 customer installation.
 
 ### Layers and folders
 
-Use these layer names when describing a package's place in the system.
-The event core is the shared code that records every change as an event and builds
-data from it.
+The table shows each folder, its layer and what it does. The
+[event core](GLOSSARY.md#event-core) is the shared code that records changes and
+builds data from them. [Tool servers](GLOSSARY.md#mcp-server-tool-server) are small
+programs that give assistants named actions, such as looking up an order. They use
+MCP, a shared standard for describing and calling tools.
 
 | Layer | Folder | What it does |
 | --- | --- | --- |
 | Browser app | [apps/web](apps/web/README.md) | Sign in, chat, watch the assistant's screen and manage organisation settings. |
 | Back end | [apps/server](apps/server/README.md) | Check access, record changes and send work to computers. It also runs the [models process](GLOSSARY.md#models-process), a separate program that checks AI spending and starts [agentgateway](GLOSSARY.md#agentgateway-ai-gateway), the AI gateway. |
 | Tool servers | [apps/demo-mcp](apps/demo-mcp/README.md) | Offer a synthetic quote and delivery slot for credential-free tool demos. |
+| Tool servers | [apps/odoo-mcp](apps/odoo-mcp/README.md) | Read Odoo draft sales orders for standalone tests; no product application calls it yet. |
 | Background workers | [apps/ops](apps/ops/README.md) | Keep the read tables and permissions up to date, start and pause computers, and rebuild data from the event log. |
-| Personal computers | [apps/computer](apps/computer/README.md) | Build each person's isolated computer, where [Codex](GLOSSARY.md#codex), the AI agent, does the work. |
+| Assistant computers | [apps/computer](apps/computer/README.md) | Build each assistant's isolated computer, where [Codex](GLOSSARY.md#codex), the AI agent, does the work. |
 | Event core | [libs/events](libs/events/README.md) | Define each kind of event and the data it carries. |
 | Event core | [libs/event-store](libs/event-store/README.md) | Save changes in the event log and read them in order. |
 | Event core | [libs/projections](libs/projections/README.md) | Turn events into read tables in PostgreSQL, the database. |
 | Event core | [libs/handlers](libs/handlers/README.md) | Run background work in response to events. |
 | Shared libraries | [libs/protocol](libs/protocol/README.md) | Define the messages the website and server share. |
-| Shared libraries | [libs/auth](libs/auth/README.md) | Handle sign-in, keep people signed in, and issue short-lived passes (access tokens) that prove who is asking. |
+| Shared libraries | [libs/auth](libs/auth/README.md) | Handle sign-in, keep people signed in, and issue short-lived [passes](GLOSSARY.md#access-token) that prove who is asking. |
 | Shared libraries | [libs/authz](libs/authz/README.md) | Check and update who may do what, using OpenFGA, the permissions service. |
 | Shared libraries | [libs/models](libs/models/README.md) | Choose models and check budgets, tool rules and approvals through the AI gateway. |
 | Shared libraries | [libs/observability](libs/observability/README.md) | Write logs that leave out private data, and optional traces that follow one request across services. |
 | Infrastructure | [infra/devbox](infra/devbox/README.md) | Set up a fresh Ubuntu developer machine. |
 | Infrastructure | [infra/dev-stack](infra/dev-stack/README.md) | Start a developer copy of OpenCrane and check it from start to finish. |
-| Infrastructure | [infra/nats](infra/nats) | Configure [NATS JetStream](GLOSSARY.md#event-log-event-store), the service that keeps and carries events. |
+| Infrastructure | [infra/nats](infra/nats/README.md) | Configure [NATS JetStream](GLOSSARY.md#nats), the service that keeps and carries events. |
 | Infrastructure | [infra/clamav](infra/clamav/README.md) | Run the virus scanner for uploads. |
 | Infrastructure | [infra/odoo](infra/odoo/README.md) | Run a test copy of Odoo, a business system, for a planned link between assistants and Odoo. |
-| Developer tools | [tools/fleet](tools/fleet) | Help the AI coding agents run tasks, and check that no passwords or keys are committed. |
+| Infrastructure | [infra/package](infra/package/README.md) | Try an OpenCrane install with Helm on a spare dev stack, ahead of the customer installer. |
+| Developer tools | [tools/fleet](tools/fleet/README.md) | Help the AI coding agents run tasks, and check that no passwords or keys are committed. |
 | Developer tools | [scripts](scripts) | Run repository checks, capture screenshots and download tools. |
 | Design notes | [docs](docs) | Describe the product, architecture, decisions and intended screens. |
 | Early experiments | [spikes](spikes) | Keep the experiments that tested the main design choices. |
@@ -73,11 +79,11 @@ flowchart LR
   ops -->|fills read tables| pg[("PostgreSQL<br/>read tables")]
   ops -->|updates permissions| fga
   server -->|reads tables| pg
-  ops -->|starts and pauses| computer["apps/computer<br/>personal computers"]
+  ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   server -->|sends chat turns| computer
-  computer -->|makes AI calls| gateway["agentgateway<br/>AI call checks"]
+  computer -->|AI and reviewed tools| gateway["agentgateway<br/>AI call checks"]
   gateway -->|asks permission| server
-  gateway -->|sends allowed AI calls| openai["OpenAI<br/>model provider"]
+  gateway -->|sends allowed calls| upstream["Model provider or tool server"]
   server -.->|uses| libs["libs/*<br/>shared code"]
 ```
 
@@ -87,13 +93,15 @@ Workers can throw them away and rebuild them from the log.
 OpenFGA answers permission questions. [Zitadel](GLOSSARY.md#zitadel-sign-in-service)
 handles company sign-in.
 MinIO stores files, and ClamAV scans them for viruses.
-agentgateway checks each AI call before passing it to a model provider, the company
-that runs the AI model, such as OpenAI. For tests, the dev stack can use a fake model
-provider.
+agentgateway checks every AI model call and calls to reviewed, [published](GLOSSARY.md#publication) MCP tools
+before forwarding them. The current chat connection offers reviewed tools that need
+no account credentials, on personal assistants. Local shell and file tools run inside
+the computer and do not pass through the gateway. Routing all browser and other
+outside traffic through it remains planned. Tests can use a fake model provider.
 
 ## What it is responsible for
 
-- Give each person an assistant and a private computer that keeps its files across restarts.
+- Give personal and shared group assistants one computer each, with files that survive restarts.
 - Save every change, such as a new member or a chat message, as an event, and build the tables the screens read from those events.
 - Check who may read conversations, use models and tools, or see a computer's screen.
 - Set money aside from the budget before each AI call, then charge the real cost once the gateway reports what the call used.
@@ -104,10 +112,14 @@ provider.
 ### What works today
 
 The dev stack supports company sign-in, personal chat, streamed replies, file uploads,
-PDF reading, screenshots and live viewing. Admins can register tool servers, set tool
-rules and set monthly budgets in organisation settings. Each installation has a fixed
-set of models for now. The server also supports members, groups and ownership changes,
-but their website pages are not built yet.
+PDF reading, screenshots and live viewing. Group chats and private sessions with
+shared group assistants are also available. Admins can register tool servers, set tool
+rules and set monthly budgets in organisation settings. Admins can connect a model
+provider, check its key and choose which models people may use in Models & providers.
+Owners and admins manage members, groups, invitations and ownership in People & groups.
+People can see, save and forget their own [memory facts](GLOSSARY.md#memory-fact)
+in chat when private memory storage is configured. The server also implements personal
+memory recall for assistants, but memory is still disabled in ordinary assistant turns.
 
 Live viewing still fails sometimes when the system is busy. Three things still need
 work: starting every tool server reliably, letting a person take control of the
@@ -118,10 +130,10 @@ Read the [changelog](CHANGELOG.md) for current limits.
 
 Not built yet:
 
-- Installing a customer silo with Helm, the Kubernetes package installer.
-- A memory service, so assistants can remember, correct and forget shared knowledge.
-- Letting assistants use Odoo, a business system, with only the rights of the person who asked.
-- Shared team assistants, work that starts at set times, and handing a conversation to another assistant. Parts of these exist, but they do not yet work together as a product.
+- A customer installer using [Helm](GLOSSARY.md#helm); the local package is an installation trial.
+- Memory during assistant turns, including team chats, until private work is proven isolated; correcting facts through the assistant also remains planned.
+- Letting assistants use Odoo with only the rights of the person who asked.
+- Completing scheduled assistant work and handing a conversation to another assistant. Parts exist, but the full product journeys still need to be connected and proven.
 
 ## Processes it handles
 
@@ -130,14 +142,14 @@ Not built yet:
 1. A person signs in with their company account through Zitadel and opens the website.
    The server checks that they are signed in and belong to this company.
 2. The person sends a message to their assistant. The server saves it as an event.
-   Background work wakes the person's computer if it is asleep. The server then passes
+   Background work wakes the assistant's computer if it is asleep. The server then passes
    the message to the [bridge](GLOSSARY.md#bridge), the small program on the computer
    that hands work to Codex and reports progress.
 3. The assistant calls an AI model. The call goes through agentgateway, which asks the
    [models process](GLOSSARY.md#models-process) in `apps/server` two things: is the
    call allowed, and is there enough budget? If so, the models process sets that money
-   aside. Some tool calls also pass through the gateway. For those, the check also
-   applies the tool's [rule](GLOSSARY.md#tool-rule-allow-ask-block): Allow, Ask or Block.
+   aside. Calls to reviewed MCP tools also pass through the gateway, which checks
+   the tool's [rule](GLOSSARY.md#tool-rule-allow-ask-block): Allow, Ask or Block.
 4. If the tool's rule is Ask, the action waits in the chat until the person approves
    it. The assistant then tries again. The approval works once, and only for exactly
    the action the person approved.
@@ -158,8 +170,8 @@ is open.
 
 ### Manage or rebuild the installation
 
-An admin or owner sets tool rules and monthly budgets in organisation settings. Each
-installation has a fixed set of models for now.
+An admin or owner manages tool rules, monthly budgets, model providers, people and
+groups in organisation settings.
 
 An operator, the person who runs the installation, can rebuild read tables or
 permissions. The tools in `apps/ops` read the event log again from the start. This
