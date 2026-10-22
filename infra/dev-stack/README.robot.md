@@ -395,6 +395,20 @@ This leaves room for the demo assistant inside the six-computer slot limit.
 It adds a third seeded member and
 checks that earlier messages stay hidden from that member. The check also removes a
 member, asks another member to leave, and records how quickly each screen clears.
+Removal observers start before Remove. Their zero is the successful removal HTTP response,
+not the click or the Owner's participant list. The receipt records milliseconds for
+`removalAccepted`, `removalSaved`, `accessStreamUpdated`, `liveFeedClosed`, `pageCleared`,
+`historyRefused`, `fileRefused` and `ownerList`. Saving and updating access are one event
+append to `participation-*`; both timings are when the journey reads that saved event.
+These observations are upper bounds, with 20 ms polling plus request time. Negative
+values mean the observer finished before the HTTP response. A missing observation is
+`NOT RUN` and fails access timing. The Owner list has its own observation and does not
+set the two-second result. The removed browser has a ready conversation WebSocket before
+removal. History and file-list reads must return 403; other refusals do not prove removal.
+This people-only chat has no computer viewer or pending approval, so those checks are
+not qualified by this journey.
+`group-removal-timing.test.ts` uses a fake clock to keep a slow Owner list independent
+of the removed page and API reads, and to refuse a page that clears after two seconds.
 It checks the long-name and no-match picker states, refuses an unauthorised add, and
 refuses a people-and-assistant choice without saving a conversation. It stops the server and conversation worker for an offline replay, then restarts both
 and checks server health directly. Each health read gets the time left in the two-minute

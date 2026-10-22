@@ -8,6 +8,7 @@ import type { Locator, Page } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
 import type { Phase4Assertion } from './browser-phase4.ts';
+import { checkGroupRemoval } from './browser-group-removal.ts';
 
 type GroupChatOptions = {
   ownerPage: Page;
@@ -150,16 +151,17 @@ export async function browserGroupChat(options: GroupChatOptions): Promise<void>
     }
 
     try {
-      const removeStartedAt = await removeParticipant(owner, options.origin, conversationId,
-        firstPerson.displayName);
-      const removeResult = await observeClearedAccess(colleague,
-        'Group message before the new person joins', removeStartedAt);
-      await waitForParticipantAbsent(owner.locator('.participant-list').first(),
-        firstPerson.displayName);
+      await openConversation(owner, options.origin, conversationId);
+      await owner.getByRole('button', { name: 'Participants', exact: true }).click();
+      const removalOptions = {
+        owner, removed: colleague, origin: options.origin, conversationId,
+        name: firstPerson.displayName,
+        oldMessage: 'Group message before the new person joins', store: options.store,
+      };
+      const removeResult = await checkGroupRemoval(removalOptions);
       const removeScreens = await captureBoth(colleague, output, 'group-removed-cleared');
       setAssertion(options.assertions, 'group_chat.remove_clears_access', removeResult.cleared,
-        { clearTimeMs: removeResult.elapsedMs, transcriptEmpty: removeResult.transcriptEmpty },
-        removeScreens);
+        removeResult.hops, removeScreens);
     } catch (error) {
       await recordFailedStep(options.assertions, 'group_chat.remove_clears_access',
         error, colleague, output, 'group-removed-cleared');
@@ -436,17 +438,6 @@ async function addParticipant(page: Page, origin: string, id: string,
   if (await backToConversation.isVisible()) await backToConversation.click();
   await openConversation(page, origin, id);
   await page.locator('#message').waitFor({ state: 'visible', timeout: 10_000 });
-}
-
-async function removeParticipant(page: Page, origin: string, id: string,
-  name: string): Promise<number> {
-  await openConversation(page, origin, id);
-  await page.getByRole('button', { name: 'Participants', exact: true }).click();
-  const row = page.locator('.participant-list').first().locator('li').filter({ hasText: name });
-  const startedAt = Date.now();
-  await row.getByRole('button', { name: 'Remove', exact: true }).click();
-  await waitForParticipantAbsent(page.locator('.participant-list').first(), name);
-  return startedAt;
 }
 
 async function leaveConversation(page: Page, origin: string, id: string): Promise<number> {
