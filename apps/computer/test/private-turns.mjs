@@ -552,11 +552,22 @@ try {
     await drive('stop', { frame: { type: 'stop', turnId: active.id, conversationId: active.id } });
     await ended(active);
     check('J3 Stop failed terminal', terminal(active.id)?.type === 'agent.turn_failed');
-    check('J3 Stop explicit reason', terminal(active.id)?.reason === 'stop_interrupted');
     check('J3 Stop bounded cleanup', performance.now() - stoppedAt <= 5000);
     await delay(500);
     check('J3 Stop no repeat', (await provider('requests')).length === beforeRequests);
     await scan('J3');
+    const personal = await turn('heldStopPersonal', 'alice', true);
+    function personalTextArrived() {
+      function isPersonalText(report) {
+        return report.turnId === personal.id && report.type === 'agent.message_delta';
+      }
+      return reports.some(isPersonalText);
+    }
+    await until(personalTextArrived, 'personal reply streams before Stop');
+    const stop = { type: 'stop', turnId: personal.id, conversationId: personal.id };
+    await drive('stop', { frame: stop });
+    await ended(personal);
+    check('J3 personal Stop explicit reason', terminal(personal.id)?.reason === 'stop_interrupted');
   });
   await journey('J4', async function crashes() {
     const doomed = await turn('heldCrash');
