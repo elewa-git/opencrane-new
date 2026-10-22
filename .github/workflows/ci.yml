@@ -109,6 +109,21 @@ jobs:
         if: needs.select.outputs.mode != 'docs'
         run: npm run check:events
 
+      - name: Read Chromium package cache versions
+        if: needs.select.outputs.mode != 'docs'
+        id: chromium-cache-key
+        run: |
+          playwright_version=$(node -p 'require("playwright/package.json").version')
+          printf 'key=chromium-debs-v1-%s-%s-%s-%s\n' \
+            "$RUNNER_OS" "$RUNNER_ARCH" "$ImageVersion" "$playwright_version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium system packages
+        if: needs.select.outputs.mode != 'docs'
+        uses: actions/cache@v4
+        with:
+          path: .tools/ci/chromium-debs/*.deb
+          key: ${{ steps.chromium-cache-key.outputs.key }}
+
       - name: Install Chromium for demo recording checks
         if: needs.select.outputs.mode != 'docs'
         run: bash scripts/ci/install-chromium.sh
@@ -280,6 +295,19 @@ jobs:
             computer.cache-from=type=gha,scope=upload-computer
             computer.cache-to=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'type=gha,scope=upload-computer,mode=max' || '' }}
 
+      - name: Read Chromium package cache versions
+        id: chromium-cache-key
+        run: |
+          playwright_version=$(node -p 'require("playwright/package.json").version')
+          printf 'key=chromium-debs-v1-%s-%s-%s-%s\n' \
+            "$RUNNER_OS" "$RUNNER_ARCH" "$ImageVersion" "$playwright_version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium system packages
+        uses: actions/cache@v4
+        with:
+          path: .tools/ci/chromium-debs/*.deb
+          key: ${{ steps.chromium-cache-key.outputs.key }}
+
       # Browser tests use the Chromium build that matches the pinned playwright package.
       - name: Install Playwright Chromium
         run: bash scripts/ci/install-chromium.sh
@@ -347,6 +375,19 @@ jobs:
       # Authz tests use disposable Docker containers and the PostgreSQL service above.
       - name: Verify Docker for real OpenFGA tests
         run: docker info
+
+      - name: Read Chromium package cache versions
+        id: chromium-cache-key
+        run: |
+          playwright_version=$(node -p 'require("playwright/package.json").version')
+          printf 'key=chromium-debs-v1-%s-%s-%s-%s\n' \
+            "$RUNNER_OS" "$RUNNER_ARCH" "$ImageVersion" "$playwright_version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium system packages
+        uses: actions/cache@v4
+        with:
+          path: .tools/ci/chromium-debs/*.deb
+          key: ${{ steps.chromium-cache-key.outputs.key }}
 
       # Browser tests use the Chromium build that matches the pinned playwright package.
       - name: Install Playwright Chromium

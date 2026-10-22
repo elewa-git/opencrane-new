@@ -63,8 +63,28 @@ records the pushed head's results when its run finishes.
 apt setting disables upgrades for this check, so an available upgrade does not
 make an installed package appear absent. This setting applies only to the check.
 When all packages are installed, setup downloads only the pinned browser files.
-Otherwise it runs Playwright's normal dependency installer. Any install failure
-fails the job. The script prints elapsed seconds; Actions also records step times.
+Otherwise it installs cached `.deb` files with `apt-get --no-download` and checks
+again that all required packages are present. A missing, incomplete or unusable
+cache falls back to Playwright's dependency installer. Both package installation
+paths have a 180-second limit, followed by forced termination after 10 seconds.
+An unsuccessful fallback or browser install fails the job.
+
+The checks, image and browser jobs use `actions/cache@v4` for the downloaded
+archives at `.tools/ci/chromium-debs/*.deb`. Their shared key includes the runner
+operating system, architecture, `ImageVersion` and installed Playwright version.
+There are no partial-key restores. The installer retains downloaded packages for
+the cache; `CHROMIUM_DEB_CACHE` changes their directory for script tests.
+The script tests cover offline cache installation, bounded downloads, incomplete
+and unusable caches, and failure propagation. They use fake commands.
+The script prints elapsed seconds; Actions also records step times.
+
+Local apt smoke check on 22 October 2026: a fresh `node:22-bookworm-slim` container
+downloaded and retained 111 dependency archives in 68 seconds. A second fresh
+container installed those packages in 33 seconds with networking disabled, then
+passed Playwright's dependency check. Both runs used the real script and apt;
+shell wrappers skipped the browser download and replaced sudo because the
+containers ran as root. These are Debian package setup times, not hosted Ubuntu
+job times. Hosted cache transfer and Ubuntu runner installation remain NOT RUN.
 
 Local measurement on Ubuntu 24.04, 22 October 2026: the dependency check took
 3.7 seconds. Complete setup took 5.7 seconds with system packages and browser

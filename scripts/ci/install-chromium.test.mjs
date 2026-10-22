@@ -46,7 +46,9 @@ const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.CI_CALLS, JSON.stringify(['timeout', ...args]) + '\\n');
-const result = spawnSync(args[2], args.slice(3), { stdio: 'inherit' });
+const commandArguments = args.slice(3);
+const options = { stdio: 'inherit' };
+const result = spawnSync(args[2], commandArguments, options);
 process.exit(result.status);
 `;
   const fileOptions = { mode: 0o755 };
@@ -125,7 +127,8 @@ function refusesFailedInstall() {
 }
 
 function installsCachedPackagesWithoutDownloads() {
-  const result = installChromium(1, 0, { present: true });
+  const cacheOptions = { present: true };
+  const result = installChromium(1, 0, cacheOptions);
   assert.equal(result.status, 0, result.stderr);
   const archive = join(result.cacheDirectory, 'fonts-test.deb');
   const archiveOption = `Dir::Cache::archives=${result.cacheDirectory}`;

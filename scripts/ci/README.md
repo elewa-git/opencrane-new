@@ -17,6 +17,8 @@ flowchart LR
   ci -->|runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image tests| computer["apps/computer<br/>test image"]
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
+  actions -->|restores system packages| cache["Actions cache<br/>downloaded packages"]
+  cache -->|supplies saved packages| ci
 ```
 
 ## What it is responsible for
@@ -38,6 +40,8 @@ The image job also installs Chromium because the screenshot test needs both.
 Chromium setup checks installed system packages first. When they are present,
 it installs only the browser and avoids an apt update or package download.
 The browser job also runs the hosted integration-row journey regression.
+Fresh runners install missing packages from the Actions cache without downloading
+them again. A cache miss downloads and saves the packages, with a time limit.
 
 Each test job saves a small list of its files. The final `ci-ok` job compares
 those lists with all the files Vitest finds. It follows local helper imports and
