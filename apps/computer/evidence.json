@@ -1,292 +1,157 @@
 {
-  "date": "2026-10-20T19:48:52.591173+00:00",
-  "status": "PARTIAL: image, lifecycle and stand-in Stop checks passed; holds remained uncertain; root suite failed and the provider-history timeout repeated alone; original paid-model Stop cause unproven",
-  "sourceCommit": "9ab903795c071e3d7ec43903837c296c6ffc70ac",
-  "mainCommit": "9153c8dabf5eadceb86e242d02a1abb10189908c",
-  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
-  "releaseDigest": "sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
-  "qualificationDigest": "sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+  "date": "2026-10-22T13:33:05.055296+00:00",
+  "status": "PARTIAL: image release, lifecycle and stand-in proof passed; the broader fresh startup journey failed at typed integration rows",
+  "sourceCommit": "4f97ddbf248f0c75097c78ff5cd7208a00d026f8",
+  "mainCommit": "560c4fab27e085720a018c6e877b3729b933df19",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+  "releaseDigest": "sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+  "qualificationDigest": "sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
   "releaseTag": "k3d-ocn-registry:5000/opencrane/computer:p2-1",
   "qualificationTag": "k3d-ocn-registry:5000/opencrane/computer:qualification",
-  "uncompressedBytes": 2913454530,
+  "uncompressedBytes": 2913455431,
   "environment": "Existing k3d-ocn with gVisor; claimed secondary slot 1; throwaway PostgreSQL 17.6; nice -n 10.",
   "cause": {
-    "originalStop": "Not reproduced with the stand-in on the old image. An image-only cause remains unproven.",
-    "buildFailure": "The image probe omitted turnId from proxy grant and removal requests. The proxy correctly refused the grant with bad input.",
-    "fix": "Only the fixture changed. It now supplies separate turn ids and asserts successful replies. No runtime guard changed."
+    "oldImage": "The previous pin lacks the explicit terminal reasons already present in the checkout.",
+    "firstBuild": "An added private-turn assertion wrongly required Stop to mean interruption; that turn reported model_error. The release tag did not move.",
+    "testCorrection": "Keep the existing private checks and require stop_interrupted after a separate personal reply starts streaming. This fails on the old pin and passes on the new image."
   },
   "checks": {
     "build": {
       "check": "build",
       "result": "FAIL",
       "exitCode": 1,
-      "durationSeconds": 169.43
+      "durationSeconds": 464.29
     },
-    "grant-red": {
-      "check": "grant-red",
+    "personal-stop-red": {
+      "check": "personal-stop-red",
       "result": "FAIL",
       "exitCode": 1,
-      "durationSeconds": 28.7
-    },
-    "grant-green": {
-      "check": "grant-green",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 144.78
+      "durationSeconds": 269.22
     },
     "build-final": {
       "check": "build-final",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 565.82
+      "durationSeconds": 622.89
+    },
+    "private-second": {
+      "check": "private-second",
+      "result": "PASS",
+      "exitCode": 0,
+      "durationSeconds": 495.3
     },
     "typecheck": {
       "check": "typecheck",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 262.21
+      "durationSeconds": 381.66
     },
     "security-rules": {
       "check": "security-rules",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 5.09
+      "durationSeconds": 5.04
     },
     "credentials": {
       "check": "credentials",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 63.29
+      "durationSeconds": 107.76
     },
     "events": {
       "check": "events",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 0.87
+      "durationSeconds": 0.8
     },
     "knip": {
       "check": "knip",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 7.88
+      "durationSeconds": 8.72
     },
     "changelog": {
       "check": "changelog",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 0.53
+      "durationSeconds": 0.63
     },
     "lifecycle": {
       "check": "lifecycle",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 714.81
+      "durationSeconds": 796.08
     },
-    "lint": {
+    "lint-first": {
+      "check": "lint",
+      "result": "FAIL",
+      "exitCode": 134,
+      "durationSeconds": 616.75
+    },
+    "lint-spacing": {
       "check": "lint",
       "result": "FAIL",
       "exitCode": 1,
-      "durationSeconds": 580.64
+      "durationSeconds": 548.3
     },
-    "lint-final": {
+    "lint": {
       "check": "lint-final",
-      "result": "FAIL",
-      "exitCode": 1,
-      "durationSeconds": 610.96
-    },
-    "lint-release": {
-      "check": "lint-release",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 687.19
+      "durationSeconds": 619.26
     },
     "package-licences": {
       "check": "package-licences",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 0.45
+      "durationSeconds": 0.66
     },
     "package-licence-tests": {
       "check": "package-licence-tests",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 0.88
+      "durationSeconds": 1.0
     },
-    "root-tests": {
-      "check": "root-tests",
+    "new-up-first": {
+      "check": "new-up",
       "result": "FAIL",
       "exitCode": 1,
-      "durationSeconds": 9203.27,
-      "tests": {
-        "passed": 6619,
-        "failed": 8,
-        "skipped": 64
-      },
-      "files": {
-        "passed": 340,
-        "failed": 7,
-        "skipped": 6
-      },
-      "cleanupHookFailures": 1,
-      "failures": [
-        {
-          "file": "apps/server/test/memory.test.ts",
-          "case": "rebuilds binding status without any key, model, tool, computer or scheduler port",
-          "detail": "Test timed out in 30000ms."
-        },
-        {
-          "file": "apps/server/test/chat-access-regression.test.ts",
-          "case": "checks legacy participation once and skips modern events during repeated churn reads",
-          "detail": "FGA Error: timeout of 1000ms exceeded while creating the fixture store."
-        },
-        {
-          "file": "apps/server/test/chat-access-regression.test.ts",
-          "case": "keeps child readers available during 100,000 messages and unrelated turn activity",
-          "detail": "Expected an open socket; received a closed socket with code 1013."
-        },
-        {
-          "file": "apps/server/test/memory-mcp.test.ts",
-          "case": "refuses a loaded fact that is expired before any fact append",
-          "detail": "The initial recall returned 403 rather than 200."
-        },
-        {
-          "file": "apps/server/test/budget-stop-status.test.ts",
-          "case": "validates malformed saved Stop data while building work",
-          "detail": "Gateway stopped (exit code 1): Error: readiness server starts."
-        },
-        {
-          "file": "libs/models/test/egress-admission.test.ts",
-          "case": "rechecks destination after the real budget dispatch append retries",
-          "detail": "Expected two publish attempts; received one."
-        },
-        {
-          "file": "libs/models/test/decision-activity.test.ts",
-          "case": "rechecks a warmed 5,000-event provider history within the shared two seconds",
-          "detail": "Test timed out in 30000ms."
-        },
-        {
-          "file": "apps/server/test/member-inventory-volume.test.ts",
-          "case": "returns a bounded review after 10,001 unrelated pending history events",
-          "detail": "Test timed out in 120000ms; cleanup hook also timed out in 10000ms."
-        }
-      ]
-    },
-    "memory-expiry-alone": {
-      "check": "memory-expiry-alone",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 28.4
-    },
-    "member-inventory-alone": {
-      "check": "member-inventory-alone",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 119.58
-    },
-    "child-volume-alone": {
-      "check": "child-volume-alone",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 188.64
-    },
-    "provider-history-alone": {
-      "check": "provider-history-alone",
-      "result": "FAIL",
-      "exitCode": 1,
-      "durationSeconds": 36.73,
-      "detail": "The same 30000ms test timeout repeated with one worker. The failure remains unresolved; no timeout or access deadline changed."
-    },
-    "legacy-access-alone": {
-      "check": "legacy-access-alone",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 22.66
-    },
-    "saved-stop-alone": {
-      "check": "saved-stop-alone",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 20.67
-    },
-    "egress-retry-alone": {
-      "check": "egress-retry-alone",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 17.69
-    },
-    "memory-rebuild-alone": {
-      "check": "memory-rebuild-alone",
-      "result": "FAIL",
-      "exitCode": 1,
-      "durationSeconds": 24.14,
-      "detail": "The selected case returned 404 because an earlier test creates its member and binding. A focused group is checked separately."
-    },
-    "memory-rebuild-group": {
-      "check": "memory-rebuild-group",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 22.83,
-      "tests": 4
-    },
-    "web-tests": {
-      "check": "web-tests",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 91.21,
-      "tests": 1100,
-      "files": 63
-    },
-    "pg-cleanup": {
-      "check": "pg-cleanup",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 0.97
+      "durationSeconds": 76.39
     },
     "new-up": {
       "check": "new-up",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 765.86,
-      "detail": "Fresh stand-in startup journey passed. Its existing approval check was skipped and is not qualified here."
+      "result": "FAIL",
+      "exitCode": 1,
+      "durationSeconds": 1035.89
     },
-    "new-stop": {
-      "check": "new-stop",
+    "browser": {
+      "check": "browser",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 88.66
+      "durationSeconds": 152.85
     },
     "new-down": {
       "check": "new-down",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 43.54
+      "durationSeconds": 62.79
     },
-    "final-docs": {
-      "check": "final-docs",
+    "pg-cleanup": {
+      "check": "pg-cleanup",
       "result": "PASS",
       "exitCode": 0,
-      "durationSeconds": 13.04
-    },
-    "github-ci": {
-      "result": "NOT RUN at receipt",
-      "detail": "The draft PR records ci-ok for the final pushed commit."
-    },
-    "final-docs-confirmed": {
-      "check": "final-docs-confirmed",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 11.38
+      "durationSeconds": 0.56
     }
   },
   "imageChecks": {
-    "date": "2026-10-20T16:39:41.208Z",
-    "source": "9ab903795c071e3d7ec43903837c296c6ffc70ac",
-    "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:a30319e3744510ea38fa59928f0881444a51c61c33934e0458f87189413515bc",
+    "date": "2026-10-22T11:25:09.748Z",
+    "source": "4f97ddbf248f0c75097c78ff5cd7208a00d026f8",
+    "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
     "receipts": [
       {
         "name": "Pod ready",
         "result": "PASS",
-        "detail": "8183 ms from claim apply, fresh Pod; local registry/layers may be cached"
+        "detail": "6128 ms from claim apply, fresh Pod; local registry/layers may be cached"
       },
       {
         "name": "runtime",
@@ -407,8 +272,8 @@
   },
   "privateTurns": {
     "result": "PASS",
-    "checks": 81,
-    "evidence": "../../docs/process/evidence/p4-14/private-turns.json",
+    "checks": 84,
+    "evidence": "../../docs/process/demo-kit/image-refresh-private.json.gz",
     "memoryAdmission": "DISABLED"
   },
   "licences": {
@@ -418,10 +283,11 @@
     "inventory": "licences.json",
     "reviewedMapping": "reviewed-licences.json",
     "sbom": "sbom.spdx.json.gz",
-    "sbomSha256": "93ad13cd98c3c60c8175d8dbb9f085007fa2d2a682f122223924a5a73e361d72"
+    "sbomSha256": "1c4c548b054a3ba4ba0f364ecd81d9097a066309ce73ba8edae1ef0fe4ec3909"
   },
-  "logs": "/tmp/demo-real-model-stop",
+  "logs": "/tmp/demo-kit-image-refresh",
   "notRun": [
+    "Full root suite (excluded by the task)",
     "Real model calls",
     "Owner-stack update or computer restart",
     "Managed-cluster qualification",
@@ -437,33 +303,27 @@
     "credentialDelivery": "Authenticated root Pod exec; no runtime protection changed"
   },
   "stopQualification": {
-    "result": "PASS for Stop; FAIL for settlement or release",
-    "oldImage": "The stand-in stopped twice on the old image. An image-only cause of the paid failure is not proven.",
-    "newImage": {
-      "stopMilliseconds": [
-        2056,
-        2156
-      ],
-      "viewportWidths": [
-        390,
-        1280
-      ],
-      "partialReplyAfterReload": "Hello ",
-      "browserLeftStopping": true,
-      "conversationEndReports": 2,
-      "computerEndReports": 2,
-      "bridgeJournalEndReports": 2,
-      "runningPodDigestVerified": true
-    },
-    "money": "Each call retained a 16-cent hold with effect.uncertain reason missing_usage. Neither settled nor released; existing money rules require the hold without final usage.",
-    "oldEvidence": "../../docs/process/demo-real-model-stop/old.json",
-    "newEvidence": "../../docs/process/demo-real-model-stop/new.json"
+    "result": "PASS",
+    "stopMilliseconds": [
+      1109,
+      2545
+    ],
+    "viewportWidths": [
+      390,
+      1280
+    ],
+    "partialReplyAfterReload": "Hello ",
+    "reason": "stop_interrupted",
+    "failureLabelsOnStoppedReply": 0,
+    "providerFailureReason": "model_error",
+    "providerFailureShownBeforeAndAfterReload": true,
+    "runningPodDigestVerified": true,
+    "evidence": "../../docs/process/demo-kit/image-refresh.json.gz"
   },
   "cleanup": {
     "result": "PASS",
     "slot": 1,
     "slotReleased": true,
-    "namespaceRemoved": true,
     "throwawayPostgresAndVolumeRemoved": true,
     "ownerStackUntouched": true
   }

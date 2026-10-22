@@ -385,6 +385,12 @@ their replies before continuing. Its expiry and cross-thread checks use separate
 turn ids. A previous removal therefore cannot make those refusal checks pass
 for the wrong reason.
 
+The image gate also requires `stop_interrupted` after a personal reply streams and
+receives Stop. It checks the image named in the tracked template without mounting
+replacement bridge code.
+The [image refresh receipt](../../docs/process/demo-kit/image-refresh.md) records
+the failing old image, released digest and browser checks at both screen widths.
+
 CI prepares the upload test with `sh scripts/build-test-computer.sh`. It rebuilds
 the desktop/Codex base from public pins, then uses the production Dockerfile and
 lockfiles to create `ocn-upload-computer:test` locally. No private registry, running

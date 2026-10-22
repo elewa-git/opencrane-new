@@ -565,7 +565,8 @@ try {
     }
     await until(personalTextArrived, 'personal reply streams before Stop');
     const stop = { type: 'stop', turnId: personal.id, conversationId: personal.id };
-    await drive('stop', { frame: stop });
+    const stopRequest = { frame: stop };
+    await drive('stop', stopRequest);
     await ended(personal);
     check('J3 personal Stop explicit reason', terminal(personal.id)?.reason === 'stop_interrupted');
   });
