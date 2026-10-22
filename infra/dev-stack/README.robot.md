@@ -784,6 +784,38 @@ booleans about the input; they were removed before committing.
 The fix changes only the development model fixture. The browser still requires
 the expected project code and a completed reply within its existing two minutes.
 
+Qualification: `nice -n 10 infra/dev-stack/daily-fresh.sh`, with the existing
+private Zitadel credential file configured. Source:
+`267e038bb9b8cf598cacf49de410f6dcbe394855`. Fresh claimed slot 1, free stand-in,
+attempt `nightly-20261022T232200-238bd706-cd43-4315-bb24-b449c3adc9c4`.
+
+| PDF check | Delivery and conversion | Question to turn completion | Result |
+| --- | --- | --- | --- |
+| Browser, 390px | 19.484 seconds | 4.151 seconds | PASS |
+| Browser, 1280px | 13.081 seconds | 3.172 seconds | PASS |
+| HTTP, forced native file read | 15.839 seconds | 7.389 seconds | PASS |
+
+These intervals use the files worker's timestamps, as above. Both browser checks
+progressed past the completed Willow-47 assertion. The HTTP check ran the native
+command, checked the answer and progressed to computer suspension. The following
+replacement check kept the converted PDF text. Website compilation took 52.495 seconds.
+
+The whole nightly run was **FAIL** after 759 seconds: a later spending check timed
+out waiting for the “Budget scope” control in `browser-budgets.ts:50`, called at
+line 89. Later group journeys and replay checks were **NOT RUN**. This result does
+not qualify the whole demo. The launcher released slot 1 and removed its containers.
+Retained sanitised logs are in `~/.opencrane/daily-fresh/` under that attempt's
+directory. Its `generated/` folder keeps the journey's changed screenshots and
+JSON records; those generated repository files were restored after the run.
+
+Local checks: **PASS** for seven focused stand-in tests twice, all 438 event-security
+tests once, workspace and focused strict typechecks, lint including Knip, the
+149-type event catalogue, and changelog validation. Checks used `nice -n 10`.
+Lint used a 6 GiB heap and reported 24 warnings in unchanged code. The focused
+and security tests set the requested `PG_TEST_URL` and need no database. A separate
+gateway investigation used a throwaway PostgreSQL container, removed with its volume.
+Full root suite and paid-model qualification: **NOT RUN**.
+
 ## Budget journey cleanup
 
 Each zero-cent browser check restores that scope in a `finally` block. The calling
