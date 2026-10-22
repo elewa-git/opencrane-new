@@ -1,16 +1,19 @@
 import { execFile } from 'node:child_process';
 import { once } from 'node:events';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as captureFiles from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer, request as httpRequest, type IncomingMessage,
   type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { decideApproval, readApproval } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
+
+vi.mock('node:fs/promises', { spy: true });
 
 const run = promisify(execFile);
 const image = process.env['CODEX_CAPTURE_IMAGE'];
@@ -121,18 +124,11 @@ async function captureNative() {
       '-v', `${directory}:/capture`, '-e', 'CAPTURE_SOCKET=/capture/gateway.sock',
       '--entrypoint', 'node', image!, '--experimental-strip-types',
       '/app/test/codex-on-request.mjs'];
-    async function captureOutput() {
-      try {
-        const limits = { maxBuffer: 16 * 1024 * 1024, timeout: 120_000 };
-        return await run('docker', args, limits);
-      } catch (error) {
-        const output = z.object({ stdout: z.string() }).parse(error);
-        await writeFile('/tmp/pr12capture.json', output.stdout);
-        throw error;
-      }
+    async function executeCapture() {
+      const limits = { maxBuffer: 16 * 1024 * 1024, timeout: 120_000 };
+      return await run('docker', args, limits);
     }
-    const output = await captureOutput();
-    await writeFile('/tmp/pr12capture.json', output.stdout);
+    await captureOutput(directory, executeCapture);
     expect(setup.received()).toBe(0);
   } finally {
     relay.closeAllConnections();
@@ -142,3 +138,55 @@ async function captureNative() {
   }
 }
 it.skipIf(!image)('captures native consent through the proxy and gateway Ask', captureNative, 150_000);
+
+async function captureOutput(directory: string, execute: () => Promise<{ stdout: string }>) {
+  void directory;
+  let output;
+  try {
+    output = await execute();
+  } catch (error) {
+    const failedOutput = z.object({ stdout: z.string() }).parse(error);
+    await writeFile('/tmp/pr12capture.json', failedOutput.stdout);
+    throw error;
+  }
+  await writeFile('/tmp/pr12capture.json', output.stdout);
+}
+
+async function keepsCapturePrivate(outcome: string) {
+  const directory = await mkdtemp(`${tmpdir()}/native-capture-output-`);
+  const path = `${directory}/capture.json`;
+  const stdout = '{"fixture":"private capture"}';
+  const failure = Object.assign(new Error('Fixture capture failed'), { stdout });
+  const actualFiles = await vi.importActual<typeof captureFiles>('node:fs/promises');
+  const originalWrite = actualFiles.writeFile;
+  async function requirePrivateWrite(...args: Parameters<typeof writeFile>) {
+    // Refuse a shared write before it can replace another run's capture.
+    expect(args[0]).toBe(path);
+    expect(args[2]).toEqual({ mode: 0o600, flag: 'wx' });
+    await originalWrite(...args);
+  }
+  const writes = vi.spyOn(captureFiles, 'writeFile').mockImplementation(requirePrivateWrite);
+  async function execute() {
+    if (outcome === 'failure') throw failure;
+    return { stdout };
+  }
+  try {
+    const capturing = captureOutput(directory, execute);
+    if (outcome === 'failure') {
+      await expect(capturing).rejects.toBe(failure);
+    } else {
+      await capturing;
+    }
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(await readFile(path, 'utf8')).toBe(stdout);
+    const file = await stat(path);
+    expect(file.mode & 0o777).toBe(0o600);
+  } finally {
+    writes.mockRestore();
+    await rm(directory, { recursive: true, force: true });
+  }
+  await expect(stat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+}
+it.each(['success', 'failure'])(
+  'keeps %s output private and removes it with the run directory', keepsCapturePrivate);

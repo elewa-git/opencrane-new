@@ -107,12 +107,12 @@ function capturesProductionPatchTool() {
 }
 it('captures the production patch tool offered by the routed model', capturesProductionPatchTool);
 
-function checksSavedCapture() {
+function checksSavedCapture(captured: typeof saved) {
   const replies: unknown[] = [];
   function send(reply: unknown) { replies.push(reply); }
   const record = vi.fn();
   const handle = nativeRequests(send, record);
-  for (const entry of saved.nativeRequests) {
+  for (const entry of captured.nativeRequests) {
     expect(entry.repliesPerId).toBe(1);
     if (entry.stage.endsWith('_accept')) continue;
     const before = replies.length;
@@ -123,16 +123,60 @@ function checksSavedCapture() {
   }
   expect(record).toHaveBeenCalledTimes(replies.length);
   for (const name of ['fixture_escalated_shell', 'fixture_file_change']) {
-    function matches(entry: (typeof saved.observations)[number]) { return entry.name === name; }
-    const observation = saved.observations.find(matches);
+    function matches(entry: (typeof captured.observations)[number]) { return entry.name === name; }
+    const observation = captured.observations.find(matches);
     expect(observation).toMatchObject({ result: 'PASS', requests: 1, markerPresent: false });
     expect(JSON.stringify(observation?.continuation)).toContain('rejected by user');
   }
-  expect(saved.gatewayAsk.result).toBe('PASS');
-  expect(saved.gatewayAsk.decisions).toHaveLength(2);
-  for (const decision of saved.gatewayAsk.decisions) {
+  expect(captured.gatewayAsk.result).toBe('PASS');
+  expect(captured.gatewayAsk.decisions).toHaveLength(2);
+  for (const decision of captured.gatewayAsk.decisions) {
     expect(decision).toMatchObject({ decision: 'rejected', beforeDecision: 0, afterDecision: 0 });
   }
 }
+function checksCommittedSavedCapture() {
+  checksSavedCapture(saved);
+}
 it('replays real fixture declines once and keeps both saved-thread calls behind Ask',
-  checksSavedCapture);
+  checksCommittedSavedCapture);
+
+function rejectsMissingSavedRequests(stage: string) {
+  const incomplete = structuredClone(saved);
+  function keepRequest(entry: (typeof saved.nativeRequests)[number]) {
+    return stage !== 'all' && entry.stage !== stage;
+  }
+  incomplete.nativeRequests = incomplete.nativeRequests.filter(keepRequest);
+  function checkIncompleteCapture() {
+    checksSavedCapture(incomplete);
+  }
+  expect(checkIncompleteCapture).toThrow();
+}
+it.each(['all', 'mcp', 'loaded_resume_mcp', 'reloaded_mcp', 'loaded_accept',
+  'reloaded_accept', 'fixture_escalated_shell', 'fixture_file_change'])(
+  'rejects a saved capture missing %s requests', rejectsMissingSavedRequests);
+
+function rejectsChangedSavedEvidence(change: string) {
+  const changed = structuredClone(saved);
+  const request = changed.nativeRequests[0]!;
+  const observation = changed.observations[0]!;
+  const decision = changed.gatewayAsk.decisions[0]!;
+  switch (change) {
+    case 'request id': request.message.id = 99; request.reply.id = 99; break;
+    case 'request method': request.message.method = 'future/request'; break;
+    case 'request kind': request.message.params._meta!.codex_approval_kind = 'other'; break;
+    case 'reply id': changed.nativeRequests[3]!.reply.id = 99; break;
+    case 'accepted reply': changed.nativeRequests[3]!.reply.result!.action = 'decline'; break;
+    case 'observation count': observation.requests = 0; break;
+    case 'continuation': observation.continuation = changed.observations[7]!.continuation; break;
+    case 'decision name': decision.name = 'reloaded_accept'; break;
+    case 'decision id': decision.approvalId = ''; break;
+    default: throw new Error('Unknown fixture mutation');
+  }
+  function checkChangedCapture() {
+    checksSavedCapture(changed);
+  }
+  expect(checkChangedCapture).toThrow();
+}
+it.each(['request id', 'request method', 'request kind', 'reply id', 'accepted reply',
+  'observation count', 'continuation', 'decision name', 'decision id'])(
+  'rejects changed saved %s evidence', rejectsChangedSavedEvidence);
