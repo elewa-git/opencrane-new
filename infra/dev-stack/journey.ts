@@ -19,6 +19,7 @@ import { connectProjectionDb, readEvents } from '@opencrane/projections';
 import { history as modelHistory, models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { journeyTool, reviewJourneyTools } from './journey-tool-policy.ts';
+import { journeyIntegrationRegistration } from './journey-integration-fixture.ts';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
 import { prepareBudgetAssistant } from './budget-fixture.ts';
@@ -573,7 +574,8 @@ try {
   assert((await runKube('exec', computer!.computer_id, '--', 'cat', uploaded.textPath)).stdout.includes('Willow-47'));
   console.log(`PASS assistant/computer lifecycle: join→Ready ${joinReadyMs} ms; resume ${resumeMs} ms; Pod replacement kept disk`);
   const serverId = `journey-${id}`;
-  await append('mcp.server_registered', `mcp-${serverId}`, { serverId, kind: 'remote', locator: 'https://mcp.example.test/mcp', catalogueRef: 'catalogue:dev' });
+  const registration = journeyIntegrationRegistration(serverId);
+  await append('mcp.server_registered', `mcp-${serverId}`, registration);
   assert(browser, 'The integration journey needs the signed-in owner');
   const readTool = journeyTool('read', true);
   const writeTool = journeyTool('write', false);
