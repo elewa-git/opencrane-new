@@ -12,7 +12,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 flowchart LR
   web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, one subscription per connection, reconnects and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
-  web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
+  web -->|shows one outcome for each reply and screenshot| capture["Reply and screenshot status<br/>workspace and viewer"]
   web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
   web -->|reviews tools and keeps current publication results| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
   web -->|checks role and removal outcomes; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
@@ -51,6 +51,8 @@ assistant check open rather than guessing an answer.
   tasks. These wishes give no access to groups or tools. A completed survey links to
   the Assistant page, which shows when persona review becomes available.
 - Lets people start conversations, send messages and stop a reply.
+  A stopped reply keeps its partial text and shows only its stopped outcome,
+  both live and after a reload. Failed replies still show “Reply failed”.
   Closing a session clears its approval cards and any open approval details.
   An approval awaiting another use still shows its earlier saved uses.
 - Shows why a spending limit stopped work, including its reset time when available.

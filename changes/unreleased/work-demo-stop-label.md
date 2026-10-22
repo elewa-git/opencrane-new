@@ -1,0 +1,1 @@
+- Stopped assistant replies keep their partial text and show only the stopped label, both live and after a page reload. Failed replies still show “Reply failed”.

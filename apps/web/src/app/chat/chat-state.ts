@@ -307,7 +307,8 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
   if ((row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished')
     && turn.state !== 'working' && turn.state !== 'stopping') return;
   if (row.type === 'agent.turn_failed') {
-    if (turn.budgetStop) return;
+    // Use the derived outcome: an interrupted Stop report is not a failed reply.
+    if (turn.state !== 'failed') return;
     turn.tools.push({ id: row.id, label: 'Reply failed',
       detail: failureDetail(row.data.reason), failed: true, time: row.time });
     return;
