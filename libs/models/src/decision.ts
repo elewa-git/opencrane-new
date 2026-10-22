@@ -384,7 +384,10 @@ export async function startDecision(
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-opencrane-decision', 'refused');
       res.writeHead(capped ? 402 : 403);
-      const refusal = { requestId, error: decisionError(error) };
+      const refusal = error instanceof MemoryToolRefused &&
+        error.message === 'memory_tool_configuration'
+        ? { status: 'refused', reason: error.message }
+        : { requestId, error: decisionError(error) };
       res.end(JSON.stringify(refusal));
     });
   });

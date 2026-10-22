@@ -3287,6 +3287,8 @@ expiry. Correct uses the HTTP replacement fields plus scopeId, memoryId, depends
 and recallProof. Forget uses scopeId, memoryId, commandId, expectedRevision and recallProof.
 Both require the requester's person scope, saved requester/assistant read AND write
 grants, both current OpenFGA permissions and the selected tool's reviewed zero-cost Allow.
-Ask returns `memory_tool_configuration` without an approval. Block and missing tools deny.
+Ask returns HTTP 403 with exactly `{status: 'refused', reason: 'memory_tool_configuration'}`
+through the gateway and backend, without an approval. Block and missing tools deny.
 The fixed refusal allowlist also contains `agent_person_scope_only` and
-`memory_tool_unavailable`; decision.ts gains no lines. Native admission is unchanged.
+`memory_tool_unavailable`. Configuration refusals keep the request id in the gateway
+response header. Native admission is unchanged.
