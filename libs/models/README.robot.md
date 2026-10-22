@@ -2827,7 +2827,11 @@ schema digest leave the process. Replies must be HTTP 200 JSON, at most 1 MiB an
 an MCP session; only Content-Type is forwarded. Errors return fixed 502/504 responses.
 The whole HTTPS exchange has a 30-second deadline and never retries or follows redirects.
 Remote starts carry `adapter: remote_https`. Only the consumed permit's private callback
-can save `adapter_response_received` or `adapter_transport_uncertain`. The recorder checks
+can save `adapter_response_received`, `adapter_transport_uncertain` or
+`adapter_dispatch_refused`. The last requires a confirmed start and a refusal before
+opening a connection. It allows the requester to record `approval.retry_requested`
+once; the next successful call cannot reuse that proof. No money is held for these
+zero-cost calls. The recorder checks
 the silo, decision id, start id, connection, generation, record digest and review revision
 against saved history. It uses the existing outcome id and conditional append, then reads
 back a lost save reply. It never repeats the remote call. No public observation route exists.
@@ -2839,8 +2843,8 @@ A complete UTF-8 JSON-RPC response with the matching id and a result or error ob
 resets, redirects, timeouts and TLS failures. The callback must confirm its evidence before
 returning a checked reply; an unconfirmed save returns an empty 503. Request/reply bytes,
 credentials and addresses never enter this evidence. Missing observations after a crash
-remain unknown; replay never sends. Crash reconciliation and proved remote non-dispatch
-are separate work. Fresh-install qualification: NOT RUN.
+remain unknown; replay never sends. A lost start reply also stays unknown. Crash
+reconciliation remains separate work. Fresh-install qualification: NOT RUN.
 
 `mcp-dispatch.test.ts` uses the recording TLS server, real gateway, NATS and PostgreSQL.
 It checks exact bindings, lost saves, store outages, changed history, forged external
@@ -2942,6 +2946,21 @@ fresh-install qualification: NOT RUN. Next for #49 is row 4, company opt-in and 
 and Ask. It cannot fill missing declarations. Exact review uses the same requirement
 in `reviewedToolChoices`; the projection checks it again when applying mode events.
 History still loads before the two-second authority check. No access streams changed.
+
+## Tool permissions immediately before sending
+
+Ordinary MCP permits call `currentAuthority` again during dispatch, including after
+`tool.dispatch_started` is saved. This queries current IAM permissions and their
+applied event receipts. It reuses the conversation history loaded before admission
+and the original two-second deadline; it reads only the small access streams.
+The existing activity check still catches later turn stops and access changes.
+
+`apps/server/test/integration-access-gateway.test.ts` proves the published HTTPS
+path. Pausing OpenFGA after a saved start previously returned 200 and sent the call.
+The regression requires refusal with no new upstream connection or bytes, alongside
+a successful control, separate admission evidence and fresh-call refusal. The same
+matrix covers product grant and group commands while IAM application is paused.
+Fresh-install qualification is NOT RUN.
 
 ## Shared test ports
 

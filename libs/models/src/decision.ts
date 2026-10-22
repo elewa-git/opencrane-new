@@ -319,8 +319,17 @@ export async function startDecision(
         const decisionId = await audit(outcome, reason,
           approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         const budget = { modelCall, decisionId, admittedAt, ...root };
+        const serverId = match[1]!;
+        async function confirmToolAccess() {
+          // Reuse the earlier chat history and original deadline. Event positions alone
+          // cannot confirm that IAM is still available before the remote send.
+          await currentAuthority(actor.store, binding, turnToken.requester,
+            computer.assistant, turnToken.conversation, 'mcp_server', serverId,
+            fresh, conversation);
+        }
         await fresh();
-        mcpSender.setPermit(res, outcome, policy, raw, requestId, fresh, fresh.deadline, budget);
+        mcpSender.setPermit(res, outcome, policy, raw, requestId,
+          confirmToolAccess, fresh.deadline, budget);
         res.setHeader('x-request-id', requestId);
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;

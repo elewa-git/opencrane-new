@@ -3676,6 +3676,102 @@ Access, turn admission, reservations and memory checks keep their existing paths
 `bridge-throughput.test.ts` drives 2,700 reports through a real socket and NATS,
 checks a competing Stop append, replay identity and recovered text.
 
+## Published tool access qualification
+
+`test/integration-access-gateway.test.ts` uses disposable NATS, PostgreSQL and
+OpenFGA, pinned agentgateway 1.5.0 and a recording local HTTPS server. It reviews
+and publishes the saved catalogue, then waits for the configuration worker's
+live acknowledgement. Grant and group commands use the product HTTP routes.
+Their original content and IAM receipts must be current before the control call.
+
+The matrix checks person-only, assistant-only and team-only refusal, then exactly
+one unchanged call with both grant sides. A team supplies the person's side only.
+It pauses IAM application after person, assistant or team grant revocation and
+after team membership removal. Both fresh calls and calls held after their saved
+start must refuse within two seconds without another upstream connection or byte.
+Leaving and rejoining a team cannot restore its revoked grant. A separately given
+direct grant survives applied team membership removal. A revoked grant given again
+stays refused while its original IAM receipt is Applying. It permits exactly one
+call through the generated gateway route once both original receipts are current.
+
+The tests distinguish the saved admission decision, dispatch start and checked
+remote reply. They also check an unchanged catalogue refresh, unrelated chat
+output, stale catalogue refusal and an IAM outage after a saved start. Every
+Allow-mode refusal fixture first sends a successful control through the same published
+route. The Ask-mode case approves a call, pauses IAM after its saved start and checks
+that the refusal opens no connection and sends no bytes. After IAM recovers, the
+requester can enable one retry. A second retry command conflicts, two competing
+calls send exactly once, a later call refuses, and no money reservation is saved.
+No model calls or dev stack are used. Fresh-install qualification remains NOT RUN.
+
+Initial branch checks, 22 October 2026: PASS — the 11-case matrix twice; the combined
+470-test run with integration-access, remote-catalogue-dispatch and the unchanged
+event security suite; typecheck; event catalogue; Knip; changelog check. All ran
+under `nice -n 10` with disposable services and a supplied `PG_TEST_URL`.
+The test-first baseline passed ten matrix cases and failed the final-send IAM
+outage case with 200 instead of 403. FAIL — the extra selected MCP dispatch run
+passed 33 cases but `lost_start` exceeded its existing ten-second cleanup limit.
+That failure was not rerun or treated as an approved flake. No assertion or timeout
+in that existing suite was changed. The disposable database was removed with its volume.
+
+### Approval recovery and restored grants: own checks
+
+22 October 2026, source `dac6cfce5`, following failing-test commit `811248b0e`.
+These were local test fixtures, not a fresh installation. They used the supplied
+`PG_TEST_URL`, disposable NATS and OpenFGA, the pinned gateway and local HTTPS.
+Every test command used `nice -n 10` and one worker.
+
+- Expected FAIL: the first regression reproduced missing non-dispatch evidence and
+  `canRetry: false` after IAM recovered. The event schema rejected the new evidence.
+- PASS: the complete 13-case gateway matrix and both event-schema cases in two
+  isolated runs. The second run also passed all 438 unchanged event security tests:
+  15 tests in the first run and 453 in the second.
+- PASS: the changed MCP refusal case in the broad run and again in the isolated
+  six-case run. The latter also passed both lost-start cases and all three stopped-turn
+  recovery cases, with no changed assertion or timeout.
+- FAIL: the broad MCP run passed 172 of 173 tests. The unchanged stopped-turn recovery
+  case for a refused MCP pass exceeded 30 seconds. It passed in 6.8 seconds in the
+  later isolated run; the earlier full-file result remains FAIL.
+- FAIL, then fixed: the first matrix run exposed a receipt helper that accepted
+  Vitest's polling argument as its expected state. Binding the expected boolean
+  before polling fixed that helper. An overlapping typecheck found the same mistake.
+- FAIL: the next concurrent matrix run had two successful-control calls return 403
+  and an IAM refusal take 2.43 seconds against the two-second assertion. Lint was
+  paused and the stale typecheck was stopped before the isolated runs above.
+- NOT RUN: the full root suite and fresh-install journeys.
+
+The isolated commands selected `integration-access-gateway.test.ts` and
+`remote-dispatch.test.ts`; the second also selected `security-rules.test.ts`.
+The broader command selected all of `mcp-dispatch.test.ts`. Its isolated follow-up
+selected `watch_final`, `lost_start` and `keeps a stopped free turn from model sends
+after recovery`. Local logs use `/tmp/tools-access-gateway-fix-`: `red-approval.log`,
+`isolated-1.log`, `isolated-2.log`, `dispatch-1.log` and `dispatch-isolated.log`.
+
+The mechanical follow-up `37d586f15` splits refusal recording into named helpers
+and gives the test's saved events an explicit type. This fixes the two complexity
+errors from the first full lint and the event-array error from typecheck.
+PASS: the 15 gateway/schema tests again on this source, then all 12 selected MCP
+start-refusal and lost-start checks. Logs are `final-regressions.log` and
+`final-dispatch.log` under the same prefix. The helper extraction changes no check,
+assertion or deadline.
+
+PASS on `37d586f15`: full `npm run lint` (including Knip and changelog validation),
+full `npm run typecheck`, and `npm run check:events` (149 matching types).
+Lint used `NODE_OPTIONS=--max-old-space-size=8192` and reported zero errors with
+24 existing length warnings. All commands used `nice -n 10`. Logs are
+`lint-final.log`, `typecheck-clean.log` and `events-final.log` under the same prefix.
+
+The shared `origin/main` advanced to `2dc248199` during validation. The final
+rebase completed without conflicts. Comparing the full feature patch before and
+after rebase with `cmp` confirmed identical bytes. That main commit changes only
+frontend code, its browser journey and related documentation; the backend code
+used by the tests above is unchanged.
+PASS after rebase: ESLint on the changed frontend files, all web typechecks,
+dependency checks, Knip, documentation and links, fixture boundaries, licence
+checks, changelog validation and the event catalogue. The upstream browser journey
+script retains its existing ESLint exclusion. Logs use
+`/tmp/tools-access-gateway-rebase-`: `lint-code.log`, `web-typecheck.log` and `gates.log`.
+
 ## Shared test ports
 
 The nine former `freePort` copies now use `@opencrane/event-store/testing`.
