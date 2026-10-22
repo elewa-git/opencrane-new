@@ -371,8 +371,8 @@ async function listsUploadAfterProjectionCatchesUp() {
   expect(available.statusCode).toBe(200);
   expect(available.json()).toMatchObject({ rows: [{ fileId: saved.fileId }] });
 
-  async function infectedScan() {
-    return 'infected' as const;
+  function infectedScan() {
+    return Promise.resolve('infected' as const);
   }
   options.scan = infectedScan;
   const infectedRequest = { ...request,

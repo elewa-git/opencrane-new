@@ -1,15 +1,16 @@
 import { sendUpload } from './upload';
 
-let request: XMLHttpRequest;
+const requests: XMLHttpRequest[] = [];
 
 afterEach(function restoreUploadFixture() {
   vi.restoreAllMocks();
+  requests.length = 0;
 });
 
 function captureUpload() {
   function ignoreRequest() {}
   function captureRequest(this: XMLHttpRequest) {
-    request = this;
+    requests.push(this);
   }
   vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(ignoreRequest);
   vi.spyOn(XMLHttpRequest.prototype, 'setRequestHeader').mockImplementation(ignoreRequest);
@@ -17,6 +18,8 @@ function captureUpload() {
 }
 
 function acknowledgeUpload() {
+  const request = requests.at(-1);
+  if (!request) throw new Error('No upload request');
   Object.defineProperty(request, 'status', { value: 201 });
   Object.defineProperty(request, 'responseText', { value: JSON.stringify({ fileId: 'file' }) });
   request.dispatchEvent(new Event('load'));
@@ -57,8 +60,9 @@ async function waitsForFileList() {
   expect(ready).toBe(false);
   makeAvailable(new Response(JSON.stringify({ rows: [{ fileId: 'file' }] })));
   await expect(upload.completed).resolves.toBe('file');
-  expect(fetcher).toHaveBeenCalledWith('/api/conversations/conversation/files',
-    expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  const lastRead = fetcher.mock.calls.at(-1);
+  expect(lastRead?.[0]).toBe('/api/conversations/conversation/files');
+  expect(lastRead?.[1]?.signal).toBeInstanceOf(AbortSignal);
 }
 it('keeps an acknowledged upload pending until the file list finishes applying', waitsForFileList);
 
