@@ -264,7 +264,14 @@ function createFetchFixture() {
       const created = conversation(String(body['conversationId']), String(body['colleagueId']));
       if (body['mode'] === 'group') {
         created.mode = 'group';
-        created.participantIds = body['participantIds'] as string[];
+        created.participantIds = [];
+        const rawParticipants = body['participantIds'];
+        if (Array.isArray(rawParticipants)) {
+          const participantIds: unknown[] = rawParticipants;
+          for (const participantId of participantIds) {
+            if (typeof participantId === 'string') created.participantIds.push(participantId);
+          }
+        }
       }
       savedConversations.push(created);
       return reply({ status: 'appended', sequence: 1 });

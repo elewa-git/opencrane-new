@@ -15,10 +15,10 @@ function reply(status: number, value: unknown): Response {
 
 function fakeServer(status: number, value: unknown, staysApplying = false) {
   let reads = 0;
-  async function fetchReply(): Promise<Response> {
+  function fetchReply(): Promise<Response> {
     reads += 1;
-    if (staysApplying || reads === 1) return reply(status, {});
-    return reply(200, value);
+    if (staysApplying || reads === 1) return Promise.resolve(reply(status, {}));
+    return Promise.resolve(reply(200, value));
   }
   const fetcher = vi.fn(fetchReply);
   vi.stubGlobal('fetch', fetcher);
