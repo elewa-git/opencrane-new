@@ -8,18 +8,43 @@ import { fixtureFiles, needsFixtures, testArguments } from './fixture-tests.mjs'
 import { verifyFiles } from './test-files.mjs';
 
 function partitionsTests() {
-  const fixtures = testArguments('fixtures');
+  const image = testArguments('fixtures-image');
+  const browser = testArguments('fixtures-browser');
+  const imageFiles = image.filter(isTestFile);
+  const browserFiles = browser.filter(isTestFile);
+  assert.deepEqual(imageFiles, [
+    'apps/computer/test/display-attacks.test.ts',
+    'apps/computer/test/supervisor-identity.test.ts',
+    'apps/computer/test/supervisor-stop.test.ts',
+    'apps/server/test/bridge-credentials.test.ts',
+    'apps/server/test/screenshot-browser.test.ts',
+    'apps/server/test/upload.test.ts',
+  ]);
+  assert.deepEqual(browserFiles, [
+    'apps/server/test/approvals.test.ts',
+    'apps/server/test/audit-browser.test.ts',
+    'apps/server/test/bootstrap-browser.test.ts',
+    'apps/server/test/integrations.test.ts',
+    'apps/server/test/live-view-k3d.test.ts',
+    'apps/server/test/provider-login.test.ts',
+    'apps/web/test/chat-browser.test.ts',
+  ]);
+  verifyFiles(fixtureFiles, [imageFiles, browserFiles]);
   for (const group of ['1', '2', '3', '4']) {
     const shard = testArguments(group);
     assert.ok(shard.includes(`--shard=${group}/4`));
     for (const file of fixtureFiles) {
       assert.ok(shard.includes(`--exclude=${file}`));
-      assert.ok(fixtures.includes(file));
     }
   }
-  assert.ok(!fixtures.some(isShardArgument));
-  assert.ok(fixtures.includes('--maxWorkers=1'));
-  assert.ok(fixtures.includes('apps/web/test/chat-browser.test.ts'));
+  for (const argumentsList of [image, browser]) {
+    assert.ok(!argumentsList.some(isShardArgument));
+    assert.ok(!argumentsList.includes('--maxWorkers=1'));
+  }
+}
+
+function isTestFile(argument) {
+  return argument.endsWith('.test.ts') && !argument.startsWith('--');
 }
 
 function isShardArgument(argument) {
