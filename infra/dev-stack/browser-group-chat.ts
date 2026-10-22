@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page, Response as BrowserResponse } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
 import type { Phase4Assertion } from './browser-phase4.ts';
@@ -88,7 +88,7 @@ export async function browserGroupChat(options: GroupChatOptions): Promise<void>
     const beforeList = await readConversations(owner, options.origin);
     await waitForComputersToSettle(options.store);
     initialActivity = await countActivity(options.store);
-    await sendMessage(owner, 'Group message before the new person joins');
+    const firstDisplay = await sendMessage(owner, 'Group message before the new person joins');
     firstSendActivity = await waitForStableActivity(options.store);
     conversationId = await waitForNewConversation(owner, options.origin, beforeList);
     modeAfterSend = (await readConversation(owner, options.origin, conversationId)).mode;
@@ -96,7 +96,9 @@ export async function browserGroupChat(options: GroupChatOptions): Promise<void>
     const createdScreens = await captureBoth(owner, output, 'group-created');
     const modePassed = modeBeforeSend === 'group' && modeAfterSend === 'group';
     setAssertion(options.assertions, 'group_chat.create_and_lock_mode', modePassed,
-      { modeBeforeSend, modeAfterSend, conversationId },
+      { modeBeforeSend, modeAfterSend, conversationId,
+        firstDisplayMs: firstDisplay.displayMs, firstDisplayedAtMs: firstDisplay.displayedAtMs,
+        firstCommandId: firstDisplay.commandId },
       [...beforeSendScreens, ...createdScreens]);
 
     await openConversation(colleague, options.origin, conversationId);
@@ -121,7 +123,7 @@ export async function browserGroupChat(options: GroupChatOptions): Promise<void>
     try {
       const laterMessage = 'Group message after everyone joined';
       const beforeLaterSend = await waitForStableActivity(options.store);
-      await sendMessage(owner, laterMessage);
+      const laterDisplay = await sendMessage(owner, laterMessage);
       await openConversation(colleague, options.origin, conversationId);
       await openConversation(secondColleague, options.origin, conversationId);
       await openConversation(laterColleague, options.origin, conversationId);
@@ -140,7 +142,8 @@ export async function browserGroupChat(options: GroupChatOptions): Promise<void>
       const messageScreens = await captureBoth(secondColleague, output, 'group-messages');
       setAssertion(options.assertions, 'group_chat.messages_and_no_activity',
         firstMessageSeen && activityIsQuiet,
-        { firstMessageSeen,
+        { firstMessageSeen, laterDisplayMs: laterDisplay.displayMs,
+          laterDisplayedAtMs: laterDisplay.displayedAtMs, laterCommandId: laterDisplay.commandId,
           aiEventsDuringSends: activityDuringSends.aiEvents,
           computerEventsDuringSends: activityDuringSends.computerEvents,
           budgetEventsDuringSends: activityDuringSends.budgetEvents },
@@ -371,11 +374,30 @@ function findConversation(id: string, row: ConversationRow): boolean {
   return row.conversationId === id;
 }
 
-async function sendMessage(page: Page, text: string): Promise<void> {
+async function sendMessage(page: Page, text: string): Promise<{
+  displayMs: number; displayedAtMs: number; commandId: string;
+}> {
   const composer = page.locator('#message');
   await composer.waitFor({ state: 'visible', timeout: 10_000 });
   await composer.fill(text);
+  let acceptedAt = 0;
+  function savedSend(response: BrowserResponse): boolean {
+    if (response.request().method() !== 'POST' || !response.url().endsWith('/messages')
+      || response.status() !== 200) {
+      return false;
+    }
+    acceptedAt = performance.now();
+    return true;
+  }
+  const accepted = page.waitForResponse(savedSend, { timeout: 10_000 });
   await composer.press('Enter');
+  const response = await accepted;
+  const command = response.request().postDataJSON() as { id: string };
+  // Include projection time: a row cannot be projected before this send was saved.
+  await page.getByText(text, { exact: true }).waitFor({ state: 'visible', timeout: 2_000 });
+  const displayMs = Math.round(performance.now() - acceptedAt);
+  assert(displayMs <= 2_000, `Saved group message appeared after ${displayMs} ms`);
+  return { displayMs, displayedAtMs: Date.now(), commandId: command.id };
 }
 
 async function waitForNewConversation(page: Page, origin: string,

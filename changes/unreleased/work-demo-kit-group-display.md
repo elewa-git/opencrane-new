@@ -1,0 +1,1 @@
+- Show saved direct and group chat messages after a brief delay in applying their rows or permissions, without needing a manual refresh. Conversation reads retry briefly; access refusals still clear the page immediately.

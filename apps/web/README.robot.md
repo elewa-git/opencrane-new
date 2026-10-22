@@ -723,8 +723,12 @@ The screen keeps separate in-memory drafts for each conversation or new recipien
 Reload discards them. No message is called recorded without a 200 receipt.
 
 HTTP 425 `access_applying` means a recorded participant is waiting for the creation
-permissions. First reads and sends retry with waits of 100, 200, 400, 800, 1600 and
-1600 ms. A 403 read remains a refusal and clears protected information. A creation
+permissions. History and first-page list reads retry 425 and 409 at 100 ms intervals,
+with at most 50 attempts and a ten-second request limit. The same history reader handles
+creation, catch-up after a saved send and live resync. Cancelling the read also cancels
+its next wait. A successful history read opens the socket from the position it loaded,
+so rows applied after that snapshot arrive live. Sends keep their separate waits of
+100, 200, 400, 800, 1600 and 1600 ms. A 403 read remains a refusal and clears protected information. A creation
 status GET with 403 says that no creation record is available, keeps the message and
 offers Try again with the same ids. A message status GET with 404 says no record yet
 and offers Send again with the original id and text. Neither status check sends a POST.

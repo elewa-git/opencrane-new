@@ -295,7 +295,7 @@ export class DirectChatSending {
   }
 
   private async checkApplyingAccess(pending: PendingChange): Promise<void> {
-    const result = await this.waitForCreationAccess(pending);
+    const result = await fetchDirectHistory(pending.conversationId, this.screen.signal);
     if (!this.isPending(pending)) return;
     if (result.kind !== 'ok') {
       this.handleWriteFailure(result.kind, pending);
@@ -308,7 +308,7 @@ export class DirectChatSending {
 
   private async finishCreation(pending: PendingChange): Promise<void> {
     this.screen.status.set('Starting the conversation…');
-    const ready = await this.waitForCreationAccess(pending);
+    const ready = await fetchDirectHistory(pending.conversationId, this.screen.signal);
     if (!this.isPending(pending)) return;
     if (ready.kind !== 'ok') {
       this.handleWriteFailure(ready.kind, pending);
@@ -321,16 +321,6 @@ export class DirectChatSending {
     };
     this.pending.set(sending);
     await this.sendPending(sending);
-  }
-
-  private async waitForCreationAccess(pending: PendingChange) {
-    const delays = [100, 200, 400, 800, 1600, 1600];
-    for (const delay of delays) {
-      const result = await fetchDirectHistory(pending.conversationId, this.screen.signal);
-      if (result.kind !== 'access_applying' || !this.isPending(pending)) return result;
-      await this.waitForRetry(delay);
-    }
-    return { kind: 'access_applying' as const };
   }
 
   private async sendWithAccessRetry(pending: PendingChange) {

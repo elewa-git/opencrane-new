@@ -188,6 +188,9 @@ The core journey selects Allow for that tool and Block for the write tool, using
 saved catalogue revision and review digest. The review must return HTTP 200. A 409
 stops the journey; it is never treated as a saved review. The focused regression in
 `journey-tool-policy.test.ts` uses the same review validator as the API, without services.
+The first and later group sends each wait for HTTP 200, then require the sender’s
+message to appear within two seconds. This includes the time taken to apply its saved
+row. Their existing receipt rows record `firstDisplayMs` and `laterDisplayMs`.
 A failed or unfinished group-chat assertion fails the journey. Before cleanup, nested
 receipts and pictures from this attempt are kept under the private failure folder.
 

@@ -68,6 +68,8 @@ assistant check open rather than guessing an answer.
 - Shows group conversations with each message's saved author and resumes live updates
   from the last message shown. Each draft stays with its conversation. A saved message
   means the server recorded it; it does not say that anyone received it.
+  If saved messages are still being applied, the page briefly retries the read so they
+  appear without a manual refresh.
 - Saves how far someone has read in a direct or group chat after the newest message appears.
   Losing access clears its messages, draft, names and files, even when an older reply arrives later.
   A closed live connection that reports lost access clears an open chat as well. The lock notice

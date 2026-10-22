@@ -261,7 +261,12 @@ function createFetchFixture() {
     }
     if (url.pathname === '/api/conversations' && request.method === 'POST') {
       const body = request.body ?? {};
-      savedConversations.push(conversation(String(body['conversationId']), String(body['colleagueId'])));
+      const created = conversation(String(body['conversationId']), String(body['colleagueId']));
+      if (body['mode'] === 'group') {
+        created.mode = 'group';
+        created.participantIds = body['participantIds'] as string[];
+      }
+      savedConversations.push(created);
       return reply({ status: 'appended', sequence: 1 });
     }
     if (url.pathname.endsWith('/messages') && request.method === 'GET') {
@@ -2370,3 +2375,37 @@ async function displaysFirstGroupMessageAfterApplyingRead(): Promise<void> {
 
 it('shows the first saved group message and opens live updates after applying reads',
   displaysFirstGroupMessageAfterApplyingRead);
+
+
+async function catchesUpAfterOneLiveGap(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  const fixture = await mountWithoutReady(api, 'group-chat');
+  await waitForText(fixture, 'Hello everyone');
+  await settle(fixture);
+  const socket = api.sockets.at(-1);
+  if (!socket?.onmessage) throw new Error('Expected a conversation socket');
+  let reads = 0;
+  const saved = eventRow(4, 'bob', 'Message after a live gap');
+  function applyingThenCurrent(request: RequestRecord): Response | undefined {
+    if (request.method !== 'GET' || !request.url.includes('/messages')) return undefined;
+    reads += 1;
+    if (reads === 1) return reply({}, 425);
+    return reply({ rows: [eventRow(1, 'bob', 'Hello everyone'), saved],
+      position: 4, generation: 1, computerState: 'not_applicable' });
+  }
+  api.override(applyingThenCurrent);
+  vi.useFakeTimers();
+  const update = { version: 1, topic: 'conversation', type: 'event',
+    conversationId: 'group-chat', position: 4, generation: 1, row: saved };
+  socket.onmessage(new MessageEvent('message', { data: JSON.stringify(update) }));
+  await vi.advanceTimersByTimeAsync(1_000);
+  fixture.detectChanges();
+  expect(root(fixture).querySelector('.transcript')?.textContent)
+    .toContain('Message after a live gap');
+  expect(reads).toBe(2);
+  fixture.destroy();
+}
+
+it('catches up a single live update after the projection briefly refuses the read',
+  catchesUpAfterOneLiveGap);
