@@ -86,3 +86,55 @@ it.each([425, 409])('loads the group list after a temporary HTTP %i', loadsList)
 it.each([403, 404, 503])('returns HTTP %i without retrying', returnsFailure);
 it('stops when the projection stays unavailable', stopsRetrying);
 it('cancels a delayed retry before it can read another conversation', cancelsRetry);
+
+function stalledServer() {
+  const signals: AbortSignal[] = [];
+  function fetchUntilAborted(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const signal = init?.signal;
+    if (!signal) throw new Error('Expected a cancellable history request');
+    signals.push(signal);
+    return new Promise<Response>(holdFetch);
+
+    function holdFetch(_resolve: (response: Response) => void, reject: (reason: unknown) => void) {
+      if (!signal) throw new Error('Expected a cancellable history request');
+      signal.addEventListener('abort', rejectOnAbort, { once: true });
+      function rejectOnAbort(): void {
+        reject(new DOMException('History request aborted', 'AbortError'));
+      }
+    }
+  }
+  const fetcher = vi.fn(fetchUntilAborted);
+  vi.stubGlobal('fetch', fetcher);
+  return { fetcher, signals };
+}
+
+async function cancelsRunningFetch(): Promise<void> {
+  const { fetcher, signals } = stalledServer();
+  const request = new AbortController();
+  const loading = fetchDirectHistory('group', request.signal);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(signals[0]?.aborted).toBe(false);
+  request.abort();
+  expect(await loading).toEqual({ kind: 'unavailable' });
+  expect(signals[0]?.aborted).toBe(true);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+}
+
+it('cancels a history fetch that is already waiting for a response', cancelsRunningFetch);
+
+async function timesOutRunningFetch(): Promise<void> {
+  const { fetcher, signals } = stalledServer();
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  try {
+    const loading = fetchDirectHistory('group', new AbortController().signal);
+    expect(timeout).toHaveBeenCalledWith(10_000);
+    expect(signals[0]?.aborted).toBe(false);
+    expect(await loading).toEqual({ kind: 'unavailable' });
+    expect(signals[0]?.aborted).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  } finally {
+    timeout.mockRestore();
+  }
+}
+
+it('aborts a stalled history fetch after ten seconds', timesOutRunningFetch, 15_000);
