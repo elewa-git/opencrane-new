@@ -14,13 +14,14 @@ import { addChildFirstInput, createRequestedChild, requestChild, retryChildReque
 import { recordChildStartFailure } from '../src/chat/child-failure.ts';
 import { chatHistory } from '../src/chat/commands.ts';
 import { summonFixture } from './support/child-summon.ts';
-import { shortenDuplicateWindow, waitForDuplicateWindow } from './support/duplicate-window.ts';
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 
 const eventData = z.record(z.string(), z.unknown());
 let context: Awaited<ReturnType<typeof summonFixture>>;
 async function initialise() {
-  context = await summonFixture();
-  await shortenDuplicateWindow(context.nats);
+  const nats = await shortDuplicateWindowFixture();
+  context = await summonFixture(nats);
 }
 async function close() {
   await context?.close();

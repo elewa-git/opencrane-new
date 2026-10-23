@@ -278,6 +278,17 @@ The diagnostic logs are `/tmp/ci-test-waits-fix-diagnostic.log`,
 `/tmp/ci-test-waits-fix-cause-before.log` and
 `/tmp/ci-test-waits-fix-cause-after.log`.
 
+## Child activation test setup
+
+The activation suite prepares its private NATS stream with the two-second duplicate
+window before `summonFixture` saves any events. The empty-stream guard stays in place.
+Shortening the window after setup fails because the fixture has already saved eleven
+events. This change affects test setup only.
+
+The call-site check covered both new activation test files and all duplicate-window
+helper calls. The event-schema tests do not use NATS. The child-summon expiry case
+already prepares its NATS stream before creating the fixture.
+
 ## Test dependencies
 
 `test/recovery-stop.test.ts` checks restart recovery with the real journal, runner,
