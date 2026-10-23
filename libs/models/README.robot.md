@@ -2964,6 +2964,9 @@ Saved spending stops use `requireBudget` on the actor state, without a reservati
 Harmless settings changes and unrelated assistants' stops leave the relay open.
 Team membership receipts are required only for the requester. Another member's pending
 addition or removal leaves the relay open. Team-wide events still require their receipts.
+All egress receipt checks use `auth.checkApplied` to retain the OpenFGA status.
+An unavailable result closes the relay as unavailable; an answered missing receipt
+closes it as revoked. Other callers retain the boolean `auth.applied` contract.
 
 An independent monotonic watchdog closes an affected relay as unavailable when proof
 reaches 1,900 ms old, leaving 100 ms for socket teardown within two seconds,

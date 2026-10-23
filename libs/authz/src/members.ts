@@ -363,14 +363,18 @@ function createMemberAuthorisation(binding: Binding,
     await client.write(writes, unwanted);
   }
 
+  function checkApplied(eventId: string) {
+    const receipt = { user: object, relation: 'applied',
+      object: objectId('projection_event', binding.silo, eventId) };
+    return client.check(receipt);
+  }
+
   return {
     binding,
+    checkApplied,
     async applied(eventId: string) {
-      const receipt = { user: object, relation: 'applied',
-        object: objectId('projection_event', binding.silo, eventId) };
-      const result = await client.check(receipt);
-      // Distinguish a missing receipt from a permission service that could not answer.
-      if (result.status === 'unavailable') throw result.error;
+      // Keep boolean callers' existing handling of missing or unavailable receipts.
+      const result = await checkApplied(eventId);
       return result.allowed;
     },
     provider(memberId: string, providerId: string, relation: 'read' | 'manage') {

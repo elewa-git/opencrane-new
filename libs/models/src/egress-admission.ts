@@ -21,6 +21,17 @@ type Activity = Awaited<ReturnType<typeof approvalActivity>>;
 type Read = ReturnType<typeof egressHistory>['read'];
 type Fresh = Awaited<ReturnType<typeof authorityFence>>;
 
+async function requireApplied(auth: ReturnType<typeof memberAuthorisation>, eventId: string) {
+  const result = await auth.checkApplied(eventId);
+  // Record a service outage separately from a confirmed missing receipt.
+  if (result.status === 'unavailable') {
+    throw result.error;
+  }
+  if (!result.allowed) {
+    throw new Revoked('Egress refused');
+  }
+}
+
 function activeWork(claims: EgressCapability, activity: Activity) {
   const computer = activity.computer.lifecycle;
   const turn = activity.computer.firstStart;
@@ -66,7 +77,7 @@ async function checkTeam(binding: Binding, requester: string, fields: Record<str
       change.event.type === 'team.member_removed';
     // Ignore other members' membership receipts. Keep all team-wide authority checks.
     if (membershipChange && data(change.event)['memberId'] !== requester) continue;
-    if (!await auth.applied(change.event.id)) throw new Revoked('Egress refused');
+    await requireApplied(auth, change.event.id);
   }
 }
 
@@ -79,7 +90,7 @@ async function checkMember(actor: BudgetActor, binding: Binding, claims: EgressC
     const role = legacyMemberRole(row.event);
     if (role !== undefined) {
       member = role !== '';
-      if (!await auth.applied(row.event.id)) throw new Revoked('Egress refused');
+      await requireApplied(auth, row.event.id);
     }
   }
   if (!member) throw new Revoked('Egress refused');
@@ -95,7 +106,7 @@ async function checkAccess(actor: BudgetActor, binding: Binding, claims: EgressC
     const fields = data(row.event);
     if (row.event.type === 'assistant.created') {
       active = true;
-      if (!await auth.applied(row.event.id)) throw new Revoked('Egress refused');
+      await requireApplied(auth, row.event.id);
       await checkTeam(binding, claims.requester, fields, fresh, read);
     }
     if (row.event.type === 'assistant.settings_changed' && typeof fields['active'] === 'boolean') {
@@ -105,7 +116,7 @@ async function checkAccess(actor: BudgetActor, binding: Binding, claims: EgressC
   if (!active) throw new Revoked('Egress refused');
   for (const row of activity.conversation) {
     if (['conversation.created', 'participant.added', 'participant.removed'].includes(row.event.type)) {
-      if (!await auth.applied(row.event.id)) throw new Revoked('Egress refused');
+      await requireApplied(auth, row.event.id);
     }
   }
   const permissions = await Promise.all([auth.check(claims.requester, 'member'),
