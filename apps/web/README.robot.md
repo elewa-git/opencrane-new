@@ -2,6 +2,15 @@
 
 For people, read [README.md](README.md) first.
 
+## Folder guides
+
+The package README names the browser startup files and test helpers. The top-level
+`src` folder and test folders have no README of their own. Other website folders have
+short guides for people, linked from the package README. These guides keep the
+behaviour explanations moved out of the package overview.
+
+## Browser behaviour
+
 Angular's disk cache is enabled locally and in CI. The fixture test runner builds
 the development app once before tests start their own Angular servers.
 This keeps cold compilation outside their existing startup deadlines.
@@ -525,7 +534,8 @@ the consent box then starts unticked.
 Only pass, fail, skipped or budget_refused settles that UI lock. Budget refusal
 uses the blocked state; unknown outcomes use the question mark state.
 
-Anthropic skips model selection without a command. OpenAI writes model choices
+Model selection is unavailable for Anthropic. Next continues without sending a
+model-selection command. OpenAI writes model choices
 only when the set changed. A 403 command refusal rechecks the provider list and
 clears the page only if that read also refuses access. A 404 create or key status
 read offers Start over; it never starts a new command by itself. The person types

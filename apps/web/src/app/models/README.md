@@ -7,10 +7,16 @@ This folder shows Models & providers, where owners and admins connect companies 
 - Lists provider connections and their dated saved facts at `/org/models`.
 - Creates connections and saves or replaces keys without reading a stored key back.
 - Separates reachability checks from a paid model-answer test. Each paid test needs fresh consent for its quoted cost; an unknown result keeps further tests locked.
-- Selects OpenAI models and shows which task routes and audiences use each model. Anthropic skips the model-selection step.
+- Selects OpenAI models and shows the jobs using each model and the people, groups or assistants allowed to use it. Model selection is unavailable for Anthropic; Next continues without saving models.
 - Grants or removes access for one person, group or assistant at a time. A grant is explicit permission; setup uses the same editor for each selected model.
 - Reports confirmed setup changes separately from pending ones. Saved model choices and unresolved access changes keep their required checks available.
 - Warns when a shared assistant lacks its own model grant only after a complete check. Missing or still-updating information stays unchecked.
+
+The access editor loads more people, groups or assistants when requested. An uncertain
+save keeps its original request reference for status checks, including after reload.
+Saved models stay selected: removing one requires a check of its existing uses and
+a separate review. Failed or unavailable checks cannot allow removal. Pending access
+changes keep setup open so the person can still check their original requests.
 
 ## Main files
 

@@ -12,6 +12,16 @@ This folder shows the outside tool servers registered with OpenCrane. Admins can
 - Explains a named tool's person permission, assistant permission and account state. An incomplete check stays unknown and does not promise that a call can run.
 - Keeps dated details during temporary read failures, but clears protected data when access is refused.
 
+A later tool change can be reviewed even when an older publication still has a saved
+reference in the browser. The page checks that original change first. A reply that
+matches it can release the reference when it belongs to an older set of tool settings.
+An uncertain publication for the current settings still needs Check status.
+
+Refresh keeps the page and keyboard focus in place. A failed tool-policy read has a
+visible notice; earlier comparison rows keep their last successful check time.
+Publication and its result use a short status card, with Check status near the top
+when the result is uncertain.
+
 ## Main files
 
 | File | What it does |

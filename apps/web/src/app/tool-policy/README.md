@@ -12,6 +12,10 @@ This folder shows Tools & access for a registered tool server. Admins choose whe
 - Checks that an assistant belongs with the selected person before offering an access-explanation link.
 - Clears protected details on access refusal and retains original references for unresolved checks, including after reload.
 
+If a tool-rule save reply is lost, Check status reads the saved modes before another
+action is offered. It never sends that save again. Each initial permission change
+waits for both its saved result and permission updates before it is shown as complete.
+
 ## Main files
 
 | File | What it does |

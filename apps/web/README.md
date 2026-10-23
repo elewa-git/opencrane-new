@@ -18,6 +18,7 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and actions"] --> web
   web -->|requests and live updates| server["apps/server<br/>the back end"]
+  server -.->|recovery tests use the transcript helper| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
 ```
@@ -60,6 +61,8 @@ pages explain these limits instead of showing invented data.
 
 | Folder | What it contains |
 | --- | --- |
+| [src](src/) | Browser startup in `main.ts`, `csp.ts` and `startup.ts`, the page in `index.html` and shared styles in `styles.css`. |
+| [test](test/) | `chat-browser.test.ts`, `chat-state.test.ts` and `theme.test.ts`; example pages in `live-view-main.ts` and `overlays-main.ts`; and the `chat-state.ts` transcript helper used by server recovery tests. |
 | [src/app](src/app/README.md) | Selects pages and puts them inside shared menus. |
 | [audit](src/app/audit/README.md) | Organisation changes and conversation action history. |
 | [chat](src/app/chat/README.md) | Assistant sessions, colleague chats, files and conversation lists. |
@@ -111,6 +114,10 @@ nice -n 10 npm run typecheck -w apps/web
 
 `npm run dev` needs `apps/server` running on port 8080. The local proxy forwards
 `/api`, `/auth` and `/ws` to it. Builds reuse compiled files locally and in CI.
+The browser fixture runner builds the development app before its checks start their
+own test servers. This keeps the first build outside their startup time limits.
+Angular component checks live beside their source in `*.spec.ts` files. The root test
+runner also runs the checks in `test/`.
 The build writes static files to `apps/web/dist/web/browser`; deployment serves
 these with requests and live connections routed to the server.
 

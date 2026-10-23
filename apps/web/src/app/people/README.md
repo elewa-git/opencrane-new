@@ -12,6 +12,15 @@ This folder shows People & groups and its member, group and owner pages. Owners 
 - Creates email invitation links and shows their expiry. No email is sent; the Invitations list is unavailable.
 - Lists owners and lets an owner appoint an active successor by member ID or step down. Appointment keeps the current owner; stepping down is separate. The server prevents removal of the last owner.
 
+A missing member clears the whole detail page, as does lost access. A temporary
+refresh failure keeps earlier details visible. Member details and access details
+have separate load times, so a successful member read cannot make older permissions
+look newly checked.
+
+An invitation whose save reply is lost keeps its original request for a status check
+before showing a link. A shared assistant can belong to a group managed by the company
+sign-in service as well as a local group.
+
 ## Main files
 
 | File | What it does |

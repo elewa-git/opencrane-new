@@ -8,7 +8,7 @@ This folder provides the status messages used across the website. People see wor
 - Offers Check status for an unknown result and Try again only for a failure known to be safe to repeat.
 - Shows saved check times, scheduled times and change references when supplied.
 - Announces a message to screen readers when the calling page requests it.
-- Displays example states and loading animations on a development-only example page.
+- Displays example states and loading animations on an example page outside normal navigation.
 
 ## Main files
 

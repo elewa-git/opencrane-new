@@ -10,6 +10,11 @@ This folder shows the Add an integration page. Admins can register an outside to
 - Shows dated package checks, refusals and expired results. Failed reads can be checked again; choosing another version returns focus to its input.
 - Checks encoded host names before submission and ignores status replies for an older package.
 
+The package checks show signature and licence refusals separately from an unavailable
+scanner. An unavailable result offers another status read and keeps Continue disabled;
+it cannot start a new scan here. A save whose reply is lost keeps its original request
+reference for a status check before another action is offered.
+
 ## Main files
 
 | File | What it does |

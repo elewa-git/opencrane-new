@@ -10,6 +10,8 @@ This folder shows the website's sign-in card, the short wait before company sign
 - Shows a fixed, safe explanation when sign-in is rejected and offers another attempt.
 - Shows invitation wording when a link contains an invitation, without granting membership.
 
+Successful sign-in returns to the start page, where the person can open the workspace.
+
 ## Main files
 
 | File | What it does |
