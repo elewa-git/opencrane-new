@@ -2,10 +2,10 @@ import { defineConfig } from 'vitest/config';
 import DurationSequencer from './scripts/ci/sequencer.mjs';
 
 // One config for every package: vitest finds every *.test.ts file under
-// apps/ and libs/, so a new package needs no config of its own.
+// apps/ and libs/, plus checks under scripts/, so new packages share this config.
 export default defineConfig({
   test: {
-    include: ['apps/**/*.test.ts', 'libs/**/*.test.ts'],
+    include: ['apps/**/*.test.ts', 'libs/**/*.test.ts', 'scripts/*.test.mjs'],
     exclude: ['**/node_modules/**', '**/dist/**', 'spikes/**'],
     environment: 'node',
     sequence: { sequencer: DurationSequencer },
