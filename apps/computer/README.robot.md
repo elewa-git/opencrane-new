@@ -1089,7 +1089,7 @@ describe which requests were observed and which remain unproven.
 
 ## Earlier guide detail retained during the plain-language update
 
-# apps/computer
+## apps/computer
 
 ## What this is
 

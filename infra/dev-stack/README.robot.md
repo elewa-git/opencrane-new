@@ -1326,11 +1326,10 @@ direct chats, shared assistants and saving provider keys. The
 [budget cleanup rules](#budget-journey-cleanup) explain how checks restore limits.
 The [demo rehearsal](#timed-demo-rehearsal) explains PDF preparation, warm computers,
 recorded spending and restoration after failures or interruptions.
->>>>>>> 8f9b137a1 (📚 Explain the root and infrastructure packages in plain words)
 
 ## Earlier development stack guide detail retained during the plain-language update
 
-# infra/dev-stack
+## infra/dev-stack
 
 ## What this is
 
