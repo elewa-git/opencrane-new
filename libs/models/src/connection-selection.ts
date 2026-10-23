@@ -203,8 +203,14 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   if (original) {
     return sameReceipt(original, event);
   }
+  let connectionId = checked.connectionId;
+  if (input.action === 'clear') {
+    // Clear the saved binding even while a replacement installation has no discovery result.
+    const state = foldConnectionSelection(rows);
+    connectionId = state.selected?.connectionId ?? connectionId;
+  }
   if (input.expectedSequence !== (rows.at(-1)?.sequence ?? 0) ||
-      input.connectionId !== checked.connectionId ||
+      input.connectionId !== connectionId ||
       (input.action === 'select' && !checked.available)) {
     throw new Error('Selection conflict');
   }
