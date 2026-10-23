@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -296,3 +296,111 @@ async function changesDuringLoad(demote: boolean) {
   }
 }
 it.each([false, true])('checks access after blocked load; demotion=%s', changesDuringLoad);
+
+async function seedBusyAssistant() {
+  const assistantId = 'z-busy';
+  await append(`assistant-${assistantId}`, 'assistant.created', {
+    assistantId, kind: 'team', ownerId: 'group-00', name: 'Busy assistant',
+  });
+  const claim = getEventDefinition('computer.claimed')!.example;
+  await append(`computer-${assistantId}`, 'computer.claimed', { ...claim, assistantId });
+  for (let index = 0; index < 500; index++) {
+    const turnId = `busy-turn-${index}`;
+    for (const type of ['computer.turn_started', 'computer.turn_closed']) {
+      const example = getEventDefinition(type)!.example;
+      await append(`computer-${assistantId}`, type, { ...example, assistantId, turnId });
+    }
+  }
+  await project();
+}
+async function listsBusyAssistant() {
+  const assistantId = 'z-busy';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await request('kind=assistant&after=z-a');
+    expect(response.statusCode).toBe(200);
+    expect(response.json<Page>().rows).toEqual([{
+      id: assistantId, displayName: 'Busy assistant',
+      sequence: await nats.store.head(`assistant-${assistantId}`),
+      cap: { status: 'not_configured' },
+    }]);
+  }
+  await append(`computer-${assistantId}`, 'computer.retired', {
+    assistantId, computerId: 'busy-computer',
+  });
+  const retired = await request('kind=assistant&after=z-a');
+  expect(retired.statusCode).toBe(200);
+  expect(retired.json<Page>().rows).toEqual([]);
+}
+function busyAssistantRegression() {
+  beforeAll(seedBusyAssistant, 120_000);
+  it('lists an assistant with 1,001 computer events and observes later retirement',
+    listsBusyAssistant);
+}
+describe('busy assistant choices', busyAssistantRegression);
+
+async function listsStoredGroupValues() {
+  const longName = 'N'.repeat(201);
+  for (const [teamId, name] of [['zz-a:group', 'Colon group'], ['zz-b-long', longName]]) {
+    await append(`team-${teamId}`, 'team.created', { teamId, name, createdBy: 'owner' });
+  }
+  await project();
+  const first = await request('kind=paying_group&after=zz&limit=1');
+  expect(first.statusCode).toBe(200);
+  expect(first.json<Page>().rows[0]).toMatchObject({
+    id: 'zz-a:group', displayName: 'Colon group',
+  });
+  expect(first.json<Page>().next).toBe('zz-a:group');
+  const after = encodeURIComponent(first.json<Page>().next!);
+  const second = await request(`kind=paying_group&after=${after}&limit=1`);
+  expect(second.statusCode).toBe(200);
+  expect(second.json<Page>().rows[0]).toMatchObject({ id: 'zz-b-long', displayName: longName });
+  expect(second.json<Page>().next).toBeNull();
+}
+it('lists stored colon ids and 201-character names without breaking continuation',
+  listsStoredGroupValues);
+
+async function boundsLockedRead(table: string, sub = 'owner') {
+  const client = await dbs.queue.connect();
+  await client.query('BEGIN');
+  await client.query(`LOCK TABLE ${table} IN ACCESS EXCLUSIVE MODE`);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  function expire(resolve: (value: undefined) => void) {
+    timer = setTimeout(resolve, 10_500);
+  }
+  const expired = new Promise<undefined>(expire);
+  const pending = request('kind=paying_group', sub);
+  const started = performance.now();
+  try {
+    const response = await Promise.race([pending, expired]);
+    expect(response, 'The request must finish while the lock is still held').toBeDefined();
+    expect(performance.now() - started).toBeLessThan(10_500);
+    expect(response!.statusCode).toBe(sub === 'owner' ? 503 : 403);
+    expect(response!.json()).toEqual({ status: sub === 'owner' ? 'unavailable' : 'refused' });
+    expect(response!.headers['cache-control']).toBe('no-store');
+  } finally {
+    clearTimeout(timer);
+    await client.query('ROLLBACK');
+    client.release();
+    await pending;
+  }
+  const recovered = await request();
+  expect(recovered.statusCode).toBe(200);
+}
+async function lockedRead(table: string) {
+  await boundsLockedRead(table);
+}
+it.each(['groups', 'projection_checkpoints', 'model_budgets'])(
+  'bounds a held %s lock and recovers after timeout', lockedRead);
+async function checksAccessAfterTimeout() {
+  await boundsLockedRead('groups', 'member');
+}
+it('checks access even when a locked read reaches its deadline', checksAccessAfterTimeout);
+
+async function listsLongGroupName() {
+  const response = await request('kind=paying_group&after=zz-b&limit=1');
+  expect(response.statusCode).toBe(200);
+  expect(response.json<Page>().rows[0]).toMatchObject({
+    id: 'zz-b-long', displayName: 'N'.repeat(201),
+  });
+}
+it('lists a saved 201-character group name', listsLongGroupName);
