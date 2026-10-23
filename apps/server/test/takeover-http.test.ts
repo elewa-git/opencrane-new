@@ -621,3 +621,69 @@ async function refusalRestart() {
 }
 it('recovers refusals after server restart and conflicts on changed actor or request',
   refusalRestart);
+
+async function removalDuringRefusal(stage: 'read' | 'append') {
+  await setup();
+  await participant();
+  const store = fixture.nats.store;
+  const read = store.readStream.bind(store);
+  const append = store.append.bind(store);
+  let removed = false;
+  async function removeMember() {
+    if (removed) return;
+    removed = true;
+    await fixture.append('member-bob', 'member.removed', {
+      memberId: 'bob', removedBy: 'alice',
+    });
+  }
+  async function* removeDuringRead(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (stage === 'read' && args[0] === `view-${body.commandId}`) await removeMember();
+  }
+  async function removeDuringAppend(command: AppendCommand) {
+    if (stage === 'append') await removeMember();
+    return append(command);
+  }
+  vi.spyOn(store, 'readStream').mockImplementation(removeDuringRead);
+  vi.spyOn(store, 'append').mockImplementation(removeDuringAppend);
+  const response = await post(body, 'bob');
+  expect(removed).toBe(true);
+  expect(response.json()).not.toEqual({ status: 'refused', reason: 'requester_only' });
+  vi.restoreAllMocks();
+  expect(await refusalRows()).toEqual([]);
+}
+it.each(['read', 'append'] as const)(
+  'saves no refusal when membership ends during refusal %s', removalDuringRefusal);
+
+async function retainsAuthorityDeadline() {
+  await setup();
+  const store = fixture.nats.store;
+  const append = store.append.bind(store);
+  const read = store.readStream.bind(store);
+  let originalDeadline: number | undefined;
+  let refusalDeadline: number | undefined;
+  let readbackDeadline: number | undefined;
+  async function conflict(command: AppendCommand) {
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success) throw new Error('Expected a valid event');
+    if (parsed.event.type === 'takeover.requested') {
+      originalDeadline = command.deadline;
+      return { status: 'conflict' as const };
+    }
+    refusalDeadline = command.deadline;
+    return append(command);
+  }
+  async function* readback(...args: Parameters<typeof read>) {
+    if (refusalDeadline && args[0] === `view-${body.commandId}`) readbackDeadline = args[2];
+    yield* read(...args);
+  }
+  vi.spyOn(store, 'append').mockImplementation(conflict);
+  vi.spyOn(store, 'readStream').mockImplementation(readback);
+  expect((await post()).statusCode).toBe(409);
+  expect(originalDeadline).toBeTypeOf('number');
+  expect(refusalDeadline).toBe(originalDeadline);
+  expect(readbackDeadline).toBe(originalDeadline);
+  expect(await refusalRows()).toHaveLength(1);
+}
+it('keeps the checked authority deadline after an intent append conflicts',
+  retainsAuthorityDeadline);
