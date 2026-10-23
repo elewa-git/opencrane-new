@@ -341,3 +341,67 @@ async function unavailableProgress(caller: RefusedCaller) {
 it.each(['ordinary', 'demoted', 'removed'] as const)(
   'hides existing, missing and foreign history during an IAM outage from %s callers',
   unavailableProgress);
+
+async function failedHistoryReads(caller: RefusedCaller) {
+  const memberId = await refusedMember(caller);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const heads = vi.spyOn(nats.store, 'head');
+  const appends = vi.spyOn(nats.store, 'append');
+  function failQuery(): ReturnType<typeof db.query> {
+    expect(reads).not.toHaveBeenCalled();
+    return Promise.reject(new Error(canary));
+  }
+  const queries = vi.spyOn(db, 'query').mockImplementation(failQuery);
+  const paths = ['/api/org/history', '/api/org/history/role', '/api/org/history/unknown',
+    '/api/org/history/foreign-role', '/api/conversations/protected/history'];
+  for (const url of paths) {
+    reads.mockClear();
+    queries.mockClear();
+    const request = { url, headers: headers(memberId) };
+    const response = await app.inject(request);
+    expect.soft(response.statusCode, url).toBe(403);
+    expect.soft(response.body, url).toBe('{"status":"refused"}');
+    expect.soft(response.headers['cache-control'], url).toBe('no-store');
+    expect.soft(queries, url).toHaveBeenCalled();
+    const subjects = reads.mock.calls.map(streamSubject);
+    expect.soft(subjects, url).toEqual([`member-${memberId}`, 'ownership-test']);
+  }
+  expect(heads).not.toHaveBeenCalled();
+  expect(appends).not.toHaveBeenCalled();
+}
+it.each(['ordinary', 'demoted', 'removed'] as const)(
+  'checks access after failed list and detail loading for %s callers', failedHistoryReads);
+
+async function authorisedLoadFailure(stage: 'history' | 'progress') {
+  await append(role);
+  await runner.run(auditTrail);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const query = db.query.bind(db);
+  async function failLoad<Row extends Record<string, unknown>>(
+    ...args: Parameters<typeof db.query>
+  ) {
+    if (stage === 'history' || String(args[0]).includes('projection_events')) {
+      expect(reads).not.toHaveBeenCalled();
+      throw new Error(canary);
+    }
+    return query<Row>(...args);
+  }
+  vi.spyOn(db, 'query').mockImplementation(failLoad);
+  const paths = ['/api/org/history/role'];
+  if (stage === 'history') {
+    paths.push('/api/org/history');
+  }
+  for (const url of paths) {
+    reads.mockClear();
+    const request = { url, headers: headers() };
+    const response = await app.inject(request);
+    expect.soft(response.statusCode, url).toBe(503);
+    expect.soft(response.body, url).toBe('{"status":"unavailable"}');
+    expect.soft(response.headers['cache-control'], url).toBe('no-store');
+    const subjects = reads.mock.calls.map(streamSubject);
+    expect.soft(subjects, url).toEqual(['member-admin', 'ownership-test']);
+  }
+}
+it.each(['history', 'progress'] as const)(
+  'returns a fixed loading error only after checking authorised access: %s',
+  authorisedLoadFailure);
