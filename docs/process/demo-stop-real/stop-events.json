@@ -1,0 +1,26 @@
+[
+  {
+    "turnId": "f30d75fe-9a9d-453c-ae7a-9ee3734a083d",
+    "stopPosition": 296,
+    "stopAt": "2026-10-23T07:18:11.069Z",
+    "endPosition": 303,
+    "endAt": "2026-10-23T07:18:12.262Z",
+    "reason": "stop_interrupted"
+  },
+  {
+    "turnId": "ade54428-977f-4fb6-91b8-c01aead982bd",
+    "stopPosition": 395,
+    "stopAt": "2026-10-23T07:19:42.431Z",
+    "endPosition": 403,
+    "endAt": "2026-10-23T07:19:43.963Z",
+    "reason": "stop_interrupted"
+  },
+  {
+    "turnId": "d81ebdce-be27-4bf3-9837-8007a8be7ca8",
+    "stopPosition": 495,
+    "stopAt": "2026-10-23T07:21:27.830Z",
+    "endPosition": 503,
+    "endAt": "2026-10-23T07:21:29.101Z",
+    "reason": "stop_interrupted"
+  }
+]

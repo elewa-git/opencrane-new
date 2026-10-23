@@ -2,6 +2,62 @@ import { once } from 'node:events';
 import { expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
 import { fixture } from './bridge-gate-fixture.ts';
+import { reportJournal, type BridgeReport } from '../src/report-journal.ts';
+
+interface GatedTerminalCase {
+  status: string;
+  type: string;
+  reason: BridgeReport['reason'];
+}
+
+async function keepsTerminalOutcomeAfterComputerStop(testCase: GatedTerminalCase) {
+  const test = await fixture();
+  const gate = await test.signedGate();
+  function running() {
+    return test.calls.includes('turn/start:thread-1');
+  }
+  function interrupted() {
+    return test.calls.includes('turn/interrupt:thread-1');
+  }
+  function quiet() {
+    return Boolean(test.receipt());
+  }
+  function isTerminal(report: BridgeReport) {
+    return report.type === 'agent.turn_completed' || report.type === 'agent.turn_failed';
+  }
+  try {
+    test.start('first');
+    await until(running);
+    test.send(gate);
+    await until(interrupted);
+    const terminal = { id: 'codex-thread-1', status: testCase.status };
+    const params = { threadId: 'thread-1', turn: terminal };
+    const notification = { method: 'turn/completed', params };
+    test.channel.notification(notification);
+    await until(quiet);
+
+    const saved = reportJournal(test.driver);
+    saved.load();
+    const terminals = saved.reports.filter(isTerminal);
+    expect(terminals).toHaveLength(1);
+    expect(terminals[0]?.turnId).toBe('first');
+    expect(terminals[0]?.type).toBe(testCase.type);
+    expect(terminals[0]?.reason).toBe(testCase.reason);
+  } finally {
+    await test.close();
+  }
+}
+
+const gatedTerminalCases: GatedTerminalCase[] = [
+  { status: 'failed', type: 'agent.turn_failed', reason: 'model_error' },
+  { status: 'completed', type: 'agent.turn_completed', reason: undefined },
+  { status: 'interrupted', type: 'agent.turn_failed', reason: 'stop_interrupted' },
+];
+
+it.each(gatedTerminalCases)(
+  'saves the $status outcome after a computer-wide stop',
+  keepsTerminalOutcomeAfterComputerStop,
+);
 
 async function stopsEveryConversation() {
   const test = await fixture();

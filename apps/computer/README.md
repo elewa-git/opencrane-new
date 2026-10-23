@@ -24,7 +24,7 @@ flowchart LR
   server -.->|integration tests use the computer helper| computer
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes and public keys| computer
-  server["apps/server<br/>the back end"] <-->|turns, files, shared history, stops, saved Stop, restart or failure reasons, report acknowledgements and signed gates| computer
+  server["apps/server<br/>the back end"] <-->|turns, files, shared history, Stop outcomes, restart or failure reasons, report acknowledgements and signed gates| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer --> supervisor["Root supervisor<br/>protected launch and desktop checks"]
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
@@ -43,7 +43,7 @@ flowchart LR
   identity. Codex can read the key, but cannot use it to sign requests or change it.
   Older deliveries without a key still work; computer-wide stop requests need a key.
 - Runs the bridge that receives chat turns and sends progress reports to the server.
-  End reports distinguish an interrupted Stop from a restart, model failure or tool refusal.
+  End reports distinguish Stop from a restart, an earlier model failure or tool refusal.
 - Returns a checked root supervisor receipt after stopping local executors. Saved stop
   gates keep executor admission closed after a restart. Desktop control stays unavailable.
 - Checks signed computer-wide stop requests against its saved identity and generation
@@ -58,7 +58,9 @@ flowchart LR
 - Keeps files in the person's workspace when the computer pauses and starts again.
 - Lets Codex reach the AI gateway only while the current chat turn holds a valid short-lived pass.
 - Removes a stopped turn's passes and tool lists, ends its approval waits and closes
-  its local model and tool requests before asking Codex to interrupt it.
+  its local model and tool requests before asking Codex to interrupt it. Keeps the Stop
+  outcome if closing the connection makes the model report a failure. Earlier failures
+  still show as failures.
 - Separates the assistant, file tools and desktop into different Linux users.
   Protects temporary desktop files before those users start.
 - Stops executors through a root-only socket. Keeps executor admission closed after

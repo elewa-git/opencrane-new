@@ -338,9 +338,13 @@ async function finishesOldInstallationBeforeReusingThread() {
     upstream.end('{}');
     expect(await response).toBe('200: {}');
     function firstTerminal(frame: Record<string, unknown>) {
-      return frame['type'] === 'agent.turn_completed' && frame['turnId'] === 'first';
+      return ['agent.turn_completed', 'agent.turn_failed'].includes(String(frame['type']))
+        && frame['turnId'] === 'first';
     }
-    expect(test.frames.filter(firstTerminal)).toHaveLength(1);
+    const terminals = test.frames.filter(firstTerminal);
+    expect(terminals).toHaveLength(1);
+    const expectedTerminal = { type: 'agent.turn_failed', reason: 'stop_interrupted' };
+    expect(terminals[0]).toMatchObject(expectedTerminal);
   } finally {
     release.resolve();
     await test.close();
