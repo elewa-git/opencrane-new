@@ -2,6 +2,137 @@
 
 For people, read [README.md](README.md) first.
 
+## Spending editor diagnostics, 23 October 2026
+
+Part of board card #600 and the #32 demo work. **Diagnostics only: no root-cause fix
+is claimed.** The cause remains unproved. The card stays open until a failure is caught
+and fixed, or several fresh runs pass. The final rehearsal and nightlies run the
+spending check; this change records evidence if its editor fails to appear.
+The retained attempt
+`nightly-20261022T232200-238bd706-cd43-4315-bb24-b449c3adc9c4`, source `267e038bb`,
+failed in the `save` helper at line 50, called from line 89. It waited for the
+**Budget scope** select on a new Spending page before submitting the next ceiling.
+It was not waiting for a refusal notice, save reply or restored limit.
+
+Evidence is under `~/.opencrane/daily-fresh/` in that attempt's directory.
+`last-error.log` gives the 30-second locator timeout. The retained
+`generated/docs/process/p3-13-live/fresh-paying_group-1280.png` shows a saved zero-cent
+paying-group ceiling. The matching refusal picture shows the group limit notice.
+There is no picture of the failed Spending page. The server log retains only its last
+100 lines, which cover later sign-out checks. Those records do not establish the
+failed page's HTTP responses, rendering state or exact trigger.
+
+The Spending editor, its read handlers and this browser check are unchanged between
+that source and the investigation's `origin/main` base `bc769a1c3`.
+A diagnostic fresh start on claimed secondary slot 1 passed all four budget cases,
+both replay checks and sign-out. Thirty additional read-only page loads and sixty
+further UI saves alternating zero and 20,000 cents also passed. The read-only observer
+ran before the budget cases and may have warmed the page. This is not an exact
+reproduction of the original cold load. The observer and temporary instrumentation
+were removed. The slot was released. Pictures and generated records are retained at
+`~/.opencrane/daily-fresh/budget-diagnostic-20261023/generated/`.
+
+The lasting change records evidence from the next failed editor load in
+`budget-editor-failure.log`. It keeps only HTTP status codes for the original page's
+GETs to the exact `/api/org/models` and `/api/org/effects` URLs on the chosen origin.
+It also records whether the Budget scope control, budget-service warning, access
+warning and Spending loaded notice are visible. Each value is `true` or `false`, or
+`null` if the browser cannot inspect that part of the page.
+
+The record contains fixed keys, status codes and these visibility values. It excludes
+screenshots, URLs, response contents, page text, input values and driver errors, which
+could contain secrets or personal data. It uses owner-only file permissions. The
+nightly launcher's existing log retention keeps it before removing the stack.
+The browser adds no HTTP reads, refreshes, write retries or longer waits. Reading
+visibility does not wait for the page to recover. The journey still fails before Save.
+
+The original failing-first tests proved missing failure evidence, **not the original
+fresh-start defect**. The tests copy the real journey into a temporary fixture directory
+so they cannot touch a running stack's files. They check an unavailable read, an access
+refusal and a successful HTTP read followed by a missing editor. They also check that
+unreadable page states do not lose the status codes, that no screenshot is taken, that
+non-GET and unrelated URL responses are excluded, and that effects responses are kept
+separately in arrival order. Money, company limits and access checks are unchanged.
+
+### Qualification and local checks
+
+The one nightly attempt was **PASS**: source
+`c985529bf446f0fa9508e1e7536435c5c1edf040`, attempt
+`nightly-20261023T002814-dd233c55-c917-4973-97c3-9240567e1419`, completed at
+00:46:36 UTC on 23 October after 1,102 seconds. It used fresh claimed secondary
+slot 1 and the free stand-in, without the diagnostic observer. This is retained evidence
+from the earlier implementation, before the current rebase and privacy change. It does not qualify the current revision. The original intermittent
+failure remains unresolved.
+
+| Spending and every following check | Result |
+| --- | --- |
+| Paying-group zero ceiling, 1280px and 390px, durable refusal after reload, no reservation | PASS |
+| Assistant zero ceiling, both widths, durable refusal after reload, no reservation | PASS |
+| Restore the chosen ceilings and save final daily/monthly limits | PASS |
+| Group list, creation, search and detail | PASS |
+| Shared assistant creation, readiness, member choice and private chat | PASS |
+| Review and remove group membership | PASS |
+| Direct chat at both widths, exchange without starting an agent | PASS |
+| Group chat creation and fixed mode; messages without AI, computer or budget activity | PASS |
+| Add from the join position, remove and leave with access cleared | PASS |
+| People picker and refusal of an unsupported recipient combination | PASS |
+| Group participants and mode preserved through server restart and conversation replay | PASS |
+| Members replay and MCP catalogue replay, each with `--verify` | PASS |
+| HTTP web page and loopback listeners | PASS |
+| Token privacy in browser and logs, form sign-out and credential-required reauthentication | PASS |
+| Paid-model answer | NOT RUN |
+| Separate member disks for shared assistants | NOT PROVEN |
+
+The retained group receipt contains 26 PASS assertions and the two explicit limits
+above. The launcher released slot 1; its directory and Compose containers were absent
+afterwards. Generated pictures and JSON records were retained privately, then restored
+in the repository. Evidence, including the group receipt and local check logs, is at
+`~/.opencrane/daily-fresh/nightly-20261023T002814-dd233c55-c917-4973-97c3-9240567e1419/`.
+
+Earlier implementation checks: **PASS**, six focused tests twice, 438 event-security tests once,
+workspace/package typecheck and a strict check of the changed infrastructure files
+using the repository's compiler settings. **PASS**, lint including Knip, Markdown,
+offline links, fixture rules, reviewed licences and changelog validation; 24 warnings
+are in unchanged code. **PASS**, event catalogue agreement for 149 types.
+All checks used `nice -n 10`. Focused and security tests used the requested
+`PG_TEST_URL`; these tests use no database. **PASS**, clean `npm ci` and both requested
+tool symlinks. Full root suite: **NOT RUN**, as requested. Protected authority and
+security tests are unchanged. CI will not be awaited.
+
+### Diagnostics rework receipt
+
+Rebased successfully onto fetched `origin/main` at `f377da0af2c0b01d92f23783d2ba4728ef57d175`.
+The fetched main commit is an ancestor of this branch and no rebase remains in progress.
+The test-only commit `fcbbb85c0` ran before the privacy change: **FAIL**, as expected,
+because the old capture had no fixed page-state record (three tests passed, six failed).
+This is proof of the diagnostics change only; no product failure was reproduced.
+
+Current local checks:
+
+- **PASS**, all nine focused tests twice after the final readability changes. Both runs
+  used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`. These fixtures
+  need no database and cannot touch the live stacks.
+- **PASS**, removal checks for all three response guards. Removing GET filtering,
+  bypassing the exact budget URL or disabling effects capture each made its new test
+  fail. Reintroducing a raw screenshot also made the privacy test fail. All temporary
+  changes were restored before the passing checks.
+- **PASS**, repository lint, including Knip, Markdown, offline links, fixture rules,
+  reviewed licences and `npm run lint:changelog`. Lint reports 24 existing warnings
+  and no errors. Knip reports two existing configuration hints.
+- **PASS**, workspace and package typecheck, plus a focused strict typecheck of the
+  changed infrastructure files using the repository's compiler settings.
+- **PASS**, `check:events`: 149 event types agree with the catalogue.
+
+All checks ran under `nice -n 10`. Lint used a 6 GiB heap. Check logs are retained at
+`~/.fleet/demo-budget-check/rework/`. Protected access, money, memory and event-security
+checks are unchanged.
+
+Fresh live run on this revision: **NOT RUN**. Full root suite: **NOT RUN**, as requested.
+The earlier nightly above remains the only recorded fresh pass for this investigation.
+The cause remains unproved and #600 stays open. This PR remains a draft. CI is not awaited.
+
+## Starting and stopping the stack
+
 On `ocn-dev`, with Node 22, installed workspaces (`npm ci`), Docker Compose,
 OpenSSL, `flock`, passwordless `sudo` for Tailscale Serve and the model-port firewall, and an authenticated
 Tailscale daemon:
