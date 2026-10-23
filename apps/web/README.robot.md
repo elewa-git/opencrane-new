@@ -137,6 +137,19 @@ abort a pending read. Read ids and positions remain in memory only.
 Both open transcript pages clear protected content on a refused history, list or status
 read, or a socket refusal. The direct/group page also clears after a refused read save.
 Both pages also clear on a bare WebSocket close with code 1008 and do not reconnect that socket.
+Code 1013 with reason `rate limit` uses the existing reconnect backoff. Both pages
+keep the selected chat, saved rows, draft and last applied event position. Direct
+and group chats read missing history before subscribing again; agent sessions
+subscribe from their last applied event. Recovery never resends a message or tool
+request. Repeated events do not add duplicate rows.
+The direct/group connection effect watches history readiness before starting
+catch-up. This lets it subscribe when that read finishes even while an uncertain
+send keeps its existing notice on screen.
+The socket service, direct-chat and workspace specs exercise CloseEvent delivery,
+replacement sockets, retained state and refusal after the reconnect wait. A real
+1008 or refusal still clears protected state and ignores late history and socket
+replies. A refused read during the wait also cancels the reconnect timer.
+These are source tests; fresh-install qualification is NOT RUN.
 The workspace clears its address selection and
 aborts an upload. Its revision prevents late list and history replies from restoring
 content. Assistant-session read markers remain for the next part.

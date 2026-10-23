@@ -2583,7 +2583,11 @@ async function retainsRateLimitedChat(mode: string): Promise<void> {
   replacement.onopen?.(new Event('open'));
   fixture.detectChanges();
   await vi.advanceTimersByTimeAsync(0);
-  fixture.detectChanges();
+  function hasResumedSubscription(): void {
+    fixture.detectChanges();
+    expect(api.sentSocketMessages).toHaveLength(2);
+  }
+  await vi.waitFor(hasResumedSubscription);
   expect(JSON.parse(api.sentSocketMessages[1] ?? '{}')).toEqual({
     type: 'subscribe', topic: 'conversation', conversationId, since: 4, generation: 1,
   });

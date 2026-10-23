@@ -136,7 +136,11 @@ export function attachWebSocketServer(
     socket.on('message', (raw: Buffer | ArrayBuffer | Buffer[]) => {
       if (socket.readyState !== socket.OPEN) return;
       if (Date.now() - windowStart >= 1000) { windowStart = Date.now(); messages = 0; }
-      if (++messages > 20) { socket.close(1008, 'rate limit'); return; }
+      if (++messages > 20) {
+        // Allow reconnecting after a burst without treating it as lost chat access.
+        socket.close(1013, 'rate limit');
+        return;
+      }
       if (socket.bufferedAmount > 64 * 1024) { socket.close(1013, 'slow consumer'); return; }
       let parsed: unknown;
       try {

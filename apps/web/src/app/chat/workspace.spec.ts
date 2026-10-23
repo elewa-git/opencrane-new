@@ -2152,7 +2152,9 @@ async function retainsRateLimitedSession(): Promise<void> {
   sendConversationRow(replacement, completed);
   sendConversationReady(replacement, 'chat', 5);
   context.fixture.detectChanges();
-  function rowPosition(row: ChatRow): number { return row.position; }
+  function rowPosition(row: ChatRow): number {
+    return row.position;
+  }
   expect(chat.rows().map(rowPosition)).toEqual([1, 2, 3, 4, 5]);
   expect(context.root.textContent).toContain('Order read once');
   expect(context.fixture.componentInstance['draft']()).toBe('Keep my draft');
@@ -2234,3 +2236,32 @@ async function purgesRevokedReconnect(refusal: string): Promise<void> {
 it.each(['1008', 'refused'])(
   'purges a session revoked during the rate-limit wait on %s and ignores late replies',
   purgesRevokedReconnect);
+
+async function cancelsReconnectAfterRefusedRead(): Promise<void> {
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  const chat = context.fixture.componentInstance['chat'];
+  context.fixture.componentInstance['draft'].set('Private draft during the wait');
+  context.socket.onopen?.(new Event('open'));
+  const oldReceive = context.socket.onmessage;
+  vi.useFakeTimers();
+  context.socket.onclose?.(new CloseEvent('close', { code: 1013, reason: 'rate limit' }));
+  context.fixture.detectChanges();
+  context.denyFeedRead();
+  await chat.refresh();
+  await vi.advanceTimersByTimeAsync(1000);
+  const late = { version: 1, topic: 'conversation', type: 'event',
+    conversationId: 'chat', position: 2, generation: 1, row: screenshotRow(2) };
+  oldReceive?.(new MessageEvent('message', { data: JSON.stringify(late) }));
+  context.fixture.detectChanges();
+  expect(context.socketFactory).toHaveBeenCalledTimes(1);
+  expect(context.root.textContent).toContain('You no longer have access');
+  expect(context.root.textContent).not.toContain('screen.png');
+  expect(chat.rows()).toEqual([]);
+  expect(chat.selected()).toBe('');
+  expect(chat['position']).toBe(0);
+  expect(context.fixture.componentInstance['draft']()).toBe('');
+  context.fixture.destroy();
+}
+
+it('cancels the pending reconnect when a read reports revocation during the wait',
+  cancelsReconnectAfterRefusedRead);
