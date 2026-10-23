@@ -20,6 +20,13 @@ through separate declarations. It owns wire shapes, not authentication, persiste
 or event business rules. Both [web](../../apps/web/README.md) and
 [server](../../apps/server/README.md) consume it.
 
+## Takeover approval cancellation
+
+The fixed `takeover` cancellation cause is shared by event and approval reply
+schemas. No new data field or event type is introduced. The saved cancellation time
+supplies `endedAt`. Used approvals retain their existing evidence. The exact behaviour
+is described in the [approval API](../../docs/api/approvals.md).
+
 ## Public contract and usage
 
 Import `@opencrane/protocol` through [src/index.ts](src/index.ts).

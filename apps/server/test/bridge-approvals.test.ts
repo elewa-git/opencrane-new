@@ -1,3 +1,4 @@
+import { parseEventByType } from '@opencrane/events';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -528,9 +529,9 @@ async function recoversCancellation(lostReply: boolean) {
   await saveTakeover();
   const appendEvent = nats.store.append.bind(nats.store);
   async function failCancellation(command: Parameters<typeof appendEvent>[0]) {
-    if (command.event.type !== 'approval.cancelled') return appendEvent(command);
+    if (!isCancellation(command.event)) return appendEvent(command);
     if (lostReply) await appendEvent(command);
-    return { status: 'unavailable' as const };
+    return { status: 'unavailable' as const, cause: new Error('Append unavailable') };
   }
   const fault = vi.spyOn(nats.store, 'append').mockImplementation(failCancellation);
   const first = watcher();
@@ -562,7 +563,7 @@ async function racesApproval() {
   const release = Promise.withResolvers<void>();
   const appendEvent = nats.store.append.bind(nats.store);
   async function holdCancellation(command: Parameters<typeof appendEvent>[0]) {
-    if (command.event.type === 'approval.cancelled') {
+    if (isCancellation(command.event)) {
       cancelling = true;
       await release.promise;
     }
@@ -583,3 +584,8 @@ async function racesApproval() {
   expect((await readCurrent()).state).toBe('cancelled');
 }
 it('cannot restore permission when Approve races a cancellation append', racesApproval);
+
+function isCancellation(value: unknown) {
+  const parsed = parseEventByType(value);
+  return parsed.success && parsed.event.type === 'approval.cancelled';
+}

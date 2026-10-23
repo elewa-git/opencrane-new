@@ -2,6 +2,16 @@
 
 For people, read [README.md](README.md) first.
 
+## Takeover approval cancellation
+
+Bridge approval entries include the computer stream position in their change check.
+Before settlement, the connected bridge sends its local work gate. If it cannot send
+the gate, the entry stays pending. A changed computer position retries the read.
+Append outages send no successful cancellation; reconnect reads the original approval.
+The existing independent pause deadline watcher is unchanged. This work adds no scan
+of offline waits, reservation release, writer, lease, return or recovery command.
+Takeover remains disabled. Fresh-install qualification is NOT RUN.
+
 ## Provider access during startup
 
 Provider routes return HTTP 425 with `{ status: 'access_applying' }` when the existing

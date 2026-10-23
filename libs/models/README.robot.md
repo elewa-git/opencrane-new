@@ -2,6 +2,17 @@
 
 For people, read [README.md](README.md) first.
 
+## Takeover approval cancellation
+
+`readApproval` reuses `readComputerControl`. Only a verified control with the exact
+assistant and affected turn can cancel. Computer identity before the approval request
+supplies its computer id and generation, including older resume records without a new
+generation. A newer replacement cannot cancel consent from a different generation.
+The existing conditional append and readback save one `approval.cancelled` with
+`cancelReason: takeover`. Concurrent readers and a racing decision reload the saved
+result. Used consent retains dispatch evidence and cannot retry during matching control.
+History loads do not add conversation or computer streams to access watches.
+
 ## Local demo TLS fixture
 
 `@opencrane/models/testing/remote-mcp` accepts an optional HTTP request handler after

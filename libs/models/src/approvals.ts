@@ -6,7 +6,8 @@ import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-st
 import { readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
-import { approvalGrantRevoked, approvalPolicyChange } from './approval-cancellation.ts';
+import { approvalGrantRevoked, approvalPolicyChange, approvalTakenOver }
+  from './approval-cancellation.ts';
 import { approvalRecord } from './approval-record.ts';
 import type { JsonValue } from '@opencrane/events/lossless-json';
 import type { mcpPolicy } from './mcp.ts';
@@ -129,13 +130,18 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   const { state, permitId } = record;
   const sequence = rows.at(-1)!.sequence;
   let conversationPosition = 0;
-  const canRetry = await verifiedRetry(store, silo, approvalId, permitId, deadline, state);
+  let canRetry = await verifiedRetry(store, silo, approvalId, permitId, deadline, state);
   const needsCurrentChecks = canRetry || ['requested', 'approved'].includes(state);
   if (needsCurrentChecks) {
     const checked = await invalidated(store, silo, request, rows[0]!.sequence,
       deadline, options.conversationRows);
     conversationPosition = checked.conversationPosition;
-    const terminal = approvalTerminalState(checked.closed, request.expiresAt, now);
+    let terminal = approvalTerminalState(checked.closed, request.expiresAt, now);
+    if (checked.cancelReason === 'takeover' && permitId) {
+      // Retain dispatch evidence even when takeover prevents an explicitly requested retry.
+      canRetry = false;
+      terminal = undefined;
+    }
     if (terminal) {
       const data = { approvalId };
       const cancellation = { ...data, cancelReason: checked.cancelReason };
@@ -194,6 +200,9 @@ export function closesDecisionTurn(event: EventEnvelope, turnId: string) {
 async function invalidated(store: EventStore, silo: string, request: Request,
   requestPosition: number, deadline: number,
   conversationRows?: StoredEvent[]) {
+  if (await approvalTakenOver(store, silo, request, requestPosition, deadline)) {
+    return { closed: true, conversationPosition: 0, cancelReason: 'takeover' as const };
+  }
   const rows = conversationRows ?? await history(
     store, `conversation-${request.conversationId}`, silo, deadline);
   function startsBoundTurn(row: StoredEvent) {
