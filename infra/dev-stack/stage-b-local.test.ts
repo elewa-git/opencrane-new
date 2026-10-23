@@ -278,3 +278,72 @@ function refuseFutureFreshness() {
   assertRefused(evidence);
 }
 test('freshness checked after the rehearsal refuses', refuseFutureFreshness);
+
+function refuseDirectWrite() {
+  const evidence = approvalEvidence();
+  Reflect.deleteProperty(evidence, 'records');
+  // Retain the old approval labels and successful readback from a direct write.
+  Reflect.deleteProperty(evidence, 'callId');
+  Reflect.deleteProperty(evidence, 'conversationId');
+  assertRefused(evidence);
+}
+test('a direct write without original approval and dispatch records refuses', refuseDirectWrite);
+
+function refuseDispatchBeforeApproval() {
+  const evidence = approvalEvidence();
+  evidence.records.approvalDecision.sequence = 15;
+  evidence.records.approvalDecision.event.time = '2026-10-23T10:00:30Z';
+  assertRefused(evidence);
+}
+test('a write dispatched before its approval refuses', refuseDispatchBeforeApproval);
+
+function refuseApprovalForAnotherCall() {
+  const evidence = approvalEvidence();
+  evidence.records.dispatchDecision.event.data.callId = 'another-call';
+  assertRefused(evidence);
+}
+test('an approval decision for another call refuses', refuseApprovalForAnotherCall);
+
+function refuseMissingOriginalRecord() {
+  for (const field of ['request', 'approvalDecision', 'approvalUse', 'dispatchDecision', 'dispatch']) {
+    const evidence = approvalEvidence();
+    Reflect.deleteProperty(evidence.records, field);
+    assertRefused(evidence);
+  }
+}
+test('each original approval and dispatch record is required', refuseMissingOriginalRecord);
+
+function refuseUnrelatedOriginalRecords() {
+  const failures = [
+    function otherApproval(data: ReturnType<typeof approvalEvidence>) {
+      data.records.approvalDecision.event.data.approvalId = 'other';
+    },
+    function otherPermit(data: ReturnType<typeof approvalEvidence>) {
+      data.records.approvalUse.event.data.permitId = 'other';
+    },
+    function otherTurn(data: ReturnType<typeof approvalEvidence>) {
+      data.records.request.event.data.turnId = 'other';
+    },
+    function otherTool(data: ReturnType<typeof approvalEvidence>) {
+      data.records.dispatch.event.data.toolName = 'read_fixture_quote';
+    },
+    function otherSilo(data: ReturnType<typeof approvalEvidence>) {
+      data.records.dispatch.event.silo = 'other';
+    },
+    function otherDecisionApproval(data: ReturnType<typeof approvalEvidence>) {
+      data.records.dispatchDecision.event.correlation.approval = 'other';
+    },
+    function otherArguments(data: ReturnType<typeof approvalEvidence>) {
+      data.records.request.event.data.argumentsDigest = 'a'.repeat(64);
+    },
+    function earlyDispatchTime(data: ReturnType<typeof approvalEvidence>) {
+      data.records.dispatch.event.data.startedAt = '2026-10-23T10:00:15Z';
+    },
+  ];
+  for (const mutate of failures) {
+    const evidence = approvalEvidence();
+    mutate(evidence);
+    assertRefused(evidence);
+  }
+}
+test('unrelated approval or dispatch records refuse', refuseUnrelatedOriginalRecords);
