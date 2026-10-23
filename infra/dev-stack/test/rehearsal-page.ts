@@ -159,12 +159,12 @@ class RehearsalLocator {
     return this;
   }
 
-  last() {
+  nth() {
     return this;
   }
 
-  filter(options: { hasText: string | RegExp }) {
-    return this.page.locator(`${this.selector} ${String(options.hasText)}`);
+  filter(options: { hasText?: string | RegExp; has?: unknown }) {
+    return this.page.locator(`${this.selector} ${String(options.hasText ?? '')}`);
   }
 
   locator(selector: string) {

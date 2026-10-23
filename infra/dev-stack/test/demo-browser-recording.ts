@@ -94,7 +94,7 @@ export function browserRecording(interruptAtLimit = false, failWarm = false) {
       waitFor: nothing,
       click,
       first: locator,
-      last: locator,
+      nth: locator,
       filter: locator,
       getByRole: locator,
       getByText: locator,
@@ -125,8 +125,11 @@ export function browserRecording(interruptAtLimit = false, failWarm = false) {
     function status() {
       return 200;
     }
+    async function json() {
+      return { rows: [{ memberId: 'zitadel-owner' }] };
+    }
     async function get() {
-      return { status, body };
+      return { status, body, json };
     }
     function setDefaultTimeout() {
       check();

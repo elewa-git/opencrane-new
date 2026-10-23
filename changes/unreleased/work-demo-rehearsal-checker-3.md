@@ -1,0 +1,1 @@
+Demo rehearsal and smoke checks accept replies that finish before waiting starts, require each new reply, and select the exact colleague and demo provider. Regression checks cover both widths, slow history pages and saved pictures.

@@ -15,27 +15,33 @@ async function draft(page: Page, origin: string) {
   await page.getByText('Draft', { exact: true }).waitFor();
 }
 
-export async function answer(page: Page, prompt: string, facts: RegExp[]) {
+async function sendForReply(page: Page, prompt: string) {
+  const loadedHistory = page.locator('.transcript[aria-busy="false"]');
+  await loadedHistory.waitFor({ state: 'attached' });
+  const replies = page.getByRole('article', { name: 'Agent reply', exact: true });
+  const previousReplyCount = await replies.count();
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.fill(prompt);
   await composer.press('Enter');
-  await page.locator('.caret').waitFor();
-  const reply = page.getByRole('article', { name: 'Agent reply', exact: true }).last();
-  await reply.getByText('Done', { exact: true }).waitFor();
+  // Keep the new reply's position so an earlier answer cannot satisfy this send or reload.
+  return replies.nth(previousReplyCount);
+}
+
+export async function answer(page: Page, prompt: string, facts: RegExp[]) {
+  const reply = await sendForReply(page, prompt);
+  const completedOptions = { hasText: /^\s*Done\s*$/u };
+  const completed = reply.locator('.turn-status', completedOptions);
+  await completed.waitFor();
   const text = await reply.locator('.prose').innerText();
   for (const fact of facts) assert(fact.test(text), 'The real reply must contain the expected fact');
   await page.reload();
-  await reply.getByText('Done', { exact: true }).waitFor();
+  await completed.waitFor();
   assert.equal(await reply.locator('.prose').innerText(), text, 'Reload keeps the answer');
 }
 
 export async function stop(page: Page,
   prompt = 'Write a long numbered list of 200 European cities and describe each one.') {
-  const composer = page.getByRole('textbox', { name: 'Message your agent' });
-  await composer.fill(prompt);
-  await composer.press('Enter');
-  await page.locator('.caret').waitFor();
-  const reply = page.getByRole('article', { name: 'Agent reply', exact: true }).last();
+  const reply = await sendForReply(page, prompt);
   const prose = reply.locator('.prose');
   const receivedTextOptions = { hasText: /[a-z]/iu };
   const receivedText = prose.filter(receivedTextOptions);
@@ -43,11 +49,13 @@ export async function stop(page: Page,
   const stopButtonOptions = { name: 'Stop', exact: true };
   const stopButton = reply.getByRole('button', stopButtonOptions);
   await stopButton.click();
-  await reply.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
+  const stoppedOptions = { hasText: /^\s*Stopped · partial reply kept\s*$/u };
+  const stopped = reply.locator('.turn-status', stoppedOptions);
+  await stopped.waitFor();
   const partial = await reply.locator('.prose').innerText();
   assert(partial.length > 0, 'Stop keeps received text');
   await page.reload();
-  await reply.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
+  await stopped.waitFor();
   assert.equal(await reply.locator('.prose').innerText(), partial);
 }
 

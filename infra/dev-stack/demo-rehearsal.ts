@@ -8,7 +8,7 @@ import { demoBudget, demoCeiling } from './demo-prepare.ts';
 import { demoRefusal } from './demo-browser.ts';
 import { waitForPrivateSessionToApply } from './browser-phase4.ts';
 import {
-  checkChangeHistory, checkProviderAnswer, rehearsalStep,
+  checkChangeHistory, checkProviderAnswer, choosePerson, rehearsalStep,
 } from './demo-rehearsal-checks.ts';
 
 type Options = Parameters<typeof demoBudget>[0];
@@ -111,22 +111,6 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
     await stop(owner, prompt);
     assert.equal(await owner.getByText('Reply failed', { exact: true }).count(), 0);
   }
-  async function choosePerson(page: Page, memberId: string) {
-    const response = await page.request.get(`${origin}/api/chat/colleagues?limit=50`);
-    assert.equal(response.status(), 200);
-    const people = await response.json() as {
-      rows: Array<{ memberId: string; displayName?: string }>;
-    };
-    function chosen(person: { memberId: string }) {
-      return person.memberId === memberId;
-    }
-    const person = people.rows.find(chosen);
-    assert(person, 'The selected colleague exists');
-    await page.locator('#colleague-search').fill(person.displayName ?? person.memberId);
-    const selectedName = person.displayName ?? person.memberId;
-    const matchingPerson = page.locator('.colleague-option').filter({ hasText: selectedName });
-    await matchingPerson.click();
-  }
   async function changeRecipients(page: Page) {
     await page.goto(`${origin}/workspace/direct`);
     await page.locator('.transcript[aria-busy="false"]').waitFor();
@@ -146,7 +130,7 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
   async function liveMessage() {
     await member.setViewportSize({ width: 390, height: 844 });
     await changeRecipients(member);
-    await choosePerson(member, 'zitadel-owner');
+    await choosePerson(member, origin, 'zitadel-owner');
     await member.getByRole('button', { name: 'Use selection', exact: true }).click();
     const first = `Rehearsal direct ${identity}`;
     await humanMessage(member, first);
@@ -174,8 +158,8 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
   }
   async function groupAndInvite() {
     await changeRecipients(owner);
-    await choosePerson(owner, 'zitadel-member');
-    await choosePerson(owner, 'jente-rosseel');
+    await choosePerson(owner, origin, 'zitadel-member');
+    await choosePerson(owner, origin, 'jente-rosseel');
     await owner.getByText('Group conversation', { exact: false }).first().waitFor();
     const message = `Rehearsal group ${identity}`;
     await humanMessage(owner, message);

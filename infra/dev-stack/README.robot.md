@@ -15,9 +15,10 @@ The MCP journey loads the local TLS fixture through
 guard. The wake measurement forwards the optional verifier and the force flag in
 the same argument positions as `SandboxClient.credentials`.
 
-The rehearsal refusal test keeps its 100 ms assertion timeout. Its HTML setup has
-a separate 30-second timeout, matching Playwright's default, so a busy browser can
-load the fixture before the assertion starts.
+The rehearsal refusal test keeps its 100 ms assertion timeout. The nested-main test
+keeps its one-second assertion timeout. Both use a separate 30-second timeout for HTML
+setup, matching Playwright's default, so a busy browser can load each fixture before
+its assertions start.
 
 ## Spending editor diagnostics, 23 October 2026
 
@@ -1210,7 +1211,7 @@ unknown writes from being repeated. The PDF list must report delivery before war
 Warm-up sends one short question to each of the personal and shared computers.
 Preparation and warm-up sit outside the timed checks and still count as paid calls.
 
-Each warm attempt has a 180-second deadline. It checks streaming/reload, PDF facts,
+Each warm attempt has a 180-second deadline. It checks completed replies and reload, PDF facts,
 preview/download bytes, Stop/reload, live direct delivery, a shared reply, and company
 limit refusal/restore. Restoration is attempted even after failure or timeout.
 Two attempts capture both browsers at 1280 and 390 pixels after each step;
@@ -1261,7 +1262,7 @@ This command makes paid calls. The allowance must be an approved integer from 1 
 The command neither starts nor claims a stack. Missing, owner and invalid ids are refused
 before settings load. Each invocation starts a new run; it does not resume paid steps.
 
-The script checks streaming, scanned PDF, action history, Stop, live direct delivery,
+The script checks completed replies, scanned PDF, action history, Stop, live direct delivery,
 private shared replies, groups and an unopened invite, Models, company limits and change
 history, at 1280 and 390 pixels. Step 5 sends from 390 pixels at both widths.
 A failure stops later steps, which are recorded as NOT RUN.
@@ -1274,7 +1275,7 @@ The existing evidence sanitiser removes known credentials and credential pattern
 failed sanitisation withholds the details. Screenshots mask email addresses, password
 inputs, invitation links and provider-key patterns.
 
-Step 8 scopes “Model answered” to `oc-models main`. Password inputs and provider-key
+Step 8 scopes “Model answered” to the `dev-openai` row inside `oc-models main`. Password inputs and provider-key
 patterns are still checked across the page. The other nine steps have no unscoped
 `main` locator. The nested-main fixture failed first with Playwright's strict-mode
 error: `locator('main') resolved to 2 elements`. It passes after the fix and refuses
@@ -1325,6 +1326,78 @@ nice -n 10 node --experimental-strip-types --test \
 
 These fixtures make no paid calls and start no stack. Live qualification remains NOT RUN.
 
+### Audit of all rehearsal steps and the smoke
+
+Part of #569. The shared answer helper waits for loaded history before counting the
+existing replies. It selects the next reply by its position before sending. It waits
+for Done in that reply's status line, checks every expected fact, reloads and requires the
+same completed text. It never waits for a streaming caret. This also prevents an
+older answer from satisfying repeated smoke questions in the saved supplier and
+shared chats. Stop selects the new reply in the same way. It needs received text
+and an enabled Stop button before clicking, then requires the saved partial text.
+A reply that finishes before Stop can be clicked still fails that check.
+
+All ten steps were checked for temporary status waits, ambiguous locators, values
+shared between widths, dependence on earlier steps and a PASS without a saved picture.
+The existing two-width repeat fixture still runs twice. Every invitation, created
+chat message and restoration request keeps its attempt and width. Every rehearsal
+PASS still requires a non-empty picture list, populated only after saving finishes.
+
+| Step | Waits and locators checked | State, repeated widths and pictures checked |
+| --- | --- | --- |
+| 1. Arithmetic reply | Select the new reply; wait for Done, expected 437 and unchanged reload text. | Open a fresh draft; use the attempt and width in the prompt; capture the owner. |
+| 2. Scanned PDF | Wait for Ready, completed facts and Preview ready; check the viewer page and exact download bytes. | Open a fresh draft and upload once; keep this width's conversation; capture upload, preview and reply. |
+| 3. Action history | Exact allow and Success text may repeat, so select the first matching record deliberately. | Open the history for this width's PDF conversation; capture the owner. |
+| 4. Stop | Remove the caret wait; select the new reply, require received text and click its Stop button. Keep stopped status, non-empty text, reload equality and no Reply failed. | Use this width's PDF conversation and labelled prompt; capture the stopped reply. |
+| 5. Live direct message | Select the colleague by exact name rather than substring; require both unique messages on the receiver. | Open new-chat controls; send from the phone; capture sender and receiver. |
+| 6. Private shared reply | Wait for the saved private session, then the new completed Paris answer and unchanged reload text. | Start a new private session for each width; capture the member's answer. |
+| 7. Group and invite | Use exact colleague names; retain group-mode, message-delivery and created-link checks. | Open new-chat controls; use separate message and invitation values; capture group chat, group and unopened invite. |
+| 8. Models | Scope Model answered to the dev-openai provider row; retain password and key checks across the page. | Read the prepared provider without changing it; capture the owner. |
+| 9. Company limit | Keep saved-budget status, current-prompt refusal before and after reload, and unchanged charged and held cents. | Use this width's private session; restore both previous limits even after failure; capture refusal before restoring. |
+| 10. Change history | Keep both event matches, explicit first matching rows and the twenty-page limit. Slow older pages still wait for rows. | Read the prepared group and saved limit events; scroll each match into view and save both pictures. |
+
+The links between steps are deliberate: steps 3 and 4 use step 2's conversation,
+and step 9 uses step 6's private session. A failure prevents all later steps and
+widths from running. Neither can reuse a prior width's conversation after a failed
+setup. The demo's prepared group and assistant are read without changing membership.
+
+The smoke was checked separately:
+
+| Smoke step | Checks and isolation |
+| --- | --- |
+| Arithmetic | New completed reply, 437 and exact reload text in the prepared supplier chat. |
+| PDF | New completed facts, preview page and exact download bytes from the prepared attachment. |
+| Stop | New reply's received text and Stop button, saved stopped status and unchanged partial text. |
+| Direct delivery | Exact colleague selection; separate random message values and new-chat controls. |
+| Shared reply | New completed Paris answer and reload text, even when the question repeats in a saved private chat. |
+| Company limit | Unique refusal and restoration ids; current refusal before and after reload; unchanged spending and restored limits. |
+
+Every smoke step awaits pictures from both browsers before it can pass. The existing
+three-minute limit still fails an overlong smoke and prevents later work after expiry.
+Preparation deliberately owns the supplier attachment and private-session URL; the
+smoke does not rely on a rehearsal having run first.
+
+The completed-reply browser fixture failed first on the old caret wait. Other small
+fixtures reject an old correct answer without a new reply, incorrect facts, an
+unfinished answer, changed reload text and a provider that has not answered when another provider has.
+A reply saying Done in its prose without a completed status failed first by wrongly passing.
+The duplicate-provider fixture also failed first with a strict-locator error.
+Colleague fixtures distinguish name prefixes and refuse duplicate exact names.
+Stop is checked with a loading composer and no caret. History pagination takes
+longer than the old fixed pause. Pictures are checked for all six smoke steps at
+both widths, and a failed member picture fails every otherwise successful step.
+
+Run the three fixture files with:
+
+```sh
+nice -n 10 node --experimental-strip-types --test \
+  infra/dev-stack/demo-smoke.test.ts infra/dev-stack/demo-rehearsal.test.ts \
+  infra/dev-stack/demo-rehearsal-repeat.test.ts
+```
+
+These source checks make no paid calls and start no stack. Attempt 5 remains NOT RUN
+here; the orchestrator runs the fresh live rehearsal after merge.
+
 ## Overview details and related procedures
 
 The stack prepares the local Kubernetes cluster so background workers can start one
@@ -1368,7 +1441,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|starts programs, checks website readiness and PDF answers using attached text or a file read| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|checks spending, uploads, provider access, rehearsals at both widths, tools and group access loss| apps
+  stack -->|checks spending, uploads, provider access, completed rehearsal replies at both widths, tools and group access loss| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -1420,6 +1493,9 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
   Rehearsals save the previous company limits and restore them when they finish or stop.
   Private records identify the run's calls, charges and money still held.
   The separate ten-step rehearsal checks the Models page inside the organisation page.
+  It checks the demo provider inside that page.
+  Reply checks wait for the new answer to finish, even when it finishes straight away.
+  They check its facts and require the same text after a reload.
   Each rehearsal uses separate invitation addresses and chat messages for its width and attempt.
   It saves pictures before reporting a step as passed. Its history pictures show the matching rows.
   It saves failure messages with private values removed, even if a screenshot fails.

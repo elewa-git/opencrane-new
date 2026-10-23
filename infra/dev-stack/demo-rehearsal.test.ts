@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mock, test } from 'node:test';
 import { chromium, type Page } from 'playwright';
-import { checkProviderAnswer, rehearsalStep } from './demo-rehearsal-checks.ts';
+import { checkProviderAnswer, choosePerson, rehearsalStep } from './demo-rehearsal-checks.ts';
 import { demoRehearsal } from './demo-rehearsal.ts';
 import { sanitiseEvidence } from './sanitise-evidence.mjs';
 import { RehearsalPage } from './test/rehearsal-page.ts';
 
 const modelsPage = `<oc-organisation-shell><main>
   <nav>Organisation</nav><oc-models><main class="provider-page">
-    <h1>Models</h1><p>Model answered</p>
+    <h1>Models</h1><article data-provider-id="dev-openai"><p>Model answered</p></article>
   </main></oc-models>
 </main></oc-organisation-shell>`;
 
@@ -20,7 +20,8 @@ async function acceptsModelsInsideOrganisation() {
   try {
     const page = await browser.newPage();
     page.setDefaultTimeout(1000);
-    await page.setContent(modelsPage);
+    const contentOptions = { timeout: 30_000 };
+    await page.setContent(modelsPage, contentOptions);
     assert.equal(await page.locator('main').count(), 2);
     async function unscopedMain() {
       await page.locator('main').innerText();
@@ -242,3 +243,66 @@ async function refusesPassWithoutPicture() {
   assert.equal(result.reason, 'Step picture missing');
 }
 test('a successful check cannot report PASS without a saved picture', refusesPassWithoutPicture);
+
+async function requiresDemoProviderAnswer() {
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(5000);
+    const another = '<article data-provider-id="another"><p>Model answered</p></article>';
+    const bothAnswered = modelsPage.replace('</main></oc-models>',
+      another + '</main></oc-models>');
+    await page.setContent(bothAnswered);
+    await checkProviderAnswer(page);
+    const unanswered = modelsPage.replace('<p>Model answered</p>', '<p>Not tested</p>');
+    const onlyAnotherAnswered = unanswered.replace('</main></oc-models>',
+      another + '</main></oc-models>');
+    await page.setContent(onlyAnotherAnswered);
+    page.setDefaultTimeout(1000);
+    await assert.rejects(checkProviderAnswer(page), /Timeout/u);
+  } finally {
+    await browser.close();
+  }
+}
+test('Models selects the demo provider when two providers have answered',
+  requiresDemoProviderAnswer);
+
+async function choosesExactColleague() {
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(5000);
+    const body = `<input id="colleague-search"><div class="colleague-option"
+      onclick="document.body.dataset.chosen='wrong'"><span>Owner Two</span>Add person</div>
+      <button class="colleague-option" onclick="document.body.dataset.chosen='owner'">
+      <span>Owner</span>Add person</button>`;
+    const origin = 'http://colleagues.test';
+    await page.setContent(body);
+    async function colleagues(address: string) {
+      assert.equal(address, `${origin}/api/chat/colleagues?limit=50`);
+      const data = { rows: [{ memberId: 'zitadel-owner', displayName: 'Owner' }] };
+      function status() {
+        return 200;
+      }
+      async function json() {
+        return data;
+      }
+      return { status, json };
+    }
+    const request = mock.method(page.request, 'get', colleagues);
+    try {
+      await choosePerson(page, origin, 'zitadel-owner');
+      assert.equal(await page.locator('body').getAttribute('data-chosen'), 'owner');
+      const duplicate = '<button class="colleague-option"><span>Owner</span>Add person</button>';
+      await page.setContent(body + duplicate);
+      await assert.rejects(choosePerson(page, origin, 'zitadel-owner'),
+        /colleague-option.*resolved to 2 elements/u);
+    } finally {
+      request.mock.restore();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+test('colleague selection distinguishes name prefixes and refuses duplicate exact names',
+  choosesExactColleague);

@@ -6,6 +6,7 @@ import type { Page } from 'playwright';
 import { answer, stop } from './real-model-journey.ts';
 import { demoBudget, demoCeiling } from './demo-prepare.ts';
 import { timedSmoke } from './demo-smoke.ts';
+import { choosePerson } from './demo-rehearsal-checks.ts';
 import { findBudgetNoticeForPrompt } from './browser-budgets.ts';
 import { waitForPrivateSessionToApply } from './browser-phase4.ts';
 
@@ -86,8 +87,7 @@ export async function demoBrowser(owner: Page, member: Page, options: Options,
         break;
       }
     }
-    await member.locator('#colleague-search').fill('zitadel-owner');
-    await member.locator('.colleague-option').first().click();
+    await choosePerson(member, origin, 'zitadel-owner');
     await member.getByRole('button', { name: 'Use selection', exact: true }).click();
     const first = `Demo delivery ${randomUUID()}`;
     await member.locator('#message').fill(first);
