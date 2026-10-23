@@ -457,3 +457,25 @@ it('keeps the outcome but clears protected rows after a self-demotion reread', a
   expect(page(fixture).textContent).not.toContain('Sales team');
   expect(paths.filter(url => url.endsWith('/access'))).toHaveLength(1);
 });
+
+function replacesAndRestoresDialogMethod(method: 'showModal' | 'close'): void {
+  const dialogPrototype = HTMLDialogElement.prototype;
+  const originalMethod = dialogPrototype[method];
+  const replacement = vi.fn();
+  const replacementMethods = { [method]: replacement };
+  const originalMethods = { [method]: originalMethod };
+  const originalDescriptor = { value: originalMethod };
+  try {
+    Object.assign(dialogPrototype, replacementMethods);
+    const dialog = document.createElement('dialog');
+    dialog[method]();
+    expect(replacement).toHaveBeenCalledOnce();
+    Object.assign(dialogPrototype, originalMethods);
+    expect(dialogPrototype[method]).toBe(originalMethod);
+  } finally {
+    Object.defineProperty(dialogPrototype, method, originalDescriptor);
+  }
+}
+
+it.each(['showModal', 'close'] as const)(
+  'lets another spec replace and restore dialog %s', replacesAndRestoresDialogMethod);
