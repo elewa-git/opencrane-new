@@ -42,7 +42,7 @@ The checkpoint row serialises overlapping dispatchers and rejects gaps,
 silo mismatches and subscription changes. Registration takes a catalogue
 name and handle function; subscriptions come from `libs/events`, checked
 against the [catalogue](../../docs/architecture/events.md) by `check:events`.
-OpenFGA's mapping is reserved; its implementation is not included.
+The ops host registers the OpenFGA permission reaction from `libs/authz`.
 
 One `key_strict_fifo` queue per handler keys jobs by stream id. Defaults:
 four worker slots, five retries, exponential backoff starting at one second,
@@ -58,8 +58,8 @@ external call atomic with SQL. Do not run the projection runner and this
 runtime against the same projection tables concurrently.
 
 Failed heads remain in place and block their stream. Monitor
-`runtime.deadLetters(name)` and pg-boss queue errors in the host. Each failure
-also has a diagnostic copy in `<handler>-dead` (14-day queued retention).
+`runtime.deadLetters(name)` and pg-boss queue errors in the host. Each exhausted job
+also has a diagnostic copy in `<handler>-dead`; these queues disable automatic deletion.
 `cleanup-memory` handles correction and forget copies after confirming that the original is failed.
 Its callback records one durable unavailable result. The runtime then logs only the
 change id, scope id and original job id. Duplicate copies cannot add another result.

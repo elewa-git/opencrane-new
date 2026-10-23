@@ -1,107 +1,67 @@
-# libs/handlers
+# Handlers
 
 ## What this is
 
-Queue and run background reactions to events.
-A [reaction](../../GLOSSARY.md#reaction-handler) is work that follows a saved
-event, such as creating an assistant after a member joins. This package sends
-each reaction to a job queue in PostgreSQL and runs the jobs. `apps/ops` starts
-the [dispatcher](../../GLOSSARY.md#dispatcher), the background program that
-sends events to registered reactions, and the workers that run them.
+This package queues and runs background work after OpenCrane saves a change.
+That work is called a [reaction](../../GLOSSARY.md#reaction-handler), such as
+creating an assistant after a member joins. A saved job list lets the workers
+continue after a restart and retry work that fails.
 
 ## Where it fits
 
-OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
-that is never changed. Everything else, such as read tables and permissions, is
-built from that log and can be rebuilt from it. This package runs the background
-work that follows each event.
-This package belongs to the event core. `apps/ops` runs it. The dispatcher reads
-new events straight from NATS JetStream, the service that holds the event log,
-using the connection and decoding helpers in `libs/event-store`. `libs/events`
-names each reaction's event types;
-`libs/projections` supplies the database helpers reactions can use. The queue
-uses pg-boss, a job queue stored in PostgreSQL.
-The reactions themselves live elsewhere. `libs/authz` updates permissions.
-`libs/models` handles budgets, model access and ownership. `apps/ops` creates
-assistants, claims computers and stops private tool processes when configured.
+This is one of the packages that build everything from the
+[event log](../../GLOSSARY.md#event-log-event-store).
+[apps/ops](../../apps/ops/README.md), the background workers, starts the
+[dispatcher](../../GLOSSARY.md#dispatcher), which reads new events and puts jobs
+on the list. The reactions live in other packages: `libs/authz` updates permissions,
+`libs/models` handles AI access and spending, and `apps/ops` manages assistants and computers.
+The list is stored in PostgreSQL using pg-boss, a job queue library.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|starts memory and connection cleanup, ordered publications and private tool stops| handlers["libs/handlers<br/>reaction jobs"]
-  nats["NATS JetStream<br/>event log"] -->|new events, appointments and upgrade history| handlers
-  reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
-  handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
-  handlers -.-> events["libs/events<br/>reaction list"]
-  handlers -.-> projections["libs/projections<br/>database helpers"]
-  handlers -->|saves jobs and failed copies; checks database sessions| pg["PostgreSQL<br/>job queue"]
+  parent["libs/<br/>shared libraries"] --> handlers["libs/handlers<br/>background job queue"]
+  ops["apps/ops<br/>background workers"] -->|runs the workers| handlers
+  nats["NATS JetStream<br/>event log"] -->|new events| handlers
+  reactions["libs/models and libs/authz<br/>registered reactions"] -.-> handlers
+  handlers -.-> store["libs/event-store<br/>connection and record checks"]
+  handlers -.-> events["libs/events<br/>reaction subscriptions"]
+  handlers -->|stores the job list| pg["PostgreSQL<br/>database"]
 ```
 
 ## What it is responsible for
 
-- Queues owner confirmations for the background worker to finish after restart.
 - Read new events and queue the reactions that subscribe to them.
-- Run jobs about the same thing, such as one member, one after another, while
-  jobs about different things run side by side.
-- Retry failed jobs and keep failed jobs from being skipped silently.
-- Let memory cleanup record a safe unavailable result when its retries run out.
-- Save a note that the job is done in the same database step as the reaction's
-  changes, so its database changes are never applied twice.
-- Let an operator retry a failed job after fixing its cause.
-- Add historical jobs for new subscriptions during a stopped-service upgrade.
-
-Chat creation and participant permission jobs run in the same conversation order,
-even though their events use separate streams. Both new jobs and historical jobs
-queued during an upgrade use that order.
+- Run related jobs in order, such as changes for one member. Let unrelated jobs
+  run alongside them.
+- Keep queued jobs safe across restarts, so none are lost.
+- Retry failed work. Keep a job that exhausts its retries on the list and put a
+  copy on a separate failure list for operators.
+- Save completion in the same database step as a reaction's table changes,
+  so a repeated job does not apply those changes twice.
+- Let operators retry or deliberately cancel a failed job after checking its cause.
+- Add jobs for older events when a release introduces a new subscription.
 
 ## Processes it handles
 
-Connection cleanup retries use fixed error text and retain failed jobs. A failed
-cleanup never makes a connection usable.
-
-Memory cleanup jobs cover corrections as well as forgetting. When retries run out,
-the retained failed job records an unavailable result for that saved change.
-
-Publication jobs from different tool servers share one queue key per silo. This
-keeps complete gateway configurations in saved event order.
-
-The scheduling host enables pg-boss's own nightly clock after workers are ready.
-Its separate trigger queue asks the host to record memory intents, without starting a computer.
-Failed nights stay queued. Startup or the next night records their missed result after
-the memory worker catches up.
-
-1. **A member joins.** The dispatcher reads the "member joined" event and
-   queues three jobs: give the member their permissions (`update-openfga`),
-   create their assistant (`create-assistant`) and allow the default AI models
-   (`seed-model-grants`).
-2. **A reaction fails.** Later jobs about the same thing wait, while jobs about
-   other things carry on. An operator can repair the cause and retry the failed
-   job, or deliberately cancel a failed original with the ops command.
-   For forgotten memory, the failed copy records that cleanup is unavailable.
-   The original remains ready for an operator retry. If reporting also fails,
-   startup recovery checks the original and records the missing result.
-
-3. **A release changes subscriptions.** The dispatcher reports which reactions and
-   event types changed and waits for shutdown. With writers and workers stopped,
-   `npm run ops -- upgrade-handlers` adds historical jobs for new subscriptions.
-   It refuses other database clients, including idle ones, and replication workers.
-   It ignores only named PostgreSQL maintenance processes, such as autovacuum,
-   that cannot apply application changes. Unknown process types block the upgrade.
-   An interrupted scan continues from its saved progress. Computers stay in
-   their current state while the dispatcher waits. Finished reactions keep their
-   receipts, so they do not run again. The
-   [operator procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade)
-   lists the stop, dry-run, upgrade and restart steps.
+1. **A member joins.** The dispatcher reads the saved event and queues work to
+   update permissions, create an assistant when requested and allow the default
+   AI models. Each reaction checks the current saved state before acting.
+2. **A reaction fails.** Later jobs for the same item wait while unrelated jobs
+   continue. The failed job remains available for an operator to repair and retry.
+   Memory cleanup also records when cleanup is unavailable after retries run out.
+3. **A release changes subscriptions.** The dispatcher reports the change and
+   waits for shutdown. The upgrade adds jobs for relevant older events only once
+   every other program using the database has stopped. Completed work stays completed.
 
 ## How to run or test it
 
-Run the type check and focused tests with these commands. The tests need the
-local NATS test server. Set `PG_TEST_URL` to a PostgreSQL admin connection whose
-role can create databases to include the PostgreSQL tests:
+These commands run from the repository root. The test command fetches the required
+tools before running the tests. PostgreSQL tests also need `PG_TEST_URL`, a
+PostgreSQL admin connection whose role can create databases:
 
 ```sh
-npm run typecheck -w libs/handlers
-sh scripts/fetch-nats.sh
-npx vitest run libs/handlers/test
+nice -n 10 npm run typecheck -w libs/handlers
+nice -n 10 npm test -- libs/handlers/test
 ```
 
 Each reaction receives the saved event and a database transaction. This example

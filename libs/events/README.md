@@ -1,251 +1,67 @@
-# libs/events
+# Events
 
 ## What this is
 
 The list of every kind of event OpenCrane records, and the exact data each one carries.
-An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened.
-This package says which event types exist and what information each one carries.
-It checks new memory text and still accepts older encrypted events for replay.
-It checks event data, but it does not save events or decide whether a person may act.
-It defines server records of which memory references a private turn loaded.
-These records contain ids, counts and fixed reasons, with no saved fact text.
-It also previews routine dates from a supplied time, without starting work.
+An [event](../../GLOSSARY.md#event) is a saved record of something that happened,
+such as a member joining or a message being sent. This package gives the server,
+background workers and database readers one agreed way to understand those records.
 
 ## Where it fits
 
-OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
-that is never changed. Everything else, such as read tables and permissions, is
-built from that log and can be rebuilt from it. This package defines what each
-event looks like.
-This is shared code in the event core. The event store, background reactions,
-read-table builders and `apps/server` use its event definitions and checks.
-`libs/models`, `libs/auth` and `libs/authz` also use these definitions for AI rules and
-permissions. `apps/ops` uses them in its background workers. The event registry
-also uses Zod, a library that checks data shapes, and `@noble/hashes` to check
-the hash of encrypted survey bytes.
+This is one of the packages that build everything from the
+[event log](../../GLOSSARY.md#event-log-event-store), the permanent record of changes.
+[libs/event-store](../event-store/README.md) uses it to check events before saving
+or returning them. [libs/projections](../projections/README.md) builds read tables,
+and [libs/handlers](../handlers/README.md) queues background work using its definitions.
+The server and the AI access library use the same definitions.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.->|checks published child answers and interim updates, child requests and start failures, hosted image check requests and results, registration, startup, saved turns and closed chat failures, budget refusal and spending stop references, memory setup, correction and removal rules and records access changes, consent, tool decisions, dispatch, not-sent outcomes and cancellation reasons| events["libs/events<br/>checks records and previews dates"]
-  store["libs/event-store<br/>saved event log"] -.->|checks instance starts, stops and original report receipts| events
+  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
+  server["apps/server<br/>back end"] -.->|reads event shapes| events
+  store["libs/event-store<br/>saved event log"] -.->|checks event shapes| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup subscriptions, nightly memory reviews and records, and cleanup results| events
-  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks relay closure, publication receipts and gateway records, tool admission, saved starts, remote outcomes and proof that a remote call was not sent, native refusals, personal connection references and blocks, expired saves, control intent and pause outcomes, private and shared turns, root allowances, root dispatch and retry checks, source-linked root stops, overruns, spending and safe spending stop references| events
-  computer["apps/computer<br/>report text check"] -.-> events
-  events -.-> checks["Zod, @noble/hashes and Intl<br/>data and date checks"]
+  handlers["libs/handlers<br/>background jobs"] -.-> events
+  models["libs/models<br/>AI access and spending"] -.-> events
 ```
-
-A remote tool refusal can record proof that no connection was opened. The record
-names the exact saved start, so it can allow one approval retry.
-
-Approval cancellation records may carry a fixed reason code. Older records without
-a reason stay readable. No review text or tool result belongs in a reason.
-
-Tool catalogue records keep exact definitions and the dates of successful or failed checks.
-The back end checks tool hashes against their saved definitions. A hash is a fixed-length
-value calculated from those definitions. Older records remain readable for replay.
 
 ## What it is responsible for
 
-Remote tool outcome records identify the decision and saved start that allowed the call.
-A checked reply proves that the server replied, even if it reports an error. Missing or
-uncertain replies remain unknown. These records contain no request or reply bytes.
-
-Check the same failed-turn record for a computer report and for a waiting
-request ended by a closed chat. The latter carries the fixed reason
-`conversation_closed` and no message text.
-
-Check relay closure receipts for safe fields, a stable identity and the models writer.
-Older destination observations remain readable. New socket receipts never claim that
-an operation succeeded.
-
-Keep the spending stop reference on a refused chat start, so reconnecting can
-finish recording the same budget refusal.
-
-Child publication records hold encrypted text and the person who published it.
-Final answers and interim updates from saved replies keep the result reference.
-Human-written interim updates need no result. None of these records gives child access.
-
-- Define departure completion records with saved change references and no private content.
-
-Dispatch records can name the root whose allowance the call uses. This lets the
-budget actor refuse an old pass after that root stops. Older records still replay.
-Rooted model holds can also save hashes of the verified call and exact request bytes.
-These let an unsent retry find the same hold without saving request text.
-
-Root allowance records fix one turn's spending bound. Root stop records prevent
-further holds without refunding earlier calls. They include calls that cost more
-than their hold, and always keep the first stop reason. A requester Stop, turn end
-or access loss names the exact saved event that caused the stop. The budget actor
-checks that event before saving the stop. These records start no work.
-
-Define publication requests, ordered gateway records and exact live gateway observations
-without private review text. Each tool server can keep a receipt for its publication request.
-An observation alone permits no call.
-
-- Check encrypted survey records and the bounded answers for all four steps.
-  Check each saved answer’s hash without reading a private key. A hash is a
-  fixed-length value calculated from the encrypted bytes.
-
-- Define private tool-instance starts, observations, and owner or admin stop requests.
-  Name the background reaction that stops a private tool after a saved request.
-  Require a system writer and change reference for new worker observations.
-  These records contain identity and timing details, with no credentials or callable status.
-  A counter names the version of startup access material, separately from process starts.
-- Define exact HTTPS destination rules for the silo, a person or an assistant.
-  Refuse reserved internal names, including `home.arpa` and names beneath it.
-
-- Defines hosted startup credential requirements and review references without secret values.
-- Records nightly memory setup with the consenting member, assistant, paying group
-  and accepted cap of 100 euro cents. This record starts no work and spends no money.
-- Checks nightly `no_changes` records that review exact fact revisions and a saved
-  position. Older blocked and missed records still load.
-- Define computer-wide control intent, checked pauses and failed pause records. These name the
-  reviewed requester and affected turns without granting desktop control.
-- Describe an owner or admin’s exact tool review separately from tool discovery.
-
-- Defines shared child records with a parent message, fixed payer and named people.
-- Records whether a child turn uses shared-only context separately from its restricted
-  execution mode.
-- Define strict routine records and rebuild their saved facts without starting work.
-  Older routines stay readable and need migration before use.
-- Calculate daily and weekly routine dates in a named time zone. Show the first
-  repeated time and flag missing times when clocks move forward.
-- Defines delegated task relationships and outcomes, including cancellation. Older records
-  remain readable. Shared tasks record the root’s shared-only class. These records
-  grant no permission to run a task.
-
-- Defines tool dispatch records, unsupported consent refusals, requester retries and safe invitation refusal records.
-- Records the departure review used for a member removal. Older removals still replay.
-  Names the reaction that removes groups and personal grants after reviewed removal.
-- Defines owner appointment requests and confirmations on member records.
-
-- Define records for pausing new model turns, cancelling that pause and switching on managed calls.
-  Keep switch-on in the silo’s spending stream.
-  Stop new holds while allowing existing holds to settle or be released.
-- Define spending stop reasons with their limit and UTC reset time.
-  Keep older records with only a spending scope readable.
-  Link each later refused turn to the saved stop that blocked it.
-- Define the final model send permission with its call, body hash and spending hold.
-  Saving this record means the call may have been sent, even if its reply is lost.
-- Define a record that closes an expired spending hold to new sends.
-  The record releases no money and still allows later usage to settle the cost.
-- Define optional provider and binding positions on turn records and spending holds.
-- Defines saved provider choices and pauses without granting model access.
-- Define the wrapper every event shares (its id, its type, what it is about,
-  who caused it and when), and the data each event type carries.
-- Check unknown values against the right event shape.
-- List which named background reactions subscribe to each event type.
-- Keep its event type list in step with the [event catalogue](../../docs/architecture/events.md).
-
-It checks recorded memory ownership fields and keeps old encrypted memory events readable for replay.
-Old events without recorded ownership do not grant access. New memory writes refuse
-repeated dependencies, so a bad write cannot stop table updates for other scopes.
-
-It defines tool start and finish records that exclude arguments, results and error text.
-The computer and server share its check for call ids and tool names.
-Tool approvals can also name the exact running instance and backend through a hash.
-Tool access decisions can carry a call id. The shared text check refuses hidden
-control characters before saving the id.
-It also records when part of a private reply was lost before the server could save it.
-Refusal records keep a hash of the caller's command id, so that id cannot appear
-as private text in the record. A hash is a fixed-length value calculated from the id.
-Invitation and join events can record whether a personal assistant was requested.
-Older events without that choice still parse. Email-only join events also record
-the account issuer and subject. Older joins without those fields remain valid.
-
-Group chat records name each participant explicitly. Participant changes use a
-separate event stream so ordinary messages do not change access. New closing
-events use that stream too. Older callers can still save a close on the conversation
-stream, and both forms replay.
-
-New group chats record at most 97 people, including their creator. Older saved
-events keep their original reading rules.
-
-Archive and read choices name one person and their join. They contain no chat text.
-
-Define records that close expired connection saves without carrying credentials.
-These records let live cleanup prove a delayed save can no longer succeed.
-
-Native request refusal records identify the request and turn without saving commands
-or prompts. They grant no access and do not appear in the chat display.
+- List every event type and the data it holds, from membership and chat to tools,
+  spending and memory.
+- Define the details shared by events: an id, type, subject, source and time,
+  plus who caused the change when recorded. The subject names what changed.
+- Refuse unknown event types and badly formed data. Checking a record does not
+  give its writer permission or save it.
+- Keep older saved records readable during [replay](../../GLOSSARY.md#replay),
+  reading the log again to rebuild data.
+- List which named [reactions](../../GLOSSARY.md#reaction-handler), background jobs
+  following a saved change, subscribe to each event type.
+- Rebuild routine definitions and preview future dates for scheduled work, including
+  clock changes, without starting that work.
 
 ## Processes it handles
 
-A saved reply can include receipts for several small pieces of text. Each receipt
-keeps its original number and digest so a repeated piece can be checked.
-
-Saved personal connection revocations and replacements name the background cleanup
-reaction. Replaying those records never deletes stored credentials.
-
-Memory correction records name the replacement revision and the revision it replaces.
-The replacement stays encrypted. Older records still parse for recovery, but cannot
-supply the ownership and revision needed to read a fact.
-
-Hosted image check requests record the exact image, registration and attempt number.
-They contain no report bytes or credentials and say nothing about passing checks.
-
-Before sending a published tool call, the models process saves a start record with
-the request, server, connection, reviewed revision and acknowledged gateway configuration.
-It contains no request bytes or credentials. It records that the pass was spent;
-it does not prove that the call reached the tool. Replaying it never sends a call.
-If a later check refuses the call before sending, the models process saves a not-sent
-outcome on the same stream.
-
-The publication subscription names the worker that prepares complete gateway
-configurations. Withdrawal has no preparation subscription.
-
-Budget turn stops carry only their reason kind and a reference to the saved spending
-stop. Participants can read them without seeing amounts or payer ids. Member stops
-keep their original shape. The bridge uses the same data checks as the event log
-before delivering these Stops to a computer.
-
-A child-chat request records the source id, chosen people, assistant and spending
-upper bound. It contains no message text and must name the requesting person.
-A saved child start failure names the attempt, stage and a fixed refusal reason.
-It contains no source text and cannot authorise work.
-
-Hosted image requests name one platform, a public upstream and the first check attempt.
-These records contain no check result or report bytes.
-
-Personal connection records can name an exact stored generation and the person who
-saved it. A replacement names the expected stream version. Old records still replay,
-but missing generation details never make a profile available for tool calls.
-Owner revocation records invalidate one profile. Admin disable records block all personal
-profiles for one member and server. Neither record claims the stored token was deleted.
-
-Nightly memory records name one scope and date, its selected fact revisions and why work stopped.
-They contain no memory text and grant no spending or computer access.
-
-A memory tombstone records a fact id and its next revision without any private text.
-The projection uses it to hide the fact and dependent copies before reading their keys.
-The cleanup record reports completed deletion or unavailable cleanup after retries run out.
-It names the original change without private text. An operator can retry the failed job;
-a later completion then confirms key destruction and removal of searchable text.
-The HTTP forget command is not built yet.
-
-1. **The event store checks an event before saving it.** It passes the event to
-   `parseEventByType`. A badly formed event or an unknown type is refused and
-   never saved.
-2. **A developer adds an event type.** The registry and event catalogue are
-   updated together. `npm run check:events` checks that this list and the event
-   catalogue match.
-
-3. **Saved routine records are read again.** `foldRoutine` rebuilds their definition
-   and run facts. It remembers each modern event's id and ignores that event if it
-   arrives again, even after later changes. It grants no access and starts no work.
-
-4. **A caller previews a routine schedule.** It supplies the time and the last used
-   local date, if there is one. The library returns future dates and clock-change
-   warnings. It saves nothing and starts no work.
+1. **The event store checks a record.** It calls `parseEventByType` before saving
+   an event. An unknown type or invalid record is refused; valid data still needs
+   the caller's access and write checks.
+2. **A developer adds an event type.** They update the registry and the
+   [event catalogue](../../docs/architecture/events.md) together.
+   `npm run check:events` checks that both lists name the same types.
+3. **Saved routines are read again.** The library rebuilds their definitions and
+   past runs. Repeated records do not start work or grant permission.
+4. **A caller previews a routine.** It supplies a time and the last used local
+   date, when known. The library returns future dates and clock-change warnings
+   without saving anything.
 
 ## How to run or test it
 
 Run the type check and focused tests with these commands. A small real call is:
 
 ```sh
-npm run typecheck -w libs/events
-npx vitest run libs/events/test
+nice -n 10 npm run typecheck -w libs/events
+nice -n 10 npm test -- libs/events/test
 npm run check:events
 ```
 
@@ -253,7 +69,7 @@ npm run check:events
 import { parseEventByType } from '@opencrane/events';
 
 const result = parseEventByType({ type: 'not.registered' });
-// result.success is false and result.reason is 'unknown_event_type'.
+// Expect result.success to be false and result.reason to be 'unknown_event_type'.
 ```
 
 ## Where to read more
@@ -263,9 +79,3 @@ const result = parseEventByType({ type: 'not.registered' });
 - [Event store](../event-store/README.md): where events are saved.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 - [Glossary](../../GLOSSARY.md): plain meanings of shared terms.
-
-Tool send admission records share the server's tool-rule stream. They order a call
-against Block and tool holds. Replaying these records never sends a call.
-
-Hosted image admission reports dated check results. All four checks must pass before
-an image is admitted. Admission grants no tool access and starts no process.

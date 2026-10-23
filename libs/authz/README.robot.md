@@ -6,7 +6,8 @@ For people, read [README.md](README.md) first.
 `src/index.ts`; hosts register its `update-openfga` handler with
 [`HandlerRuntime`](../handlers/README.md). Commands only append events.
 The [catalogue](../../docs/architecture/events.md) owns the subscriptions and
-[plan](../../plan.md) owns the architecture. Server wiring is separate work.
+[plan](../../plan.md) owns the architecture. The server and models process use its
+access checks; the ops host runs its reaction.
 
 ```ts
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -23,9 +24,9 @@ Only provisioning creates models. No public arbitrary tuple-write API is exposed
 The SDK adapter's narrow read/check/write methods are private to this package;
 only the handler writes relationships, including during rebuild.
 [Model v1](model/v1.fga) is the versioned DSL; its generated JSON is checked against
-that DSL in tests. Future teams, assistants and grants can add separate object
-and relation types. Their currently reserved subscriptions throw and hold their
-stream; they do not silently complete. Invitations do not grant membership.
+that DSL in tests. Teams, assistants and grants use separate object and relation
+types in the current model. The reaction applies their registered subscriptions.
+Invitations do not grant membership.
 
 `member.joined` writes membership and an optional owner/admin role.
 `member.role_changed` replaces the elevated role and requires existing membership.
@@ -83,7 +84,7 @@ See [evidence](evidence.md) for results, revocation latency and untested conditi
 
 Verified licences: [OpenFGA v1.21.0](https://github.com/openfga/openfga/blob/v1.21.0/LICENSE),
 [@openfga/sdk 0.9.7](https://github.com/openfga/js-sdk/blob/v0.9.7/LICENSE) and
-[@openfga/syntax-transformer 0.2.2](https://github.com/openfga/syntax-transformer/blob/v0.2.2/LICENSE)
+[@openfga/syntax-transformer 0.2.2](https://github.com/openfga/language/blob/906bdc546a4686c9a31409ac9948c05df9cf8dc6/LICENSE)
 are Apache-2.0 (source/npm metadata and installed LICENSE files).
 The transformer is dev-only. Axios is overridden to **1.20.0 (MIT)** because the
 SDK pins vulnerable 1.19.0. The real-service tests exercise the overridden SDK.
@@ -118,7 +119,9 @@ Group creation writes explicit person tuples for its audience and one `creator` 
 Group membership never grants conversation access. Receipts and permission changes
 share one atomic OpenFGA write. Rebuild into a fresh model/store before using these
 relations. Direct chats and assistant sessions keep their existing tuples.
-The server still refuses group mode. Creation and participant IAM jobs share `conversation-<id>` for exact current and legacy subjects in this silo.
+The server exposes group chat creation and participant changes. Creation and
+participant permission jobs share `conversation-<id>` for exact current and legacy
+subjects in this silo.
 The [queue upgrade procedure](../handlers/README.robot.md#conversation-job-keys)
 keeps old and new jobs from running under different keys.
 
