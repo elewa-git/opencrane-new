@@ -113,6 +113,7 @@ test('bad certificates and redirects refuse without another connection', refuseT
 async function refuseTransportBypasses() {
   const fixture = await demoRemoteFixture();
   function receive() { assert.fail('No response expected'); }
+  function bypassCertificate() { return undefined; }
   function publicLookup(_host: unknown, _options: unknown,
     done: (error: null, address: string, family: number) => void) {
     done(null, '93.184.216.34', 4);
@@ -121,7 +122,8 @@ async function refuseTransportBypasses() {
     const options = { servername: 'mcp.example.test', rejectUnauthorized: true,
       agent: false as const, family: 4, lookup: publicLookup };
     for (const patch of [{ servername: 'foreign.example.test' },
-      { rejectUnauthorized: false }, { agent: undefined }, { lookup: undefined }]) {
+      { rejectUnauthorized: false }, { agent: undefined }, { lookup: undefined },
+      { checkServerIdentity: bypassCertificate }, { socketPath: '/tmp/stage-b-denied.sock' }]) {
       function requestUnsafe() {
         fixture.network.request!(new URL(demoLocator), { ...options, ...patch }, receive);
       }
@@ -146,6 +148,13 @@ function rejectFalseEvidence() {
     function oldReceipt(data: ReturnType<typeof approvalEvidence>) {
       data.policy.configurationObservation!.changeRef = 'another-publication';
     },
+    function wrongPublication(data: ReturnType<typeof approvalEvidence>) {
+      data.publicationCommandId = 'another-publication';
+    },
+    function oldGeneration(data: ReturnType<typeof approvalEvidence>) { data.gateway.generation = 2; },
+    function wrongProcess(data: ReturnType<typeof approvalEvidence>) {
+      data.gateway.processRef = '00000000-0000-4000-8000-000000000002';
+    },
     function missingGrant(data: ReturnType<typeof approvalEvidence>) { data.grants.pop(); },
     function staleIam(data: ReturnType<typeof approvalEvidence>) {
       data.grants[0]!.receipt.projection.iam = 'applying';
@@ -153,13 +162,20 @@ function rejectFalseEvidence() {
     function wrongGrant(data: ReturnType<typeof approvalEvidence>) {
       data.grants[0]!.receipt.commandId = 'another-grant';
     },
+    function foreignAssistant(data: ReturnType<typeof approvalEvidence>) {
+      data.grants[1]!.command.granteeId = 'another-assistant';
+    },
     function prematureWrite(data: ReturnType<typeof approvalEvidence>) {
       data.waiting.effectCount = 1;
     },
     function duplicateWrite(data: ReturnType<typeof approvalEvidence>) { data.after.effectCount = 2; },
     function differentTurn(data: ReturnType<typeof approvalEvidence>) { data.replyTurnId = 'other'; },
-    function toolCharge(data: ReturnType<typeof approvalEvidence>) { data.toolChargedCents = 1; },
-    function toolHold(data: ReturnType<typeof approvalEvidence>) { data.toolReservedCents = 1; },
+    function toolCharge(data: ReturnType<typeof approvalEvidence>) {
+      Reflect.set(data, 'toolChargedCents', 1);
+    },
+    function toolHold(data: ReturnType<typeof approvalEvidence>) {
+      Reflect.set(data, 'toolReservedCents', 1);
+    },
   ];
   for (const mutate of failures) {
     const evidence = approvalEvidence();
@@ -169,3 +185,10 @@ function rejectFalseEvidence() {
   }
 }
 test('incomplete publication, grants, approval, effects or spending cannot pass', rejectFalseEvidence);
+
+function keepEvidenceErrorsPrivate() {
+  const syntheticSecret = 'synthetic-private-value';
+  function check() { checkStageBApproval({ secret: syntheticSecret }); }
+  assert.throws(check, { message: 'Approval evidence refused' });
+}
+test('invalid evidence errors contain no supplied values', keepEvidenceErrorsPrivate);

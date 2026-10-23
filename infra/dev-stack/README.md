@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts in Docker| services["Local services<br/>storage and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|starts and checks completed rehearsal replies| apps["Server, workers and website<br/>OpenCrane apps"]
+  stack -->|starts and checks replies and demo tools| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster| devbox
 ```
@@ -45,6 +45,8 @@ tables, [NATS](../../GLOSSARY.md#nats) for the event log,
 - Keeps two spare test stacks separate from the owner's copy and from each other.
 - Provides demo preparation and screen measurements, while refusing automated coding
   jobs that try to run the owner's commands.
+- Checks the demo tool server through local TLS and rejects incomplete approval evidence.
+  The separate browser and chat rehearsal is still to be connected to these checks.
 
 ## Processes it handles
 

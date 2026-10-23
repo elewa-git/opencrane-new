@@ -7,8 +7,9 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { once } from 'node:events';
 import type { RemoteNetwork } from '../../src/remote-https.ts';
+import type { RequestListener } from 'node:http';
 
-export async function remoteFixture(wrongHostname = false) {
+export async function remoteFixture(wrongHostname = false, handler?: RequestListener) {
   const directory = await mkdtemp(`${tmpdir()}/mcp-tls-`);
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', `${directory}/key`, '-out', `${directory}/cert`,
     '-days', '1', '-subj', '/CN=mcp.example.test', '-addext', 'subjectAltName=DNS:mcp.example.test'], { stdio: 'ignore' });
@@ -38,6 +39,10 @@ export async function remoteFixture(wrongHostname = false) {
   let status = 200;
   let resetConnection = false;
   const server = createServer({ key: await readFile(`${directory}/key`), cert: serverCert }, (req, res) => {
+    if (handler) {
+      handler(req, res);
+      return;
+    }
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
