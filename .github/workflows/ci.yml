@@ -153,7 +153,7 @@ jobs:
           infra/dev-stack/demo-rehearsal.test.ts infra/dev-stack/demo-rehearsal-repeat.test.ts
           infra/dev-stack/stage-b-local.test.ts
           infra/dev-stack/zitadel-setup.test.ts infra/package/fresh-twice.test.ts
-          infra/package/browser-capture.test.ts
+          infra/package/browser-capture.test.ts infra/package/chart-render.test.mjs
 
       # apps/web builds and tests through the Angular CLI, so it needs its own steps.
       - name: Build apps/web

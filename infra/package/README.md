@@ -70,6 +70,9 @@ infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"
 infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 ```
 
+The chart render test needs Helm and checks the installation files without starting
+an install. It uses made-up settings. The [operator notes](README.robot.md) give the command.
+
 ## Folders
 
 | Folder | What it does |
