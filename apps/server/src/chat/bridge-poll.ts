@@ -252,7 +252,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       function finished() {
         deadlines.delete(assistantId);
       }
-      const deadline = watchTakeoverDeadline(options.store, options.silo, assistantId, signal);
+      const deadline = watchTakeoverDeadline(options.store, options.silo,
+        assistantId, signal, logger);
       deadlines.set(assistantId, deadline.finally(finished));
     }
     function start(assistantId: string) {

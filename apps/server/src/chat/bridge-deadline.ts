@@ -1,11 +1,13 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { readComputerControl, type ComputerControl } from '@opencrane/auth';
+import type { Logger } from '@opencrane/observability';
 import type { EventStore } from '@opencrane/event-store';
 import { pauseTimeRemaining, forgetPauseDeadline } from './bridge-pause-time.ts';
 import { saveFailed } from './bridge-pausing.ts';
 
 export async function watchTakeoverDeadline(store: EventStore, silo: string,
-  assistantId: string, signal: AbortSignal) {
+  assistantId: string, signal: AbortSignal, logger: Logger) {
+  let logged = false;
   let observedPosition: number | undefined;
   let control: ComputerControl | undefined;
   while (!signal.aborted) {
@@ -29,7 +31,11 @@ export async function watchTakeoverDeadline(store: EventStore, silo: string,
       }
       wait = Math.min(wait, remaining);
     } catch {
-      // Retry the same saved transition after conflicts or outages. Work remains denied.
+      // Log once per request without exposing receipts, credentials or upstream errors.
+      if (!logged) {
+        logged = true;
+        logger.warn('Takeover deadline check unavailable; work remains blocked');
+      }
     }
     try {
       await delay(wait, undefined, { signal });
