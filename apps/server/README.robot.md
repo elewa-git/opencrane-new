@@ -278,6 +278,17 @@ The diagnostic logs are `/tmp/ci-test-waits-fix-diagnostic.log`,
 `/tmp/ci-test-waits-fix-cause-before.log` and
 `/tmp/ci-test-waits-fix-cause-after.log`.
 
+## Child activation test setup
+
+The activation suite prepares its private NATS stream with the two-second duplicate
+window before `summonFixture` saves any events. The empty-stream guard stays in place.
+Shortening the window after setup fails because the fixture has already saved eleven
+events. This change affects test setup only.
+
+The call-site check covered both new activation test files and all duplicate-window
+helper calls. The event-schema tests do not use NATS. The child-summon expiry case
+already prepares its NATS stream before creating the fixture.
+
 ## Test dependencies
 
 `test/recovery-stop.test.ts` checks restart recovery with the real journal, runner,
@@ -4214,3 +4225,21 @@ Own checks after rebasing onto `9a885e7f9`:
 Every check used `nice -n 10`. Logs use `/tmp/p3-17-pr2h-clock-fix`, including
 `repeat-1.log` through `repeat-50.log` in the directory of that name.
 Full root suite and fresh-install qualification: NOT RUN. The PR remains a draft.
+
+## Checked child activation, first part
+
+`chat/child-activation.ts` exports `activateRequestedChild(options, memberId, input, attempt)`.
+The input uses the existing child-request shape and must match the original request id.
+It reuses `checkedChildInput` for history, saved creation/input and current access checks.
+Both histories load before the two-second write check. A final incremental parent read
+refuses a newly saved failure, retry or legacy close; small access streams detect removal
+and modern closure. The append retains the original deadline and expects the child's
+last position. The source-derived activation id is stable across attempts and replicas.
+Retries verify the full saved binding and return its original row, beyond broker deduplication.
+
+This is admission-time ordering across streams, not an atomic parent/child transaction.
+A parent change after the final check can still precede the child append. Later root
+allocation and first start must check authority, attempt and closure again. IAM and storage
+uncertainty throw without saving a failure or claiming activation. No route or recovery
+worker calls this command yet. `childRequestHeld` and production start gates remain intact.
+Root allocation, first-start recovery and fresh-install qualification: NOT RUN / remaining.

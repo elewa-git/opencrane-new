@@ -755,3 +755,11 @@ profileId and positive profileRevision; clear omits both. The envelope supplies 
 actor and stable commandId. The models fold checks the subject, actor and deterministic
 id (SHA-256 of JSON `[silo, subject, changeRef]`). No handler subscribes to this event.
 Activation schemas still accept only personal ownerKind and purpose.
+
+## Checked child activation
+
+`conversation.child_activated` belongs to the child conversation and requires a human
+server principal matching `requestedBy`, matching command/event ids and no report.
+Its strict data binds the parent intent, child creation and first input by id and ordered
+global position, plus the original request, assistant, payer and attempt 1–3.
+No text, credentials or cents are copied. It has no reaction and grants no execution.

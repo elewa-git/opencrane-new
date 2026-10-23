@@ -1,3 +1,4 @@
+import { childActivatedEventSchema } from './child-activation.ts';
 import { validEgressObservation } from './egress-observation.ts';
 import { childRequestedEventSchema, childStartFailedEventSchema,
   childRetryRequestedEventSchema } from './child-request.ts';
@@ -151,6 +152,9 @@ function matchingMaintenanceScope(event: EventEnvelope) {
 }
 
 function validChildRequest(event: EventEnvelope) {
+  if (event.type === 'conversation.child_activated') {
+    return childActivatedEventSchema.safeParse(event).success;
+  }
   if (event.type === 'conversation.child_retry_requested') {
     return childRetryRequestedEventSchema.safeParse(event).success;
   }

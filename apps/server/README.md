@@ -32,7 +32,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, live updates and saved tool status| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, access-checked control refusals, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
+  server -->|records changes, access-checked control refusals, checked child activations, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations and history with saved and missing tool outcomes| postgres
@@ -161,6 +161,8 @@ people and assistant, and create the named child. A separate command waits for i
 permissions to apply, then copies only the reviewed message under the child’s own key.
 Repeating a request returns the same saved records. The reviewed start route and recovery
 worker use these commands. They do not start assistant work.
+Another internal command records that the saved first input and current access were checked.
+The child stays held until spending allocation and first-start recovery are connected.
 
 A person continues a shared child chat. The server gives the assistant completed
 exchanges from that child, including replies to other people. It leaves out parent

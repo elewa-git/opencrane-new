@@ -29,7 +29,7 @@ const inputSchema = z.strictObject({
 });
 type Input = z.infer<typeof inputSchema>;
 const assistantSchema = z.object({ kind: z.literal('team'), payingGroupId: z.string() });
-function stageId(options: Options, input: Input, stage: string) {
+export function stageId(options: Options, input: Input, stage: string) {
   const identity = JSON.stringify([options.silo, input.conversationId, input.sourceMessageId]);
   const hash = createHash('sha256');
   hash.update(identity);
@@ -159,7 +159,7 @@ function savedIntent(options: Options, memberId: string, loaded: Loaded) {
       !isDeepStrictEqual(people, audience)) throw new ChildRequestChanged('Child request changed');
   return { row: loaded.intent, data };
 }
-async function save(options: Options, memberId: string, id: string, subject: string,
+export async function save(options: Options, memberId: string, id: string, subject: string,
   type: string, data: unknown, sequence: number,
   fresh: Awaited<ReturnType<typeof authorityFence>> | undefined,
   verify: typeof verifySaved = verifySaved) {
@@ -178,7 +178,7 @@ async function save(options: Options, memberId: string, id: string, subject: str
   verify(row, event);
   return row;
 }
-function verifySaved(row: StoredEvent, expected: StoredEvent['event']) {
+export function verifySaved(row: StoredEvent, expected: StoredEvent['event']) {
   const saved = row.event;
   if (saved.id !== expected.id || saved.commandId !== expected.commandId ||
       saved.silo !== expected.silo || saved.subject !== expected.subject ||
@@ -246,7 +246,7 @@ function inputText(options: Options, conversationId: string, data: unknown) {
     throw new ChatConflict('Child input unavailable');
   }
 }
-export async function addChildFirstInput(options: Options, memberId: string, value: unknown) {
+export async function checkedChildInput(options: Options, memberId: string, value: unknown) {
   const loaded = await load(options, memberId, value);
   const intent = savedIntent(options, memberId, loaded);
   const { childConversationId, firstInputId } = intent.data;
@@ -266,20 +266,17 @@ export async function addChildFirstInput(options: Options, memberId: string, val
     fresh.deadline)) throw new ChildRequestClosed('Conversation closed');
   const source = messagePostedDataSchema.parse(loaded.source.event.data);
   const text = inputText(options, loaded.input.conversationId, source);
-  options.keys.provision(options.silo, childConversationId);
-  const encrypted = options.keys.encrypt(options.silo, childConversationId, text);
   const data = { conversationId: childConversationId, authorId: memberId,
-    authorKind: 'human', contentType: source.contentType, ...encrypted };
+    authorKind: 'human', contentType: source.contentType };
   function verifyInput(row: StoredEvent, expected: StoredEvent['event']) {
     const parsed = messagePostedDataSchema.safeParse(row.event.data);
     if (!parsed.success || inputText(options, childConversationId, parsed.data) !== text ||
         !isDeepStrictEqual(row.event.correlation, {})) {
       throw new ChildRequestChanged('Child input changed');
     }
-    // Compare the text separately because encryption creates a new ciphertext each time.
-    const comparedData = { ...parsed.data, ciphertext: encrypted.ciphertext };
-    const compared = { ...row, event: { ...row.event, data: comparedData } };
-    verifySaved(compared, expected);
+    // Decryption checks the child's key reference; compare text without creating another key.
+    const expectedData = { ...data, ciphertext: parsed.data.ciphertext, keyId: parsed.data.keyId };
+    verifySaved(row, { ...expected, data: expectedData });
   }
   function isFirstInput(row: StoredEvent) {
     return row.event.id === firstInputId;
@@ -292,9 +289,18 @@ export async function addChildFirstInput(options: Options, memberId: string, val
       principal: { kind: 'human' as const, id: memberId } };
     verifyInput(previous, expected);
     await fresh();
-    return previous;
   }
-  return save(options, memberId, firstInputId, subject, 'message.posted', data,
+  return { loaded, intent, rows, creation, previous, subject, data, text, fresh, verifyInput };
+}
+export async function addChildFirstInput(options: Options, memberId: string, value: unknown) {
+  const checked = await checkedChildInput(options, memberId, value);
+  if (checked.previous) return checked.previous;
+  const { intent, subject, creation, fresh, verifyInput } = checked;
+  const childId = intent.data.childConversationId;
+  options.keys.provision(options.silo, childId);
+  const encrypted = options.keys.encrypt(options.silo, childId, checked.text);
+  const data = { ...checked.data, ...encrypted };
+  return save(options, memberId, intent.data.firstInputId, subject, 'message.posted', data,
     creation.sequence, fresh, verifyInput);
 }
 
