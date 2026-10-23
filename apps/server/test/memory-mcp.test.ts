@@ -1105,7 +1105,12 @@ async function preparesColdRecallAuthority(subject: string) {
     dates.mockRestore();
   }
 }
-const coldRecallSubjects = ['member-alice', grantStream('mcp_server', 'memory')];
+const coldRecallSubjects = [
+  'member-alice',
+  'assistant-assistant',
+  'conversation-conversation',
+  grantStream('mcp_server', 'memory'),
+];
 it.each(coldRecallSubjects)(
   'finishes a cold access lookup before signing the valid recall control: %s',
   preparesColdRecallAuthority);
