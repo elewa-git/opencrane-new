@@ -3983,3 +3983,46 @@ upgrade, reviews stay incomplete until the inventory index has been rebuilt.
 Reviews use indexed history changes and report incomplete results when new
 streams have not been checked. Unrelated read receipts do not require reading
 the event log.
+## Takeover timeout checks, 23 October 2026
+
+These are local checks with disposable NATS, OpenFGA and PostgreSQL 17.6 fixtures,
+not a fresh installation. Test commands use `nice -n 10`, one worker and
+`PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:55799/postgres`.
+
+- Expected FAIL: releasing the queued pause append first at thirty seconds saved
+  paused instead of failed. The test was committed before the append fix.
+- Expected FAIL: forgotten assistants kept polling after completion; timeout append
+  outages produced no warning; an observation could remain after a request ended
+  before its watcher started. Each regression was committed before its fix.
+- PASS: nine separate guard removals caused assertion failures. These covered the
+  first-observation cap, invalid dates, cached history, shutdown after a read,
+  polling sleep, observation removal, terminal phases, single-watcher registration
+  and expiry before root stop. Each guard was restored after its check.
+- PASS: 640 tests across bridge-control, bridge-gate, bridge-deadline, bridge-pausing,
+  bridge-replay and the unchanged event security tests, before the final observation
+  cleanup.
+- PASS: all 126 tests in the three changed test files twice on `ca1c12f47`.
+  Both runs used one worker. The later cleanup edit only names the map before
+  deleting its entry; it changes no condition or deadline. All ten deadline tests
+  and targeted lint passed again after that readability edit.
+- PASS: repository typecheck, the repeated server typecheck after correcting the
+  shared test helper, and the event catalogue check with 149 matching types.
+- PASS: full lint, including Knip, dependency checks, Markdown, links, fixture and
+  licence checks, and changelog validation. ESLint reported zero errors and 24
+  existing warnings about long functions.
+- PASS: the completed rebase onto `58d781331`. Comparing the feature patch before
+  and after the second rebase found identical bytes. Main's manual Stop test and
+  `suspendComputer` import are preserved.
+- FAIL, then corrected: the first focused guard run had two fixture errors. The
+  first lint found three test-helper errors. The first server typecheck after that
+  helper change needed a check that the recorded context was a Map. Assertions and
+  production checks were not relaxed.
+- NOT RUN: the full root suite and fresh-install qualification.
+
+The tests with adjusted clocks simulate append outages. They do not establish shutdown
+bounds during a real read outage or already blocked connection work.
+Local logs use `/tmp/p3-17-pr2h-`: `red-race.log`, `red-retire.log`, `red-log.log`,
+`red-finished.log`, `mutations.log`, `tests-1.log`, `typecheck.log`,
+`typecheck-server-corrected.log`, `events.log`, `lint-final.log`, `tests-2.log`
+`tests-3.log`, `deadline-last.log` and `lint-last.log`.
+The disposable PostgreSQL container and its volume were removed after the checks.

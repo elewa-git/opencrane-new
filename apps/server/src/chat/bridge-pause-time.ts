@@ -34,5 +34,6 @@ export function pauseTimeRemaining(store: EventStore, silo: string, control: Con
 
 export function forgetPauseDeadline(store: EventStore, silo: string, assistantId: string) {
   const key = JSON.stringify([silo, assistantId]);
-  deadlines.get(store)?.delete(key);
+  const observed = deadlines.get(store);
+  observed?.delete(key);
 }
