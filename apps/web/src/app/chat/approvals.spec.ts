@@ -344,6 +344,7 @@ const reasonCases: [NonNullable<ApprovalCard['cancelReason']>, string, string][]
   ['grant_revoked', 'No longer valid: a tool grant was revoked', 'closed'],
   ['schema_changed', 'No longer valid: tool schema changed', 'failed'],
   ['profile_changed', 'No longer valid: profile changed', 'failed'],
+  ['takeover', 'Cancelled: desktop takeover', 'dash'],
 ];
 
 it.each(reasonCases)('shows the saved reason %s with its glyph', async (reason, words, glyph) => {
