@@ -1,4 +1,4 @@
-import { shortenDuplicateWindow, waitForDuplicateWindow }
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -436,9 +436,10 @@ it.each(['outage', 'applying'])('keeps %s queued then completes missing saves', 
 
 async function losesFailureReply() {
   const previous = context;
-  await setup();
+  const nats = await shortDuplicateWindowFixture();
+  context = await summonFixture(nats);
+  await context.runner.initialise(childRequests);
   try {
-    await shortenDuplicateWindow(context.nats);
     await losesFailureReplyAfterExpiry();
   } finally {
     vi.restoreAllMocks();

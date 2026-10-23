@@ -294,6 +294,10 @@ These commands need the dev stack's settings. The full system starts with
 [dev stack guide](../../infra/dev-stack/README.md).
 [README.robot.md](README.robot.md) lists required settings and exact test commands.
 
+Child-chat retry tests wait until NATS stores a repeated event as a new message.
+Their private test streams use a short duplicate window set before any messages
+are saved. They then check that repeating the child command keeps its saved result.
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): request contracts, settings, limits and test detail.

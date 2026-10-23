@@ -1,4 +1,4 @@
-import { shortenDuplicateWindow, waitForDuplicateWindow }
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { once } from 'node:events';
@@ -37,7 +37,11 @@ async function save(subject: string, type: string, data: unknown, apply = true) 
   return saved;
 }
 async function initialise() {
-  nats = await natsFixture();
+  const fixture = await natsFixture();
+  await initialiseWithNats(fixture);
+}
+async function initialiseWithNats(fixture: typeof nats) {
+  nats = fixture;
   storage = await databases();
   fga = await openfga();
   directory = await mkdtemp(`${tmpdir()}/child-requests-`);
@@ -128,9 +132,9 @@ async function refusesChangedAccess(kind: string) {
 it.each(['closed', 'rejoined'])('refuses a %s parent', refusesChangedAccess);
 async function savesAndReplays() {
   const previous = { nats, storage, fga, options, auth, runner, directory };
-  await initialise();
+  const fixture = await shortDuplicateWindowFixture();
+  await initialiseWithNats(fixture);
   try {
-    await shortenDuplicateWindow(nats);
     await savesAndReplaysAfterExpiry();
   } finally {
     vi.restoreAllMocks();

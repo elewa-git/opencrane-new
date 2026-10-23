@@ -7,8 +7,8 @@ import { chatHistory } from '../../src/chat/commands.ts';
 import { buildServer } from '../../src/server.ts';
 import { childFixture } from './child-fixture.ts';
 
-export async function summonFixture() {
-  const context = await childFixture();
+export async function summonFixture(nats?: Parameters<typeof childFixture>[0]) {
+  const context = await childFixture(nats);
   for (const teamId of ['owners', 'payer']) {
     await context.append(`team-${teamId}`, 'team.created',
       { teamId, name: teamId, createdBy: 'alice' });
