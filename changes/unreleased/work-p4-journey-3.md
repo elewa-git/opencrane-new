@@ -1,0 +1,1 @@
+- Check group journeys and the full ownership handover on fresh and saved local installs.

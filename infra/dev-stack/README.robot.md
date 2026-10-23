@@ -1652,3 +1652,24 @@ Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user
 - [infra/nats](../nats/README.md): the event log's connection rules.
 - [infra/clamav](../clamav/README.md): the file scanner used by uploads.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
+
+## Ownership browser check
+
+Named organisation journeys now include provider saving and the ownership handover,
+followed by the existing group chat checks. The separate development owner remains a
+separate test user. A short-lived fixture session uses the product commands to appoint
+the browser account, then steps down so the browser starts as the sole owner.
+No ownership event is added directly by this fixture.
+
+The browser appoints the signed-in member. The former owner steps down to Admin,
+and the new owner changes that account to Member through the member detail page.
+The check reads member, admin and owner routes to verify the resulting access.
+It checks the sole owner's disabled step-down control and sends refused step-down
+and self-removal commands. Neither refusal may move the corresponding saved position.
+Finally, product commands restore the separate owner, browser Admin and browser Member
+so that the same saved data can run again.
+
+The ownership regression first failed because an Admin fixture silently recorded
+`NOT PROVEN`. It now refuses that setup. A second test checks preparation and
+restoration twice against the same saved accounts. These tests use an API fixture;
+the live journey supplies the real browser and server evidence.

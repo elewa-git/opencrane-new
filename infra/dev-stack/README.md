@@ -39,6 +39,7 @@ tables, [NATS](../../GLOSSARY.md#nats) for the event log,
   [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
 - Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
 - Runs browser checks for chat, files, people, groups, shared assistants and spending.
+- Checks ownership handover and refuses a last owner’s departure in named journeys.
 - Waits for each new rehearsal reply to finish, checks its facts and checks the saved
   text after a reload. Uses separate messages and invitations for each screen width and
   attempt, and saves step pictures before recording success.
