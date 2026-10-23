@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
-import { auditFilterSchema, auditDetailFilterSchema } from '@opencrane/protocol';
+import { auditFilterSchema, auditDetailFilterSchema, type AuditDetailFilter } from '@opencrane/protocol';
 import { readAudit, readAuditDetail, type Query, type connectMemberFeed } from '@opencrane/projections';
 import { currentMembership } from '@opencrane/models';
 import { readMembershipProgress } from './membership-progress.ts';
@@ -59,12 +59,13 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       const filter = auditDetailFilterSchema.parse(request.query);
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) return reply.code(403).send({ status: 'refused' });
-      const result = await readAuditDetail(options.db, options.silo, auditId, filter);
-      if (result) {
-        await readMembershipProgress(options.db, options.binding, result.records);
-      }
+      const loading = loadDetail(options, auditId, filter);
+      const [loaded] = await Promise.allSettled([loading]);
+      // Check access after failed loads too, so errors cannot reveal a protected record.
       const allowed = await access(options, memberId);
       if (!allowed) return reply.code(403).send({ status: 'refused' });
+      if (loaded.status === 'rejected') throw loaded.reason;
+      const result = loaded.value;
       if (!result) return reply.code(404).send({ status: 'not_found' });
       return reply.send(result);
     } catch (error) {
@@ -73,6 +74,13 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       return reply.code(503).send({ status: 'unavailable' });
     }
   });
+}
+async function loadDetail(options: AuditOptions, auditId: string, filter: AuditDetailFilter) {
+  const result = await readAuditDetail(options.db, options.silo, auditId, filter);
+  if (result) {
+    await readMembershipProgress(options.db, options.binding, result.records);
+  }
+  return result;
 }
 function conversationIdFromPath(params: unknown): boolean {
   return typeof params === 'object' && params !== null && 'conversationId' in params;
