@@ -44,6 +44,52 @@ It also checks a 403 and a successful HTTP read followed by rendering and screen
 failure. These reproduce the missing evidence, **not the original fresh-start defect**.
 No product fix is claimed. Money, company limits and access checks are unchanged.
 
+### Qualification and local checks
+
+The one nightly attempt was **PASS**: source
+`c985529bf446f0fa9508e1e7536435c5c1edf040`, attempt
+`nightly-20261023T002814-dd233c55-c917-4973-97c3-9240567e1419`, completed at
+00:46:36 UTC on 23 October after 1,102 seconds. It used fresh claimed secondary
+slot 1 and the free stand-in, without the diagnostic observer. Only documentation
+changed after this source. The original intermittent failure remains unresolved.
+
+| Spending and every following check | Result |
+| --- | --- |
+| Paying-group zero ceiling, 1280px and 390px, durable refusal after reload, no reservation | PASS |
+| Assistant zero ceiling, both widths, durable refusal after reload, no reservation | PASS |
+| Restore the chosen ceilings and save final daily/monthly limits | PASS |
+| Group list, creation, search and detail | PASS |
+| Shared assistant creation, readiness, member choice and private chat | PASS |
+| Review and remove group membership | PASS |
+| Direct chat at both widths, exchange without starting an agent | PASS |
+| Group chat creation and fixed mode; messages without AI, computer or budget activity | PASS |
+| Add from the join position, remove and leave with access cleared | PASS |
+| People picker and refusal of an unsupported recipient combination | PASS |
+| Group participants and mode preserved through server restart and conversation replay | PASS |
+| Members replay and MCP catalogue replay, each with `--verify` | PASS |
+| HTTP web page and loopback listeners | PASS |
+| Token privacy in browser and logs, form sign-out and credential-required reauthentication | PASS |
+| Paid-model answer | NOT RUN |
+| Separate member disks for shared assistants | NOT PROVEN |
+
+The retained group receipt contains 26 PASS assertions and the two explicit limits
+above. The launcher released slot 1; its directory and Compose containers were absent
+afterwards. Generated pictures and JSON records were retained privately, then restored
+in the repository. Evidence, including the group receipt and local check logs, is at
+`~/.opencrane/daily-fresh/nightly-20261023T002814-dd233c55-c917-4973-97c3-9240567e1419/`.
+
+Local checks: **PASS**, six focused tests twice, 438 event-security tests once,
+workspace/package typecheck and a strict check of the changed infrastructure files
+using the repository's compiler settings. **PASS**, lint including Knip, Markdown,
+offline links, fixture rules, reviewed licences and changelog validation; 24 warnings
+are in unchanged code. **PASS**, event catalogue agreement for 149 types.
+All checks used `nice -n 10`. Focused and security tests used the requested
+`PG_TEST_URL`; these tests use no database. **PASS**, clean `npm ci` and both requested
+tool symlinks. Full root suite: **NOT RUN**, as requested. Protected authority and
+security tests are unchanged. CI will not be awaited.
+
+## Starting and stopping the stack
+
 On `ocn-dev`, with Node 22, installed workspaces (`npm ci`), Docker Compose,
 OpenSSL, `flock`, passwordless `sudo` for Tailscale Serve and the model-port firewall, and an authenticated
 Tailscale daemon:
