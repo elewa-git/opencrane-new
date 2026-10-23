@@ -2790,11 +2790,18 @@ All replies use no-store. No error mapping depends on message text.
 
 Enabled POSTs that pass authentication, validation and chat access save requester-only
 and control-conflict refusals on `view-<commandId>`. `takeover-refusals.ts` stores only
-attemptId, actorId, inputDigest and the fixed reason. The digest binds the silo,
+attemptId, actorId, conversationId, inputDigest and the fixed reason. The digest binds the silo,
 authenticated actor and all four validated request fields. Identical retries read the
 saved record without appending, including after a restart. Changed bindings return 409.
 Reusing an accepted command id cannot create a refusal that replaces its saved result.
-A conditional append and readback share a two-second deadline. A lost reply can recover
+Before recording a refusal, writeChatAccess rechecks membership and participation.
+The same check watches the assistant, relevant teams and payer, and desktop grant.
+Append and readback retain that checked deadline, including after an intent conflict.
+Both append paths check the other outcome inside the conditional append. The event
+store requires the global position from before that check, so only one outcome
+can commit. Changed retry bindings still return 409.
+The conversation history route lists the refusal for its authenticated requester;
+rebuilding the audit table preserves the same conversation and requester links. A lost reply can recover
 the committed record; missing or unreadable evidence returns 503. No refusal writes to
 the computer stream. Authentication, Origin, CSRF, malformed input, chat-access and
 globally disabled refusals create no audit event. GET remains read-only.

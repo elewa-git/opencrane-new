@@ -14,7 +14,8 @@ type Attempt = { commandId: string; conversationId: string;
 function refusalBinding(silo: string, actorId: string, input: Attempt) {
   const fields = [silo, actorId, input.commandId, input.conversationId,
     input.requesterEventId, input.generation];
-  return { attemptId: input.commandId, actorId, inputDigest: refusalDigest(fields) };
+  return { attemptId: input.commandId, actorId, conversationId: input.conversationId,
+    inputDigest: refusalDigest(fields) };
 }
 
 export function throwControlRefusal(reason: Refusal['reason']): never {
@@ -47,7 +48,8 @@ export async function savedControlRefusal(options: ChatOptions, actorId: string,
     // Keep storage errors and rejected event data out of replies and logs.
     throw new Error('Control audit unavailable');
   }
-  if (saved && (saved.actorId !== expected.actorId || saved.inputDigest !== expected.inputDigest)) {
+  if (saved && (saved.actorId !== expected.actorId || saved.conversationId !== expected.conversationId ||
+      saved.inputDigest !== expected.inputDigest)) {
     throw new ControlConflict('Control conflict');
   }
   return saved?.reason;

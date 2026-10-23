@@ -525,6 +525,8 @@ installations add the save-time column on worker startup. Run history is stored 
 
 `takeover.refused` starts its own audit row. Matching actorId and the human envelope
 principal produce a verified person; its fixed reason uses the shared protocol wording.
+The saved conversationId and verified actor populate conversation_id and requester_id,
+so the person who attempted control can read the refusal in conversation history.
 The row carries no computer or private turn identifiers. Server refusal tests compare
 the real PostgreSQL projection with a full rebuild.
 

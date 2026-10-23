@@ -5,8 +5,8 @@
 The list of every kind of event OpenCrane records, and the exact data each one carries.
 An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including new memory text, and still accepts older encrypted events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates without starting work.
 
-Control refusals record the attempt, the person who made it, a fingerprint of the
-checked request and a fixed reason. They contain no computer or private turn details.
+Control refusals record the attempt, the person who made it, its conversation, a
+fingerprint of the checked request and a fixed reason. They contain no computer or private turn details.
 
 ## Where it fits
 
@@ -20,7 +20,7 @@ The server and the AI access library use the same definitions.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|checks control refusals, saved child answers, requests, retries and failures| events
+  server["apps/server<br/>back end"] -.->|checks conversation-linked control refusals, saved child answers, requests, retries and failures| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews and results| events

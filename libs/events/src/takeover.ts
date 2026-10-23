@@ -4,11 +4,11 @@ import { event } from './definition.ts';
 const id = z.string().min(1).max(200);
 const refusalId = z.string().regex(/^[\w-]{1,200}$/u);
 export const takeoverRefusedDataSchema = z.object({
-  attemptId: refusalId, actorId: refusalId,
+  attemptId: refusalId, actorId: refusalId, conversationId: refusalId,
   inputDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   reason: z.enum(['requester_only', 'control_conflict']),
 }).strict();
-const refusedExample = { attemptId: 'attempt_1', actorId: 'member_1',
+const refusedExample = { attemptId: 'attempt_1', actorId: 'member_1', conversationId: 'conv_1',
   inputDigest: 'a'.repeat(64), reason: 'requester_only' as const };
 const refused = event('takeover.refused', 'view',
   'An authenticated control attempt was refused. Existing work and control are unchanged.',
