@@ -49,7 +49,7 @@ export function foldConnectionSelection(rows: StoredEvent[]) {
         parsed.data.action === 'select') {
       selected = parsed.data;
     }
-    sequence = row.sequence;
+    sequence = Math.max(sequence, row.sequence);
   }
   return { sequence, selected };
 }
