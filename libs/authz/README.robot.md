@@ -195,3 +195,49 @@ Shared-child creation writes explicit person participants, creator, silo and rec
 in the existing atomic write. It adds no parent, group or resource relationships.
 Delayed creation uses the existing per-person removal guard; replay gives identical tuples.
 New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
+
+## Routine permissions
+
+`memberAuthorisation(binding, eventStore).routine(memberId, routineId, relation)` checks
+`read_metadata` or `manage`. It loads routine history with its own ten-second limit,
+then checks the member and silo ownership histories, their exact applied receipts and
+OpenFGA. It checks access once. This read result is not a write permit; future commands
+must still use the existing two-second authority check over small access streams.
+No conversation history is read or watched. Missing history, receipts or IAM refuse access.
+
+The model records `silo`, `owner` and `active_silo` relationships. `read_metadata` needs
+current silo membership and either recorded ownership or current silo admin status.
+`manage` needs the recorded owner and membership through `active_silo`. Retirement
+reads routine events in saved order through the retirement event. It writes the
+recorded owner and silo links and removes `active_silo` in the same write as its
+receipt. It does not keep a stale or missing owner from the permission records.
+Missing history, creation or retirement leaves the job without a receipt so it can
+be retried. Neither relation grants instructions, private results, profile use,
+approval or execution.
+
+`update-openfga` applies modern creation, reassignment and retirement atomically with
+an event-id receipt. Later applied ownership changes prevent an old creation or transfer
+from restoring an earlier owner. Legacy records receive receipts without relationships;
+legacy migration is not enabled. Commands still append events and cannot write tuples.
+Rebuild uses the existing handler, without SQL, event appends or execution services.
+Routine rebuilds read saved history only up to the captured replay position, so
+retirement uses the same owner reconstruction as delayed delivery. Other resources
+keep their existing ordered rebuild path.
+
+This subscription and model change requires stopped services. Follow the
+[handler subscription upgrade](../../apps/ops/README.robot.md#handler-subscription-upgrade)
+to drain old work, stop clients and writers, and upgrade the stored manifest. Keep its
+startup guard enabled. Rebuild into a fresh OpenFGA store with
+`npm run replay -- openfga --confirm-openfga-stopped`, then switch both store/model ids
+for readers and workers before restarting. Omit `--verify` when upgrading an older model:
+its tuples cannot yet include routines. After the upgrade, `--verify` compares all tuples
+and receipts against a stopped current store. Retain queue state and existing receipts.
+
+`test/routines.test.ts` uses real NATS/OpenFGA for owner/admin separation, stale access,
+missing receipts, IAM outage, transfers, retirement and replay. No execution is enabled.
+`test/routine-order.test.ts` covers all six delivery orders of creation, reassignment
+and retirement, repeated delivery, missing history and complete tuple/receipt equality
+with replay. `test/routine-guards.test.ts` isolates history deadlines, history identity,
+required receipts, saved membership, legacy definitions and safe error replies.
+`test/routine-model.test.ts` checks membership and owner requirements directly in OpenFGA.
+Fresh-install execution qualification remains NOT RUN.

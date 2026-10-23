@@ -23,8 +23,8 @@ flowchart LR
   server["apps/server<br/>back end"] -.-> authz
   models["libs/models<br/>AI access and spending"] -.->|checks access, receipts and outages| authz
   ops["apps/ops<br/>background workers"] -.-> authz
-  authz -->|checks and updates permissions| fga["OpenFGA<br/>permissions service"]
-  authz -.-> store["libs/event-store<br/>saved changes"]
+  authz -->|checks permissions, including routine ownership| fga["OpenFGA<br/>permissions service"]
+  authz -.->|reads saved ownership| store["libs/event-store<br/>saved changes"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
@@ -41,6 +41,9 @@ flowchart LR
   applied change. Keep existing yes-or-no receipt checks available to other callers.
 - Keep delayed or repeated events from restoring access that was removed.
 - Rebuild permissions in a fresh OpenFGA store from the saved history.
+- Give routine owners management permission and current admins metadata access only.
+  Retired routines keep permitted metadata readers, but cannot be managed.
+  Retirement reads the saved owner even when earlier permission jobs arrive late.
 
 ## Processes it handles
 
@@ -51,10 +54,13 @@ flowchart LR
 2. **A protected request arrives.** The server or models process asks whether the
    person, assistant or group has access. The request proceeds only when OpenFGA
    confirms it and the caller's other access checks pass.
-3. **A person rejoins a chat.** Their permission to read is restored. In ordinary
+3. **A routine is checked.** Saved ownership and membership must agree with permission
+   records and their receipts. Admin metadata access gives no private instructions,
+   management or execution rights.
+4. **A person rejoins a chat.** Their permission to read is restored. In ordinary
    chats, rejoining restores messages from the new join. In shared child chats,
    an explicit invitation releases the whole shared history.
-4. **An operator rebuilds permissions.** The library reads the event history into
+5. **An operator rebuilds permissions.** The library reads the event history into
    a new OpenFGA store. Readers and workers switch to it together before resuming.
 
 ## How to run or test it

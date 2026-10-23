@@ -310,6 +310,109 @@
           }
         }
       }
+    },
+    {
+      "type": "routine",
+      "relations": {
+        "silo": {
+          "this": {}
+        },
+        "active_silo": {
+          "this": {}
+        },
+        "owner": {
+          "this": {}
+        },
+        "read_metadata": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "owner"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "admin"
+                        },
+                        "tupleset": {
+                          "relation": "silo"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "member"
+                  },
+                  "tupleset": {
+                    "relation": "silo"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "manage": {
+          "intersection": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "member"
+                  },
+                  "tupleset": {
+                    "relation": "active_silo"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "silo": {
+            "directly_related_user_types": [
+              {
+                "type": "silo"
+              }
+            ]
+          },
+          "active_silo": {
+            "directly_related_user_types": [
+              {
+                "type": "silo"
+              }
+            ]
+          },
+          "owner": {
+            "directly_related_user_types": [
+              {
+                "type": "person"
+              }
+            ]
+          },
+          "read_metadata": {
+            "directly_related_user_types": []
+          },
+          "manage": {
+            "directly_related_user_types": []
+          }
+        }
+      }
     }
   ]
 }

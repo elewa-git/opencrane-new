@@ -11,6 +11,11 @@ function value(event: EventEnvelope, name: string): unknown {
 }
 
 function sameTarget(previous: EventEnvelope, later: EventEnvelope): boolean {
+  if (previous.type.startsWith('routine.')) {
+    const changes = ['routine.created', 'routine.reassigned', 'routine.retired'];
+    return value(previous, 'version') === 1 && value(later, 'version') === 1 &&
+      changes.includes(later.type);
+  }
   if (previous.type === 'member.ownership_confirmed' && later.type === 'member.role_changed') {
     return false;
   }

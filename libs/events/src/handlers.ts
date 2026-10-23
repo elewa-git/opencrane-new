@@ -16,6 +16,7 @@ export const handlerSubscriptions = {
     "ownership.seeded", "ownership.transferred", "ownership.stepped_down",
   ],
   "update-openfga": [
+    "routine.created", "routine.reassigned", "routine.retired",
     "provider.created",
     "member.joined", "silo.owner_bootstrapped",
     "member.role_changed",

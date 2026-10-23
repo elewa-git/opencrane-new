@@ -179,6 +179,9 @@ NATS, PostgreSQL and OpenFGA where those services hold the result.
 | settle-budget | computer.lost | Require the latest lifecycle event and reservations saved before it. | actor, loss-backfill |
 | settle-budget | effect.observed | Read current spending and all saved effect amounts; charge once. | reconcile |
 | settle-budget | effect.resolved | Read current spending and saved resolutions; charge once. | reconcile |
+| update-openfga | routine.created | Keep a later applied transfer or retirement; legacy records grant no access. | routines |
+| update-openfga | routine.reassigned | Keep a later applied transfer or retirement; replace the recorded owner. | routines |
+| update-openfga | routine.retired | Keep permitted metadata readers and remove management. | routines |
 | update-openfga | member.joined | Keep later applied membership and ownership changes. | projection |
 | update-openfga | silo.owner_bootstrapped | Keep later applied membership and ownership changes. | projection |
 | update-openfga | member.role_changed | Keep later applied roles, removals and ownership changes. | projection |
