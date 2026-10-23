@@ -37,6 +37,7 @@ flowchart LR
 - Give the people named in a side conversation, a child chat started from another
   chat, access to it. Keep its creator's permission to manage participants separate.
 - Refuse access when OpenFGA cannot give a reliable answer.
+- Report an unavailable permission service separately from a missing applied change.
 - Keep delayed or repeated events from restoring access that was removed.
 - Rebuild permissions in a fresh OpenFGA store from the saved history.
 

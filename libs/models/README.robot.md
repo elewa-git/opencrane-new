@@ -2950,8 +2950,9 @@ expected assertion. The guards are restored for the passing runs.
 non-directory or wider permissions with `egress_directory_refused`. Each retained
 close record is checked against its silo-derived filename and existing receipt checks,
 then retried once and kept for normal running retries when pending. Invalid files stay in place and produce only `egress_receipt_refused`.
-Registration prepares one receipt before listening. Closing captures the record through
-that receipt. Shutdown closes all relays as unavailable and waits up to two seconds
+Registration prepares one receipt before listening. Refused confirmation removes that
+prepared receipt and reports the refusal, so no empty receipt remains for retries.
+Closing captures the record through that receipt. Shutdown closes all relays as unavailable and waits up to two seconds
 for receipt saves. Restart scans evidence only; it never registers a relay.
 
 Each relay checks every 500 ms, with no overlapping check. It retains its admitted
@@ -2966,11 +2967,14 @@ addition or removal leaves the relay open. Team-wide events still require their 
 
 An independent monotonic watchdog closes an affected relay as unavailable when proof
 reaches 1,900 ms old, leaving 100 ms for socket teardown within two seconds,
-including while a recheck is stuck. Successful checks date
-proof from the start of their reads. They never extend permit expiry or reopen a closed
+including while a recheck is stuck. Initial proof starts before admission reads access;
+receipt preparation and delayed dispatch replies consume that same lifetime. Successful
+checks date refreshed proof from the start of their reads. They never extend permit expiry or reopen a closed
 relay. Typed recheck failures distinguish proved revocations and spending stops from
 store, IAM and current budget-writer failures. `BudgetActor.requireCurrent` checks the
-budget stream position between actor commands, without writing or replaying history.
+budget stream position outside the money queue, without writing or replaying history.
+It waits for unfinished commands first and repeats a read if a command overlaps it.
+Slow proof reads cannot hold up reservations, settlements or stops.
 A replacement writer or a failed actor invalidates proof. Process leader-lock loss also
 uses the existing shutdown path.
 
@@ -2991,7 +2995,9 @@ of the three destination revocations, member removal, assistant inactivity, ende
 conversation closure, changed generation, spending stops, harmless updates, narrow reads,
 private directories, retained-file refusal, restart deduplication and permit reuse.
 Fresh-install qualification: NOT RUN. Outage tests use recording sockets, fake clocks,
-barriers and disposable NATS, PostgreSQL, OpenFGA and gateway fixtures.
+barriers and disposable NATS, PostgreSQL, OpenFGA and gateway fixtures. The SDK-outage
+regression uses the existing Apache-2.0 `@openfga/sdk` 0.9.7 as a declared test dependency;
+no runtime dependency or installed version changes.
 
 ## Scheduled connection scans (P3-8 PR 3f; Part of #49)
 

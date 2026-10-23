@@ -366,7 +366,12 @@ function createMemberAuthorisation(binding: Binding,
   return {
     binding,
     async applied(eventId: string) {
-      return (await client.check({ user: object, relation: 'applied', object: objectId('projection_event', binding.silo, eventId) })).allowed;
+      const receipt = { user: object, relation: 'applied',
+        object: objectId('projection_event', binding.silo, eventId) };
+      const result = await client.check(receipt);
+      // Distinguish a missing receipt from a permission service that could not answer.
+      if (result.status === 'unavailable') throw result.error;
+      return result.allowed;
     },
     provider(memberId: string, providerId: string, relation: 'read' | 'manage') {
       return client.check({ user: objectId('person', binding.silo, memberId), relation,

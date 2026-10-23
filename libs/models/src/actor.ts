@@ -175,15 +175,23 @@ export class BudgetActor {
       rootId, this.now, this.append.bind(this));
     return this.serial(check);
   }
-  requireCurrent(deadline: number) {
-    const check = async () => {
-      const position = await this.store.head(`budget-${this.silo}`, deadline);
-      if (position !== this.sequence || performance.now() >= deadline) {
+  async requireCurrent(deadline: number) {
+    for (;;) {
+      const commands = this.queue;
+      await commands;
+      if (this.failed || performance.now() >= deadline) {
         throw new Error('Budget writer unavailable');
       }
-    };
-    // Check between commands so our own pending append cannot look like a replacement writer.
-    return this.serial(check);
+      // Read outside the money queue so slow proof reads cannot delay a reservation or Stop.
+      const position = await this.store.head(`budget-${this.silo}`, deadline);
+      if (performance.now() >= deadline) throw new Error('Budget writer unavailable');
+      // Wait for and recheck any local command that overlapped this read, including lost replies.
+      if (commands !== this.queue) continue;
+      if (this.failed || position !== this.sequence) {
+        throw new Error('Budget writer unavailable');
+      }
+      return;
+    }
   }
   admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number,
     rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>) {

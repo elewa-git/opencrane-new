@@ -195,7 +195,8 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
       checked.conversation, checked.turn, performance.now() + 10_000);
     const work = activeWork(checked, activity);
     const subjects = [`member-${checked.requester}`, `assistant-${checked.assistant}`];
-    const fresh = await authorityFence(actor.store, performance.now(), subjects);
+    const proofStartedAt = performance.now();
+    const fresh = await authorityFence(actor.store, proofStartedAt, subjects);
     const access = egressHistory(actor.store, actor.silo);
     await checkAccess(actor, binding, checked, activity, fresh, access.read);
     await checkRules(actor, checked, fresh, access.read);
@@ -262,8 +263,8 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
         throw new EgressRecheckFailure(revoked ? 'revoked' : 'unavailable', error);
       }
     }
-    const registration = { recheck, confirm: confirmRegistration, permitId: requestId, host: checked.host, port: checked.port,
-      expiresAt: checked.exp * 1000 };
+    const registration = { proofStartedAt, recheck, confirm: confirmRegistration,
+      permitId: requestId, host: checked.host, port: checked.port, expiresAt: checked.exp * 1000 };
     const relay = await registry.register(registration);
     res.setHeader('x-egress-relay', relay);
     res.end();

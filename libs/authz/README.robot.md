@@ -37,7 +37,10 @@ A later join restores membership and makes those saved relationships available a
 IDs encode both silo and member without delimiter collisions.
 Checks always request higher consistency, with no application cache. Errors and
 one-second HTTP timeouts return `allowed: false`, `status: 'unavailable'`, and an
-internal error with its cause. Do not return that error to an API caller.
+internal error with its cause. `applied(eventId)` returns a boolean for an answered
+receipt check and throws that internal error when OpenFGA is unavailable. This keeps
+callers from treating an outage as a confirmed missing receipt. Do not return that
+error to an API caller.
 
 The handler uses higher-consistency reads, then one atomic OpenFGA write of the
 changes **and an event-id receipt tuple**. A lost response is retried safely;

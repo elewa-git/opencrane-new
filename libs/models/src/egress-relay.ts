@@ -4,8 +4,13 @@ import { egressDestinationSchema } from '@opencrane/events';
 import { connectEgressDestination, systemTransport, type EgressTransport } from './egress-guard.ts';
 
 type Destination = { host: string; port: number };
-type Registration = Destination & { permitId: string; expiresAt: number;
-  recheck?: () => Promise<void>; confirm?: () => Promise<void> };
+type Registration = Destination & {
+  permitId: string;
+  expiresAt: number;
+  proofStartedAt?: number;
+  recheck?: () => Promise<void>;
+  confirm?: () => Promise<void>;
+};
 type CloseReason = 'finished' | 'failed' | 'refused' | 'expired' | 'revoked' | 'unavailable';
 export type EgressCloseRecord = Destination & {
   permitId: string;
@@ -18,6 +23,7 @@ export type EgressCloseRecord = Destination & {
   closedAt: number;
 };
 type CloseRecord = (record: EgressCloseRecord) => void;
+type Prepare = (request: Registration) => Promise<void | (() => void)>;
 
 // Leave time for socket teardown inside the two-second outage limit.
 const proofLifetimeMs = 1900;
@@ -42,7 +48,7 @@ class Relay {
   private readonly watch: NodeJS.Timeout;
   private watchdog: NodeJS.Timeout | undefined;
   expiry: NodeJS.Timeout | undefined;
-  private proofDeadline = performance.now() + proofLifetimeMs;
+  private proofDeadline: number;
 
   readonly registration: Registration;
   private readonly registeredAt: number;
@@ -51,6 +57,8 @@ class Relay {
 
   constructor(registration: Registration, registeredAt: number,
     onClose: CloseRecord, transport: EgressTransport) {
+    const started = registration.proofStartedAt ?? performance.now();
+    this.proofDeadline = started + proofLifetimeMs;
     this.registration = registration;
     this.registeredAt = registeredAt;
     this.onClose = onClose;
@@ -195,10 +203,10 @@ export class EgressRelayRegistry {
   private readonly onClose: CloseRecord;
   private readonly transport: EgressTransport;
 
-  private readonly prepare: ((request: Registration) => Promise<void>) | undefined;
+  private readonly prepare: Prepare | undefined;
 
   constructor(onClose: CloseRecord, transport = systemTransport,
-    prepare?: (request: Registration) => Promise<void>) {
+    prepare?: Prepare) {
     this.onClose = onClose;
     this.transport = transport;
     this.prepare = prepare;
@@ -215,9 +223,14 @@ export class EgressRelayRegistry {
     }
     // Reserve before awaiting the listener, so concurrent registrations cannot reuse a permit.
     this.permits.add(request.permitId);
-    await this.prepare?.(request);
-    await request.confirm?.();
-    if (this.stopped) throw new Error('egress_registration_refused');
+    const cancelPreparation = await this.prepare?.(request);
+    try {
+      await request.confirm?.();
+      if (this.stopped) throw new Error('egress_registration_refused');
+    } catch (error) {
+      cancelPreparation?.();
+      throw error;
+    }
     const registration = { ...request, ...destination };
     const relay = new Relay(registration, registeredAt, this.onClose, this.transport);
     this.relays.set(request.permitId, relay);

@@ -35,6 +35,12 @@ export async function startEgress(store: EventStore, silo: string, stateDirector
       channel: 'command' as const, host: request.host, port: request.port };
     const receipt = await createEgressReceipt(store, silo, binding, directory);
     receipts.set(receipt.observationId, receipt);
+    function cancelPreparation() {
+      // Remove only the empty receipt: no relay exists to provide a close record.
+      receipts.delete(receipt.observationId);
+      refused();
+    }
+    return cancelPreparation;
   }
   function capture(record: EgressCloseRecord) {
     const id = egressObservationId(silo, record.permitId);

@@ -103,7 +103,9 @@ Neither checker admits an image or starts it; malware and vulnerability checks r
 The models process prepares private connection relays and records their closure.
 It checks access and spending again while a relay is open. Removing access ends it.
 Losing storage, permissions or current spending proof closes affected sockets within
-two seconds, even when a check stalls. A late reply cannot reopen the connection.
+two seconds, including time spent admitting the connection. A stalled check or late
+reply cannot extend that time. Permission-service failures remain distinct from removed
+access. Spending proof reads do not delay money commands.
 Changing another team member's membership leaves a valid relay open.
 Pending closure records retry after storage recovers, without restarting. Restart
 recovers saved closure records without reopening connections. Outside networking
