@@ -22,8 +22,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|reserves test space| package
   package -->|uses local cluster| devbox
-  package -->|starts| apps["Website and server<br/>product requests"]
-  package -->|starts| workers["apps/ops<br/>background workers"]
+  package -->|starts| apps["Website, server and workers<br/>product requests and background jobs"]
   package -->|runs| services["Core services<br/>storage and access"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
 ```
@@ -70,6 +69,16 @@ infra/package/forward.sh
 infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"
 infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 ```
+
+The chart render test needs Helm and checks the installation files without starting
+an install. It uses made-up settings. The [operator notes](README.robot.md) give the command.
+
+## Folders
+
+| Folder | What it does |
+| --- | --- |
+| [chart](chart/README.md) | Describes the local installation and its required settings. |
+| [chart/templates](chart/templates/README.md) | Describes the programs, storage and network rules to install. |
 
 ## Where to read more
 

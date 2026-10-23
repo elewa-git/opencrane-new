@@ -50,6 +50,12 @@ nice -n 10 npm test -- apps/server/test/upload.test.ts
 infra/clamav/refresh.sh /absolute/scratch/candidate-signatures
 ```
 
+## Folders
+
+| Folder | What it does |
+| --- | --- |
+| [upstream](upstream/README.md) | Keeps the earlier scanner code and its licence for reference. |
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): image details and virus list updates.

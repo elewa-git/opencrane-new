@@ -11,7 +11,7 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
+    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:readmes && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
     "typecheck": "npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack",
     "typecheck:package": "tsc --noEmit -p infra/package/tsconfig.json",
     "typecheck:dev-stack": "tsc --noEmit -p infra/dev-stack/tsconfig.json",
@@ -30,6 +30,7 @@
     "lint:deps": "depcruise apps/demo-mcp/src apps/odoo-mcp/src apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs && depcruise apps --config .dependency-cruiser-tests.mjs",
     "lint:unused": "knip",
     "lint:docs": "markdownlint-cli2",
+    "lint:readmes": "node scripts/check-folder-readmes.mjs",
     "lint:links": "sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'spikes/README.md' 'spikes/*/README.md' 'apps/*/README*.md' 'libs/*/README*.md' 'infra/*/README*.md' 'tools/*/README*.md'",
     "provision": "node --experimental-strip-types libs/handlers/src/provision.ts",
     "visual:fold-loader": "node scripts/check-fold-loader.mjs --capture",

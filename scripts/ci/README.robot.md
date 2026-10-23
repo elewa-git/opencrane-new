@@ -125,6 +125,14 @@ unknown output, or a failed decision job, runs everything. The first rollout
 also runs everything when the base commit has no decision script. The gate allows
 skipped shards and fixtures only for `docs`, with successful documentation checks.
 
+The documentation step runs `lint:docs`, `lint:readmes`, `lint:links` and
+`lint:changelog`. Full lint also runs `lint:readmes`. The README checker needs only
+Node and Git, so the documentation path needs no additional installation.
+`select.test.mjs` runs the workflow's documentation commands in a temporary Git
+repository with a ticket reference in a folder guide. Only the README checker runs
+for real; the other npm commands are replaced. The test requires the README error
+and refuses any npm installation command.
+
 ## Fixture startup
 
 The earlier local fixture run failed in audit-browser and integrations while

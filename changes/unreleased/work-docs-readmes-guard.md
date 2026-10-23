@@ -1,0 +1,2 @@
+- Folder guides are required for tracked package folders, and their README files reject ticket and phase references. The local Helm chart keeps its folder guide without rendering it as a Kubernetes resource.
+- Documentation-only pull requests run the same folder README check as full lint, without extra installs.

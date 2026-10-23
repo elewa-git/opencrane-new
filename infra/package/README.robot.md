@@ -12,6 +12,17 @@ reviewed contents of every pinned image. It refuses unknown application licences
 non-OSI application licences and operating-system packages without a matching
 Debian main or PostgreSQL apt archive review.
 
+`chart/.helmignore` excludes `templates/README.md` so Helm does not try to render
+the guide as a Kubernetes resource. `chart-render.test.mjs` renders the real chart
+with made-up digest-pinned images and credential reference names. It checks that
+each rendered document is a Kubernetes resource and comes from a YAML template.
+CI runs it beside the other package tests. A missing Helm binary fails the check;
+the test never skips rendering. Run it locally with:
+
+```sh
+nice -n 10 node --test infra/package/chart-render.test.mjs
+```
+
 Claim a secondary slot with `infra/dev-stack/claim.sh`. Set `DEV_STACK_ID` to the
 returned id. `infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"` creates
 only `opencrane-package-$DEV_STACK_ID` and records its Kubernetes UID, cluster,

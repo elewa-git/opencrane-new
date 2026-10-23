@@ -1,0 +1,2 @@
+# Keep folder guides out of the Kubernetes resources Helm renders.
+templates/README.md

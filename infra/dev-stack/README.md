@@ -86,6 +86,12 @@ A fresh start replaces that stack's local data and credentials. Memory reads als
 need an existing private key directory configured at startup. Detailed prerequisites,
 real-provider choices and daily timer settings are in the operator notes.
 
+## Folders
+
+| Folder | What it does |
+| --- | --- |
+| [systemd](systemd/README.md) | Schedules the daily check on a fresh spare stack. |
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): settings, stack ownership, commands and detailed checks.
