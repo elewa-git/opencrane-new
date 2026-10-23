@@ -145,7 +145,7 @@ async function bridgeFixture(cachedControl = false) {
       await watching;
     }
     watchers.push(stop);
-    return stop;
+    return Object.assign(stop, { forgetMissing: watcher.forgetMissing });
   }
   async function close() {
     for (const stop of watchers) await stop();
@@ -781,3 +781,29 @@ async function stopsDeadlineOnShutdown() {
 }
 it('stops deadline work on shutdown and fails the old request on restart',
   stopsDeadlineOnShutdown);
+
+async function retiresForgottenDeadline(pending: boolean) {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  let clock: ReturnType<typeof takeoverClock> | undefined;
+  if (pending) {
+    const request = await test.intendControl();
+    clock = takeoverClock(request.time);
+    await test.link.control.send();
+  }
+  const stop = test.startControls();
+  await delay(300);
+  stop.forgetMissing([]);
+  if (clock) {
+    clock.advance(30_000, -60_000);
+    await waitForControl(test.store, 'failed');
+  }
+  await delay(300);
+  const reads = vi.spyOn(test.store, 'head');
+  await delay(600);
+  await stop();
+  expect(reads).not.toHaveBeenCalled();
+}
+it.each([false, true])(
+  'retires forgotten deadline polling after any pending request finishes: %s',
+  retiresForgottenDeadline);
