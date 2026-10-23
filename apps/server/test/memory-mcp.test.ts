@@ -17,6 +17,7 @@ import { envelope, history, memoryRights, parseMemoryRequest, readToolPolicy, st
   verifyMemoryContext, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { limits, listFacts } from '../src/memory/reads.ts';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
@@ -1048,6 +1049,7 @@ async function recalledRemember(commandId: string, query = 'deliver') {
   await grantWrite('member');
   await grantWrite('assistant');
   await prepareMemoryAccess();
+  await prepareRecallPage(query);
   const recallArguments = { ...call.params.arguments, query, limit: 2 };
   const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
   // Issue the setup recall directly so gateway admission does not spend its short pass.
@@ -1070,6 +1072,17 @@ async function recalledRemember(commandId: string, query = 'deliver') {
     recallProof: page.recallProof };
   return { ...call, params: { ...call.params, name: 'remember', arguments: argumentsValue } };
 }
+async function prepareRecallPage(query: string) {
+  const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
+    binding: setup.binding, feed: { memberId } };
+  const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
+  const search = { q: query };
+  const bounds = { pageFacts: 2, pageBytes: limits.pageBytes };
+  const secret = testAuthConfig().cookieSecret;
+  // Wait for the checked projection and first search before starting the signed pass.
+  await listFacts(memory, 'alice', scope, search, secret, bounds);
+}
+
 function coldLookupClock() {
   const originalDate = Date.now.bind(Date);
   const originalPerformance = performance.now.bind(performance);

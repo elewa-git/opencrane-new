@@ -4478,17 +4478,22 @@ The save uses the original approval position and the write check's deadline.
 
 ### Memory MCP test preparation and cleanup
 
-`test/memory-mcp.test.ts` checks active membership, tool-server grants and personal
+`test/memory-mcp.test.ts` checks active membership, tool server grants and personal
 memory grants before signing recall or change controls. It checks the OpenFGA receipts
 that confirm the member joined, the assistant and conversation were created, and the
 grants were applied. It also checks both identities' resource permissions, permission
 to act for the assistant, and permission to post in the conversation.
 
 The fixture reads the initial chat summary before signing, using its own history
-deadline. A discovery request alone cannot prove that this preparation finished:
-its result may be a cold-start refusal. Four recall regressions advance both clocks
-by 2.2 seconds during the first membership, assistant, tool-server grant or chat-summary
-lookup. Each keeps the original HTTP 200 recall assertion. The summary case delays
+deadline. It also reads the requested page of up to two facts through the normal memory reader.
+That read checks the projection's saved position and generation, then finishes the
+first search before the signed pass begins. The actual HTTP recall still reads the
+page and records its own proof and loaded references.
+
+A discovery request alone cannot prove that this preparation finished: its result
+may be a refusal while clients start. Five recall regressions advance both clocks by 2.2 seconds
+during the first membership, assistant, tool server grant, chat summary or projected
+fact search. Each keeps the original HTTP 200 recall assertion. The summary case delays
 only reads that include older conversation closes, so a raw receipt-history lookup
 cannot hide a missing summary read. Removing only that preparation makes the case fail.
 A first lookup can take longer than the signed pass's two-second lifetime. Both
