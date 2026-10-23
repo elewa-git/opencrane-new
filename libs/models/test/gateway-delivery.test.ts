@@ -1,6 +1,5 @@
 import { createConnection, createServer, type Socket } from 'node:net';
 import { once } from 'node:events';
-import { Pool } from 'pg';
 import { dirname } from 'node:path';
 import { ChildProcess, execFile } from 'node:child_process';
 import { readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
@@ -9,7 +8,8 @@ import { z } from 'zod';
 import { promisify } from 'node:util';
 import { databases } from '@opencrane/authz/testing';
 import { createLogger } from '@opencrane/observability';
-import { pgDb, ProjectionRunner, mcpCatalogue, readPublication } from '@opencrane/projections';
+import { connectProjectionDb, pgDb, ProjectionRunner, mcpCatalogue, readPublication }
+  from '@opencrane/projections';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { gatewayObservationSchema, getEventDefinition, eventEnvelopeSchema } from '@opencrane/events';
 import { lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
@@ -1016,9 +1016,8 @@ async function refusesLostGatewayLock() {
   const before = await readFile(setup.options.configFile);
   const inode = (await stat(setup.options.configFile)).ino;
   const proxy = await delayedDisconnect(setup.storage.queue.options.connectionString!);
-  const pool = new Pool({ connectionString: proxy.url, max: 1, query_timeout: 150 });
   function ignoreError() {}
-  pool.on('error', ignoreError);
+  const connection = connectProjectionDb(proxy.url, ignoreError);
   const competitor = await setup.storage.queue.connect();
   const lockName = 'opencrane:projection:gateway-configuration:test';
   let checks = 0;
@@ -1037,7 +1036,7 @@ async function refusesLostGatewayLock() {
     competingSessionOwnsLock = acquired.rows[0]!.held;
     expect(competingSessionOwnsLock).toBe(true);
   }
-  const options = { ...setup.options, db: pgDb(pool), requireLeader };
+  const options = { ...setup.options, db: connection.db, requireLeader };
   const delivery = gatewayDelivery(options);
   try {
     await expect(delivery.deliver(setup.record)).rejects.toThrow('Gateway delivery unavailable');
@@ -1050,7 +1049,7 @@ async function refusesLostGatewayLock() {
     await competitor.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lockName]);
     competitor.release();
     await proxy.close();
-    await pool.end();
+    await connection.close();
   }
 }
 it('refuses replacement after the gateway lock session dies with delayed disconnect notification',
