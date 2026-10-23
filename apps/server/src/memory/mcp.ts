@@ -5,7 +5,7 @@ import type { AuthConfig } from '@opencrane/auth';
 import type { MemoryOptions } from './access.ts';
 import { remember } from './commands.ts';
 import { checkRecallProof, recallProof } from './recall-proof.ts';
-import { recallPreparations } from './recall-preparation.ts';
+import { memoryPreparations } from './preparation.ts';
 import { confirmAgentLineage, refuseAgentChange } from './agent-lineage.ts';
 import { readRecallContext, recordRecall } from './recall-delivery.ts';
 
@@ -22,7 +22,7 @@ const discovery = { ...cache, supportedVersions: ['2026-07-28'], capabilities: {
 
 export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
   options?: MemoryOptions) {
-  const preparations = options ? recallPreparations(options, config.cookieSecret) : undefined;
+  const preparations = options ? memoryPreparations(options, config.cookieSecret) : undefined;
   const consume = memoryContextConsumer(options?.dispatchGeneration);
   // Keep the original JSON number text for the gateway's signed body digest.
   function register(instance: FastifyInstance, _options: unknown, done: () => void) {
@@ -57,8 +57,8 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
   async function admit(context: MemoryContext, parsed: ReturnType<typeof parseMemoryRequest>) {
     if (context.preparing) throw new Error('Memory preparation cannot act');
     consume(context);
-    const prepared = parsed.input?.operation === 'recall' ? preparations!.consume(context)
-      : undefined;
+    const needsPreparation = parsed.input && parsed.input.operation !== 'remember';
+    const prepared = needsPreparation ? preparations!.consume(context) : undefined;
     const remaining = context.exp * 1000 - Date.now();
     const deadline = performance.now() + remaining;
     const evidence = prepared?.evidence ?? await readRecallContext(options!, context);
@@ -77,7 +77,7 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       result = toolList;
     }
     await refuseAgentChange(options!, context, evidence, parsed.input, config.cookieSecret,
-      rights.confirm, deadline);
+      rights.confirm, deadline, prepared?.rows);
     if (parsed.input?.operation === 'remember') {
       const input = parsed.input;
       const writeAuthority = rights.writeAuthority!;
@@ -94,7 +94,7 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       result = { content: [], structuredContent: receipt };
     }
     if (parsed.input?.operation === 'recall') {
-      if (!prepared) throw new Error('Memory preparation missing');
+      if (prepared?.operation !== 'recall') throw new Error('Memory preparation missing');
       const { snapshot, facts } = prepared;
       const proof = recallProof(config.cookieSecret, context, facts.facts, evidence.inputGeneration);
       result = { content: [], structuredContent: { ...facts, recallProof: proof } };

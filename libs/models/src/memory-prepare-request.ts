@@ -12,11 +12,12 @@ type Identity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'comput
   'generation' | 'conversation' | 'turn' | 'thread'>;
 const resultSchema = z.strictObject({ preparationId: z.uuid(), inputGeneration: z.string() });
 
-async function requestRecallPreparation(claims: Identity, raw: string,
+async function requestMemoryPreparation(claims: Identity, raw: string,
   headers: IncomingHttpHeaders, requestId: string, options: McpDispatchOptions | undefined,
   sign: ((claims: Record<string, unknown>, expiresAt: number) => Promise<string>) | undefined) {
   const parsed = parseMemoryRequest(raw, headers);
-  if (parsed.input?.operation !== 'recall') return undefined;
+  const input = parsed.input;
+  if (!input || input.operation === 'remember') return undefined;
   function matches(route: NonNullable<McpDispatchOptions['routes']>[number]) {
     return route.serverId === 'memory' && route.connectionId === 'server';
   }
@@ -24,13 +25,13 @@ async function requestRecallPreparation(claims: Identity, raw: string,
   if (!route?.generation || !sign) throw new Error('Memory preparation unavailable');
   const dispatch = { permitDigest: '0'.repeat(64), backendGeneration: route.generation,
     schemaDigest: '0'.repeat(64), policyRevision: 0 };
-  const payload = { ...claims, operation: 'recall', scopes: [parsed.input.scopeId],
+  const payload = { ...claims, operation: input.operation, scopes: [input.scopeId],
     contentAccess: 'private', bodyDigest: parsed.bodyDigest,
     callId: parsed.request.params._meta.callId, requestId, contextPosition: 0,
     dispatch, preparing: true };
   const credential = await sign(payload, Date.now() + 2000);
   const requestHeaders = { 'content-type': 'application/json', 'mcp-method': 'tools/call',
-    'mcp-name': 'recall', 'mcp-protocol-version': String(headers['mcp-protocol-version']),
+    'mcp-name': input.operation, 'mcp-protocol-version': String(headers['mcp-protocol-version']),
     'x-memory-context': credential };
   const request = { method: 'POST', headers: requestHeaders, body: raw,
     signal: AbortSignal.timeout(10_000) };
@@ -40,15 +41,15 @@ async function requestRecallPreparation(claims: Identity, raw: string,
   return resultSchema.parse(result);
 }
 
-export async function prepareRecallDecision(memoryRoute: boolean, store: EventStore,
+export async function prepareMemoryDecision(memoryRoute: boolean, store: EventStore,
   binding: Binding, claims: Identity, raw: string, headers: IncomingHttpHeaders,
   requestId: string, options: McpDispatchOptions | undefined,
   identity: { memory?: { memoryContext:
     (claims: Record<string, unknown>, expiresAt: number) => Promise<string> } }) {
-  let preparation: Awaited<ReturnType<typeof requestRecallPreparation>>;
+  let preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>;
   let reads: Awaited<ReturnType<typeof prepareMemoryReads>> | undefined;
   if (memoryRoute) {
-    preparation = await requestRecallPreparation(claims, raw, headers, requestId,
+    preparation = await requestMemoryPreparation(claims, raw, headers, requestId,
       options, identity.memory?.memoryContext);
     if (preparation) {
       const parsed = parseMemoryRequest(raw, headers);
@@ -58,7 +59,7 @@ export async function prepareRecallDecision(memoryRoute: boolean, store: EventSt
   return { preparation, reads };
 }
 
-export function recallAccessStarted(managedRoute: boolean, loaded: boolean, started: number,
-  preparation: Awaited<ReturnType<typeof requestRecallPreparation>>) {
+export function memoryAccessStarted(managedRoute: boolean, loaded: boolean, started: number,
+  preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>) {
   return decisionAccessStarted(managedRoute || preparation !== undefined, loaded, started);
 }

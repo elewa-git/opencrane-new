@@ -4762,7 +4762,7 @@ Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
 
 The throwaway PostgreSQL container and its volume were removed after the third run.
 
-## Recall preparation before signing
+## Memory preparation before signing
 
 `POST /mcp/memory/server/prepare` accepts a signed memory credential with
 `preparing: true`. This credential can load data but cannot execute a tool.
@@ -4771,7 +4771,7 @@ IAM receipt facts, scope history and the bounded fact page within ten seconds.
 At most 128 preparations live in this server process. Each has a random id,
 expires after 30 seconds and is removed before any attempt to use it.
 
-The final signed recall binds the id and input generation to the silo, requester,
+The final signed recall, Correct or Forget binds the id and input generation to the silo, requester,
 assistant, computer generation, conversation, turn, thread, operation, scope,
 request digest, call id and request id. Missing, expired, reused and mismatched
 preparations return the existing generic refusal. There is no cold-read fallback.
@@ -4780,5 +4780,10 @@ Prepared data contains no permission result. The two-second call checks current
 permissions and small access streams, turn changes and the current memory revision.
 Chat refresh reads only later events; losing its prepared summary refuses the call.
 No preparation or fact text is saved in an event or returned by the preparation route.
-Correct and Forget retain their old path and remain disabled. Their slow-read
-regressions remain outstanding. Fresh-install qualification: NOT RUN.
+Correct and Forget use the same preparation store and load read/write grant receipts.
+Their prepared data contains scope events, with no decrypted fact text or permission result.
+The signed pass checks current permissions and reads only later scope events before
+validating the target and every loaded reference. It rechecks the original access
+streams after reading the conversation tail. Correct and Forget remain disabled;
+valid controls return `memory_tool_unavailable` and create no business event or file.
+Remember and discovery still use their existing paths. Fresh-install qualification: NOT RUN.

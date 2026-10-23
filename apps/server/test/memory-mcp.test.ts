@@ -2607,10 +2607,10 @@ async function changeGrantDuringLineage(operation: 'correct' | 'forget', restore
       finished = true;
     }
   }
+  // Install the race after preparation so it exercises the final signed check.
+  const token = await changeToken(request);
   const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
   try {
-    // Finish the test's observations before starting the request's original access window.
-    const token = await changeToken(request);
     const response = await sendChange(request, token);
     expect(changed).toBe(true);
     expect(finished).toBe(true);
@@ -2889,22 +2889,36 @@ async function refusesPreparation(change: 'missing' | 'reused' | 'expired' | 'mi
 it.each(['missing', 'reused', 'expired', 'mismatched'] as const)(
   'refuses a %s recall preparation', refusesPreparation, 40_000);
 
-async function gatewayPreparation(step: 'history' | 'IAM') {
+async function gatewayPreparation(operation: 'recall' | 'correct' | 'forget',
+  step: 'history' | 'IAM') {
+  let body: unknown = call;
+  let requestHeaders = headers;
+  if (operation !== 'recall') {
+    const request = await changeRequest(operation, false);
+    body = request.body;
+    requestHeaders = request.requestHeaders;
+  }
   function delay() {
     return pause(2200);
   }
   const timing = timeMemoryPath(setup, step, delay);
   try {
-    const response = await setup.call(headers, call, route);
+    const response = await setup.call(requestHeaders, body as Record<string, unknown>, route);
     expect(timing.delayed()).toBe(true);
-    expect(response.status, response.text).toBe(200);
+    if (operation === 'recall') {
+      expect(response.status, response.text).toBe(200);
+    } else {
+      expect(response.status).toBe(403);
+      expect(JSON.parse(response.text)).toEqual({
+        status: 'refused', reason: 'memory_tool_unavailable' });
+    }
     expect(decodeJwt(capability)['preparationId']).toEqual(expect.any(String));
   } finally {
     timing.restore();
   }
 }
-it.each(['history', 'IAM'] as const)(
-  'prepares slow %s through the real gateway before signing recall', gatewayPreparation);
+it.each(backendDelays)(
+  'prepares %s through the real gateway before signing after slow %s', gatewayPreparation);
 
 async function usesOnlyPreparedReceipts() {
   const signed = await signedRecall(setup);
@@ -2963,3 +2977,46 @@ async function revokedDuringCorrectPreparation() {
 }
 it('refuses revocation during slow Correct preparation with a fresh pass',
   revokedDuringCorrectPreparation);
+
+async function invalidChangePreparation(operation: 'correct' | 'forget',
+  change: 'missing' | 'expired' | 'mismatched') {
+  const request = await changeRequest(operation, false);
+  const original = await changeToken(request);
+  const claims = decodeJwt(original);
+  expect(claims['preparationId']).toEqual(expect.any(String));
+  if (change === 'missing') delete claims['preparationId'];
+  if (change === 'mismatched') claims['requestId'] = randomUUID();
+  if (change === 'expired') await pause(30_100);
+  claims['dispatch'] = await memoryBinding(setup);
+  const signed = await setup.tokens.memoryContext(claims, Date.now() + 2000);
+  const response = await sendChange(request, signed);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+const invalidChangePreparations = [
+  ['correct', 'missing'], ['correct', 'expired'], ['correct', 'mismatched'],
+  ['forget', 'missing'], ['forget', 'expired'], ['forget', 'mismatched'],
+] as const;
+it.each(invalidChangePreparations)('refuses %s with a %s preparation',
+  invalidChangePreparation, 40_000);
+
+async function usesPreparedChangeReads(operation: 'correct' | 'forget') {
+  const request = await changeRequest(operation, false);
+  const signed = await changeToken(request);
+  const receipts = vi.spyOn(setup.auth, 'applied');
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  try {
+    const response = await sendChange(request, signed);
+    expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+    expect(receipts).not.toHaveBeenCalled();
+    for (const [subject, from] of reads.mock.calls) {
+      if (subject === `scope-${scopeId}` || subject === 'conversation-conversation') {
+        expect(from).toBeGreaterThan(1);
+      }
+    }
+  } finally {
+    reads.mockRestore();
+    receipts.mockRestore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'uses prepared history and IAM receipts inside the signed %s pass', usesPreparedChangeReads);

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { history, memoryReferences, MemoryToolRefused, type MemoryContext,
+import type { StoredEvent } from '@opencrane/event-store';
+import { memoryReferences, MemoryToolRefused, type MemoryContext,
   type parseMemoryRequest } from '@opencrane/models';
 import { checkRecallProof } from './recall-proof.ts';
 import { MemoryRefused, type MemoryOptions } from './access.ts';
@@ -91,7 +92,7 @@ export function confirmAgentLineage(options: MemoryOptions, context: MemoryConte
 type Input = ReturnType<typeof parseMemoryRequest>['input'];
 export async function refuseAgentChange(options: MemoryOptions, context: MemoryContext,
   evidence: Evidence, input: Input, secret: string, confirmRights: () => Promise<unknown>,
-  deadline: number) {
+  deadline: number, preparedRows?: StoredEvent[]) {
   if (input?.operation !== 'correct' && input?.operation !== 'forget') return;
   const target = { scopeId: input.scopeId, memoryId: input.memoryId,
     revision: input.expectedRevision };
@@ -102,7 +103,14 @@ export async function refuseAgentChange(options: MemoryOptions, context: MemoryC
     evidence.inputGeneration, target);
   const confirm = confirmAgentLineage(options, context, evidence, dependencies,
     confirmRights, deadline, target);
-  const rows = await history(options.store, `scope-${input.scopeId}`, options.silo, deadline);
+  if (!preparedRows) throw new MemoryRefused();
+  const rows = [...preparedRows];
+  const from = (rows.at(-1)?.sequence ?? 0) + 1;
+  // Read only later changes. Initial scope history belongs to preparation.
+  for await (const row of options.store.readStream(`scope-${input.scopeId}`, from, deadline)) {
+    if (row.event.silo !== options.silo) throw new MemoryRefused();
+    rows.push(row);
+  }
   const references = memoryReferences(rows, options.silo, input.scopeId, 'event-only');
   for (const reference of proved) {
     if (references.current(reference) !== 'current') throw new MemoryRefused();

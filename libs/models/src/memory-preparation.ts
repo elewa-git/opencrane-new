@@ -14,7 +14,12 @@ export async function prepareMemoryReads(store: EventStore, binding: Binding,
   const activity = await prepareMemoryActivity(store, binding, claims, parsed, deadline);
   const subjects = new Set([`ownership-${claims.silo}`, `member-${claims.requester}`,
     `assistant-${claims.assistant}`, grantStream('mcp_server', 'memory')]);
-  if (parsed.input) subjects.add(grantStream('memory_read', parsed.input.scopeId));
+  if (parsed.input) {
+    subjects.add(grantStream('memory_read', parsed.input.scopeId));
+    if (parsed.input.operation !== 'recall') {
+      subjects.add(grantStream('memory_write', parsed.input.scopeId));
+    }
+  }
   const rows = [...activity.conversation];
   for (const subject of subjects) {
     const loaded = await history(store, subject, claims.silo, deadline);

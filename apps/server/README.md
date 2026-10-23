@@ -33,9 +33,9 @@ unavailable gate delivery keep the wait pending. Reconnection reads the same res
 HTTP decisions check approval ownership and current write access before saving a
 cancellation, so a foreign approval stays unchanged.
 
-Recall loads chat history and saved memory before the gateway signs its short pass.
+Recall, Correct and Forget load their history before the gateway signs the short pass.
 The server keeps that data briefly for one call and checks current access before use.
-Correct and Forget still use their existing checks and remain disabled.
+Correct and Forget validate their targets but remain disabled.
 
 ## Where it fits
 
@@ -55,7 +55,7 @@ flowchart LR
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
-  runtime -->|prepares recall, then checks permission| server
+  runtime -->|prepares memory calls, then checks permission| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -69,8 +69,8 @@ Both operations remain disabled after these checks and create no fact, key or co
 Discovery still lists recall alone.
 Memory tests finish their setup reads before signing short-lived requests. Separate tests
 delay history and permission reads inside the server and record only elapsed times.
-These show that a slow server can refuse a valid request before it checks the memory
-target, because the original two-second pass expires.
+These check that slow preparation leaves the original two-second pass available
+for current permissions and memory revisions.
 
 ## What it is responsible for
 

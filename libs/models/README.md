@@ -33,7 +33,7 @@ to handle AI calls.
 flowchart LR
   models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews and approval details, takeover cancellation, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
-  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; prepares recall; rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; prepares recall, Correct and Forget; rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -77,6 +77,8 @@ The server uses the same check before releasing a renewed turn pass. A memory ch
 saved after the last memory read is checked at the next renewal or call.
 A corrected, forgotten or expired fact, an invalid dependency, or removed memory access
 refuses the next call. Other facts, messages and uploads do not refuse it.
+Recall, Correct and Forget prepare history before the gateway signs their short pass.
+Each call checks permissions again; prepared data never grants access.
 Memory writes keep their original access check. Removing and restoring a grant while
 the server reads memory references still refuses the write. The event store repeats
 that same check before saving the fact.

@@ -1,6 +1,6 @@
 import { createLogger, type Logger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
-import { prepareRecallDecision, recallAccessStarted } from './memory-prepare-request.ts';
+import { prepareMemoryDecision, memoryAccessStarted } from './memory-prepare-request.ts';
 import { requestSchema } from './model-request.ts';
 import { authoriseEgress } from './egress-admission.ts';
 import type { EgressRelayRegistry } from './egress-relay.ts';
@@ -249,11 +249,11 @@ export async function startDecision(
       const memory = await prepareLoadedMemory(actor.store, binding, memoryClaims,
         conversation, performance.now() + 10_000);
       const raw = await readBody(req);
-      const recall = await prepareRecallDecision(memoryRoute, actor.store, binding,
+      const preparedMemory = await prepareMemoryDecision(memoryRoute, actor.store, binding,
         memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);
-      const { preparation, reads: memoryReads } = recall;
+      const { preparation, reads: memoryReads } = preparedMemory;
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = recallAccessStarted(managedRoute, memory.loaded, started, preparation);
+      const accessStarted = memoryAccessStarted(managedRoute, memory.loaded, started, preparation);
       stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);

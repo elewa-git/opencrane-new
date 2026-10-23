@@ -17,32 +17,41 @@ function binding(context: MemoryContext) {
 
 async function load(options: MemoryOptions, context: MemoryContext,
   parsed: ReturnType<typeof parseMemoryRequest>, secret: string) {
-  if (parsed.input?.operation !== 'recall' || context.silo !== options.silo) {
+  const input = parsed.input;
+  if (!input || input.operation === 'remember' || context.silo !== options.silo) {
     throw new Error('Memory preparation refused');
   }
   const evidence = await readRecallContext(options, context, true);
   const access = await prepareMemoryReads(options.store, options.binding, context, parsed);
+  if (input.operation !== 'recall') {
+    const rows = await readScope(options, input.scopeId);
+    // Keep event data only. Check permissions afresh when the signed change arrives.
+    return { operation: input.operation, evidence, access, rows };
+  }
   // Check access before reading private facts, then discard this permission result.
   const { scope } = await memoryRights(options.store, options.binding, context, parsed,
     performance.now() + 2000, undefined, access);
 
   const snapshot = await memorySnapshot(options, scope);
-  const rows = await history(options.store, `scope-${scope.scopeId}`, options.silo,
-    performance.now() + 10_000);
-  const query = { q: parsed.input.query, cursor: parsed.input.cursor };
+  const rows = await readScope(options, scope.scopeId);
+  const query = { q: input.query, cursor: input.cursor };
   const emptyReply = { jsonrpc: '2.0', id: parsed.request.id,
     result: { content: [], structuredContent: null } };
   const envelopeBytes = Buffer.byteLength(JSON.stringify(emptyReply)) - 4;
-  const proofBytes = recallProofBytes(secret, context, parsed.input.limit, evidence.inputGeneration);
-  const bounds = { pageFacts: parsed.input.limit, pageBytes: 16384 - envelopeBytes - proofBytes };
+  const proofBytes = recallProofBytes(secret, context, input.limit, evidence.inputGeneration);
+  const bounds = { pageFacts: input.limit, pageBytes: 16384 - envelopeBytes - proofBytes };
   const facts = await listFacts(options, context.requester, scope, query, secret, bounds);
   if (!options.keyDirectory) throw new Error('Memory keys unavailable');
   const keys = memoryKeys(options.keyDirectory);
   const references = memoryReferences(rows, options.silo, scope.scopeId, keys);
-  return { evidence, access, snapshot, references, facts };
+  return { operation: 'recall' as const, evidence, access, snapshot, references, facts };
 }
 
-export function recallPreparations(options: MemoryOptions, secret: string) {
+function readScope(options: MemoryOptions, scopeId: string) {
+  return history(options.store, `scope-${scopeId}`, options.silo, performance.now() + 10_000);
+}
+
+export function memoryPreparations(options: MemoryOptions, secret: string) {
   type Prepared = Awaited<ReturnType<typeof load>>;
   const pending = new Map<string, { binding: string; expires: number; loaded: Prepared | undefined }>();
   async function prepare(context: MemoryContext, parsed: ReturnType<typeof parseMemoryRequest>) {
