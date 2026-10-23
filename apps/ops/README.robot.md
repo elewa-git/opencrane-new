@@ -683,7 +683,25 @@ checks admission, including hosted and computer Pod resize requests, in disposab
 namespaces on a claimed, stopped secondary slot. The device, privileged and missing-limit tests copy the relevant generated
 validation into an isolated policy. These fixtures are valid for Kubernetes; other
 template rules cannot hide a missing check.
-Quota and network isolation remain for 8b; no runtime start path is connected here.
+The fixture installs `infra/dev-stack/mcp-resources.mjs`. It checks four admitted Pods
+and fifth-Pod quota refusal, each total resource limit, and real gateway/upstream
+TCP connections. Separate listener Pods use Python from the existing reviewed
+computer image, with the hosted template's security and resource settings. Those
+ordinary fixtures have their own namespaces and no admission policy, because the
+computer entrypoint cannot run as an admitted hosted tool. The admission tests
+still use the exact template in a separate namespace. No new image is built.
+Each denied route must connect after its directional policy is removed and fail
+again after restoration. Metadata is skipped if it has no reachable listener with
+the policy removed; that timeout cannot prove isolation. Cleanup checks namespace
+UIDs and policy/binding UIDs before any deletion. Random ownership labels also
+cover partially completed creates. Hosted resize waits for Pod deletion and quota
+usage to settle. The independent count check raises only the CPU and memory totals,
+then restores them. Upstream rules require same-silo Pods approved by UID label;
+raw IPs are refused. The live connection checks include node API and kubelet ports,
+unlabelled Pods, withdrawn bindings and lifecycle GET/POST proxy refusal. Listener
+health requests use the gateway path. The shared journey guard refuses owner and
+fleet runs before setup. No runtime start path or
+hosted dispatch is connected. See the [receipt](../../docs/process/p3-6-pr8b/receipt.md).
 
 ## Scheduled private connection maintenance
 

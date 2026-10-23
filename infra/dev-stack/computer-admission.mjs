@@ -118,6 +118,7 @@ const policies = [
     `size(object.spec.volumeClaimTemplates) == 1 && object.spec.volumeClaimTemplates[0].metadata.name == 'home' && object.spec.volumeClaimTemplates[0].spec.all(k, k in ['accessModes', 'resources'])`,
   ]],
 ];
+const objects = [];
 for (const [suffix, group, resources, expression, expressions] of policies) {
   const name = `${namespace}-computer-${suffix}`;
   const policy = { apiVersion: 'admissionregistration.k8s.io/v1', kind: 'ValidatingAdmissionPolicy', metadata: { name }, spec: {
@@ -127,5 +128,17 @@ for (const [suffix, group, resources, expression, expressions] of policies) {
   const binding = { apiVersion: policy.apiVersion, kind: 'ValidatingAdmissionPolicyBinding', metadata: { name }, spec: {
     policyName: name, validationActions: ['Deny'], matchResources: { namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': namespace } } },
   } };
-  for (const object of [policy, binding]) execFileSync('kubectl', ['--context=k3d-ocn', 'apply', '-f', '-'], { input: JSON.stringify(object), stdio: ['pipe', 'inherit', 'inherit'] });
+  objects.push(policy, binding);
+}
+if (process.argv.includes('--render')) {
+  console.log(JSON.stringify({ apiVersion: 'v1', kind: 'List', items: objects }));
+} else {
+  for (const object of objects) {
+    try {
+      execFileSync('kubectl', ['--context=k3d-ocn', 'apply', '-f', '-'],
+        { input: JSON.stringify(object), stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch {
+      throw new Error('Could not install admission policy');
+    }
+  }
 }

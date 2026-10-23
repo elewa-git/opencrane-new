@@ -137,6 +137,7 @@ jobs:
         run: >-
           nice -n 10 node --experimental-strip-types --test
           infra/dev-stack/model-stub.test.ts infra/dev-stack/models-environment.test.ts
+          infra/dev-stack/mcp-resources.test.ts infra/dev-stack/mcp-hosted-fixture.test.ts
           infra/dev-stack/provider-setup.test.ts infra/dev-stack/daily-fresh.test.ts
           infra/dev-stack/browser-group-chat.test.ts infra/dev-stack/group-removal-timing.test.ts
           infra/dev-stack/browser-group-removal.test.ts

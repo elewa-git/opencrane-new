@@ -1,8 +1,8 @@
 // Check defaulted Kubernetes fields against the reviewed template before admitting workloads.
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-const namespace = process.argv[2];
-if (!namespace || !/^[a-z0-9-]+$/.test(namespace)) throw new Error('Expected MCP namespace');
+import { mcpNamespace } from './mcp-namespace.mjs';
+const namespace = mcpNamespace(process.argv[2]);
 const templateUrl = new URL('../../apps/ops/mcp-hosted-template.json', import.meta.url);
 const template = JSON.parse(readFileSync(templateUrl));
 const worker = `request.userInfo.username == 'system:serviceaccount:${namespace}:mcp-lifecycle'`;
@@ -103,6 +103,7 @@ const policies = [
   ['scale', 'apps', ['statefulsets/scale'], '', [worker,
     `!has(object.spec.replicas) || ${replicas}`]],
 ];
+const objects = [];
 for (const [suffix, group, resources, expression, expressions] of policies) {
   const name = `${namespace}-${suffix}`;
   const variables = [];
@@ -136,12 +137,17 @@ for (const [suffix, group, resources, expression, expressions] of policies) {
       paramRef: { name: 'mcp-approved-images', namespace, parameterNotFoundAction: 'Deny' },
       matchResources: { namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': namespace } } },
     } };
-  for (const object of [policy, binding]) {
+  objects.push(policy, binding);
+}
+if (process.argv.includes('--render')) {
+  console.log(JSON.stringify({ apiVersion: 'v1', kind: 'List', items: objects }));
+} else {
+  for (const object of objects) {
     try {
       execFileSync('kubectl', ['--context=k3d-ocn', 'apply', '-f', '-'],
         { input: JSON.stringify(object), stdio: ['pipe', 'pipe', 'pipe'] });
     } catch {
-      throw new Error('Could not install hosted MCP admission policy');
+      throw new Error('Could not install admission policy');
     }
   }
 }
