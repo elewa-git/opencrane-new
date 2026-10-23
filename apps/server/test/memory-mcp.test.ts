@@ -552,7 +552,8 @@ async function signedRecall(target: typeof setup, overrides = {}, body = call) {
     bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
   const dispatch = await memoryBinding(target);
-  const fields = await prepareSignedMemory(target, { ...claims, dispatch }, body, headers);
+  const boundClaims = { ...claims, dispatch };
+  const fields = await prepareSignedMemory(target, boundClaims, body, headers);
   const finalClaims = { ...claims, dispatch, ...fields, ...overrides };
   return target.tokens.memoryContext(finalClaims, Date.now() + 2000);
 }
@@ -2891,7 +2892,7 @@ it.each(['missing', 'reused', 'expired', 'mismatched'] as const)(
 
 async function gatewayPreparation(operation: 'recall' | 'correct' | 'forget',
   step: 'history' | 'IAM') {
-  let body: unknown = call;
+  let body: Record<string, unknown> = call;
   let requestHeaders = headers;
   if (operation !== 'recall') {
     const request = await changeRequest(operation, false);
@@ -2903,7 +2904,7 @@ async function gatewayPreparation(operation: 'recall' | 'correct' | 'forget',
   }
   const timing = timeMemoryPath(setup, step, delay);
   try {
-    const response = await setup.call(requestHeaders, body as Record<string, unknown>, route);
+    const response = await setup.call(requestHeaders, body, route);
     expect(timing.delayed()).toBe(true);
     if (operation === 'recall') {
       expect(response.status, response.text).toBe(200);
