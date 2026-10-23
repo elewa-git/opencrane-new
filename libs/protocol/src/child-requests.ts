@@ -17,3 +17,7 @@ export const childRequestStatusSchema = z.union([
   z.strictObject({ state: z.literal('queued'), requestId: chatIdSchema,
     childConversationId: chatIdSchema.optional() }),
 ]);
+
+export const childRetryInputSchema = z.strictObject({
+  retryId: chatIdSchema, failureEventId: chatIdSchema,
+});

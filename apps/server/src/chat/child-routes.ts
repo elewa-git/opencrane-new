@@ -11,7 +11,8 @@ import { requireMember, MemberRefusal } from '../members/guard.ts';
 import { chatAccess, ChatAccessApplying, isChatRefused, type ChatOptions } from './access.ts';
 import { chatHistory } from './commands.ts';
 import { reviewChildRequest, requestChild, createRequestedChild, addChildFirstInput,
-  ChildRequestRefused, ChildRequestClosed, ChildRequestChanged, ChildRequestFailed }
+  ChildRequestRefused, ChildRequestClosed, ChildRequestChanged, ChildRequestFailed,
+  retryChildRequest }
   from './child-requests.ts';
 
 const bindingSchema = z.strictObject({ silo: chatIdSchema, data: childRequestedDataSchema,
@@ -159,6 +160,7 @@ export function registerChildRoutes(app: FastifyInstance, config: AuthConfig, op
   app.post(`${base}/child-review`, routeOptions, handler);
   app.post(`${base}/children`, routeOptions, handler);
   app.get(`${base}/children/:requestId`, routeOptions, handler);
+  app.post(`${base}/children/:requestId/retry`, routeOptions, handler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     const reviewing = request.routeOptions.url?.endsWith('/child-review');
@@ -168,6 +170,11 @@ export function registerChildRoutes(app: FastifyInstance, config: AuthConfig, op
       const context = await requireMember(request, reply, config, options,
         { write: request.method === 'POST' });
       await requireGroup(context.options, params.conversationId);
+      if (params.requestId && request.method === 'POST') {
+        const receipt = await retryChildRequest(context.options, context.memberId,
+          params.conversationId, params.requestId, request.body);
+        return reply.code(202).send(receipt);
+      }
       if (params.requestId) {
         return reply.send(await status(context.options, context.memberId,
           params.conversationId, params.requestId));

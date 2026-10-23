@@ -168,7 +168,7 @@ it.each(['conversation.child_requested', 'conversation.created', 'message.posted
 async function retriesUntilWorkerBuildsTable() {
   const { intent } = await savedRequest('conversation.child_requested');
   // Remove the test's earlier projection records to model a fresh installation.
-  await context.db.query('DROP TABLE child_requests_v2');
+  await context.db.query('DROP TABLE child_requests_v3');
   await context.db.query('DELETE FROM projection_checkpoints WHERE name = $1',
     [childRequests.name]);
   await context.db.query('DELETE FROM projection_events WHERE projection = $1',
@@ -224,9 +224,9 @@ async function reference(parent: string) {
   await context.runner.initialise(childRequests);
   await context.runner.run(childRequests);
   const result = await context.db.query(
-    'SELECT * FROM child_requests_v2 WHERE silo = $1 AND parent_id = $2', ['test', parent]);
-  const { failed_attempt: _failed, ...reference } = result.rows[0]!;
-  return reference;
+    `SELECT silo, parent_id, intent_id, intent_position, child_id, first_input_id
+    FROM child_requests_v3 WHERE silo = $1 AND parent_id = $2`, ['test', parent]);
+  return result.rows[0]!;
 }
 async function refusesChangedReferences() {
   const { input } = await savedRequest('conversation.child_requested');
@@ -246,10 +246,10 @@ async function rebuildsWithoutEffects() {
   const { input } = await savedRequest('conversation.child_requested');
   await reference(input.conversationId);
   const before = await context.nats.store.head();
-  const original = await context.db.query('SELECT * FROM child_requests_v2 ORDER BY intent_position');
+  const original = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');
   expect(JSON.stringify(original.rows)).not.toContain('canary');
   await context.runner.rebuild(childRequests);
-  const rebuilt = await context.db.query('SELECT * FROM child_requests_v2 ORDER BY intent_position');
+  const rebuilt = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');
   expect(rebuilt.rows).toEqual(original.rows);
   expect(await context.nats.store.head()).toBe(before);
 }
@@ -343,9 +343,9 @@ async function savesOneFailureAndStops() {
   const before = await context.nats.store.head(`conversation-${input.conversationId}`);
   expect((await context.request(input.conversationId, 'children', start)).statusCode).toBe(409);
   await context.runner.run(childRequests);
-  const indexed = await context.db.query('SELECT * FROM child_requests_v2 ORDER BY intent_position');
+  const indexed = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');
   await context.runner.rebuild(childRequests);
-  expect((await context.db.query('SELECT * FROM child_requests_v2 ORDER BY intent_position')).rows)
+  expect((await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position')).rows)
     .toEqual(indexed.rows);
   const reads = vi.spyOn(context.nats.store, 'readStream');
   const stop = worker();
@@ -606,6 +606,10 @@ async function hidesFailedStatus(kind: string) {
   expect(failed.body).toBe(unknown.body);
   expect(failed.body).not.toContain('failed');
   expect(failed.body).not.toContain(intent.childConversationId);
+  const retry = { retryId: 'refused-retry', failureEventId: 'failure' };
+  const refused = await context.request(conversationId, `children/${input.requestId}/retry`,
+    retry, memberId);
+  expect(refused.statusCode).toBe(403);
 }
 it.each(['removed', 'outsider', 'different chat', 'pre-join'])(
   'hides failed status like an unknown request for %s', hidesFailedStatus);
@@ -624,14 +628,14 @@ async function storesExactAttemptAndDeletesCompletedRow() {
       attempt: 3, stage: 'create', reason: 'access_refused' } };
   await childRequests.apply(context.db, failure, 1);
   const indexed = await context.db.query(
-    'SELECT failed_attempt FROM child_requests_v2 WHERE intent_id = $1',
+    'SELECT failed_attempt FROM child_requests_v3 WHERE intent_id = $1',
     [failedRow['intent_id']]);
   expect(indexed.rows).toEqual([{ failed_attempt: 3 }]);
   const completed = await savedRequest('conversation.created');
   await recoverChildRequest(context.options, await reference(completed.input.conversationId));
   await context.runner.run(childRequests);
   const remaining = await context.db.query(
-    'SELECT * FROM child_requests_v2 WHERE child_id = $1', [completed.intent.childConversationId]);
+    'SELECT * FROM child_requests_v3 WHERE child_id = $1', [completed.intent.childConversationId]);
   expect(remaining.rows).toEqual([]);
 }
 it('stores the exact failed attempt and deletes the completed child index row',

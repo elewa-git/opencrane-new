@@ -17,8 +17,8 @@ The server and the AI access library use the same definitions.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|reads event shapes| events
-  store["libs/event-store<br/>saved event log"] -.->|checks event shapes| events
+  server["apps/server<br/>back end"] -.->|checks saved child answers, requests, retries and failures| events
+  store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, tool stops, cleanup and nightly memory records| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks saved event shapes, including native access expiry and retry records| events
@@ -42,17 +42,73 @@ flowchart LR
 
 ## Processes it handles
 
-1. **The event store checks a record.** It calls `parseEventByType` before saving
-   an event. An unknown type or invalid record is refused; valid data still needs
-   the caller's access and write checks.
-2. **A developer adds an event type.** They update the registry and the
-   [event catalogue](../../docs/architecture/events.md) together.
-   `npm run check:events` checks that both lists name the same types.
-3. **Saved routines are read again.** The library rebuilds their definitions and
-   past runs. Repeated records do not start work or grant permission.
-4. **A caller previews a routine.** It supplies a time and the last used local
-   date, when known. The library returns future dates and clock-change warnings
-   without saving anything.
+A saved reply can include receipts for several small pieces of text. Each receipt
+keeps its original number and digest so a repeated piece can be checked.
+
+Saved personal connection revocations and replacements name the background cleanup
+reaction. Replaying those records never deletes stored credentials.
+
+Memory correction records name the replacement revision and the revision it replaces.
+The replacement stays encrypted. Older records still parse for recovery, but cannot
+supply the ownership and revision needed to read a fact.
+
+Hosted image check requests record the exact image, registration and attempt number.
+They contain no report bytes or credentials and say nothing about passing checks.
+
+Before sending a published tool call, the models process saves a start record with
+the request, server, connection, reviewed revision and acknowledged gateway configuration.
+It contains no request bytes or credentials. It records that the pass was spent;
+it does not prove that the call reached the tool. Replaying it never sends a call.
+If a later check refuses the call before sending, the models process saves a not-sent
+outcome on the same stream.
+
+The publication subscription names the worker that prepares complete gateway
+configurations. Withdrawal has no preparation subscription.
+
+Budget turn stops carry only their reason kind and a reference to the saved spending
+stop. Participants can read them without seeing amounts or payer ids. Member stops
+keep their original shape. The bridge uses the same data checks as the event log
+before delivering these Stops to a computer.
+
+A child-chat request records the source id, chosen people, assistant and spending
+upper bound. It contains no message text and must name the requesting person.
+A saved child start failure names the attempt, stage and a fixed refusal reason.
+A retry names that failure and the next attempt without changing the original request.
+It contains no source text and cannot authorise work.
+
+Hosted image requests name one platform, a public upstream and the first check attempt.
+These records contain no check result or report bytes.
+
+Personal connection records can name an exact stored generation and the person who
+saved it. A replacement names the expected stream version. Old records still replay,
+but missing generation details never make a profile available for tool calls.
+Owner revocation records invalidate one profile. Admin disable records block all personal
+profiles for one member and server. Neither record claims the stored token was deleted.
+
+Nightly memory records name one scope and date, its selected fact revisions and why work stopped.
+They contain no memory text and grant no spending or computer access.
+
+A memory tombstone records a fact id and its next revision without any private text.
+The projection uses it to hide the fact and dependent copies before reading their keys.
+The cleanup record reports completed deletion or unavailable cleanup after retries run out.
+It names the original change without private text. An operator can retry the failed job;
+a later completion then confirms key destruction and removal of searchable text.
+The HTTP forget command is not built yet.
+
+1. **The event store checks an event before saving it.** It passes the event to
+   `parseEventByType`. A badly formed event or an unknown type is refused and
+   never saved.
+2. **A developer adds an event type.** The registry and event catalogue are
+   updated together. `npm run check:events` checks that this list and the event
+   catalogue match.
+
+3. **Saved routine records are read again.** `foldRoutine` rebuilds their definition
+   and run facts. It remembers each modern event's id and ignores that event if it
+   arrives again, even after later changes. It grants no access and starts no work.
+
+4. **A caller previews a routine schedule.** It supplies the time and the last used
+   local date, if there is one. The library returns future dates and clock-change
+   warnings. It saves nothing and starts no work.
 
 ## How to run or test it
 

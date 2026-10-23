@@ -1,5 +1,6 @@
 import { shortenDuplicateWindow, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
+import { recordChildStartFailure } from '../src/chat/child-failure.ts';
 import { createLogger } from '@opencrane/observability';
 import { watchChildRequests } from '../src/chat/child-recovery.ts';
 import * as authz from '@opencrane/authz';
@@ -157,7 +158,7 @@ async function recoversWithContext(stage: string) {
 it.each(['conversation.child_requested', 'conversation.created', 'message.posted'])(
   'recovers after %s across restart, expiry, changed choices and replay', recovers);
 
-async function holdsWork() {
+async function holdsWork(retry: boolean) {
   const input = await context.parent();
   const start = await review(input);
   const starts = await Promise.all([context.request(input.conversationId, 'children', start),
@@ -166,6 +167,16 @@ async function holdsWork() {
   const saved = await context.intent(input.conversationId);
   const rows = await chatHistory(context.nats.store, 'test', saved.childConversationId);
   await context.auth.handler.handle(rows[0]!.event, context.db);
+  if (retry) {
+    const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
+    const intent = parent.at(-1)!.event;
+    await recordChildStartFailure(context.options, intent.id, saved, 'first_input', 'access_refused');
+    const failed = await chatHistory(context.nats.store, 'test', input.conversationId);
+    const payload = { retryId: 'held-retry', failureEventId: failed.at(-1)!.event.id };
+    const response = await context.request(input.conversationId,
+      `children/${input.requestId}/retry`, payload);
+    expect(response.statusCode, response.body).toBe(202);
+  }
   await context.restart();
   await context.runner.initialise(childRequests);
   await context.runner.run(childRequests);
@@ -237,7 +248,7 @@ async function holdsWork() {
     server.close();
   }
 }
-it('holds delivery, resume, admission and tokens for a saved child request', holdsWork);
+it.each([false, true])('holds delivery, resume, admission and tokens with retry=%s', holdsWork);
 
 async function retriesPermissionOutage() {
   const input = await context.parent();

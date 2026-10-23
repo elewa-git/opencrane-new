@@ -1,35 +1,53 @@
 import { createHash } from 'node:crypto';
-import { childStartFailedEventSchema, type ChildRequest } from '@opencrane/events';
+import { childStartFailedEventSchema, childRetryRequestedEventSchema, type ChildRequest }
+  from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import type { ChatOptions } from './access.ts';
 import { chatHistory } from './commands.ts';
 
-export function childStartFailure(rows: StoredEvent[], intentEventId: string) {
+export function childStartState(rows: StoredEvent[], intentEventId: string) {
+  let attempt = 1;
+  let failure: ReturnType<typeof childStartFailedEventSchema.parse> | undefined;
   for (const row of rows) {
-    if (row.event.type !== 'conversation.child_start_failed') continue;
-    const event = childStartFailedEventSchema.parse(row.event);
-    if (event.data.intentEventId === intentEventId) return event;
+    if (row.event.type === 'conversation.child_start_failed') {
+      const event = childStartFailedEventSchema.parse(row.event);
+      if (event.data.intentEventId === intentEventId && event.data.attempt === attempt) {
+        failure = event;
+      }
+    } else if (row.event.type === 'conversation.child_retry_requested' && failure) {
+      const event = childRetryRequestedEventSchema.parse(row.event);
+      if (event.data.conversationId === failure.data.conversationId &&
+          event.data.requestId === failure.data.requestId &&
+          event.data.failureEventId === failure.id && event.data.attempt === attempt + 1) {
+        attempt = event.data.attempt;
+        failure = undefined;
+      }
+    }
   }
-  return undefined;
+  return { attempt, failure };
+}
+export function childStartFailure(rows: StoredEvent[], intentEventId: string) {
+  return childStartState(rows, intentEventId).failure;
 }
 export async function recordChildStartFailure(options: Pick<ChatOptions, 'store' | 'silo'>,
   intentEventId: string, intent: ChildRequest, stage: 'create' | 'first_input',
-  reason: 'access_refused' | 'conversation_closed' | 'record_changed') {
+  reason: 'access_refused' | 'conversation_closed' | 'record_changed', attempt = 1) {
   const rows = await chatHistory(options.store, options.silo, intent.conversationId);
-  if (childStartFailure(rows, intentEventId)) return;
+  const current = childStartState(rows, intentEventId);
+  if (current.failure || current.attempt !== attempt) return;
   const subject = `conversation-${intent.conversationId}`;
   let sequence = 0;
   for (const row of rows) {
     if (row.event.subject === subject) sequence = row.sequence;
   }
   const hash = createHash('sha256');
-  hash.update(JSON.stringify([options.silo, intent.conversationId, intent.requestId, 1]));
+  hash.update(JSON.stringify([options.silo, intent.conversationId, intent.requestId, attempt]));
   const id = `child-failure-${hash.digest('hex')}`;
   const event = { id, commandId: id, subject, type: 'conversation.child_start_failed',
     silo: options.silo, source: 'opencrane-server', time: new Date().toISOString(),
     principal: { kind: 'system', id: 'opencrane-server' },
     data: { conversationId: intent.conversationId, requestId: intent.requestId,
-      childConversationId: intent.childConversationId, intentEventId, attempt: 1, stage, reason } };
+      childConversationId: intent.childConversationId, intentEventId, attempt, stage, reason } };
   // Save the outcome even after close. This grants no permission to resume the child.
   const command = { event, expectedSequence: sequence, historyChecked: true as const };
   const result = await options.store.append(command);

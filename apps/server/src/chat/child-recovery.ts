@@ -5,7 +5,7 @@ import { readEventAt } from '@opencrane/event-store';
 import type { Logger } from '@opencrane/observability';
 import { isChatRefused, type ChatOptions } from './access.ts';
 import { chatHistory } from './commands.ts';
-import { childStartFailure, recordChildStartFailure } from './child-failure.ts';
+import { childStartState, recordChildStartFailure } from './child-failure.ts';
 import { createRequestedChild, addChildFirstInput, ChildRequestClosed,
   ChildRequestChanged, ChildRequestRefused, ChildRequestRace } from './child-requests.ts';
 
@@ -40,7 +40,8 @@ export async function recoverChildRequest(options: Options, value: unknown) {
     allowanceBoundCents: data.allowanceBoundCents,
     participantIds: data.initialJoins.map(participantId) };
   const parent = await chatHistory(options.store, options.silo, data.conversationId);
-  if (childStartFailure(parent, parsed.data.id)) return;
+  const current = childStartState(parent, parsed.data.id);
+  if (current.failure) return;
   const child = await chatHistory(options.store, options.silo, data.childConversationId);
   for (const row of child) {
     if (row.event.id === data.firstInputId) return;
@@ -53,7 +54,7 @@ export async function recoverChildRequest(options: Options, value: unknown) {
   } catch (error) {
     const reason = failureReason(error);
     if (!reason) throw error;
-    await recordChildStartFailure(options, parsed.data.id, data, stage, reason);
+    await recordChildStartFailure(options, parsed.data.id, data, stage, reason, current.attempt);
   }
 }
 
@@ -68,7 +69,7 @@ function failureReason(error: unknown) {
 
 async function recoverPage(options: Options, after: number, logger: Logger, signal: AbortSignal) {
   const result = await options.db.query(`SELECT silo, parent_id, intent_id, intent_position,
-    child_id, first_input_id FROM child_requests_v2
+    child_id, first_input_id FROM child_requests_v3
     WHERE failed_attempt IS NULL AND silo = $1 AND intent_position > $2
     ORDER BY intent_position LIMIT 32`,
   [options.silo, after]);

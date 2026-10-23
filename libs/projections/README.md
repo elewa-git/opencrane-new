@@ -27,7 +27,7 @@ flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses the database test helper| projections
   ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history with saved and missing tool evidence, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads spending choices with a time limit, and tables including closed assistant chats for cleanup, bounded grant lists with membership status, choices and join times| pg["PostgreSQL<br/>database"]
-  projections -->|keeps native refusal audits and child requests outside feeds; saves ordered reply batches, public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
+  projections -->|keeps native refusal audits, child requests and retries outside feeds; saves ordered reply batches, public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and reads unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
@@ -175,7 +175,8 @@ these details. The reports remain in the feed so their saved evidence is availab
 ## Processes it handles
 
 The conversations worker builds an index of child requests from saved events. It keeps
-event references, ids and failed attempt numbers. Recovery skips failed requests. Rebuilding this index creates no child and copies no message.
+event references, ids and failed attempt numbers. Recovery skips failed requests until the requester saves a retry.
+Rebuilding this index creates no child and copies no message.
 
 Memory replay reads saved corrections before opening any text. It rebuilds only
 the latest usable revision and hides facts derived from superseded revisions.

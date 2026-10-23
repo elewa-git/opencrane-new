@@ -11,7 +11,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, saved spending choices, history and tool holds"]
-  server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and call statuses, live stop notices and dated approvals| protocol
+  server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, retries, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and call statuses, live stop notices and dated approvals| protocol
   projections["libs/projections<br/>read tables"] -.->|directory and spending choices| protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool lists, publications and not-sent outcomes"]
@@ -68,6 +68,7 @@ even when its start was already saved.
 
 Child requests carry reviewed choices and a signed review. Status replies show only
 the requester’s saved request and child id, or a saved refusal with its stage and attempt.
+A retry identifies the saved failure and keeps the same child and first input.
 They contain no source message text.
 
 Spending stop replies carry saved reasons, execution status and call statuses.

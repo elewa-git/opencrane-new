@@ -31,11 +31,13 @@ guard makes that test fail with 503. It also checks one append and the new key.
 
 ## Child retry tests and duplicate messages
 
-Only the four tests that retry after the JetStream duplicate window use a private
-fixture with a two-second window. `test/support/duplicate-window.ts` checks that
+The tests that retry after the JetStream duplicate window use private
+fixtures with a two-second window. The retry-command test file also uses this window
+to check that an old worker cannot save a failure after a newer attempt starts. `test/support/duplicate-window.ts` checks that
 normal creation used 120 seconds, then updates that private EVENTS stream through
 the NATS test connection. Production still uses 120 seconds; there is no new
-production setting. All other tests in those files keep the normal window.
+production setting. Other test files keep the normal window except for their
+individual expiry cases.
 The shared `child-fixture.ts` and `child-summon.ts` helpers are unchanged.
 
 Each shortened test publishes the same valid event twice and checks that NATS
@@ -3696,7 +3698,7 @@ It uses `libs/models/src/remote-https.ts` for DNS checks and pinned TLS, with it
 
 ## Saved child start refusals (P4-8 PR 7c, part of #90)
 
-Failure history stops both recovery and repeated start commands. It is checked before
+A saved failure stops recovery and repeated starts until a retry is accepted. It is checked before
 any new child write. Failed status is requester-only and absent from feeds and history.
 Participation reads establish the join receipt before interpreting a permission denial.
 If access was not yet applied at that point, recovery retries without saving a failure.
@@ -3706,8 +3708,21 @@ applied, then checks that recovery saves the first input once and no failure.
 Unchanged joins need only one receipt read. That file
 also checks unavailable append/key reads, hidden failed status, the exact indexed attempt
 and deletion of completed rows.
-Attempt 1 is implemented; three attempts is the accepted limit for the next retry part.
-Next: `conversation.child_retry_requested` and POST retry with stable receipts and ids.
+The [retry API](../../docs/api/group-chats.md#reviewed-child-requests) permits three attempts.
+`test/child-retry.test.ts` checks saved receipts, concurrent retry ids, lost replies beyond
+deduplication expiry, current access, later failures, missing input and index rebuild.
+Failure recording checks the worker's original attempt before saving, so an old worker
+cannot fail a later retry. The conversations worker rebuilds `child-requests-v3`.
+Closure found in the parent history is reported only after current requester access
+and source visibility pass. A removed requester receives the same status and body
+for a closed parent as for an unknown request. Authorised callers still get 409.
+The retry tests delay each complete parent history read by more than two seconds,
+then require a successful write. Each history has its own ten-second limit; neither
+uses the two-second authority deadline.
+`test/child-failure.test.ts` checks saved failure and retry identities and validates
+the saved schemas again. The projection, event and protocol packages test their own
+retry validation. Tests also cover receipt recovery after a later failure and reject
+changed source, audience and spending fields in retry input.
 Activation, root allocation and bridge release are not built. Fresh-install qualification: NOT RUN.
 
 ## Models relay startup (Part of #61)

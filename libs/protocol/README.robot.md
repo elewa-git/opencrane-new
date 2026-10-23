@@ -253,9 +253,10 @@ published entry fields before decrypting text for HTTP and sockets.
 
 ## Reviewed child requests
 
-`childReviewInputSchema`, `childStartInputSchema` and `childRequestStatusSchema` check
+`childReviewInputSchema`, `childStartInputSchema`, `childRetryInputSchema` and
+`childRequestStatusSchema` check
 the [child request API](../../docs/api/group-chats.md#reviewed-child-requests).
-Unknown and queued status replies are strict; saved failure outcomes await the next part.
+Status and retry inputs are strict. Retry accepts only retryId and failureEventId.
 
 ## Child origin replies
 
