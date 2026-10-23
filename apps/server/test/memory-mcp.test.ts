@@ -2800,17 +2800,18 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
   async function delay() {
     await pause(2200);
     if (revoke) {
-      await setup.append(grantStream('memory_read', scopeId), 'grant.revoked', {
-        resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member',
-        granteeId: 'alice', revokedBy: 'alice',
-      });
+      const revokedGrant = { resourceType: 'memory_read', resourceId: scopeId,
+        granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
+      await setup.append(grantStream('memory_read', scopeId), 'grant.revoked', revokedGrant);
     }
   }
   const timing = timeMemoryPath(setup, step, delay);
   try {
-    const response = await app.inject({ method: 'POST', url: route, payload: JSON.stringify(body),
-      headers: { ...requestHeaders, 'content-type': 'application/json',
-        'x-memory-context': token } });
+    const forwardedHeaders = { ...requestHeaders, 'content-type': 'application/json',
+      'x-memory-context': token };
+    const payload = JSON.stringify(body);
+    const request = { method: 'POST' as const, url: route, payload, headers: forwardedHeaders };
+    const response = await app.inject(request);
     timing.report(operation, revoke);
     expect(timing.delayed()).toBe(true);
     if (revoke) {

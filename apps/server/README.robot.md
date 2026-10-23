@@ -4686,3 +4686,78 @@ rules, 438/438 once. Logs and JSON reports use `/tmp/p4-15-pr2f-finish-`.
 PASS: the changed memory-dispatch case, 1/1 in each of two runs; the other 92
 cases were not selected. The throwaway database container and its volume were removed.
 The full root suite and fresh-install qualification remain NOT RUN. The PR stays draft.
+
+## Measured backend expiry, 23 October 2026 (Part of #97)
+
+Rebased the retained branch commits onto `369730231af315fb4067b84efa01e85e227b572b`.
+The rebase completed. The only conflict was in this file; both additions were kept.
+
+The failing-first commit adds a test-only helper, `test/support/memory-path-timing.ts`.
+It records elapsed milliseconds for history, scope streams, IAM receipts and permission
+reads, grant streams and loaded-reference validation. It records no arguments, returned
+values, errors, credentials or fact text. Six cases delay history or IAM by 2.2 seconds
+inside the backend. Six more save a read-grant revocation during that delay.
+
+The first targeted run used disposable PostgreSQL 17.6, NATS, OpenFGA and gateway fixtures.
+Own result: FAIL, six valid controls refused and six revocation cases refused. The latter
+are not proof of the revocation check: expiry refused them before that check was reached.
+The existing 136 cases were not selected in this targeted run.
+
+| Operation | Delayed step | Measured step | Whole request |
+| --- | --- | --- | --- |
+| Recall | History | 2,210 ms | 2,304 ms |
+| Recall | IAM receipt | 2,210 ms | 2,343 ms |
+| Correct | History | 2,214 ms | 2,224 ms |
+| Correct | IAM receipt | 2,216 ms | 2,444 ms |
+| Forget | History | 2,208 ms | 2,216 ms |
+| Forget | IAM receipt | 2,206 ms | 2,292 ms |
+
+All six refused before scope and loaded-reference validation. The signed pass was
+already running when the measured step began. Logs: `/tmp/p4-15-rootfix-red.log`.
+The product fix is still outstanding. No deadline or product access check changed.
+
+The gateway signs in `libs/models/src/mcp-dispatch.ts` before forwarding to the backend.
+The backend checks that same expiry at receipt, write confirmation and recall delivery.
+Moving reads inside the backend cannot make a 2.2-second read fit that signed lifetime.
+Preparation before signing needs a gateway/backend protocol change. Treating the incoming
+pass as admission only and starting a separate backend check would change the existing
+expiry contract. Preparation before signing remains outstanding in this follow-up.
+
+A preparation protocol must run before gateway authority checks and permit creation.
+It must bind the same requester, assistant, conversation, turn, exact request and backend
+instance. Final checks must compare small access streams and fact revisions with what
+preparation read, while keeping the original two-second expiry. A prepared request must
+be usable once only and must never supply an access decision to another request.
+This follow-up supplies the failing proof; it does not implement that protocol.
+
+The focused reproduction uses a disposable database supplied through `PG_TEST_URL`:
+
+```sh
+nice -n 10 npx vitest run apps/server/test/memory-mcp.test.ts --maxWorkers=1 -t 'slow backend'
+```
+
+### Consecutive repeat checks
+
+All three runs use one worker, `nice -n 10` and the test behaviour committed in
+`2ce9415c77ef839d5fcf47d81e291ca75de38ecc`. Later test edits only expand the layout
+and give the same request data named constants. Logs use `/tmp/p4-15-rootfix-run-`.
+
+| Run | Starting load | Own result |
+| --- | --- | --- |
+| 1 | 9.56 | FAIL: 137/148. Six controlled slow-read failures and five other valid recall refusals. |
+| 2 | 7.20 | FAIL: 141/148. Six controlled slow-read failures and one 30-second teardown timeout. |
+| 3 | 9.63 | FAIL: 142/148. Only the six controlled slow-read cases failed. |
+
+Run 1's other refusals affected renewal, the valid call before forged-call checks,
+harmless file activity, prepared gateway recall and assistant-notes recall. Their
+individual slow steps were not measured. Run 2's other failure was `afterEach(close)`
+for the assistant-notes loaded-reference case; it was not an access assertion failure.
+
+Own PASS: full lint, full typecheck, event catalogue (153 types), Knip, changelog,
+and the unchanged event security rules (438/438). Full lint had zero errors and
+25 existing warnings. The final test layout also passed targeted lint and server
+typecheck. The changed cases ran in the targeted reproduction and every full repeat;
+the six delayed valid controls remain red. The product fix is not source ready.
+Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
+
+The throwaway PostgreSQL container and its volume were removed after the third run.

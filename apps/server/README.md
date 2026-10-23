@@ -63,8 +63,10 @@ Agent correction and forget requests need a signed proof of a loaded, current pe
 A correction names every other loaded fact as a dependency, with no revision of its own target.
 Both operations remain disabled after these checks and create no fact, key or command file.
 Discovery still lists recall alone.
-Memory tests finish their setup reads before signing short-lived requests. A slow
-backend can still refuse a request when its original two-second lifetime expires.
+Memory tests finish their setup reads before signing short-lived requests. Separate tests
+delay history and permission reads inside the server and record only elapsed times.
+These show that a slow server can refuse a valid request before it checks the memory
+target, because the original two-second pass expires.
 
 ## What it is responsible for
 

@@ -20,18 +20,23 @@ export function timeMemoryPath(setup: Fixture, slowStep: Step, delay: () => Prom
       }
       return await work();
     } finally {
-      samples.push({ step, startedMs: Math.round(before - started),
-        durationMs: Math.round(performance.now() - before) });
+      const sample = { step, startedMs: Math.round(before - started),
+        durationMs: Math.round(performance.now() - before) };
+      samples.push(sample);
     }
   }
   const readContext = delivery.readRecallContext;
   function history(...args: Parameters<typeof readContext>) {
-    function read() { return readContext(...args); }
+    function read() {
+      return readContext(...args);
+    }
     return measure('history', read);
   }
   const checkReferences = lineage.refuseAgentChange;
   function loaded(...args: Parameters<typeof checkReferences>) {
-    function check() { return checkReferences(...args); }
+    function check() {
+      return checkReferences(...args);
+    }
     return measure('loaded-reference', check);
   }
   const readStream = setup.nats.store.readStream.bind(setup.nats.store);
@@ -42,20 +47,31 @@ export function timeMemoryPath(setup: Fixture, slowStep: Step, delay: () => Prom
       yield* readStream(...args);
     } finally {
       let step: Step | undefined;
-      if (subject.startsWith('scope-')) step = 'scope';
-      if (subject.startsWith('grant-')) step = 'grant';
-      if (step) samples.push({ step, startedMs: Math.round(before - started),
-        durationMs: Math.round(performance.now() - before) });
+      if (subject.startsWith('scope-')) {
+        step = 'scope';
+      }
+      if (subject.startsWith('grant-')) {
+        step = 'grant';
+      }
+      if (step) {
+        const sample = { step, startedMs: Math.round(before - started),
+          durationMs: Math.round(performance.now() - before) };
+        samples.push(sample);
+      }
     }
   }
   const originalApplied = setup.auth.applied.bind(setup.auth);
   function applied(eventId: string) {
-    function read() { return originalApplied(eventId); }
+    function read() {
+      return originalApplied(eventId);
+    }
     return measure('IAM', read);
   }
   const originalUse = setup.auth.use.bind(setup.auth);
   function use(...args: Parameters<typeof originalUse>) {
-    function read() { return originalUse(...args); }
+    function read() {
+      return originalUse(...args);
+    }
     return measure('IAM', read);
   }
   const spies = [
@@ -71,8 +87,12 @@ export function timeMemoryPath(setup: Fixture, slowStep: Step, delay: () => Prom
     process.stdout.write(`Memory backend timing: ${JSON.stringify(result)}\n`);
   }
   function restore() {
-    for (const spy of spies) spy.mockRestore();
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
   }
-  function wasDelayed() { return delayed; }
+  function wasDelayed() {
+    return delayed;
+  }
   return { report, restore, delayed: wasDelayed };
 }
