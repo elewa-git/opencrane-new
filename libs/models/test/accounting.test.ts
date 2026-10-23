@@ -252,6 +252,8 @@ async function upgradesMonthSelection() {
   await actor.reserve(call('support', 'support-assistant'), 70);
   await runner.run(budgets);
   const before = await allPages();
+  await postgres.db.query(`DROP INDEX model_budget_calls_month, model_budget_calls_month_payer,
+    model_budget_calls_month_assistant, model_budget_calls_month_scopes`);
   await postgres.db.query('UPDATE projection_versions SET version = 3 WHERE name = $1',
     [budgets.name]);
   await expect(models.readSpendingCalls(postgres.db, 'test')).rejects.toThrow('unavailable');

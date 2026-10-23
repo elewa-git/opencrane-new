@@ -4300,7 +4300,12 @@ Root allocation, first-start recovery and fresh-install qualification: NOT RUN /
 ## Bounded call spending
 
 `GET /api/org/spending` accepts only `limit` (default 20, range 1–50),
-`continuation`, `payingGroupId` and `assistantId`. Both filters compose.
+`continuation`, `payingGroupId`, `assistantId` and optional `month`. All filters compose.
+`month` must be `YYYY-MM`, with exactly four year digits and a month from 01 to 12.
+It selects the reservation’s original UTC month. A November settlement of an October
+call stays in October. Omitting the filter keeps calls from all months. Older open
+holds still reduce current spending capacity when omitted from a filtered page.
+This read grants no spending authority.
 It uses the existing `integrations.modelDb` projection connection and
 `readSpendingCalls`. The data read shares a two-second deadline, selects at most
 `limit + 1` call rows, and reads no budget JSON or event history. The budget
@@ -4329,7 +4334,7 @@ GET appends no event and makes no model/tool call or budget change.
 
 `test/spending.test.ts` uses real NATS, PostgreSQL and OpenFGA for paging,
 access races, SQL timeout, continuation restart and replayed accounting evidence.
-Root/routine joins, month filtering, impact previews and screens remain later work.
+Root/routine joins, impact previews and screens remain later work.
 Fresh-install qualification: NOT RUN.
 
 ## Role and ownership history progress

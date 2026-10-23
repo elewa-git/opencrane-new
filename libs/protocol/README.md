@@ -17,7 +17,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, spending pages and choices, integration facts, history and tool holds"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, spending pages by month and choices, integration facts, history and tool holds"]
   server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests and retries, origin replies, published answers, integration facts, publication facts, spending replies, live stop notices and approvals| protocol
   projections["libs/projections<br/>read tables"] -.->|directory, spending choices, removal, role and ownership facts, and control refusal reasons| protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -94,6 +94,8 @@ without decision controls.
 
 Call spending pages carry original dates, safe references, held and settled cents,
 accounting evidence and a continuation. A missing settlement differs from recorded zero.
+An optional filter selects the UTC month when money was first held for each call.
+Changing that month starts a new page sequence.
 
 Spending choice pages carry names, resource revisions and explicit cap states.
 An absent cap differs from a zero cap and from a cap that could not be read.

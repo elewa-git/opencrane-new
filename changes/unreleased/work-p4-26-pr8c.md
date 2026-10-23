@@ -1,0 +1,1 @@
+Owners and admins can filter recorded call spending by its original UTC reservation month, together with payer and assistant. Late charges stay in the original month, and older open holds still reduce current spending capacity. Changing the month requires restarting pagination.

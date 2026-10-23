@@ -25,6 +25,7 @@ let runner: ProjectionRunner;
 let actor: BudgetActor;
 let clock = new Date('2026-10-31T23:59:00.000Z');
 let serial = 0;
+let upstreamCalls = 0;
 const expected: Omit<SpendingCall, 'silo'>[] = [];
 type Page = { rows: typeof expected; next: string | null; sequence: number; generation: number };
 function now() {
@@ -34,6 +35,7 @@ function memberId(_silo: string, _issuer: string, sub: string) {
   return Promise.resolve(sub);
 }
 function noCalls(): Promise<never> {
+  upstreamCalls += 1;
   throw new Error('GET must not call tools or models');
 }
 async function append(subject: string, type: string, data: unknown) {
@@ -49,9 +51,12 @@ async function reserve(index: number, writer = actor) {
     computerId: 'private-computer', requesterId: 'owner', conversationId: 'private-chat',
     turnId: 'private-turn', threadId: 'private-thread', contextDigest: '0'.repeat(64) };
   const reservationId = await writer.reserve(call, 120);
+  const reservedAt = clock.toISOString();
+  const day = reservedAt.slice(0, 10);
+  const month = reservedAt.slice(0, 7);
   return { reservationId, permitId: reservationId, payingGroupId, assistantId,
-    position: await nats.store.head('budget-acme'), reservedAt: clock.toISOString(),
-    day: clock.toISOString().slice(0, 10), month: clock.toISOString().slice(0, 7), heldCents: 120, settledCents: null, evidence: 'held' };
+    position: await nats.store.head('budget-acme'), reservedAt, day, month,
+    heldCents: 120, settledCents: null, evidence: 'held' };
 }
 async function initialise() {
   nats = await natsFixture();
@@ -121,6 +126,7 @@ async function pagesCalls(sub: string) {
   expect(found).toEqual(expected);
   expect(await nats.store.head()).toBe(before);
   expect(actor.state).toEqual(state);
+  expect(upstreamCalls).toBe(0);
 }
 it.each(['owner', 'admin'])('pages 63 mixed calls with stable positions as %s', pagesCalls);
 async function filtersCompose() {
@@ -147,7 +153,8 @@ async function monthPages() {
           (!filters.assistantId || row.assistantId === filters.assistantId);
       }
       for (const limit of ['1', '50']) {
-        const query = new URLSearchParams({ ...filters, month, limit }).toString();
+        const parameters = new URLSearchParams({ ...filters, month, limit });
+        const query = parameters.toString();
         const found: Page['rows'] = [];
         let next: string | null = null;
         do {
@@ -164,6 +171,7 @@ async function monthPages() {
   }
   expect(await nats.store.head()).toBe(before);
   expect(actor.state).toEqual(state);
+  expect(upstreamCalls).toBe(0);
 }
 it('pages original UTC months with both filters and limits 1 and 50 without duplicates', monthPages);
 async function rejectsQuery(query: string) {
@@ -173,7 +181,8 @@ async function rejectsQuery(query: string) {
 }
 it.each(['limit=0', 'limit=51', 'limit=1.5', 'limit=9007199254740992', 'limit=2&limit=3',
   'month=', 'month=2026-1', 'month=26-10', 'month=2026-00', 'month=2026-13',
-  'month=2026-10-01', 'month=2026-10Z', 'month=2026-10%20', 'month=2026-10&month=2026-11',
+  'month=2026-10-01', 'month=2026-10Z', 'month=2026-10%20', 'month=2026-10%0A',
+  'month=2026-10&month=2026-11',
   'rootId=private', 'after=1', 'payingGroupId=', 'assistantId=*',
   'total=true'])('rejects unsupported or invalid query %s', rejectsQuery);
 async function refusesCaller(sub: string) {
@@ -240,8 +249,8 @@ async function changesDuringRead(action: string) {
     database.query = original;
   }
 }
-it.each(['chat', 'demote', 'revoke', 'demote-failed', 'revoke-failed', 'rebuild'])('checks current access after held data read: %s',
-  changesDuringRead);
+it.each(['chat', 'demote', 'revoke', 'demote-failed', 'revoke-failed', 'rebuild'])(
+  'checks current access after held data read: %s', changesDuringRead);
 async function refusesUnavailable(kind: string) {
   const database = options.modelDb!;
   const original = database.query.bind(database);
@@ -386,6 +395,7 @@ async function boundedReadOnly() {
     const result = await page('limit=50&month=2026-10');
     expect(result.rows).toHaveLength(33);
     expect(actor.state).toEqual(state);
+    expect(upstreamCalls).toBe(0);
     const startedDeadline = statements[0]!.deadline;
     expect(startedDeadline).toBeDefined();
     for (const statement of statements) {

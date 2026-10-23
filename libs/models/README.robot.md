@@ -3155,7 +3155,11 @@ schema and still requires `Selection conflict` without saving a choice.
 [call spending API](../../apps/server/README.robot.md#bounded-call-spending).
 It returns 20 rows by default, at most 50, plus `next`, the last reservation position when another page
 exists. Pass that position as `after` with the same silo and filters. Indexes cover
-silo/position, payer, assistant and both filters. Each query shares a two-second
+silo/position, payer, assistant and both filters, with or without `month`.
+The optional `month` is strict `YYYY-MM` with months 01–12. It selects the original
+UTC reservation month from the saved time, including charges recorded later.
+Older open holds still reduce current capacity even when this page omits them.
+Each query shares a two-second
 read deadline by default; callers may supply their remaining deadline. Returned
 `sequence` and `generation` describe the budgets checkpoint read before the rows;
 they do not promise an immutable snapshot across pages. Later settlements keep the
@@ -3168,7 +3172,9 @@ A null settlement means no recorded settlement; zero is a recorded amount. Unkno
 outcomes retain the safety hold alongside the maximum saved settlement. These are
 accounting states, not proof of dispatch or completion. No private call text is copied.
 
-Version 3 replays installed data and replaces both tables in one transaction,
+Version 4 adds month indexes over the saved reservation time, for all combinations
+of the payer and assistant filters. It replays installed data and replaces both
+tables in one transaction,
 retaining reader grants. Verification compares both tables, reading call rows in batches of 200. An incomplete legacy
 call that the shared budget fold cannot read makes the upgrade and reader unavailable;
 it does not invent attribution or claim an empty result. Missing upgrades also refuse.

@@ -3,13 +3,14 @@ import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 import { applyBudget, data, emptyBudget, stateSchema, totals, type BudgetState } from './state.ts';
 
-export const budgetProjectionVersion = 3;
+export const budgetProjectionVersion = 4;
 type Reservation = BudgetState['reservations'][number];
 const pageSchema = z.object({
   after: z.int().nonnegative().default(0),
   limit: z.int().min(1).max(50).default(20),
   payingGroupId: z.string().min(1).optional(),
   assistantId: z.string().min(1).optional(),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u).optional(),
 }).strict();
 const callSchema = z.object({
   silo: z.string(), reservationId: z.string(), permitId: z.string(),
@@ -32,6 +33,10 @@ async function createBudgetCalls(db: Query, table: string) {
     ['payer', 'silo, paying_group_id, position'],
     ['assistant', 'silo, assistant_id, position'],
     ['scopes', 'silo, paying_group_id, assistant_id, position'],
+    ['month', 'silo, left(reserved_at, 7), position'],
+    ['month_payer', 'silo, left(reserved_at, 7), paying_group_id, position'],
+    ['month_assistant', 'silo, left(reserved_at, 7), assistant_id, position'],
+    ['month_scopes', 'silo, left(reserved_at, 7), paying_group_id, assistant_id, position'],
   ]) {
     await db.query(`CREATE INDEX IF NOT EXISTS ${table}_${suffix} ON ${table} (${columns})`);
   }
@@ -80,6 +85,10 @@ export async function readSpendingCalls(db: Query, silo: string,
   if (page.assistantId !== undefined) {
     parameters.push(page.assistantId);
     conditions.push(`assistant_id = $${parameters.length}`);
+  }
+  if (page.month !== undefined) {
+    parameters.push(page.month);
+    conditions.push(`left(reserved_at, 7) = $${parameters.length}`);
   }
   parameters.push(page.limit + 1);
   const result = await db.query(`SELECT silo, reservation_id AS "reservationId",

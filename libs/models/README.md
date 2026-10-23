@@ -30,7 +30,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices and payer limits; records tool starts, remote outcomes and spending; reads spending calls in pages and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, spending call rows and read tables"]
+  models -->|checks spending choices and payer limits; records tool starts, remote outcomes and spending; reads spending calls in pages by original UTC month and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, spending call rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -506,6 +506,10 @@ import { modelForTask } from '@opencrane/models/routing';
 
 const model = modelForTask('chat_turn');
 ```
+
+Call spending pages can select the UTC month when money was first held for a call.
+Later charges stay with that month. Older open holds still reduce today's capacity,
+even when a page leaves them out. Reading a page does not allow more spending.
 
 ## Where to read more
 

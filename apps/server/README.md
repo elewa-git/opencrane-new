@@ -40,7 +40,7 @@ flowchart LR
   server -->|records changes, checked owner pauses, control refusals, child activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads conversations, history and exact removal, role and ownership receipts| postgres
+  server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|checks permission| server
@@ -297,6 +297,8 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
 
 Owners and admins can read small pages of recorded call spending. The reply keeps
 money held separate from money charged, with the original dates and safe references.
+They can select the UTC month when money was first held for each call. Late charges
+stay in that month. Older open holds still reduce current spending capacity.
 The server checks current finance access after loading. A read starts no work.
 
 The server renews computer passes through authenticated Kubernetes access as root.
