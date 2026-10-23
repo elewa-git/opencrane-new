@@ -1,0 +1,1 @@
+Saved spending stops now show each call's reserved, unknown, charged or released status. Check status reads the original turn without repeating work. Missing amounts stay absent, participants see no amounts, and failed checks keep the reason visible. Status checks politely announce progress, changed call statuses, failed reads and access loss.

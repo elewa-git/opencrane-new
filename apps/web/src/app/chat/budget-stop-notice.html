@@ -1,12 +1,22 @@
+<p class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  @if (accessChanged()) {
+    Access changed. Stop details are no longer available.
+  } @else if (loading()) {
+    Checking saved status…
+  } @else if (unavailable()) {
+    Stop details unavailable. Any status shown is from the last successful check.
+  } @else if (details(); as stop) {
+    Saved call status checked.
+    @for (call of stop.calls; track $index) { {{ callStatus(call) }}. }
+  } @else if (notStopped()) {
+    Stop details checked. No saved call status is available.
+  }
+</p>
 @if (execution()) { <p class="budget-work">{{ execution() }} — spending limit</p> }
 <section class="budget-stop" aria-label="Spending limit stop">
   @if (accessChanged()) {
     <strong>Access changed</strong>
     <p>Stop details are no longer available.</p>
-  } @else if (unavailable()) {
-    <strong>Stop details unavailable</strong>
-    <p>This work is still stopped.</p>
-    <button type="button" [disabled]="loading()" (click)="checkAgain()">Check again</button>
   } @else if (details(); as stop) {
     @for (reason of stop.reasons; track $index) {
       <div class="budget-reason">
@@ -18,8 +28,31 @@
   } @else if (notStopped()) {
     <strong>Spending limit reached</strong>
     <p>An Owner or Admin can review the limit, or wait for the next monthly budget period (UTC).</p>
-  } @else {
+  } @else if (!unavailable()) {
     <strong>Checking stop details</strong>
     <p>This work is still stopped.</p>
   }
+  @if (!accessChanged() && unavailable()) {
+    <strong class="budget-unavailable">Stop details unavailable</strong>
+    <p>This work is still stopped. Any status shown is from the last successful check.</p>
+  }
 </section>
+@if (!accessChanged()) {
+  @if (details()?.calls?.length) {
+    <section class="budget-calls" aria-label="Saved call status">
+      @for (call of details()!.calls; track $index) {
+        <article class="budget-call">
+          <strong>{{ callStatus(call) }}</strong>
+          <p>{{ callExplanation(call) }}</p>
+          @if (callAmount(call); as amount) { <p>{{ amount }}</p> }
+          <code>{{ call.reference }}</code>
+        </article>
+      }
+    </section>
+  }
+  @if (details()?.calls?.length || unavailable()) {
+    @if (loading()) { <p>Checking saved status…</p> }
+    <button class="budget-check" type="button" [attr.aria-disabled]="loading()"
+      (click)="checkStatus()">Check status</button>
+  }
+}
