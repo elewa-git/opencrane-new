@@ -1,7 +1,15 @@
-import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { readFile, writeFile } from 'node:fs/promises';
 
 export class RehearsalPage {
   limited = false;
+  refusalMissing = true;
+  width = 1280;
+  invitationEmail = '';
+  invitationEmails = new Set<string>();
+  enteredValues: Array<{ width: number; selector: string; value: string }> = [];
+  historyInView = '';
+  pictures: Array<{ path: string; historyInView: string }> = [];
   restoreAttempted = false;
   address = 'https://rehearsal.example.invalid/workspace?conversation=fixture';
   keyboard = { press: this.ignore };
@@ -27,9 +35,16 @@ export class RehearsalPage {
     return { status, body, json };
   }
 
-  setViewportSize = this.ignore;
+  async setViewportSize(viewport: { width: number }) {
+    this.width = viewport.width;
+  }
+
+  async screenshot(settings: { path: string }) {
+    const picture = { path: settings.path, historyInView: this.historyInView };
+    this.pictures.push(picture);
+    await writeFile(settings.path, 'Synthetic picture fixture');
+  }
   setDefaultTimeout = this.ignore;
-  screenshot = this.ignore;
   reload = this.ignore;
   waitForLoadState = this.ignore;
 
@@ -82,19 +97,30 @@ class RehearsalLocator {
     this.selector = selector;
   }
 
-  async fill() {}
+  async fill(value: string) {
+    const entry = { width: this.page.width, selector: this.selector, value };
+    this.page.enteredValues.push(entry);
+    if (this.selector === 'Person email') {
+      this.page.invitationEmail = value;
+    }
+  }
 
   async press() {}
 
   async selectOption() {}
 
   async waitFor() {
-    if (this.selector === '/limit reached/iu') {
+    if (this.selector === '/limit reached/iu' && this.page.refusalMissing) {
       throw new Error('Original refusal missing sk-synthetic-fixture-value');
     }
   }
 
   async click() {
+    if (this.selector === 'Create') {
+      assert(!this.page.invitationEmails.has(this.page.invitationEmail),
+        'Invitation email already exists');
+      this.page.invitationEmails.add(this.page.invitationEmail);
+    }
     if (this.selector === 'Save budget') {
       this.page.limited = true;
     }
@@ -114,7 +140,14 @@ class RehearsalLocator {
     return '1';
   }
 
+  async scrollIntoViewIfNeeded() {
+    this.page.historyInView = this.selector;
+  }
+
   async innerText() {
+    if (this.selector === 'oc-audit') {
+      return 'budget.ceiling_set team.created';
+    }
     return '437 1,234.56 17 November 2026 Paris Stopped reply';
   }
 
@@ -130,8 +163,8 @@ class RehearsalLocator {
     return this;
   }
 
-  filter() {
-    return this;
+  filter(options: { hasText: string | RegExp }) {
+    return this.page.locator(`${this.selector} ${String(options.hasText)}`);
   }
 
   locator(selector: string) {

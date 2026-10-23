@@ -64,7 +64,9 @@ async function retainsSafeFailureForEveryStep() {
   function sanitise(value: string) {
     return sanitiseEvidence(value, directory, directory);
   }
-  async function capture() {}
+  async function capture() {
+    return ['fixture.png'];
+  }
   try {
     for (let index = 1; index <= 10; index++) {
       async function fail() {
@@ -112,7 +114,9 @@ async function withholdsUnsafeErrors() {
   async function fail() {
     throw new Error('synthetic-private-value');
   }
-  async function capture() {}
+  async function capture() {
+    return ['fixture.png'];
+  }
   function sanitise(): string {
     throw new Error('Cannot remove private values');
   }
@@ -223,3 +227,17 @@ async function sanitisesCombinedFailuresSeparately() {
 }
 test('combined checker, restoration and picture errors each remove private values',
   sanitisesCombinedFailuresSeparately);
+
+async function refusesPassWithoutPicture() {
+  async function pass() {}
+  async function capture() {
+    return [];
+  }
+  function sanitise(value: string) {
+    return value;
+  }
+  const result = await rehearsalStep(pass, capture, sanitise);
+  assert.equal(result.result, 'FAIL');
+  assert.equal(result.reason, 'Step picture missing');
+}
+test('a successful check cannot report PASS without a saved picture', refusesPassWithoutPicture);

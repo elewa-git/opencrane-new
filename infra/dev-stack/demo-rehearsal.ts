@@ -7,7 +7,9 @@ import { answer, stop } from './real-model-journey.ts';
 import { demoBudget, demoCeiling } from './demo-prepare.ts';
 import { demoRefusal } from './demo-browser.ts';
 import { waitForPrivateSessionToApply } from './browser-phase4.ts';
-import { checkProviderAnswer, rehearsalStep } from './demo-rehearsal-checks.ts';
+import {
+  checkChangeHistory, checkProviderAnswer, rehearsalStep,
+} from './demo-rehearsal-checks.ts';
 
 type Options = Parameters<typeof demoBudget>[0];
 
@@ -15,6 +17,9 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
   output: string, allowance: number, sanitise: (value: string) => string) {
   const { origin } = options;
   const supplier = new URL('./fixtures/supplier.pdf', import.meta.url);
+  const attempt = randomUUID();
+  let identity = '';
+  let stepPictures: string[] = [];
   let failed = false;
   let width = 1280;
   let conversation = '';
@@ -28,6 +33,7 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
       path: `${output}/${name}-${width}.png`, mask: [addresses, credentials, providerValues],
     };
     await page.screenshot(settings);
+    stepPictures.push(settings.path);
   }
   async function paidAllowance() {
     const budget = await demoBudget(options);
@@ -43,8 +49,8 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
   async function streamedReply() {
     await paidAllowance();
     await draft();
-    await answer(owner, 'What is 19 multiplied by 23? Explain in three plain sentences. ' +
-      'Do not use tools.', [/\b437\b/u]);
+    await answer(owner, `Rehearsal ${identity}. What is 19 multiplied by 23? ` +
+      'Explain in three plain sentences. Do not use tools.', [/\b437\b/u]);
   }
   async function scannedPdf() {
     await paidAllowance();
@@ -57,8 +63,8 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
     const ready = owner.locator('.upload-status').filter({ hasText: 'Ready' });
     await ready.waitFor();
     await picture(owner, '02-upload-ready');
-    await answer(owner, 'Read the attached supplier quote. Give its total in euros and delivery ' +
-      'date in one plain sentence. Do not use tools.',
+    await answer(owner, `Rehearsal ${identity}. Read the attached supplier quote. ` +
+      'Give its total in euros and delivery date in one plain sentence. Do not use tools.',
       [/1[,. ]?234[,.]56/u, /17/u, /November|11/u, /2026/u]);
     conversation = new URL(owner.url()).searchParams.get('conversation')!;
     assert(conversation);
@@ -100,7 +106,9 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
   async function stoppedReply() {
     await paidAllowance();
     await owner.goto(`${origin}/workspace?conversation=${conversation}`);
-    await stop(owner);
+    const prompt = `Rehearsal ${identity}. Write a long numbered list of 200 European cities ` +
+      'and describe each one.';
+    await stop(owner, prompt);
     assert.equal(await owner.getByText('Reply failed', { exact: true }).count(), 0);
   }
   async function choosePerson(page: Page, memberId: string) {
@@ -140,11 +148,11 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
     await changeRecipients(member);
     await choosePerson(member, 'zitadel-owner');
     await member.getByRole('button', { name: 'Use selection', exact: true }).click();
-    const first = `Rehearsal direct ${randomUUID()}`;
+    const first = `Rehearsal direct ${identity}`;
     await humanMessage(member, first);
     await owner.goto(member.url());
     await owner.getByText(first, { exact: true }).waitFor();
-    const live = `Live arrival ${randomUUID()}`;
+    const live = `Live arrival ${identity}`;
     await humanMessage(member, live);
     await owner.getByText(live, { exact: true }).waitFor();
     await picture(member, '05-member-phone');
@@ -158,7 +166,8 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
       name: 'Start session', exact: true,
     }).click();
     await waitForPrivateSessionToApply(member);
-    await answer(member, 'What is the capital of France? One plain sentence. Do not use tools.',
+    await answer(member, `Rehearsal ${identity}. What is the capital of France? ` +
+      'One plain sentence. Do not use tools.',
       [/\bParis\b/iu]);
     privateUrl = member.url();
     await picture(member, '06-private-shared-reply');
@@ -168,7 +177,7 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
     await choosePerson(owner, 'zitadel-member');
     await choosePerson(owner, 'jente-rosseel');
     await owner.getByText('Group conversation', { exact: false }).first().waitFor();
-    const message = `Rehearsal group ${randomUUID()}`;
+    const message = `Rehearsal group ${identity}`;
     await humanMessage(owner, message);
     await member.goto(owner.url());
     await member.getByText(message, { exact: true }).waitFor();
@@ -178,7 +187,8 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
     await picture(owner, '07-group');
     await owner.goto(`${origin}/org/people`);
     await owner.getByRole('button', { name: 'Invite people', exact: true }).click();
-    await owner.getByLabel('Person email', { exact: true }).fill('rehearsal@example.invalid');
+    const email = `rehearsal-${identity}@example.invalid`;
+    await owner.getByLabel('Person email', { exact: true }).fill(email);
     await owner.getByRole('button', { name: 'Create', exact: true }).click();
     await owner.getByText('Link created. No email was sent.', { exact: true }).waitFor();
     assert((await owner.locator('#invitation-link').inputValue()).length > 0);
@@ -202,7 +212,7 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
       await owner.getByRole('button', { name: 'Save budget', exact: true }).click();
       await owner.getByText('Budget saved', { exact: true }).waitFor();
       await member.goto(privateUrl);
-      const prompt = `Rehearsal limit ${randomUUID()}. Say hello in one plain sentence.`;
+      const prompt = `Rehearsal limit ${identity}. Say hello in one plain sentence.`;
       const composer = member.getByRole('textbox', { name: 'Message your agent' });
       await composer.fill(prompt);
       await composer.press('Enter');
@@ -218,7 +228,7 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
       throw error;
     } finally {
       try {
-        await demoCeiling(options, `rehearsal-restore-${randomUUID()}`,
+        await demoCeiling(options, `rehearsal-restore-${identity}`,
           before.ceilingCents, before.dailyCeilingCents);
         const restored = await demoBudget(options);
         assert.equal(restored.ceilingCents, before.ceilingCents);
@@ -236,41 +246,22 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
   }
   async function changeHistory() {
     await owner.goto(`${origin}/org/history`);
-    await owner.getByRole('heading', { name: 'Change history', exact: true }).waitFor();
-    let limitSeen = false;
-    let groupSeen = false;
-    for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
-      await owner.locator('oc-audit article').first().waitFor();
-      const text = await owner.locator('oc-audit').innerText();
-      if (text.includes('budget.ceiling_set')) {
-        limitSeen = true;
-        await picture(owner, '10-limit-history');
-      }
-      if (/team\.(created|member_added|member_removed)/u.test(text)) {
-        groupSeen = true;
-        await picture(owner, '10-group-history');
-      }
-      if (limitSeen && groupSeen) {
-        return;
-      }
-      const older = owner.getByRole('button', { name: 'Older history', exact: true });
-      if (!await older.count()) {
-        break;
-      }
-      await older.click();
-      await delay(300);
+    async function captureHistory(name: string) {
+      await picture(owner, name);
     }
-    assert(limitSeen && groupSeen, 'Change history shows limits and groups');
+    await checkChangeHistory(owner, captureHistory);
   }
   const steps = [streamedReply, scannedPdf, actionHistory, stoppedReply, liveMessage,
     sharedReply, groupAndInvite, providerAnswer, companyLimit, changeHistory];
   const results = [];
   for (width of [1280, 390]) {
+    identity = `${attempt}-${width}`;
     await owner.setViewportSize({ width, height: 900 });
     await member.setViewportSize({ width, height: 900 });
     owner.setDefaultTimeout(120_000);
     member.setDefaultTimeout(120_000);
     for (let index = 0; index < steps.length; index++) {
+      stepPictures = [];
       const run = steps[index]!;
       const prefix = String(index + 1).padStart(2, '0');
       async function capture(result: string) {
@@ -280,6 +271,7 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
         } else {
           await picture(owner, `${prefix}-${run.name}`);
         }
+        return stepPictures;
       }
       let outcome;
       if (failed) {

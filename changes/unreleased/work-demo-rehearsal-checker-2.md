@@ -1,0 +1,1 @@
+Demo rehearsals use different invitation addresses and chat messages for each width and attempt. Every passed step lists its saved pictures, and history pictures show the matching limit and group rows.

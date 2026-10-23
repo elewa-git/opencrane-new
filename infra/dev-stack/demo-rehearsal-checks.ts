@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { Page } from 'playwright';
 
 export async function checkProviderAnswer(owner: Page) {
@@ -24,12 +25,13 @@ function failureReason(error: unknown, sanitise: (value: string) => string) {
 }
 
 export async function rehearsalStep(run: () => Promise<void>,
-  capture: (result: string) => Promise<void>, sanitise: (value: string) => string) {
+  capture: (result: string) => Promise<string[]>, sanitise: (value: string) => string) {
   const started = performance.now();
   let result = 'PASS';
   let reason: string | undefined;
   let additionalReasons: string[] | undefined;
   let pictureReason: string | undefined;
+  let pictures: string[] = [];
   function sanitisedReason(error: unknown) {
     return failureReason(error, sanitise);
   }
@@ -46,7 +48,8 @@ export async function rehearsalStep(run: () => Promise<void>,
     }
   }
   try {
-    await capture(result);
+    pictures = await capture(result);
+    assert(pictures.length > 0, 'Step picture missing');
   } catch (error) {
     if (result === 'FAIL') {
       pictureReason = failureReason(error, sanitise);
@@ -55,6 +58,41 @@ export async function rehearsalStep(run: () => Promise<void>,
       reason = failureReason(error, sanitise);
     }
   }
-  return { result, reason, additionalReasons, pictureReason,
+  return { result, reason, additionalReasons, pictureReason, pictures,
     elapsedMs: Math.round(performance.now() - started) };
+}
+
+export async function checkChangeHistory(owner: Page,
+  picture: (name: string) => Promise<void>) {
+  await owner.getByRole('heading', { name: 'Change history', exact: true }).waitFor();
+  let limitSeen = false;
+  let groupSeen = false;
+  for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
+    await owner.locator('oc-audit article').first().waitFor();
+    const text = await owner.locator('oc-audit').innerText();
+    if (text.includes('budget.ceiling_set')) {
+      limitSeen = true;
+      const limits = owner.locator('oc-audit article').filter({ hasText: 'budget.ceiling_set' });
+      await limits.first().scrollIntoViewIfNeeded();
+      await picture('10-limit-history');
+    }
+    if (/team\.(created|member_added|member_removed)/u.test(text)) {
+      groupSeen = true;
+      const groups = owner.locator('oc-audit article').filter({
+        hasText: /team\.(created|member_added|member_removed)/u,
+      });
+      await groups.first().scrollIntoViewIfNeeded();
+      await picture('10-group-history');
+    }
+    if (limitSeen && groupSeen) {
+      return;
+    }
+    const older = owner.getByRole('button', { name: 'Older history', exact: true });
+    if (!await older.count()) {
+      break;
+    }
+    await older.click();
+    await delay(300);
+  }
+  assert(limitSeen && groupSeen, 'Change history shows limits and groups');
 }
