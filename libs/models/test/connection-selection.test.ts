@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
-import type { AppendCommand } from '@opencrane/event-store';
+import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { connectionCreatedDataSchema, connectionSelectedDataSchema } from '@opencrane/events';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -13,6 +13,8 @@ import { envelope, history } from '../src/actor.ts';
 import { saveBearerConnection, changePersonalConnection, foldConnection } from '../src/bearer-connections.ts';
 import { changeConnectionSelection, foldConnectionSelection, readConnectionSelection }
   from '../src/connection-selection.ts';
+import { toolPolicyFromRows } from '../src/tool-policy.ts';
+import { data as eventData } from '../src/state.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -46,8 +48,32 @@ async function publishServer(locator = 'https://example.test/mcp') {
   const publication = envelope('test', 'mcp-server', 'mcp.server_published', {
     serverId: 'server', publishedBy: 'admin',
   });
-  await nats.seed([review, publication]);
+  await nats.seed([review]);
+  const rows = await history(nats.store, 'mcp-server', 'test');
+  const policy = toolPolicyFromRows(rows);
+  if (policy.driftHeld) {
+    await confirmPublication(policy.sequence);
+  } else {
+    await nats.seed([publication]);
+  }
 }
+async function confirmPublication(reviewRevision: number) {
+  const changeRef = `publication-${reviewRevision}`;
+  const fragmentDigest = 'a'.repeat(64);
+  const publication = envelope('test', 'mcp-server', 'mcp.server_published', {
+    serverId: 'server', publishedBy: 'admin', commandId: changeRef,
+    expectedSequence: reviewRevision, reviewRevision, fragmentDigest,
+  });
+  await nats.seed([publication]);
+  const sourceSequence = await nats.store.head('mcp-server');
+  const observation = envelope('test', 'mcp-server', 'mcp.configuration_observed', {
+    serverId: 'server', changeRef, reviewRevision, fragmentDigest, sourceSequence,
+    generation: 1, recordDigest: 'b'.repeat(64), configDigest: 'c'.repeat(64),
+    processRef: '00000000-0000-4000-8000-000000000001', observedAt: new Date().toISOString(),
+  });
+  await nats.seed([observation]);
+}
+
 async function close() {
   await storage?.close();
   await fga?.close();
@@ -121,7 +147,7 @@ async function invalidInput(patch: Record<string, unknown>) {
   expect(test.custody.stage).not.toHaveBeenCalled();
 }
 it.each([{ userId: 'other' }, { ownerId: 'other' }, { ownerKind: 'company' },
-  { ownerKind: 'validation' }, { serverId: 'other' }, { connectionId: 'other' },
+  { ownerKind: 'validation' }, { connectionId: 'other' },
   { profileId: 'missing' }, { profileRevision: 1 }, { expectedSequence: 1 }])(
   'refuses forged or stale selection input %j', invalidInput);
 
@@ -421,3 +447,583 @@ async function blockedLegacyReview() {
 }
 it('refuses selection and bearer staging after a blocked legacy review and publication',
   blockedLegacyReview);
+
+async function invalidIdentifiers(patch: Record<string, unknown>) {
+  const test = await fixture();
+  await expect(test.select({ ...test.command, ...patch })).rejects.toThrow('Selection input invalid');
+  expect(await nats.store.head(test.subject)).toBe(0);
+}
+it.each([{ serverId: '' }, { serverId: '*' }, { connectionId: 'a'.repeat(201) },
+  { profileId: '../private' }, { changeRef: '' }, { expectedSequence: -1 },
+  { expectedSequence: 0.5 }, { expectedSequence: Number.MAX_SAFE_INTEGER + 1 },
+  { profileRevision: 0 }, { profileRevision: -1 }, { profileRevision: 0.5 }])(
+  'rejects invalid ids and ranges before reading facts: %j', invalidIdentifiers);
+
+async function invalidCaller() {
+  const test = await fixture();
+  await expect(changeConnectionSelection(nats.store, binding, '*', test.command))
+    .rejects.toThrow('Selection input invalid');
+  await expect(readConnectionSelection(nats.store, binding, '*', 'server'))
+    .rejects.toThrow('Selection input invalid');
+  await expect(readConnectionSelection(nats.store, binding, test.userId, '*'))
+    .rejects.toThrow('Selection input invalid');
+}
+it('validates the authenticated caller and read server ids', invalidCaller);
+
+async function corruptReceipt(field: string) {
+  const test = await fixture();
+  const selected = await test.select();
+  const rows = await history(nats.store, test.subject, 'test');
+  const changed = structuredClone(rows);
+  const event = changed[0]!.event;
+  if (field === 'id') {
+    event.id = 'a'.repeat(64);
+  } else if (field === 'subject') {
+    event.subject = 'connection-selection-other-server';
+  } else if (field === 'commandId') {
+    event.commandId = 'other';
+  } else if (field === 'type') {
+    event.type = 'connection.created';
+  } else if (field === 'source') {
+    event.source = 'untrusted';
+  } else if (field === 'principal kind') {
+    event.principal = { kind: 'system', id: test.userId };
+  } else if (field === 'principal id') {
+    event.principal = { kind: 'human', id: 'other' };
+  } else if (field === 'silo') {
+    event.silo = 'other';
+  }
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* substituteReceipt(subject: string, from?: number, deadline?: number) {
+    if (subject === test.subject) {
+      yield* changed;
+      return;
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  const fault = vi.spyOn(nats.store, 'readStream');
+  fault.mockImplementation(substituteReceipt);
+  try {
+    const message = field === 'silo' ? 'Wrong silo' : 'Selection conflict';
+    await expect(test.select()).rejects.toThrow(message);
+  } finally {
+    fault.mockRestore();
+  }
+  expect(await nats.store.head(test.subject)).toBe(selected.sequence);
+}
+it.each(['id', 'subject', 'commandId', 'type', 'source', 'principal kind', 'principal id', 'silo'])(
+  'refuses recovery when the saved receipt has a different %s', corruptReceipt);
+
+async function missingSavedReceipt() {
+  const test = await fixture();
+  const append = nats.store.append.bind(nats.store);
+  const readStream = nats.store.readStream.bind(nats.store);
+  let appended = false;
+  async function appendThenHide(command: AppendCommand) {
+    const result = await append(command);
+    appended = true;
+    return result;
+  }
+  async function* hideReceipt(subject: string, from?: number, deadline?: number) {
+    if (appended && subject === test.subject) {
+      return;
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  const appendFault = vi.spyOn(nats.store, 'append');
+  const readFault = vi.spyOn(nats.store, 'readStream');
+  appendFault.mockImplementation(appendThenHide);
+  readFault.mockImplementation(hideReceipt);
+  try {
+    await expect(test.select()).rejects.toThrow('Selection conflict');
+  } finally {
+    appendFault.mockRestore();
+    readFault.mockRestore();
+  }
+  expect(appended).toBe(true);
+  expect(await history(nats.store, test.subject, 'test')).toHaveLength(1);
+}
+it('never reports success without reading the saved receipt', missingSavedReceipt);
+
+function replaceStream(subjectToReplace: string, rows: StoredEvent[]) {
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* substitute(subject: string, from?: number, deadline?: number) {
+    if (subject === subjectToReplace) {
+      yield* rows;
+      return;
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  const fault = vi.spyOn(nats.store, 'readStream');
+  fault.mockImplementation(substitute);
+  return fault;
+}
+
+async function unavailableServer(kind: string) {
+  const test = await fixture();
+  const allRows = await history(nats.store, 'mcp-server', 'test');
+  const rows = structuredClone(allRows.slice(-4));
+  expect(toolPolicyFromRows(rows).published).toBe(true);
+  if (kind === 'missing') {
+    rows.length = 0;
+  } else if (kind === 'hosted') {
+    rows[0]!.event.data = { serverId: 'server', kind: 'hosted', registeredBy: 'admin',
+      locator: `registry.example.test/tool@sha256:${'a'.repeat(64)}` };
+  } else if (kind === 'company') {
+    for (const row of rows.slice(1, 3)) {
+      row.event.data = { ...eventData(row.event), accountMode: 'company' };
+    }
+  } else if (kind === 'unpublished') {
+    const event = envelope('test', 'mcp-server', 'mcp.server_unpublished', {
+      serverId: 'server', unpublishedBy: 'admin',
+    });
+    rows.push({ sequence: rows.at(-1)!.sequence + 1, event });
+  } else if (kind === 'expired') {
+    const checkedAt = new Date(Date.now() - 400_000).toISOString();
+    const expiresAt = new Date(Date.now() - 100_000).toISOString();
+    rows[1]!.event.data = { ...eventData(rows[1]!.event), checkedAt, expiresAt };
+    rows[2]!.event.time = checkedAt;
+  }
+  const fault = replaceStream('mcp-server', rows);
+  try {
+    await expect(test.select()).rejects.toThrow('Selection conflict');
+  } finally {
+    fault.mockRestore();
+  }
+  expect(await nats.store.head(test.subject)).toBe(0);
+}
+it.each(['missing', 'hosted', 'company', 'unpublished', 'expired'])(
+  'refuses %s server facts while the person still has tool rights and a valid profile',
+  unavailableServer);
+
+async function catalogueEvent(kind: string) {
+  const rows = await history(nats.store, 'mcp-server', 'test');
+  const policy = toolPolicyFromRows(rows);
+  if (kind === 'registered') {
+    return envelope('test', 'mcp-server', 'mcp.server_registered', {
+      serverId: 'server', kind: 'remote', locator: 'https://replacement.example.test/mcp',
+      registeredBy: 'admin',
+    });
+  }
+  if (kind === 'changed') {
+    return envelope('test', 'mcp-server', 'mcp.tools_changed', {
+      serverId: 'server', previousSchemaDigest: policy.catalogue!.schemaDigest,
+      newSchemaDigest: policy.catalogue!.schemaDigest, catalogue: policy.catalogue,
+    });
+  }
+  const now = Date.now();
+  return envelope('test', 'mcp-server', 'mcp.catalogue_checked', {
+    serverId: 'server', outcome: 'unchanged', schemaDigest: policy.catalogue!.schemaDigest,
+    checkedAt: new Date(now).toISOString(), expiresAt: new Date(now + 300_000).toISOString(),
+  });
+}
+
+async function catalogueBeforeAppend(kind: string) {
+  const test = await fixture();
+  const event = await catalogueEvent(kind);
+  const append = nats.store.append.bind(nats.store);
+  async function changeThenAppend(command: AppendCommand) {
+    fault.mockRestore();
+    await nats.seed([event]);
+    await expect(command.checkAccess!()).rejects.toThrow('Selection conflict');
+    return append(command);
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementationOnce(changeThenAppend);
+  try {
+    await expect(test.select()).rejects.toThrow('Selection append unconfirmed');
+    expect(await nats.store.head(test.subject)).toBe(0);
+  } finally {
+    fault.mockRestore();
+    await publishServer();
+  }
+}
+it.each(['registered', 'changed', 'unchanged'])(
+  'refuses a %s catalogue event between loading facts and appending', catalogueBeforeAppend);
+
+async function catalogueAvailability(kind: string) {
+  const test = await fixture();
+  const selected = await test.select();
+  const event = await catalogueEvent(kind);
+  try {
+    await nats.seed([event]);
+    if (kind === 'unchanged') {
+      expect(await test.read()).toMatchObject({ status: 'saved_unverified' });
+      const input = { ...test.command, expectedSequence: selected.sequence, changeRef: 'again' };
+      expect((await test.select(input)).status).toBe('selected');
+    } else {
+      expect(await test.read()).toEqual({ status: 'unavailable', sequence: selected.sequence });
+      const input = { ...test.command, expectedSequence: selected.sequence, changeRef: 'again' };
+      await expect(test.select(input)).rejects.toThrow('Selection conflict');
+    }
+  } finally {
+    await publishServer();
+  }
+}
+it.each(['unchanged', 'changed'])(
+  'uses current catalogue availability after an %s check', catalogueAvailability);
+
+async function expiryDuringAppend() {
+  const test = await fixture();
+  const rows = await history(nats.store, 'mcp-server', 'test');
+  const expiresAt = Date.parse(toolPolicyFromRows(rows).expiresAt!);
+  const append = nats.store.append.bind(nats.store);
+  async function expireThenAppend(command: AppendCommand) {
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(expiresAt);
+    try {
+      await expect(command.checkAccess!()).rejects.toThrow('Selection unavailable');
+      return await append(command);
+    } finally {
+      now.mockRestore();
+    }
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementationOnce(expireThenAppend);
+  try {
+    await expect(test.select()).rejects.toThrow('Selection append unconfirmed');
+  } finally {
+    fault.mockRestore();
+  }
+  expect(await nats.store.head(test.subject)).toBe(0);
+}
+it('rechecks catalogue expiry inside the append', expiryDuringAppend);
+
+async function appendDeadline(remaining: number, expectedDeadline: number) {
+  const test = await fixture();
+  const rows = await history(nats.store, 'mcp-server', 'test');
+  const expiresAt = Date.parse(toolPolicyFromRows(rows).expiresAt!);
+  const wallClock = vi.spyOn(Date, 'now');
+  const monotonicClock = vi.spyOn(performance, 'now');
+  wallClock.mockReturnValue(expiresAt - remaining);
+  monotonicClock.mockReturnValue(1000);
+  const append = nats.store.append.bind(nats.store);
+  async function checkDeadline(command: AppendCommand) {
+    expect(command.deadline).toBe(expectedDeadline);
+    return append(command);
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementationOnce(checkDeadline);
+  try {
+    expect((await test.select()).status).toBe('selected');
+    expect(fault).toHaveBeenCalledTimes(1);
+  } finally {
+    fault.mockRestore();
+    wallClock.mockRestore();
+    monotonicClock.mockRestore();
+  }
+}
+it.each([[500, 1500], [5000, 3000]])(
+  'caps the append deadline with %i milliseconds left at %i', appendDeadline);
+
+async function applyAccessEvent(event: StoredEvent['event']) {
+  await nats.seed([event]);
+  const auth = memberAuthorisation(binding);
+  await auth.handler.handle(event, pgDb(storage.queue));
+}
+
+function revokeDirect(userId: string, typed = true) {
+  const fields = { resourceType: 'mcp_server', resourceId: 'server',
+    granteeId: userId, revokedBy: userId };
+  let data: unknown = fields;
+  if (typed) {
+    data = { ...fields, granteeKind: 'member' };
+  }
+  return envelope('test', grantStream('mcp_server', 'server'), 'grant.revoked', data);
+}
+
+async function teamAccess(test: Awaited<ReturnType<typeof fixture>>) {
+  const teamId = `group-${test.userId}`;
+  const subject = `team-${teamId}`;
+  const created = envelope('test', subject, 'team.created', {
+    teamId, name: 'Test group', createdBy: test.userId,
+  });
+  const added = envelope('test', subject, 'team.member_added', {
+    teamId, memberId: test.userId, addedBy: test.userId,
+  });
+  const grant = envelope('test', grantStream('mcp_server', 'server'), 'grant.given', {
+    resourceType: 'mcp_server', resourceId: 'server', granteeKind: 'team',
+    granteeId: teamId, grantedBy: test.userId,
+  });
+  await applyAccessEvent(created);
+  await applyAccessEvent(added);
+  await applyAccessEvent(grant);
+  await applyAccessEvent(revokeDirect(test.userId));
+  return { teamId, subject };
+}
+
+async function delayedRevocation(kind: string) {
+  const test = await fixture();
+  let event = revokeDirect(test.userId, false);
+  if (kind !== 'untyped direct') {
+    const team = await teamAccess(test);
+    if (kind === 'team removal') {
+      event = envelope('test', team.subject, 'team.member_removed', {
+        teamId: team.teamId, memberId: test.userId, removedBy: test.userId,
+      });
+    } else {
+      const fields = { resourceType: 'mcp_server', resourceId: 'server',
+        granteeId: team.teamId, revokedBy: test.userId };
+      let data: unknown = fields;
+      if (kind === 'team grant') {
+        data = { ...fields, granteeKind: 'team' };
+      }
+      event = envelope('test', grantStream('mcp_server', 'server'), 'grant.revoked', data);
+    }
+  }
+  const selected = await test.select();
+  expect(await test.read()).toMatchObject({ status: 'saved_unverified' });
+  await nats.seed([event]);
+  const command = { ...test.command, expectedSequence: selected.sequence, changeRef: 'again' };
+  const auth = memberAuthorisation(binding);
+  try {
+    expect((await auth.use('person', test.userId, 'mcp_server', 'server')).allowed).toBe(true);
+    await expect(test.select(command)).rejects.toThrow('Selection access unavailable');
+    await expect(test.read()).rejects.toThrow('Selection access unavailable');
+  } finally {
+    await auth.handler.handle(event, pgDb(storage.queue));
+  }
+  await expect(test.select(command)).rejects.toThrow('Selection access unavailable');
+  await expect(test.read()).rejects.toThrow('Selection access unavailable');
+  expect(await nats.store.head(test.subject)).toBe(selected.sequence);
+}
+it.each(['untyped direct', 'team grant', 'untyped team', 'team removal'])(
+  'refuses a saved %s revocation before and after IAM applies it', delayedRevocation);
+
+async function accessPositionRace(kind: string, timing: string) {
+  const test = await fixture();
+  let subject = grantStream('mcp_server', 'server');
+  let event = revokeDirect(test.userId);
+  if (kind === 'team') {
+    const team = await teamAccess(test);
+    subject = team.subject;
+    event = envelope('test', subject, 'team.member_removed', {
+      teamId: team.teamId, memberId: test.userId, removedBy: test.userId,
+    });
+  }
+  const readStream = nats.store.readStream.bind(nats.store);
+  const head = nats.store.head.bind(nats.store);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function change() {
+    if (!changed) {
+      changed = true;
+      await nats.seed([event]);
+    }
+  }
+  async function* changeAfterHistory(stream: string, from?: number, deadline?: number) {
+    yield* readStream(stream, from, deadline);
+    if (stream === subject && timing === 'before') {
+      await change();
+    }
+  }
+  async function changeDuringAccess(stream?: string, deadline?: number) {
+    if (stream === `member-${test.userId}` && timing === 'during') {
+      await change();
+    }
+    return head(stream, deadline);
+  }
+  async function changeAtAppend(command: AppendCommand) {
+    appendFault.mockRestore();
+    if (timing === 'append') {
+      await change();
+    }
+    return append(command);
+  }
+  const readFault = vi.spyOn(nats.store, 'readStream');
+  const headFault = vi.spyOn(nats.store, 'head');
+  const appendFault = vi.spyOn(nats.store, 'append');
+  readFault.mockImplementation(changeAfterHistory);
+  headFault.mockImplementation(changeDuringAccess);
+  appendFault.mockImplementationOnce(changeAtAppend);
+  try {
+    let message = 'Authority changed';
+    if (timing === 'before') {
+      message = 'Selection conflict';
+    } else if (timing === 'append') {
+      message = 'Selection append unconfirmed';
+    }
+    await expect(test.select()).rejects.toThrow(message);
+    expect(changed).toBe(true);
+  } finally {
+    readFault.mockRestore();
+    headFault.mockRestore();
+    appendFault.mockRestore();
+    if (changed) {
+      const auth = memberAuthorisation(binding);
+      await auth.handler.handle(event, pgDb(storage.queue));
+    }
+  }
+  expect(await nats.store.head(test.subject)).toBe(0);
+}
+const accessRaces = [
+  ['grant', 'before'], ['grant', 'during'], ['grant', 'append'],
+  ['team', 'before'], ['team', 'during'], ['team', 'append'],
+];
+it.each(accessRaces)('refuses a %s change %s the write access check', accessPositionRace);
+
+async function readMembershipDenial(state: string) {
+  const test = await fixture();
+  if (state !== 'absent') {
+    const selected = await test.select();
+    if (state === 'cleared') {
+      const clear = { action: 'clear', serverId: 'server', connectionId: 'installed',
+        expectedSequence: selected.sequence, changeRef: 'clear' };
+      await test.select(clear);
+    }
+  }
+  await changeProfile(test, 'remove');
+  await expect(test.read()).rejects.toThrow('Active silo membership required');
+}
+it.each(['saved', 'absent', 'cleared'])(
+  'refuses reading a %s selection after membership ends', readMembershipDenial);
+
+async function wrongReadIdentity(field: 'userId' | 'serverId') {
+  const test = await fixture();
+  const selected = await test.select();
+  const rows = await history(nats.store, test.subject, 'test');
+  const row = rows[0]!;
+  const data = connectionSelectedDataSchema.parse(row.event.data);
+  data[field] = 'another';
+  row.event.data = data;
+  row.event.subject = `connection-selection-${data.userId}-${data.serverId}`;
+  row.event.principal = { kind: 'human', id: data.userId };
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([row.event.silo, row.event.subject, row.event.commandId]));
+  row.event.id = hash.digest('hex');
+  expect(foldConnectionSelection(rows).selected).toEqual(data);
+  const profiles = await history(nats.store, test.profileSubject, 'test');
+  const profile = connectionCreatedDataSchema.parse(profiles[0]!.event.data);
+  profile.userId = data.userId;
+  profile.serverId = data.serverId;
+  profile.activation!.changedBy = data.userId;
+  const profileSubject = `connection-${data.userId}-${data.serverId}-personal`;
+  profiles[0]!.event.subject = profileSubject;
+  profiles[0]!.event.principal = { kind: 'human', id: data.userId };
+  profiles[0]!.event.data = profile;
+  expect(foldConnection(profiles).status).toBe('saved_unverified');
+  const serverRows = await history(nats.store, 'mcp-server', 'test');
+  function registration(row: StoredEvent) {
+    return row.event.type === 'mcp.server_registered';
+  }
+  const server = serverRows.slice(serverRows.findLastIndex(registration));
+  for (const record of server) {
+    record.event.subject = `mcp-${data.serverId}`;
+    record.event.data = { ...eventData(record.event), serverId: data.serverId };
+  }
+  expect(toolPolicyFromRows(server).published).toBe(true);
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* substituteIdentity(subject: string, from?: number, deadline?: number) {
+    if (subject === test.subject) {
+      yield* rows;
+    } else if (subject === profileSubject) {
+      yield* profiles;
+    } else if (subject === `mcp-${data.serverId}`) {
+      yield* server;
+    } else {
+      yield* readStream(subject, from, deadline);
+    }
+  }
+  const fault = vi.spyOn(nats.store, 'readStream');
+  fault.mockImplementation(substituteIdentity);
+  try {
+    expect(await test.read()).toEqual({ status: 'unavailable', sequence: selected.sequence });
+  } finally {
+    fault.mockRestore();
+  }
+}
+it.each(['userId', 'serverId'] as const)(
+  'never exposes a valid saved choice for a different %s', wrongReadIdentity);
+
+async function readWithoutWriteDeadline() {
+  const test = await fixture();
+  const selected = await test.select();
+  const readStream = nats.store.readStream.bind(nats.store);
+  const head = vi.spyOn(nats.store, 'head');
+  const clock = vi.spyOn(performance, 'now');
+  let now = 1000;
+  clock.mockImplementation(currentTime);
+  function currentTime() {
+    return now;
+  }
+  async function* slowHistory(subject: string, from?: number, deadline?: number) {
+    expect(subject.startsWith('conversation-')).toBe(false);
+    yield* readStream(subject, from, deadline);
+    if (subject === test.profileSubject || subject === `member-${test.userId}`) {
+      now += 2500;
+    }
+  }
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(slowHistory);
+  try {
+    expect(await test.read()).toMatchObject({ status: 'saved_unverified',
+      sequence: selected.sequence });
+    for (const call of head.mock.calls) {
+      expect(call[0]).toBe(`connection-control-${test.userId}-server`);
+    }
+    const subjects = read.mock.calls.map(readSubject);
+    expect(subjects).toEqual([test.subject, 'mcp-server', test.profileSubject,
+      grantStream('mcp_server', 'server'), ...teamSubjects(subjects),
+      `member-${test.userId}`, 'ownership-test']);
+  } finally {
+    read.mockRestore();
+    head.mockRestore();
+    clock.mockRestore();
+  }
+}
+function readSubject(call: [string, ...unknown[]]) {
+  return call[0];
+}
+function teamSubjects(subjects: string[]) {
+  function isTeam(subject: string) {
+    return subject.startsWith('team-');
+  }
+  return subjects.filter(isTeam);
+}
+it('checks read access once without starting a two-second write deadline', readWithoutWriteDeadline);
+
+async function independentChoices() {
+  const first = await fixture();
+  const second = await fixture();
+  const firstChoice = await first.select();
+  const secondChoice = await second.select();
+  const clear = { action: 'clear', serverId: 'server', connectionId: 'installed',
+    expectedSequence: firstChoice.sequence, changeRef: 'clear' };
+  await first.select(clear);
+  expect(await first.read()).toMatchObject({ status: 'unavailable' });
+  expect(await second.read()).toEqual({ status: 'saved_unverified', sequence: secondChoice.sequence,
+    profileId: 'personal', profileRevision: second.created.sequence });
+  expect(await nats.store.head(`connection-control-${first.userId}-server`)).toBe(0);
+  expect(await nats.store.head(first.profileSubject)).toBe(first.created.sequence);
+  expect(await nats.store.head(second.profileSubject)).toBe(second.created.sequence);
+}
+it('keeps choices, profiles and control streams separate for two people using the same reference',
+  independentChoices);
+
+async function historyBeforeWriteAccess() {
+  const test = await fixture();
+  const readStream = nats.store.readStream.bind(nats.store);
+  const clock = vi.spyOn(performance, 'now');
+  let now = 1000;
+  function currentTime() {
+    return now;
+  }
+  clock.mockImplementation(currentTime);
+  async function* slowFacts(subject: string, from?: number, deadline?: number) {
+    expect(subject.startsWith('conversation-')).toBe(false);
+    yield* readStream(subject, from, deadline);
+    if (subject === test.profileSubject) {
+      now += 2500;
+    }
+  }
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(slowFacts);
+  try {
+    expect((await test.select()).status).toBe('selected');
+  } finally {
+    read.mockRestore();
+    clock.mockRestore();
+  }
+}
+it('finishes profile history before starting the two-second write access check',
+  historyBeforeWriteAccess);
