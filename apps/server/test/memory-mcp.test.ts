@@ -1083,7 +1083,10 @@ async function preparesColdRecallAuthority(subject: string) {
     return originalPerformance() + elapsed;
   }
   async function* readStream(...args: Parameters<typeof originalRead>) {
-    if (args[0] === subject && !coldRead) {
+    const conversationSummary = subject === 'conversation-conversation';
+    const includesCloses = args[3] === true;
+    const selected = args[0] === subject && (!conversationSummary || includesCloses);
+    if (selected && !coldRead) {
       coldRead = true;
       // Advance both clocks to model a cold lookup without waiting on a timer.
       elapsed += 2200;
