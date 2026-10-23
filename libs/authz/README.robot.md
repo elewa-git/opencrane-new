@@ -84,7 +84,7 @@ See [evidence](evidence.md) for results, revocation latency and untested conditi
 
 Verified licences: [OpenFGA v1.21.0](https://github.com/openfga/openfga/blob/v1.21.0/LICENSE),
 [@openfga/sdk 0.9.7](https://github.com/openfga/js-sdk/blob/v0.9.7/LICENSE) and
-[@openfga/syntax-transformer 0.2.2](https://github.com/openfga/syntax-transformer/blob/v0.2.2/LICENSE)
+[@openfga/syntax-transformer 0.2.2](https://github.com/openfga/language/blob/906bdc546a4686c9a31409ac9948c05df9cf8dc6/LICENSE)
 are Apache-2.0 (source/npm metadata and installed LICENSE files).
 The transformer is dev-only. Axios is overridden to **1.20.0 (MIT)** because the
 SDK pins vulnerable 1.19.0. The real-service tests exercise the overridden SDK.
