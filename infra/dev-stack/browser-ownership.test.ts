@@ -197,3 +197,34 @@ function enableStatusControl() {
 
 test('status checks ignore disabled or removed controls and activate an available control once',
   activatesOnlyAnAvailableStatusControl);
+
+
+async function readsTheSavedStepDownThroughItsStatusButton() {
+  const { waitForOwnershipMessage } = await import('./browser-phase4.ts');
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<button>Check status</button><strong>Applying</strong>');
+    await page.evaluate(installStepDownStatus);
+    await waitForOwnershipMessage(page, 'You are now an Admin', 1_000);
+    assert.equal(await page.getByRole('button').count(), 0);
+    assert.equal(await page.locator('strong').innerText(), 'You are now an Admin');
+  } finally {
+    await browser.close();
+  }
+}
+
+function installStepDownStatus() {
+  const button = document.querySelector('button');
+  const status = document.querySelector('strong');
+  if (!button || !status) throw new Error('The step-down fixture is missing');
+  function readSavedStepDown() {
+    if (!button || !status) throw new Error('The step-down fixture was removed too early');
+    status.textContent = 'You are now an Admin';
+    button.remove();
+  }
+  button.addEventListener('click', readSavedStepDown);
+}
+
+test('a saved step-down is read through Check status before expecting the confirmed screen',
+  readsTheSavedStepDownThroughItsStatusButton);

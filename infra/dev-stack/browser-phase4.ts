@@ -1054,7 +1054,7 @@ async function qualifyOwnershipHandover(
   const receipt = await response.json() as { commandId: string };
   await waitForChange(previousOwner.request,
     `${options.origin}/api/ownership/changes/${receipt.commandId}`);
-  await previousOwner.getByText('You are now an Admin', { exact: true }).waitFor();
+  await waitForOwnershipMessage(previousOwner, 'You are now an Admin', 30_000);
   const steppedDown = await readOwners(previousOwner.request, options.origin);
   assert.equal(steppedDown.viewer.role, 'admin');
   assert.deepEqual(steppedDown.owners.map(readOwnershipMemberId), [memberId]);
@@ -1225,18 +1225,27 @@ function readOwnershipTransferCommand(request: BrowserRequest): OwnershipTransfe
     expectedSequence: body['expectedSequence'] };
 }
 
-async function waitForOwnershipTransfer(page: Page, successorId: string): Promise<void> {
-  const deadline = Date.now() + 120_000;
+export async function waitForOwnershipMessage(
+  page: Page,
+  message: string,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const confirmed = page.getByText(message, { exact: true });
+  const statusButton = page.getByRole('button', { name: /Check status|Checking/ });
   while (Date.now() < deadline) {
-    const ownershipText = await page.locator('main').innerText();
-    const ownerListText = await page.locator('.owner-list').innerText();
-    if (ownerListText.includes(ownerId) && ownerListText.includes(successorId)
-      && ownershipText.includes('You remain an owner')) return;
-    const statusButton = page.getByRole('button', { name: /Check status|Checking/ });
     await clickStatusWhenEnabled(statusButton);
+    if (await confirmed.isVisible()) return;
     await delay(500);
   }
-  throw new Error('The reviewed ownership transfer did not finish applying within two minutes.');
+  throw new Error('The ownership screen did not confirm the saved change in time.');
+}
+
+async function waitForOwnershipTransfer(page: Page, successorId: string): Promise<void> {
+  await waitForOwnershipMessage(page, 'You remain an owner.', 120_000);
+  const ownerListText = await page.locator('.owner-list').innerText();
+  assert(ownerListText.includes(ownerId) && ownerListText.includes(successorId),
+    'The confirmed appointment must show both owners');
 }
 
 export async function clickStatusWhenEnabled(button: Locator): Promise<boolean> {

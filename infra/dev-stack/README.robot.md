@@ -1683,3 +1683,9 @@ accepted. Its Check status button disappeared between a count and an enabled
 check. A failing-first test reproduced that browser race. The read-only status
 control is now checked and activated in one browser operation. This adds no wait
 or write retry. A browser fixture also checks disabled and removed controls.
+
+The next fresh run on `c3a72c8c5` confirmed the appointment and showed the successor's
+owner controls. It stopped after step-down because the script did not use Check status
+to read that result into the screen. A failing-first browser test reproduced the missing
+read action. Appointment and step-down now use the same status reader. Their existing
+120-second and 30-second limits are unchanged. The reader sends no write command.
