@@ -290,7 +290,7 @@ it('withholds private values and target ids from outsiders and foreign silos', p
 
 type RefusedCaller = 'ordinary' | 'demoted' | 'removed';
 
-async function refusedMember(caller: RefusedCaller) {
+async function refusedMember(caller: RefusedCaller, applyPermissions = false) {
   if (caller === 'ordinary') {
     return 'reader';
   }
@@ -303,7 +303,10 @@ async function refusedMember(caller: RefusedCaller) {
     });
   }
   await append(change);
-  // Keep the identity mapping and IAM unchanged to check access against saved membership.
+  if (applyPermissions) {
+    await auth.handler.handle(change, db);
+  }
+  // Keep the identity mapping so removed people still reach the saved-membership check.
   return 'admin';
 }
 
@@ -343,7 +346,8 @@ it.each(['ordinary', 'demoted', 'removed'] as const)(
   unavailableProgress);
 
 async function failedHistoryReads(caller: RefusedCaller) {
-  const memberId = await refusedMember(caller);
+  // Apply demotion so conversation access reaches its permission check, rather than missing IAM.
+  const memberId = await refusedMember(caller, true);
   const reads = vi.spyOn(nats.store, 'readStream');
   const heads = vi.spyOn(nats.store, 'head');
   const appends = vi.spyOn(nats.store, 'append');
