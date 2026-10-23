@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { takeoverClock, waitForControl } from './support/takeover-clock.ts';
+import { takeoverClock, waitForControl, trackPauseObservations }
+  from './support/takeover-clock.ts';
 import { createEventStore } from '@opencrane/event-store';
 import { savePausing } from '../src/chat/bridge-pausing.ts';
 import { turnCommand } from '../src/chat/turns.ts';
@@ -874,14 +875,9 @@ async function releasesAlreadyFinishedObservation() {
   fixture = await bridgeFixture();
   const test = fixture;
   await test.intendControl();
-  const set = Map.prototype.set;
-  let retained: Map<unknown, unknown> | undefined;
-  function capture(this: Map<unknown, unknown>, key: unknown, value: unknown) {
-    if (typeof key === 'string' && key.startsWith('["test","assistant"')) retained = this;
-    return set.call(this, key, value);
-  }
-  vi.spyOn(Map.prototype, 'set').mockImplementation(capture);
+  const observation = trackPauseObservations();
   await test.link.control.send();
+  const retained = observation();
   expect(retained?.size).toBe(1);
   const failed = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
     podUid: 'fixture', takeoverId: 'control', affectedTurnIds: [test.message.id],

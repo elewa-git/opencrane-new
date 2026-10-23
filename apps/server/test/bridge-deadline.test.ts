@@ -7,7 +7,7 @@ import { createLogger } from '@opencrane/observability';
 import { watchTakeoverDeadline } from '../src/chat/bridge-deadline.ts';
 import { pauseTimeRemaining } from '../src/chat/bridge-pause-time.ts';
 import { saveFailed, savePausing, savePaused } from '../src/chat/bridge-pausing.ts';
-import { takeoverClock } from './support/takeover-clock.ts';
+import { takeoverClock, trackPauseObservations } from './support/takeover-clock.ts';
 
 vi.mock('node:timers/promises', { spy: true });
 
@@ -66,14 +66,9 @@ it('treats an invalid saved time as expired', invalidTimeExpires);
 
 async function releasesObservation() {
   const test = await setup();
-  const original = Map.prototype.set;
-  let retained: Map<unknown, unknown> | undefined;
-  function capture(this: Map<unknown, unknown>, key: unknown, value: unknown) {
-    if (typeof key === 'string' && key.startsWith('["test","assistant"')) retained = this;
-    return original.call(this, key, value);
-  }
-  vi.spyOn(Map.prototype, 'set').mockImplementation(capture);
+  const observation = trackPauseObservations();
   pauseTimeRemaining(test.store, 'test', test.control);
+  const retained = observation();
   expect(retained?.size).toBe(1);
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse(test.control.requestedAt) + 30_000);
   await test.watch();
