@@ -3435,15 +3435,27 @@ both block work. Failed is allowed only from requested or pausing, with reason
 proof waits, including when there is no ready computer. It uses the saved request
 time plus thirty seconds, capped by thirty seconds from the server's first
 monotonic observation. Polls and reconnects share that observation. Clock changes
-can shorten the limit but cannot extend it. A restart reads the original saved time
-and fails an expired request immediately. The worker reuses saved control facts
+can shorten an observed limit but cannot extend it. A fresh store or server loses
+that monotonic observation. It reads the original saved time and fails immediately
+if the wall clock says the request has expired. If that clock moved backwards before
+the new server's first observation, it can allow up to thirty more seconds. This is
+a first-observation cap, not a guarantee across restarts with clock rollback. The worker reuses saved control facts
 until the computer stream changes, but checks the deadline on every poll. Shutdown
-stops the deadline checks.
+stops the deadline checks. Only requested or pausing control starts a deadline task.
+Each assistant has at most one such task. Removing a chat from discovery keeps its
+active task until the request ends. Completion removes the task and its saved clock
+observation. Assistants without pending control use only ordinary snapshot polling.
 
-The proof path checks the same limit immediately before saving paused. Conditional
-writes prevent a delayed proof from replacing a saved failure. An append outage
+The proof path checks the same limit before root stop and after its reply. Pausing
+and paused appends carry that limit into the event store's publish attempts and
+retry waits. A queued append released at expiry cannot publish, even if the failure
+append has not run yet. Conditional writes prevent a delayed proof from replacing
+a saved failure. The store cannot withdraw a publish already sent to NATS. An append outage
 keeps work denied and retries only the original deterministic failure transition.
 Read-back and current saved status prevent duplicate failures after lost replies.
+A deadline task logs `Takeover deadline check unavailable; work remains blocked`
+once if reading or saving fails. It includes no request, receipt or upstream error
+contents. Further attempts in that task do not repeat the warning.
 Tests hold connections and proofs, move both clocks, race conditional writes, and
 restart after an append outage or lost reply beyond the NATS duplicate window.
 They also check unchanged terminal records and work/renewal refusal.
