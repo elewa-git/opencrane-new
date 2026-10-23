@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { uploadComputer } from '../../server/test/support/upload-computer.ts';
+import { pauseBridgeCodex } from './pause-bridge-codex.ts';
 
 const binding = { generation: 1, podUid: 'fixture', takeoverId: 'identity-test',
   affectedTurnIds: [] };
@@ -96,6 +97,7 @@ child.stderr.on('data', ready);
     expect(await computer.exec('node', '--input-type=module', '-e', launch)).toBe('ready');
     const before = await computer.exec('pgrep', '-u', String(uid), '-x', 'chromium');
     expect(before).toMatch(/\d+/u);
+    await pauseBridgeCodex(computer);
     const request = `
 import { request } from 'node:http';
 function receive(response) { response.pipe(process.stdout); }

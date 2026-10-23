@@ -12,6 +12,7 @@ const attempt = {
 };
 
 async function control(computer: Computer, input = attempt, uid = 0) {
+  await pauseBridgeCodex(computer);
   const script = `
 import { request } from 'node:http';
 process.setgroups([]);
@@ -430,6 +431,7 @@ it('keeps executor admission closed when a crash leaves an unreadable gate',
   damagedGateStaysClosed, 60_000);
 
 async function boundControl(computer: Computer, changes = {}) {
+  await pauseBridgeCodex(computer);
   const helper = `
 import { spawnSync } from 'node:child_process';
 const result = spawnSync('node', ['--experimental-strip-types', '/app/src/stop-executor.ts'], {

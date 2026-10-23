@@ -192,6 +192,64 @@ Run with `nice -n 10 npm test -- apps/computer/test/supervisor-stop.test.ts
 --maxWorkers=1`. Docker/runc source checks do not qualify gVisor or a fresh silo.
 Pinned gVisor/Kasm full quietness and live takeover: **NOT RUN**.
 
+### Stop test process stability
+
+`pause-bridge-codex.ts` suspends only the persistent bridge Codex process, UID 1000,
+before a supervisor test requests proof. It finds exactly one `codex` process for
+that user and sends SIGSTOP as the same user. It uses the existing `until` wait
+to check that every thread has state `T`; a stopped main thread alone is not enough.
+The process stays suspended until the disposable computer closes. Restart creates
+a new process, which the next stop request suspends again.
+
+The bridge, executor users 1001 and 1003, and desktop user 1002 remain running.
+The real-executor test checks that its tool, detached child, code-mode host and
+private Codex are still present after the persistent Codex is suspended. All existing
+termination, forged request, restart, late fork and desktop checks remain required.
+No production code, stop deadline, inventory refusal or request retry changes.
+
+The persistent Codex can retire an unrelated worker during `/proc` scans, including
+after the first successful stop. A local diagnostic scanning an idle computer found
+ENOENT for `/proc/41/task/53/stat` while the leader remained `codex`, UID 1000.
+The same 1,000 paired executor/desktop scans completed without observation errors
+after suspending that process. Keep process and thread identity checks strict:
+an unreadable or changed list must still refuse a receipt.
+
+The first test commit requires the persistent Codex to be suspended while real
+executors remain present. Both real-executor cases failed before the helper sent
+SIGSTOP. The image job retains parallel workers; serialising files does not prevent
+background threads changing inside an individual computer.
+
+### Image test timing — 23 October 2026
+
+Main run `39882160047`, attempt 1, used commit `f377da0af`. The failed assertion
+was the repeated stop at `supervisor-stop.test.ts:343`; its first stop succeeded.
+The whole case took 4.0 seconds, below the ten-second stop deadline.
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| Hosted `fixtures-image` whole job | 5m 03s, FAIL | NOT RUN |
+| Hosted image build step | 2m 16s | NOT RUN |
+| Hosted test step, including web build | 1m 17s, FAIL | NOT RUN |
+| Local six files, three workers | 2m 03s, PASS | 2m 55s, PASS |
+| Local six files, one worker | 4m 05s, PASS | NOT RUN |
+
+Local measurements used the existing `ocn-upload-computer:test` image, a disposable
+PostgreSQL database and two low-priority CPU busy loops. The loops covered both
+three-worker measurements; the one-worker loops ended after 180 seconds. These
+are shared-box observations, not hosted job predictions. Unchanged credential
+tests took 61 seconds before and 79 seconds after; upload tests took 109 and
+136 seconds. The 52-second suite difference therefore includes other load.
+Both runs selected all six image files, with the screenshot journey still skipped
+by its existing opt-in flag. The CI watcher records the hosted after time.
+
+Final targeted validation runs the changed supervisor files twice: once with the
+35 inventory tests, then with all six image files under load. The inventory run
+passed 51 tests; the image run passed 36 and skipped the opt-in screenshot test.
+The event security rules passed 438 tests. Fresh-install and gVisor qualification
+remain NOT RUN; no full root suite was run for this test-fixture change.
+Lint (including knip), typecheck, `check:events` and `lint:changelog` passed.
+Full lint used CI's `NODE_OPTIONS=--max-old-space-size=8192` and `nice -n 10`.
+
 ## Review fixes — 8 October 2026
 
 Findings 1 and 2 were confirmed with failing tests before changing production code.
