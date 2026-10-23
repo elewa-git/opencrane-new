@@ -2,6 +2,34 @@
 
 For people, read [README.md](README.md) first.
 
+## Decision cost fixture scheduling
+
+`test/decision-cost.test.ts` pauses the first cold grant read until admission
+returns 403. It checks one saved Deny and no reservations. After releasing the
+read, it waits directly for `readDecisionGrants` with the existing two-minute
+history budget. It waits for the latest requester and assistant grant receipts
+through `auth.applied(eventId)` before warm-up. A regression withholds a new requester
+grant receipt while model permission already exists, then applies it through the
+real handler. Preparation must wait for that receipt.
+
+`prepareDecisionWarmUp` also reads `ownership-test`, `member-alice` and
+`assistant-assistant` with the same preparation deadline. These first small reads
+would otherwise run inside the HTTP warm-up. A regression confirms both model
+permissions are allowed, then delays only the first assistant lookup by 2,200 ms.
+Preparation must finish that read before starting the HTTP call. The HTTP call
+still reads current access again under its normal two-second deadline.
+
+The fixture's token issuer has a frozen clock for credential tests. After a long
+seed or history read, `issue()` can therefore issue an expired two-minute turn token.
+These volume tests sign a fresh token from the real clock before each request,
+keeping the normal two-minute lifetime and the same turn claims. A regression moves
+the fixture clock back 121 seconds: its token must receive 403 without holding money,
+and a fresh token must receive 200. One successful warm-up precedes the measured
+admission. There is no admission retry loop. Successful calls must still take less
+than two seconds, read no old grant rows and keep their reservations unsettled. Background dispatch
+stops before the volume seed. Production defaults are unchanged.
+[Own checks and the other 503 causes](../../docs/process/evidence/ci-flakes-3.md).
+
 ## Saved-thread native consent capture
 
 `test/codex-native-capture.test.ts` runs only with `CODEX_CAPTURE_IMAGE` set to the

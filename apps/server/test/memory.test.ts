@@ -326,7 +326,12 @@ describe('personal HTTP correction', function correctionCases() {
       }
       async function* secondHistory(subject: string, from?: number, deadline?: number) {
         yield* read(subject, from, deadline);
-        if (subject === `scope-${identity.scopeId}` && from === 1) release.resolve();
+        if (subject === `scope-${identity.scopeId}` && from === 1) {
+          // Keep the old revision, then finish the first write before checking for a conflict.
+          // Otherwise Forget can correctly refuse the still-occupied write slot as busy.
+          release.resolve();
+          await firstResult;
+        }
       }
       const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(held);
       const first = correct(identity.memoryId, `race-${operation}-first`);
@@ -339,12 +344,47 @@ describe('personal HTTP correction', function correctionCases() {
         else second = correct(identity.memoryId, 'race-correct-second');
         const replies = await Promise.all([firstResult, second]);
         expect(replies[0].statusCode).toBe(200);
-        expect(replies[1].statusCode).toBe(409);
+        expect(replies[1].statusCode, replies[1].body).toBe(409);
         expect(keys.status({ ...identity, revision: 4 })).toBe('available');
         expect(appends).toBe(1);
       } finally { release.resolve(); readSpy.mockRestore(); appendSpy.mockRestore(); }
       expect((await forget(identity.memoryId, `race-${operation}-final`, 4)).statusCode).toBe(200);
       expect((await correct(identity.memoryId, `race-${operation}-restore`, 4)).statusCode).toBe(409);
+    });
+
+  it('returns conflict when another correction still occupies the write slot',
+    async function occupiedCorrectionSlot() {
+      const identity = await correctionTarget('occupied-correction');
+      const append = nats.store.append.bind(nats.store);
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      let appends = 0;
+      async function holdFirstWrite(command: Parameters<typeof append>[0]) {
+        appends++;
+        if (appends === 1) {
+          entered.resolve();
+          await release.promise;
+        }
+        return append(command);
+      }
+      const appendSpy = vi.spyOn(nats.store, 'append');
+      appendSpy.mockImplementation(holdFirstWrite);
+      const first = correct(identity.memoryId, 'occupied-correction-first');
+      const firstResult = first.then();
+      try {
+        await entered.promise;
+        const second = await correct(identity.memoryId, 'occupied-correction-second');
+        expect(second.statusCode, second.body).toBe(409);
+        expect(appends).toBe(1);
+        release.resolve();
+        const accepted = await firstResult;
+        expect(accepted.statusCode, accepted.body).toBe(200);
+        expect(keys.status({ ...identity, revision: 4 })).toBe('available');
+      } finally {
+        release.resolve();
+        await firstResult;
+        appendSpy.mockRestore();
+      }
     });
 
   it('retains a refused correction candidate for a later checked command', async function candidate() {

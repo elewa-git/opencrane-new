@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { countReads, expectNoWholeReads } from '@opencrane/event-store/testing';
 import { grantStream } from '@opencrane/authz';
+import { until } from '@opencrane/authz/testing';
 import { BudgetActor, envelope, history } from '../src/actor.ts';
 import { totals } from '../src/state.ts';
 import { startDecision } from '../src/decision.ts';
@@ -350,6 +351,138 @@ it.each(['computer-assistant', 'conversation-conversation', grantStream('model',
   'refuses %s history restored below its summary without reserving more money',
   refusesRestoredHistory, 40_000);
 
+async function freshDecisionHeaders(setup: Fixture) {
+  const headers = await setup.issue();
+  // Keep the normal lifetime but issue from the real clock after lengthy fixture preparation.
+  const turnToken = await setup.sign(setup.t, 'decision-service');
+  return { ...headers, 'x-turn-token': turnToken };
+}
+
+async function refreshesExpiredFixtureCredentials() {
+  const setup = await fixture();
+  try {
+    // Reproduce preparation outlasting the turn token without waiting two minutes.
+    setup.credentialTime(-121);
+    const staleHeaders = await setup.issue();
+    const refused = await decide(setup, setup.options.decisionUrl, staleHeaders);
+    expect(refused.status, refused.text).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    await prepareDecisionWarmUp(setup, performance.now() + 15_000);
+    const headers = await freshDecisionHeaders(setup);
+    const ready = await decide(setup, setup.options.decisionUrl, headers);
+    expect(ready.status, ready.text).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refreshes an expired fixture turn token before warming admission',
+  refreshesExpiredFixtureCredentials);
+
+async function prepareDecisionWarmUp(setup: Fixture, deadline: number) {
+  const grants = await readDecisionGrants(setup.nats.store, 'test', 'gpt-6-luna', deadline);
+  const granteeSchema = z.object({ granteeId: z.string(), granteeKind: z.string() });
+  for (const row of grants.rows) {
+    const grantee = granteeSchema.parse(row.event.data);
+    const requester = grantee.granteeKind === 'member' && grantee.granteeId === 'alice';
+    const assistant = grantee.granteeKind === 'assistant' && grantee.granteeId === 'assistant';
+    if (!requester && !assistant) continue;
+    async function receiptApplied() {
+      return setup.auth.applied(row.event.id);
+    }
+    const remaining = Math.max(0, deadline - performance.now());
+    await until(receiptApplied, remaining);
+  }
+  // Finish the first small access lookups before the HTTP request starts its short deadline.
+  const authoritySubjects = ['ownership-test', 'member-alice', 'assistant-assistant'];
+  for (const subject of authoritySubjects) {
+    await history(setup.nats.store, subject, 'test', deadline);
+  }
+}
+
+async function waitsForGrantReceiptBeforeWarmUp() {
+  const setup = await fixture();
+  const receiptChecked = Promise.withResolvers<'receipt checked'>();
+  const applied = setup.auth.applied.bind(setup.auth);
+  let waiting: Promise<'finished'> | undefined;
+  try {
+    await setup.stopDispatch();
+    const subject = grantStream('model', 'gpt-6-luna');
+    const grant = { resourceType: 'model', resourceId: 'gpt-6-luna',
+      granteeId: 'alice', granteeKind: 'member', grantedBy: 'alice' };
+    const event = await setup.append(subject, 'grant.given', grant);
+    expect(await applied(event.id)).toBe(false);
+    async function observeReceipt(eventId: string) {
+      const result = await applied(eventId);
+      if (eventId === event.id && !result) receiptChecked.resolve('receipt checked');
+      return result;
+    }
+    const appliedSpy = vi.spyOn(setup.auth, 'applied');
+    appliedSpy.mockImplementation(observeReceipt);
+    async function prepareWarmUp(): Promise<'finished'> {
+      await prepareDecisionWarmUp(setup, performance.now() + 15_000);
+      return 'finished';
+    }
+    waiting = prepareWarmUp();
+    const first = await Promise.race([waiting, receiptChecked.promise]);
+    expect(first).toBe('receipt checked');
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    await setup.auth.handler.handle(event, setup.db);
+    await waiting;
+    expect(await applied(event.id)).toBe(true);
+    const ready = await decide(setup);
+    expect(ready.status, ready.text).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+    expect(setup.received()).toBe(0);
+  } finally {
+    await waiting;
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('waits for the latest model grant receipt before warming admission',
+  waitsForGrantReceiptBeforeWarmUp);
+
+async function finishesFirstAssistantReadBeforeWarmUp() {
+  const setup = await fixture();
+  const store = setup.nats.store;
+  const read = store.readStream.bind(store);
+  let assistantReadDelayed = false;
+  async function* slowFirstAssistantRead(...args: Parameters<typeof read>) {
+    if (args[0] === 'assistant-assistant' && !assistantReadDelayed) {
+      assistantReadDelayed = true;
+      // Reproduce a cold lookup taking longer than the HTTP admission budget.
+      await delay(2200);
+    }
+    yield* read(...args);
+  }
+  try {
+    await setup.stopDispatch();
+    const requesterUse = await setup.auth.use('person', 'alice', 'model', 'gpt-6-luna');
+    const assistantUse = await setup.auth.use('assistant', 'assistant', 'model', 'gpt-6-luna');
+    expect(requesterUse.allowed).toBe(true);
+    expect(assistantUse.allowed).toBe(true);
+    const reads = vi.spyOn(store, 'readStream');
+    reads.mockImplementation(slowFirstAssistantRead);
+    await prepareDecisionWarmUp(setup, performance.now() + 15_000);
+    const headers = await freshDecisionHeaders(setup);
+    const ready = await decide(setup, setup.options.decisionUrl, headers);
+    expect(assistantReadDelayed).toBe(true);
+    expect(ready.status, ready.text).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('finishes a slow first assistant history read before warming admission',
+  finishesFirstAssistantReadBeforeWarmUp);
+
 async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee: boolean) {
   const setup = await fixture();
   const store = setup.nats.store;
@@ -382,7 +515,7 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     await setup.nats.seed(events);
     vi.spyOn(store, 'readStream').mockImplementation(recordGrantRead);
     // Stop cold history before access checks so its refusal cannot reach a saved Allow.
-    const coldHeaders = await setup.issue();
+    const coldHeaders = await freshDecisionHeaders(setup);
     const warmed = await decide(setup, setup.options.decisionUrl, coldHeaders);
     expect(coldReadPaused).toBe(true);
     expect(warmed.status, warmed.text).toBe(403);
@@ -397,15 +530,15 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     resumeGrantHistory.resolve();
     // Keep the existing two-minute history budget outside the measured admission.
     const grantHistoryDeadline = performance.now() + 120_000;
-    await readDecisionGrants(store, 'test', 'gpt-6-luna', grantHistoryDeadline);
-    const readyHeaders = await setup.issue();
+    await prepareDecisionWarmUp(setup, grantHistoryDeadline);
+    const readyHeaders = await freshDecisionHeaders(setup);
     const ready = await decide(setup, setup.options.decisionUrl, readyHeaders);
     expect(ready.status, ready.text).toBe(200);
     expect(setup.actor.state.reservations).toHaveLength(1);
     const reservationsBefore = setup.actor.state.reservations.length;
     const summaryPosition = await store.head(subject);
     const reads = countReads(store);
-    const headers = await setup.issue();
+    const headers = await freshDecisionHeaders(setup);
     const began = performance.now();
     const result = await decide(setup, setup.options.decisionUrl, headers);
     expect(result.status, result.text).toBe(200);

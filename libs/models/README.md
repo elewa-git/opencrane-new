@@ -440,7 +440,11 @@ Workers keep copies belonging to other silos without checking or changing them.
 Tests share a port picker that keeps listeners away from outgoing connections
 and the secondary dev stacks. It tries another port if one is already busy.
 Gateway startup errors keep recent safe details, including port conflicts.
-The admission timing tests wait for cold history to finish before measuring a call.
+The admission timing tests wait for cold history and applied model grant receipts
+before measuring a call. They issue a fresh turn token after preparation, with the
+normal two-minute lifetime.
+The long-grant cases first read the small ownership, member and assistant histories.
+Their HTTP warm-up still checks current access within the normal two seconds.
 They check that a cold refusal holds no money and that the measured call adds one hold.
 Separate timeout checks require unsent holds to settle at zero euro cents.
 The measured call must still finish within two seconds.
