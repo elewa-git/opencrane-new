@@ -121,3 +121,25 @@ async function forwardsAttemptLimits() {
   expect(limits?.deadline).toBeLessThanOrEqual(performance.now() + 60_000);
 }
 it('passes the live job attempt limits through the runtime to its handler', forwardsAttemptLimits);
+
+async function preservesCallbackLockTimeout() {
+  const storage = await databases();
+  onTestFinished(storage.close.bind(storage));
+  const pool = new Pool({ connectionString: storage.queue.options.connectionString, max: 1 });
+  const db = pgDb(pool);
+  async function readTimeout(connection: Query) {
+    const result = await connection.query<{ lock_timeout: string }>('SHOW lock_timeout');
+    return result.rows[0]!.lock_timeout;
+  }
+  try {
+    const before = await readTimeout(db);
+    const options = { timeoutMs: 250 };
+    const during = await db.lock!('gateway-configuration:test', readTimeout, options);
+    expect(during).toBe('250ms');
+    expect(await readTimeout(db)).toBe(before);
+  } finally {
+    await pool.end();
+  }
+}
+it('keeps the caller lock timeout during work and resets it before reusing the connection',
+  preservesCallbackLockTimeout);
