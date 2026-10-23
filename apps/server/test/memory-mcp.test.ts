@@ -155,18 +155,26 @@ function captureContext(request: import('fastify').FastifyRequest,
   }
   done();
 }
-function restartMemoryGateway() {
-  return setup.restart();
+function restartMemoryGateway(target = setup) {
+  // Replace only disposable test gateways. No request is in progress during setup.
+  return target.restart('SIGKILL');
 }
 async function close() {
   const currentApp = app;
   app = undefined!;
-  // Disconnect unfinished test requests before waiting for the backend to close.
-  currentApp?.server.closeAllConnections();
-  await currentApp?.close();
   const currentSetup = setup;
   setup = undefined!;
-  await currentSetup?.close();
+  await closeMemoryServices(currentSetup, currentApp);
+}
+async function closeMemoryServices(target: typeof setup | undefined,
+  backend: typeof app | undefined) {
+  // Finish every call and assertion before disposal. Do not wait for gateway drain here.
+  const child = target?.gatewayChild();
+  child?.kill('SIGKILL');
+  // Disconnect unfinished test requests before waiting for the backend to close.
+  backend?.server.closeAllConnections();
+  await backend?.close();
+  await target?.close();
 }
 async function renewGatewayCredentials() {
   // Keep each test on the same live turn with a fresh two-minute token.
@@ -347,7 +355,7 @@ async function scopedRecall(team: boolean) {
     const upstream = new URL(address).host;
     target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
       generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
-    await target.restart();
+    await restartMemoryGateway(target);
     await refuseUnboundScopes(target, backend);
     for (const scope of scopes) {
       const selectedId = memoryScopeId('test', scope.scopeKind, scope.ownerId);
@@ -398,8 +406,7 @@ async function scopedRecall(team: boolean) {
       await allowScopedRead(target, selectedId, requester);
     }
   } finally {
-    await backend?.close();
-    await target.close();
+    await closeMemoryServices(target, backend);
   }
 }
 it.each([false, true])('recalls only the selected scope with live grants (team=%s)',
@@ -490,7 +497,7 @@ async function isolatedBackend(target: typeof setup) {
   const upstream = new URL(address).host;
   target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
-  await target.restart();
+  await restartMemoryGateway(target);
   return backend;
 }
 
@@ -563,8 +570,7 @@ async function recordedMemoryGrant(granteeKind: string) {
       .toMatchObject({ allowed: true });
     await assertRecallRefused(target, backend);
   } finally {
-    await backend?.close();
-    await target.close();
+    await closeMemoryServices(target, backend);
   }
 }
 it.each(['member', 'assistant'])(
@@ -596,8 +602,7 @@ it('requires recorded MCP grants independently of valid memory grants',
       const allowed = await target.call(headers, call, route);
       expect(allowed.status, allowed.text).toBe(200);
     } finally {
-      await backend?.close();
-      await target.close();
+      await closeMemoryServices(target, backend);
     }
   }, 120_000);
 
@@ -616,8 +621,7 @@ it.each([undefined, 'memory_free'] as const)(
       backend = await isolatedBackend(target);
       await assertRecallRefused(target, backend);
     } finally {
-      await backend?.close();
-      await target.close();
+      await closeMemoryServices(target, backend);
     }
   }, 120_000);
 
@@ -1599,8 +1603,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       append.mockRestore();
     }
   } finally {
-    await backend?.close();
-    await target.close();
+    await closeMemoryServices(target, backend);
   }
 }
 async function confirmAgent() {}
