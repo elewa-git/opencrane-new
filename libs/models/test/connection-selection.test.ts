@@ -580,8 +580,10 @@ async function unavailableServer(kind: string) {
     });
     rows.push({ sequence: rows.at(-1)!.sequence + 1, event });
   } else if (kind === 'expired') {
-    const checkedAt = new Date(Date.now() - 400_000).toISOString();
-    const expiresAt = new Date(Date.now() - 100_000).toISOString();
+    // Use one timestamp so a clock tick cannot exceed the five-minute catalogue lifetime.
+    const timestamp = Date.now();
+    const checkedAt = new Date(timestamp - 400_000).toISOString();
+    const expiresAt = new Date(timestamp - 100_000).toISOString();
     rows[1]!.event.data = { ...eventData(rows[1]!.event), checkedAt, expiresAt };
     rows[2]!.event.time = checkedAt;
     expect(mcpServerDiscoveredDataSchema.safeParse(rows[1]!.event.data).success).toBe(true);

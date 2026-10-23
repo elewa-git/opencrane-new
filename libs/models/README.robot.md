@@ -3080,3 +3080,8 @@ profiles choose nothing. Selection preserves saved_unverified and never grants a
 reads custody, calls a provider or falls back to another profile. Connecting never selects.
 Tests use bearer fixtures with real NATS, PostgreSQL and OpenFGA. Company opt-in, company
 profiles, HTTP/UI, release, dispatch and fresh-install qualification remain outside this PR.
+
+The expired-catalogue fixture derives both dates from one timestamp. Its five-minute
+lifetime must remain valid even when the clock advances between reads. A regression
+advances the clock by one millisecond per read, checks the discovery data against its
+schema and still requires `Selection conflict` without saving a choice.
