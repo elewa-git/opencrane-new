@@ -870,7 +870,7 @@ it.each([['requested', 30_000, true], ['pausing', 29_999, true], ['pausing', 30_
   ['pausing', 30_001, true], ['pausing', 30_000, false]] as const)(
   'enforces the deadline with held %s proof at %i ms and deadline watcher: %s', heldProofDeadline);
 
-async function racesConditionalOutcomes() {
+async function racesConditionalOutcomes(pausedFirst: boolean) {
   const entered = Promise.withResolvers<void>();
   const releaseProof = Promise.withResolvers<void>();
   async function stop(input: StopInput) {
@@ -914,6 +914,10 @@ async function racesConditionalOutcomes() {
     await paused.promise;
     clock.advance(30_000);
     await failed.promise;
+    if (pausedFirst) {
+      releasePaused.resolve();
+      await link.control.settled();
+    }
     releaseFailed.resolve();
     await waitForControl(test.store, 'failed');
   } finally {
@@ -930,7 +934,8 @@ async function racesConditionalOutcomes() {
   }
   expect(outcomes).toEqual(['takeover.failed']);
 }
-it('lets only the saved failure survive racing conditional pause and failure writes',
+it.each([false, true])(
+  'keeps failure when conditional writes race; release paused first: %s',
   racesConditionalOutcomes);
 
 async function reconnectKeepsDeadline() {
