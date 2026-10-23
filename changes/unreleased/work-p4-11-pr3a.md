@@ -1,0 +1,1 @@
+- Offline native-child checks now record early ancestry and exact HTTP retries at two depths. Delegation remains disabled: trusted identity for each call and the required spawn-completion race remain unproven.
