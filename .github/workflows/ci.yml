@@ -151,6 +151,7 @@ jobs:
           infra/dev-stack/demo-prepare.test.ts infra/dev-stack/demo-smoke.test.ts
           infra/dev-stack/demo-recovery.test.ts infra/dev-stack/demo-spending.test.ts
           infra/dev-stack/demo-rehearsal.test.ts infra/dev-stack/demo-rehearsal-repeat.test.ts
+          infra/dev-stack/stage-b-local.test.ts
           infra/dev-stack/zitadel-setup.test.ts infra/package/fresh-twice.test.ts
           infra/package/browser-capture.test.ts
 

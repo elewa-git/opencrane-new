@@ -2,6 +2,17 @@
 
 For people, read [README.md](README.md) first.
 
+## Local demo TLS fixture
+
+`@opencrane/models/testing/remote-mcp` accepts an optional HTTP request handler after
+its existing wrong-hostname flag. A supplied handler replaces only the synthetic RPC
+responder; DNS, certificate creation, TLS listener, pin mapping and cleanup stay shared.
+Existing callers keep the default responder. With a handler, `calls` and `received`
+are not populated; connection and pin counts remain available.
+`infra/dev-stack/test/demo-remote.ts` uses this to serve the real demo routes and checks
+one permitted hostname and the production TLS options before allowing the local mapping.
+This is test-only support and is not imported by either production entry point.
+
 ## Decision cost fixture scheduling
 
 `test/decision-cost.test.ts` pauses the first cold grant read until admission

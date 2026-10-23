@@ -2,6 +2,53 @@
 
 For people, read [README.md](README.md) first.
 
+## Local tools rehearsal checks
+
+The first split of P3-4/P3-5 PR 14a supplies test helpers, not a live journey.
+`test/demo-remote.ts` runs the real `apps/demo-mcp` routes behind the TLS server from
+`@opencrane/models/testing/remote-mcp`. It accepts only `https://mcp.example.test/`.
+It checks the public pin, TLS verification, SNI hostname and disabled connection
+pooling before the shared fixture maps the connection to loopback.
+Production DNS and address checks still run. No production startup path imports it.
+
+`requireStageBStack` checks the requested and claimed secondary ids before reading
+the owner marker. It rejects foreign and redirected directories before any settings
+read. The caller must obtain the claim through `claim.sh`.
+
+`checkStageBApproval` checks supplied policy, original grant command references,
+IAM/content receipts, the matching gateway generation and process, requester approval,
+same-turn reply, fixture readbacks and zero tool spending. `rehearsedAt` records the
+rehearsal time. The product's `isToolPolicyAvailable` must accept the policy at that
+time. The saved catalogue must contain valid definitions whose names, revisions,
+read-only flags and zero costs match the reviewed choices.
+
+`records` contains the original event envelopes and global event-log positions for
+`tool.approval_requested`, `approval.decided`, `approval.used`, `decision.recorded`
+and `tool.dispatch_recorded`. Each record must belong to the same silo and its expected
+stream. Their positions must increase in that order, and their times must agree with
+that order and precede or equal `rehearsedAt`. The approval, consumed permit and dispatch
+must refer to the same call, conversation, turn, requester, assistant and write tool.
+The request must match the reviewed revision, connection, catalogue and arguments.
+The dispatch must start after the saved decision and before the approval expires.
+Missing records, unrelated records and dispatch before approval are refused.
+
+Its input is collected
+evidence, not an authentication mechanism. The caller must obtain those records from
+the product and take the readbacks at the stated stages. Synthetic records in its
+unit tests are not live qualification. Model spending reconciliation, browser capture,
+reload, Change history and collection of those records remain in the next split.
+
+```sh
+nice -n 10 node --experimental-strip-types --test infra/dev-stack/stage-b-local.test.ts
+```
+
+The test calls discovery and the shared remote HTTPS exchange directly. It does not
+run the catalogue worker, gateway or Codex. The next split must inject the same adapter
+at discovery, watch and dispatch while keeping server and models processes separate.
+It must run the one fresh browser/chat journey before reporting live qualification.
+Native shell and file-edit consent remains NOT RUN under the 23 October decision.
+See [the receipt and remaining work](../../docs/process/demo-stage-b-local/receipt.md).
+
 ## TypeScript checks
 
 `npm run typecheck:dev-stack` runs `tsc --noEmit` with this folder's existing

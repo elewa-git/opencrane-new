@@ -480,6 +480,8 @@ npm run typecheck -w libs/models
 ```
 
 Some tests use Docker and a PostgreSQL test database. README.robot.md lists what they need.
+The shared remote-tool fixture can serve real demo routes over local TLS. This lets
+development checks test the demo without changing the public-address rules.
 An optional Codex capture uses these disposable services to check that native consent
 still reaches the gateway's requester approval. Capture output is private to that test
 run and is removed when the run finishes.
