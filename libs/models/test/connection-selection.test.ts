@@ -584,6 +584,7 @@ async function unavailableServer(kind: string) {
     const expiresAt = new Date(Date.now() - 100_000).toISOString();
     rows[1]!.event.data = { ...eventData(rows[1]!.event), checkedAt, expiresAt };
     rows[2]!.event.time = checkedAt;
+    expect(mcpServerDiscoveredDataSchema.safeParse(rows[1]!.event.data).success).toBe(true);
   }
   const fault = replaceStream('mcp-server', rows);
   try {
@@ -596,6 +597,23 @@ async function unavailableServer(kind: string) {
 it.each(['missing', 'hosted', 'company', 'unpublished', 'expired'])(
   'refuses %s server facts while the person still has tool rights and a valid profile',
   unavailableServer);
+
+async function expiredServerAcrossClockTick() {
+  let timestamp = Date.now();
+  function advancingClock() {
+    timestamp += 1;
+    return timestamp;
+  }
+  const clock = vi.spyOn(Date, 'now');
+  clock.mockImplementation(advancingClock);
+  try {
+    await unavailableServer('expired');
+  } finally {
+    clock.mockRestore();
+  }
+}
+it('refuses expired server facts with valid catalogue dates when the clock ticks between reads',
+  expiredServerAcrossClockTick);
 
 async function catalogueEvent(kind: string) {
   const rows = await history(nats.store, 'mcp-server', 'test');
