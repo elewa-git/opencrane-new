@@ -39,14 +39,15 @@ async function refusesIncorrectOrExposedProvider() {
   try {
     const page = await browser.newPage();
     page.setDefaultTimeout(100);
+    const contentOptions = { timeout: 30_000 };
     const missing = modelsPage.replace('<p>Model answered</p>', '');
-    await page.setContent('<p>Model answered</p>' + missing);
+    await page.setContent('<p>Model answered</p>' + missing, contentOptions);
     await assert.rejects(checkProviderAnswer(page), /Timeout/u);
     const syntheticKey = 'sk-synthetic-fixture-value';
     for (const html of [modelsPage + `<aside>${syntheticKey}</aside>`,
       modelsPage.replace('</oc-models>', `<p>${syntheticKey}</p></oc-models>`),
       modelsPage + '<input type="password" value="synthetic-password">']) {
-      await page.setContent(html);
+      await page.setContent(html, contentOptions);
       await assert.rejects(checkProviderAnswer(page));
     }
   } finally {
@@ -96,7 +97,7 @@ async function retainsErrorWhenPicturesFail() {
   async function fail() {
     throw new Error('Original checker failure');
   }
-  async function capture() {
+  async function capture(): Promise<string[]> {
     throw new Error('Screenshot failed');
   }
   const result = await rehearsalStep(fail, capture, sanitise);
@@ -201,7 +202,7 @@ async function sanitisesCombinedFailuresSeparately() {
       new Error('Restoration unavailable sk-synthetic-fixture-value')];
     throw new AggregateError(errors, 'Combined failures');
   }
-  async function capture() {
+  async function capture(): Promise<string[]> {
     throw new Error('Screenshot failed synthetic-private-value');
   }
   function sanitise(value: string) {

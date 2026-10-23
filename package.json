@@ -12,8 +12,9 @@
   ],
   "scripts": {
     "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
-    "typecheck": "npm run typecheck --workspaces && npm run typecheck:package",
+    "typecheck": "npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack",
     "typecheck:package": "tsc --noEmit -p infra/package/tsconfig.json",
+    "typecheck:dev-stack": "tsc --noEmit -p infra/dev-stack/tsconfig.json",
     "pretest": "sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh",
     "test": "vitest run",
     "ops": "npm run ops -w apps/ops --",

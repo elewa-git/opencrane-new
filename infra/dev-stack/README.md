@@ -65,6 +65,9 @@ tables, [NATS](../../GLOSSARY.md#nats) for the event log,
 The machine needs Docker, Node 22 and the cluster prepared by
 [infra/devbox](../devbox/README.md). These commands claim and use a spare stack:
 
+`npm run typecheck` checks the TypeScript in this folder as well as the apps and libraries.
+`npm run typecheck:dev-stack` checks this folder on its own.
+
 ```sh
 DEV_STACK_ID=$(infra/dev-stack/claim.sh) || exit 1
 export DEV_STACK_ID

@@ -30,8 +30,10 @@ test('owner restore removes secondary redirects, preserves other settings, and r
     await writeFile(providerFile, JSON.stringify(initial));
     await writeFile(`${home}/pat`, 'fake-test-pat');
     const first = await restore();
+    const expectedOwnerApp = { ...ownerApp,
+      oidcConfig: { ...ownerApp.oidcConfig, ...desired } };
     const expected = { ...initial, apps: { ...initial.apps,
-      [ownerApp.id]: { ...ownerApp, oidcConfig: { ...ownerApp.oidcConfig, ...desired } } }, updates: 1 };
+      [ownerApp.id]: expectedOwnerApp }, updates: 1 };
     assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), expected);
     const receipt = JSON.parse(first.stdout);
     assert.equal(receipt.changed, true);
@@ -40,7 +42,7 @@ test('owner restore removes secondary redirects, preserves other settings, and r
     assert.equal(JSON.parse((await restore()).stdout).changed, false);
     assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), expected);
     for (const value of [false, undefined, 'true']) {
-      const config = { ...expected.apps[ownerApp.id]!.oidcConfig,
+      const config = { ...expectedOwnerApp.oidcConfig,
         idTokenUserinfoAssertion: value };
       const app = { ...expected.apps[ownerApp.id], oidcConfig: config };
       const refused = { ...expected, apps: { ...expected.apps, [ownerApp.id]: app } };

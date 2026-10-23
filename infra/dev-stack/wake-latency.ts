@@ -74,9 +74,9 @@ class TimedKube extends SandboxClient {
     await super.mode(name, mode);
     if (mode === 'Running') stamp('running_patch');
   }
-  override async credentials(name: string, token: IssuedToken, force = false) {
+  override async credentials(name: string, token: IssuedToken, verifier?: object, force = false) {
     stamp('credential_start');
-    await super.credentials(name, token, force);
+    await super.credentials(name, token, verifier, force);
     stamp(force ? 'bridge_credential_delivered' : 'credential_delivered');
   }
 }
