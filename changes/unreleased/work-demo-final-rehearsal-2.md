@@ -1,0 +1,1 @@
+- Record the second final demo rehearsal: fresh startup, both smoke widths and all desktop steps passed, but the phone script stopped on a duplicate invitation. No owner refresh commit is qualified.

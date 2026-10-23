@@ -49,7 +49,7 @@ request records is not a recovery step. Assistant creation does not prove readin
 ### Secondary rehearsal
 
 Only one live rehearsal uses the shared machine at a time. The refreshed computer image
-has passed Stop with the stand-in; Stop with the real model still needs checking. Keep the remaining
+has passed Stop with both the stand-in and the real model. Keep the remaining
 allowance for all paid runs together within 2,000 cents per UTC day, including unknown
 holds. Startup's 2,000-cent ceiling is per stack; it is not a shared daily counter.
 
@@ -88,15 +88,16 @@ name this run's reservations, charges and holds, and failed warm-up still has ti
 ### OWNER-RUN: refreshing the owner checkout
 
 **A complete real-demo fresh-install PASS is still required before this sequence.**
-The owner real-mode command and refreshed image are available. PDF seeding, ceilings
-and the timed smoke are still unfinished. There is no qualified owner SHA in this guide.
+The owner real-mode command and refreshed image are available. PDF preparation, ceilings
+and both timed smoke widths have passed. There is no qualified owner SHA in this guide.
 These commands require an interactive terminal and refuse any `OPENCRANE_FLEET_TASK`
 marker, including an empty one. Task launchers export that marker. No task has run
 these commands on the owner stack or checked the real phone path.
 
-The [latest rehearsal](../demo-rehearsal/final-2026-10-23/receipt.md) passed fresh
-startup and both timed smoke widths, then stopped at a browser-checker error on the
-Models page. The remaining script steps are untested. It does not qualify an owner refresh.
+The [latest rehearsal](../demo-rehearsal/final-2026-10-23-2/receipt.md) passed fresh
+startup, both timed smoke widths and all ten desktop script steps. The phone-width
+script stopped when it reused the desktop invitation's email address. Its last three
+steps are untested. It does not qualify an owner refresh.
 
 Before choosing a SHA, confirm that it is merged into `origin/main`, includes both
 the real-provider and demo-kit changes, includes the qualified Stop image, and has
