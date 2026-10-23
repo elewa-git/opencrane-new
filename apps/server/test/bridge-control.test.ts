@@ -837,3 +837,34 @@ async function logsFailureOutageOnce() {
   await waitForControl(test.store, 'failed');
 }
 it('logs a fixed warning once while saving a timeout keeps failing', logsFailureOutageOnce);
+
+async function sharesActiveDeadline() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(request.time) + 30_000);
+  const append = test.store.append.bind(test.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let attempts = 0;
+  async function hold(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'takeover.failed') {
+      attempts++;
+      entered.resolve();
+      await release.promise;
+    }
+    return append(command);
+  }
+  vi.spyOn(test.store, 'append').mockImplementation(hold);
+  test.startControls();
+  try {
+    await entered.promise;
+    await delay(600);
+    expect(attempts).toBe(1);
+  } finally {
+    release.resolve();
+  }
+  await waitForControl(test.store, 'failed');
+}
+it('keeps one deadline watcher while its failure append waits across polls', sharesActiveDeadline);

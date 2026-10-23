@@ -1029,3 +1029,23 @@ async function outageKeepsActiveWorkDenied() {
 }
 it('keeps an active turn renewal denied during failure append outage and then saves failure',
   outageKeepsActiveWorkDenied);
+
+async function expiresBeforeStop() {
+  const stops: StopInput[] = [];
+  async function stop(input: StopInput) {
+    stops.push(input);
+    return stopped(input, { quietProof: 'complete' });
+  }
+  const test = await setup(false, stop);
+  await test.save();
+  const request = await readComputerControl(test.store, test.silo, 'assistant');
+  if (!request || request.phase !== 'requested') throw new Error('Missing request');
+  const link = await test.connect();
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(request.requestedAt) + 30_000);
+  link.control.receive(quiet());
+  await link.control.settled();
+  expect(stops).toEqual([]);
+  expect((await readComputerControl(test.store, test.silo, 'assistant'))?.phase).toBe('failed');
+}
+it('expires an accepted receipt before calling root stop without a deadline watcher',
+  expiresBeforeStop);
