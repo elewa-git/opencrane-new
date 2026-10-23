@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 import { readFile } from "node:fs/promises";
 import { issueCertificate } from "./certificates.ts";
 import { connect as tcpConnect } from "node:net";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, onTestFinished } from "vitest";
 import { connect, nkeyAuthenticator, nkeys, PermissionViolationError, type NatsConnection } from "@nats-io/transport-node";
 import { AckPolicy, DeliverPolicy, jetstream, jetstreamManager } from "@nats-io/jetstream";
 import { connectNats, createEventStore } from "../src/index.ts";
@@ -11,6 +11,27 @@ import { event, natsFixture } from "./testing.ts";
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
 beforeAll(async () => { fixture = await natsFixture(); });
 afterAll(async () => { await fixture?.close(); });
+
+async function consumerFixture() {
+  const isolated = await natsFixture();
+  onTestFinished(isolated.close);
+  const manager = await jetstreamManager(isolated.connection);
+  for (const role of ['projection', 'dispatcher']) {
+    const options = consumerOptions(role);
+    await manager.consumers.add('EVENTS', options);
+  }
+  return isolated;
+}
+
+function consumerOptions(role: string) {
+  const name = role === 'projection' ? 'projection-members' : 'handler-dispatcher';
+  const ackPolicy = role === 'projection' ? AckPolicy.None : AckPolicy.Explicit;
+  return {
+    durable_name: name,
+    filter_subject: 'ev.>',
+    ack_policy: ackPolicy,
+  };
+}
 
 // Core publish errors arrive asynchronously. Assert NATS's actual refusal,
 // not just a request timeout (which could also mean a broken test server).
@@ -142,7 +163,7 @@ it("refuses a TLS client without credentials", async () => {
 });
 
 it("refuses a server signed by the wrong CA", async () => {
-  const other = await natsFixture();
+  const other = await natsFixture({ freshCertificates: true });
   try {
     await expect(connectNats({ ...fixture.env(), NATS_CA_FILE: other.env().NATS_CA_FILE }))
       .rejects.toThrow(/certificate|issuer|self.signed/i);
@@ -190,8 +211,10 @@ it("limits the command identity's JetStream API access to EVENTS", async () => {
 });
 
 it.each(["projection", "dispatcher"])("%s cannot administer or consume another role's consumers", async (role) => {
-  const connection = await fixture.client(role);
-  const manager = await jetstreamManager(fixture.connection);
+  // Create both consumers here so this check also works when tests are shuffled.
+  const isolated = await consumerFixture();
+  const connection = await isolated.client(role);
+  const manager = await jetstreamManager(isolated.connection);
   const own = role === "projection" ? "projection-members" : "handler-dispatcher";
   const other = role === "projection" ? "handler-dispatcher" : "projection-members";
   const before = await Promise.all([own, other].map((name) => manager.consumers.info("EVENTS", name)));
