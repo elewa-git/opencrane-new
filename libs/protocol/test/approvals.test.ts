@@ -44,3 +44,12 @@ function checksPermitUses() {
   expect(approvalCardsSchema.safeParse([notAList]).success).toBe(false);
 }
 it('requires each permit use to contain only its id and a valid UTC instant', checksPermitUses);
+
+function checksTakeoverCancellation() {
+  const cancelled = { ...card, state: 'cancelled', cancelReason: 'takeover',
+    endedAt: '2026-10-23T12:00:00.000Z' };
+  expect(approvalCardsSchema.safeParse([cancelled]).success).toBe(true);
+  const unsafe = { ...cancelled, cancelReason: 'takeover private details' };
+  expect(approvalCardsSchema.safeParse([unsafe]).success).toBe(false);
+}
+it('accepts only the fixed takeover cancellation cause', checksTakeoverCancellation);

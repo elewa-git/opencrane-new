@@ -1051,3 +1051,39 @@ async function expiresBeforeStop() {
 }
 it('expires an accepted receipt before calling root stop without a deadline watcher',
   expiresBeforeStop);
+
+async function gatesBeforeApprovalWake(withIssuer: boolean) {
+  const test = await setup();
+  const link = await test.connect(withIssuer);
+  const approvalId = 'a'.repeat(64);
+  await test.append(`approval-${approvalId}`, 'tool.approval_requested', {
+    approvalId, assistantId: 'assistant', conversationId: 'chat', turnId: 'first',
+    requesterId: 'alice', tool: 'write', serverId: 'fixture', connectionId: 'installed',
+    toolRevision: approvalId, schemaDigest: approvalId, profile: 'none', policySequence: 0,
+    digestVersion: 'lossless-json-v1', argumentsDigest: approvalId,
+    expiresAt: '2099-01-01T00:00:00.000Z', stepUp: false,
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAA==', keyId: 'key:fixture', reviewDigest: approvalId,
+  });
+  await test.append(`approval-${approvalId}`, 'approval.cancelled', { approvalId });
+  await test.save();
+  link.approvals.receive({ type: 'approval_waiting', approvalId,
+    conversationId: 'chat', turnId: 'first' });
+  link.approvals.poll(await test.store.head());
+  await link.approvals.settled();
+  if (!withIssuer) {
+    await delay(30);
+    expect(test.frames.map(frameType)).toEqual(['resume']);
+    expect(link.approvals.size).toBe(1);
+    return;
+  }
+  function replied() {
+    return test.frames.some(isSettlement);
+  }
+  function isSettlement(frame: Record<string, unknown>) {
+    return frame['type'] === 'approval_settled';
+  }
+  await until(replied);
+  expect(test.frames.map(frameType)).toEqual(['resume', 'bridge_gate', 'approval_settled']);
+}
+it.each([true, false])('requires local gate delivery before an approval wake (issuer: %s)',
+  gatesBeforeApprovalWake);

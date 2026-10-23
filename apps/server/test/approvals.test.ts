@@ -903,12 +903,13 @@ async function refusesCallsAndApprovalsDuringControl() {
     await f.append('computer-assistant', 'takeover.requested', data);
     expect((await f.decide()).statusCode).toBe(409);
     expect((await f.call()).status).toBe(403);
-    expect((await f.decide('rejected')).statusCode).toBe(200);
+    expect((await f.decide('rejected')).statusCode).toBe(409);
+    expect((await f.read()).cards[0]?.state).toBe('cancelled');
   } finally {
     await f.close();
   }
 }
-it('refuses a late approval during control but allows explicit denial',
+it('keeps the saved cancellation final after a late approval or denial',
   refusesCallsAndApprovalsDuringControl);
 
 async function refusesApprovedOldTokenDuringControl() {
@@ -934,7 +935,7 @@ async function refusesApprovedOldTokenDuringControl() {
     await expect(setup.issue()).rejects.toThrow('Computer control is pending');
     expect((await setup.call(undefined, oldHeaders)).status).toBe(403);
     expect(setup.received()).toBe(0);
-    expect((await setup.read()).cards[0]?.state).toBe('approved');
+    expect((await setup.read()).cards[0]?.state).toBe('cancelled');
   } finally {
     await setup.close();
   }
@@ -991,7 +992,7 @@ async function refusesIntentDuringApprovalChecks() {
     try {
       expect((await setup.decide()).statusCode).toBe(503);
       expect(intended).toBe(true);
-      expect((await setup.read()).cards[0]?.state).toBe('requested');
+      expect((await setup.read()).cards[0]?.state).toBe('cancelled');
       expect(setup.received()).toBe(0);
       const rows = await history(setup.nats.store, 'approval-' +
         (await setup.read()).cards[0]!.approvalId, 'test');
