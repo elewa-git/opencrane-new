@@ -1,0 +1,27 @@
+{
+  "source": "62c404b3a072dfe9c0e3fe838f5d4ffd3860641e",
+  "result": "NOT RUN",
+  "reason": "Stopped after the 390px timed smoke failed at Stop.",
+  "steps": [
+    {"step": 1, "name": "Streamed reply and reload", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 2, "name": "Scanned PDF total/date, preview and download", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 3, "name": "Action history", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 4, "name": "Stop and partial text after reload", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 5, "name": "Live member-to-owner message at 390px", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 6, "name": "Private shared-assistant reply", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 7, "name": "Group chat and unopened invitation", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 8, "name": "Model answered and key hidden", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 9, "name": "Company ceiling refusal and restoration", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 10, "name": "Limit and group change history", "width": 1280, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 1, "name": "Streamed reply and reload", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 2, "name": "Scanned PDF total/date, preview and download", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 3, "name": "Action history", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 4, "name": "Stop and partial text after reload", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 5, "name": "Live member-to-owner message at 390px", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 6, "name": "Private shared-assistant reply", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 7, "name": "Group chat and unopened invitation", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 8, "name": "Model answered and key hidden", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 9, "name": "Company ceiling refusal and restoration", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []},
+    {"step": 10, "name": "Limit and group change history", "width": 390, "result": "NOT RUN", "elapsedMs": null, "pictures": []}
+  ]
+}

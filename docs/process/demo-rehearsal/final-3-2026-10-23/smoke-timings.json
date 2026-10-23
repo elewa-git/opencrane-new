@@ -1,0 +1,81 @@
+{
+  "sha": "62c404b3a072dfe9c0e3fe838f5d4ffd3860641e",
+  "warmMs": 25398,
+  "warmResult": "PASS",
+  "attempts": [
+    {
+      "width": 1280,
+      "elapsedMs": 67321,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "streaming",
+          "result": "PASS",
+          "elapsedMs": 12245
+        },
+        {
+          "name": "pdf",
+          "result": "PASS",
+          "elapsedMs": 11886
+        },
+        {
+          "name": "stopped",
+          "result": "PASS",
+          "elapsedMs": 13030
+        },
+        {
+          "name": "direct",
+          "result": "PASS",
+          "elapsedMs": 8957
+        },
+        {
+          "name": "shared",
+          "result": "PASS",
+          "elapsedMs": 9906
+        },
+        {
+          "name": "limit",
+          "result": "PASS",
+          "elapsedMs": 11297
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "elapsedMs": 180186,
+      "result": "FAIL",
+      "steps": [
+        {
+          "name": "streaming",
+          "result": "PASS",
+          "elapsedMs": 10633
+        },
+        {
+          "name": "pdf",
+          "result": "PASS",
+          "elapsedMs": 10830
+        },
+        {
+          "name": "stopped",
+          "result": "FAIL",
+          "elapsedMs": 158723
+        },
+        {
+          "name": "direct",
+          "result": "NOT RUN",
+          "elapsedMs": 0
+        },
+        {
+          "name": "shared",
+          "result": "NOT RUN",
+          "elapsedMs": 0
+        },
+        {
+          "name": "limit",
+          "result": "NOT RUN",
+          "elapsedMs": 0
+        }
+      ]
+    }
+  ]
+}

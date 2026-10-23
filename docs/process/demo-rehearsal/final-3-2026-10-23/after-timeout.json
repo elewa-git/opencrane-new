@@ -1,0 +1,11 @@
+{
+  "observedAt": "2026-10-23T06:01:26.540Z",
+  "note": "Read-only observation after the smoke deadline. No message submitted.",
+  "statuses": {
+    "Done": 0,
+    "Stopped · partial reply kept": 0,
+    "Reply failed": 1
+  },
+  "replyCharacters": 175,
+  "stopButtons": 0
+}
