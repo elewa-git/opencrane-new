@@ -8,7 +8,7 @@ import { egressObservationId, parseEventByType } from '@opencrane/events';
 import { startEgress } from '../src/egress-startup.ts';
 import { history } from '../src/event-history.ts';
 
-async function setup() {
+async function setup(fakeTimeouts = false) {
   const nats = await natsFixture();
   const directory = await mkdtemp(join(tmpdir(), 'egress-startup-'));
   let refusals = 0;
@@ -16,7 +16,12 @@ async function setup() {
     refusals++;
   }
   // Install before startup so the test also owns the normal receipt retry interval.
-  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  if (fakeTimeouts) {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout',
+      'clearTimeout', 'performance', 'Date'] });
+  } else {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  }
   const runtime = await startEgress(nats.store, 'test', directory, refused);
   async function cleanup() {
     await runtime.close();
@@ -125,3 +130,31 @@ async function coalescesAndKeepsOpenReceipts() {
 }
 it('joins retry batches, keeps empty open receipts and cancels the startup interval',
   coalescesAndKeepsOpenReceipts);
+
+async function shutdownClearsOwnedTimers() {
+  const test = await setup(true);
+  const release = Promise.withResolvers<void>();
+  onTestFinished(release.resolve);
+  function recheck() {
+    return release.promise;
+  }
+  const request = { host: 'registry.npmjs.org', port: 443, permitId: randomUUID(),
+    expiresAt: Date.now() + 60_000, recheck };
+  await test.runtime.registry.register(request);
+  // Count the receipt retry, access check, proof watchdog and permit expiry timers.
+  expect(vi.getTimerCount()).toBe(4);
+  await vi.advanceTimersByTimeAsync(500);
+  const closing = test.runtime.close();
+  await test.runtime.flush();
+  await vi.advanceTimersByTimeAsync(2000);
+  await closing;
+  expect(vi.getTimerCount()).toBe(0);
+  release.resolve();
+  await test.runtime.registry.waitForChecks();
+  expect(vi.getTimerCount()).toBe(0);
+  const rows = await history(test.nats.store, `egress-${request.permitId}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event.data).toMatchObject({ relay: { reason: 'unavailable' } });
+}
+it('clears every startup and relay timer even when a recheck finishes after shutdown',
+  shutdownClearsOwnedTimers);

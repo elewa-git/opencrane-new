@@ -771,6 +771,9 @@ it.each([false, true])('retries retained receipts without restart; lost reply: %
 
 async function boundedShutdown(recover: boolean) {
   const test = await setup();
+  // Stop fixture workers before counting timers owned by egress shutdown.
+  const workers = test.facts.runtime.boss.getWipData({ includeInternal: true });
+  expect(workers).toHaveLength(0);
   const bearer = await test.token();
   const subject = `egress-${decodeJwt(bearer).jti!}`;
   const entered = Promise.withResolvers<void>();
