@@ -1306,6 +1306,7 @@ nice -n 10 node --experimental-strip-types --test \
 ```
 
 These fixtures make no paid calls and start no stack. Live qualification remains NOT RUN.
+
 ## Hosted MCP connections and resource limits
 
 `node infra/dev-stack/mcp-resources.mjs <silo>-mcp [port [pod:name:port ...]]`

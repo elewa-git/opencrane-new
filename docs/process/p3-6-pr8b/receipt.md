@@ -1,5 +1,8 @@
 # Hosted tool resource and connection checks
 
+These are historical checks of the original implementation. The
+[23 October results](rework.md) cover the current Pod bindings, proxy refusal and cleanup.
+
 20 October 2026. Base: `e3f593bf6`. Test-first commits: `0ef992701` (quota)
 and `e864692d6` (connections). The fixture used secondary slot 1, claimed through
 `infra/dev-stack/claim.sh` after both secondary slots reported free. It used fresh,
