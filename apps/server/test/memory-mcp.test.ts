@@ -284,6 +284,24 @@ async function replacesPausedGateway() {
 }
 it('replaces a fixture gateway that cannot finish graceful shutdown', replacesPausedGateway);
 
+async function replacesGatewayWithSlowStartup() {
+  const originalRestart = setup.restart.bind(setup);
+  async function restart(signal?: NodeJS.Signals) {
+    await originalRestart(signal);
+    // Keep startup slower than the shutdown check, without delaying the old child's exit.
+    await pause(2200);
+  }
+  const restarts = vi.spyOn(setup, 'restart');
+  restarts.mockImplementation(restart);
+  try {
+    await replacesPausedGateway();
+  } finally {
+    restarts.mockRestore();
+  }
+}
+it('waits for replacement startup after checking the paused gateway has exited',
+  replacesGatewayWithSlowStartup);
+
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
   if (team && kind !== 'person') {
     return { granteeKind: 'team', granteeId: 'sales' };
@@ -2569,6 +2587,42 @@ const changedLineageGrants = [
 it.each(changedLineageGrants)(
   'refuses %s when its write grant changes during the lineage read (restored=%s)',
   changeGrantDuringLineage);
+
+async function preparesLineageObservation(operation: 'correct' | 'forget') {
+  const originalHead = setup.nats.store.head.bind(setup.nats.store);
+  const clock = coldLookupClock();
+  let observe = false;
+  let delayed = false;
+  async function head(subject?: string, deadline?: number, includeConversationCloses?: boolean) {
+    if (observe && !delayed && deadline === undefined && subject === `scope-${scopeId}`) {
+      delayed = true;
+      clock.advance();
+    }
+    return originalHead(subject, deadline, includeConversationCloses);
+  }
+  const originalContext = setup.tokens.memoryContext.bind(setup.tokens);
+  async function memoryContext(...args: Parameters<typeof originalContext>) {
+    const signed = await originalContext(...args);
+    // Start observing after the valid control; the next scope read belongs to test setup.
+    if (args[0].operation === operation) observe = true;
+    return signed;
+  }
+  const positions = vi.spyOn(setup.nats.store, 'head');
+  positions.mockImplementation(head);
+  const contexts = vi.spyOn(setup.tokens, 'memoryContext');
+  contexts.mockImplementation(memoryContext);
+  try {
+    await changeGrantDuringLineage(operation, false);
+    expect(delayed).toBe(true);
+  } finally {
+    contexts.mockRestore();
+    positions.mockRestore();
+    clock.restore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'finishes the %s lineage test observations before signing its request',
+  preparesLineageObservation);
 
 async function changePolicy(value: 'ask' | 'block') {
   const request = await changeRequest('correct');
