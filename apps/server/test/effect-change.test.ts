@@ -1,9 +1,11 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import type { EventEnvelope } from '@opencrane/events';
-import { BudgetActor, envelope, history, priceTableId, resolveEffect } from '@opencrane/models';
+import { effectResolvedDataSchema, type EventEnvelope } from '@opencrane/events';
+import { BudgetActor, envelope, history, priceTableId, readEffectChange,
+  resolveEffect } from '@opencrane/models';
 import { pgDb } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import type { IntegrationOptions } from '../src/integrations/routes.ts';
@@ -116,13 +118,13 @@ async function recoversOnlySavedCommand() {
   expect(noCalls).not.toHaveBeenCalled();
 
   await actor.effect(permitId, undefined, 'error');
+  const observed = { permitId, computerId: 'private-computer', tool: 'private-tool',
+    destination: 'private-destination', outcome: 'success', costCents: 600 };
+  const observation = envelope('test', `effect-${permitId}`, 'effect.observed', observed);
+  await nats.seed([observation]);
   await waitForDuplicateWindow(nats);
-  await app.close();
-  await nats.stop();
-  await nats.restart();
   actor = new BudgetActor(nats.store, 'test');
   await actor.start();
-  app = buildServer(config, { integrations: options });
   const restarted = await request(saved.commandId!, 'admin');
   expect(restarted.json()).toEqual(expectedReceipt());
   const replay = buildServer(config, { integrations: { ...options, store: nats.reader } });
@@ -145,3 +147,214 @@ async function recoversOnlySavedCommand() {
 }
 it('recovers only the saved resolution after a race, lost reply, expiry, restart and replay',
   recoversOnlySavedCommand, 60000);
+
+async function refusesInvalidRecord(kind: string) {
+  const permit = `invalid-${kind}`;
+  const data = { ...effectResolvedDataSchema.parse(saved.data), permitId: permit,
+    reservationId: permit };
+  const record = { ...saved, id: permit, subject: `effect-${permit}`, data };
+  if (kind === 'principal') record.principal = { kind: 'system', id: data.resolvedBy };
+  if (kind === 'actor') record.principal = { kind: 'human', id: 'forged' };
+  if (kind === 'resolver') record.data.resolvedBy = 'forged';
+  if (kind === 'source') record.source = 'untrusted';
+  if (kind === 'permit') record.data.permitId = 'other';
+  if (kind === 'reservation') record.data.reservationId = 'other';
+  if (kind === 'silo') record.silo = 'other';
+  if (kind === 'type') {
+    record.type = 'effect.uncertain';
+    const uncertain: EventEnvelope = { ...record,
+      data: { permitId: permit, computerId: 'private', reason: 'missing_usage' } };
+    await nats.seed([uncertain]);
+  } else {
+    await nats.seed([record]);
+  }
+  const before = await nats.store.head();
+  const response = await request(saved.commandId!, 'owner', permit);
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+  expect(await nats.store.head()).toBe(before);
+}
+it.each(['principal', 'actor', 'resolver', 'source', 'permit', 'reservation', 'silo', 'type'])(
+  'does not confirm an invalid saved %s', refusesInvalidRecord);
+
+async function refusesCaller(sub: string) {
+  const response = await request(saved.commandId!, sub);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it.each(['member', 'missing-member'])('discloses no receipt to %s', refusesCaller);
+
+async function refusesForeignAndInvalid() {
+  const foreign = await request(saved.commandId!, 'owner', permitId, app, 'other');
+  expect(foreign.statusCode).toBe(403);
+  const mismatch = buildServer(config, { integrations: { ...options, silo: 'other' } });
+  try {
+    expect((await request(saved.commandId!, 'owner', permitId, mismatch)).statusCode).toBe(403);
+  } finally {
+    await mismatch.close();
+  }
+  expect((await request(saved.commandId!, 'owner', 'wrong-permit')).json())
+    .toEqual({ status: 'not_found' });
+  const invalidIds = [{ value: 'bad%2Aid', status: 400 }, { value: 'x'.repeat(201), status: 414 }];
+  for (const bad of invalidIds) {
+    expect((await request(bad.value)).statusCode).toBe(bad.status);
+    expect((await request(saved.commandId!, 'owner', bad.value)).statusCode).toBe(bad.status);
+  }
+}
+it('refuses foreign sessions, silo mismatches and malformed ids without matching other permits',
+  refusesForeignAndInvalid);
+
+async function checksAccessAfterLoading(kind: string, failed: boolean) {
+  const sub = `${kind}-${String(failed)}`;
+  await appendMember(sub, 'admin');
+  const read = nats.store.readStream.bind(nats.store);
+  async function* changeDuringRead(...args: Parameters<typeof read>) {
+    const [subject, , deadline] = args;
+    expect(subject).not.toBe('budget-test');
+    expect(subject).not.toContain('conversation-');
+    yield* read(...args);
+    if (subject !== `effect-${permitId}`) return;
+    expect(deadline).toBeLessThanOrEqual(performance.now() + 10000);
+    expect(deadline).toBeGreaterThan(performance.now());
+    let change: EventEnvelope;
+    if (kind === 'remove') {
+      change = envelope('test', `member-${sub}`, 'member.removed',
+        { memberId: sub, removedBy: 'owner' });
+    } else {
+      const newRole = kind === 'demote' ? 'member' : 'admin';
+      change = envelope('test', `member-${sub}`, 'member.role_changed',
+        { memberId: sub, previousRole: 'admin', newRole, changedBy: 'owner' });
+    }
+    await nats.seed([change]);
+    if (failed) throw new Error('Private history failure canary');
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(changeDuringRead);
+  try {
+    const response = await request(saved.commandId!, sub);
+    // Leave OpenFGA unchanged: events must refuse demotion/removal, and exact receipts must apply.
+    expect(response.statusCode).toBe(kind === 'unapplied' ? 503 : 403);
+    const status = kind === 'unapplied' ? 'unavailable' : 'refused';
+    expect(response.json()).toEqual({ status });
+    const memberReads = reads.mock.calls.filter(isMemberRead);
+    expect(memberReads).toHaveLength(1);
+  } finally {
+    reads.mockRestore();
+  }
+}
+function isMemberRead(args: Parameters<typeof nats.store.readStream>) {
+  return args[0].startsWith('member-');
+}
+it.each([['remove', false], ['demote', false], ['unapplied', false],
+  ['remove', true], ['demote', true], ['unapplied', true]] as const)(
+  'checks %s after history, including failed=%s', checksAccessAfterLoading);
+
+async function permissionFailure(kind: string) {
+  const auth = memberAuthorisation(options.binding);
+  const permission = kind === 'denied'
+    ? { status: 'ok' as const, allowed: false }
+    : { status: 'unavailable' as const, allowed: false as const,
+      error: new Error('IAM failure canary') };
+  const check = vi.spyOn(auth, 'check').mockResolvedValue(permission);
+  try {
+    const response = await request(saved.commandId!);
+    expect(response.statusCode).toBe(kind === 'denied' ? 403 : 503);
+    const status = kind === 'denied' ? 'refused' : 'unavailable';
+    expect(response.json()).toEqual({ status });
+    expect(check).toHaveBeenCalledExactlyOnceWith('owner', 'admin');
+  } finally {
+    check.mockRestore();
+  }
+}
+it.each(['denied', 'unavailable'])('refuses independently %s IAM permission', permissionFailure);
+
+async function boundsHistoryWithoutWriteChecks() {
+  const read = nats.store.readStream.bind(nats.store);
+  async function* slow(...args: Parameters<typeof read>) {
+    if (args[0] === `effect-${permitId}`) await delay(2200);
+    yield* read(...args);
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
+  const head = vi.spyOn(nats.store, 'head');
+  const append = vi.spyOn(nats.store, 'append');
+  try {
+    expect((await request(saved.commandId!)).json()).toEqual(expectedReceipt());
+    expect(reads.mock.calls.map(readSubject))
+      .toEqual([`effect-${permitId}`, 'member-owner', 'ownership-test']);
+    expect(head).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+    expect(noCalls).not.toHaveBeenCalled();
+    expect(await readEffectChange(nats.reader, 'test', permitId, saved.commandId!))
+      .toEqual(expectedReceipt().receipt);
+  } finally {
+    reads.mockRestore();
+    head.mockRestore();
+    append.mockRestore();
+  }
+}
+function readSubject(args: Parameters<typeof nats.store.readStream>) {
+  return args[0];
+}
+it('allows slow history under its own deadline, reads only access streams afterwards and writes nothing',
+  boundsHistoryWithoutWriteChecks);
+
+async function expiresHistory() {
+  const read = nats.store.readStream.bind(nats.store);
+  const now = vi.spyOn(performance, 'now');
+  async function* expired(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === `effect-${permitId}`) now.mockReturnValue(args[2]! + 1);
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(expired);
+  try {
+    const response = await request(saved.commandId!);
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(reads.mock.calls.filter(isMemberRead)).toHaveLength(1);
+  } finally {
+    reads.mockRestore();
+    now.mockRestore();
+  }
+}
+it('does not confirm expired history and still checks access', expiresHistory);
+
+async function readsRecordedZeroWithoutRelease() {
+  const permit = 'recorded-zero';
+  const evidence = [{ kind: 'dispatch_record', reference: 'private-proof',
+    digest: 'a'.repeat(64), notDispatched: true }];
+  const data = { permitId: permit, reservationId: permit, resolvedBy: 'owner',
+    outcome: 'released', settledCents: 0, evidence };
+  const record = { ...envelope('test', `effect-${permit}`, 'effect.resolved', data),
+    source: 'opencrane-server', principal: { kind: 'human' as const, id: 'owner' } };
+  await nats.seed([record]);
+  const before = await nats.store.head();
+  const state = structuredClone(actor.state);
+  const response = await request(record.commandId!, 'admin', permit);
+  expect(response.json()).toEqual({ status: 'recorded', receipt: {
+    changeRef: record.commandId, eventId: record.id, position: before,
+    time: record.time, resolvedBy: 'owner', outcome: 'released', settledCents: 0,
+  } });
+  expect(await nats.store.head()).toBe(before);
+  expect(actor.state).toEqual(state);
+  expect(noCalls).not.toHaveBeenCalled();
+}
+it('returns recorded zero cents without claiming or applying a release', readsRecordedZeroWithoutRelease);
+
+async function recoversAfterServiceRestart() {
+  await app.close();
+  await nats.stop();
+  await nats.restart();
+  app = buildServer(config, { integrations: options });
+  const before = await nats.store.head();
+  expect((await request(saved.commandId!)).json()).toEqual(expectedReceipt());
+  const missing = saved.commandId === 'first' ? 'second' : 'first';
+  expect((await request(missing)).json()).toEqual({ status: 'not_found' });
+  expect(await nats.store.head()).toBe(before);
+  const resolver = saved.principal!.id;
+  const demoted = envelope('test', `member-${resolver}`, 'member.role_changed', {
+    memberId: resolver, previousRole: resolver, newRole: 'member', changedBy: 'owner',
+  });
+  await nats.seed([demoted]);
+  await refusesCaller(resolver);
+}
+// Restart last: the NATS fixture cleans up a process restarted inside a test when that test ends.
+it('recovers the same original receipt after restarting NATS and the server', recoversAfterServiceRestart);

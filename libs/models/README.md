@@ -30,11 +30,15 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices and payer limits; records tool starts, remote outcomes and spending; reads spending calls in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, spending call rows and read tables"]
+  models -->|checks spending choices and payer limits; records tool starts, remote outcomes and spending; reads spending calls in pages and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, spending call rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
 uses this library to check saved dependencies at the intended nightly time.
+
+A lost resolution reply can be checked against the original saved event. The receipt
+names the resolver and recorded amount. It proves only that the resolution was saved;
+reading it never charges money, releases a hold or repeats an outside action.
 
 Approval cards retain the saved decision, use and end times after a restart.
 They name a cancellation cause only when a saved event proves it. Retrying keeps

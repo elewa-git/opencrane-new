@@ -25,7 +25,7 @@ export {
 
 export { losslessJson } from '@opencrane/events/lossless-json';
 
-export { readEffect, listEffects, resolveEffect, resolutionCommandSchema } from './reconciliation.ts';
+export { readEffect, readEffectChange, listEffects, resolveEffect, resolutionCommandSchema } from './reconciliation.ts';
 
 export { ownershipConfirmationHandler } from './ownership-confirmation.ts';
 export { seedOwnership, ownershipSeedHandler,

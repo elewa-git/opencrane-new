@@ -859,6 +859,16 @@ Private turn admission keeps its existing small access streams.
 
 ## Resolution history and access
 
+`readEffectChange(store, silo, permitId, changeRef)` reads only `effect-<permitId>`
+under its own ten-second deadline. It returns the exact saved `effect.resolved`
+receipt, or undefined when that change reference is absent. Invalid or ambiguous
+records and failed/expired reads throw. It checks the silo, subject, event type,
+server source, human principal, matching resolver, permit and reservation.
+The strict result contains only `changeRef`, `eventId`, `position`, `time`,
+`resolvedBy`, `outcome` and integer `settledCents`. It excludes evidence references,
+private call details and progress. The caller must check current access after loading,
+including failure. It never reads budget history, appends or applies settlement.
+
 `resolveEffect` reads the reservation and effect events with one ten-second history
 limit before starting its two-second member access check. The HTTP access callback
 starts after history too, and is checked again immediately before the append.

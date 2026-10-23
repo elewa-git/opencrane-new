@@ -5,6 +5,7 @@ This folder lets owners and admins inspect AI and tool calls whose cost or deliv
 ## What it is responsible for
 
 - Lists saved call records and returns the details of one call.
+- Recovers the original saved resolution after a reply is lost.
 - Checks current owner or admin access after loading records.
 - Accepts a resolution only from this website and the browser session that read the call.
 - Passes resolution checks and saving to the shared spending code.
@@ -14,11 +15,16 @@ Before a call, OpenCrane puts money aside: this is a hold. Afterwards it charges
 
 History loads before the short final write access check. A removed admin receives no spending records, and a lost permission check cannot authorise a resolution.
 
+A resolution receipt identifies the saved change, its resolver, time and recorded amount.
+It does not prove that settlement finished or an outside action succeeded. Only current
+owners and admins can read it. Missing or unavailable receipts never allow a resend.
+Receipt reads check access after loading, including failed loads, and start no work.
+
 ## Main files
 
 | File | What it does |
 | --- | --- |
-| [routes.ts](routes.ts) | Handles call lists, detail and protected resolution requests. |
+| [routes.ts](routes.ts) | Handles call lists, detail, original receipts and protected resolutions. |
 
 ## How it connects
 

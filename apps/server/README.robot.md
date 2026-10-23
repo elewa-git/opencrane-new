@@ -1576,6 +1576,23 @@ immediately before its unchanged conditional append. Removal during history refu
 the write even when the member table and OpenFGA have not caught up.
 [The resolution contract](../../docs/process/p3-15-reconcile.md) specifies the
 CSRF token, optimistic sequence and pending settlement state. No screen is added.
+
+`GET /api/org/effects/:permitId/changes/:commandId` recovers an original resolution.
+Both ids use `[\w-]{1,200}`. Success is 200 `{status: "recorded", receipt}` with
+only `changeRef`, `eventId`, `position`, `time`, `resolvedBy`, `outcome` and
+`settledCents`. These are saved event values, not current settlement progress or
+proof of an external action. A later observation or equal amount cannot replace them.
+The route loads the permit's effect history under a ten-second deadline, then checks
+current Owner/Admin membership, exact IAM receipts and admin permission once.
+The same check runs after failed loads. Demoted original callers have no exception.
+All replies use no-store. Missing sessions receive 401; malformed ids 400; access
+refusals 403; overlong URL ids 414; absent changes 404 `{status: "not_found"}`; failed history, invalid
+records or unavailable IAM 503 `{status: "unavailable"}`. Neither 404 nor 503 allows
+resending. GET appends nothing and performs no settlement, release or external call.
+`test/effect-change.test.ts` covers races, lost replies, restart, duplicate expiry,
+replay, safe fields and successful/failed-load access checks using disposable services.
+Audit metadata, settlement progress and fresh-install qualification remain later work.
+
 Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).
 
 Group list, group detail, group command status, ownership and ownership command
