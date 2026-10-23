@@ -4476,6 +4476,97 @@ The save uses the original approval position and the write check's deadline.
 
 ## Disabled agent correction and forget (Part of #97)
 
+### Memory MCP test preparation and cleanup
+
+`test/memory-mcp.test.ts` prepares personal read and write grants before signing
+recall or change controls. It reads the grant streams, checks the saved receipts
+that show each grant was applied, and checks both identities' current permissions.
+A first lookup can take longer than the signed pass's two-second lifetime. Both
+change operations have regressions that delay the first event or IAM receipt read
+by 2.2 seconds and still require the exact `memory_tool_unavailable` control reply.
+The backend checks access again on the real request with its original deadline.
+No refused call is retried.
+
+Cleanup disconnects unfinished backend HTTP requests before awaiting server closure
+and removing service fixtures. Its regression sends headers with an incomplete body
+and requires cleanup to finish within two seconds. Without the disconnect, cleanup
+waits for the client socket and the regression fails.
+
+Gateway replacement and disposal use `SIGKILL` for these disposable memory fixtures.
+Memory tool calls finish before disposal. Normal replacement happens during setup,
+with no tool call in progress. Both steps still await the child's exit and close its output pipes.
+Separate regressions pause the gateway process with `SIGSTOP` and require replacement
+or complete cleanup within two seconds. Waiting for graceful shutdown makes both fail.
+The shared models fixture and its normal graceful shutdown remain unchanged.
+
+`test/memory-recall-proof.test.ts` includes both old and current revisions in its
+dependency list, so the returned-reference check accepts either. A proof for the old
+revision must still refuse the current target. Removing only the target revision
+comparison makes both correct and forget cases fail.
+
+Own checks, 23 October 2026, rebased on `55fae525d`, with Node 22.23.3 and
+a throwaway PostgreSQL 17.6 database supplied through `PG_TEST_URL`.
+The gateway lifecycle source is `90bdc25bc`:
+
+- Expected FAIL: test-first commit `5276f81c7` reproduced cleanup waiting for the
+  incomplete request. The same test passed after `03db23f8f` disconnected it.
+- Expected FAIL: test-first commit `2072589a7` reproduced the missing configuration
+  refusal reason for both cold-grant controls. Both passed after `d63730250`.
+- Expected FAIL: test-first commit `4365520d1` reproduced the same missing reason
+  after delaying the first IAM receipt read. Preparation now checks those receipts
+  and permissions too, including before recall controls. The first focused run of
+  this change passed 5/7; the forget cold-IAM control and input-proof control still
+  failed under overlapping test load. Those failures are retained.
+- Expected FAIL: removing only the target revision comparison made both new proof
+  cases fail. The production file was restored before normal checks.
+- Expected FAIL: test-first commit `e2ff3097f` reproduced the paused gateway blocking
+  replacement and cleanup. Both passed after `90bdc25bc`. The focused run also
+  passed the unfinished-request regression, 3/3 in total.
+- PASS: the four-case focused run covered both cold-grant controls and both cases
+  named in the fix request.
+- FAIL: the diagnostic baseline, with the original fixture code, passed 111/120.
+  One setup exceeded 120 seconds and then reported `ECONNRESET`. Eight initial
+  recall or change controls failed before their intended refusal checks. This run
+  overlapped lint and typecheck. Both cases named in the fix request passed.
+- FAIL: the first three-file run, before the gateway lifecycle fix, passed 228/229.
+  The member-permission case exceeded its 120-second setup hook. All other cases
+  passed. The gateway lifecycle fix followed this run.
+- FAIL: before IAM preparation was added, the next full run passed 230/231. Forget's
+  valid control exceeded its 120-second setup hook. The second run passed 225/231
+  with temporary setup markers; six initial controls failed before the intended
+  checks. Neither run proved repeat stability. The markers were removed afterwards.
+
+Logs use `/tmp/p4-15-pr2f-fix-`: `red-close.log`, `green-close.log`,
+`red-control.log`, `green-control.log`, `mutation-target.log` and `baseline.log`.
+The gateway regressions use `red-gateway-close.log`, `red-gateway-restart.log`
+and `green-gateway.log`.
+The full runs before IAM preparation use `repeat1.log`, `final1.log` and
+`final2-traced.log`. IAM probes use `red-iam-control.log` and `green-iam-control.log`.
+
+The first complete run on `2ab46a0a2` passed 232/233. Both named fix cases and all
+new cold-read, lifecycle and target-revision regressions passed. The empty loaded
+evidence case failed its initial recall control with 403 instead of 200, before
+its intended refusal check. This run is FAIL; repeat stability is not established.
+Its log is `qualified1.log` under the same prefix.
+The second complete run on the same fixture source passed 233/233. It used no
+diagnostic markers and overlapped no other local check. Both named fix cases and
+all new regressions passed in both complete runs. The first failure is not erased
+by the second pass: repeat stability remains PARTIAL. Its log is `qualified2.log`.
+
+PASS: full lint, full typecheck, the event catalogue (149 types), Knip and changelog
+validation. The final test edits also passed targeted ESLint, server typecheck and
+Knip again. Full lint reported zero errors and 24 existing length warnings.
+PASS: the changed dispatch case, `withholds recall corrected after its loaded
+append and refuses renewal and decision`, passed in two separate one-worker runs.
+Their logs are `dispatch1.log` and `dispatch2.log` under the same prefix. The other
+92 cases in that file were not selected in this round.
+The throwaway PostgreSQL container and its volume were removed after the tests.
+The baseline's private timing and error logs use `close.log` and `errors.log`.
+Every test, lint and typecheck command used `nice -n 10`. The full root suite and
+fresh-install qualification are NOT RUN.
+
+### Target checks
+
 The backend checks the signed target against the turn identity and saved input generation,
 the loaded references and current scope rows. Correct requires all loaded references except
 its target as dependencies; no revision of that target may be a dependency. Forget also
