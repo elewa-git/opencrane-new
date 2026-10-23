@@ -12,6 +12,7 @@ async function releasesExpiredLock() {
   const entered = Promise.withResolvers<void>();
   const finish = Promise.withResolvers<void>();
   let preparation: Promise<void> | undefined;
+  let preparationStopped = false;
   async function attempt(_query: Query, context?: { signal: AbortSignal; deadline: number }) {
     async function prepare() {
       entered.resolve();
@@ -22,9 +23,10 @@ async function releasesExpiredLock() {
         await Promise.race([finish.promise, stopped.promise]);
       } finally {
         context?.signal.removeEventListener('abort', cancel);
+        preparationStopped = true;
       }
     }
-    const options = { timeoutMs: 200, signal: context?.signal };
+    const options = { timeoutMs: 200, ...(context ? { signal: context.signal } : {}) };
     preparation = db.lock!('gateway-configuration:test', prepare, options);
     await preparation;
   }
@@ -41,6 +43,7 @@ async function releasesExpiredLock() {
   }
   try {
     await expect.poll(locks, { timeout: 500 }).toBe(0);
+    expect(preparationStopped).toBe(true);
   } finally {
     finish.resolve();
     await preparation;
@@ -56,7 +59,10 @@ async function boundsPoolAcquisition() {
   const occupied = await pool.connect();
   let called = false;
   let settled = false;
-  async function prepare() { called = true; }
+  function prepare() {
+    called = true;
+    return Promise.resolve();
+  }
   function completed(error?: unknown) { settled = true; return error; }
   const pending = pgDb(pool).lock!('gateway-configuration:test', prepare, { timeoutMs: 100 });
   const result = pending.then(completed, completed);

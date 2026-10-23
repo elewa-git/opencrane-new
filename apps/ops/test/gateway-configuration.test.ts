@@ -124,11 +124,12 @@ function publicationDigest(value: unknown) {
   return losslessJson(encoded).digest;
 }
 
-async function cancelsPreparation(stage: 'waiting' | 'preparing') {
+async function cancelsPreparation(stage: 'waiting' | 'preparing', expiry = 'signal') {
   const setup = await preparationFixture();
   const event = await setup.publish('cancelled');
   const controller = new AbortController();
-  const attempt = { signal: controller.signal, deadline: performance.now() + 5000 };
+  const timeoutMs = expiry === 'deadline' ? 250 : 5000;
+  const attempt = { signal: controller.signal, deadline: performance.now() + timeoutMs };
   const paused = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>();
   const competitor = await setup.storage.queue.connect();
@@ -164,7 +165,7 @@ async function cancelsPreparation(stage: 'waiting' | 'preparing') {
   try {
     if (stage === 'waiting') await expect.poll(waiting).toBe(1);
     else await entered.promise;
-    controller.abort(new Error('Attempt expired'));
+    if (expiry === 'signal') controller.abort(new Error('Attempt expired'));
     if (stage === 'waiting') await expect.poll(waiting, { timeout: 500 }).toBe(0);
     else await expect.poll(canAcquire, { timeout: 500 }).toBe(true);
     expect(await result).toBeInstanceOf(Error);
@@ -178,3 +179,9 @@ async function cancelsPreparation(stage: 'waiting' | 'preparing') {
 }
 it.each(['waiting', 'preparing'] as const)('cancels an expired preparation while %s',
   cancelsPreparation);
+
+async function expiresPreparation(stage: 'waiting' | 'preparing') {
+  await cancelsPreparation(stage, 'deadline');
+}
+it.each(['waiting', 'preparing'] as const)('enforces the preparation deadline while %s',
+  expiresPreparation);
