@@ -158,6 +158,21 @@ function sameReceipt(row: StoredEvent, attempted: EventEnvelope) {
   return receipt(row);
 }
 
+function requireCurrentSelection(selection: Selection, rows: StoredEvent[],
+  checked: Awaited<ReturnType<typeof facts>>) {
+  let connectionId = checked.connectionId;
+  if (selection.action === 'clear') {
+    // Clear the saved binding even while a replacement installation has no discovery result.
+    const state = foldConnectionSelection(rows);
+    connectionId = state.selected?.connectionId ?? connectionId;
+  }
+  if (selection.expectedSequence !== (rows.at(-1)?.sequence ?? 0) ||
+      selection.connectionId !== connectionId ||
+      (selection.action === 'select' && !checked.available)) {
+    throw new Error('Selection conflict');
+  }
+}
+
 /** Save one choice for the authenticated caller; never accept an owner from the request. */
 export async function changeConnectionSelection(store: EventStore, binding: Binding,
   userId: string, raw: unknown) {
@@ -189,17 +204,7 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   if (original) {
     return sameReceipt(original, event);
   }
-  let connectionId = checked.connectionId;
-  if (input.action === 'clear') {
-    // Clear the saved binding even while a replacement installation has no discovery result.
-    const state = foldConnectionSelection(rows);
-    connectionId = state.selected?.connectionId ?? connectionId;
-  }
-  if (input.expectedSequence !== (rows.at(-1)?.sequence ?? 0) ||
-      input.connectionId !== connectionId ||
-      (input.action === 'select' && !checked.available)) {
-    throw new Error('Selection conflict');
-  }
+  requireCurrentSelection(selected, rows, checked);
   const confirmAuthority = fresh;
   async function checkAccess() {
     await confirmAuthority();

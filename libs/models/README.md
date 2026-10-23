@@ -327,6 +327,8 @@ Later confirmed usage can still settle their cost.
 The library saves or clears a person's explicit account choice for a tool server.
 The choice grants no access and does not verify the account. A changed or blocked profile
 becomes unavailable; connecting another account never selects it automatically.
+A person can clear the saved choice while replacement discovery is unavailable.
+Replaying older records cannot restore a cleared choice.
 The server does not expose these commands yet.
 
 Saved spending Stops include the calls for that conversation and turn, in saved

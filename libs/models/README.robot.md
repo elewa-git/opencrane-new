@@ -3059,9 +3059,11 @@ Base dependency #523 landed as `e3f593bf6d41ae465e3c49cb43f7444c4120c968`.
 `changeConnectionSelection(store, binding, userId, input)` takes the authenticated user
 separately. Strict input has action (select/clear), serverId, connectionId, changeRef and
 expectedSequence. Select also requires profileId and the checked profileRevision.
-Clear has no profile fields. Both actions require the current installed connection.
-Select requires a review of the latest tool list. Owner overrides refuse. Receipts contain status,
-sequence and changeRef. Reusing a reference with changed fields conflicts, including after
+Clear has no profile fields. It names the saved connection when a choice exists,
+even after re-registration clears the current installation. With no saved choice,
+it names the current installation. Select requires the current installation and an
+accepted review of the latest tool list. Bearer saves share this server check.
+The caller cannot choose another owner. Receipts contain status, sequence and changeRef. Reusing a reference with changed fields conflicts, including after
 broker deduplication expires. Concurrent identical commands recover the original receipt.
 
 The command reads profile, control and server facts before member/tool access checks.
@@ -3072,7 +3074,8 @@ No conversation history enters the two-second access check.
 
 `foldConnectionSelection` rebuilds the explicit choice from
 `connection-selection-<user>-<server>`. `readConnectionSelection` checks current facts
-and access once. Missing, cleared, rotated, revoked, disabled, incomplete and replaced
+and access once. Replay keeps the highest observed position; older rows cannot restore
+a cleared choice. Missing, cleared, rotated, revoked, disabled, incomplete and replaced
 profiles choose nothing. Selection preserves saved_unverified and never grants access,
 reads custody, calls a provider or falls back to another profile. Connecting never selects.
 Tests use bearer fixtures with real NATS, PostgreSQL and OpenFGA. Company opt-in, company
