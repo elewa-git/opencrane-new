@@ -897,3 +897,9 @@ to the captured event position. Keep readers and workers stopped until commit.
 Tests: `PG_TEST_URL=… nice -n 10 npx vitest run libs/projections/test/routines.test.ts`.
 They use real NATS/PostgreSQL and guarded worker/replay child processes.
 Fresh-install live qualification is NOT RUN.
+
+## Child activation records
+
+`conversation.child_activated` is excluded before conversation feed insertion, list
+updates and notifications. Replay uses the same exclusion. The v3 recovery index is
+unchanged; it still completes at first input and does not schedule activation.

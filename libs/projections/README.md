@@ -182,6 +182,8 @@ stay encrypted. Each run keeps its original owner, assistant and paying group af
 later edits. Missed dates stay in one compact record. Rebuilding these tables starts
 no work and requires readers and workers to be stopped.
 
+Child activation records stay out of message feeds, including after replay.
+
 The conversations worker builds an index of child requests from saved events. It keeps
 event references, ids and failed attempt numbers. Recovery skips failed requests until the requester saves a retry.
 Rebuilding this index creates no child and copies no message.

@@ -1,5 +1,6 @@
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
+import { activateRequestedChild } from '../src/chat/child-activation.ts';
 import { recordChildStartFailure } from '../src/chat/child-failure.ts';
 import { createLogger } from '@opencrane/observability';
 import { watchChildRequests } from '../src/chat/child-recovery.ts';
@@ -193,6 +194,9 @@ async function holdsWork(retry: boolean) {
     stop.abort();
     await recovering;
   }
+  const activationInput = { ...input, payingGroupId: saved.payingGroupId };
+  const attempt = retry ? 2 : 1;
+  await activateRequestedChild(context.options, 'alice', activationInput, attempt);
   await context.runner.run(conversations);
   const listed = await listConversations(context.db, 'test', 'alice');
   function matches(row: typeof listed[number]) {
@@ -203,6 +207,7 @@ async function holdsWork(retry: boolean) {
   const computer = { computerId: 'computer', assistantId: 'helper', generation: 1, podUid: 'test' };
   const ready = await context.append('computer-helper', 'computer.ready', computer, false);
   const before = await context.nats.store.head();
+  const tokens = vi.spyOn(context.tokens, 'turn');
   function connection(): Promise<never> {
     return Promise.reject(new Error('Must not deliver'));
   }
@@ -242,13 +247,14 @@ async function holdsWork(retry: boolean) {
     await bridge.settled();
     expect(await context.nats.store.head()).toBe(before);
     expect(JSON.stringify(received)).not.toContain('token');
+    expect(tokens).not.toHaveBeenCalled();
   } finally {
     bridge.socket.terminate();
     for (const client of server.clients) client.terminate();
     server.close();
   }
 }
-it.each([false, true])('holds delivery, resume, admission and tokens with retry=%s', holdsWork);
+it.each([false, true])('holds delivery, resume, admission and tokens after activation with retry=%s', holdsWork);
 
 async function retriesPermissionOutage() {
   const input = await context.parent();

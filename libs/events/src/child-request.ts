@@ -1,3 +1,4 @@
+import { childActivatedEvent } from './child-activation.ts';
 import { z } from 'zod';
 import { budgetRootAllowanceSetDataSchema } from './budget-root.ts';
 import { chatIdSchema, sharedChildConversationSchema } from './conversation.ts';
@@ -82,4 +83,6 @@ const childRetryRequestedEvent = event('conversation.child_retry_requested', 'co
   'The requester asked to resume a saved child failure with the original choices.',
   childRetryRequestedDataSchema, retryExample);
 
-export const childRequestEvents = [childRequestEvent, childStartFailedEvent, childRetryRequestedEvent];
+export const childRequestEvents = [
+  childRequestEvent, childStartFailedEvent, childRetryRequestedEvent, childActivatedEvent,
+];

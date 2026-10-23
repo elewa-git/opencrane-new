@@ -20,7 +20,7 @@ The server and the AI access library use the same definitions.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|checks conversation-linked control refusals, saved child answers, requests, retries and failures| events
+  server["apps/server<br/>back end"] -.->|checks conversation-linked control refusals, saved child answers, requests, activations, retries and failures| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews and results| events
@@ -81,6 +81,8 @@ upper bound. It contains no message text and must name the requesting person.
 A saved child start failure names the attempt, stage and a fixed refusal reason.
 A retry names that failure and the next attempt without changing the original request.
 It contains no source text and cannot authorise work.
+A child activation records the checked intent, creation, first input and attempt.
+It contains no message text and does not release the hold on execution.
 
 Hosted image requests name one platform, a public upstream and the first check attempt.
 These records contain no check result or report bytes.

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { parseEventByType } from '../src/index.ts';
+import { childActivatedEventSchema, parseEventByType } from '../src/index.ts';
 
 const activation = { id: 'activation', commandId: 'activation',
   type: 'conversation.child_activated', source: 'opencrane-server', silo: 'test',
@@ -11,6 +11,9 @@ const activation = { id: 'activation', commandId: 'activation',
     assistantId: 'assistant', payingGroupId: 'payer', attempt: 1 } };
 function acceptsActivation() {
   expect(parseEventByType(activation).success).toBe(true);
+  expect(childActivatedEventSchema.safeParse(activation).success).toBe(true);
+  const changed = { ...activation, type: 'conversation.child_requested' };
+  expect(childActivatedEventSchema.safeParse(changed).success).toBe(false);
 }
 it('accepts a checked child activation without allowing execution', acceptsActivation);
 function refusesFields(patch: object) {

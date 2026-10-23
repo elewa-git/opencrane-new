@@ -124,3 +124,5 @@ export { agentNativeRequestRefusedDataSchema } from './native-request.ts';
 
 export { childRetryRequestedDataSchema, childRetryRequestedEventSchema }
   from './child-request.ts';
+
+export { childActivatedDataSchema, childActivatedEventSchema } from './child-activation.ts';
