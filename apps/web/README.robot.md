@@ -494,7 +494,9 @@ the reservation was released. Only present cents use `money()`, including a real
 Participant replies supply no amounts. An unavailable reply keeps the last saved status
 with a warning. A 401, 403 or denied input clears calls, reasons and amounts. Older reads
 cannot restore details after the conversation, turn or access changes. Two pending clicks
-send one GET. Call details stay in memory and never enter browser storage or the address.
+send one GET. A persistent polite status region announces checking, saved call statuses,
+unavailable reads and access loss without moving focus. It never uses an alert.
+Call details stay in memory and never enter browser storage or the address.
 A `not_stopped` reply keeps the older generic notice because the saved row gives no scope or reset. A reset adds a dated line but
 never restarts the old turn. `npm run visual:screen-p3-14-stop` captures both widths.
 `npm run visual:screen-p3-14-calls` checks and captures WRK-43, participant, changed-status

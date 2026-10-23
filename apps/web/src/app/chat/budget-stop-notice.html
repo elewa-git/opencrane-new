@@ -1,3 +1,17 @@
+<p class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  @if (accessChanged()) {
+    Access changed. Stop details are no longer available.
+  } @else if (loading()) {
+    Checking saved status…
+  } @else if (unavailable()) {
+    Stop details unavailable. Any status shown is from the last successful check.
+  } @else if (details(); as stop) {
+    Saved call status checked.
+    @for (call of stop.calls; track $index) { {{ callStatus(call) }}. }
+  } @else if (notStopped()) {
+    Stop details checked. No saved call status is available.
+  }
+</p>
 @if (execution()) { <p class="budget-work">{{ execution() }} — spending limit</p> }
 <section class="budget-stop" aria-label="Spending limit stop">
   @if (accessChanged()) {
