@@ -20,16 +20,18 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|starts programs, checks website readiness and PDF answers using attached text or a file read| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|checks uploads, spending, provider access, rehearsals, tool reviews and group access loss| apps
+  stack -->|checks spending, uploads, provider access, rehearsals, tools and group access loss| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
 
 ## What it is responsible for
 
-When the Spending editor fails to appear, the browser check keeps a picture and
-the HTTP status codes from that page's budget reads in the stack's private files.
-It still fails the check. The nightly launcher retains these files before cleanup.
+When the Spending editor fails to appear, the browser check keeps HTTP status codes
+and fixed visibility values for the editor and its loading and access notices.
+It records no screenshots, page text or response contents. The check still fails.
+The nightly launcher retains the private record before cleanup. The cause of the
+intermittent failure is still unknown; this change helps investigate the next failure.
 
 The upload check retries a file list that is still applying. Once the list is
 available, it checks the exact file count and waits for workspace delivery.

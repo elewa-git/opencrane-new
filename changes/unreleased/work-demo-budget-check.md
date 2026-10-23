@@ -1,1 +1,1 @@
-Spending browser checks now retain the failed page and its budget-read status codes when the editor does not appear. The original intermittent fresh-start failure remains under investigation.
+Spending browser checks now retain read status codes and fixed page-state values when the editor does not appear, without capturing page contents or personal data. This is a diagnostics change; the original intermittent fresh-start failure has no proved cause or fix.

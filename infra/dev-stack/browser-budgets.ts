@@ -138,11 +138,35 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   }
 }
 
+async function visibleState(locator: Locator): Promise<boolean | null> {
+  try {
+    return await locator.isVisible();
+  } catch {
+    // Keep unreadable pages distinct from a control that is absent.
+    return null;
+  }
+}
+
+async function readEditorState(owner: Page) {
+  const budgetScope = owner.getByLabel('Budget scope', { exact: true });
+  const unavailable = owner.getByText('Budget service unavailable', { exact: true });
+  const accessChanged = owner.getByText('Spending needs the Owner or Admin role.', { exact: true });
+  const loaded = owner.getByText('Spending loaded', { exact: true });
+  const states = [visibleState(budgetScope), visibleState(unavailable),
+    visibleState(accessChanged), visibleState(loaded)];
+  const [budgetScopeVisible, budgetServiceUnavailable, accessChangedVisible, spendingLoaded]
+    = await Promise.all(states);
+  return { budgetScopeVisible, budgetServiceUnavailable,
+    accessChanged: accessChangedVisible, spendingLoaded };
+}
+
 async function loadBudgetEditor(owner: Page, origin: string): Promise<Locator> {
   const budgetReadStatuses: number[] = [];
   const effectReadStatuses: number[] = [];
   function recordResponse(response: Response) {
-    if (response.request().method() !== 'GET') return;
+    if (response.request().method() !== 'GET') {
+      return;
+    }
     if (response.url() === `${origin}/api/org/models`) {
       budgetReadStatuses.push(response.status());
     } else if (response.url() === `${origin}/api/org/effects`) {
@@ -157,13 +181,11 @@ async function loadBudgetEditor(owner: Page, origin: string): Promise<Locator> {
     return budgetScope;
   } catch {
     // Keep the failed page's replies, rather than making new reads after the failure.
-    const evidence = JSON.stringify({ budgetReadStatuses, effectReadStatuses });
-    const screenshot = { path: `${directory}/budget-editor-failure.png`, fullPage: true };
-    const captures = [
-      writeFile(`${directory}/budget-editor-failure.log`, evidence, { mode: 0o600 }),
-      owner.screenshot(screenshot),
-    ];
-    await Promise.allSettled(captures);
+    // Record fixed states only; page pictures and text can contain personal data.
+    const editorState = await readEditorState(owner);
+    const evidence = JSON.stringify({ budgetReadStatuses, effectReadStatuses, editorState });
+    const record = writeFile(`${directory}/budget-editor-failure.log`, evidence, { mode: 0o600 });
+    await Promise.allSettled([record]);
     // Exclude browser errors because they can contain request or page contents.
     throw new Error('Spending budget editor did not load; inspect private evidence');
   } finally {

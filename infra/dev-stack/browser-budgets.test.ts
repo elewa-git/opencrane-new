@@ -212,8 +212,9 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
     function requestDetails() {
       return { method };
     }
+    const response = { url, status, request: requestDetails };
     for (const listener of listeners) {
-      listener({ url, status, request: requestDetails });
+      listener(response);
     }
   }
   async function goto() {
@@ -229,9 +230,15 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
   async function ready() {}
   function getByText(name: string) {
     async function isVisible() {
-      if (failPageState) throw new Error('Synthetic private page detail');
-      if (name === 'Budget service unavailable') return statusCode === 503;
-      if (name === 'Spending needs the Owner or Admin role.') return statusCode === 403;
+      if (failPageState) {
+        throw new Error('Synthetic private page detail');
+      }
+      if (name === 'Budget service unavailable') {
+        return statusCode === 503;
+      }
+      if (name === 'Spending needs the Owner or Admin role.') {
+        return statusCode === 403;
+      }
       assert.equal(name, 'Spending loaded');
       return statusCode === 200;
     }
@@ -244,7 +251,9 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
   function getByLabel(name: string) {
     assert.equal(name, 'Budget scope');
     async function isVisible() {
-      if (failPageState) throw new Error('Synthetic private page detail');
+      if (failPageState) {
+        throw new Error('Synthetic private page detail');
+      }
       return false;
     }
     return { waitFor: missingEditor, isVisible };
