@@ -3131,8 +3131,9 @@ schema and still requires `Selection conflict` without saving a choice.
 
 ## Spending call accounting (P4-26 row 8, first part)
 
-`readSpendingCalls` is an internal read, with no HTTP route. It returns 20 rows by
-default, at most 50, plus `next`, the last reservation position when another page
+`readSpendingCalls` supplies the server’s
+[call spending API](../../apps/server/README.robot.md#bounded-call-spending).
+It returns 20 rows by default, at most 50, plus `next`, the last reservation position when another page
 exists. Pass that position as `after` with the same silo and filters. Indexes cover
 silo/position, payer, assistant and both filters. Each query shares a two-second
 read deadline by default; callers may supply their remaining deadline. Returned

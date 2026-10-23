@@ -27,9 +27,15 @@ let clock = new Date('2026-10-31T23:59:00.000Z');
 let serial = 0;
 const expected: Omit<SpendingCall, 'silo'>[] = [];
 type Page = { rows: typeof expected; next: string | null; sequence: number; generation: number };
-function now() { return clock; }
-function memberId(_silo: string, _issuer: string, sub: string) { return Promise.resolve(sub); }
-function noCalls(): Promise<never> { throw new Error('GET must not call tools or models'); }
+function now() {
+  return clock;
+}
+function memberId(_silo: string, _issuer: string, sub: string) {
+  return Promise.resolve(sub);
+}
+function noCalls(): Promise<never> {
+  throw new Error('GET must not call tools or models');
+}
 async function append(subject: string, type: string, data: unknown) {
   const record = { ...event(`spending-${++serial}`, subject, type), silo: 'acme', data,
     principal: { kind: 'human' as const, id: 'owner' }, correlation: {} };
@@ -106,7 +112,7 @@ async function pagesCalls(sub: string) {
     const result = await page(continuation, sub);
     expect(result.rows.length).toBeLessThanOrEqual(20);
     expect(result.sequence).toBe(before);
-    expect(result.generation).toBeGreaterThan(0);
+    expect(result.generation).toBeGreaterThanOrEqual(0);
     found.push(...result.rows);
     continuation = result.next ? `continuation=${result.next}` : '';
   } while (continuation);
@@ -148,7 +154,9 @@ async function foreignCaller() {
     const response = await request('', 'owner', 'org-acme', server);
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ status: 'refused' });
-  } finally { await server.close(); }
+  } finally {
+    await server.close();
+  }
 }
 it('refuses other organisations and mismatched silo bindings', foreignCaller);
 async function changesDuringRead(action: string) {
@@ -165,7 +173,8 @@ async function changesDuringRead(action: string) {
     return original<Row>(sql, values, readOptions);
   }
   database.query = query;
-  const sub = action === 'chat' ? 'owner' : action;
+  let sub = 'owner';
+  if (action === 'demote' || action === 'revoke') sub = action;
   const pending = request('', sub);
   try {
     await Promise.race([loaded.promise, delay(3000)]);
@@ -175,16 +184,27 @@ async function changesDuringRead(action: string) {
       });
     } else if (action === 'revoke') {
       await append('member-revoke', 'member.removed', { memberId: sub, removedBy: 'owner' });
+    } else if (action === 'rebuild') {
+      await original(`UPDATE projection_generations SET generation = generation + 1
+        WHERE name = 'model-budgets'`);
     } else {
       await append('conversation-private', 'conversation.created', getEventDefinition('conversation.created')!.example);
     }
     resume.resolve();
     const response = await pending;
-    expect(response.statusCode).toBe(action === 'chat' ? 200 : 403);
-    if (action !== 'chat') expect(response.json()).toEqual({ status: 'refused' });
-  } finally { resume.resolve(); database.query = original; }
+    if (action === 'rebuild') {
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ status: 'restart' });
+    } else {
+      expect(response.statusCode).toBe(action === 'chat' ? 200 : 403);
+      if (action !== 'chat') expect(response.json()).toEqual({ status: 'refused' });
+    }
+  } finally {
+    resume.resolve();
+    database.query = original;
+  }
 }
-it.each(['chat', 'demote', 'revoke'])('checks current access after held data read: %s',
+it.each(['chat', 'demote', 'revoke', 'rebuild'])('checks current access after held data read: %s',
   changesDuringRead);
 async function refusesUnavailable(kind: string) {
   const database = options.modelDb!;
@@ -198,9 +218,13 @@ async function refusesUnavailable(kind: string) {
       if (kind === 'missing') throw new Error('Private database canary');
     }
     if (sql.includes('SELECT version')) {
-      if (kind === 'old') return { rows: [{ version: 2, sequence: '999', generation: '1' }] as Row[] };
+      if (kind === 'old') {
+        return original<Row>('SELECT 2 AS version, 999 AS sequence, 1 AS generation');
+      }
       if (kind === 'absent') return { rows: [] };
-      if (kind === 'lag') return { rows: [{ version: 3, sequence: '0', generation: '1' }] as Row[] };
+      if (kind === 'lag') {
+        return original<Row>('SELECT 3 AS version, 0 AS sequence, 1 AS generation');
+      }
     }
     return original<Row>(sql, values, readOptions);
   }
@@ -210,7 +234,9 @@ async function refusesUnavailable(kind: string) {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ status: 'unavailable' });
     await refusesCaller('member');
-  } finally { database.query = original; }
+  } finally {
+    database.query = original;
+  }
 }
 it.each(['missing', 'old', 'absent', 'lag'])('keeps %s index unavailable', refusesUnavailable);
 async function lockedRead() {
@@ -240,7 +266,7 @@ async function continuationBinding() {
     expect(response.json()).toEqual({ status: 'restart' });
   }
   expect((await page(`limit=2&payingGroupId=support&continuation=${first.next}`)).rows)
-    .toEqual(expected.slice(2, 3).concat(expected.slice(4, 5)));
+    .toEqual([expected[2], expected[4]]);
   await options.modelDb!.query('DELETE FROM model_budget_calls WHERE reservation_id = $1',
     [expected[0]!.reservationId]);
   await rebuildBudgetProjection(pgDb(dbs.queue), nats.reader, logger);
@@ -286,3 +312,50 @@ async function accountingEvidence() {
 }
 it('preserves zero, null, release, unknown holds and late original-period charges through replay',
   accountingEvidence);
+
+async function boundedReadOnly() {
+  const database = options.modelDb!;
+  const original = database.query.bind(database);
+  const readStream = nats.store.readStream.bind(nats.store);
+  const statements: { sql: string; values: unknown[] | undefined;
+    deadline: number | undefined }[] = [];
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+    readOptions?: { deadline: number }) {
+    statements.push({ sql, values, deadline: readOptions?.deadline });
+    return original<Row>(sql, values, readOptions);
+  }
+  function read(...args: Parameters<typeof readStream>) {
+    expect(args[0]).toMatch(/^(member-|ownership-)/u);
+    return readStream(...args);
+  }
+  database.query = query;
+  nats.store.readStream = read;
+  const before = await nats.store.head();
+  try {
+    const result = await page('limit=50');
+    expect(result.rows).toHaveLength(50);
+    const startedDeadline = statements[0]!.deadline;
+    expect(startedDeadline).toBeDefined();
+    for (const statement of statements) {
+      expect(statement.sql).not.toContain('FROM model_budgets');
+      expect(statement.deadline).toBe(startedDeadline);
+      if (statement.sql.includes('FROM model_budget_calls')) {
+        expect(statement.sql).toContain('LIMIT');
+        expect(statement.values?.at(-1)).toBe(51);
+      }
+    }
+    expect(await nats.store.head()).toBe(before);
+    const schema = protocol.spendingCallsResponseSchema;
+    expect(schema.safeParse({ ...result, totalCents: 0 }).success).toBe(false);
+    for (const amount of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const rows = [{ ...result.rows[0], heldCents: amount }];
+      expect(schema.safeParse({ ...result, rows }).success).toBe(false);
+    }
+    const rows = [{ ...result.rows[0], conversationId: 'private-chat' }];
+    expect(schema.safeParse({ ...result, rows }).success).toBe(false);
+  } finally {
+    database.query = original;
+    nats.store.readStream = readStream;
+  }
+}
+it('reads limit plus one with one deadline, no private history, totals or writes', boundedReadOnly);

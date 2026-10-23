@@ -1,0 +1,1 @@
+Owners and admins can read bounded pages of call spending through `GET /api/org/spending`, filtered by payer and assistant. Replies preserve original accounting dates and distinguish held, settled, released and unknown money. Access changes during loading refuse the reply; unavailable data stays unavailable, and replaced projections require paging to restart.

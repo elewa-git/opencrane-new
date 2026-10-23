@@ -10,6 +10,7 @@ import { registerOwnershipRoutes } from './members/ownership-routes.ts';
 import { registerMemberReads } from './members/read-routes.ts';
 import { registerProviderRoutes, type ProviderOptions } from './providers/routes.ts';
 import { registerModelAccessRoutes, type ModelAccessOptions } from './models/access-routes.ts';
+import { registerSpending } from './models/spending.ts';
 import { registerBudgetChoices } from './models/budget-choices.ts';
 import { registerAssistantRoutes } from './assistants/routes.ts';
 import { registerScreenshots } from './computers/screenshots.ts';
@@ -105,6 +106,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerBootstrapRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);
   registerBudgetChoices(app, authConfig, options.integrations);
+  registerSpending(app, authConfig, options.integrations);
   registerMcpInstanceRoutes(app, authConfig, options.mcpInstances);
   if (options.mcpInstances) {
     const configured = options.mcpInstances;

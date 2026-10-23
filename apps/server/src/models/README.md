@@ -4,6 +4,7 @@ This folder lets owners and admins choose who may use each AI model. It serves t
 
 ## What it is responsible for
 
+- Returns bounded call spending pages to current owners and admins.
 - Lists recorded model access and suitable recipients from the same customer installation.
 - Gives or revokes one [grant](../../../../GLOSSARY.md#grant), a saved permission for a person, group or assistant.
 - Checks the original request when a save reply is lost.
@@ -17,6 +18,7 @@ Admins can revoke a departed person's grant. Revoking access that is already abs
 | File | What it does |
 | --- | --- |
 | [access-routes.ts](access-routes.ts) | Registers model, tool-access and destination requests and checks organisation access. |
+| [spending.ts](spending.ts) | Reads call spending and checks current finance access. |
 | [access-changes.ts](access-changes.ts) | Saves model grants and recovers their original results. |
 
 ## How it connects
