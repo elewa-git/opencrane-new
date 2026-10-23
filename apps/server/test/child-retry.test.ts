@@ -297,3 +297,21 @@ async function uncertainAccess(kind: string) {
     request.payload)).statusCode).toBe(202);
 }
 it.each(['outage', 'applying'])('keeps %s retryable without saving a refusal', uncertainAccess);
+
+async function hidesClosedParentFromRemovedRequester() {
+  const request = await failedRequest();
+  const conversationId = request.input.conversationId;
+  await context.append(`participation-${conversationId}`, 'participant.removed',
+    { conversationId, participantId: 'alice', removedBy: 'bob' });
+  await context.append(`conversation-${conversationId}`, 'conversation.closed',
+    { conversationId, closedBy: 'bob' }, false);
+  const before = await context.nats.store.head();
+  const response = await context.request(conversationId, request.path, request.payload);
+  const unknown = await context.request(conversationId, 'children/unknown/retry', request.payload);
+  expect(unknown.statusCode).toBe(403);
+  expect(response.statusCode).toBe(unknown.statusCode);
+  expect(response.body).toBe(unknown.body);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('hides a closed parent from its removed requester', hidesClosedParentFromRemovedRequester);
