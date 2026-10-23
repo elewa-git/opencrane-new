@@ -1673,3 +1673,7 @@ The ownership regression first failed because an Admin fixture silently recorded
 `NOT PROVEN`. It now refuses that setup. A second test checks preparation and
 restoration twice against the same saved accounts. These tests use an API fixture;
 the live journey supplies the real browser and server evidence.
+
+The transfer check also matches the command id from the current browser request.
+Its failing-first test showed that an earlier appointment of the same person could
+otherwise stand in for a missing appointment in a saved-data run.

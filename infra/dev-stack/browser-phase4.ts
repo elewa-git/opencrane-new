@@ -1012,12 +1012,12 @@ export async function qualifyOwnershipTransfer(
   await waitForOwnershipTransfer(page, memberId);
   const resultScreens = await captureAtBothWidths(page, output, 'ownership-transfer-result');
   const resultText = await page.locator('main').innerText();
-  const event = await ownershipTransferEvent(options.store, options.silo, memberId, ownerId);
+  const event = await ownershipTransferEvent(options.store, options.silo, memberId, ownerId, command.commandId);
   const bothPeopleAreOwners = resultText.includes(ownerId) && resultText.includes(memberId)
     && resultText.includes('You remain an owner');
   const transferMatchesReview = event.successorId === memberId && event.transferredBy === ownerId;
   const transferEvidence = { successorId: event.successorId,
-    transferredBy: event.transferredBy, ownerIds: [ownerId, memberId] };
+    transferredBy: event.transferredBy, commandId: command.commandId, ownerIds: [ownerId, memberId] };
   record(options.assertions, 'ownership.appointment', bothPeopleAreOwners && transferMatchesReview,
     'The saved change makes the reviewed member an owner and leaves the first owner in place.',
     transferEvidence, resultScreens);
@@ -1194,6 +1194,7 @@ function matchesOwnerId(memberId: string, owner: OwnershipView['owners'][number]
 }
 
 type OwnershipTransferCommand = {
+  commandId: string;
   successorId: string;
   expectedSequence: number;
 };
@@ -1217,9 +1218,11 @@ function isOwnershipTransferResponse(response: BrowserResponse): boolean {
 
 function readOwnershipTransferCommand(request: BrowserRequest): OwnershipTransferCommand {
   const body = request.postDataJSON() as Record<string, unknown>;
+  assert(typeof body['commandId'] === 'string');
   assert(typeof body['successorId'] === 'string');
   assert(typeof body['expectedSequence'] === 'number');
-  return { successorId: body['successorId'], expectedSequence: body['expectedSequence'] };
+  return { commandId: body['commandId'], successorId: body['successorId'],
+    expectedSequence: body['expectedSequence'] };
 }
 
 async function waitForOwnershipTransfer(page: Page, successorId: string): Promise<void> {
@@ -1243,14 +1246,16 @@ async function clickStatusWhenEnabled(button: Locator): Promise<boolean> {
   return true;
 }
 
-async function ownershipTransferEvent(
+export async function ownershipTransferEvent(
   store: EventStore,
   silo: string,
   successorId: string,
   transferredBy: string,
+  commandId: string,
 ): Promise<{ successorId: string; transferredBy: string }> {
   for await (const stored of store.readStream(ownershipSubject(silo))) {
     if (stored.event.silo !== silo || stored.event.type !== 'ownership.transferred') continue;
+    if (stored.event.commandId !== commandId) continue;
     const data = stored.event.data as OwnershipTransferData;
     if (data.memberId !== successorId || data.transferredBy !== transferredBy) continue;
     return { successorId: data.memberId, transferredBy: data.transferredBy };

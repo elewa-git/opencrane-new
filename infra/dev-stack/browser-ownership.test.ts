@@ -120,3 +120,20 @@ async function preparesAndRestoresSavedAccounts() {
 
 test('ownership fixture uses authorised commands and restores accounts for a saved-data repeat',
   preparesAndRestoresSavedAccounts);
+
+async function doesNotReuseAnEarlierTransfer() {
+  const { ownershipTransferEvent } = await import('./browser-phase4.ts');
+  async function* readStream() {
+    yield { event: { silo: 'test', type: 'ownership.transferred', commandId: 'earlier-attempt',
+      data: { memberId: 'zitadel-member', transferredBy: 'zitadel-owner' } } };
+  }
+  const store = { readStream } as unknown as import('@opencrane/event-store').EventStore;
+  async function readCurrentTransfer() {
+    await ownershipTransferEvent(store, 'test', 'zitadel-member', 'zitadel-owner',
+      'current-attempt');
+  }
+  await assert.rejects(readCurrentTransfer, /No ownership transfer/);
+}
+
+test('saved-data evidence cannot use an earlier ownership transfer as the current result',
+  doesNotReuseAnEarlierTransfer);
