@@ -4484,6 +4484,17 @@ that confirm the member joined, the assistant and conversation were created, and
 grants were applied. It also checks both identities' resource permissions, permission
 to act for the assistant, and permission to post in the conversation.
 
+Each fresh fixture completes read-only preparation before starting its memory backend.
+It checks the selected scope's read grant as well as MCP access, then reads the initial
+chat summary and fact page. It requires the existing gateway discovery call to return
+HTTP 200. Discovery alone checks MCP access without reading the selected memory scope.
+Write grants are added only by tests that need a valid write control.
+
+A separate startup regression delays the first memory-read grant lookup by advancing
+both clocks. It recreates the fixture and requires HTTP 200 from its first gateway
+recall. Without shared preparation, that first read runs inside the short pass and
+the gateway refuses it.
+
 The fixture reads the initial chat summary before signing, using its own history
 deadline. It also reads the requested page of up to two facts through the normal memory reader.
 That read checks the projection's saved position and generation, then finishes the

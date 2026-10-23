@@ -131,6 +131,8 @@ async function prepare(team = false) {
       ...encrypted });
   }
   await setup.runner.run(projection);
+  await prepareMemoryAccess(false);
+  await prepareRecallPage('deliver');
   const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
     binding: setup.binding, feed: { memberId }, identity: setup.identity,
     dispatchGeneration: 'memory-instance', keyDirectory: dirname(setup.options.configFile) };
@@ -141,10 +143,11 @@ async function prepare(team = false) {
   setup.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
   await restartMemoryGateway();
-  // Warm service clients. Cold calls may correctly refuse when the access deadline expires.
+  // Check the gateway only after its access and data readers are ready.
   const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
   const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
-  await setup.call(discoveryHeaders, discovery, route);
+  const ready = await setup.call(discoveryHeaders, discovery, route);
+  expect(ready.status, ready.text).toBe(200);
 }
 function memberId() {
   return Promise.resolve('alice');
@@ -2344,7 +2347,7 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   }
   return request;
 }
-async function prepareMemoryAccess() {
+async function prepareMemoryAccess(includeMemoryWrite = true) {
   // Finish cold event and IAM reads before issuing the control's two-second pass.
   const deadline = performance.now() + 10_000;
   const checkApplied = setup.auth.applied.bind(setup.auth);
@@ -2353,8 +2356,11 @@ async function prepareMemoryAccess() {
   const resources = [
     { resourceType: 'mcp_server', resourceId: 'memory' },
     { resourceType: 'memory_read', resourceId: scopeId },
-    { resourceType: 'memory_write', resourceId: scopeId },
   ];
+  if (includeMemoryWrite) {
+    const write = { resourceType: 'memory_write', resourceId: scopeId };
+    resources.push(write);
+  }
   for (const { resourceType, resourceId } of resources) {
     const subject = grantStream(resourceType, resourceId);
     const grants = await history(setup.nats.store, subject, 'test', deadline);
