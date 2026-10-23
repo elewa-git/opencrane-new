@@ -1,0 +1,421 @@
+{
+  "commit": "c3a72c8c5e366ce798d2e3261f1f1832c2322c7e",
+  "attempt": "fresh-1-fixed",
+  "viewportWidths": [
+    1280,
+    390
+  ],
+  "durationMs": 139622,
+  "startedAt": "2026-10-23T15:58:00.525Z",
+  "finishedAt": "2026-10-23T16:00:20.186Z",
+  "assertions": [
+    {
+      "id": "providers.paid_model_answer",
+      "status": "PAID / NOT RUN",
+      "statement": "The real provider answer check needs a paid call and was not run.",
+      "evidence": {
+        "paidCallMade": false,
+        "attempt": "fresh-1-fixed"
+      },
+      "screenshots": []
+    },
+    {
+      "id": "shared_assistant.member_disk_isolation",
+      "status": "NOT PROVEN",
+      "statement": "Separate member disks and browser profiles for assistant sessions are not built.",
+      "evidence": {
+        "assistantBrowserProfiles": false,
+        "assistantComputerDisks": 1
+      },
+      "screenshots": []
+    },
+    {
+      "id": "groups.list",
+      "status": "PASS",
+      "statement": "The group page shows the names returned by the server.",
+      "evidence": {
+        "groupCount": 1
+      },
+      "screenshots": [
+        "groups-list-1280.png",
+        "groups-list-390.png"
+      ]
+    },
+    {
+      "id": "groups.create",
+      "status": "PASS",
+      "statement": "The Owner creates a local group and can open its detail page.",
+      "evidence": {
+        "groupId": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b",
+        "groupName": "Journey group 569c87ac-c902-4605-b132-e6fc7cc46d26"
+      },
+      "screenshots": [
+        "groups-created-1280.png",
+        "groups-created-390.png"
+      ]
+    },
+    {
+      "id": "groups.search",
+      "status": "PASS",
+      "statement": "Searching by the new group name finds its row at 1280px and 390px.",
+      "evidence": {
+        "groupName": "Journey group 569c87ac-c902-4605-b132-e6fc7cc46d26"
+      },
+      "screenshots": [
+        "groups-search-1280.png",
+        "groups-search-390.png"
+      ]
+    },
+    {
+      "id": "groups.detail",
+      "status": "PASS",
+      "statement": "Group detail shows the member and model grant.",
+      "evidence": {
+        "memberId": "zitadel-member",
+        "modelId": "gpt-6.1-sol"
+      },
+      "screenshots": [
+        "groups-detail-1280.png",
+        "groups-detail-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.admin_create",
+      "status": "PASS",
+      "statement": "The admin can choose this group, its payer and its model grant.",
+      "evidence": {
+        "groupName": "Journey group 569c87ac-c902-4605-b132-e6fc7cc46d26",
+        "payerGroup": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b",
+        "modelId": "gpt-6.1-sol"
+      },
+      "screenshots": [
+        "shared-assistant-create-1280.png",
+        "shared-assistant-create-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.review",
+      "status": "PASS",
+      "statement": "The review names the fixed paying group before the assistant is created.",
+      "evidence": {
+        "payerGroup": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b"
+      },
+      "screenshots": [
+        "shared-assistant-review-1280.png",
+        "shared-assistant-review-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.create_request",
+      "status": "PASS",
+      "statement": "The server accepts the assistant create request from the review.",
+      "evidence": {
+        "responseStatus": 200,
+        "assistantId": "team-6b381de3-02c8-4e0d-b2ca-18594a318b35",
+        "requestFields": [
+          "assistantId",
+          "commandId",
+          "grants",
+          "groupId",
+          "name",
+          "payingGroupId"
+        ],
+        "hasStage": false,
+        "groupId": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b",
+        "payingGroupId": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b",
+        "name": "Shared journey 9c94d0d1-2ada-4f22-9a0c-7ea14c2f4d27",
+        "grantIds": [
+          "model:gpt-6.1-sol"
+        ]
+      },
+      "screenshots": [
+        "shared-assistant-create-response-1280.png",
+        "shared-assistant-create-response-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.created",
+      "status": "PASS",
+      "statement": "The saved assistant event names the owner group, payer, model and display name.",
+      "evidence": {
+        "assistantId": "team-6b381de3-02c8-4e0d-b2ca-18594a318b35",
+        "payerGroup": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b",
+        "ownerGroup": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b",
+        "creationMatchesReview": true
+      },
+      "screenshots": [
+        "shared-assistant-created-1280.png",
+        "shared-assistant-created-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.computer_ready_for_selection",
+      "status": "PASS",
+      "statement": "The assistant appears in the member selection list after its computer record is ready.",
+      "evidence": {
+        "assistantId": "team-6b381de3-02c8-4e0d-b2ca-18594a318b35",
+        "status": "ready"
+      },
+      "screenshots": [
+        "shared-assistant-created-1280.png",
+        "shared-assistant-created-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.member_choice",
+      "status": "PASS",
+      "statement": "The member can choose the shared assistant for a private session.",
+      "evidence": {
+        "assistantId": "team-6b381de3-02c8-4e0d-b2ca-18594a318b35",
+        "assistantName": "Shared journey 9c94d0d1-2ada-4f22-9a0c-7ea14c2f4d27"
+      },
+      "screenshots": [
+        "shared-assistant-choice-1280.png",
+        "shared-assistant-choice-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.session_recorded",
+      "status": "PASS",
+      "statement": "The server records the member\u2019s private session with this shared assistant.",
+      "evidence": {
+        "assistantId": "team-6b381de3-02c8-4e0d-b2ca-18594a318b35",
+        "payingGroupId": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b",
+        "conversationId": "75f8fbfb-7d5e-4972-b665-1c2fe0e30e8e",
+        "responseStatus": 200
+      },
+      "screenshots": [
+        "shared-assistant-session-response-1280.png",
+        "shared-assistant-session-response-390.png"
+      ]
+    },
+    {
+      "id": "shared_assistant.private_chat",
+      "status": "PASS",
+      "statement": "The member loads a private chat, sends a prompt and sees a reply.",
+      "evidence": {
+        "assistantId": "team-6b381de3-02c8-4e0d-b2ca-18594a318b35",
+        "payingGroupId": "journey-group-569c87ac-c902-4605-b132-e6-28a8e59b",
+        "createdBy": "zitadel-member",
+        "privateUrl": "http://127.0.0.1:25106/workspace?conversation=75f8fbfb-7d5e-4972-b665-1c2fe0e30e8e"
+      },
+      "screenshots": [
+        "shared-assistant-private-chat-1280.png",
+        "shared-assistant-private-chat-390.png"
+      ]
+    },
+    {
+      "id": "groups.removal_review",
+      "status": "PASS",
+      "statement": "Removal review explains what access ends and when.",
+      "evidence": {},
+      "screenshots": [
+        "groups-removal-review-1280.png",
+        "groups-removal-review-390.png"
+      ]
+    },
+    {
+      "id": "groups.remove_member",
+      "status": "PASS",
+      "statement": "The removed member no longer sees the shared assistant through the server.",
+      "evidence": {
+        "removedMemberId": "zitadel-member",
+        "sharedAssistantHidden": true
+      },
+      "screenshots": [
+        "groups-removed-1280.png",
+        "groups-removed-390.png"
+      ]
+    },
+    {
+      "id": "direct_chat.start_390",
+      "status": "PASS",
+      "statement": "The direct chat names only the chosen colleague before the first message.",
+      "evidence": {
+        "colleague": "zitadel-owner"
+      },
+      "screenshots": [
+        "direct-chat-recipient-390.png"
+      ]
+    },
+    {
+      "id": "direct_chat.start_1280",
+      "status": "PASS",
+      "statement": "The direct chat recipient screen fits at 1280px.",
+      "evidence": {
+        "colleague": "zitadel-owner"
+      },
+      "screenshots": [
+        "direct-chat-recipient-1280.png"
+      ]
+    },
+    {
+      "id": "direct_chat.receive",
+      "status": "PASS",
+      "statement": "The colleague receives the member message at 1280px and 390px.",
+      "evidence": {
+        "conversationId": "direct-f114d297-6230-4c94-8da7-f35d961ad729",
+        "author": "zitadel-member"
+      },
+      "screenshots": [
+        "direct-chat-received-1280.png",
+        "direct-chat-received-390.png"
+      ]
+    },
+    {
+      "id": "direct_chat.exchange_and_no_agent",
+      "status": "PASS",
+      "statement": "Both people exchange ordered messages. No assistant turn, model admission or agent control appears.",
+      "evidence": {
+        "memberMessages": 2,
+        "agentActivity": 0,
+        "assistantRequests": 0,
+        "messageOrder": true
+      },
+      "screenshots": [
+        "direct-chat-exchange-1280.png",
+        "direct-chat-exchange-390.png"
+      ]
+    },
+    {
+      "id": "providers.list",
+      "status": "PASS",
+      "statement": "The provider page shows the names returned by the server.",
+      "evidence": {
+        "providerCount": 1
+      },
+      "screenshots": [
+        "provider-list-1280.png",
+        "provider-list-390.png"
+      ]
+    },
+    {
+      "id": "providers.key_save",
+      "status": "PASS",
+      "statement": "The fake key is saved without a leak or a claim that it works.",
+      "evidence": {
+        "providerId": "46a86469-4095-40ae-8053-bbb540eda8ad",
+        "saved": true,
+        "reachable": false,
+        "modelAnswer": false,
+        "placeholderInPage": false,
+        "placeholderInEvents": false,
+        "placeholderInLogs": false
+      },
+      "screenshots": [
+        "provider-key-saved-1280.png",
+        "provider-key-saved-390.png"
+      ]
+    },
+    {
+      "id": "providers.key_input_cleared",
+      "status": "PASS",
+      "statement": "The key input is empty after the save, when it remains on screen.",
+      "evidence": {
+        "inputState": "clear"
+      },
+      "screenshots": [
+        "provider-key-saved-1280.png",
+        "provider-key-saved-390.png"
+      ]
+    },
+    {
+      "id": "ownership.actor_ready",
+      "status": "PASS",
+      "statement": "The signed-in browser account has the Owner role before opening the transfer screen.",
+      "evidence": {
+        "memberId": "zitadel-owner",
+        "role": "owner"
+      },
+      "screenshots": [
+        "ownership-actor-ready-1280.png",
+        "ownership-actor-ready-390.png"
+      ]
+    },
+    {
+      "id": "ownership.review",
+      "status": "PASS",
+      "statement": "The owner reviews the named successor and sees that both people will remain owners.",
+      "evidence": {
+        "successorId": "zitadel-member"
+      },
+      "screenshots": [
+        "ownership-transfer-review-1280.png",
+        "ownership-transfer-review-390.png"
+      ]
+    },
+    {
+      "id": "ownership.transfer_request",
+      "status": "PASS",
+      "statement": "The server accepts the reviewed transfer command.",
+      "evidence": {
+        "successorId": "zitadel-member",
+        "expectedSequence": 409,
+        "responseStatus": 200
+      },
+      "screenshots": [
+        "ownership-transfer-response-1280.png",
+        "ownership-transfer-response-390.png"
+      ]
+    },
+    {
+      "id": "ownership.appointment",
+      "status": "PASS",
+      "statement": "The saved change makes the reviewed member an owner and leaves the first owner in place.",
+      "evidence": {
+        "successorId": "zitadel-member",
+        "transferredBy": "zitadel-owner",
+        "commandId": "02cbf6d2-5418-4373-8499-3a87730adba5",
+        "ownerIds": [
+          "zitadel-owner",
+          "zitadel-member"
+        ]
+      },
+      "screenshots": [
+        "ownership-transfer-result-1280.png",
+        "ownership-transfer-result-390.png"
+      ]
+    },
+    {
+      "id": "ownership.successor_controls",
+      "status": "PASS",
+      "statement": "The new owner sees the owner controls in their own signed-in browser.",
+      "evidence": {
+        "memberId": "zitadel-member"
+      },
+      "screenshots": [
+        "ownership-new-owner-1280.png",
+        "ownership-new-owner-390.png"
+      ]
+    },
+    {
+      "id": "ownership.step_down_review",
+      "status": "PASS",
+      "statement": "The previous owner reviews the separate step down, which first makes them an Admin.",
+      "evidence": {
+        "remainingOwnerId": "zitadel-member"
+      },
+      "screenshots": [
+        "ownership-step-down-1280.png",
+        "ownership-step-down-390.png"
+      ]
+    },
+    {
+      "id": "journey.execution",
+      "status": "FAIL",
+      "statement": "The browser checks did not all finish.",
+      "evidence": {
+        "reason": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByText('You are now an Admin', { exact: true }) to be visible\n"
+      },
+      "screenshots": []
+    }
+  ],
+  "environment": {
+    "stack": "claimed secondary slot 1",
+    "installation": "fresh",
+    "provider": "local model stub",
+    "paidProviderCalls": "NOT RUN"
+  },
+  "command": "infra/dev-stack/up.sh --fresh",
+  "fullStartStatus": "FAIL"
+}

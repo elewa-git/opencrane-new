@@ -76,7 +76,6 @@ export async function browserPhase4(options: BrowserPhase4Options): Promise<void
     return;
   }
   await qualifyProvider(options, ownerPage, attemptDirectory);
-
 }
 
 function findPage(pages: Page[], width: number): Page {
@@ -1012,7 +1011,8 @@ export async function qualifyOwnershipTransfer(
   await waitForOwnershipTransfer(page, memberId);
   const resultScreens = await captureAtBothWidths(page, output, 'ownership-transfer-result');
   const resultText = await page.locator('main').innerText();
-  const event = await ownershipTransferEvent(options.store, options.silo, memberId, ownerId, command.commandId);
+  const event = await ownershipTransferEvent(options.store, options.silo,
+    memberId, ownerId, command.commandId);
   const bothPeopleAreOwners = resultText.includes(ownerId) && resultText.includes(memberId)
     && resultText.includes('You remain an owner');
   const transferMatchesReview = event.successorId === memberId && event.transferredBy === ownerId;
@@ -1024,7 +1024,6 @@ export async function qualifyOwnershipTransfer(
   assert(successorPage, 'The ownership journey needs the successor’s browser session');
   await qualifyOwnershipHandover(options, page, successorPage, output);
 }
-
 
 async function qualifyOwnershipHandover(
   options: BrowserPhase4Options,

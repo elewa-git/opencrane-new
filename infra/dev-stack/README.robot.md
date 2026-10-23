@@ -711,18 +711,20 @@ that the text is absent from the page, browser storage, provider events and proc
 logs. The local server keeps the key in a private folder inside the disposable stack,
 outside the event store. Stack cleanup removes that folder. It does not ask the provider
 to answer. Each assertion is written to
-`docs/process/p4-journey/run-<attempt>.json`; screenshots sit beside this receipt in
-`run-<attempt>/`. Set `P4_JOURNEY_ATTEMPT` to keep the two fresh run receipts apart.
-The group chat receipt is part of the same JSON file. Its screenshots are saved under
-`run-<attempt>/group-chat/` at 1280px and 390px.
+`$DEV_STACK_DIR/p4-journey/<attempt>/receipt.json`. Screenshots sit beside it.
+Set `P4_JOURNEY_ATTEMPT` to keep each run apart. The group chat receipt is part
+of the same JSON file. Its screenshots are saved in the `group-chat/` subfolder
+at 1280px and 390px. Public copies are checked for readable emails before committing.
 
 The spare stack allows six computer pods and disks, with up to 3 GiB of memory
 and 6 GiB of disk requests. The sixth place lets a saved-data repeat start a new
 shared assistant computer while keeping the previous run's data.
 
-The ownership transfer check runs only when PR #262 is merged. A development event
-gives the signed-in test account the Owner role before the ownership screen opens.
-The transfer itself goes through the live review and owner screen. Separate member
+The manual ownership check uses product commands to make the signed-in test account
+the sole Owner before the ownership screen opens. The separate owner test user stays
+in the silo. The browser checks appointment, step-down and the former owner’s Member
+role, then checks the last-owner refusals. Product commands restore the test roles
+for the saved-data repeat. Separate member
 disks and browser profiles are not built. A real provider answer needs a paid call;
 the check records it as **PAID / NOT RUN** and sends no request.
 

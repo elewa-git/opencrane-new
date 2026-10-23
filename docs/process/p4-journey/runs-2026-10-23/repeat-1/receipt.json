@@ -1,0 +1,22 @@
+{
+  "commit": "d1305b0672c4172c54a8666314196348f54f6c4d",
+  "attempt": "repeat-1",
+  "fullStartStatus": "FAIL",
+  "status": "PARTIAL",
+  "reason": "The command ended with SIGTERM (exit 143) before it could write its assertion receipt. The signal source is unknown. Captures do not establish assertions on their own.",
+  "viewportWidths": [
+    1280,
+    390
+  ],
+  "assertions": [],
+  "environment": {
+    "stack": "claimed secondary slot 1",
+    "installation": "saved data",
+    "provider": "local model stub",
+    "paidProviderCalls": "NOT RUN"
+  },
+  "recordKind": "Manual interruption record. No automated assertion receipt was written.",
+  "interruptionObservedAt": "2026-10-23T16:40:45Z",
+  "lastCaptureAt": "2026-10-23T16:40:39.851Z",
+  "commandLogCreatedAt": "2026-10-23T16:27:59.141Z"
+}

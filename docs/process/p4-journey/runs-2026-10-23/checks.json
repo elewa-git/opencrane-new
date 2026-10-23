@@ -1,0 +1,157 @@
+{
+  "recordedAt": "2026-10-23T17:23:50.201502+00:00",
+  "sourceChecks": "PASS",
+  "liveQualification": "PARTIAL",
+  "liveSourceCommit": "610f345abab575c08ff4b5278fc86eaca54102f8",
+  "laterSourceChanges": "Only line wrapping and blank lines changed in the script after the last live run.",
+  "checks": [
+    {
+      "check": "lint",
+      "status": "PASS",
+      "startedAt": "2026-10-23T17:08:16.493038+00:00",
+      "finishedAt": "2026-10-23T17:17:42.997379+00:00",
+      "durationMs": 566506,
+      "exitCode": 0,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "npm",
+        "run",
+        "lint"
+      ],
+      "nodeOptions": "--max-old-space-size=6144"
+    },
+    {
+      "check": "typecheck",
+      "status": "PASS",
+      "startedAt": "2026-10-23T17:17:43.035745+00:00",
+      "finishedAt": "2026-10-23T17:22:44.169183+00:00",
+      "durationMs": 301133,
+      "exitCode": 0,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "npm",
+        "run",
+        "typecheck"
+      ]
+    },
+    {
+      "check": "events",
+      "status": "PASS",
+      "startedAt": "2026-10-23T17:22:44.169847+00:00",
+      "finishedAt": "2026-10-23T17:22:44.981169+00:00",
+      "durationMs": 811,
+      "exitCode": 0,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "npm",
+        "run",
+        "check:events"
+      ]
+    },
+    {
+      "check": "knip",
+      "status": "PASS",
+      "startedAt": "2026-10-23T17:22:44.983279+00:00",
+      "finishedAt": "2026-10-23T17:22:51.975579+00:00",
+      "durationMs": 6992,
+      "exitCode": 0,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "npm",
+        "run",
+        "lint:unused"
+      ]
+    },
+    {
+      "check": "changelog",
+      "status": "PASS",
+      "startedAt": "2026-10-23T17:22:51.979328+00:00",
+      "finishedAt": "2026-10-23T17:22:52.482175+00:00",
+      "durationMs": 503,
+      "exitCode": 0,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "npm",
+        "run",
+        "lint:changelog"
+      ]
+    },
+    {
+      "check": "focused-1",
+      "status": "PASS",
+      "startedAt": "2026-10-23T17:22:52.483650+00:00",
+      "finishedAt": "2026-10-23T17:22:59.166524+00:00",
+      "durationMs": 6683,
+      "exitCode": 0,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "infra/dev-stack/browser-ownership.test.ts",
+        "infra/dev-stack/browser-group-chat.test.ts"
+      ]
+    },
+    {
+      "check": "focused-2",
+      "status": "PASS",
+      "startedAt": "2026-10-23T17:22:59.167493+00:00",
+      "finishedAt": "2026-10-23T17:23:05.437163+00:00",
+      "durationMs": 6270,
+      "exitCode": 0,
+      "command": [
+        "nice",
+        "-n",
+        "10",
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        "infra/dev-stack/browser-ownership.test.ts",
+        "infra/dev-stack/browser-group-chat.test.ts"
+      ]
+    }
+  ],
+  "focusedTestsPerRun": 14,
+  "eventTypes": 151,
+  "lintWarnings": 25,
+  "lintErrors": 0,
+  "knipConfigurationHints": 2,
+  "setup": {
+    "npmCi": "PASS",
+    "natsServerSymlink": "PASS",
+    "lycheeSymlink": "PASS"
+  },
+  "capturePrivacy": {
+    "status": "PASS",
+    "capturesLookedAtByEye": 310,
+    "readableEmailAddresses": false,
+    "receiptEmailAndTokenShapeCheck": "PASS"
+  },
+  "slotRelease": {
+    "status": "PASS",
+    "secondarySlot": 1,
+    "reportedState": "free",
+    "generatedDirectoryAbsent": true,
+    "composeContainersAbsent": true
+  },
+  "limits": {
+    "savedDataRepeat": "NOT PROVEN; command and single rerun interrupted by SIGTERM",
+    "earlierGroupChatTimingFailure": "Unresolved; the second fresh run passed this check",
+    "memberDiskIsolation": "NOT PROVEN",
+    "paidProviderCalls": "NOT RUN",
+    "fullRootSuite": "NOT RUN, as requested",
+    "ci": "NOT RUN locally; not awaited"
+  }
+}
