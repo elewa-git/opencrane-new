@@ -32,7 +32,10 @@ async function serveMemory(page, scenario, posts) {
     let status = 200;
     if (path.endsWith('/correct')) {
       posts.push(JSON.parse(request.postData() || '{}'));
-      if (scenario !== 'accepted') { status = 409; body = { outcome: 'conflict' }; }
+      if (scenario !== 'accepted' && !scenario.endsWith('-accepted')) {
+        status = 409;
+        body = { outcome: 'conflict' };
+      }
       else body = { operation: 'correct', outcome: 'accepted', scopeId: scope.scopeId,
         memoryId: fact.memoryId, revision: 4, acceptedAt: '2026-10-20T09:20:00Z',
         contentStatus: 'current', cleanupStatus: 'pending' };
@@ -47,9 +50,11 @@ async function serveMemory(page, scenario, posts) {
     } else if (path.includes('/changes/')) body = receipt('forgotten');
     else if (path.endsWith('/facts/fact-one')) {
       detailReads += 1;
-      if (['forgotten-detail', 'unavailable'].includes(scenario) && detailReads > 1) {
+      const hiddenText = scenario.startsWith('quarantined-') || scenario.startsWith('destroyed-');
+      if ((['forgotten-detail', 'unavailable'].includes(scenario) || hiddenText) && detailReads > 1) {
         let reason = 'forgotten';
-        if (scenario === 'unavailable') reason = 'quarantined';
+        if (scenario === 'unavailable' || scenario.startsWith('quarantined-')) reason = 'quarantined';
+        if (scenario.startsWith('destroyed-')) reason = 'destroyed';
         body = { status: 'unavailable', scopeId: scope.scopeId, memoryId: fact.memoryId,
           revision: 4, reason };
       } else {
@@ -240,11 +245,62 @@ async function captureEditWidth(browser, width) {
   }
 }
 
+async function assertNoProtectedEditText(page) {
+  const panel = page.locator('oc-memory-panel');
+  const text = await panel.textContent();
+  assert(!text.includes(fact.text), 'The page retained the original fact text');
+  assert(!text.includes('Private correction draft'), 'The page retained the editor draft');
+  const fields = panel.locator('input, textarea');
+  for (const field of await fields.all()) {
+    const value = await field.inputValue();
+    assert(!value.includes(fact.text), 'An input retained the original fact text');
+    assert(!value.includes('Private correction draft'), 'An input retained the editor draft');
+  }
+}
+
+async function verifyUnavailableEdit(browser, width, reason, outcome) {
+  const posts = [];
+  const page = await openPage(browser, width, `${reason}-${outcome}`, posts);
+  try {
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const sheet = page.getByRole('dialog', { name: 'Edit fact', exact: true });
+    await sheet.getByRole('textbox').fill('Private correction draft');
+    await sheet.getByRole('button', { name: 'Save correction' }).click();
+    if (outcome === 'conflict') {
+      await sheet.getByRole('button', { name: 'Refresh and review' }).click();
+    }
+    await sheet.getByText('This fact’s text is no longer available. Your edit wasn’t applied.')
+      .waitFor();
+    const rows = page.locator('button.fact');
+    assert.equal(await rows.count(), 1);
+    assert.equal(await sheet.locator('textarea, .preview').count(), 0);
+    assert(!(await sheet.textContent()).includes('forgotten'));
+    await assertNoProtectedEditText(page);
+    await inspect(page, width);
+    await sheet.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await assertNoProtectedEditText(page);
+    await page.getByRole('button', { name: 'Back to memory' }).click();
+    await rows.getByText('This fact’s text is no longer available.', { exact: true }).waitFor();
+    assert.equal(await rows.count(), 1);
+    await assertNoProtectedEditText(page);
+    assert.equal(posts.length, 1);
+  } finally {
+    await page.close();
+  }
+}
+
 const browser = await chromium.launch();
 try {
   await mkdir(output, { recursive: true });
   for (const width of [1280, 390]) {
-    if (editing) await captureEditWidth(browser, width);
+    if (editing) {
+      await captureEditWidth(browser, width);
+      for (const reason of ['quarantined', 'destroyed']) {
+        for (const outcome of ['conflict', 'accepted']) {
+          await verifyUnavailableEdit(browser, width, reason, outcome);
+        }
+      }
+    }
     else await captureWidth(browser, width);
   }
   await writeFile(`${output}/receipt.md`, editing ? `# Personal memory correction screens

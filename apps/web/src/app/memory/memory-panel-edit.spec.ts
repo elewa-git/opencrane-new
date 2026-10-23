@@ -304,36 +304,119 @@ it('resizes the phone sheet when the keyboard reduces the visible height', async
 });
 
 it.each([
-  ['quarantined', 'conflict'], ['quarantined', 'accepted'],
-  ['destroyed', 'conflict'], ['destroyed', 'accepted'],
-  ['forgotten', 'conflict'], ['forgotten', 'accepted'],
-])(
-  'keeps the %s reason after %s', async (reason, outcome) => {
-    await setup();
-    const unavailable = { status: 'unavailable', reason };
-    post = () => Promise.resolve(response(outcome === 'conflict' ? 409 : 200, accepted));
-    latest = () => Promise.resolve(response(200, unavailable));
-    saveDraft();
+  ['quarantined', 'conflict', 1280], ['quarantined', 'accepted', 1280],
+  ['destroyed', 'conflict', 1280], ['destroyed', 'accepted', 1280],
+  ['forgotten', 'conflict', 1280], ['forgotten', 'accepted', 1280],
+  ['quarantined', 'conflict', 390], ['quarantined', 'accepted', 390],
+  ['destroyed', 'conflict', 390], ['destroyed', 'accepted', 390],
+  ['forgotten', 'conflict', 390], ['forgotten', 'accepted', 390],
+] as const)(
+  'clears protected text for %s after %s at %i pixels', checkMissingFact);
+
+async function checkMissingFact(reason: string, outcome: string,
+  width: number): Promise<void> {
+  vi.stubGlobal('innerWidth', width);
+  await setup();
+  const unavailable = { status: 'unavailable', reason };
+  post = () => Promise.resolve(response(outcome === 'conflict' ? 409 : 200, accepted));
+  latest = () => Promise.resolve(response(200, unavailable));
+  saveDraft();
+  await settled();
+  if (outcome === 'conflict') {
+    click('Refresh and review');
     await settled();
-    if (outcome === 'conflict') {
-      click('Refresh and review');
-      await settled();
-    }
-    const sheet = root.querySelector('oc-memory-edit');
-    if (reason === 'forgotten') {
-      expect(sheet?.textContent).toContain('This fact was forgotten. Your edit wasn’t applied.');
-      expect(root.querySelector('button.fact')).toBeNull();
-    } else {
-      expect(sheet?.textContent).toContain(
-        'This fact’s text is no longer available. Your edit wasn’t applied.');
-      expect(sheet?.textContent).not.toContain('forgotten');
-      expect(root.querySelector('button.fact')?.textContent).toContain(fact.text);
-    }
-    expect(sheet?.querySelector('textarea')).toBeNull();
-    expect(sheet?.querySelector('.preview')).toBeNull();
-    expect(sheet?.textContent).not.toContain('My draft');
-    noPrivateAnnouncements();
-  });
+  }
+  const sheet = root.querySelector('oc-memory-edit');
+  if (reason === 'forgotten') {
+    expect(sheet?.textContent).toContain('This fact was forgotten. Your edit wasn’t applied.');
+    expect(root.querySelector('button.fact')).toBeNull();
+  } else {
+    expect(sheet?.textContent).toContain(
+      'This fact’s text is no longer available. Your edit wasn’t applied.');
+    expect(sheet?.textContent).not.toContain('forgotten');
+    expect(root.querySelectorAll('button.fact')).toHaveLength(1);
+    expect(root.querySelector('button.fact')?.textContent).toContain(
+      'This fact’s text is no longer available.');
+  }
+  expect(sheet?.querySelector('textarea')).toBeNull();
+  expect(sheet?.querySelector('.preview')).toBeNull();
+  expect(sheet?.textContent).not.toContain('My draft');
+  noProtectedFactText();
+  expect(editorComponent().fact().text).toBe('');
+  click('‹ Cancel');
+  noProtectedFactText();
+  click('‹ Back to memory');
+  noProtectedFactText();
+  expect(root.querySelectorAll('button.fact')).toHaveLength(reason === 'forgotten' ? 0 : 1);
+}
+
+function noProtectedFactText(): void {
+  expect(root.textContent).not.toMatch(/Private original text|My draft/);
+  for (const field of root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) {
+    expect(field.value).not.toMatch(/Private original text|My draft/);
+  }
+  noPrivateAnnouncements();
+}
+
+it.each(['conflict', 'accepted'])(
+  'keeps recoverable content when the detail read fails after %s', checkFailedDetail);
+
+async function checkFailedDetail(outcome: string): Promise<void> {
+  await setup();
+  post = () => Promise.resolve(response(outcome === 'conflict' ? 409 : 200, accepted));
+  latest = () => Promise.resolve(response(503, {}));
+  saveDraft();
+  await settled();
+  if (outcome === 'conflict') {
+    click('Refresh and review');
+    await settled();
+    expect(buttons('Refresh and review')).toHaveLength(1);
+  } else {
+    expect(root.textContent).toContain('Corrected in your memory · r8');
+  }
+  expect(root.textContent).toContain('Details are unavailable right now.');
+  expect(root.textContent).not.toMatch(/forgotten|no longer available/);
+  expect(root.querySelector('button.fact')?.textContent).toContain(fact.text);
+  expect(buttons('Edit')).toHaveLength(0);
+  latest = () => Promise.resolve(response(200, { ...detail, fact: updated }));
+  if (outcome === 'conflict') {
+    click('Refresh and review');
+    await settled();
+    expect(root.querySelector('textarea')?.value).toBe('My draft');
+    expect(root.textContent).toContain('Current revision r8');
+  } else {
+    click('‹ Back to memory');
+    root.querySelector<HTMLButtonElement>('button.fact')?.click();
+    await finishReplies();
+    expect(root.querySelector('.detail-text')?.textContent).toBe(updated.text);
+    expect(buttons('Edit')).toHaveLength(1);
+  }
+  expect(matching('/correct')).toHaveLength(1);
+  noPrivateAnnouncements();
+}
+
+it.each(['conflict', 'accepted'])(
+  'keeps the row for an unspecified unavailable reason after %s', checkUnavailableReason);
+
+async function checkUnavailableReason(outcome: string): Promise<void> {
+  await setup();
+  post = () => Promise.resolve(response(outcome === 'conflict' ? 409 : 200, accepted));
+  const unavailable = { status: 'unavailable', reason: 'unavailable' };
+  latest = () => Promise.resolve(response(200, unavailable));
+  saveDraft();
+  await settled();
+  if (outcome === 'conflict') {
+    click('Refresh and review');
+    await settled();
+  }
+  expect(root.textContent).toContain('This fact’s text is no longer available.');
+  expect(root.textContent).not.toContain('forgotten');
+  expect(root.querySelector('button.fact')?.textContent).toContain(fact.text);
+  expect(root.querySelector('textarea')).toBeNull();
+  expect(root.querySelector('.preview')).toBeNull();
+  expect(root.textContent).not.toContain('My draft');
+  noPrivateAnnouncements();
+}
 
 function editorComponent(): MemoryEdit {
   const editor: unknown = fixture.debugElement.query(By.directive(MemoryEdit))?.componentInstance;
