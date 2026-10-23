@@ -1,0 +1,118 @@
+{
+  "sha": "e872e3fe37558e949c9d655f7c158dc40cc3438f",
+  "warmMs": 36089,
+  "warmResult": "PASS",
+  "attempts": [
+    {
+      "width": 390,
+      "elapsedMs": 88691,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "streaming",
+          "result": "PASS",
+          "elapsedMs": 14199
+        },
+        {
+          "name": "pdf",
+          "result": "PASS",
+          "elapsedMs": 13881
+        },
+        {
+          "name": "stopped",
+          "result": "PASS",
+          "elapsedMs": 17724
+        },
+        {
+          "name": "direct",
+          "result": "PASS",
+          "elapsedMs": 10837
+        },
+        {
+          "name": "shared",
+          "result": "PASS",
+          "elapsedMs": 16845
+        },
+        {
+          "name": "limit",
+          "result": "PASS",
+          "elapsedMs": 15205
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "elapsedMs": 100451,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "streaming",
+          "result": "PASS",
+          "elapsedMs": 14404
+        },
+        {
+          "name": "pdf",
+          "result": "PASS",
+          "elapsedMs": 15384
+        },
+        {
+          "name": "stopped",
+          "result": "PASS",
+          "elapsedMs": 17798
+        },
+        {
+          "name": "direct",
+          "result": "PASS",
+          "elapsedMs": 11284
+        },
+        {
+          "name": "shared",
+          "result": "PASS",
+          "elapsedMs": 23511
+        },
+        {
+          "name": "limit",
+          "result": "PASS",
+          "elapsedMs": 18070
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "elapsedMs": 95211,
+      "result": "PASS",
+      "steps": [
+        {
+          "name": "streaming",
+          "result": "PASS",
+          "elapsedMs": 16156
+        },
+        {
+          "name": "pdf",
+          "result": "PASS",
+          "elapsedMs": 16588
+        },
+        {
+          "name": "stopped",
+          "result": "PASS",
+          "elapsedMs": 18908
+        },
+        {
+          "name": "direct",
+          "result": "PASS",
+          "elapsedMs": 12915
+        },
+        {
+          "name": "shared",
+          "result": "PASS",
+          "elapsedMs": 14487
+        },
+        {
+          "name": "limit",
+          "result": "PASS",
+          "elapsedMs": 16156
+        }
+      ]
+    }
+  ]
+}

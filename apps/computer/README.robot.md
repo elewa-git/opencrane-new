@@ -29,6 +29,8 @@ followed by a restart. It checks the saved reason, kept text and label live and 
 reload. Removing access triggers the fixture's model failure before `turn/interrupt`.
 Older reports with no reason still use the server's `bridge_interrupted` default.
 `turn-model.test.ts` checks terminal causes and journal reload.
+The [real-reply Stop receipt](../../docs/process/demo-stop-real/receipt.md) records
+the corrected image, failing-first proof and phone checks.
 
 ## Report delivery while stopping
 

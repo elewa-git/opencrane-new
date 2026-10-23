@@ -1,0 +1,17 @@
+{
+  "allowanceCents": 300,
+  "baseline": {
+    "chargedCents": 21,
+    "heldCents": 33
+  },
+  "corrected": {
+    "chargedCents": 31,
+    "heldCents": 70
+  },
+  "totalCents": 155,
+  "restoredCeilings": {
+    "monthlyCents": 246,
+    "dailyCents": 246
+  },
+  "unrestoredFiles": 0
+}
