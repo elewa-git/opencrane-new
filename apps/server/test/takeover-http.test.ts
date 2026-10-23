@@ -687,3 +687,40 @@ async function retainsAuthorityDeadline() {
 }
 it('keeps the checked authority deadline after an intent append conflicts',
   retainsAuthorityDeadline);
+
+async function racesAcceptedAndRefused(first: 'requested' | 'refused') {
+  await setup();
+  const stale = { ...body, generation: 2 };
+  const append = fixture.nats.store.append.bind(fixture.nats.store);
+  const both = Promise.withResolvers<void>();
+  const firstSaved = Promise.withResolvers<void>();
+  let arrivals = 0;
+  async function ordered(command: AppendCommand) {
+    arrivals++;
+    if (arrivals === 2) both.resolve();
+    await both.promise;
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success) throw new Error('Expected a valid event');
+    if (parsed.event.type !== `takeover.${first}`) await firstSaved.promise;
+    const result = await append(command);
+    if (parsed.event.type === `takeover.${first}`) firstSaved.resolve();
+    return result;
+  }
+  vi.spyOn(fixture.nats.store, 'append').mockImplementation(ordered);
+  const replies = await Promise.all([post(), post(stale)]);
+  vi.restoreAllMocks();
+  const saved = await refusalRows();
+  for await (const row of fixture.nats.store.readStream('computer-assistant')) {
+    if (row.event.type === 'takeover.requested') saved.push(row);
+  }
+  expect(saved).toHaveLength(1);
+  expect(saved[0]?.event.type).toBe(`takeover.${first}`);
+  expect(replies[0]?.statusCode).toBe(first === 'requested' ? 202 : 409);
+  expect(replies[1]?.statusCode).toBe(409);
+  const before = await fixture.nats.store.head();
+  expect((await post()).json()).toEqual(replies[0]?.json());
+  expect((await post(stale)).json()).toEqual(replies[1]?.json());
+  expect(await fixture.nats.store.head()).toBe(before);
+}
+it.each(['requested', 'refused'] as const)(
+  'saves one outcome when acceptance and refusal race, %s first', racesAcceptedAndRefused);
