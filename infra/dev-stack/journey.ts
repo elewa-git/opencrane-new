@@ -1,5 +1,5 @@
 import './journey-entry.ts';
-import { requireJourneyProviderMode } from './journey-guard.ts';
+import { phase4JourneyScope, requireJourneyProviderMode } from './journey-guard.ts';
 import { realModelJourney } from './real-model-journey.ts';
 import { uploadJourney } from './upload-journey.ts';
 import assert from 'node:assert/strict';
@@ -83,13 +83,16 @@ async function runPhase4Journey() {
   assert(browser, 'The Phase 4 journey needs real signed-in browser sessions');
   const startedAt = performance.now();
   const startedAtUtc = new Date().toISOString();
+  const scope = phase4JourneyScope(phase4Attempt);
   let journeyFailure: unknown;
   try {
     await browserPhase4({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
       origin, directory, attempt: phase4Attempt, silo,
-      secondaryStack: secondary, scope: 'all',
+      secondaryStack: secondary, scope,
       store: events.store, append, assertions: phase4Assertions });
-    await runOwnershipJourney();
+    if (scope === 'all') {
+      await runOwnershipJourney();
+    }
     const groupMembers = await groupChatMembers();
     await browserGroupChat({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
       otherPage: groupMembers.otherPage, thirdPage: groupMembers.thirdPage,

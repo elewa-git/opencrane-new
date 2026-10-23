@@ -2,6 +2,15 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { chromium, type Page } from 'playwright';
 import { qualifyOwnershipTransfer, type Phase4Assertion } from './browser-phase4.ts';
+import { phase4JourneyScope } from './journey-guard.ts';
+
+function preservesNightlyScope() {
+  assert.equal(phase4JourneyScope('nightly-20261023T232200-run'), 'groups');
+  assert.equal(phase4JourneyScope('fresh-1'), 'all');
+  assert.equal(phase4JourneyScope('repeat-1'), 'all');
+}
+
+test('nightly checks keep their groups-only scope', preservesNightlyScope);
 
 async function refusesAnAdminFixture() {
   const assertions: Phase4Assertion[] = [];

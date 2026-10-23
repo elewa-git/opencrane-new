@@ -1655,7 +1655,7 @@ Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user
 
 ## Ownership browser check
 
-Named organisation journeys now include provider saving and the ownership handover,
+Manual named organisation journeys include provider saving and the ownership handover,
 followed by the existing group chat checks. The separate development owner remains a
 separate test user. A short-lived fixture session uses the product commands to appoint
 the browser account, then steps down so the browser starts as the sole owner.
@@ -1689,3 +1689,6 @@ owner controls. It stopped after step-down because the script did not use Check 
 to read that result into the screen. A failing-first browser test reproduced the missing
 read action. Appointment and step-down now use the same status reader. Their existing
 120-second and 30-second limits are unchanged. The reader sends no write command.
+
+Names starting with `nightly-` retain the daily job’s groups-only checks. They do not
+change providers or owners. A failing-first scope test keeps that distinction.
