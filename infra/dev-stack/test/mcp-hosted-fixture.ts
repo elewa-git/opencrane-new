@@ -134,7 +134,7 @@ export function hostedFixture() {
     process: { env: { MCP_HOSTED_K3D: '1', DEV_STACK_ID: '1' } },
     requireAutomatedJourney() {}, console };
   runInNewContext(source, context);
-  return { objects, calls, cases, setup: () => setup(), cleanup: () => cleanup(),
+  return { objects, calls, cases, setup: () => setup(), cleanup: async () => cleanup(),
     failBinding(name: string) { failedName = name; },
     get sleeps() { return sleeps; },
   };
