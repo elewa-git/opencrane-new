@@ -283,8 +283,6 @@ function refuseDirectWrite() {
   const evidence = approvalEvidence();
   Reflect.deleteProperty(evidence, 'records');
   // Retain the old approval labels and successful readback from a direct write.
-  Reflect.deleteProperty(evidence, 'callId');
-  Reflect.deleteProperty(evidence, 'conversationId');
   assertRefused(evidence);
 }
 test('a direct write without original approval and dispatch records refuses', refuseDirectWrite);
@@ -331,7 +329,7 @@ function refuseUnrelatedOriginalRecords() {
       data.records.dispatch.event.silo = 'other';
     },
     function otherDecisionApproval(data: ReturnType<typeof approvalEvidence>) {
-      data.records.dispatchDecision.event.correlation.approval = 'other';
+      data.records.dispatchDecision.event.correlation!.approval = 'other';
     },
     function otherArguments(data: ReturnType<typeof approvalEvidence>) {
       data.records.request.event.data.argumentsDigest = 'a'.repeat(64);

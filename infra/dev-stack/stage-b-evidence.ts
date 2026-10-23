@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { isToolPolicyAvailable } from '@opencrane/projections';
 import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
-import { gatewayObservationSchema } from '@opencrane/events';
+import { gatewayObservationSchema, eventEnvelopeSchema, toolApprovalRequestedDataSchema,
+  approvalDecidedDataSchema, approvalUsedDataSchema, decisionRecordedDataSchema,
+  toolDispatchRecordedDataSchema } from '@opencrane/events';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { modelAccessChangeSchema, modelAccessCommandSchema, toolPolicySchema }
   from '@opencrane/protocol';
 
@@ -14,6 +17,14 @@ const readback = z.strictObject({ quoteId: z.literal('DEMO-001'), amountCents: z
 const evidenceSchema = z.strictObject({
   policy: toolPolicySchema,
   rehearsedAt: z.iso.datetime(),
+  conversationId: z.string().min(1), callId: z.string().min(1),
+  records: z.strictObject({
+    request: recordedEvent('tool.approval_requested', toolApprovalRequestedDataSchema),
+    approvalDecision: recordedEvent('approval.decided', approvalDecidedDataSchema),
+    approvalUse: recordedEvent('approval.used', approvalUsedDataSchema),
+    dispatchDecision: recordedEvent('decision.recorded', decisionRecordedDataSchema),
+    dispatch: recordedEvent('tool.dispatch_recorded', toolDispatchRecordedDataSchema),
+  }),
   publicationCommandId: z.string().min(1),
   gateway: gatewayObservationSchema,
   grants: z.array(z.strictObject({ command: modelAccessCommandSchema, receipt })),
@@ -34,6 +45,7 @@ export function checkStageBApproval(input: unknown) {
   checkPublication(data);
   checkReviewedTools(data.policy, Date.parse(data.rehearsedAt));
   checkGrants(data);
+  checkApprovalRecords(data);
   requireEvidence(data.before.effectCount === 0 && data.before.slot === 'morning');
   requireEvidence(data.waiting.effectCount === 0 && data.waiting.slot === 'morning');
   requireEvidence(data.after.effectCount === 1 && data.after.slot === 'afternoon');
@@ -69,15 +81,16 @@ function checkReviewedTools(policy: Evidence['policy'], rehearsedAt: number) {
   } catch {
     throw new Error('Approval evidence refused');
   }
-  requireEvidence(policy.tools.length === 2 && catalogue.tools?.length === 2);
+  const declarations = catalogue.tools;
+  requireEvidence(policy.tools.length === 2 && declarations?.length === 2);
   for (const tool of policy.tools) {
     const read = tool.name === 'read_fixture_quote' && tool.mode === 'allow' && tool.readOnly;
     const write = tool.name === 'change_delivery_slot' && tool.mode === 'ask' && !tool.readOnly;
     requireEvidence(tool.reviewed && tool.costCents === 0 && (read || write));
-    function matchesName(declaration: NonNullable<typeof catalogue.tools>[number]) {
+    function matchesName(declaration: NonNullable<typeof declarations>[number]) {
       return declaration.name === tool.name;
     }
-    const declaration = catalogue.tools.find(matchesName);
+    const declaration = declarations.find(matchesName);
     requireEvidence(declaration?.revision === tool.revision);
     requireEvidence(declaration?.readOnly === tool.readOnly && declaration.costCents === 0);
     requireEvidence(declaration.review);
@@ -106,9 +119,107 @@ function checkGrants(data: Evidence) {
   requireEvidence(kinds.size === 2 && changes.size === 2);
 }
 
+function checkApprovalRecords(data: Evidence) {
+  const records = data.records;
+  const request = records.request.event.data;
+  const decision = records.approvalDecision.event.data;
+  const use = records.approvalUse.event.data;
+  const dispatchDecision = records.dispatchDecision.event;
+  const dispatch = records.dispatch.event.data;
+  checkRecordOrder(data);
+  checkApprovalRequest(data);
+  requireEvidence(decision.approvalId === request.approvalId && decision.decision === 'approved');
+  requireEvidence(decision.decidedBy === data.requesterId);
+  requireEvidence(use.approvalId === request.approvalId && use.permitId === dispatch.requestId);
+  requireEvidence(dispatchDecision.correlation.approval === request.approvalId);
+  requireEvidence(dispatch.approvalId === request.approvalId);
+  requireEvidence(Date.parse(dispatch.startedAt) >= Date.parse(dispatchDecision.time));
+  requireEvidence(Date.parse(dispatch.startedAt) <= Date.parse(records.dispatch.event.time));
+  requireEvidence(Date.parse(dispatch.startedAt) < Date.parse(request.expiresAt));
+  checkDispatchRecords(data);
+}
+
+function checkRecordOrder(data: Evidence) {
+  const records = data.records;
+  const ordered = [records.request, records.approvalDecision, records.approvalUse,
+    records.dispatchDecision, records.dispatch];
+  const approvalId = records.request.event.data.approvalId;
+  const requestId = records.dispatch.event.data.requestId;
+  let previousSequence = 0;
+  let previousTime = -Infinity;
+  const ids = new Set<string>();
+  for (const record of ordered) {
+    const event = record.event;
+    const approval = event.type === 'tool.approval_requested' ||
+      event.type === 'approval.decided' || event.type === 'approval.used';
+    const subject = approval ? `approval-${approvalId}` : `decision-${requestId}`;
+    const time = Date.parse(event.time);
+    requireEvidence(event.silo === data.policy.silo && event.subject === subject);
+    // Compare global event positions across streams to prove the saved order.
+    requireEvidence(record.sequence > previousSequence && time >= previousTime);
+    requireEvidence(!ids.has(event.id) && time <= Date.parse(data.rehearsedAt));
+    ids.add(event.id);
+    previousSequence = record.sequence;
+    previousTime = time;
+  }
+}
+
+function checkApprovalRequest(data: Evidence) {
+  const request = data.records.request.event.data;
+  const catalogue = data.policy.catalogue;
+  requireEvidence(request.requesterId === data.requesterId);
+  requireEvidence(request.assistantId === data.assistantId);
+  requireEvidence(request.conversationId === data.conversationId && request.turnId === data.turnId);
+  requireEvidence(request.serverId === data.policy.serverId);
+  requireEvidence(request.connectionId === data.policy.connectionId && request.profile === 'none');
+  requireEvidence(request.tool === 'change_delivery_slot');
+  function isWriteTool(tool: Evidence['policy']['tools'][number]) {
+    return tool.name === request.tool;
+  }
+  const writeTool = data.policy.tools.find(isWriteTool);
+  requireEvidence(request.toolRevision === writeTool?.revision);
+  requireEvidence(request.schemaDigest === catalogue?.schemaDigest);
+  requireEvidence(request.policySequence === data.policy.policyRevision);
+  const argumentsJson = '{"quoteId":"DEMO-001","slot":"afternoon"}';
+  requireEvidence(request.argumentsDigest === losslessJson(argumentsJson).digest);
+}
+
+function checkDispatchRecords(data: Evidence) {
+  const decisionEvent = data.records.dispatchDecision.event;
+  const decision = decisionEvent.data;
+  const dispatch = data.records.dispatch.event.data;
+  requireEvidence(decision.route === 'mcp' && decision.outcome === 'allow');
+  requireEvidence(decision.reason === 'approval_used' && decision.requestId === dispatch.requestId);
+  requireEvidence(decision.requesterId === data.requesterId &&
+    decision.assistantId === data.assistantId);
+  requireEvidence(decision.logicalRequestId === dispatch.logicalRequestId);
+  for (const call of [decision, dispatch]) {
+    requireEvidence(call.callId === data.callId && call.turnId === data.turnId);
+    requireEvidence(call.conversationId === data.conversationId);
+    requireEvidence(call.serverId === data.policy.serverId);
+    requireEvidence(call.toolName === 'change_delivery_slot');
+  }
+  requireEvidence(dispatch.outcome === 'responded');
+  requireEvidence(dispatch.evidence === 'response_received' ||
+    dispatch.evidence === 'adapter_response_received');
+  const adapter = dispatch.adapter;
+  if (adapter) {
+    requireEvidence(adapter.decisionId === decisionEvent.id);
+    requireEvidence(adapter.connectionId === data.policy.connectionId);
+    requireEvidence(adapter.reviewRevision === data.policy.reviewRevision);
+    requireEvidence(adapter.generation === data.gateway.generation &&
+      adapter.recordDigest === data.gateway.recordDigest);
+  }
+}
+
 function toolName(tool: z.output<typeof toolPolicySchema>['tools'][number]) {
   return tool.name;
 }
 function requireEvidence(condition: unknown): asserts condition {
   if (!condition) throw new Error('Approval evidence refused');
+}
+
+function recordedEvent<Data extends z.ZodType>(type: string, data: Data) {
+  const event = eventEnvelopeSchema(data).extend({ type: z.literal(type) });
+  return z.strictObject({ sequence: z.int().positive(), event });
 }

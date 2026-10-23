@@ -74,7 +74,7 @@ function approvalRecords(toolRevision: string, schemaDigest: string) {
   const requestData = { approvalId, conversationId: 'conversation', turnId: 'turn',
     assistantId: 'assistant', requesterId: 'member', tool: 'change_delivery_slot',
     serverId: 'demo', toolRevision, schemaDigest, connectionId: 'connection',
-    profile: 'none', policySequence: 3, digestVersion: 'lossless-json-v1', argumentsDigest,
+    profile: 'none', policySequence: 3, digestVersion: 'lossless-json-v1' as const, argumentsDigest,
     expiresAt: '2026-10-23T10:04:00Z', stepUp: false,
     ciphertext: Buffer.from('synthetic-encrypted-review').toString('base64'),
     keyId: 'key:synthetic-review', reviewDigest: 'e'.repeat(64) };
@@ -82,20 +82,20 @@ function approvalRecords(toolRevision: string, schemaDigest: string) {
   const request = record('tool.approval_requested', requestData, 10,
     '2026-10-23T10:00:10Z', approvalSubject);
   const approvalDecision = record('approval.decided',
-    { approvalId, decidedBy: 'member', decision: 'approved' }, 11,
+    { approvalId, decidedBy: 'member', decision: 'approved' as const }, 11,
     '2026-10-23T10:00:20Z', approvalSubject);
   const approvalUse = record('approval.used', { approvalId, permitId: requestId }, 12,
     '2026-10-23T10:00:21Z', approvalSubject);
   const decisionData = { callId: 'call', logicalRequestId, serverId: 'demo',
     toolName: 'change_delivery_slot', requestId, requesterId: 'member', assistantId: 'assistant',
-    conversationId: 'conversation', turnId: 'turn', route: 'mcp', outcome: 'allow',
+    conversationId: 'conversation', turnId: 'turn', route: 'mcp' as const, outcome: 'allow' as const,
     reason: 'approval_used', contextDigest: 'f'.repeat(64) };
   const dispatchDecision = record('decision.recorded', decisionData, 13,
     '2026-10-23T10:00:22Z', `decision-${requestId}`, { approval: approvalId });
   const dispatchData = { conversationId: 'conversation', turnId: 'turn', callId: 'call',
     serverId: 'demo', toolName: 'change_delivery_slot', requestId, logicalRequestId, approvalId,
-    startedAt: '2026-10-23T10:00:22Z', durationMs: 10, outcome: 'responded',
-    evidence: 'response_received' };
+    startedAt: '2026-10-23T10:00:22Z', durationMs: 10, outcome: 'responded' as const,
+    evidence: 'response_received' as const };
   const dispatch = record('tool.dispatch_recorded', dispatchData, 14,
     '2026-10-23T10:00:23Z', `decision-${requestId}`);
   return { request, approvalDecision, approvalUse, dispatchDecision, dispatch };
