@@ -145,7 +145,8 @@ async function bridgeFixture(cachedControl = false) {
       await watching;
     }
     watchers.push(stop);
-    return Object.assign(stop, { forgetMissing: watcher.forgetMissing });
+    const controls = { forgetMissing: watcher.forgetMissing };
+    return Object.assign(stop, controls);
   }
   async function close() {
     for (const stop of watchers) await stop();
@@ -868,3 +869,29 @@ async function sharesActiveDeadline() {
   await waitForControl(test.store, 'failed');
 }
 it('keeps one deadline watcher while its failure append waits across polls', sharesActiveDeadline);
+
+async function releasesAlreadyFinishedObservation() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  await test.intendControl();
+  const set = Map.prototype.set;
+  let retained: Map<unknown, unknown> | undefined;
+  function capture(this: Map<unknown, unknown>, key: unknown, value: unknown) {
+    if (typeof key === 'string' && key.startsWith('["test","assistant"')) retained = this;
+    return set.call(this, key, value);
+  }
+  vi.spyOn(Map.prototype, 'set').mockImplementation(capture);
+  await test.link.control.send();
+  expect(retained?.size).toBe(1);
+  const failed = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
+    podUid: 'fixture', takeoverId: 'control', affectedTurnIds: [test.message.id],
+    reason: 'pause_timeout' };
+  await test.append('computer-assistant', 'takeover.failed', failed);
+  const stop = test.startControls();
+  await delay(300);
+  await stop();
+  expect((await readComputerControl(test.store, 'test', 'assistant'))?.phase).toBe('failed');
+  expect(retained?.size).toBe(0);
+}
+it('releases a finished observation even when no deadline task was started',
+  releasesAlreadyFinishedObservation);
