@@ -304,13 +304,19 @@ async function seedBusyAssistant() {
   });
   const claim = getEventDefinition('computer.claimed')!.example;
   await append(`computer-${assistantId}`, 'computer.claimed', { ...claim, assistantId });
+  const turns = [];
   for (let index = 0; index < 500; index++) {
     const turnId = `busy-turn-${index}`;
     for (const type of ['computer.turn_started', 'computer.turn_closed']) {
       const example = getEventDefinition(type)!.example;
-      await append(`computer-${assistantId}`, type, { ...example, assistantId, turnId });
+      const data = { ...example, assistantId, turnId };
+      getEventDefinition(type)!.dataSchema.parse(data);
+      const record = { ...event(`choice-${++serial}`, `computer-${assistantId}`, type),
+        silo: 'acme', data };
+      turns.push(record);
     }
   }
+  await nats.seed(turns);
   await project();
 }
 async function listsBusyAssistant() {
