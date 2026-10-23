@@ -5,7 +5,8 @@ import type { EventStore } from '@opencrane/event-store';
 
 export function takeoverClock(requestedAt: string) {
   const wallStart = Date.parse(requestedAt);
-  const monotonicStart = performance.now();
+  // Use exact milliseconds so strict deadline comparisons do not depend on rounding.
+  const monotonicStart = 2768;
   const wall = vi.spyOn(Date, 'now').mockReturnValue(wallStart);
   const monotonic = vi.spyOn(performance, 'now').mockReturnValue(monotonicStart);
   function advance(elapsed: number, wallElapsed = elapsed) {
