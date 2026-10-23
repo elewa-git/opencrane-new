@@ -1,3 +1,5 @@
+import { createConnection, createServer, type Socket } from 'node:net';
+import { Pool } from 'pg';
 import { dirname } from 'node:path';
 import { ChildProcess, execFile } from 'node:child_process';
 import { readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
@@ -84,7 +86,7 @@ async function fixture() {
   async function acknowledged() {
     expect(await delivery.observe()).not.toBeNull();
   }
-  return { ...setup, nats, record, delivery, options, acknowledged, faulty };
+  return { ...setup, nats, record, delivery, options, acknowledged, faulty, storage };
 }
 
 async function publicationStatus(setup: Awaited<ReturnType<typeof fixture>>, now = new Date()) {
@@ -966,3 +968,85 @@ async function waitsForPreparationLock() {
 }
 it('waits for preparation on another database connection and refuses its obsolete file',
   waitsForPreparationLock);
+
+async function delayedDisconnect(connectionString: string) {
+  const address = new URL(connectionString);
+  const targetHost = address.hostname;
+  const targetPort = Number(address.port);
+  const sockets = new Set<Socket>();
+  function ignoreError() {}
+  function forward(client: Socket) {
+    const upstream = createConnection({ host: targetHost, port: targetPort });
+    sockets.add(client);
+    sockets.add(upstream);
+    client.on('error', ignoreError);
+    upstream.on('error', ignoreError);
+    // Keep the client socket open after PostgreSQL has dropped its backend.
+    upstream.pipe(client, { end: false });
+    function send(bytes: Buffer) {
+      if (!upstream.destroyed) upstream.write(bytes);
+    }
+    client.on('data', send);
+  }
+  const server = createServer(forward);
+  await new Promise<void>(function listen(resolve) { server.listen(0, '127.0.0.1', resolve); });
+  const listening = server.address();
+  if (!listening || typeof listening === 'string') throw new Error('Missing proxy port');
+  address.hostname = '127.0.0.1';
+  address.port = String(listening.port);
+  return {
+    url: address.href,
+    pause() {
+      for (const socket of sockets) socket.pause();
+    },
+    async close() {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(function close(resolve) { server.close(() => resolve()); });
+    },
+  };
+}
+
+async function refusesLostGatewayLock() {
+  const setup = await fixture();
+  const before = await readFile(setup.options.configFile);
+  const inode = (await stat(setup.options.configFile)).ino;
+  const proxy = await delayedDisconnect(setup.storage.queue.options.connectionString!);
+  const pool = new Pool({ connectionString: proxy.url, max: 1, query_timeout: 150 });
+  function ignoreError() {}
+  pool.on('error', ignoreError);
+  const competitor = await setup.storage.queue.connect();
+  const lockName = 'opencrane:projection:gateway-configuration:test';
+  let checks = 0;
+  let competingSessionOwnsLock = false;
+  async function requireLeader() {
+    checks++;
+    if (checks !== 2) return;
+    const locked = await setup.storage.queue.query<{ pid: number }>(`SELECT pid FROM pg_locks
+      WHERE locktype = 'advisory' AND granted
+      AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
+    expect(locked.rows).toHaveLength(1);
+    proxy.pause();
+    await setup.storage.queue.query('SELECT pg_terminate_backend($1)', [locked.rows[0]!.pid]);
+    const acquired = await competitor.query<{ held: boolean }>(
+      'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS held', [lockName]);
+    competingSessionOwnsLock = acquired.rows[0]!.held;
+    expect(competingSessionOwnsLock).toBe(true);
+  }
+  const options = { ...setup.options, db: pgDb(pool), requireLeader };
+  const delivery = gatewayDelivery(options);
+  try {
+    await expect(delivery.deliver(setup.record)).rejects.toThrow('Gateway delivery unavailable');
+    expect(competingSessionOwnsLock).toBe(true);
+    expect(await readFile(setup.options.configFile)).toEqual(before);
+    expect((await stat(setup.options.configFile)).ino).toBe(inode);
+    expect(await delivery.observe()).toBeNull();
+    expect(await memberReceipts(setup)).toHaveLength(0);
+  } finally {
+    await competitor.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lockName]);
+    competitor.release();
+    await proxy.close();
+    await pool.end();
+  }
+}
+it('refuses replacement after the gateway lock session dies with delayed disconnect notification',
+  refusesLostGatewayLock);
