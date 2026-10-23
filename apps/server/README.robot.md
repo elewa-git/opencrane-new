@@ -3631,15 +3631,44 @@ New commands now validate saved groups, shared assistants and the chosen default
 payer before checking current caller access. The budget integration tests use the
 production startup payer, `installation-default`, without creating a team for it.
 Other valid group and shared-assistant cases seed their actual records.
-Personal-assistant caps are refused. Exact saved
-retries retain their original receipts. The scope-choices GET remains the next
-part of P4-26 row 3, together with its protocol and pagination tests.
+Personal-assistant caps are refused. Exact saved retries retain their original receipts.
 
 Spending choice refusals pass from the models process through POST `/api/org/models`
 as HTTP 422 with `{"status":"refused","reason":"spending_choice_unavailable"}`.
 No budget event is appended. Lost Owner/Admin access still returns 403.
 The Chromium integration check sends an unknown default payer, checks the fixed
 refusal and retained ceiling, corrects the payer and saves the same typed ceiling.
+
+### Named spending choices
+
+`GET /api/org/models/scope-choices?kind=paying_group|assistant&after=…&limit=…`
+uses the existing integration options. It reads 20 candidates by default, at most 50,
+plus one candidate to decide whether another page exists. `next` is the last examined
+opaque id; pass it as `after`. Filtering can leave a short or empty page with a continuation.
+No total is returned. Only existing groups and active, non-retired shared assistants appear.
+The installation payer is not invented as a group. Personal choices remain unavailable.
+
+Each row has `id`, `displayName`, the resource stream's `sequence`, and `cap`.
+A cap is `set` with safe integer `ceilingCents`, `not_configured`, or `unavailable`.
+Zero remains a set cap. Budget failures or stale budget state yield unavailable caps.
+Missing or lagging directory checkpoints return `status: applying`, never a complete empty list.
+The route uses the same resource eligibility reader as spending saves. It reads compact
+summaries of the group, assistant and computer streams within a ten-second deadline.
+Cold reads catch up incrementally; later reads start after the last saved position.
+Each summary kind retains at most 64 streams and 2 MiB. A partial cold read keeps its
+progress for a later request. Ordinary turn and membership history has no event-count cap.
+No wildcard stream is scanned. Each PostgreSQL read gets a statement timeout for the
+remaining request time; waiting for a pooled connection also observes that deadline.
+After loading, it checks event-log Owner/Admin membership and OpenFGA once.
+Reads have no authority fence, append no events, use fixed refusals and always send `no-store`.
+
+`test/budget-choices.test.ts` covers real NATS/PostgreSQL/OpenFGA paging, resource revisions,
+caps, lag, access refusal, IAM outage and changes during a blocked load. It also checks
+an assistant with 1,001 computer events, stored colon ids, 201-character group names,
+continuation, and locked candidate, checkpoint and budget tables. A timed-out read still
+checks caller access. Save-command id validation stays unchanged; older stored ids can
+be displayed and paged even when the command API cannot accept them.
+Screens, accounting indexes and fresh-install qualification remain outside this change.
 
 ## Shared remote transport
 

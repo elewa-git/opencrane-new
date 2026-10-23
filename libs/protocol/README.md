@@ -10,9 +10,9 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, history and tool holds"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, saved spending choices, history and tool holds"]
   server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and call statuses, live stop notices and dated approvals| protocol
-  projections["libs/projections<br/>read tables"] -.-> protocol
+  projections["libs/projections<br/>read tables"] -.->|directory and spending choices| protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool lists, publications and not-sent outcomes"]
 ```
@@ -80,6 +80,9 @@ cancellation reasons. Older replies can omit these fields.
 Approval cards may name their saved turn. The browser then shows a stopped card
 without decision controls.
 
+Spending choice pages carry names, resource revisions and explicit cap states.
+An absent cap differs from a zero cap and from a cap that could not be read.
+
 1. **A browser sends a live message.** The server checks the message against the shared schema before handling it. The browser checks server replies before showing them.
 2. **A person opens a conversation or settings page.** The server returns data in a shared shape, and the browser checks that shape before drawing the page.
    Conversation lists include a continuation for loading another visible page.
@@ -118,3 +121,6 @@ const message = clientMessageSchema.parse({ type: 'hello', text: 'Hello' });
 
 Hosted image admission reports dated check results. All four checks must pass before
 an image is admitted. Admission grants no tool access and starts no process.
+
+Spending choice replies accept saved group names and ids, including older values. Displaying a
+choice does not change the checks used to save its limit.

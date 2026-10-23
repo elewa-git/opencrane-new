@@ -27,7 +27,7 @@ flowchart LR
   mcp -.->|demo tests use the inventory helper| server
   server -.->|checks access, invitations, keys, spending choices and stops, memory, tools, images, publication, turn previews and closes| libs["libs/*<br/>shared code and chat keys"]
   server -->|records child requests, start failures, answers, instance and stop reports, control intent and quiet proof, memory facts, forget requests, recall choices, publication, grants, roles, chats, computers, provider choices, tools, spending stops, turn decisions and relay closures| nats["NATS<br/>event log"]
-  nats -->|original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
+  nats -->|summaries of spending choices, original spending changes, saved child leave results, spending stop reasons, departure cleanup, managed call mode, gateway configurations and checked origin references| server
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads unfinished child requests; locks gateway replacement; reads members, invitations, visible chats, own archive and read choices, file lists and worker progress, facts, models, tools, publication status, nightly memory status and paged change history| postgres
@@ -103,6 +103,9 @@ The server sends spending changes to the models process. It checks each chosen
 group and shared assistant before saving. Personal assistants cannot receive a new
 cap. The saved installation payer needs no group record. An unavailable choice
 asks the admin to correct the editor; lost admin access still clears the page.
+Owners and admins can read small pages of named groups and active shared assistants.
+Each choice includes its saved revision and whether a cap is set, absent or unavailable.
+The server checks current access after loading the page.
 
 The back end reads unfinished child requests from a table kept by the conversations
 worker. It checks each saved request and current access before continuing the child.
@@ -572,3 +575,6 @@ infra/dev-stack/up.sh (see [infra/dev-stack](../../infra/dev-stack/README.md)).
 
 Hosted image admission reports dated check results. All four checks must pass before
 an image is admitted. Admission grants no tool access and starts no process.
+
+Spending choices stay available as assistants do more work. A busy database returns a temporary
+unavailable reply, after the server checks current access.
