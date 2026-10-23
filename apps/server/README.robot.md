@@ -31,20 +31,151 @@ guard makes that test fail with 503. It also checks one append and the new key.
 
 ## Child retry tests and duplicate messages
 
-The tests that retry after the JetStream duplicate window use private
-fixtures with a two-second window. The retry-command test file also uses this window
-to check that an old worker cannot save a failure after a newer attempt starts. `test/support/duplicate-window.ts` checks that
-normal creation used 120 seconds, then updates that private EVENTS stream through
-the NATS test connection. Production still uses 120 seconds; there is no new
-production setting. Other test files keep the normal window except for their
-individual expiry cases.
-The shared `child-fixture.ts` and `child-summon.ts` helpers are unchanged.
+The four tests that retry after the JetStream duplicate window use private
+fixtures with a two-second window. The retry-command test also uses this window
+to check that an old worker cannot save a failure after a newer attempt starts.
+`test/support/duplicate-window.ts` checks that normal creation used 120 seconds,
+then updates the empty private EVENTS stream through the NATS test connection.
+Production still uses 120 seconds; there is no new production setting. Other
+tests keep the normal window except for their individual expiry cases. The shared
+`child-fixture.ts` and `child-summon.ts` helpers accept the prepared NATS fixture,
+so setup saves its first event after the window is set.
 
 Each shortened test publishes the same valid event twice and checks that NATS
 stores it once. It then repeats that publish until NATS stores a new message,
 with a five-second limit. Only then does it retry the child command and check
 the saved result. The probe uses its own assistant subject and does not change
 chat history or the permissions rebuilt by the tests.
+
+NATS 2.15.0 resets an active duplicate-expiry timer before changing its window.
+The timer can run between those steps and schedule its next check using the old
+120-second value. Publishing checks the saved duplicate ids; it does not expire
+them itself. A reported two-second configuration can therefore still suppress
+the probe after five seconds. Setting the window on an empty stream avoids this
+race because the first message starts the timer afterwards. The helper refuses
+populated streams. `test/duplicate-window.test.ts` checks that refusal leaves the
+original configuration and saved event intact. It also checks that the wait ends
+with two identical events at different saved positions.
+
+The relevant source is NATS 2.15.0's
+[configuration update and duplicate-expiry timer](https://github.com/nats-io/nats-server/blob/v2.15.0/server/stream.go).
+
+A disposable diagnostic reproduced this ordering with the same NATS binary. It
+changed an active 120-second window to 100 ms, then published and checked storage
+every 25 ms. On attempt 85 the reported window was 100 ms but the repeat still
+had position 169 after 569 ms. Restarting NATS with the saved configuration let
+the same repeat become position 170 immediately. The diagnostic was removed;
+its own logs are `/tmp/ci-flakes-5-timer-diagnostic-2.log` and
+`/tmp/ci-flakes-5-timer-proof.json`. It touched no shared service or dev stack.
+The failing-first commit `e48a63bc5` fails because the old helper accepts a
+populated stream. Its other test already passes the stored-repeat check.
+
+### Own duplicate-window checks, 23 October 2026
+
+All commands used `nice -n 10` and the supplied `PG_TEST_URL` at port 55432.
+The tests used private NATS, disposable databases and OpenFGA. The root suite and
+fresh-install journeys were NOT RUN. No access check, timeout or dependency changed.
+
+- Expected FAIL: test-first commit `e48a63bc5` accepted a populated stream.
+- PASS: the five affected test files twice: 105 tests in each pass.
+  The first pass also ran all 438 unchanged event security tests: 543 total.
+- PASS: typecheck, event catalogue, Knip and changelog validation.
+- PASS: full lint. Its first attempt had a setup error because ESLint listed the
+  temporary diagnostic before it was removed. The clean rerun passed.
+
+The target case ran 30 times in order, each in a new Vitest process. A separate
+companion process ran alongside it. Companion 1 supplied the second five-file
+pass; later companions ran all 31 child-first-input tests. Each companion finished
+before the report was written. No failed test was retried.
+
+| Run | Result | Wall time (s) | Overlapping companions |
+| --- | --- | --- | --- |
+| 1 | PASS | 25.21 | 1 |
+| 2 | PASS | 24.46 | 1 |
+| 3 | PASS | 25.28 | 1 |
+| 4 | PASS | 27.50 | 1 |
+| 5 | PASS | 28.59 | 1 |
+| 6 | PASS | 27.20 | 1 |
+| 7 | PASS | 26.78 | 1 |
+| 8 | PASS | 24.26 | 1 |
+| 9 | PASS | 24.21 | 1, 2 |
+| 10 | PASS | 27.56 | 2, 3 |
+| 11 | PASS | 30.41 | 3 |
+| 12 | PASS | 24.58 | 3, 4 |
+| 13 | PASS | 23.34 | 4 |
+| 14 | PASS | 24.94 | 4, 5 |
+| 15 | PASS | 34.09 | 5 |
+| 16 | PASS | 36.28 | 5, 6 |
+| 17 | PASS | 31.62 | 6 |
+| 18 | PASS | 33.53 | 6, 7 |
+| 19 | PASS | 34.73 | 7 |
+| 20 | PASS | 35.64 | 7, 8 |
+| 21 | PASS | 33.33 | 8 |
+| 22 | PASS | 37.35 | 8, 9 |
+| 23 | PASS | 31.43 | 9 |
+| 24 | PASS | 31.76 | 9, 10 |
+| 25 | PASS | 30.78 | 10 |
+| 26 | PASS | 32.02 | 10, 11 |
+| 27 | PASS | 31.17 | 11, 12 |
+| 28 | PASS | 32.29 | 12 |
+| 29 | PASS | 25.57 | 12, 13 |
+| 30 | PASS | 27.32 | 13 |
+
+| Companion | Result | Tests | Wall time (s) |
+| --- | --- | --- | --- |
+| 1 | PASS | 105 | 212.26 |
+| 2 | PASS | 31 | 48.04 |
+| 3 | PASS | 31 | 50.69 |
+| 4 | PASS | 31 | 46.10 |
+| 5 | PASS | 31 | 64.97 |
+| 6 | PASS | 31 | 60.10 |
+| 7 | PASS | 31 | 65.79 |
+| 8 | PASS | 31 | 69.22 |
+| 9 | PASS | 31 | 60.14 |
+| 10 | PASS | 31 | 57.89 |
+| 11 | PASS | 31 | 59.59 |
+| 12 | PASS | 31 | 57.11 |
+| 13 | PASS | 31 | 46.25 |
+
+Logs are `/tmp/ci-flakes-5-changed-1.log`, `/tmp/ci-flakes-5-repeats.log`,
+`/tmp/ci-flakes-5-repeats/target-NN.log` and
+`/tmp/ci-flakes-5-repeats/companion-NN.log`. The first companion log is
+`companion-01-changed-2.log`. `results.json` in that directory records every
+start, finish, wall time and result. Check logs use `/tmp/ci-flakes-5-` followed
+by `lint-final.log`, `typecheck.log`, `events.log` and `changelog.log`.
+
+### Retry setup correction, 23 October 2026
+
+The retry suite still shortened the window after `summonFixture` saved eleven
+events. The local baseline reproduced the setup failure from the empty-stream
+guard, with all 25 retry tests skipped. The suite now creates the short-window
+NATS fixture before passing it to `summonFixture`. The guard and all assertions
+remain unchanged. This correction changes test setup only.
+
+The call-site search covered `shortenDuplicateWindow`, `shortDuplicateWindowFixture`
+and `summonFixture` throughout the repository. The other shortened fixtures already
+set the window before saving events. The selected files are `child-first-input`,
+`child-recovery`, `child-requests`, `child-retry`, `child-summon` and `duplicate-window`.
+
+Own checks after rebasing onto `76238ab8c`:
+
+- Expected FAIL: the unchanged retry suite refused the eleven saved events during setup.
+- PASS: all six selected test files twice, with 131 tests in each run.
+- PASS: full typecheck, event catalogue and full lint, including Knip and changelog
+  validation. ESLint reported zero errors and 25 function-length warnings.
+
+Both test runs used `nice -n 10`, one worker and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The full root suite and fresh-install journeys were NOT RUN.
+Logs are `/tmp/ci-flakes-5-before.log`, `/tmp/ci-flakes-5-tests-1.log` and
+`/tmp/ci-flakes-5-tests-2.log`. Static check logs use `/tmp/ci-flakes-5-fix-`
+followed by `typecheck.log`, `events.log`, `lint.log` and `changelog.log`.
+
+Main advanced during validation with computer test and documentation changes.
+The final rebase onto `3a3202909` completed. Comparing the PR patch before and
+after that rebase found identical bytes. The server test code is unchanged.
+
+### Earlier short-window checks
 
 Own checks, 22 October 2026, based on `8a334f3ee`, with Node 22.23.3:
 

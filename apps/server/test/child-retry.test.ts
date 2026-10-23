@@ -1,4 +1,4 @@
-import { shortenDuplicateWindow, waitForDuplicateWindow }
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { buildServer } from '../src/server.ts';
@@ -16,9 +16,9 @@ import { summonFixture } from './support/child-summon.ts';
 
 let context: Awaited<ReturnType<typeof summonFixture>>;
 async function setup() {
-  context = await summonFixture();
+  const nats = await shortDuplicateWindowFixture();
+  context = await summonFixture(nats);
   await context.runner.initialise(childRequests);
-  await shortenDuplicateWindow(context.nats);
 }
 async function cleanup() {
   await context.close();

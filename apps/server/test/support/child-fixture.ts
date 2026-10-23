@@ -14,8 +14,8 @@ import { buildServer } from '../../src/server.ts';
 import { conversationKeys } from '../../src/chat/keys.ts';
 import { testAuthConfig } from './test-auth-config.ts';
 
-export async function childFixture() {
-  const nats = await natsFixture();
+export async function childFixture(existingNats?: Awaited<ReturnType<typeof natsFixture>>) {
+  const nats = existingNats ?? await natsFixture();
   const dbs = await databases();
   const fga = await openfga();
   const directory = await mkdtemp(`${tmpdir()}/child-participants-`);

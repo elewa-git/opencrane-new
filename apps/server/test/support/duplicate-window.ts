@@ -1,18 +1,32 @@
 import { expect } from 'vitest';
 import { z } from 'zod';
 import { envelope } from '@opencrane/models';
-import type { natsFixture } from '@opencrane/event-store/testing';
+import { natsFixture } from '@opencrane/event-store/testing';
 
 type NatsFixture = Awaited<ReturnType<typeof natsFixture>>;
 const streamSchema = z.object({
   config: z.looseObject({ duplicate_window: z.number() }),
+  state: z.object({ messages: z.number() }),
 });
+
+export async function shortDuplicateWindowFixture() {
+  const nats = await natsFixture();
+  try {
+    await shortenDuplicateWindow(nats);
+    return nats;
+  } catch (error) {
+    await nats.close();
+    throw error;
+  }
+}
 
 export async function shortenDuplicateWindow(nats: NatsFixture) {
   const info = await nats.connection.request('$JS.API.STREAM.INFO.EVENTS');
   const stream = streamSchema.parse(info.json());
   expect(stream.config.duplicate_window).toBe(120_000_000_000);
-  // Change only this private stream, after normal fixture creation has finished.
+  // Set the window before the first message starts NATS's duplicate-expiry timer.
+  // Updating an active timer can leave it waiting for the old 120-second window.
+  expect(stream.state.messages, 'Shorten only an empty stream').toBe(0);
   const config = { ...stream.config, duplicate_window: 2_000_000_000 };
   const payload = new TextEncoder().encode(JSON.stringify(config));
   const response = await nats.connection.request('$JS.API.STREAM.UPDATE.EVENTS', payload);

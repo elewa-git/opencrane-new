@@ -1,4 +1,4 @@
-import { shortenDuplicateWindow, waitForDuplicateWindow }
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { recordChildStartFailure } from '../src/chat/child-failure.ts';
 import { createLogger } from '@opencrane/observability';
@@ -86,9 +86,9 @@ async function recovers(stage: string) {
     return;
   }
   const previous = context;
-  await initialise();
+  const nats = await shortDuplicateWindowFixture();
+  context = await summonFixture(nats);
   try {
-    await shortenDuplicateWindow(context.nats);
     await recoversWithContext(stage);
   } finally {
     vi.restoreAllMocks();
