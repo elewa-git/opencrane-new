@@ -136,6 +136,7 @@ export function hostedFixture() {
   runInNewContext(source, context);
   return { objects, calls, cases, setup: () => setup(), cleanup: async () => cleanup(),
     failBinding(name: string) { failedName = name; },
+    holdQuota() { staleQuota = Infinity; },
     get sleeps() { return sleeps; },
   };
 }

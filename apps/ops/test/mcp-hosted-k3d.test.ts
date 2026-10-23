@@ -260,15 +260,19 @@ function permissions() {
   const forbidden = [
     ['patch', 'configmaps'], ['patch', 'validatingadmissionpolicies'], ['patch', 'roles'],
     ['patch', 'resourcequotas'], ['patch', 'networkpolicies'], ['create', 'pods/exec'],
-    ['get', 'secrets'], ['create', 'pods'],
+    ['get', 'secrets'], ['create', 'pods'], ['get', 'pods/proxy'], ['create', 'pods/proxy'],
   ];
+  for (const resource of ['resourcequotas', 'networkpolicies', 'configmaps']) {
+    for (const verb of ['create', 'update', 'delete']) forbidden.push([verb, resource]);
+  }
   for (const [verb, resource] of forbidden) {
     function request() {
       kube(['auth', 'can-i', verb!, resource!], undefined, true);
     }
     expect(request).toThrow('forbidden');
   }
-  for (const resource of ['resourcequota/mcp-limit', 'networkpolicy/mcp-egress']) {
+  for (const resource of ['resourcequota/mcp-limit', 'networkpolicy/mcp-egress',
+    'networkpolicy/mcp-ingress', 'configmap/mcp-approved-images']) {
     const patchBody = { metadata: { labels: { changed: 'yes' } } };
     function patch() {
       kube(['patch', resource, '--type=merge', '--dry-run=server',
@@ -479,6 +483,9 @@ async function waitForEmptyQuota() {
 }
 async function quota() {
   await waitForEmptyQuota();
+  const roomyTotals = { spec: { hard: { 'requests.cpu': '1', 'requests.memory': '2Gi',
+    'limits.cpu': '8', 'limits.memory': '4Gi' } } };
+  kube(['patch', 'resourcequota/mcp-limit', '--type=merge', '-p', JSON.stringify(roomyTotals)]);
   const names = ['quota-one', 'quota-two', 'quota-three', 'quota-four', 'quota-five'];
   try {
     const admittedNames = names.slice(0, 4);
@@ -491,6 +498,8 @@ async function quota() {
     expect(fifth).toThrow('exceeded quota');
   } finally {
     kube(['delete', 'pods', ...names, '--ignore-not-found', '--wait=true', '--timeout=60s']);
+    command('node', ['infra/dev-stack/mcp-resources.mjs', namespace]);
+    await waitForEmptyQuota();
   }
 }
 
@@ -602,12 +611,17 @@ async function network() {
   const computer = listenerPod(upstreamNamespace, 'computer', 'computer');
   const upstream = listenerPod(upstreamNamespace, 'upstream', 'upstream');
   const arbitrary = listenerPod(upstreamNamespace, 'arbitrary', 'arbitrary');
-  for (const peer of [hosted, gateway, wrongPod, foreign, computer, upstream, arbitrary]) {
+  const unlabelled = listenerPod(target, 'unlabelled', '');
+  for (const peer of [hosted, gateway, wrongPod, foreign, computer, upstream, arbitrary, unlabelled]) {
     await ready(peer);
   }
-  command('node', ['infra/dev-stack/mcp-resources.mjs', target, '8080',
-    `${upstream.address}:8080`]);
+  const upstreamUid = kube(['get', '-n', upstreamNamespace, 'pod/upstream',
+    '-o', 'jsonpath={.metadata.uid}']);
+  kube(['label', '-n', upstreamNamespace, 'pod/upstream',
+    `opencrane.ai/mcp-upstream=${upstreamUid}`]);
+  command('node', ['infra/dev-stack/mcp-resources.mjs', target, '8080', 'pod:upstream:8080']);
   const ingress = [
+    { source: wrongPod, address: unlabelled.address, port: 8080, reason: 'unlabelled target' },
     { source: wrongPod, address: hosted.address, port: 8080, reason: 'wrong Pod in right namespace' },
     { source: foreign, address: hosted.address, port: 8080, reason: 'right label in another silo' },
     { source: computer, address: hosted.address, port: 8080, reason: 'direct computer' },
@@ -616,7 +630,12 @@ async function network() {
   ];
   const controlPlane = kube(['get', 'service', 'kubernetes', '-n', 'default',
     '-o', 'jsonpath={.spec.clusterIP}']);
+  const nodeAddress = kube(['get', 'nodes', '-o',
+    'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}']);
   const egress = [
+    { source: hosted, address: nodeAddress, port: 6443, reason: 'node API server' },
+    { source: hosted, address: nodeAddress, port: 10250, reason: 'node kubelet' },
+    { source: unlabelled, address: upstream.address, port: 8081, reason: 'unlabelled source' },
     { source: hosted, address: controlPlane, port: 443, reason: 'control plane' },
     { source: hosted, address: upstream.address, port: 8081, reason: 'unreviewed upstream port' },
     { source: hosted, address: arbitrary.address, port: 8080, reason: 'arbitrary destination' },
@@ -624,10 +643,39 @@ async function network() {
   ];
   expect(connect(gateway, hosted.address)).toBe('connected');
   expect(connect(hosted, upstream.address)).toBe('connected');
+  const health = `import http.client
+connection = http.client.HTTPConnection('${hosted.address}', 8080, timeout=2)
+connection.request('GET', '/health')
+response = connection.getresponse()
+print(str(response.status) + ' ' + response.read().decode())`;
+  expect(kube(['exec', '-n', gateway.namespace, gateway.name, '--',
+    'python3', '-c', health])).toBe('200 healthy');
   await removalControl(target, 'mcp-ingress', ingress);
   await removalControl(target, 'mcp-egress', egress);
   expect(connect(gateway, hosted.address)).toBe('connected');
   expect(connect(hosted, upstream.address)).toBe('connected');
+  command('node', ['infra/dev-stack/mcp-resources.mjs', target, '8080']);
+  const withdrawn = [{ source: hosted, address: upstream.address, port: 8080,
+    reason: 'withdrawn upstream binding' }];
+  await connections(withdrawn, 'blocked');
+  command('node', ['infra/dev-stack/mcp-resources.mjs', target, '8080', 'pod:upstream:8080']);
+  await connections(withdrawn, 'connected');
+  proxyRefusals(target);
+}
+function proxyRefusals(target: string) {
+  kube(['apply', '-n', target, '-f', 'infra/dev-stack/mcp-lifecycle-rbac.yaml']);
+  for (const port of [8080, 8081]) {
+    const path = `/api/v1/namespaces/${target}/pods/mcp:${port}/proxy/health`;
+    for (const verb of ['get', 'create']) {
+      function proxy() {
+        const args = [verb, '--raw', path, '--as',
+          `system:serviceaccount:${target}:mcp-lifecycle`];
+        if (verb === 'create') args.push('-f', '-');
+        kube(args, {});
+      }
+      expect(proxy).toThrow('forbidden');
+    }
+  }
 }
 
 async function metadataConnection(context: TestContext) {

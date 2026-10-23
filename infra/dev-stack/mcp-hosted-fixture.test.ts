@@ -44,3 +44,24 @@ test('hosted resize waits for Pod deletion and quota usage to settle', async fun
   await fixture.cases.get('denies hosted Pod resize')!();
   assert.ok(fixture.sleeps >= 2, 'Quota observation must finish before the next quota test');
 });
+
+test('quota settling has a fixed deadline and never starts the next workload early', async function deadline() {
+  const fixture = hostedFixture();
+  await fixture.setup();
+  fixture.holdQuota();
+  const quota = fixture.cases.get('admits four Pods and refuses a fifth through quota')!;
+  await assert.rejects(quota, /quota usage did not settle/u);
+  assert.equal(fixture.sleeps, 60);
+});
+test('replacement binding and changed ownership label refuse cleanup', async function binding() {
+  for (const property of ['uid', 'labels']) {
+    const fixture = hostedFixture();
+    await fixture.setup();
+    const binding = fixture.objects.get(
+      'validatingadmissionpolicybinding/opencrane-dev-1-fixture--mcp-pod')!;
+    if (property === 'uid') binding.metadata.uid = 'replacement';
+    else binding.metadata.labels = { 'opencrane.dev/fixture-owner': 'foreign' };
+    await assert.rejects(fixture.cleanup, /ownership changed/u);
+    assert.deepEqual(deletes(fixture.calls), []);
+  }
+});
