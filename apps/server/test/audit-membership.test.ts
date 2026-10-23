@@ -287,3 +287,57 @@ async function privateReads() {
   expect(detailResponse.statusCode).toBe(404);
 }
 it('withholds private values and target ids from outsiders and foreign silos', privateReads);
+
+type RefusedCaller = 'ordinary' | 'demoted' | 'removed';
+
+async function refusedMember(caller: RefusedCaller) {
+  if (caller === 'ordinary') {
+    return 'reader';
+  }
+  let change = saved('member.removed', 'removed-admin', {
+    memberId: 'admin', removedBy: 'owner',
+  });
+  if (caller === 'demoted') {
+    change = saved('member.role_changed', 'demoted-admin', {
+      memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+  }
+  await append(change);
+  // Keep the identity mapping and IAM unchanged to check access against saved membership.
+  return 'admin';
+}
+
+function streamSubject(call: Parameters<typeof nats.store.readStream>) {
+  return call[0];
+}
+
+async function unavailableProgress(caller: RefusedCaller) {
+  await append(role);
+  await append(intent);
+  const foreign = { ...role, id: 'foreign-role', silo: 'foreign', subject: 'member-foreign' };
+  await append(foreign);
+  await runner.run(auditTrail);
+  const memberId = await refusedMember(caller);
+  await app.close();
+  const binding = { ...auth.binding, apiUrl: 'http://127.0.0.1:1' };
+  const audit = { silo: 'test', store: nats.store, db, feed, binding };
+  app = buildServer(config, { audit });
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const heads = vi.spyOn(nats.store, 'head');
+  const appends = vi.spyOn(nats.store, 'append');
+  for (const id of ['unknown', 'foreign-role', 'role', 'intent']) {
+    reads.mockClear();
+    const request = { url: `/api/org/history/${id}`, headers: headers(memberId) };
+    const response = await app.inject(request);
+    expect.soft(response.statusCode, id).toBe(403);
+    expect.soft(response.body, id).toBe('{"status":"refused"}');
+    expect.soft(response.headers['cache-control'], id).toBe('no-store');
+    const subjects = reads.mock.calls.map(streamSubject);
+    expect.soft(subjects, id).toEqual([`member-${memberId}`, 'ownership-test']);
+  }
+  expect(heads).not.toHaveBeenCalled();
+  expect(appends).not.toHaveBeenCalled();
+}
+it.each(['ordinary', 'demoted', 'removed'] as const)(
+  'hides existing, missing and foreign history during an IAM outage from %s callers',
+  unavailableProgress);
