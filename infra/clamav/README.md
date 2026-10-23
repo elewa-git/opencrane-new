@@ -46,7 +46,7 @@ an already running scanner.
 
 ```sh
 infra/dev-stack/up.sh
-nice -n 10 npx vitest run apps/server/test/upload.test.ts
+nice -n 10 npm test -- apps/server/test/upload.test.ts
 infra/clamav/refresh.sh /absolute/scratch/candidate-signatures
 ```
 

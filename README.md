@@ -64,27 +64,22 @@ MCP, a shared standard for describing and calling tools.
 
 ### Today's system
 
-Arrows show calls made while the system runs. The dotted arrow shows shared code.
-The files box groups storage and virus scanning to keep the map small.
-The server box includes the separate models process.
+Arrows show calls made while the system runs. Storage and file services share one
+box, and sign-in and permissions share another. The server box includes the separate
+models process.
 
 ```mermaid
 flowchart LR
   web["apps/web<br/>website"] -->|requests| server["apps/server<br/>back end and models"]
-  server -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
-  server -->|saves events| nats[("NATS JetStream<br/>event log")]
-  server -->|checks access| fga["OpenFGA<br/>permissions service"]
-  server -->|stores and scans files| files["MinIO + ClamAV<br/>files and virus scan"]
-  ops["apps/ops<br/>background workers"] -->|reads and saves events| nats
-  ops -->|fills read tables| pg[("PostgreSQL<br/>read tables")]
-  ops -->|updates permissions| fga
-  server -->|reads tables| pg
+  server -->|sign-in and access| access["Zitadel + OpenFGA<br/>sign-in and permissions"]
+  server -->|stores and reads| data["NATS, PostgreSQL, MinIO + ClamAV<br/>events, tables and files"]
+  ops["apps/ops<br/>background workers"] -->|reads and saves| data
+  ops -->|updates permissions| access
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   server -->|sends chat turns| computer
   computer -->|AI and reviewed tools| gateway["agentgateway<br/>AI call checks"]
   gateway -->|asks permission| server
   gateway -->|sends allowed calls| upstream["Model provider or tool server"]
-  server -.->|uses| libs["libs/*<br/>shared code"]
 ```
 
 NATS JetStream keeps the event log, the lasting record of each change. PostgreSQL,

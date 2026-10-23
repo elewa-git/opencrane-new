@@ -49,7 +49,7 @@ start a real NATS server and check that each key can do only its own job.
 
 ```sh
 infra/dev-stack/up.sh
-nice -n 10 npx vitest run libs/event-store/test/security.test.ts
+nice -n 10 npm test -- libs/event-store/test/security.test.ts
 ```
 
 ## Where to read more

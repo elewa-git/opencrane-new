@@ -35,6 +35,8 @@ Line fields: id, name, product_uom_qty. Arguments contain only a positive safe i
 The request's Bearer header is forwarded with the fixed X-Odoo-Database header.
 There is no credential registry, logging, retention, proxy inheritance, redirect or retry.
 One 15-second deadline covers both requests. Each upstream reply is limited to 64 KiB.
+An order may have at most 20 lines. More than 20 lines returns `record_limit`;
+the server refuses the whole order rather than returning only some lines.
 Missing or inaccessible records and non-drafts return `read_refused`; oversized records
 return `record_limit`; malformed replies return `invalid_response`; outages return `read_unavailable`.
 No refusal includes upstream error text or a partial snapshot.

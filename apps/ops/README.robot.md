@@ -229,7 +229,7 @@ personal assistant ownership and live requester membership. `-- budgets` project
 spending; `MODEL_DECISION_URL` enables the dispatcher's settlement handler.
 The [gateway tests](../../libs/models/test/gateway.test.ts) exercise actual lifecycle
 tokens and prove refusals leave the budget stream unchanged.
-Run `LIFECYCLE_K3D=1 PG_TEST_URL=... npx vitest run apps/ops/test/lifecycle-k3d.test.ts`
+Run `LIFECYCLE_K3D=1 PG_TEST_URL=... nice -n 10 npm test -- apps/ops/test/lifecycle-k3d.test.ts`
 for admission, ephemeral delivery, crash recovery, races, readiness and Pod/PVC loss.
 Fresh-install browser and Codex-thread recovery qualification remains NOT RUN.
 Provision NATS first. The processes fail on dependency errors; SIGINT/SIGTERM stops
@@ -590,7 +590,7 @@ idle/busy computer states, missing permission receipts, completion and the upgra
 It pauses a real NATS claim before append, completes removal cleanup, then releases the
 claim and checks that no new claim was saved. It also checks loss confirmation retries.
 Rejoin coverage keeps the new assistant, computer and grants unchanged. It does not
-qualify live private-history isolation after return. Run with `PG_TEST_URL` and `nice -n 10 npx vitest run
+qualify live private-history isolation after return. Run with `PG_TEST_URL` and `nice -n 10 npm test --
 apps/ops/test/departure-cleanup.test.ts --maxWorkers=2` from the root.
 Fresh-install departure and return qualification: NOT RUN.
 
@@ -678,7 +678,7 @@ placeholder admits nothing. The operator's `mcp-approved-images` ConfigMap maps 
 64-character spec digest to the approved image digest. Workload and Pod annotations
 use `opencrane.ai/mcp-spec`. Only `mcp-lifecycle` may create or change workload specs;
 updates only change replicas between zero and one. Controller maintenance stays allowed.
-`MCP_HOSTED_K3D=1 DEV_STACK_ID=1 nice -n 10 npx vitest run apps/ops/test/mcp-hosted-k3d.test.ts`
+`MCP_HOSTED_K3D=1 DEV_STACK_ID=1 nice -n 10 npm test -- apps/ops/test/mcp-hosted-k3d.test.ts`
 checks admission, including hosted and computer Pod resize requests, in disposable
 namespaces on a claimed, stopped secondary slot. The device, privileged and missing-limit tests copy the relevant generated
 validation into an isolated policy. These fixtures are valid for Kubernetes; other

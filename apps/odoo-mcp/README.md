@@ -30,7 +30,8 @@ flowchart LR
 - Reads one complete draft order using the account supplied for that request.
 - Returns the order as Odoo holds it, a safe copy for showing on screen, and a
   fingerprint so later changes can be spotted.
-- Refuses requests it does not expect, records beyond its size limits and all writes.
+- Refuses orders that exceed its limits, including orders with more than 20 lines.
+- Refuses requests it does not expect and all writes.
 
 ## Processes it handles
 
@@ -51,7 +52,7 @@ Odoo replies and need no running Odoo service.
 
 ```sh
 npm start -w apps/odoo-mcp
-nice -n 10 npx vitest run apps/odoo-mcp/test
+nice -n 10 npm test -- apps/odoo-mcp/test
 ```
 
 ## Where to read more

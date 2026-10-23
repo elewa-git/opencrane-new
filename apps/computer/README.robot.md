@@ -188,7 +188,7 @@ The parent is reaped before the scan continues. Each barrier asserts that the fo
 happened, the child is live and the root socket refuses a receipt. These checks and
 the endless-worker check use a no-op helper to simulate failed termination; a real
 task stuck in kernel I/O is NOT RUN.
-Run with `nice -n 10 npx vitest run apps/computer/test/supervisor-stop.test.ts
+Run with `nice -n 10 npm test -- apps/computer/test/supervisor-stop.test.ts
 --maxWorkers=1`. Docker/runc source checks do not qualify gVisor or a fresh silo.
 Pinned gVisor/Kasm full quietness and live takeover: **NOT RUN**.
 
