@@ -4,6 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { selectRun, isDocsDecision, jobsPassed } from './select.mjs';
 
 function permitsOnlyDocs() {
@@ -98,7 +99,10 @@ test('uses base rules and refuses renamed code or a broken diff', usesBaseRulesA
 function documentationCommands() {
   const path = new URL('../../.github/workflows/ci.yml', import.meta.url);
   const workflow = readFileSync(path, 'utf8');
-  const docsStep = /- name: Check documentation\n +if: needs\.select\.outputs\.mode == 'docs'\n +run: \|\n((?:          .*\n)+)/u;
+  const stepHeader = '- name: Check documentation\\n';
+  const condition = " +if: needs\\.select\\.outputs\\.mode == 'docs'\\n";
+  const commandBlock = ' +run: \\|\\n((?:          .*\\n)+)';
+  const docsStep = new RegExp(stepHeader + condition + commandBlock, 'u');
   const match = workflow.match(docsStep);
   assert.ok(match, 'The documentation checks must run when CI selects docs.');
   return match[1];
@@ -112,16 +116,19 @@ const { spawnSync } = require('node:child_process');
 const [command, script] = process.argv.slice(2);
 if (command !== 'run') throw new Error('Documentation checks must not install packages.');
 if (script === 'lint:readmes') {
-  const result = spawnSync(process.execPath, [process.env.README_CHECKER], { stdio: 'inherit' });
+  const execution = { stdio: 'inherit' };
+  const result = spawnSync(process.execPath, [process.env.README_CHECKER], execution);
   process.exit(result.status ?? 1);
 }
 const otherChecks = ['lint:docs', 'lint:links', 'lint:changelog'];
 if (!otherChecks.includes(script)) throw new Error('Unexpected documentation check: ' + script);
 `;
   try {
+    const directoryOptions = { recursive: true };
+    const executableOptions = { mode: 0o755 };
     mkdirSync(join(directory, 'bin'));
-    mkdirSync(join(directory, 'libs/example'), { recursive: true });
-    writeFileSync(join(directory, 'bin/npm'), npmFixture, { mode: 0o755 });
+    mkdirSync(join(directory, 'libs/example'), directoryOptions);
+    writeFileSync(join(directory, 'bin/npm'), npmFixture, executableOptions);
     writeFileSync(join(directory, 'libs/example/README.md'), '# Example\n\nAdded in #123.\n');
     execFileSync('git', ['init', '--quiet'], options);
     execFileSync('git', ['add', 'libs'], options);
@@ -129,7 +136,7 @@ if (!otherChecks.includes(script)) throw new Error('Unexpected documentation che
     const environment = {
       ...process.env,
       PATH: `${directory}/bin:${process.env.PATH}`,
-      README_CHECKER: checker.pathname,
+      README_CHECKER: fileURLToPath(checker),
     };
     const execution = { ...options, env: environment };
 
@@ -138,7 +145,8 @@ if (!otherChecks.includes(script)) throw new Error('Unexpected documentation che
     assert.equal(result.status, 1, result.stderr);
     assert.match(result.stderr, /Remove ticket or phase references from libs\/example\/README.md:3/u);
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    const cleanup = { recursive: true, force: true };
+    rmSync(directory, cleanup);
   }
 }
 
