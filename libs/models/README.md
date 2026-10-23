@@ -443,6 +443,8 @@ Gateway startup errors keep recent safe details, including port conflicts.
 The admission timing tests wait for cold history and applied model grant receipts
 before measuring a call. They issue a fresh turn token after preparation, with the
 normal two-minute lifetime.
+The long-grant cases first read the small ownership, member and assistant histories.
+Their HTTP warm-up still checks current access within the normal two seconds.
 They check that a cold refusal holds no money and that the measured call adds one hold.
 Separate timeout checks require unsent holds to settle at zero euro cents.
 The measured call must still finish within two seconds.

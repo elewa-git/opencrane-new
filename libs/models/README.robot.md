@@ -12,6 +12,13 @@ through `auth.applied(eventId)` before warm-up. A regression withholds a new req
 grant receipt while model permission already exists, then applies it through the
 real handler. Preparation must wait for that receipt.
 
+`prepareDecisionWarmUp` also reads `ownership-test`, `member-alice` and
+`assistant-assistant` with the same preparation deadline. These first small reads
+would otherwise run inside the HTTP warm-up. A regression confirms both model
+permissions are allowed, then delays only the first assistant lookup by 2,200 ms.
+Preparation must finish that read before starting the HTTP call. The HTTP call
+still reads current access again under its normal two-second deadline.
+
 The fixture's token issuer has a frozen clock for credential tests. After a long
 seed or history read, `issue()` can therefore issue an expired two-minute turn token.
 These volume tests sign a fresh token from the real clock before each request,

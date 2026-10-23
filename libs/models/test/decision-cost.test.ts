@@ -367,7 +367,7 @@ async function refreshesExpiredFixtureCredentials() {
     const refused = await decide(setup, setup.options.decisionUrl, staleHeaders);
     expect(refused.status, refused.text).toBe(403);
     expect(setup.actor.state.reservations).toHaveLength(0);
-    await waitForDecisionGrants(setup, performance.now() + 15_000);
+    await prepareDecisionWarmUp(setup, performance.now() + 15_000);
     const headers = await freshDecisionHeaders(setup);
     const ready = await decide(setup, setup.options.decisionUrl, headers);
     expect(ready.status, ready.text).toBe(200);
@@ -381,7 +381,7 @@ async function refreshesExpiredFixtureCredentials() {
 it('refreshes an expired fixture turn token before warming admission',
   refreshesExpiredFixtureCredentials);
 
-async function waitForDecisionGrants(setup: Fixture, deadline: number) {
+async function prepareDecisionWarmUp(setup: Fixture, deadline: number) {
   const grants = await readDecisionGrants(setup.nats.store, 'test', 'gpt-6-luna', deadline);
   const granteeSchema = z.object({ granteeId: z.string(), granteeKind: z.string() });
   for (const row of grants.rows) {
@@ -394,6 +394,11 @@ async function waitForDecisionGrants(setup: Fixture, deadline: number) {
     }
     const remaining = Math.max(0, deadline - performance.now());
     await until(receiptApplied, remaining);
+  }
+  // Finish the first small access lookups before the HTTP request starts its short deadline.
+  const authoritySubjects = ['ownership-test', 'member-alice', 'assistant-assistant'];
+  for (const subject of authoritySubjects) {
+    await history(setup.nats.store, subject, 'test', deadline);
   }
 }
 
@@ -417,7 +422,7 @@ async function waitsForGrantReceiptBeforeWarmUp() {
     const appliedSpy = vi.spyOn(setup.auth, 'applied');
     appliedSpy.mockImplementation(observeReceipt);
     async function prepareWarmUp(): Promise<'finished'> {
-      await waitForDecisionGrants(setup, performance.now() + 15_000);
+      await prepareDecisionWarmUp(setup, performance.now() + 15_000);
       return 'finished';
     }
     waiting = prepareWarmUp();
@@ -462,7 +467,7 @@ async function finishesFirstAssistantReadBeforeWarmUp() {
     expect(assistantUse.allowed).toBe(true);
     const reads = vi.spyOn(store, 'readStream');
     reads.mockImplementation(slowFirstAssistantRead);
-    await waitForDecisionGrants(setup, performance.now() + 15_000);
+    await prepareDecisionWarmUp(setup, performance.now() + 15_000);
     const headers = await freshDecisionHeaders(setup);
     const ready = await decide(setup, setup.options.decisionUrl, headers);
     expect(assistantReadDelayed).toBe(true);
@@ -525,7 +530,7 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     resumeGrantHistory.resolve();
     // Keep the existing two-minute history budget outside the measured admission.
     const grantHistoryDeadline = performance.now() + 120_000;
-    await waitForDecisionGrants(setup, grantHistoryDeadline);
+    await prepareDecisionWarmUp(setup, grantHistoryDeadline);
     const readyHeaders = await freshDecisionHeaders(setup);
     const ready = await decide(setup, setup.options.decisionUrl, readyHeaders);
     expect(ready.status, ready.text).toBe(200);
