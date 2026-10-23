@@ -1,0 +1,126 @@
+{
+  "allowanceCents": 1000,
+  "startup": {
+    "chargedCents": 13,
+    "heldCents": 17
+  },
+  "smoke": {
+    "chargedCents": 16,
+    "heldCents": 35
+  },
+  "rehearsal": {
+    "chargedCents": 9,
+    "heldCents": 17
+  },
+  "total": {
+    "chargedCents": 38,
+    "heldCents": 69,
+    "chargedAndHeldCents": 107
+  },
+  "restoredCeilings": {
+    "monthlyCents": 1000,
+    "dailyCents": 1000
+  },
+  "calls": [
+    {
+      "reservationId": "6c8f0459-4d77-4014-9616-ae1e8a08e2ce",
+      "chargedCents": 1,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "300bf38f-25a0-46aa-9c32-d832e42f1b58",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "072156c0-d927-40ee-a118-12c9b28f63bf",
+      "chargedCents": 0,
+      "heldCents": 17
+    },
+    {
+      "reservationId": "3f70723f-7fe0-461c-9834-631c416bf252",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "2d80f35b-1914-4620-a873-ff18027e622f",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "94648ee3-0564-46fc-9266-97fef7f3bb61",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "f5ac0799-9180-4ce6-a487-6e14793c066f",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "531d9fc4-7293-4aa0-bf30-baf351c8cf4b",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "c0d415f3-81bd-4383-931b-732a6322f083",
+      "chargedCents": 1,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "8b25e936-d210-48a7-aeae-4389a6093a63",
+      "chargedCents": 1,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "f738f0f1-61ae-4515-a499-a371c90c140c",
+      "chargedCents": 0,
+      "heldCents": 17
+    },
+    {
+      "reservationId": "7828b584-3237-4b5a-a82b-193969c1b99f",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "7501197e-1dc5-4500-b1f2-bc2e4b431011",
+      "chargedCents": 1,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "a89deff1-531a-48a2-b341-0386e041bdc7",
+      "chargedCents": 1,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "7cd9572c-4bbd-4b3a-96f3-98af62edff94",
+      "chargedCents": 0,
+      "heldCents": 18
+    },
+    {
+      "reservationId": "457a6d1f-0373-4495-b410-94ee124204a0",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "b5af82c8-6039-44e8-9503-a094d1e89311",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "56688ffe-4426-4be8-9678-87c8942c8821",
+      "chargedCents": 3,
+      "heldCents": 0
+    },
+    {
+      "reservationId": "533f4cb1-d137-484e-b6cd-1b3d19312291",
+      "chargedCents": 0,
+      "heldCents": 17
+    },
+    {
+      "reservationId": "79202768-d120-42d6-989f-af34095f4ccc",
+      "chargedCents": 3,
+      "heldCents": 0
+    }
+  ]
+}

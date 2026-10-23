@@ -91,7 +91,17 @@ These commands require an interactive terminal and refuse any `OPENCRANE_FLEET_T
 marker, including an empty one. Task launchers export that marker. No task has run
 these commands on the owner stack or checked the real phone path.
 
-The [latest rehearsal](../demo-rehearsal/final-3-2026-10-23/receipt.md) passed fresh startup and the desktop smoke. The phone-width smoke failed at Stop; a later read showed “Reply failed” with partial text kept. The separate ten-step script was not run. This attempt does not qualify an owner refresh. The prior attempt passed startup, both timed smoke widths and all ten desktop script steps, but its phone script stopped when it reused the desktop invitation address. Its last three steps were untested.
+The [latest rehearsal](../demo-rehearsal/final-2026-10-23-4/receipt.md) passed fresh
+startup, both timed smoke widths and the first five desktop script steps. The next
+step timed out waiting for the shared assistant's streaming indicator, although its
+picture shows a completed answer. The remaining desktop steps and the phone script
+are untested. It does not qualify an owner refresh.
+
+The previous rehearsal passed startup and the desktop smoke. Its phone-width smoke
+failed at Stop; a later read showed “Reply failed” with partial text kept. Its separate
+ten-step script was not run. The earlier attempt passed startup, both timed smoke
+widths and all ten desktop script steps, but its phone script reused the desktop
+invitation address. Its last three steps were untested.
 
 Before choosing a SHA, confirm that it is merged into `origin/main`, includes both
 the real-provider and demo-kit changes, includes the qualified Stop image, and has
