@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
-import { chromium } from 'playwright';
+import { mock, test } from 'node:test';
+import { chromium, type Page } from 'playwright';
 import { checkProviderAnswer, rehearsalStep } from './demo-rehearsal-checks.ts';
+import { demoRehearsal } from './demo-rehearsal.ts';
 import { sanitiseEvidence } from './sanitise-evidence.mjs';
+import { RehearsalPage } from './test/rehearsal-page.ts';
 
 const modelsPage = `<oc-organisation-shell><main>
   <nav>Organisation</nav><oc-models><main class="provider-page">
@@ -134,3 +136,54 @@ async function refusesUnsafeSlots() {
   }
 }
 test('rehearsal refuses missing, owner and invalid slots before reading settings', refusesUnsafeSlots);
+
+async function retainsCheckerAndRestorationFailures() {
+  const directory = await mkdtemp(join(tmpdir(), 'rehearsal-restoration-'));
+  const owner = new RehearsalPage();
+  const member = new RehearsalPage();
+  const options = { origin: 'https://rehearsal.example.invalid', cookie: '', directory };
+  const budget = { sequence: 1, defaultPayingGroupId: null, periodStart: null,
+    todayCents: 10, monthCents: 10, reservedCents: 0, ceilingCents: 1000,
+    dailyCeilingCents: 700, ceilings: [] };
+  async function fetchFixture(address: string) {
+    assert.equal(address, `${options.origin}/api/org/models`);
+    if (owner.limited) {
+      owner.restoreAttempted = true;
+      return new Response('', { status: 503 });
+    }
+    return Response.json({ budget });
+  }
+  function sanitise(value: string) {
+    return sanitiseEvidence(value, directory, directory);
+  }
+  const network = mock.method(globalThis, 'fetch', fetchFixture);
+  try {
+    const passed = await demoRehearsal(owner as unknown as Page, member as unknown as Page,
+      options, directory, 1000, sanitise);
+    assert.equal(passed, false);
+    assert.equal(owner.restoreAttempted, true);
+    const receipt = await readFile(`${directory}/results.json`, 'utf8');
+    const steps = JSON.parse(receipt) as Array<{
+      step: number; width: number; result: string; reason?: string; additionalReasons?: string[];
+    }>;
+    assert.equal(steps.length, 20);
+    const failure = steps[8]!;
+    assert.equal(failure.step, 9);
+    assert.equal(failure.width, 1280);
+    assert.equal(failure.result, 'FAIL');
+    assert.equal(failure.reason, 'Original refusal missing [REDACTED]');
+    assert.deepEqual(failure.additionalReasons, ['Demo spending unavailable']);
+    for (const step of steps.slice(0, 8)) {
+      assert.equal(step.result, 'PASS');
+    }
+    for (const step of steps.slice(9)) {
+      assert.equal(step.result, 'NOT RUN');
+    }
+    assert.equal(receipt.includes('sk-synthetic-fixture-value'), false);
+  } finally {
+    network.mock.restore();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('the receipt keeps the checker error first when restoring company limits also fails',
+  retainsCheckerAndRestorationFailures);
