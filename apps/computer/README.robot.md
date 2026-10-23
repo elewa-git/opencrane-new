@@ -1298,3 +1298,19 @@ expected request and its matching reply and continuation.
 - [Why Codex runs on each person's computer](../../docs/adr/0003-harness-codex.md).
 - [Why a computer keeps its disk when it sleeps](../../docs/adr/0006-computer-disk-and-live-view.md).
 - [The shared words used in these guides](../../GLOSSARY.md).
+
+## Offline child ancestry — P4-11 PR 3a
+
+`test/codex-native-ancestry.mjs` uses the launch pattern from `codex-mcp-resume.mjs`.
+It runs Codex 0.159.2 with the bundled `gpt-6.1-sol` metadata, two concurrent roots
+and two descendant levels. Only this labelled offline fixture enables multi-agent
+execution and one HTTP retry. Docker networking is disabled; replies are local.
+The fixture drops each grandchild's first response before returning bytes.
+It saves ordered, anonymous identifiers, never prompts, replies or credentials.
+
+The [capture receipt](../../docs/process/p4-11-pr3a/receipt.md) separates observed
+`subAgentActivity` items from model-written calls and synthetic acceptance tests.
+Early local ancestry is observed. A child overtaking its spawn-completion notification
+and a trusted identity for each model call remain unproven. Bridge authentication,
+production admission and fresh-install qualification are NOT RUN. No production
+config, turn runner, signing, routing or event schema changes here.

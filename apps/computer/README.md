@@ -75,6 +75,24 @@ Supervisor tests pause the bridge's Codex process before checking stopped execut
 Its background workers would otherwise change during the process check. The bridge,
 executors, private Codex processes and desktop keep running until the test stops them.
 
+Both image commands need Docker and the dev stack's local Kubernetes cluster.
+`build:image` also runs the image tests and updates `sandbox-template.json` with the
+new image.
+The release checks require a stopped reply to report why it ended. This keeps the
+saved partial reply distinct from a model failure after the page reloads.
+
+Repository CI builds a separate test image once for the tests that need it.
+The [CI test guide](../../scripts/ci/README.md) explains how those files are grouped.
+
+A separate local capture checks native consent on saved Codex threads. It uses a
+stub model and a disposable gateway. Missing shell or file requests remain unproven;
+the capture does not enable approvals in normal turns. Its saved checks require every
+expected request and its matching reply and continuation.
+
+A separate offline check records when native child threads first call the model.
+It uses the existing image and local replies. Its saved observations do not enable
+delegation; reliable identity for each call and the required timing race remain unproven.
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): image settings, security limits and detailed checks.
