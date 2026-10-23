@@ -2989,6 +2989,13 @@ Shutdown stops retries, closes listeners and sockets, clears relay timers, and w
 to two seconds for saves and active rechecks, including after an earlier shutdown signal.
 A hung dependency may finish later; it cannot reopen a relay.
 
+Admission fixtures stop both event delivery and the job workers before testing shutdown.
+Stopping event delivery alone leaves pg-boss polling and PostgreSQL idle timers running.
+Those callbacks can create timers during the fake-clock shutdown check. The check still
+requires zero timers. A separate startup test counts all four owned timers before closing:
+receipt retries, access checks, the proof watchdog and permit expiry. It requires zero
+after shutdown and again after a waiting access check finishes.
+
 Scope cutoff for PR 2g: crash markers, crash reconciliation and authorised receipt reads
 remain for the next part. No crash proves zero bytes. No live egress capability is claimed:
 `models-main.ts` still supplies no `egressDecisionUrl`, so CONNECT stays off.

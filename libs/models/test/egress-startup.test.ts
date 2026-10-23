@@ -134,7 +134,10 @@ it('joins retry batches, keeps empty open receipts and cancels the startup inter
 async function shutdownClearsOwnedTimers() {
   const test = await setup(true);
   const release = Promise.withResolvers<void>();
-  onTestFinished(release.resolve);
+  function releaseCheck() {
+    release.resolve();
+  }
+  onTestFinished(releaseCheck);
   function recheck() {
     return release.promise;
   }

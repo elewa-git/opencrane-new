@@ -26,6 +26,8 @@ async function setup(missing?: string, problem = 'missing', team = false) {
   // Allow the test services to drain before removing their temporary data.
   onTestFinished(facts.close.bind(facts), 30_000);
   await facts.stopDispatch();
+  // Stop job polling too, so its database and retry timers cannot outlive egress shutdown.
+  await facts.runtime.stop();
   const positions: number[] = [];
   for (const [scope, subjectId] of [['silo', 'test'], ['person', 'alice'],
     ['assistant', 'assistant']] as const) {
