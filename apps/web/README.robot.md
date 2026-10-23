@@ -828,10 +828,11 @@ The [screen checks](../../docs/process/p4-4-screens/README.robot.md) record API 
 captures, intentional design differences, guard removals and remaining live checks.
 The [recipient checks](../../docs/process/p4-4-start-evidence.md) cover the first draft PR.
 
-Dialog methods installed by model-registry tests remain writable, as browser
-methods are. Other component tests can replace methods on their own dialog
-elements even when the Angular runner reuses a test environment. The regression
-in `src/app/models/model-registry.spec.ts` checks both `showModal` and `close`.
+Dialog methods installed by model-registry, invite-panel and member-role tests
+remain writable, as browser methods are. Other component tests can replace methods
+on their own dialog elements or the shared prototype even when the Angular runner
+reuses a test environment. The people specs check that both `showModal` and `close`
+can be replaced and restored. The model-registry spec checks replacement on an element.
 
 ## Memory store and receipts
 

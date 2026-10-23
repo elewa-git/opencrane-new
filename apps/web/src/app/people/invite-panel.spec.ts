@@ -4,12 +4,12 @@ import { invitationCommandSchema } from '@opencrane/protocol';
 import { InvitePanel } from './invite-panel';
 
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
-  configurable: true, value: function showModal(this: HTMLDialogElement): void {
+  configurable: true, writable: true, value: function showModal(this: HTMLDialogElement): void {
     this.setAttribute('open', '');
   },
 });
 Object.defineProperty(HTMLDialogElement.prototype, 'close', {
-  configurable: true, value: function close(this: HTMLDialogElement): void {
+  configurable: true, writable: true, value: function close(this: HTMLDialogElement): void {
     this.removeAttribute('open');
   },
 });
@@ -337,7 +337,7 @@ it.each(['Cancel', 'access loss'])('ignores an identity reply after %s', async (
 
 function replacesAndRestoresDialogMethod(method: 'showModal' | 'close'): void {
   const dialogPrototype = HTMLDialogElement.prototype;
-  const originalMethod = dialogPrototype[method];
+  const originalMethod: unknown = Object.getOwnPropertyDescriptor(dialogPrototype, method)?.value;
   const replacement = vi.fn();
   const replacementMethods = { [method]: replacement };
   const originalMethods = { [method]: originalMethod };
@@ -348,7 +348,8 @@ function replacesAndRestoresDialogMethod(method: 'showModal' | 'close'): void {
     dialog[method]();
     expect(replacement).toHaveBeenCalledOnce();
     Object.assign(dialogPrototype, originalMethods);
-    expect(dialogPrototype[method]).toBe(originalMethod);
+    const restoredMethod: unknown = Object.getOwnPropertyDescriptor(dialogPrototype, method)?.value;
+    expect(restoredMethod).toBe(originalMethod);
   } finally {
     Object.defineProperty(dialogPrototype, method, originalDescriptor);
   }
