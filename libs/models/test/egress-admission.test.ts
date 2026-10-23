@@ -326,7 +326,9 @@ async function changesDuringDispatchRetry(change: string) {
     }
     const index = maps.mock.calls.findIndex(isReceipt);
     expect(index).toBeGreaterThanOrEqual(0);
-    expect(maps.mock.contexts[index]!.has(id)).toBe(false);
+    const receipts = maps.mock.contexts[index];
+    if (!(receipts instanceof Map)) throw new Error('Missing receipt map');
+    expect(receipts.has(id)).toBe(false);
   }
 }
 it.each(['destination', 'turn', 'deadline', 'registration-deadline', 'expiry', 'none'])(
@@ -915,7 +917,7 @@ async function delayedDispatchProof() {
   const append = test.facts.nats.store.append.bind(test.facts.nats.store);
   const held = Promise.withResolvers<boolean>();
   let lostAt = 0;
-  let iam: ReturnType<typeof vi.spyOn> | undefined;
+  let restoreIam: (() => void) | undefined;
   function hang() {
     return held.promise;
   }
@@ -924,7 +926,8 @@ async function delayedDispatchProof() {
     const event = z.object({ type: z.string() }).parse(command.event);
     if (event.type === 'budget.call_dispatch_admitted') {
       lostAt = performance.now();
-      iam = vi.spyOn(test.facts.auth, 'applied').mockImplementation(hang);
+      const iam = vi.spyOn(test.facts.auth, 'applied').mockImplementation(hang);
+      restoreIam = iam.mockRestore.bind(iam);
       await delay(1200);
     }
     return result;
@@ -932,7 +935,7 @@ async function delayedDispatchProof() {
   const spy = vi.spyOn(test.facts.nats.store, 'append').mockImplementation(delayReply);
   function restore() {
     spy.mockRestore();
-    iam?.mockRestore();
+    restoreIam?.();
     held.resolve(true);
   }
   onTestFinished(restore);

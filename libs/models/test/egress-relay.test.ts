@@ -358,3 +358,93 @@ async function lateCheckAfterRevocation() {
 }
 it('does not restart the watchdog after a closed relay receives a late success',
   lateCheckAfterRevocation);
+
+async function noRecheckWatchdog() {
+  const setup = await fixture();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  onTestFinished(restoreClock);
+  await setup.register('permit', Date.now() + 60_000);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(setup.records).toHaveLength(0);
+}
+it('does not apply a proof watchdog to a registration without rechecks', noRecheckWatchdog);
+
+async function lateSuccessBeforeWatchdog() {
+  const setup = await fixture();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  onTestFinished(restoreClock);
+  const held = Promise.withResolvers<void>();
+  function recheck() {
+    return held.promise;
+  }
+  const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
+  await setup.registry.register(request);
+  await vi.advanceTimersByTimeAsync(500);
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(2000);
+  onTestFinished(clock.mockRestore.bind(clock));
+  held.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ reason: 'unavailable' });
+}
+it('rejects a late successful check before the watchdog gets CPU time', lateSuccessBeforeWatchdog);
+
+async function refreshedProofStartsAtRead() {
+  const setup = await fixture();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  onTestFinished(restoreClock);
+  const first = Promise.withResolvers<void>();
+  const later = Promise.withResolvers<void>();
+  let checks = 0;
+  function recheck() {
+    checks++;
+    return checks === 1 ? first.promise : later.promise;
+  }
+  const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
+  await setup.registry.register(request);
+  await vi.advanceTimersByTimeAsync(1500);
+  first.resolve();
+  await vi.advanceTimersByTimeAsync(899);
+  expect(setup.records).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ reason: 'unavailable' });
+  later.resolve();
+}
+it('dates refreshed proof from the read start even when its reply is delayed',
+  refreshedProofStartsAtRead);
+
+async function untypedRejection() {
+  const setup = await fixture();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  onTestFinished(restoreClock);
+  function recheck() {
+    return Promise.reject(new Error('private-canary'));
+  }
+  const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
+  await setup.registry.register(request);
+  await vi.advanceTimersByTimeAsync(500);
+  expect(setup.records).toHaveLength(1);
+  expect(setup.records[0]).toMatchObject({ reason: 'unavailable' });
+}
+it('records an untyped recheck rejection as unavailable', untypedRejection);
+
+async function connectedTimeAfterClockRollback() {
+  const setup = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  onTestFinished(restoreClock);
+  const target = await setup.register('permit', Date.now() + 60_000);
+  vi.setSystemTime(Date.now() - 60_000);
+  const client = await setup.dial(target);
+  await once(client, 'data');
+  setup.registry.closeAll();
+  expect(setup.records).toHaveLength(1);
+  expect(egressCloseSchema.safeParse(setup.records[0]).success).toBe(true);
+  expect(setup.records[0]!.connectedAt).toBe(setup.records[0]!.registeredAt);
+}
+it('keeps connection receipt times valid when the clock goes backwards before connect',
+  connectedTimeAfterClockRollback);

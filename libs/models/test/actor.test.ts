@@ -630,6 +630,7 @@ async function relayReadsDoNotBlockMoney() {
   }
   await vi.advanceTimersByTimeAsync(1900);
   expect(records).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(100);
   let reserved = false;
   function reservationSaved() {
     reserved = true;
@@ -643,3 +644,103 @@ async function relayReadsDoNotBlockMoney() {
 }
 it('keeps four healthy relays open without putting proof reads ahead of money',
   relayReadsDoNotBlockMoney);
+
+async function currentProofDeadline() {
+  const position = await nats.store.head('budget-test');
+  const deadline = performance.now() + 2000;
+  function lateHead() {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(deadline);
+    onTestFinished(clock.mockRestore.bind(clock));
+    return Promise.resolve(position);
+  }
+  const spy = vi.spyOn(nats.store, 'head').mockImplementation(lateHead);
+  onTestFinished(spy.mockRestore.bind(spy));
+  await expect(actor.requireCurrent(deadline)).rejects.toThrow('Budget writer unavailable');
+}
+it('refuses current-writer proof whose matching position arrives at the deadline',
+  currentProofDeadline);
+
+async function currentProofWaitsForAppend() {
+  const append = nats.store.append.bind(nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function holdReply(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    entered.resolve();
+    await release.promise;
+    return result;
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(holdReply);
+  function cleanup() {
+    release.resolve();
+    spy.mockRestore();
+  }
+  onTestFinished(cleanup);
+  const reservation = reserve();
+  await entered.promise;
+  let checked = false;
+  let failure: unknown;
+  function failed(error: unknown) {
+    checked = true;
+    failure = error;
+  }
+  function completed() {
+    checked = true;
+  }
+  const checking = actor.requireCurrent(performance.now() + 2000).then(completed, failed);
+  await delay(50);
+  expect(checked).toBe(false);
+  release.resolve();
+  await reservation;
+  await checking;
+  expect(checked).toBe(true);
+  expect(failure).toBeUndefined();
+}
+it('waits for its own unfinished append before proving the budget writer is current',
+  currentProofWaitsForAppend);
+
+async function moneyDuringProofRead() {
+  const head = nats.store.head.bind(nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let reads = 0;
+  async function holdFirstRead(...args: Parameters<typeof head>) {
+    const position = await head(...args);
+    reads++;
+    if (reads === 1) {
+      entered.resolve();
+      await release.promise;
+    }
+    return position;
+  }
+  const spy = vi.spyOn(nats.store, 'head').mockImplementation(holdFirstRead);
+  function cleanup() {
+    release.resolve();
+    spy.mockRestore();
+  }
+  onTestFinished(cleanup);
+  const checking = actor.requireCurrent(performance.now() + 2000);
+  await entered.promise;
+  const reservation = await reserve();
+  release.resolve();
+  await checking;
+  expect(actor.state.reservations).toMatchObject([{ id: reservation, amountCents: 1 }]);
+  expect(reads).toBe(2);
+}
+it('rechecks a position read that overlapped a money command without blocking that command',
+  moneyDuringProofRead);
+
+async function failedWriterCannotProveCurrent() {
+  const cause = new Error('private-canary');
+  function unavailable() {
+    return Promise.resolve({ status: 'unavailable' as const, cause });
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(unavailable);
+  onTestFinished(spy.mockRestore.bind(spy));
+  await expect(reserve()).rejects.toThrow('Budget writer lost its fence');
+  spy.mockRestore();
+  await expect(actor.requireCurrent(performance.now() + 2000))
+    .rejects.toThrow('Budget writer unavailable');
+}
+it('refuses proof from a failed writer even when its saved position still matches',
+  failedWriterCannotProveCurrent);
