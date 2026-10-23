@@ -94,7 +94,7 @@ it('bounds gateway lock acquisition even when every pooled connection is occupie
 
 async function forwardsAttemptLimits() {
   const setup = await fixture();
-  onTestFinished(setup.close);
+  onTestFinished(setup.close.bind(setup));
   let called = false;
   let limits: HandlerAttempt | undefined;
   let abortedDuringHandler: boolean | undefined;
