@@ -23,6 +23,7 @@ import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import { timeMemoryPath } from './support/memory-path-timing.ts';
 
 async function cryptoModule() {
   const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
@@ -2777,3 +2778,56 @@ async function missingChangeTool() {
   await refusedChange(request);
 }
 it('denies correct when the reviewed catalogue has no correct tool', missingChangeTool);
+
+const backendDelays = [
+  ['recall', 'history'], ['recall', 'IAM'],
+  ['correct', 'history'], ['correct', 'IAM'],
+  ['forget', 'history'], ['forget', 'IAM'],
+] as const;
+async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
+  step: 'history' | 'IAM', revoke = false) {
+  let body: unknown = call;
+  let requestHeaders = headers;
+  let token: string;
+  if (operation === 'recall') {
+    token = await signedRecall(setup);
+  } else {
+    const request = await changeRequest(operation, false);
+    body = request.body;
+    requestHeaders = request.requestHeaders;
+    token = await changeToken(request);
+  }
+  async function delay() {
+    await pause(2200);
+    if (revoke) {
+      await setup.append(grantStream('memory_read', scopeId), 'grant.revoked', {
+        resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member',
+        granteeId: 'alice', revokedBy: 'alice',
+      });
+    }
+  }
+  const timing = timeMemoryPath(setup, step, delay);
+  try {
+    const response = await app.inject({ method: 'POST', url: route, payload: JSON.stringify(body),
+      headers: { ...requestHeaders, 'content-type': 'application/json',
+        'x-memory-context': token } });
+    timing.report(operation, revoke);
+    expect(timing.delayed()).toBe(true);
+    if (revoke) {
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ status: 'refused' });
+    } else if (operation === 'recall') {
+      expect(response.statusCode).toBe(200);
+    } else {
+      expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+    }
+  } finally {
+    timing.restore();
+  }
+}
+it.each(backendDelays)('allows %s after a slow backend %s read', delayedBackend);
+async function revokedDuringBackend(operation: 'recall' | 'correct' | 'forget',
+  step: 'history' | 'IAM') {
+  await delayedBackend(operation, step, true);
+}
+it.each(backendDelays)('refuses %s revoked during a slow backend %s read', revokedDuringBackend);
