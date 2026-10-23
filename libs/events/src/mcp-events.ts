@@ -106,6 +106,13 @@ export const mcpEvents = [
     { resourceType: 'mcp_server', resourceId: 'mcp_1', granteeId: 'team_1', revokedBy: 'mem_1' },
   ),
   event(
+    'connection.selected', 'connection',
+    'A person explicitly selected a personal account revision or cleared their choice.',
+    data.connectionSelectedDataSchema,
+    { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1',
+      action: 'select', profileId: 'personal_1', profileRevision: 1, expectedSequence: 0 },
+  ),
+  event(
     'connection.created',
     'connection',
     'A person saved a staged connection reference; account identity may remain unverified.',

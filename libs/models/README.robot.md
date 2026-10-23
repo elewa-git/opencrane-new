@@ -1872,7 +1872,7 @@ records unavailable and new profiles `saved_unverified`. It reads no secret stor
 no work.
 
 The existing `profile` event field holds the opaque profileId, never an editable label.
-The stream is `connection-<member>-<server>-<profile>`. Selection, identity verification,
+The stream is `connection-<member>-<server>-<profile>`. Identity verification,
 release, broker, HTTP routes, UI and fresh-install qualification remain NOT RUN here.
 Tests use real NATS/OpenFGA and disposable PostgreSQL, with a custody boundary fixture;
 the existing custody tests separately exercise the private HTTP adapter.
@@ -3051,3 +3051,37 @@ pins the silo and native namespace, and tries valid competing roots and bindings
 Each competitor succeeds with a distinct call id, but cannot replace the original hold.
 An older native hold without a saved expiry remains held and cannot be recovered.
 A decision-history read that crosses the expiry refuses before saving a missing decision.
+
+## Explicit personal account selection (P3-8 PR 4a; Part of #49)
+
+Base dependency #523 landed as `e3f593bf6d41ae465e3c49cb43f7444c4120c968`.
+`connection-selection.ts` exposes internal commands and reads, with no HTTP route.
+`changeConnectionSelection(store, binding, userId, input)` takes the authenticated user
+separately. Strict input has action (select/clear), serverId, connectionId, changeRef and
+expectedSequence. Select also requires profileId and the checked profileRevision.
+Clear has no profile fields. It names the saved connection when a choice exists,
+even after re-registration clears the current installation. With no saved choice,
+it names the current installation. Select requires the current installation and an
+accepted review of the latest tool list. Bearer saves share this server check.
+The caller cannot choose another owner. Receipts contain status, sequence and changeRef. Reusing a reference with changed fields conflicts, including after
+broker deduplication expires. Concurrent identical commands recover the original receipt.
+
+The command reads profile, control and server facts before member/tool access checks.
+It checks applied grant and team receipts and watches their exact streams. The event store
+repeats the checks inside one conditional append and binds them to the global log position.
+An unrelated concurrent append can therefore refuse a save; callers may retry unchanged.
+No conversation history enters the two-second access check.
+
+`foldConnectionSelection` rebuilds the explicit choice from
+`connection-selection-<user>-<server>`. `readConnectionSelection` checks current facts
+and access once. Replay keeps the highest observed position; older rows cannot restore
+a cleared choice. Missing, cleared, rotated, revoked, disabled, incomplete and replaced
+profiles choose nothing. Selection preserves saved_unverified and never grants access,
+reads custody, calls a provider or falls back to another profile. Connecting never selects.
+Tests use bearer fixtures with real NATS, PostgreSQL and OpenFGA. Company opt-in, company
+profiles, HTTP/UI, release, dispatch and fresh-install qualification remain outside this PR.
+
+The expired-catalogue fixture derives both dates from one timestamp. Its five-minute
+lifetime must remain valid even when the clock advances between reads. A regression
+advances the clock by one millisecond per read, checks the discovery data against its
+schema and still requires `Selection conflict` without saving a choice.
