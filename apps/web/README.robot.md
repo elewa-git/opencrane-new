@@ -146,8 +146,10 @@ The direct/group connection effect watches history readiness before starting
 catch-up. This lets it subscribe when that read finishes even while an uncertain
 send keeps its existing notice on screen.
 The socket service, direct-chat and workspace specs exercise CloseEvent delivery,
-replacement sockets, retained state and refusal after the reconnect wait. A real
-1008 or refusal still clears protected state and ignores late history and socket
+replacement sockets, retained state and refusal after the reconnect wait. The
+direct-chat and workspace scenarios run at 390px and 1280px, with the width set
+before mounting each page. They also check a refused read during the wait at both widths.
+A real 1008 or refusal still clears protected state and ignores late history and socket
 replies. A refused read during the wait also cancels the reconnect timer.
 These are source tests; fresh-install qualification is NOT RUN.
 The workspace clears its address selection and

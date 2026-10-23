@@ -2536,7 +2536,8 @@ function deliverChatRow(socket: SocketLike, conversationId: string,
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(update) }));
 }
 
-async function retainsRateLimitedChat(mode: string): Promise<void> {
+async function retainsRateLimitedChat(mode: string, viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
   const api = createFetchFixture();
   let conversationId = 'existing';
   if (mode === 'group') {
@@ -2604,10 +2605,18 @@ async function retainsRateLimitedChat(mode: string): Promise<void> {
   fixture.destroy();
 }
 
-it.each(['direct', 'group'])('retains a rate-limited %s chat and catches up once',
-  retainsRateLimitedChat);
+const rateLimitedChatScenarios = [
+  ['direct', 390],
+  ['direct', 1280],
+  ['group', 390],
+  ['group', 1280],
+] as const;
 
-async function revokedDuringReconnect(): Promise<void> {
+it.each(rateLimitedChatScenarios)(
+  'retains a rate-limited %s chat at %ipx and catches up once', retainsRateLimitedChat);
+
+async function revokedDuringReconnect(viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
   const api = createFetchFixture();
   const fixture = await mount(api);
   await openExisting(fixture);
@@ -2650,4 +2659,6 @@ async function revokedDuringReconnect(): Promise<void> {
   fixture.destroy();
 }
 
-it('never restores a chat revoked during the rate-limit reconnect wait', revokedDuringReconnect);
+it.each([390, 1280])(
+  'never restores a chat revoked during the rate-limit reconnect wait at %ipx',
+  revokedDuringReconnect);

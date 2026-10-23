@@ -2108,7 +2108,8 @@ function replacementChatSocket() {
   return { socket, send };
 }
 
-async function retainsRateLimitedSession(): Promise<void> {
+async function retainsRateLimitedSession(viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
   const context = await createCaptureWorkspace([screenshotRow(1)]);
   const chat = context.fixture.componentInstance['chat'];
   context.setMessageStatus(0);
@@ -2165,10 +2166,12 @@ async function retainsRateLimitedSession(): Promise<void> {
   context.fixture.destroy();
 }
 
-it('retains a rate-limited session and resumes without resending uncertain work',
+it.each([390, 1280])(
+  'retains a rate-limited session at %ipx and resumes without resending uncertain work',
   retainsRateLimitedSession);
 
-async function purgesRevokedReconnect(refusal: string): Promise<void> {
+async function purgesRevokedReconnect(refusal: string, viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
   const context = await createCaptureWorkspace([screenshotRow(1)]);
   const chat = context.fixture.componentInstance['chat'];
   context.fixture.componentInstance['draft'].set('Private waiting draft');
@@ -2233,11 +2236,19 @@ async function purgesRevokedReconnect(refusal: string): Promise<void> {
   context.fixture.destroy();
 }
 
-it.each(['1008', 'refused'])(
-  'purges a session revoked during the rate-limit wait on %s and ignores late replies',
+const revokedReconnectScenarios = [
+  ['1008', 390],
+  ['1008', 1280],
+  ['refused', 390],
+  ['refused', 1280],
+] as const;
+
+it.each(revokedReconnectScenarios)(
+  'purges a session revoked during the rate-limit wait on %s at %ipx and ignores late replies',
   purgesRevokedReconnect);
 
-async function cancelsReconnectAfterRefusedRead(): Promise<void> {
+async function cancelsReconnectAfterRefusedRead(viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
   const context = await createCaptureWorkspace([screenshotRow(1)]);
   const chat = context.fixture.componentInstance['chat'];
   context.fixture.componentInstance['draft'].set('Private draft during the wait');
@@ -2263,5 +2274,6 @@ async function cancelsReconnectAfterRefusedRead(): Promise<void> {
   context.fixture.destroy();
 }
 
-it('cancels the pending reconnect when a read reports revocation during the wait',
+it.each([390, 1280])(
+  'cancels the pending reconnect when a read reports revocation during the wait at %ipx',
   cancelsReconnectAfterRefusedRead);

@@ -187,9 +187,13 @@ describe('WebSocketService', () => {
     expect(sockets).toHaveLength(1);
   });
 
-  it.each([1011, 1013])('reconnects after close %i without reporting access loss', code => {
+  function maximumRandomValue(): number {
+    return 1;
+  }
+
+  function reconnectsWithoutAccessLoss(code: number): void {
     vi.useFakeTimers();
-    const service = setup(() => 1);
+    const service = setup(maximumRandomValue);
     const accessLost = vi.fn();
     service.accessLost.subscribe(accessLost);
     service.connect('/ws');
@@ -204,7 +208,10 @@ describe('WebSocketService', () => {
     expect(sockets).toHaveLength(2);
     expect(accessLost).not.toHaveBeenCalled();
     expect(sockets[1]?.sent).toEqual([]);
-  });
+  }
+
+  it.each([1011, 1013])(
+    'reconnects after close %i without reporting access loss', reconnectsWithoutAccessLoss);
 
   it('resets the backoff once a reconnect succeeds', () => {
     vi.useFakeTimers();
