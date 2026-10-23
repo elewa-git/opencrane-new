@@ -138,7 +138,7 @@ async function prepare(team = false) {
   const upstream = new URL(address).host;
   setup.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
-  await setup.restart();
+  await restartMemoryGateway();
   // Warm service clients. Cold calls may correctly refuse when the access deadline expires.
   const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
   const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
@@ -154,6 +154,9 @@ function captureContext(request: import('fastify').FastifyRequest,
     expect(request.headers[name]).toBeUndefined();
   }
   done();
+}
+function restartMemoryGateway() {
+  return setup.restart();
 }
 async function close() {
   const currentApp = app;
@@ -193,7 +196,9 @@ afterEach(close);
 
 async function closesIncompleteBackendRequest() {
   const address = app.server.address();
-  if (!address || typeof address === 'string') throw new Error('Missing memory backend address');
+  if (!address || typeof address === 'string') {
+    throw new Error('Missing memory backend address');
+  }
   const incoming = once(app.server, 'request');
   const options = { host: '127.0.0.1', port: address.port, path: route, method: 'POST',
     headers: { 'content-type': 'application/json', 'content-length': '16384' } };
@@ -219,6 +224,52 @@ async function closesIncompleteBackendRequest() {
 }
 it('closes an unfinished backend request before removing its service fixtures',
   closesIncompleteBackendRequest);
+
+async function closesPausedGateway() {
+  const child = setup.gatewayChild();
+  if (!child) {
+    throw new Error('Missing memory fixture gateway');
+  }
+  // Reproduce a gateway that cannot finish graceful shutdown before the hook deadline.
+  expect(child.kill('SIGSTOP')).toBe(true);
+  const closing = close();
+  function closed() {
+    return 'closed';
+  }
+  const completed = closing.then(closed);
+  const expired = pause(2000, 'still waiting');
+  try {
+    expect(await Promise.race([completed, expired])).toBe('closed');
+    expect(child.signalCode).toBe('SIGKILL');
+  } finally {
+    child.kill('SIGKILL');
+    await closing;
+  }
+}
+it('removes service fixtures when the gateway cannot finish graceful shutdown', closesPausedGateway);
+
+async function replacesPausedGateway() {
+  const child = setup.gatewayChild();
+  if (!child) {
+    throw new Error('Missing memory fixture gateway');
+  }
+  expect(child.kill('SIGSTOP')).toBe(true);
+  const restarting = restartMemoryGateway();
+  function restarted() {
+    return 'restarted';
+  }
+  const completed = restarting.then(restarted);
+  const expired = pause(2000, 'still waiting');
+  try {
+    expect(await Promise.race([completed, expired])).toBe('restarted');
+    expect(child.signalCode).toBe('SIGKILL');
+    expect(setup.gatewayHealthy()).toBe(true);
+  } finally {
+    child.kill('SIGKILL');
+    await restarting;
+  }
+}
+it('replaces a fixture gateway that cannot finish graceful shutdown', replacesPausedGateway);
 
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
   if (team && kind !== 'person') {
