@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { requireAutomatedJourney } from '../../../infra/dev-stack/journey-guard.ts';
 import { afterAll, beforeAll, describe, expect, it, type TestContext } from 'vitest';
 
 const live = process.env['MCP_HOSTED_K3D'] === '1';
@@ -14,6 +15,8 @@ let otherNamespace = '';
 let approved: unknown;
 let secondImage = '';
 const ownedNamespaces = new Map<string, string>();
+type OwnedPolicy = { kind: string; name: string; namespace: string; owner: string; uid?: string };
+const ownedPolicies: OwnedPolicy[] = [];
 let metadataSource: Peer | undefined;
 
 function command(binary: string, args: string[], input?: string): string {
@@ -72,6 +75,7 @@ function approvedImages(image: string) {
 }
 async function setup() {
   if (!live) return;
+  requireAutomatedJourney();
   const slot = process.env['DEV_STACK_ID'];
   expect(['1', '2']).toContain(slot);
   const owner = join(homedir(), '.config/opencrane', `dev-stack-${slot}`, 'stack-owner');
@@ -93,7 +97,7 @@ async function setup() {
   kube(['apply', '-f', '-'], approvedImages(image));
   command('node', ['infra/dev-stack/mcp-resources.mjs', namespace]);
   const script = process.env['MCP_ADMISSION_SCRIPT'] ?? 'infra/dev-stack/mcp-admission.mjs';
-  command('node', [script, namespace]);
+  installPolicies(script, namespace);
   const invalidReplicas = workload();
   change(invalidReplicas, 'spec.replicas', 2);
   // Wait for policy distribution before testing the individual refusals.
@@ -112,16 +116,57 @@ function createNamespace(name: string) {
   const created: unknown = JSON.parse(kube(['create', 'namespace', name, '-o', 'json']));
   ownedNamespaces.set(name, String(field(created, 'metadata.uid')));
 }
-function cleanup() {
-  if (ownedNamespaces.has(namespace)) {
-    for (const suffix of ['statefulset', 'pod', 'scale']) {
-      kube(['delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
-        `${namespace}-${suffix}`, '--ignore-not-found']);
-    }
-  }
+function installPolicies(script: string, target: string) {
+  const rendered: unknown = JSON.parse(command('node', [script, target, '--render']));
+  const items = field(rendered, 'items');
+  if (!Array.isArray(items)) throw new Error('Missing admission policies');
+  for (const object of items) createPolicy(object, target);
+}
+function createPolicy(object: unknown, target: string) {
+  const record: OwnedPolicy = { kind: String(field(object, 'kind')).toLowerCase(),
+    name: String(field(object, 'metadata.name')), namespace: target, owner: randomUUID() };
+  change(object, 'metadata.labels', { 'opencrane.dev/fixture-owner': record.owner });
+  // Remember the create before sending it so cleanup can recover a lost response.
+  ownedPolicies.push(record);
+  const created: unknown = JSON.parse(kube(['create', '-f', '-', '-o', 'json'], object));
+  record.uid = String(field(created, 'metadata.uid'));
+}
+function checkedPolicies(records: OwnedPolicy[]) {
   for (const [name, uid] of ownedNamespaces) {
-    expect(kube(['get', 'namespace', name, '-o', 'jsonpath={.metadata.uid}'])).toBe(uid);
+    const current = kube(['get', 'namespace', name, '--ignore-not-found',
+      '-o', 'jsonpath={.metadata.uid}']);
+    if (current && current !== uid) throw new Error('Fixture namespace ownership changed');
   }
+  const present: OwnedPolicy[] = [];
+  for (const record of records) {
+    const output = kube(['get', record.kind, record.name, '--ignore-not-found', '-o', 'json']);
+    if (!output) continue;
+    const current: unknown = JSON.parse(output);
+    const labels = field(current, 'metadata.labels');
+    if (typeof labels !== 'object' || labels === null ||
+        Reflect.get(labels, 'opencrane.dev/fixture-owner') !== record.owner) {
+      throw new Error('Fixture policy ownership changed');
+    }
+    const uid = String(field(current, 'metadata.uid'));
+    if (record.uid && uid !== record.uid) throw new Error('Fixture policy ownership changed');
+    record.uid = uid;
+    present.push(record);
+  }
+  return present;
+}
+function deletePolicies(records: OwnedPolicy[]) {
+  // Check every identity before the first deletion, including a partially created policy.
+  const present = checkedPolicies(records);
+  for (const record of present) {
+    kube(['delete', record.kind, record.name, '--ignore-not-found']);
+  }
+  for (const record of records) {
+    const index = ownedPolicies.indexOf(record);
+    if (index !== -1) ownedPolicies.splice(index, 1);
+  }
+}
+function cleanup() {
+  deletePolicies([...ownedPolicies]);
   if (ownedNamespaces.size) {
     kube(['delete', 'namespace', ...ownedNamespaces.keys(), '--wait=true', '--timeout=60s']);
   }
@@ -311,7 +356,7 @@ function resizePod(name: string, cpu: string) {
   return kube(['patch', `pod/${name}`, '--subresource=resize', '--type=strategic',
     '--dry-run=server', '-p', JSON.stringify(patch)]);
 }
-function hostedResize() {
+async function hostedResize() {
   const candidate = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'mcp',
     annotations: { 'opencrane.ai/mcp-spec': specDigest } },
   spec: structuredClone(field(approved, pod)) };
@@ -323,7 +368,8 @@ function hostedResize() {
     }
     expect(increaseCpu).toThrow(/Hosted MCP check/u);
   } finally {
-    kube(['delete', 'pod', 'mcp', '--wait=false']);
+    kube(['delete', 'pod', 'mcp', '--wait=true', '--timeout=60s']);
+    await waitForEmptyQuota();
   }
 }
 async function computerResize() {
@@ -336,7 +382,7 @@ async function computerResize() {
   try {
     const script = process.env['COMPUTER_ADMISSION_SCRIPT']
       ?? 'infra/dev-stack/computer-admission.mjs';
-    command('node', [script, namespace]);
+    installPolicies(script, namespace);
     await delay(2000);
     kube(['create', '-f', '-'], candidate);
     function increaseCpu() {
@@ -344,12 +390,14 @@ async function computerResize() {
     }
     expect(increaseCpu).toThrow(/Computer must use the checked template/u);
   } finally {
-    for (const suffix of ['sandbox', 'pod', 'claim']) {
-      kube(['delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
-        `${namespace}-computer-${suffix}`, '--ignore-not-found']);
-    }
-    kube(['delete', 'pod', 'computer', '--ignore-not-found', '--wait=false']);
     namespace = savedNamespace;
+    function computerPolicy(record: OwnedPolicy) {
+      return record.namespace === otherNamespace;
+    }
+    const records = ownedPolicies.filter(computerPolicy);
+    deletePolicies(records);
+    kube(['delete', '-n', otherNamespace, 'pod', 'computer',
+      '--ignore-not-found', '--wait=true', '--timeout=60s']);
   }
 }
 
@@ -374,19 +422,22 @@ async function isolatedGuard(
       paramRef: { name: 'mcp-approved-images', namespace, parameterNotFoundAction: 'Deny' },
       matchResources: { namespaceSelector: {
         matchLabels: { 'kubernetes.io/metadata.name': otherNamespace } } } } };
-  kube(['apply', '-f', '-'], policy);
-  kube(['apply', '-f', '-'], binding);
-  await delay(2000);
   const savedNamespace = namespace;
-  namespace = otherNamespace;
   try {
+    createPolicy(policy, otherNamespace);
+    createPolicy(binding, otherNamespace);
+    await delay(2000);
+    namespace = otherNamespace;
     admit(candidate, false);
     change(candidate, path, value);
     refuse(candidate, false);
   } finally {
-    kube(['delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
-      `${namespace}-isolated`, '--ignore-not-found']);
     namespace = savedNamespace;
+    function isolatedPolicy(record: OwnedPolicy) {
+      return record.name === `${otherNamespace}-isolated`;
+    }
+    const records = ownedPolicies.filter(isolatedPolicy);
+    deletePolicies(records);
   }
 }
 
@@ -418,7 +469,16 @@ function quotaPod(name: string) {
     annotations: { 'opencrane.ai/mcp-spec': specDigest } },
   spec: structuredClone(field(approved, pod)) };
 }
-function quota() {
+async function waitForEmptyQuota() {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const used = kube(['get', 'resourcequota/mcp-limit', '-o', 'jsonpath={.status.used.pods}']);
+    if (used === '0') return;
+    await delay(500);
+  }
+  throw new Error('Fixture quota usage did not settle');
+}
+async function quota() {
+  await waitForEmptyQuota();
   const names = ['quota-one', 'quota-two', 'quota-three', 'quota-four', 'quota-five'];
   try {
     const admittedNames = names.slice(0, 4);
@@ -434,7 +494,8 @@ function quota() {
   }
 }
 
-function quotaTotals() {
+async function quotaTotals() {
+  await waitForEmptyQuota();
   const limits = [
     ['requests.cpu', '99m'], ['requests.memory', '255Mi'],
     ['limits.cpu', '999m'], ['limits.memory', '511Mi'],

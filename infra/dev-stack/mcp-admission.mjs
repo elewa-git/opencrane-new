@@ -103,6 +103,7 @@ const policies = [
   ['scale', 'apps', ['statefulsets/scale'], '', [worker,
     `!has(object.spec.replicas) || ${replicas}`]],
 ];
+const objects = [];
 for (const [suffix, group, resources, expression, expressions] of policies) {
   const name = `${namespace}-${suffix}`;
   const variables = [];
@@ -136,12 +137,17 @@ for (const [suffix, group, resources, expression, expressions] of policies) {
       paramRef: { name: 'mcp-approved-images', namespace, parameterNotFoundAction: 'Deny' },
       matchResources: { namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': namespace } } },
     } };
-  for (const object of [policy, binding]) {
+  objects.push(policy, binding);
+}
+if (process.argv.includes('--render')) {
+  console.log(JSON.stringify({ apiVersion: 'v1', kind: 'List', items: objects }));
+} else {
+  for (const object of objects) {
     try {
       execFileSync('kubectl', ['--context=k3d-ocn', 'apply', '-f', '-'],
         { input: JSON.stringify(object), stdio: ['pipe', 'pipe', 'pipe'] });
     } catch {
-      throw new Error('Could not install hosted MCP admission policy');
+      throw new Error('Could not install admission policy');
     }
   }
 }
