@@ -11,7 +11,13 @@ import { conversationKeys } from '../src/chat/keys.ts';
 import { recordReport } from '../src/chat/reports.ts';
 import { transcript } from '../../web/test/chat-state.ts';
 
-async function keepsRecoveryFailureAfterUndeliveredStop() {
+interface StopOrderCase {
+  order: 'restart' | 'stop_then_failure' | 'failure_then_stop';
+  reason: string;
+  state: 'failed' | 'stopped';
+}
+
+async function keepsTerminalOutcome(testCase: StopOrderCase) {
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/recovery-stop-`);
   const keys = conversationKeys(directory);
@@ -23,7 +29,19 @@ async function keepsRecoveryFailureAfterUndeliveredStop() {
     operations.push(method);
     return Promise.resolve({ thread: { id: 'thread' }, turn: { id: 'codex-turn' } });
   }
-  function grant() {
+  let failOnRemoval = false;
+  function modelFailed() {
+    operations.push('model_failed');
+    runner.complete({ method: 'turn/completed', params: {
+      threadId: 'thread', turn: { id: 'codex-turn', status: 'failed' },
+    } });
+  }
+  function grant(_thread: string, _conversation: string, token: string) {
+    if (!token && failOnRemoval) {
+      failOnRemoval = false;
+      operations.push('access_removed');
+      modelFailed();
+    }
     return Promise.resolve();
   }
   function credential() {
@@ -67,19 +85,32 @@ async function keepsRecoveryFailureAfterUndeliveredStop() {
       { token: 'fresh', expiresAt: Date.now() + 60_000 });
     await starting;
     runner.complete({ method: 'item/agentMessage/delta', params: {
-      threadId: 'thread', itemId: 'reply', delta: 'Partial reply before restart',
+      threadId: 'thread', itemId: 'reply', delta: 'Partial reply before Stop',
     } });
     expect(await recordReport(nats.store, keys, context, reports[1])).toBe('recorded');
+    if (testCase.order === 'failure_then_stop') modelFailed();
     await chatCommand(nats.store, keys, person,
       { id: 'stop', conversationId: 'chat', stopTurnId: 'message' });
     const beforeRestart = await chatHistory(nats.store, 'test', 'chat');
     const liveRows = beforeRestart.map(displayRow);
     expect(transcript(liveRows, 'alice', 'message').at(-1)?.state).toBe('stopping');
 
-    // Restart before delivering Stop. Recovery must explain the failure as a crash.
-    const recovered = reportJournal(driver);
-    recovered.load();
-    turnRunner(driver, recovered, send, closeSocket);
+    if (testCase.order === 'restart') {
+      // Keep a crash separate when the computer never received Stop.
+      const recovered = reportJournal(driver);
+      recovered.load();
+      turnRunner(driver, recovered, send, closeSocket);
+    } else {
+      // Reproduce a failed model stream while Stop is removing its connection.
+      failOnRemoval = testCase.order === 'stop_then_failure';
+      operations.push('stop_received');
+      await runner.interrupt({ turnId: 'message', conversationId: 'chat' });
+      let ending = ['model_failed', 'stop_received'];
+      if (testCase.order === 'stop_then_failure') {
+        ending = ['stop_received', 'access_removed', 'model_failed'];
+      }
+      expect(operations.slice(-ending.length)).toEqual(ending);
+    }
     expect(operations).not.toContain('turn/interrupt');
     const reloaded = reportJournal(driver);
     reloaded.load();
@@ -100,16 +131,29 @@ async function keepsRecoveryFailureAfterUndeliveredStop() {
     const reloadedTranscript = transcript(reloadRows, 'alice');
     expect(reloadedTranscript).toEqual(live);
     for (const turns of [live, reloadedTranscript]) {
-      expect.soft(turns.at(-1)).toMatchObject({ state: 'failed',
-        text: 'Partial reply before restart', reason: 'bridge_restarted',
-        tools: [{ label: 'Reply failed', detail: 'Run interrupted', failed: true }] });
+      expect.soft(turns.at(-1)).toMatchObject({ state: testCase.state,
+        text: 'Partial reply before Stop', reason: testCase.reason });
+      if (testCase.state === 'stopped') {
+        expect.soft(turns.at(-1)?.tools).toEqual([]);
+      } else {
+        expect.soft(turns.at(-1)?.tools).toMatchObject([
+          { label: 'Reply failed', detail: 'Run interrupted', failed: true },
+        ]);
+      }
     }
-    expect(failure.reason).toBe('bridge_restarted');
+    expect(failure.reason).toBe(testCase.reason);
   } finally {
     await nats.close();
     await rm(directory, { recursive: true, force: true });
   }
 }
 
-it('keeps Reply failed and partial text live and after reload when recovery precedes Stop delivery',
-  keepsRecoveryFailureAfterUndeliveredStop);
+const stopOrderCases: StopOrderCase[] = [
+  { order: 'restart', reason: 'bridge_restarted', state: 'failed' },
+  { order: 'stop_then_failure', reason: 'stop_interrupted', state: 'stopped' },
+  { order: 'failure_then_stop', reason: 'model_error', state: 'failed' },
+];
+
+it.each(stopOrderCases)(
+  'keeps the first terminal cause live and after reload: $order', keepsTerminalOutcome,
+);
