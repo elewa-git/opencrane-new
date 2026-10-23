@@ -147,7 +147,10 @@ async function cancelsPreparation(stage: 'waiting' | 'preparing', expiry = 'sign
     await competitor.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [lockName]);
   }
   const pending = setup.handler.handle(event, setup.transaction, attempt);
-  const result = pending.catch(function failed(error: unknown) { return error; });
+  function failed(error: unknown) {
+    return error;
+  }
+  const result = pending.catch(failed);
   async function waiting() {
     const rows = await setup.storage.queue.query(`SELECT pid FROM pg_locks
       WHERE locktype = 'advisory' AND NOT granted

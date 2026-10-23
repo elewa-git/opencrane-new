@@ -1,4 +1,5 @@
 import { createConnection, createServer, type Socket } from 'node:net';
+import { once } from 'node:events';
 import { Pool } from 'pg';
 import { dirname } from 'node:path';
 import { ChildProcess, execFile } from 'node:child_process';
@@ -989,7 +990,9 @@ async function delayedDisconnect(connectionString: string) {
     client.on('data', send);
   }
   const server = createServer(forward);
-  await new Promise<void>(function listen(resolve) { server.listen(0, '127.0.0.1', resolve); });
+  const ready = once(server, 'listening');
+  server.listen(0, '127.0.0.1');
+  await ready;
   const listening = server.address();
   if (!listening || typeof listening === 'string') throw new Error('Missing proxy port');
   address.hostname = '127.0.0.1';
@@ -1001,7 +1004,9 @@ async function delayedDisconnect(connectionString: string) {
     },
     async close() {
       for (const socket of sockets) socket.destroy();
-      await new Promise<void>(function close(resolve) { server.close(() => resolve()); });
+      const closed = once(server, 'close');
+      server.close();
+      await closed;
     },
   };
 }

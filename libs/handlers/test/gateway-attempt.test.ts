@@ -3,6 +3,8 @@ import { databases } from '@opencrane/authz/testing';
 import { pgDb, type Query } from '@opencrane/projections';
 import { expect, it, onTestFinished } from 'vitest';
 import { withinAttempt } from '../src/attempt.ts';
+import { registerHandler, type HandlerAttempt } from '../src/index.ts';
+import { fixture, until } from './helpers.ts';
 
 async function releasesExpiredLock() {
   const storage = await databases();
@@ -17,7 +19,9 @@ async function releasesExpiredLock() {
     async function prepare() {
       entered.resolve();
       const stopped = Promise.withResolvers<void>();
-      function cancel() { stopped.resolve(); }
+      function cancel() {
+        stopped.resolve();
+      }
       context?.signal.addEventListener('abort', cancel, { once: true });
       try {
         await Promise.race([finish.promise, stopped.promise]);
@@ -31,7 +35,10 @@ async function releasesExpiredLock() {
     await preparation;
   }
   const pending = withinAttempt(db, controller.signal, 60, attempt);
-  const result = pending.catch(function failed(error: unknown) { return error; });
+  function failed(error: unknown) {
+    return error;
+  }
+  const result = pending.catch(failed);
   await entered.promise;
   controller.abort(new Error('Attempt expired'));
   expect(await result).toMatchObject({ message: 'Handler attempt aborted' });
@@ -63,10 +70,15 @@ async function boundsPoolAcquisition() {
     called = true;
     return Promise.resolve();
   }
-  function completed(error?: unknown) { settled = true; return error; }
+  function completed(error?: unknown) {
+    settled = true;
+    return error;
+  }
   const pending = pgDb(pool).lock!('gateway-configuration:test', prepare, { timeoutMs: 100 });
   const result = pending.then(completed, completed);
-  function finished() { return settled; }
+  function finished() {
+    return settled;
+  }
   try {
     await expect.poll(finished, { timeout: 500 }).toBe(true);
     expect(await result).toBeInstanceOf(Error);
@@ -79,3 +91,31 @@ async function boundsPoolAcquisition() {
 }
 it('bounds gateway lock acquisition even when every pooled connection is occupied',
   boundsPoolAcquisition);
+
+async function forwardsAttemptLimits() {
+  const setup = await fixture();
+  onTestFinished(setup.close);
+  let called = false;
+  let limits: HandlerAttempt | undefined;
+  async function handle(_event: unknown, transaction: Query, attempt?: HandlerAttempt) {
+    limits = attempt;
+    await transaction.query('SELECT 1');
+    called = true;
+  }
+  const handler = registerHandler('update-members', handle);
+  const runtime = await setup.runtime([handler]);
+  await setup.append('attempt-limits');
+  void setup.startDispatch(runtime);
+  await setup.checkpoint(1);
+  const started = performance.now();
+  await runtime.work();
+  function completed() {
+    return Promise.resolve(called);
+  }
+  await until(completed);
+  expect(limits?.signal).toBeInstanceOf(AbortSignal);
+  expect(limits?.signal.aborted).toBe(false);
+  expect(limits?.deadline).toBeGreaterThan(started);
+  expect(limits?.deadline).toBeLessThanOrEqual(performance.now() + 60_000);
+}
+it('passes the live job attempt limits through the runtime to its handler', forwardsAttemptLimits);
