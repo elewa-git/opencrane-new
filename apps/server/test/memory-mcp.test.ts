@@ -536,6 +536,10 @@ async function memoryBinding(target: typeof setup) {
     schemaDigest: memoryCatalogue.schemaDigest, policyRevision: policy.policyRevision };
 }
 
+function isMemoryRoute(candidate: { serverId: string }) {
+  return candidate.serverId === 'memory';
+}
+
 async function signedRecall(target: typeof setup, overrides = {}, body = call) {
   const parsed = parseMemoryRequest(JSON.stringify(body), headers);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
@@ -544,7 +548,17 @@ async function signedRecall(target: typeof setup, overrides = {}, body = call) {
     bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
   const dispatch = await memoryBinding(target);
-  return target.tokens.memoryContext({ ...claims, dispatch, ...overrides }, Date.now() + 2000);
+  const preparing = await target.tokens.memoryContext({ ...claims, dispatch, preparing: true },
+    Date.now() + 2000);
+  const upstream = target.options.mcpRoutes.find(isMemoryRoute)!.upstream;
+  const preparation = await fetch(`http://${upstream}${route}/prepare`, {
+    method: 'POST', headers: { ...headers, 'content-type': 'application/json',
+      'x-memory-context': preparing }, body: JSON.stringify(body) });
+  const prepared: unknown = await preparation.json();
+  const fields = z.object({ preparationId: z.uuid(), inputGeneration: z.string() })
+    .partial().parse(prepared);
+  return target.tokens.memoryContext({ ...claims, dispatch, ...fields, ...overrides },
+    Date.now() + 2000);
 }
 
 async function assertRecallRefused(target: typeof setup, backend: typeof app) {
@@ -2788,9 +2802,9 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
   step: 'history' | 'IAM', revoke = false) {
   let body: unknown = call;
   let requestHeaders = headers;
-  let token: string;
+  let token = '';
   if (operation === 'recall') {
-    token = await signedRecall(setup);
+    // Sign only after the server finishes the deliberately slow preparation.
   } else {
     const request = await changeRequest(operation, false);
     body = request.body;
@@ -2807,6 +2821,7 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
   }
   const timing = timeMemoryPath(setup, step, delay);
   try {
+    if (operation === 'recall') token = await signedRecall(setup);
     const forwardedHeaders = { ...requestHeaders, 'content-type': 'application/json',
       'x-memory-context': token };
     const payload = JSON.stringify(body);
@@ -2832,3 +2847,21 @@ async function revokedDuringBackend(operation: 'recall' | 'correct' | 'forget',
   await delayedBackend(operation, step, true);
 }
 it.each(backendDelays)('refuses %s revoked during a slow backend %s read', revokedDuringBackend);
+
+async function refusesPreparation(change: 'missing' | 'reused' | 'expired' | 'mismatched') {
+  const original = await signedRecall(setup);
+  const claims = decodeJwt(original);
+  if (change === 'missing') delete claims['preparationId'];
+  if (change === 'mismatched') claims['inputGeneration'] = 'another-input';
+  const request = { method: 'POST' as const, url: route, payload: call,
+    headers: { ...headers, 'x-memory-context': original } };
+  if (change === 'reused') expect((await app.inject(request)).statusCode).toBe(200);
+  if (change === 'expired') await pause(30_100);
+  claims['dispatch'] = await memoryBinding(setup);
+  request.headers['x-memory-context'] = await setup.tokens.memoryContext(claims, Date.now() + 2000);
+  const response = await app.inject(request);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it.each(['missing', 'reused', 'expired', 'mismatched'] as const)(
+  'refuses a %s recall preparation', refusesPreparation, 40_000);
