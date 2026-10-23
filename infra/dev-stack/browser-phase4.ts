@@ -12,6 +12,7 @@ import { models, ownershipSubject } from '@opencrane/models';
 import { modelForTask } from '@opencrane/models/routing';
 import { readEvents } from '@opencrane/projections';
 import { readConversations } from './browser-group-chat.ts';
+import { readOwners, waitForChange } from './ownership-fixture.ts';
 
 export type Phase4Status = 'PASS' | 'FAIL' | 'NOT PROVEN' | 'PAID / NOT RUN';
 export type Phase4Assertion = {
@@ -75,10 +76,6 @@ export async function browserPhase4(options: BrowserPhase4Options): Promise<void
     return;
   }
   await qualifyProvider(options, ownerPage, attemptDirectory);
-  if (options.secondaryStack) {
-    await qualifyOwnershipTransfer(options, ownerPage, attemptDirectory);
-  }
-
 }
 
 function findPage(pages: Page[], width: number): Page {
@@ -959,19 +956,15 @@ async function waitForProviderKeySave(
   throw new Error(`The provider key did not finish saving; screen said: ${message}`);
 }
 
-async function qualifyOwnershipTransfer(
+export async function qualifyOwnershipTransfer(
   options: BrowserPhase4Options,
   page: Page,
   output: string,
+  successorPage?: Page,
 ): Promise<void> {
   const initial = await ownershipView(page);
-  if (initial.viewer.role !== 'owner') {
-    const ownershipEvidence = { viewerRole: initial.viewer.role };
-    options.assertions.push({ id: 'ownership.transfer', status: 'NOT PROVEN',
-      statement: 'The signed-in test account is an admin, so it cannot appoint an owner.',
-      evidence: ownershipEvidence, screenshots: [] });
-    return;
-  }
+  assert.equal(initial.viewer.role, 'owner',
+    'Ownership qualification requires a current Owner');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${options.origin}/org/people/owners`);
   await page.getByRole('heading', { name: 'Owners', exact: true }).waitFor();
@@ -1018,15 +1011,155 @@ async function qualifyOwnershipTransfer(
   await waitForOwnershipTransfer(page, memberId);
   const resultScreens = await captureAtBothWidths(page, output, 'ownership-transfer-result');
   const resultText = await page.locator('main').innerText();
-  const event = await ownershipTransferEvent(options.store, options.silo, memberId, ownerId);
+  const event = await ownershipTransferEvent(options.store, options.silo,
+    memberId, ownerId, command.commandId);
   const bothPeopleAreOwners = resultText.includes(ownerId) && resultText.includes(memberId)
     && resultText.includes('You remain an owner');
   const transferMatchesReview = event.successorId === memberId && event.transferredBy === ownerId;
   const transferEvidence = { successorId: event.successorId,
-    transferredBy: event.transferredBy, ownerIds: [ownerId, memberId] };
-  record(options.assertions, 'ownership.transfer', bothPeopleAreOwners && transferMatchesReview,
+    transferredBy: event.transferredBy, commandId: command.commandId, ownerIds: [ownerId, memberId] };
+  record(options.assertions, 'ownership.appointment', bothPeopleAreOwners && transferMatchesReview,
     'The saved change makes the reviewed member an owner and leaves the first owner in place.',
     transferEvidence, resultScreens);
+  assert(successorPage, 'The ownership journey needs the successor’s browser session');
+  await qualifyOwnershipHandover(options, page, successorPage, output);
+}
+
+async function qualifyOwnershipHandover(
+  options: BrowserPhase4Options,
+  previousOwner: Page,
+  successor: Page,
+  output: string,
+): Promise<void> {
+  await waitForOwnershipRole(successor, memberId);
+  await successor.goto(`${options.origin}/org/people/owners`);
+  await successor.getByRole('button', { name: 'Appoint an owner', exact: true }).waitFor();
+  const successorScreens = await captureAtBothWidths(successor, output, 'ownership-new-owner');
+  record(options.assertions, 'ownership.successor_controls', true,
+    'The new owner sees the owner controls in their own signed-in browser.',
+    { memberId }, successorScreens);
+
+  await previousOwner.getByRole('button', { name: 'Step down', exact: true }).click();
+  const review = previousOwner.getByRole('dialog');
+  await review.getByText('You become an Admin', { exact: true }).waitFor();
+  const stepDownScreens = await captureAtBothWidths(previousOwner, output, 'ownership-step-down');
+  record(options.assertions, 'ownership.step_down_review', true,
+    'The previous owner reviews the separate step down, which first makes them an Admin.',
+    { remainingOwnerId: memberId }, stepDownScreens);
+  const responsePromise = previousOwner.waitForResponse(isOwnershipTransferResponse);
+  await review.getByRole('button', { name: 'Step down', exact: true }).click();
+  const response = await responsePromise;
+  assert.equal(response.status(), 200);
+  const receipt = await response.json() as { commandId: string };
+  await waitForChange(previousOwner.request,
+    `${options.origin}/api/ownership/changes/${receipt.commandId}`);
+  await waitForOwnershipMessage(previousOwner, 'You are now an Admin', 30_000);
+  const steppedDown = await readOwners(previousOwner.request, options.origin);
+  assert.equal(steppedDown.viewer.role, 'admin');
+  assert.deepEqual(steppedDown.owners.map(readOwnershipMemberId), [memberId]);
+
+  await demotePreviousOwner(options, successor, output);
+  await previousOwner.goto(`${options.origin}/org/people/owners`);
+  await previousOwner.getByText('Your access changed', { exact: true }).first().waitFor();
+  const deniedOwnerControls = await previousOwner.getByRole('button', {
+    name: 'Appoint an owner', exact: true,
+  }).count() === 0;
+  const ownerRead = await previousOwner.request.get(`${options.origin}/api/ownership`);
+  const adminRead = await previousOwner.request.get(`${options.origin}/api/org/integrations`);
+  const memberRead = await previousOwner.request.get(`${options.origin}/api/chat`);
+  const formerOwnerScreens = await captureAtBothWidths(previousOwner, output,
+    'ownership-former-owner-refused');
+  record(options.assertions, 'ownership.former_owner_member_access',
+    deniedOwnerControls && ownerRead.status() === 403 && adminRead.status() === 403
+      && memberRead.status() === 200,
+    'The previous owner keeps member access and loses owner and admin access.',
+    { ownershipRead: ownerRead.status(), adminRead: adminRead.status(),
+      memberRead: memberRead.status() }, formerOwnerScreens);
+  await previousOwner.goto(`${options.origin}/workspace`);
+  await previousOwner.getByRole('textbox', { name: 'Message' }).waitFor();
+  const memberScreens = await captureAtBothWidths(previousOwner, output,
+    'ownership-former-owner-workspace');
+  await qualifyLastOwnerRefusal(options, successor, output);
+  record(options.assertions, 'ownership.transfer', true,
+    'The browser handover leaves the successor as sole owner and the former owner as a Member.',
+    { previousOwnerId: ownerId, successorId: memberId, previousOwnerRole: 'member' },
+    [...successorScreens, ...formerOwnerScreens, ...memberScreens]);
+}
+
+function readOwnershipMemberId(owner: { memberId: string }): string {
+  return owner.memberId;
+}
+
+async function demotePreviousOwner(
+  options: BrowserPhase4Options,
+  successor: Page,
+  output: string,
+): Promise<void> {
+  await successor.goto(`${options.origin}/org/people/members/${ownerId}`);
+  await successor.getByRole('button', { name: 'Change role', exact: true }).click();
+  const review = successor.getByRole('dialog');
+  await review.locator('input[value=member]').check();
+  const screenshots = await captureAtBothWidths(successor, output, 'ownership-member-review');
+  const responsePromise = successor.waitForResponse(isPreviousOwnerRoleResponse);
+  await review.getByRole('button', { name: /Make .* a Member/ }).click();
+  const response = await responsePromise;
+  assert.equal(response.status(), 200);
+  const receipt = await response.json() as { commandId: string };
+  await waitForChange(successor.request,
+    `${options.origin}/api/members/${ownerId}/changes/${receipt.commandId}`);
+  const memberResponse = await successor.request.get(`${options.origin}/api/members/${ownerId}`);
+  const member = await memberResponse.json() as { role: string };
+  record(options.assertions, 'ownership.previous_owner_demoted', member.role === 'member',
+    'The new owner changes the former owner from Admin to Member through the member page.',
+    { previousOwnerId: ownerId, role: member.role }, screenshots);
+}
+
+function isPreviousOwnerRoleResponse(response: BrowserResponse): boolean {
+  return response.request().method() === 'POST'
+    && new URL(response.url()).pathname === `/api/members/${ownerId}/role`;
+}
+
+async function qualifyLastOwnerRefusal(
+  options: BrowserPhase4Options,
+  page: Page,
+  output: string,
+): Promise<void> {
+  await page.goto(`${options.origin}/org/people/owners`);
+  await page.getByText("You're the last owner", { exact: true }).waitFor();
+  const stepDownDisabled = await page.getByRole('button', {
+    name: 'Step down', exact: true,
+  }).isDisabled();
+  const before = await readOwners(page.request, options.origin);
+  assert.deepEqual(before.owners.map(readOwnershipMemberId), [memberId]);
+  const memberPosition = await options.store.head(`member-${memberId}`);
+  const command = { action: 'step_down', commandId: `last-owner-${randomUUID()}`,
+    expectedSequence: before.sequence };
+  const response = await page.request.post(`${options.origin}/api/ownership`, {
+    headers: { origin: options.origin }, data: command,
+  });
+  const refusal = await response.json() as { reason: string };
+  assert.equal(response.status(), 409);
+  assert.equal(refusal.reason, 'last_owner');
+  const removal = { commandId: `last-owner-remove-${randomUUID()}`,
+    expectedSequence: memberPosition, reviewRevision: '0'.repeat(64) };
+  const removalResponse = await page.request.post(
+    `${options.origin}/api/members/${memberId}/remove`, {
+      headers: { origin: options.origin }, data: removal,
+    });
+  const removalRefusal = await removalResponse.json() as { reason: string };
+  const after = await readOwners(page.request, options.origin);
+  const memberPositionAfter = await options.store.head(`member-${memberId}`);
+  const screenshots = await captureAtBothWidths(page, output, 'ownership-last-owner-refused');
+  record(options.assertions, 'ownership.last_owner_refused',
+    stepDownDisabled && after.sequence === before.sequence
+      && removalResponse.status() === 409
+      && removalRefusal.reason === 'ownership_stream_required'
+      && memberPositionAfter === memberPosition,
+    'The sole owner cannot step down or remove themselves. Both refusals save no change.',
+    { stepDownStatus: response.status(), reason: refusal.reason,
+      removalStatus: removalResponse.status(), removalReason: removalRefusal.reason,
+      ownershipUnchanged: after.sequence === before.sequence,
+      memberUnchanged: memberPositionAfter === memberPosition }, screenshots);
 }
 
 type OwnershipView = {
@@ -1060,6 +1193,7 @@ function matchesOwnerId(memberId: string, owner: OwnershipView['owners'][number]
 }
 
 type OwnershipTransferCommand = {
+  commandId: string;
   successorId: string;
   expectedSequence: number;
 };
@@ -1083,40 +1217,62 @@ function isOwnershipTransferResponse(response: BrowserResponse): boolean {
 
 function readOwnershipTransferCommand(request: BrowserRequest): OwnershipTransferCommand {
   const body = request.postDataJSON() as Record<string, unknown>;
+  assert(typeof body['commandId'] === 'string');
   assert(typeof body['successorId'] === 'string');
   assert(typeof body['expectedSequence'] === 'number');
-  return { successorId: body['successorId'], expectedSequence: body['expectedSequence'] };
+  return { commandId: body['commandId'], successorId: body['successorId'],
+    expectedSequence: body['expectedSequence'] };
+}
+
+export async function waitForOwnershipMessage(
+  page: Page,
+  message: string,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const confirmed = page.getByText(message, { exact: true });
+  const statusButton = page.getByRole('button', { name: /Check status|Checking/ });
+  while (Date.now() < deadline) {
+    await clickStatusWhenEnabled(statusButton);
+    if (await confirmed.isVisible()) return;
+    await delay(500);
+  }
+  throw new Error('The ownership screen did not confirm the saved change in time.');
 }
 
 async function waitForOwnershipTransfer(page: Page, successorId: string): Promise<void> {
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-    const ownershipText = await page.locator('main').innerText();
-    const ownerListText = await page.locator('.owner-list').innerText();
-    if (ownerListText.includes(ownerId) && ownerListText.includes(successorId)
-      && ownershipText.includes('You remain an owner')) return;
-    const statusButton = page.getByRole('button', { name: /Check status|Checking/ });
-    await clickStatusWhenEnabled(statusButton);
-    await delay(500);
-  }
-  throw new Error('The reviewed ownership transfer did not finish applying within two minutes.');
+  await waitForOwnershipMessage(page, 'You remain an owner.', 120_000);
+  const ownerListText = await page.locator('.owner-list').innerText();
+  assert(ownerListText.includes(ownerId) && ownerListText.includes(successorId),
+    'The confirmed appointment must show both owners');
 }
 
-async function clickStatusWhenEnabled(button: Locator): Promise<boolean> {
-  if (!(await button.count())) return false;
-  if (!(await button.isEnabled())) return false;
-  await button.click();
+export async function clickStatusWhenEnabled(button: Locator): Promise<boolean> {
+  // Check and activate this read-only control together; completion can remove it at any time.
+  return await button.evaluateAll(clickEnabledStatusButton);
+}
+
+function clickEnabledStatusButton(elements: Element[]): boolean {
+  const button = elements[0];
+  if (!button) return false;
+  if (elements.length !== 1 || !(button instanceof HTMLButtonElement)) {
+    throw new Error('Expected one status button');
+  }
+  if (button.disabled) return false;
+  button.click();
   return true;
 }
 
-async function ownershipTransferEvent(
+export async function ownershipTransferEvent(
   store: EventStore,
   silo: string,
   successorId: string,
   transferredBy: string,
+  commandId: string,
 ): Promise<{ successorId: string; transferredBy: string }> {
   for await (const stored of store.readStream(ownershipSubject(silo))) {
     if (stored.event.silo !== silo || stored.event.type !== 'ownership.transferred') continue;
+    if (stored.event.commandId !== commandId) continue;
     const data = stored.event.data as OwnershipTransferData;
     if (data.memberId !== successorId || data.transferredBy !== transferredBy) continue;
     return { successorId: data.memberId, transferredBy: data.transferredBy };
@@ -1190,7 +1346,9 @@ async function screenshot(page: Page, output: string, name: string): Promise<str
   assert.equal(pageWidth, viewportWidth, `${name} must not scroll sideways`);
   const destination = resolve(output, `${name}.png`);
   await page.screenshot({ path: destination, fullPage: false,
-    animations: 'disabled', timeout: 90_000 });
+    animations: 'disabled', timeout: 90_000,
+    mask: [page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu),
+      page.locator('input[type=email], input[value*="@"]')] });
   return destination;
 }
 

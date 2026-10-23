@@ -1,5 +1,5 @@
 import './journey-entry.ts';
-import { requireJourneyProviderMode } from './journey-guard.ts';
+import { phase4JourneyScope, requireJourneyProviderMode } from './journey-guard.ts';
 import { realModelJourney } from './real-model-journey.ts';
 import { uploadJourney } from './upload-journey.ts';
 import assert from 'node:assert/strict';
@@ -26,8 +26,9 @@ import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.t
 import { prepareBudgetAssistant } from './budget-fixture.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
-import { browserPhase4, type Phase4Assertion } from './browser-phase4.ts';
+import { browserPhase4, qualifyOwnershipTransfer, type Phase4Assertion } from './browser-phase4.ts';
 import { browserGroupChat } from './browser-group-chat.ts';
+import { prepareOwnershipJourney, restoreOwnershipJourney } from './ownership-fixture.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { namespace, secondary, stackId } from './identity.ts';
@@ -55,7 +56,7 @@ const identities = new Map<string, { sub: string; cookie: string }>();
 const phase4Assertions: Phase4Assertion[] = [];
 const phase4Attempt = process.env['P4_JOURNEY_ATTEMPT'] ?? 'manual';
 
-async function writePhase4Receipt(durationMs: number) {
+async function writePhase4Receipt(durationMs: number, startedAt: string) {
   const receiptDirectory = `${directory}/p4-journey/${phase4Attempt}`;
   await mkdir(receiptDirectory, { recursive: true });
   const receiptPath = `${receiptDirectory}/receipt.json`;
@@ -65,9 +66,13 @@ async function writePhase4Receipt(durationMs: number) {
     attempt: phase4Attempt,
     viewportWidths: [1280, 390],
     durationMs,
+    startedAt,
+    finishedAt: new Date().toISOString(),
     assertions: phase4Assertions,
   };
-  await writeFile(receiptPath, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
+  const json = JSON.stringify(receipt, null, 2);
+  const safeJson = json.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, '[email hidden]');
+  await writeFile(receiptPath, safeJson + '\n', { mode: 0o600 });
 }
 
 async function currentCommit(): Promise<string> {
@@ -77,12 +82,17 @@ async function currentCommit(): Promise<string> {
 async function runPhase4Journey() {
   assert(browser, 'The Phase 4 journey needs real signed-in browser sessions');
   const startedAt = performance.now();
+  const startedAtUtc = new Date().toISOString();
+  const scope = phase4JourneyScope(phase4Attempt);
   let journeyFailure: unknown;
   try {
     await browserPhase4({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
       origin, directory, attempt: phase4Attempt, silo,
-      secondaryStack: secondary, scope: 'groups',
+      secondaryStack: secondary, scope,
       store: events.store, append, assertions: phase4Assertions });
+    if (scope === 'all') {
+      await runOwnershipJourney();
+    }
     const groupMembers = await groupChatMembers();
     await browserGroupChat({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
       otherPage: groupMembers.otherPage, thirdPage: groupMembers.thirdPage,
@@ -96,7 +106,7 @@ async function runPhase4Journey() {
       evidence: { reason: errorMessage(error) }, screenshots: [] });
   }
   try {
-    await writePhase4Receipt(Math.round(performance.now() - startedAt));
+    await writePhase4Receipt(Math.round(performance.now() - startedAt), startedAtUtc);
   } catch (receiptError) {
     if (journeyFailure) {
       throw new AggregateError([journeyFailure, receiptError],
@@ -106,6 +116,34 @@ async function runPhase4Journey() {
   }
   if (journeyFailure) throw journeyFailure;
   console.log(`PASS Phase 4 browser journey; receipt run-${phase4Attempt}.json`);
+}
+
+async function runOwnershipJourney() {
+  assert(secondary && browser);
+  const contents = await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8');
+  const setup = JSON.parse(contents) as { extraIdentities: Array<{ subject: string }> };
+  const identity = setup.extraIdentities[0];
+  assert(identity, 'The separate development owner must exist');
+  const now = Math.floor(Date.now() / 1000);
+  // Use a short-lived fixture session only to prepare and restore the owner test accounts.
+  const session = { sub: identity.subject, orgId: config.expectedOrgId!,
+    roles: [], authTime: now, exp: now + 300 };
+  const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
+  const context = await browser.browser.newContext({ extraHTTPHeaders: { cookie } });
+  const memberPage = browser.memberPages[0];
+  assert(memberPage);
+  try {
+    await prepareOwnershipJourney(context.request, browser.ownerPage.request, origin);
+    const output = `${directory}/p4-journey/${phase4Attempt}`;
+    const options = { ownerPage: browser.ownerPage, memberPages: browser.memberPages,
+      origin, directory, attempt: phase4Attempt, silo, secondaryStack: secondary,
+      scope: 'all' as const, store: events.store, append, assertions: phase4Assertions };
+    await qualifyOwnershipTransfer(options, browser.ownerPage, output, memberPage);
+    await restoreOwnershipJourney(context.request, memberPage.request, origin);
+    console.log('PASS ownership fixture restored: separate owner, browser admin and member');
+  } finally {
+    await context.close();
+  }
 }
 
 async function groupChatMembers() {

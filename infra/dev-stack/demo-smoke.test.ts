@@ -73,8 +73,12 @@ function warmPage(sharedSessionDelay = false) {
       location = 'http://demo.test/workspace?conversation=saved';
     }
   }
+  async function evaluateSessionStatus() {
+    await checkSessionStatus();
+    return true;
+  }
   function sessionStatusButton() {
-    return { ...element, click: checkSessionStatus };
+    return { ...element, click: checkSessionStatus, evaluateAll: evaluateSessionStatus };
   }
   function startSessionButton() {
     return { ...element, click: startSession };

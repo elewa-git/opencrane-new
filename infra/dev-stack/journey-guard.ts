@@ -1,6 +1,13 @@
 const automatedJourneyRefusal =
   'Automated journeys require a secondary stack and no fleet task';
 
+export function phase4JourneyScope(attempt: string): 'groups' | 'all' {
+  if (attempt.startsWith('nightly-')) {
+    return 'groups';
+  }
+  return 'all';
+}
+
 export function requireAutomatedJourney() {
   const id = process.env['DEV_STACK_ID'];
   if ((id !== '1' && id !== '2') || process.env['OPENCRANE_FLEET_TASK'] !== undefined) {

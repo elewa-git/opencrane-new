@@ -711,18 +711,20 @@ that the text is absent from the page, browser storage, provider events and proc
 logs. The local server keeps the key in a private folder inside the disposable stack,
 outside the event store. Stack cleanup removes that folder. It does not ask the provider
 to answer. Each assertion is written to
-`docs/process/p4-journey/run-<attempt>.json`; screenshots sit beside this receipt in
-`run-<attempt>/`. Set `P4_JOURNEY_ATTEMPT` to keep the two fresh run receipts apart.
-The group chat receipt is part of the same JSON file. Its screenshots are saved under
-`run-<attempt>/group-chat/` at 1280px and 390px.
+`$DEV_STACK_DIR/p4-journey/<attempt>/receipt.json`. Screenshots sit beside it.
+Set `P4_JOURNEY_ATTEMPT` to keep each run apart. The group chat receipt is part
+of the same JSON file. Its screenshots are saved in the `group-chat/` subfolder
+at 1280px and 390px. Public copies are checked for readable emails before committing.
 
 The spare stack allows six computer pods and disks, with up to 3 GiB of memory
 and 6 GiB of disk requests. The sixth place lets a saved-data repeat start a new
 shared assistant computer while keeping the previous run's data.
 
-The ownership transfer check runs only when PR #262 is merged. A development event
-gives the signed-in test account the Owner role before the ownership screen opens.
-The transfer itself goes through the live review and owner screen. Separate member
+The manual ownership check uses product commands to make the signed-in test account
+the sole Owner before the ownership screen opens. The separate owner test user stays
+in the silo. The browser checks appointment, step-down and the former owner’s Member
+role, then checks the last-owner refusals. Product commands restore the test roles
+for the saved-data repeat. Separate member
 disks and browser profiles are not built. A real provider answer needs a paid call;
 the check records it as **PAID / NOT RUN** and sends no request.
 
@@ -1652,3 +1654,43 @@ Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user
 - [infra/nats](../nats/README.md): the event log's connection rules.
 - [infra/clamav](../clamav/README.md): the file scanner used by uploads.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
+
+## Ownership browser check
+
+Manual named organisation journeys include provider saving and the ownership handover,
+followed by the existing group chat checks. The separate development owner remains a
+separate test user. A short-lived fixture session uses the product commands to appoint
+the browser account, then steps down so the browser starts as the sole owner.
+No ownership event is added directly by this fixture.
+
+The browser appoints the signed-in member. The former owner steps down to Admin,
+and the new owner changes that account to Member through the member detail page.
+The check reads member, admin and owner routes to verify the resulting access.
+It checks the sole owner's disabled step-down control and sends refused step-down
+and self-removal commands. Neither refusal may move the corresponding saved position.
+Finally, product commands restore the separate owner, browser Admin and browser Member
+so that the same saved data can run again.
+
+The ownership regression first failed because an Admin fixture silently recorded
+`NOT PROVEN`. It now refuses that setup. A second test checks preparation and
+restoration twice against the same saved accounts. These tests use an API fixture;
+the live journey supplies the real browser and server evidence.
+
+The transfer check also matches the command id from the current browser request.
+Its failing-first test showed that an earlier appointment of the same person could
+otherwise stand in for a missing appointment in a saved-data run.
+
+The first fresh run on `975f73474` stopped after the ownership appointment was
+accepted. Its Check status button disappeared between a count and an enabled
+check. A failing-first test reproduced that browser race. The read-only status
+control is now checked and activated in one browser operation. This adds no wait
+or write retry. A browser fixture also checks disabled and removed controls.
+
+The next fresh run on `c3a72c8c5` confirmed the appointment and showed the successor's
+owner controls. It stopped after step-down because the script did not use Check status
+to read that result into the screen. A failing-first browser test reproduced the missing
+read action. Appointment and step-down now use the same status reader. Their existing
+120-second and 30-second limits are unchanged. The reader sends no write command.
+
+Names starting with `nightly-` retain the daily job’s groups-only checks. They do not
+change providers or owners. A failing-first scope test keeps that distinction.

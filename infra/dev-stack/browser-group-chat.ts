@@ -600,7 +600,9 @@ async function captureBoth(page: Page, output: string, name: string): Promise<st
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     const destination = resolve(output, `${name}-${width}.png`);
-    await page.screenshot({ path: destination, fullPage: false, animations: 'disabled' });
+    await page.screenshot({ path: destination, fullPage: false, animations: 'disabled',
+      mask: [page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu),
+        page.locator('input[type=email], input[value*="@"]')] });
     screenshots.push(destination);
   }
   return screenshots;

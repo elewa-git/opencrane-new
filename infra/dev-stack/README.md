@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts in Docker| services["Local services<br/>storage and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|starts and checks tools and replies| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|starts apps and demo tools; checks chats, replies and ownership| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster| devbox
 ```
@@ -39,6 +39,7 @@ tables, [NATS](../../GLOSSARY.md#nats) for the event log,
   [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
 - Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
 - Runs browser checks for chat, files, people, groups, shared assistants and spending.
+- Checks ownership handover and refuses a last owner’s departure in manual named journeys.
 - Waits for each new rehearsal reply to finish, checks its facts and checks the saved
   text after a reload. Uses separate messages and invitations for each screen width and
   attempt, and saves step pictures before recording success.

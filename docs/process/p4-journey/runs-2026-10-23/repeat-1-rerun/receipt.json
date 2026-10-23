@@ -1,0 +1,22 @@
+{
+  "commit": "610f345ab",
+  "attempt": "repeat-1-rerun",
+  "fullStartStatus": "FAIL",
+  "status": "PARTIAL",
+  "reason": "The saved-data rerun also ended with SIGTERM (exit 143), before the named browser section and before a receipt. The signal source is unknown. No further saved-data retry was made.",
+  "interruptionObservedAt": "2026-10-23T16:49:07Z",
+  "viewportWidths": [
+    1280,
+    390
+  ],
+  "assertions": [],
+  "environment": {
+    "stack": "claimed secondary slot 1",
+    "installation": "saved data",
+    "provider": "local model stub",
+    "paidProviderCalls": "NOT RUN"
+  },
+  "recordKind": "Manual interruption record. No automated assertion receipt was written.",
+  "websiteReadinessRecordedAt": "2026-10-23T16:46:52.641Z",
+  "commandLogCreatedAt": "2026-10-23T16:46:04.723Z"
+}
