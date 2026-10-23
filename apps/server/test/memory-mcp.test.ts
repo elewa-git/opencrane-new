@@ -2247,6 +2247,29 @@ async function preparesColdChangeGrant(operation: 'correct' | 'forget') {
 it.each(['correct', 'forget'] as const)(
   'finishes a cold write-grant lookup before signing the valid %s control', preparesColdChangeGrant);
 
+async function preparesColdChangeReceipt(operation: 'correct' | 'forget') {
+  const original = setup.auth.applied.bind(setup.auth);
+  let coldRead = false;
+  async function applied(eventId: string) {
+    if (!coldRead) {
+      coldRead = true;
+      // Reproduce a first IAM receipt lookup taking longer than the signed pass lasts.
+      await pause(2200);
+    }
+    return original(eventId);
+  }
+  const receipts = vi.spyOn(setup.auth, 'applied').mockImplementation(applied);
+  try {
+    await changeRequest(operation);
+    expect(coldRead).toBe(true);
+  } finally {
+    receipts.mockRestore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'finishes a cold IAM receipt lookup before signing the valid %s control',
+  preparesColdChangeReceipt);
+
 async function changeToken(request: ChangeRequest, overrides = {}) {
   const parsed = parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
   const dispatch = await memoryBinding(setup);
