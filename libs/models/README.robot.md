@@ -2185,9 +2185,12 @@ qualification is NOT RUN.
 
 ## Root spending allowance (P4-8 PR 4, first part; #90 and #93)
 
-`BudgetActor.setRootAllowance(binding, firstCallBoundCents)` saves the reviewed bound
+`BudgetActor.setRootAllowance(binding, firstCallBoundCents, fresh?)` saves the reviewed bound
 only when every remaining cap and the first call fit. It derives rootId as SHA-256
 of JSON `[silo, conversationId, turnId]`. Identical retries return the saved record.
+When supplied, `fresh` runs inside the actor queue, before returning a saved root,
+and immediately before the allocation append. A switch-on append race repeats the
+same callback. The callback retains the caller's original access deadline.
 `reserve` takes optional rootId as its fifth argument; rooted turns must supply it
 and match every saved identity field. The saved root position replaces admittedAt.
 `rootTotals` uses the existing reservations, BigInt sums and lifetime settlement.

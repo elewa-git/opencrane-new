@@ -118,9 +118,16 @@ export class BudgetActor {
     };
     return this.serial(save);
   }
-  setRootAllowance(raw: unknown, firstCallBoundCents: number) {
-    const save = () => setRootAllowance(this.state, this.silo, this.now(), raw,
-      firstCallBoundCents, this.append.bind(this));
+  setRootAllowance(raw: unknown, firstCallBoundCents: number, fresh?: () => Promise<void>) {
+    const append = async (type: string, payload: unknown) => {
+      await fresh?.();
+      await this.append(type, payload, undefined, fresh);
+    };
+    const save = async () => {
+      // Keep the original access check through queueing, including saved-root retries.
+      await fresh?.();
+      return setRootAllowance(this.state, this.silo, this.now(), raw, firstCallBoundCents, append);
+    };
     return this.serial(save);
   }
   async stopRoot(rootId: string, reason: RootStopReason, subject: string, position: number) {
