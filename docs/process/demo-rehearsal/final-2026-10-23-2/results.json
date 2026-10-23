@@ -1,0 +1,266 @@
+{
+  "sourceSha": "5bae5bd7163adcea6e2ec2dfde8e7fa7eb5921c4",
+  "allowanceCents": 1000,
+  "startup": {
+    "startedAt": "2026-10-23T03:44:58.298047+00:00",
+    "finishedAt": "2026-10-23T03:57:36.255707+00:00",
+    "exitCode": 0,
+    "slot": 1,
+    "allowanceCents": 1000,
+    "sha": "5bae5bd7163adcea6e2ec2dfde8e7fa7eb5921c4",
+    "websiteReadyMs": 88603,
+    "chargedCents": 13,
+    "heldCents": 17
+  },
+  "smoke": {
+    "sha": "5bae5bd7163adcea6e2ec2dfde8e7fa7eb5921c4",
+    "warmMs": 22530,
+    "warmResult": "PASS",
+    "attempts": [
+      {
+        "width": 1280,
+        "elapsedMs": 80026,
+        "result": "PASS",
+        "steps": [
+          {
+            "name": "streaming",
+            "result": "PASS",
+            "elapsedMs": 11211
+          },
+          {
+            "name": "pdf",
+            "result": "PASS",
+            "elapsedMs": 13506
+          },
+          {
+            "name": "stopped",
+            "result": "PASS",
+            "elapsedMs": 15027
+          },
+          {
+            "name": "direct",
+            "result": "PASS",
+            "elapsedMs": 9804
+          },
+          {
+            "name": "shared",
+            "result": "PASS",
+            "elapsedMs": 15937
+          },
+          {
+            "name": "limit",
+            "result": "PASS",
+            "elapsedMs": 14541
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "elapsedMs": 76871,
+        "result": "PASS",
+        "steps": [
+          {
+            "name": "streaming",
+            "result": "PASS",
+            "elapsedMs": 13023
+          },
+          {
+            "name": "pdf",
+            "result": "PASS",
+            "elapsedMs": 13423
+          },
+          {
+            "name": "stopped",
+            "result": "PASS",
+            "elapsedMs": 14949
+          },
+          {
+            "name": "direct",
+            "result": "PASS",
+            "elapsedMs": 8949
+          },
+          {
+            "name": "shared",
+            "result": "PASS",
+            "elapsedMs": 12588
+          },
+          {
+            "name": "limit",
+            "result": "PASS",
+            "elapsedMs": 13940
+          }
+        ]
+      }
+    ]
+  },
+  "scriptRun": {
+    "startedAt": "2026-10-23T04:02:32.669988+00:00",
+    "finishedAt": "2026-10-23T04:09:10.738335+00:00",
+    "elapsedMs": 398068,
+    "exitCode": 1,
+    "allowanceCents": 1000
+  },
+  "script": [
+    {
+      "step": 1,
+      "name": "streamedReply",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 11802
+    },
+    {
+      "step": 2,
+      "name": "scannedPdf",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 36997
+    },
+    {
+      "step": 3,
+      "name": "actionHistory",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 1541
+    },
+    {
+      "step": 4,
+      "name": "stoppedReply",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 14864
+    },
+    {
+      "step": 5,
+      "name": "liveMessage",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 9663
+    },
+    {
+      "step": 6,
+      "name": "sharedReply",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 18311
+    },
+    {
+      "step": 7,
+      "name": "groupAndInvite",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 10546
+    },
+    {
+      "step": 8,
+      "name": "providerAnswer",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 1501
+    },
+    {
+      "step": 9,
+      "name": "companyLimit",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 12445
+    },
+    {
+      "step": 10,
+      "name": "changeHistory",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 1788
+    },
+    {
+      "step": 1,
+      "name": "streamedReply",
+      "width": 390,
+      "result": "PASS",
+      "elapsedMs": 10425
+    },
+    {
+      "step": 2,
+      "name": "scannedPdf",
+      "width": 390,
+      "result": "PASS",
+      "elapsedMs": 34244
+    },
+    {
+      "step": 3,
+      "name": "actionHistory",
+      "width": 390,
+      "result": "PASS",
+      "elapsedMs": 1192
+    },
+    {
+      "step": 4,
+      "name": "stoppedReply",
+      "width": 390,
+      "result": "PASS",
+      "elapsedMs": 10313
+    },
+    {
+      "step": 5,
+      "name": "liveMessage",
+      "width": 390,
+      "result": "PASS",
+      "elapsedMs": 7404
+    },
+    {
+      "step": 6,
+      "name": "sharedReply",
+      "width": 390,
+      "result": "PASS",
+      "elapsedMs": 16386
+    },
+    {
+      "step": 7,
+      "name": "groupAndInvite",
+      "width": 390,
+      "result": "FAIL",
+      "reason": "locator.waitFor: Timeout 120000ms exceeded.\nCall log:\n  - waiting for getByText('Link created. No email was sent.', { exact: true }) to be visible\n",
+      "elapsedMs": 129785
+    },
+    {
+      "step": 8,
+      "name": "providerAnswer",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 9,
+      "name": "companyLimit",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 10,
+      "name": "changeHistory",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    }
+  ],
+  "finalBudget": {
+    "sequence": 765,
+    "defaultPayingGroupId": "installation-default",
+    "periodStart": "2026-10-01T00:00:00.000Z",
+    "todayCents": 47,
+    "monthCents": 47,
+    "reservedCents": 86,
+    "ceilingCents": 1000,
+    "dailyCeilingCents": 1000,
+    "ceilings": []
+  },
+  "chargedCents": 47,
+  "heldCents": 86,
+  "reservationCount": 24,
+  "cleanup": {
+    "startedAt": "2026-10-23T04:09:43.461487+00:00",
+    "exitCode": 0,
+    "elapsedMs": 50166,
+    "slotDirectoryRemoved": true
+  }
+}
