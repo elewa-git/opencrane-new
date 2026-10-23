@@ -1,0 +1,22 @@
+[
+  {"step": 1, "name": "streamedReply", "width": 1280, "result": "PASS", "pictures": ["01-streamedReply-1280.png"], "elapsedMs": 15615},
+  {"step": 2, "name": "scannedPdf", "width": 1280, "result": "PASS", "pictures": ["02-upload-ready-1280.png", "02-preview-download-1280.png", "02-scannedPdf-1280.png"], "elapsedMs": 32817},
+  {"step": 3, "name": "actionHistory", "width": 1280, "result": "PASS", "pictures": ["03-actionHistory-1280.png"], "elapsedMs": 1355},
+  {"step": 4, "name": "stoppedReply", "width": 1280, "result": "PASS", "pictures": ["04-stoppedReply-1280.png"], "elapsedMs": 10558},
+  {"step": 5, "name": "liveMessage", "width": 1280, "result": "PASS", "pictures": ["05-member-phone-1280.png", "05-liveMessage-1280.png"], "elapsedMs": 7670},
+  {"step": 6, "name": "sharedReply", "width": 1280, "result": "FAIL", "reason": "locator.waitFor: Timeout 120000ms exceeded.\nCall log:\n  - waiting for locator('.caret') to be visible\n", "pictures": ["06-failure-owner-1280.png", "06-failure-member-1280.png"], "elapsedMs": 124983},
+  {"step": 7, "name": "groupAndInvite", "width": 1280, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 8, "name": "providerAnswer", "width": 1280, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 9, "name": "companyLimit", "width": 1280, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 10, "name": "changeHistory", "width": 1280, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 1, "name": "streamedReply", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 2, "name": "scannedPdf", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 3, "name": "actionHistory", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 4, "name": "stoppedReply", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 5, "name": "liveMessage", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 6, "name": "sharedReply", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 7, "name": "groupAndInvite", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 8, "name": "providerAnswer", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 9, "name": "companyLimit", "width": 390, "result": "NOT RUN", "elapsedMs": 0},
+  {"step": 10, "name": "changeHistory", "width": 390, "result": "NOT RUN", "elapsedMs": 0}
+]

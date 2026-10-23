@@ -1,0 +1,1 @@
+- The fourth demo rehearsal passed fresh real-model startup and both timed screen widths, then stopped when the desktop shared-assistant checker missed streaming despite a completed answer. The receipt records 38 charged cents, 69 held cents and secondary cleanup; no owner refresh commit is qualified.
