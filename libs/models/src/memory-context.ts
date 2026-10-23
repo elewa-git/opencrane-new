@@ -8,10 +8,14 @@ import { type authorityFence, decisionAuthorityFence, currentAuthority } from '.
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
-import type { prepareMemoryReads } from './memory-preparation.ts';
 import { data } from './state.ts';
 import { groupMembership } from './paying-group.ts';
 import type { IncomingHttpHeaders } from 'node:http';
+
+type PreparedMemoryReads = {
+  activity: Awaited<ReturnType<typeof decisionActivity>>;
+  applied: (eventId: string) => Promise<boolean>;
+};
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -61,7 +65,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
   claims: Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' | 'generation' |
     'conversation' | 'turn' | 'thread'>, parsed: ReturnType<typeof parseMemoryRequest>,
   deadline: number, includeDispatch?: (...subjects: string[]) => void,
-  prepared?: Awaited<ReturnType<typeof prepareMemoryReads>>) {
+  prepared?: PreparedMemoryReads) {
   const activity = prepared?.activity ??
     await prepareMemoryActivity(store, binding, claims, parsed, deadline);
   if (prepared) await activity.confirm(deadline, false, true);
@@ -306,7 +310,7 @@ function requireLiveComputer(activity: Awaited<ReturnType<typeof decisionActivit
 export async function prepareMemoryContext(store: EventStore, binding: Binding,
   claims: ThreadIdentity, raw: string, headers: IncomingHttpHeaders, deadline: number,
   requestId: string, includeDispatch?: (...subjects: string[]) => void,
-  prepared?: Awaited<ReturnType<typeof prepareMemoryReads>>) {
+  prepared?: PreparedMemoryReads) {
   const parsed = parseMemoryRequest(raw, headers);
   const rights = await memoryRights(store, binding, claims, parsed, deadline,
     includeDispatch, prepared);
