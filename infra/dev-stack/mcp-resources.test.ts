@@ -1,19 +1,23 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
-const require = createRequire(import.meta.url);
 const namespace = 'fixture-mcp';
 const upstreamUid = '11111111-1111-4111-8111-111111111111';
 
+type Resource = { metadata: Record<string, string>; spec: {
+  podSelector?: unknown; policyTypes?: string[]; ingress?: unknown[]; egress?: unknown[];
+  hard?: Record<string, string>;
+} };
+type Resources = { items: [Resource, Resource, Resource] };
+
 function generate(args: string[], podChanges = {}, fail = false) {
-  const applied: any[] = [];
+  const applied: unknown[] = [];
   const upstream = { metadata: { name: 'upstream', namespace: 'fixture', uid: upstreamUid,
     labels: { 'opencrane.ai/mcp-upstream': upstreamUid } }, spec: { hostNetwork: false },
     ...podChanges };
-  function execFileSync(_binary: string, command: string[], options: any) {
+  function execFileSync(_binary: string, command: string[], options: { input: string }) {
     if (fail) throw new Error('private-kubernetes-output');
     if (command.includes('get')) return JSON.stringify(upstream);
     applied.push(JSON.parse(options.input));
@@ -24,7 +28,6 @@ function generate(args: string[], podChanges = {}, fail = false) {
   source = source.replace(/^import .*;\n/gmu, '');
   // Run the real CLI with only its process and Kubernetes boundaries replaced.
   const context = { process: { argv: ['node', 'script', ...args] }, execFileSync,
-    require, isIPv4: require('node:net').isIPv4,
     mcpNamespace: validateNamespace, upstreamUid };
   function validateNamespace(value: string) {
     const validator = readFileSync(new URL('./mcp-namespace.mjs', import.meta.url), 'utf8');
@@ -32,13 +35,14 @@ function generate(args: string[], podChanges = {}, fail = false) {
     return runInNewContext(`${callable}\nmcpNamespace(value)`, { value });
   }
   runInNewContext(source, context);
-  return JSON.parse(JSON.stringify(applied.at(-1)));
+  return JSON.parse(JSON.stringify(applied.at(-1))) as Resources;
 }
 
 const unsafe = ['10.43.0.1:443', '10.42.0.9:8080', '192.168.1.2:6443',
   '172.18.0.2:10250', '100.64.0.1:443', '8.8.8.8:443', '127.0.0.1:80',
   '169.254.169.254:80', '0.0.0.0:80', '224.0.0.1:80', 'example.com:80',
-  '10.0.0.0/8:80', '[::1]:80'];
+  '10.0.0.0/8:80', '[::1]:80', 'pod:upstream:0', 'pod:upstream:65536',
+  'pod:upstream:80:extra', 'pod:foreign/upstream:443', 'pod::80', 'service:upstream:80'];
 for (const binding of unsafe) {
   test(`refuses raw or unresolved destination ${binding}`, function refuse() {
     assert.throws(function install() { generate([namespace, '8080', binding]); });
@@ -87,6 +91,9 @@ const unowned = [
   { metadata: { name: 'upstream', namespace: 'fixture', uid: 'replacement',
     labels: { 'opencrane.ai/mcp-upstream': upstreamUid } } },
   { spec: { hostNetwork: true } },
+  { metadata: { name: 'upstream', namespace: 'fixture', uid: upstreamUid,
+    deletionTimestamp: '2026-10-23T00:00:00Z',
+    labels: { 'opencrane.ai/mcp-upstream': upstreamUid } } },
 ];
 for (const changes of unowned) {
   test(`refuses unowned or host-network Pod ${JSON.stringify(changes)}`, function refusal() {

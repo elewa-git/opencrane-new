@@ -1306,17 +1306,45 @@ nice -n 10 node --experimental-strip-types --test \
 ```
 
 These fixtures make no paid calls and start no stack. Live qualification remains NOT RUN.
-`node infra/dev-stack/mcp-resources.mjs <silo>-mcp [port [IPv4:port ...]]`
+## Hosted MCP connections and resource limits
+
+`node infra/dev-stack/mcp-resources.mjs <silo>-mcp [port [pod:name:port ...]]`
 installs the namespace quota and two NetworkPolicies. The quota permits four Pods,
 requests of 400m CPU / 1 GiB memory, and limits of 4 CPUs / 2 GiB memory. It selects
 all Pods, as do both policies. With no port or bindings, all ingress and egress
 are denied. A declared TCP port permits ingress only from `<silo>-gateway` Pods
-labelled `app=opencrane-gateway`. Both selectors must match. Each upstream binding
-permits only that IPv4 address and TCP port. There is no DNS allowance. Hostnames,
-CIDRs, loopback, link-local, unspecified and multicast addresses are rejected.
-The operator must review each binding; private addresses require an explicit
-in-silo upstream binding. Never bind a control-plane or another silo's address.
-The lifecycle ServiceAccount cannot patch these resources or image parameters.
+labelled `app=opencrane-gateway`. Both selectors must match.
+
+An upstream binding names a Pod in `<silo>`, never a raw IP or another namespace.
+The operator approves that exact Pod by setting `opencrane.ai/mcp-upstream` to its
+Kubernetes UID. The installer reads the Pod and checks its namespace, name, UID
+label, deletion state and absence of host networking. Each egress rule combines
+the namespace selector with that UID label and one TCP port. A replaced Pod needs
+new approval; reusing an address gives no permission. All IP literals, hostnames,
+CIDRs and Tailscale destinations are refused. DNS has no exception. Public remote
+upstreams need a separately reviewed path; this installer supports only in-silo Pods.
+Reapplying with fewer bindings replaces the managed rules and removes withdrawn access.
+
+The lifecycle ServiceAccount cannot create, update, delete or patch the quota,
+network policies or image parameters. It cannot GET or POST `pods/proxy`.
+Health requests in the listener qualification travel from the authorised gateway Pod.
+Kubernetes node administrators remain trusted: NetworkPolicy does not isolate Pods
+from their own node. No application or lifecycle health path may use that exemption.
+
+The admission installers accept `--render` to print objects without contacting
+Kubernetes. The hosted fixture creates those objects individually, records their
+UIDs and a random ownership label, and checks every namespace and policy before
+cleanup begins. Partial setup and lost create responses retain cleanup records.
+Resize cleanup waits for Pod deletion and zero reported quota usage. The Pod-count
+check gives CPU and memory totals room for five Pods so only the count cap can refuse
+number five. The fixture imports the shared secondary-stack and fleet guard.
+
+The maintained Node tests run without Kubernetes:
+
+```sh
+nice -n 10 node --experimental-strip-types --test \
+  infra/dev-stack/mcp-resources.test.ts infra/dev-stack/mcp-hosted-fixture.test.ts
+```
 
 Only the disposable hosted-MCP fixture installs these resources today. General
 lifecycle and secondary startup installation remain deferred until their owning

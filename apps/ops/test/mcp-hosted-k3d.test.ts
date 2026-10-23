@@ -267,9 +267,12 @@ function permissions() {
   }
   for (const [verb, resource] of forbidden) {
     function request() {
-      kube(['auth', 'can-i', verb!, resource!], undefined, true);
+      const [kind, subresource] = resource!.split('/');
+      const args = ['auth', 'can-i', verb!, kind!];
+      if (subresource) args.push(`--subresource=${subresource}`);
+      kube(args, undefined, true);
     }
-    expect(request).toThrow('forbidden');
+    expect(request, `${verb} ${resource}`).toThrow('forbidden');
   }
   for (const resource of ['resourcequota/mcp-limit', 'networkpolicy/mcp-egress',
     'networkpolicy/mcp-ingress', 'configmap/mcp-approved-images']) {
@@ -528,13 +531,22 @@ async function quotaTotals() {
 
 type Peer = { namespace: string; name: string; address: string };
 const listener = `
-import socketserver
+import http.server
 import threading
-class Handler(socketserver.BaseRequestHandler):
-    def handle(self):
-        self.request.sendall(b'fixture')
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != '/health':
+            self.send_error(404)
+            return
+        body = b'healthy'
+        self.send_response(200)
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, format, *args):
+        pass
 for port in (8080, 8081):
-    server = socketserver.TCPServer(('0.0.0.0', port), Handler)
+    server = http.server.ThreadingHTTPServer(('0.0.0.0', port), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 threading.Event().wait()
 `;

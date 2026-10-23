@@ -18,7 +18,7 @@ flowchart LR
   ops -->|destroys forgotten and superseded memory keys| keys["Server files<br/>private memory keys"]
   ops -->|updates tables, unfinished child requests and jobs; locks gateway preparation; restores cleanup jobs| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates and checks permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|updates computers, delivers passes and keys, defines hosted tool settings, stops private tools and scans this silo's old connection copies at startup and every 15 minutes| kube["Kubernetes<br/>computer manager"]
+  ops -->|updates computers, delivers passes and keys, checks hosted tool settings and connection rules, stops private tools and scans this silo's old connection copies at startup and every 15 minutes| kube["Kubernetes<br/>computer manager"]
 ```
 
 ## What it is responsible for
@@ -54,6 +54,9 @@ flowchart LR
 A reviewed template defines how hosted tools may run. Separate Kubernetes rules check
 the image and settings and limit who may create or scale a tool. The disposable
 cluster tests also check total resource limits and which connections are allowed.
+Hosted tool connections need the named gateway. Upstream connections need approval
+for the exact Pod in the same silo; lifecycle workers cannot use the Kubernetes
+proxy to bypass those rules.
 Starting hosted tools through the application remains unavailable.
 
 When private connection custody is configured, the dispatcher cleans old personal

@@ -6,34 +6,51 @@ import { runInNewContext } from 'node:vm';
 
 type ObjectRecord = { kind: string; metadata: { name: string; uid: string;
   labels?: Record<string, string> }; spec?: unknown; status?: unknown };
-export function hostedFixture() {
+export function hostedFixture(environment = { MCP_HOSTED_K3D: '1', DEV_STACK_ID: '1' }) {
   const objects = new Map<string, ObjectRecord>();
   const calls: string[][] = [];
   const cases = new Map<string, () => Promise<void>>();
   let setup: () => Promise<void>;
   let cleanup: () => Promise<void>;
   let failedName = '';
+  let lostResponseName = '';
   let staleQuota = 0;
   let sleeps = 0;
   let sequence = 0;
   function expect(value: unknown) {
     return {
-      toBe(expected: unknown) { assert.equal(value, expected); },
-      toContain(expected: unknown) { assert.ok((value as string[]).includes(expected as string)); },
-      toHaveLength(expected: number) { assert.equal((value as unknown[]).length, expected); },
+      toBe(expected: unknown) {
+        assert.equal(value, expected);
+      },
+      toContain(expected: unknown) {
+        assert.ok((value as string[]).includes(expected as string));
+      },
+      toHaveLength(expected: number) {
+        assert.equal((value as unknown[]).length, expected);
+      },
       toThrow(expected: RegExp | string) {
-        assert.throws(value as () => void, function matches(error: Error) {
+        function matches(error: Error) {
           if (expected instanceof RegExp || typeof expected !== 'string') {
             assert.match(error.message, expected);
           } else assert.ok(error.message.includes(expected), error.message);
           return true;
-        });
+        }
+        assert.throws(value as () => void, matches);
       },
-      not: { toBe(expected: unknown) { assert.notEqual(value, expected); } },
+      not: {
+        toBe(expected: unknown) {
+          assert.notEqual(value, expected);
+        },
+      },
     };
   }
-  function it(name: string, action: () => Promise<void>) { cases.set(name, action); }
-  it.each = function each() { return function register() {}; };
+  function it(name: string, action: () => Promise<void>) {
+    cases.set(name, action);
+  }
+  function register() {}
+  it.each = function each() {
+    return register;
+  };
   function create(object: ObjectRecord) {
     const key = `${object.kind.toLowerCase()}/${object.metadata.name}`;
     if (object.metadata.name === failedName && object.kind.endsWith('Binding')) {
@@ -43,6 +60,9 @@ export function hostedFixture() {
     sequence++;
     object.metadata.uid = `uid-${sequence}`;
     objects.set(key, object);
+    if (object.metadata.name === lostResponseName) {
+      throw new Error('private-create-response');
+    }
     return JSON.stringify(object);
   }
   function manifests(namespace: string) {
@@ -69,12 +89,16 @@ export function hostedFixture() {
     const command = args.slice(offset);
     const [verb, resource, name] = command;
     if (verb === 'create' && resource === 'namespace') {
-      return create({ kind: 'Namespace', metadata: { name: name!, uid: '' } });
+      const object = { kind: 'Namespace', metadata: { name: name!, uid: '' } };
+      return create(object);
     }
     if (verb === 'get') {
       const key = resource!.includes('/') ? resource! : `${resource}/${name}`;
       if (resource!.startsWith('resourcequota')) {
-        if (staleQuota > 0) { staleQuota--; return '1'; }
+        if (staleQuota > 0) {
+          staleQuota--;
+          return '1';
+        }
         return '0';
       }
       const object = objects.get(key);
@@ -88,12 +112,15 @@ export function hostedFixture() {
         staleQuota = 2;
       }
       const kinds = resource!.split(',');
-      const names = command.slice(2).filter(isName);
-      for (const kind of kinds) for (const item of names) objects.delete(`${kind}/${item}`);
+      const candidates = command.slice(2);
+      const names = candidates.filter(isName);
+      for (const kind of kinds) {
+        for (const item of names) objects.delete(`${kind}/${item}`);
+      }
       return '';
     }
     if ((verb === 'create' || verb === 'apply') && options.input) {
-      const object = JSON.parse(options.input);
+      const object = JSON.parse(options.input) as ObjectRecord;
       if (command.includes('--dry-run=server')) {
         throw new Error('denied: Hosted MCP check 0 requires the approved template or identity');
       }
@@ -101,7 +128,9 @@ export function hostedFixture() {
       if (object.kind === 'Pod' && staleQuota > 0) throw new Error('Quota usage has not settled');
     }
     if (verb === 'patch' && command.includes('--subresource=resize')) {
-      const body = JSON.parse(command[command.indexOf('-p') + 1]!);
+      const body = JSON.parse(command[command.indexOf('-p') + 1]!) as {
+        spec: { containers: [{ resources: { limits: { cpu: string } } }] }
+      };
       if (body.spec.containers[0].resources.limits.cpu === '2') {
         throw new Error('denied: Hosted MCP check 0 requires the approved template or identity');
       }
@@ -111,32 +140,74 @@ export function hostedFixture() {
   function isVerb(value: string) {
     return ['create', 'apply', 'get', 'delete', 'patch', 'auth'].includes(value);
   }
-  function isName(value: string) { return !value.startsWith('--'); }
+  function isName(value: string) {
+    return !value.startsWith('--');
+  }
   function spawnSync(binary: string, args: string[], options: { input?: string }) {
-    try { return { status: 0, stdout: execute(binary, args, options), stderr: '' }; }
-    catch (error) { return { status: 1, stdout: '', stderr: (error as Error).message }; }
+    try {
+      const stdout = execute(binary, args, options);
+      return { status: 0, stdout, stderr: '' };
+    } catch (error) {
+      return { status: 1, stdout: '', stderr: (error as Error).message };
+    }
   }
   function read(path: string, encoding: 'utf8') {
     if (path.endsWith('stack-owner')) return `worktree=${resolve('.')}\n`;
     return readFileSync(path, encoding);
   }
-  async function delay() { sleeps++; }
-  function beforeAll(action: typeof setup) { setup = action; }
-  function afterAll(action: typeof cleanup) { cleanup = action; }
-  function skipIf() { return function describe(_name: string, action: () => void) { action(); }; }
+  async function delay() {
+    sleeps++;
+  }
+  function beforeAll(action: typeof setup) {
+    setup = action;
+  }
+  function afterAll(action: typeof cleanup) {
+    cleanup = action;
+  }
+  function describe(_name: string, action: () => void) {
+    action();
+  }
+  function skipIf() {
+    return describe;
+  }
   const sourcePath = new URL('../../../apps/ops/test/mcp-hosted-k3d.test.ts', import.meta.url);
   const original = readFileSync(sourcePath, 'utf8');
   const withoutImports = original.replace(/^import[\s\S]*?;\n/gmu, '');
-  const source = stripTypeScriptTypes(withoutImports);
-  const context = { spawnSync, randomUUID: () => 'fixture-id', readFileSync: read,
-    homedir: () => '/fixture', join: (...parts: string[]) => parts.join('/'), resolve,
+  const guardPath = new URL('../journey-guard.ts', import.meta.url);
+  const guard = readFileSync(guardPath, 'utf8');
+  const guardSource = guard.replaceAll('export function', 'function');
+  const source = stripTypeScriptTypes(`${guardSource}\n${withoutImports}`);
+  function randomUUID() {
+    return 'fixture-id';
+  }
+  function homedir() {
+    return '/fixture';
+  }
+  function join(...parts: string[]) {
+    return parts.join('/');
+  }
+  const context = { spawnSync, randomUUID, readFileSync: read, homedir, join, resolve,
     delay, afterAll, beforeAll, describe: { skipIf }, expect, it, structuredClone,
-    process: { env: { MCP_HOSTED_K3D: '1', DEV_STACK_ID: '1' } },
-    requireAutomatedJourney() {}, console };
+    process: { env: environment }, console };
   runInNewContext(source, context);
-  return { objects, calls, cases, setup: () => setup(), cleanup: async () => cleanup(),
-    failBinding(name: string) { failedName = name; },
-    holdQuota() { staleQuota = Infinity; },
-    get sleeps() { return sleeps; },
+  async function initialise() {
+    await setup();
+  }
+  async function finish() {
+    await cleanup();
+  }
+  return { objects, calls, cases, setup: initialise, cleanup: finish,
+    loseCreateResponse(name: string) {
+      lostResponseName = name;
+    },
+    failBinding(name: string) {
+      failedName = name;
+    },
+    holdQuota() {
+      staleQuota = Infinity;
+    },
+    get sleeps() {
+      return sleeps;
+    },
   };
 }

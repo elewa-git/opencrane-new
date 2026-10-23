@@ -3,7 +3,10 @@ import { test } from 'node:test';
 import { hostedFixture } from './test/mcp-hosted-fixture.ts';
 
 function deletes(calls: string[][]) {
-  return calls.filter(function deletion(call) { return call.includes('delete'); });
+  function deletion(call: string[]) {
+    return call.includes('delete');
+  }
+  return calls.filter(deletion);
 }
 test('a replacement namespace prevents every cleanup deletion', async function replacement() {
   const fixture = hostedFixture();
@@ -63,5 +66,27 @@ test('replacement binding and changed ownership label refuse cleanup', async fun
     else binding.metadata.labels = { 'opencrane.dev/fixture-owner': 'foreign' };
     await assert.rejects(fixture.cleanup, /ownership changed/u);
     assert.deepEqual(deletes(fixture.calls), []);
+  }
+});
+
+test('cleanup recovers an owned policy after a lost create response without leaking output', async function lost() {
+  const fixture = hostedFixture();
+  fixture.loseCreateResponse('opencrane-dev-1-fixture--mcp-statefulset');
+  await assert.rejects(fixture.setup, function safe(error: Error) {
+    assert.doesNotMatch(error.message, /private-create-response/u);
+    return true;
+  });
+  await fixture.cleanup();
+  assert.equal(fixture.objects.size, 0);
+});
+test('owner and fleet runs stop before any Kubernetes call', async function guard() {
+  const environments = [
+    { MCP_HOSTED_K3D: '1', DEV_STACK_ID: 'owner' },
+    { MCP_HOSTED_K3D: '1', DEV_STACK_ID: '1', OPENCRANE_FLEET_TASK: '' },
+  ];
+  for (const environment of environments) {
+    const fixture = hostedFixture(environment);
+    await assert.rejects(fixture.setup, /secondary stack and no fleet task/u);
+    assert.deepEqual(fixture.calls, []);
   }
 });

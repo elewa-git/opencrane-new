@@ -693,7 +693,14 @@ still use the exact template in a separate namespace. No new image is built.
 Each denied route must connect after its directional policy is removed and fail
 again after restoration. Metadata is skipped if it has no reachable listener with
 the policy removed; that timeout cannot prove isolation. Cleanup checks namespace
-UIDs and deletes only namespaces created by this run. No runtime start path or
+UIDs and policy/binding UIDs before any deletion. Random ownership labels also
+cover partially completed creates. Hosted resize waits for Pod deletion and quota
+usage to settle. The independent count check raises only the CPU and memory totals,
+then restores them. Upstream rules require same-silo Pods approved by UID label;
+raw IPs are refused. The live connection checks include node API and kubelet ports,
+unlabelled Pods, withdrawn bindings and lifecycle GET/POST proxy refusal. Listener
+health requests use the gateway path. The shared journey guard refuses owner and
+fleet runs before setup. No runtime start path or
 hosted dispatch is connected. See the [receipt](../../docs/process/p3-6-pr8b/receipt.md).
 
 ## Scheduled private connection maintenance
