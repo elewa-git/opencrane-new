@@ -2,8 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
 import * as crypto from 'node:crypto';
 import * as access from '../src/chat/access.ts';
-import { encodeSession } from '@opencrane/auth';
-import type { AppendCommand } from '@opencrane/event-store';
+import { computerSummary, encodeSession } from '@opencrane/auth';
+import { createEventStore, type AppendCommand } from '@opencrane/event-store';
+import { auditTrail, readAudit } from '@opencrane/projections';
 import { parseEventByType } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
 import { buildServer, buildProductionServer } from '../src/server.ts';
@@ -454,3 +455,144 @@ async function productionDisabled() {
   expect((await post()).statusCode).toBe(503);
 }
 it('keeps requests disabled in the production route set', productionDisabled);
+
+async function refusalRows() {
+  const rows = [];
+  for await (const row of fixture.nats.store.readStream(`view-${body.commandId}`)) {
+    rows.push(row);
+  }
+  return rows;
+}
+async function computerState() {
+  const state = computerSummary.empty();
+  for await (const row of fixture.nats.store.readStream('computer-assistant')) {
+    computerSummary.add(state, row);
+  }
+  return state;
+}
+async function recordsSafeRefusal(controller: boolean) {
+  await setup();
+  await participant();
+  await fixture.append('computer-assistant', 'computer.turn_started', {
+    assistantId: 'assistant', computerId: 'desktop', conversationId: 'private-chat',
+    turnId: 'private-turn-canary', threadId: 'private-thread', requesterId: 'alice',
+    task: 'chat_turn',
+  });
+  if (controller) {
+    expect((await post()).statusCode).toBe(202);
+    body = { ...body, commandId: 'second-tab' };
+  }
+  const member = controller ? 'alice' : 'bob';
+  const before = await computerState();
+  const position = await fixture.nats.store.head('computer-assistant');
+  const response = await post(body, member);
+  expect(response.statusCode).toBe(controller ? 409 : 403);
+  const expected = controller ? { status: 'conflict' }
+    : { status: 'refused', reason: 'requester_only' };
+  expect(response.json()).toEqual(expected);
+  expect((await post(body, member)).json()).toEqual(expected);
+  const rows = await refusalRows();
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.event).toMatchObject({ type: 'takeover.refused',
+    principal: { kind: 'human', id: member }, data: { attemptId: body.commandId,
+      actorId: member, reason: controller ? 'control_conflict' : 'requester_only',
+      inputDigest: expect.stringMatching(/^[a-f0-9]{64}$/u) } });
+  expect(await computerState()).toEqual(before);
+  expect(await fixture.nats.store.head('computer-assistant')).toBe(position);
+  const after = await fixture.nats.store.head();
+  expect((await get(member)).statusCode).toBe(200);
+  expect(await fixture.nats.store.head()).toBe(after);
+  expect(desktopCalls).toBe(0);
+  await fixture.runner.initialise(auditTrail);
+  await fixture.runner.run(auditTrail);
+  const audit = await readAudit(fixture.db, 'test');
+  expect(audit.rows[0]?.records[0]).toMatchObject({ type: 'takeover.refused',
+    actor: { kind: 'person', id: member }, reason: controller
+      ? 'Control request conflicts with saved state' : 'Only the requester may take control' });
+  await fixture.runner.rebuild(auditTrail);
+  expect(await readAudit(fixture.db, 'test')).toEqual(audit);
+  const serialised = JSON.stringify([rows, audit.rows[0], response.json()]);
+  for (const forbidden of ['private-turn-canary', 'private-thread', 'private-chat',
+    'affectedTurnIds', 'computerId', 'podUid', body.requesterEventId,
+    headers(member).cookie, 'ciphertext']) {
+    expect(serialised).not.toContain(forbidden);
+  }
+}
+it.each([false, true])('records one safe refusal without changing work, controller=%s',
+  recordsSafeRefusal);
+
+async function concurrentRefusals() {
+  await setup();
+  await participant();
+  const append = fixture.nats.store.append.bind(fixture.nats.store);
+  const both = Promise.withResolvers<void>();
+  let arrivals = 0;
+  async function together(command: AppendCommand) {
+    arrivals++;
+    if (arrivals === 2) both.resolve();
+    await both.promise;
+    return append(command);
+  }
+  vi.spyOn(fixture.nats.store, 'append').mockImplementation(together);
+  const replies = await Promise.all([post(body, 'bob'), post(body, 'bob')]);
+  expect(arrivals).toBe(2);
+  for (const reply of replies) expect(reply.statusCode).toBe(403);
+  expect(await refusalRows()).toHaveLength(1);
+}
+it('recovers one refusal for concurrent identical attempts', concurrentRefusals);
+
+async function uncertainRefusal(mode: 'lost' | 'append' | 'read') {
+  await setup();
+  await participant();
+  const append = fixture.nats.store.append.bind(fixture.nats.store);
+  let attempted = false;
+  async function uncertain(command: AppendCommand) {
+    attempted = true;
+    if (mode !== 'append') await append(command);
+    throw new Error('private-error-canary');
+  }
+  vi.spyOn(fixture.nats.store, 'append').mockImplementation(uncertain);
+  const read = fixture.nats.store.readStream.bind(fixture.nats.store);
+  async function* unreadable(...args: Parameters<typeof read>) {
+    if (mode === 'read' && attempted && args[0].startsWith('view-')) {
+      throw new Error('private-read-canary');
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(unreadable);
+  const reply = await post(body, 'bob');
+  expect(attempted).toBe(true);
+  expect(reply.statusCode).toBe(mode === 'lost' ? 403 : 503);
+  expect(reply.json()).toEqual(mode === 'lost'
+    ? { status: 'refused', reason: 'requester_only' } : { status: 'unavailable' });
+  vi.restoreAllMocks();
+  expect(await refusalRows()).toHaveLength(mode === 'append' ? 0 : 1);
+}
+it.each(['lost', 'append', 'read'] as const)(
+  'confirms the saved refusal or reports unavailable after %s uncertainty', uncertainRefusal);
+
+async function refusalRestart() {
+  await setup();
+  await participant();
+  expect((await post(body, 'bob')).statusCode).toBe(403);
+  const saved = await refusalRows();
+  expect(saved).toHaveLength(1);
+  await app.close();
+  const store = await createEventStore(fixture.nats.connection);
+  const chat = { ...fixture, store, silo: 'test' };
+  app = buildServer(fixture.config, { chat, takeoverRequestsEnabled: true });
+  const append = vi.spyOn(store, 'append');
+  // Require saved history to answer; broker duplicate detection cannot help here.
+  expect((await post(body, 'bob')).statusCode).toBe(403);
+  expect(append).not.toHaveBeenCalled();
+  for (const changed of [{ ...body, generation: 2 },
+    { ...body, requesterEventId: 'changed' }]) {
+    expect((await post(changed, 'bob')).statusCode).toBe(409);
+  }
+  expect((await post(body, 'alice')).statusCode).toBe(409);
+  expect((await post(body, 'alice', 'other')).statusCode).toBe(403);
+  expect(await refusalRows()).toEqual(saved);
+  expect(append).not.toHaveBeenCalled();
+}
+it('recovers refusals after server restart and conflicts on changed actor or request',
+  refusalRestart);
