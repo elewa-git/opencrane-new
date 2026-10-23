@@ -687,7 +687,7 @@ async function refusesChangedNativeRetry(field: string) {
     if (field === 'body') changedRaw += ' ';
     else if (field === 'generation') call.generation = 2;
     else Reflect.set(call, field, 'changed');
-    const native = { callId: `call-${binding.turnId}-${raw}`,
+    const native = { callId: `call-${binding.turnId}-${raw}`, accessExpiresAt: Date.now() + 2000,
       rootId: context.root.rootId, rootTurn };
     const allow = allowNative(context, binding);
     const position = await context.store.head();
@@ -840,8 +840,10 @@ async function preservesNativeDeadline(restart: boolean, expireDuringDecision: b
     function monotonicClock() {
       return originalPerformance + elapsed;
     }
-    vi.spyOn(Date, 'now').mockImplementation(wallClock);
-    vi.spyOn(performance, 'now').mockImplementation(monotonicClock);
+    const dateClock = vi.spyOn(Date, 'now');
+    dateClock.mockImplementation(wallClock);
+    const performanceClock = vi.spyOn(performance, 'now');
+    performanceClock.mockImplementation(monotonicClock);
     if (restart) {
       await context.restartActor();
     }
