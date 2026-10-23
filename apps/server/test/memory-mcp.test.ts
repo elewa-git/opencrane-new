@@ -4,6 +4,7 @@ import * as crypto from 'node:crypto';
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { request, type IncomingMessage } from 'node:http';
+import { once } from 'node:events';
 import { setTimeout as pause } from 'node:timers/promises';
 import { proxy } from '../../computer/test/server.ts';
 import type { MemoryIdentity } from '@opencrane/events';
@@ -187,6 +188,35 @@ async function preparePersonal() {
 beforeEach(preparePersonal, 120_000);
 beforeEach(renewGatewayCredentials);
 afterEach(close);
+
+async function closesIncompleteBackendRequest() {
+  const address = app.server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing memory backend address');
+  const incoming = once(app.server, 'request');
+  const options = { host: '127.0.0.1', port: address.port, path: route, method: 'POST',
+    headers: { 'content-type': 'application/json', 'content-length': '16384' } };
+  const pending = request(options);
+  function ignoreClosedSocket() {
+    // Expect the fixture to disconnect this unfinished request during cleanup.
+  }
+  pending.on('error', ignoreClosedSocket);
+  pending.flushHeaders();
+  await incoming;
+  const closing = close();
+  function closed() {
+    return 'closed';
+  }
+  const completed = closing.then(closed);
+  const expired = pause(2000, 'still waiting');
+  try {
+    expect(await Promise.race([completed, expired])).toBe('closed');
+  } finally {
+    pending.destroy();
+    await closing;
+  }
+}
+it('closes an unfinished backend request before removing its service fixtures',
+  closesIncompleteBackendRequest);
 
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
   if (team && kind !== 'person') {
