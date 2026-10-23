@@ -151,6 +151,15 @@ refuses incompatible configuration. Deletion/purge are disabled; payload
 forgetting needs a separate qualified design. Callers supply credential file paths
 and own connection shutdown; one connection serves one silo.
 
+`createEventStore` uses the SDK's normal five-second management request timeout
+for its initial account check and for `ensureStream`'s lookup and creation.
+Creation waits for NATS to reply and does not retry. A timeout can mean the stream
+was created without its reply reaching the caller; rerunning provisioning checks
+the stored configuration. Event reads and publishes still use 250 ms requests,
+with their existing overall deadlines. Both managers use the same connection.
+Direct `new EventStore(client, manager, provisioningManager = manager)` callers
+own those managers' timeouts.
+
 ## Dated MCP catalogue evidence
 
 Dated MCP snapshots are checked with `validateMcpCatalogue` before append. The saved
@@ -249,9 +258,11 @@ fixtures. Each fixture still has its own NATS server, port and JetStream storage
 `natsFixture({ freshCertificates: true })` generates a separate CA and credentials
 for trust refusal tests. Direct `certificates(directory, days)` calls still generate
 fresh credentials, including the development stack's 30-day certificates.
-Test stream creation retries once on `TimeoutError`, waits 100 ms between attempts,
-and reports any second failure. A failed creation closes the fixture before throwing.
-Other setup failures are not retried. Production request timeouts remain 250 ms.
+Test stream creation uses the production provisioning timeout without a fixture retry
+or sleep. A failed creation closes the fixture before throwing.
+`test/provision.test.ts` holds real stream lookup and creation replies past 250 ms
+with a paused TCP proxy and a controlled timer. Each case then creates a usable log.
+It also checks that a server which never replies times out at five seconds.
 For focused tests, run `sh scripts/fetch-nats.sh`, then
 `npx vitest run libs/event-store/test`. Tests launch random-port NATS servers
 and prove conditional races, scoped retries, ordered reads, restart/outage

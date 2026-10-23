@@ -2,7 +2,6 @@ export { freePort } from "./ports.ts";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { setTimeout as delay } from "node:timers/promises";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { connect, createServer, type Socket } from "node:net";
 import { resolve } from "node:path";
@@ -189,7 +188,9 @@ export async function natsFixture({ provision = true, freshCertificates = false 
     await rm(directory, { recursive: true, force: true });
   }
   try {
-    if (provision) await ensureFixtureStream(store);
+    if (provision) {
+      await store.ensureStream({ replicas: 1 });
+    }
   } catch (error) {
     await close();
     throw error;
@@ -232,17 +233,6 @@ export async function natsFixture({ provision = true, freshCertificates = false 
     },
     close,
   };
-}
-
-async function ensureFixtureStream(store: EventStore) {
-  try {
-    await store.ensureStream({ replicas: 1 });
-  } catch (error) {
-    if (!(error instanceof TimeoutError)) throw error;
-    // Retry only setup: a fresh test server can miss the 250 ms request limit under load.
-    await delay(100);
-    await store.ensureStream({ replicas: 1 });
-  }
 }
 
 export interface ReadCall {

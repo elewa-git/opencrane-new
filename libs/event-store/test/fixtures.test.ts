@@ -59,22 +59,12 @@ async function separateAuthority() {
   expect(sharedCa.equals(freshCa)).toBe(false);
 }
 
-async function retryCreation() {
-  const ensure = vi.spyOn(EventStore.prototype, 'ensureStream');
-  ensure.mockRejectedValueOnce(new TimeoutError());
-  const fixture = await startFixture();
-  expect(ensure).toHaveBeenCalledTimes(2);
-  expect(await fixture.store.head()).toBe(0);
-}
-
-async function stopRetryingCreation() {
+async function reportCreationTimeout() {
   const ensure = vi.spyOn(EventStore.prototype, 'ensureStream');
   const failure = new TimeoutError();
   ensure.mockRejectedValueOnce(failure);
-  ensure.mockRejectedValueOnce(failure);
-  ensure.mockRejectedValueOnce(new Error('Unexpected third attempt'));
   expect(await fixtureSetupError()).toBe(failure);
-  expect(ensure).toHaveBeenCalledTimes(2);
+  expect(ensure).toHaveBeenCalledTimes(1);
 }
 
 async function refuseOtherFailures() {
@@ -101,6 +91,5 @@ afterEach(closeFixtures);
 it('reuses credentials but gives concurrent fixtures separate files and event histories',
   reuseCredentials);
 it('can create a separate certificate authority for trust refusal tests', separateAuthority);
-it('retries stream creation once after a timeout', retryCreation);
-it('reports a second stream creation timeout without trying a third time', stopRetryingCreation);
+it('reports a stream creation timeout without retrying', reportCreationTimeout);
 it('does not retry other stream creation failures', refuseOtherFailures);

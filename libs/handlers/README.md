@@ -55,6 +55,9 @@ flowchart LR
 
 ## How to run or test it
 
+The setup command waits up to five seconds for each NATS stream lookup or creation
+request. This gives a busy server time to create the event log before workers start.
+
 These commands run from the repository root. The test command fetches the required
 tools before running the tests. PostgreSQL tests also need `PG_TEST_URL`, a
 PostgreSQL admin connection whose role can create databases:
