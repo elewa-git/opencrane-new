@@ -2159,6 +2159,30 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   return request;
 }
 type ChangeRequest = Awaited<ReturnType<typeof changeRequest>>;
+
+async function preparesColdChangeGrant(operation: 'correct' | 'forget') {
+  const subject = grantStream('memory_write', scopeId);
+  const original = setup.nats.store.readStream.bind(setup.nats.store);
+  let coldRead = false;
+  async function* readStream(...args: Parameters<typeof original>) {
+    if (args[0] === subject && !coldRead) {
+      coldRead = true;
+      // Reproduce a first grant lookup taking longer than the signed pass lasts.
+      await pause(2200);
+    }
+    yield* original(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  try {
+    await changeRequest(operation);
+    expect(coldRead).toBe(true);
+  } finally {
+    reads.mockRestore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'finishes a cold write-grant lookup before signing the valid %s control', preparesColdChangeGrant);
+
 async function changeToken(request: ChangeRequest, overrides = {}) {
   const parsed = parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
   const dispatch = await memoryBinding(setup);
