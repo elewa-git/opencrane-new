@@ -157,7 +157,14 @@ async function refusesPersonalAssistant() {
 test('refuses a personal assistant before starting the budget browser journey',
   refusesPersonalAssistant);
 
-async function retainsEditorLoadFailure(statusCode = 503, failScreenshot = false) {
+interface ReadResponse {
+  method: string;
+  url: string;
+  status: number;
+}
+
+async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
+  extraResponses: ReadResponse[] = [], effectReadStatuses: number[] = []) {
   const fixture = await files.mkdtemp(`${import.meta.dirname}/.budget-load-`);
   const fixtureSource = `${fixture}/browser-budgets.ts`;
   const source = new URL('./browser-budgets.ts', import.meta.url);
@@ -192,16 +199,15 @@ async function retainsEditorLoadFailure(statusCode = 503, failScreenshot = false
   function off(_name: string, listener: (response: unknown) => void) {
     listeners.delete(listener);
   }
-  async function goto() {
-    navigations++;
+  function emitResponse(details: ReadResponse) {
     function url() {
-      return 'http://fixture.test/api/org/models';
+      return details.url;
     }
     function status() {
-      return statusCode;
+      return details.status;
     }
     function method() {
-      return 'GET';
+      return details.method;
     }
     function requestDetails() {
       return { method };
@@ -210,9 +216,26 @@ async function retainsEditorLoadFailure(statusCode = 503, failScreenshot = false
       listener({ url, status, request: requestDetails });
     }
   }
+  async function goto() {
+    navigations++;
+    const budgetResponse = {
+      method: 'GET', url: 'http://fixture.test/api/org/models', status: statusCode,
+    };
+    emitResponse(budgetResponse);
+    for (const response of extraResponses) {
+      emitResponse(response);
+    }
+  }
   async function ready() {}
-  function getByText() {
-    return { waitFor: ready };
+  function getByText(name: string) {
+    async function isVisible() {
+      if (failPageState) throw new Error('Synthetic private page detail');
+      if (name === 'Budget service unavailable') return statusCode === 503;
+      if (name === 'Spending needs the Owner or Admin role.') return statusCode === 403;
+      assert.equal(name, 'Spending loaded');
+      return statusCode === 200;
+    }
+    return { waitFor: ready, isVisible };
   }
   async function missingEditor() {
     failedWaits++;
@@ -220,11 +243,14 @@ async function retainsEditorLoadFailure(statusCode = 503, failScreenshot = false
   }
   function getByLabel(name: string) {
     assert.equal(name, 'Budget scope');
-    return { waitFor: missingEditor };
+    async function isVisible() {
+      if (failPageState) throw new Error('Synthetic private page detail');
+      return false;
+    }
+    return { waitFor: missingEditor, isVisible };
   }
   async function screenshot(options: { path: string }) {
     screenshots.push(options.path);
-    if (failScreenshot) throw new Error('Synthetic screenshot failure');
   }
   async function get() {
     function status() {
@@ -256,10 +282,21 @@ async function retainsEditorLoadFailure(statusCode = 503, failScreenshot = false
     assert.equal(failedWaits, 1);
     assert.equal(navigations, 2, 'A failed read never resubmits a save or reloads the page');
     const contents = await files.readFile(`${fixture}/budget-editor-failure.log`, 'utf8');
-    const expected = { budgetReadStatuses: [statusCode], effectReadStatuses: [] };
+    const editorState = {
+      budgetScopeVisible: false,
+      budgetServiceUnavailable: statusCode === 503,
+      accessChanged: statusCode === 403,
+      spendingLoaded: statusCode === 200,
+    };
+    const unreadableState = {
+      budgetScopeVisible: null, budgetServiceUnavailable: null,
+      accessChanged: null, spendingLoaded: null,
+    };
+    const expected = { budgetReadStatuses: [statusCode], effectReadStatuses,
+      editorState: failPageState ? unreadableState : editorState };
     assert.deepEqual(JSON.parse(contents), expected);
-    assert.equal(screenshots.length, 1);
-    assert(screenshots[0]!.endsWith('/budget-editor-failure.png'));
+    assert.equal(screenshots.length, 0, 'Do not capture page content or personal data');
+    assert.equal(contents.includes('Synthetic private page detail'), false);
     assert.equal(listeners.size, 0, 'Remove response listeners after the failed load');
     assert.equal(failure.message, 'Spending budget editor did not load; inspect private evidence');
   } finally {
@@ -270,7 +307,7 @@ async function retainsEditorLoadFailure(statusCode = 503, failScreenshot = false
 async function retainsUnavailableRead() {
   await retainsEditorLoadFailure();
 }
-test('keeps the actual failed budget load and a screenshot without copying driver errors',
+test('keeps failed budget read statuses and fixed page states without page contents',
   retainsUnavailableRead);
 
 async function retainsRefusedRead() {
@@ -279,8 +316,37 @@ async function retainsRefusedRead() {
 test('records an access refusal and fails without refreshing or resubmitting a save',
   retainsRefusedRead);
 
-async function keepsReadWhenScreenshotFails() {
+async function keepsReadWhenPageStateFails() {
   await retainsEditorLoadFailure(200, true);
 }
-test('keeps a successful HTTP read when rendering and screenshot capture fail',
-  keepsReadWhenScreenshotFails);
+test('keeps HTTP statuses when the failed page cannot be inspected',
+  keepsReadWhenPageStateFails);
+
+async function excludesWriteResponses() {
+  const writes = [
+    { method: 'POST', url: 'http://fixture.test/api/org/models', status: 201 },
+    { method: 'POST', url: 'http://fixture.test/api/org/effects', status: 202 },
+  ];
+  await retainsEditorLoadFailure(503, false, writes);
+}
+test('excludes non-GET responses from both status lists', excludesWriteResponses);
+
+async function excludesOtherUrls() {
+  const otherReads = [
+    { method: 'GET', url: 'http://fixture.test/api/org/models/extra', status: 404 },
+    { method: 'GET', url: 'http://fixture.test/api/org/models?token=synthetic', status: 401 },
+    { method: 'GET', url: 'http://other.test/api/org/models', status: 502 },
+    { method: 'GET', url: 'http://fixture.test/api/org/effects?person=synthetic', status: 403 },
+  ];
+  await retainsEditorLoadFailure(503, false, otherReads);
+}
+test('records only the exact budget and effects URLs on the chosen origin', excludesOtherUrls);
+
+async function retainsEffectsResponses() {
+  const effectReads = [
+    { method: 'GET', url: 'http://fixture.test/api/org/effects', status: 200 },
+    { method: 'GET', url: 'http://fixture.test/api/org/effects', status: 503 },
+  ];
+  await retainsEditorLoadFailure(503, false, effectReads, [200, 503]);
+}
+test('keeps effects GET statuses separately and in arrival order', retainsEffectsResponses);
