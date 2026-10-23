@@ -11,24 +11,33 @@ const lockfile = JSON.stringify({ lockfileVersion: 3, packages: {
     integrity: `sha512-${Buffer.alloc(64, 1).toString('base64')}` },
 } });
 function fixture(argv = npmArgv, input = lockfile) {
+  const context = { executorId: 'executor-1', siloId: 'silo-1', personId: 'person-1',
+    computerId: 'computer-1', processId: 'process-1', generation: 3 };
+  const lookups: unknown[] = [];
+  let consumed = false;
+  function consume() {
+    if (consumed) return false;
+    consumed = true;
+    return true;
+  }
   const params = { processId: 'process-1', argv, cwd: 'file:///workspace', env: {},
 tty: false, pipeStdin: false, arg0: null,
 metadata: { threadId: 'thread-1', toolCallId: 'call-1' } };
   const hash = createHash('sha256');
   hash.update(JSON.stringify([argv, params.cwd, input]));
-  const registration = { threadId: 'thread-1', toolCallId: 'call-1', turnId: 'turn-1',
+  const registration = { ...context, threadId: 'thread-1', toolCallId: 'call-1', turnId: 'turn-1',
 operationId: 'operation-1', operationDigest: hash.digest('hex'), generation: 3,
 host: argv[0] === 'npm' ? 'registry.npmjs.org' : 'github.com', port: 443,
 expiresAt: 2000 };
-  function lookup(threadId: string, toolCallId: string) {
-if (threadId !== 'thread-1' || toolCallId !== 'call-1') return undefined;
-return { generation: 3, registration, input };
+  function lookup(identity: unknown) {
+    lookups.push(identity);
+    return { generation: context.generation, registration, input, consume };
   }
   const request = { id: 1, method: 'process/start', params };
   function validate() {
-return workerRequest(Buffer.from(`${JSON.stringify(request)}\n`), lookup, 1000);
+return workerRequest(Buffer.from(`${JSON.stringify(request)}\n`), lookup, context, 1000);
   }
-  return { request, registration, lookup, validate };
+  return { request, registration, context, lookups, lookup, consume, validate };
 }
 
 function checksInstall() {
@@ -130,7 +139,10 @@ it.each([
   '{"lockfileVersion":3}', '{}', lockfile.padEnd(65_537, ' '),
 ])('refuses unpinned or unsafe lock input %#', refusesLockfile);
 function refusesFrame(frame: string) {
-  function validate() { return workerRequest(Buffer.from(frame), fixture().lookup, 1000); }
+  const test = fixture();
+  function validate() {
+    return workerRequest(Buffer.from(frame), test.lookup, test.context, 1000);
+  }
   expect(validate).toThrow(/^worker_request_refused$/);
 }
 it.each(['', '{}\n', '{"method":"worker/register"}\n', '{',
@@ -138,7 +150,7 @@ it.each(['', '{}\n', '{"method":"worker/register"}\n', '{',
 function refusesPartial() {
   const test = fixture();
   const partial = Buffer.from(JSON.stringify(test.request));
-  function validate() { return workerRequest(partial, test.lookup, 1000); }
+  function validate() { return workerRequest(partial, test.lookup, test.context, 1000); }
   expect(validate).toThrow('worker_request_refused');
 }
 it('requires exactly one complete bounded frame', refusesPartial);
@@ -146,7 +158,7 @@ function refusesCallerRegistration() {
   const test = fixture();
   function missing() { return undefined; }
   function validateMissing() {
-    return workerRequest(Buffer.from(`${JSON.stringify(test.request)}\n`), missing, 1000);
+    return workerRequest(Buffer.from(`${JSON.stringify(test.request)}\n`), missing, test.context, 1000);
   }
   expect(validateMissing).toThrow('worker_request_refused');
   Object.assign(test.request, { registration: test.registration });
@@ -167,11 +179,111 @@ function boundsValidFrames() {
   const test = fixture();
   const json = JSON.stringify(test.request);
   const maximum = Buffer.from(`${json.padEnd(65_535, ' ')}\n`);
-  expect(workerRequest(maximum, test.lookup, 1000).execution).toBe('disabled');
+  expect(workerRequest(maximum, test.lookup, test.context, 1000).execution).toBe('disabled');
+  const oversizedTest = fixture();
   function oversized() {
     const frame = Buffer.from(`${json.padEnd(65_536, ' ')}\n`);
-    return workerRequest(frame, test.lookup, 1000);
+    return workerRequest(frame, oversizedTest.lookup, oversizedTest.context, 1000);
   }
   expect(oversized).toThrow('worker_request_refused');
 }
 it('bounds a valid frame by bytes including its final newline', boundsValidFrames);
+
+const ownerFields = ['executorId', 'siloId', 'personId', 'computerId'] as const;
+function refusesCopiedRequest(field: typeof ownerFields[number]) {
+  const test = fixture();
+  test.context[field] = 'another-owner';
+  expect(test.context.generation).toBe(test.registration.generation);
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+  expect(test.consume()).toBe(true);
+}
+it.each(ownerFields)(
+  'refuses copied valid metadata and input from another %s at the same generation',
+  refusesCopiedRequest);
+
+function refusesForeignRegistration(field: typeof ownerFields[number]) {
+  const test = fixture();
+  test.registration[field] = 'another-owner';
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+}
+it.each(ownerFields)('refuses a lookup returning another %s', refusesForeignRegistration);
+
+function refusesForgedProcessId() {
+  const test = fixture();
+  test.request.params.processId = 'forged-process';
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+  expect(test.lookups).toEqual([]);
+}
+it('refuses a forged processId before reading a registration', refusesForgedProcessId);
+
+function refusesDifferentRegisteredProcess() {
+  const test = fixture();
+  test.registration.processId = 'another-process';
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+}
+it('checks the registered process against the trusted connection binding',
+  refusesDifferentRegisteredProcess);
+
+function looksUpBoundIdentity() {
+  const test = fixture();
+  test.validate();
+  expect(test.lookups).toEqual([{ executorId: 'executor-1', siloId: 'silo-1',
+    personId: 'person-1', computerId: 'computer-1', processId: 'process-1', generation: 3 }]);
+}
+it('looks up by the trusted binding without caller thread or call metadata', looksUpBoundIdentity);
+
+function refusesReuse(changeRequestId: boolean) {
+  const test = fixture();
+  expect(test.validate().execution).toBe('disabled');
+  if (changeRequestId) test.request.id = 2;
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+}
+it.each([false, true])('consumes a registration once even when the request id changes: %s',
+  refusesReuse);
+
+function refusesAlreadyConsumed() {
+  const test = fixture();
+  expect(test.consume()).toBe(true);
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+}
+it('refuses a registration already consumed through another lookup', refusesAlreadyConsumed);
+
+function preservesRegistrationAfterRefusal() {
+  const test = fixture();
+  test.request.params.metadata.toolCallId = 'forged-call';
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+  test.request.params.metadata.toolCallId = 'call-1';
+  expect(test.validate().execution).toBe('disabled');
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+}
+it('consumes only after every request check passes', preservesRegistrationAfterRefusal);
+
+function refusesMissingBinding() {
+  const test = fixture();
+  function validate() {
+    const frame = Buffer.from(`${JSON.stringify(test.request)}\n`);
+    return workerRequest(frame, test.lookup, undefined, 1000);
+  }
+  expect(validate).toThrow(/^worker_request_refused$/);
+  expect(test.lookups).toEqual([]);
+}
+it('refuses a missing trusted connection binding before lookup', refusesMissingBinding);
+
+function refusesEmptyBinding(field: typeof ownerFields[number] | 'processId') {
+  const test = fixture();
+  test.context[field] = '';
+  test.registration[field] = '';
+  test.request.params.processId = test.context.processId;
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+}
+it.each([...ownerFields, 'processId'] as const)(
+  'refuses an empty %s even when registration and binding match', refusesEmptyBinding);
+
+function refusesUnsafeGeneration(generation: number) {
+  const test = fixture();
+  test.context.generation = generation;
+  test.registration.generation = generation;
+  expect(test.validate).toThrow(/^worker_request_refused$/);
+}
+it.each([1.5, Number.MAX_SAFE_INTEGER + 1])(
+  'refuses an unsafe generation in both registration and binding: %s', refusesUnsafeGeneration);
