@@ -155,6 +155,9 @@ a private network between the owner's own devices, so it needs a signed-in Tails
 The two numbered test stacks are reached only from the machine itself.
 The [developer box](../devbox/README.md) sets up the local Kubernetes cluster.
 
+`npm run typecheck` checks the TypeScript in this folder as well as the apps and libraries.
+`npm run typecheck:dev-stack` checks this folder on its own.
+
 ```sh
 infra/dev-stack/up.sh
 infra/dev-stack/status.sh

@@ -2,6 +2,23 @@
 
 For people, read [README.md](README.md) first.
 
+## TypeScript checks
+
+`npm run typecheck:dev-stack` runs `tsc --noEmit` with this folder's existing
+`tsconfig.json`. It includes every top-level `.ts` script and test and the modules
+they import. It inherits the strict settings in `../../tsconfig.base.json`.
+The root `npm run typecheck` runs it after the workspace and package checks, so
+the existing CI Typecheck step also checks this folder.
+
+The MCP journey loads the local TLS fixture through
+`@opencrane/models/testing/remote-mcp`. Its import stays after the secondary-stack
+guard. The wake measurement forwards the optional verifier and the force flag in
+the same argument positions as `SandboxClient.credentials`.
+
+The rehearsal refusal test keeps its 100 ms assertion timeout. Its HTML setup has
+a separate 30-second timeout, matching Playwright's default, so a busy browser can
+load the fixture before the assertion starts.
+
 ## Spending editor diagnostics, 23 October 2026
 
 Part of board card #600 and the #32 demo work. **Diagnostics only: no root-cause fix
