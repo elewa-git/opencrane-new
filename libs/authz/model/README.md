@@ -9,6 +9,7 @@ keep private chats private and limit organisation settings to the right people.
 - Defines which relationships can give someone access.
 - Requires current membership as well as a role for organisation owners and admins.
 - Keeps conversation participation separate from permission to manage participants.
+- Keeps routine metadata readable after retirement while removing management rights.
 - Describes explicit grants for resources such as models and tools.
 - Keeps a readable description and the version installed by the application together.
 

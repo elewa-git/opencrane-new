@@ -1,3 +1,4 @@
+import { applyRoutine, checkRoutine } from './routines.ts';
 import type { EventStore } from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
 import { supersededEvent, removedParticipant, ownerAtTransfer,
@@ -302,6 +303,9 @@ function createMemberAuthorisation(binding: Binding,
     if (store && roleTypes.includes(event.type)) {
       await requireEarlierRoleChanges(store, event, applied);
     }
+    if (event.type.startsWith('routine.')) {
+      return applyRoutine(client, event, receipt);
+    }
     if (event.type.startsWith('ownership.')) {
       return applyOwnership(event, receipt);
     }
@@ -371,6 +375,9 @@ function createMemberAuthorisation(binding: Binding,
 
   return {
     binding,
+    routine(memberId: string, routineId: string, relation: 'read_metadata' | 'manage') {
+      return checkRoutine(binding, client, store, memberId, routineId, relation);
+    },
     checkApplied,
     async applied(eventId: string) {
       // Keep boolean callers' existing handling of missing or unavailable receipts.

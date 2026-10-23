@@ -666,7 +666,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts (pure fold only) | none; routine execution is unavailable |
+| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; no execution |
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` / `routine.run_finished` | server system | saved run facts | none; records grant no authority |
@@ -740,7 +740,7 @@ Managed provider dispatch remains unavailable until PR 5.
 These queue names and subscriptions are checked against `libs/events` by
 `check:events`. A host enables a handler explicitly. `update-members` can
 wrap the members projection; [authz](../../libs/authz/README.md) implements
-`update-openfga` for provider, member, assistant, conversation, team and resource-grant
+`update-openfga` for routine, provider, member, assistant, conversation, team and resource-grant
 events. Desktop admission additionally requires an explicit member
 `shared_desktop` grant. Scope promotion remains deferred.
 
@@ -754,7 +754,7 @@ events. Desktop admission additionally requires an explicit member
 | `stop-budget-turns` | `budget.ceiling_set`, `budget.exhausted` |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
 | `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |
-| `update-openfga` | `provider.created`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `update-openfga` | `routine.created`, `routine.reassigned`, `routine.retired`, `provider.created`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
 | `confirm-ownership` | `ownership.transferred` |
 | `seed-ownership` | `silo.owner_bootstrapped` |
 | `seed-provider-default` | `provider.verification_recorded`, `provider.models_selected` |

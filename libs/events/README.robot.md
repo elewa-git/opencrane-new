@@ -763,3 +763,12 @@ server principal matching `requestedBy`, matching command/event ids and no repor
 Its strict data binds the parent intent, child creation and first input by id and ordered
 global position, plus the original request, assistant, payer and attempt 1–3.
 No text, credentials or cents are copied. It has no reaction and grants no execution.
+
+## Routine permission subscriptions
+
+`update-openfga` subscribes to the existing `routine.created`, `routine.reassigned`
+and `routine.retired` events. The permission library applies their modern ownership
+and lifecycle changes with exact receipts. Legacy events give no routine permissions.
+The [permission contract](../authz/README.robot.md#routine-permissions) describes
+retired metadata, read checks and the stopped-services model/subscription upgrade.
+Other routine events still start no work.

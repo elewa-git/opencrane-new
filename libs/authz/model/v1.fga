@@ -45,3 +45,12 @@ type provider
     define silo: [silo]
     define manage: admin from silo
     define read: manage
+
+# Keep retired metadata readable while removing management permission.
+type routine
+  relations
+    define silo: [silo]
+    define active_silo: [silo]
+    define owner: [person]
+    define read_metadata: (owner or admin from silo) and member from silo
+    define manage: owner and member from active_silo

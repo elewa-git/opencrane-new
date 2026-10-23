@@ -23,7 +23,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|checks conversation-linked control refusals, saved child answers, requests, activations, retries and failures| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews and results| events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks saved event shapes, including native access expiry, retry records, personal connection choices and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
@@ -67,6 +67,9 @@ It contains no request bytes or credentials. It records that the pass was spent;
 it does not prove that the call reached the tool. Replaying it never sends a call.
 If a later check refuses the call before sending, the models process saves a not-sent
 outcome on the same stream.
+
+Routine creation, reassignment and retirement name the permission worker. It records
+who may read metadata or manage a routine. These subscriptions start no routine work.
 
 The publication subscription names the worker that prepares complete gateway
 configurations. Withdrawal has no preparation subscription.

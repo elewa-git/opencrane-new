@@ -1,0 +1,1 @@
+Routine owners can pass metadata and management checks, while current silo admins can read metadata only. Saved ownership, membership and exact permission receipts must agree. Transfers remove the previous owner's management, and retirement keeps permitted metadata readable without management. Permission replay starts no routine work.
