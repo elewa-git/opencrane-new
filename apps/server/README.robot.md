@@ -4353,6 +4353,28 @@ callers, and fixed loading errors for authorised readers. All loading, successfu
 failed, finishes before the single access check. No write authority fence is used.
 Live qualification remains NOT RUN.
 
+## Exact tool-mode change reads (P4-27 PR 7a; Part of #109)
+
+GET `/api/org/integrations/:serverId/changes/:commandId` accepts no query fields.
+The current Owner/Admin must also be the original actor. A saved `mcp.tool_mode_set`
+returns `status: appended` and `receipt`: `changeRef`, `eventId`, `recordedAt`,
+`sequence`, `serverId`, `connectionId`, `toolRevision`, `mode` and `setBy`.
+Successful tools POST replies add the same receipt beside the existing current policy.
+Only the receipt describes the original save; current settings can differ.
+
+GET `availability` reports the current policy sequence and whether its saved policy
+is current. Its overall status remains unavailable with `requester_assistant_required`;
+it does not promise that a person and assistant can use the tool. Missing, foreign,
+wrong-operation or unverified references return `status: unknown`, without permission
+to resend. Failed loading or IAM outage returns 503. Demotion or removal returns 403,
+including when loading fails. Reads check access once after loading and use `no-store`.
+Existing registration, publication and saved-facts routes keep their contracts.
+
+`test/integration-changes.test.ts` covers lost replies, changed policy, stale revisions,
+exact retries beyond broker deduplication, actor/payload conflicts, replay, final access
+and privacy. It uses disposable NATS, PostgreSQL and OpenFGA. No screen or provider call
+is added. Fresh-install qualification is NOT RUN.
+
 ## Internal owner pause (P4-24 PR 4b; Part of #106)
 
 Prerequisite #631 landed as `3f4e231e55582a31c2f6e738004f86ab4e462666`.

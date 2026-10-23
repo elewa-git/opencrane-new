@@ -3181,3 +3181,20 @@ upgrades, locked-read deadlines and replay equality. Existing root tests still e
 Callers must check current finance access once after loading. There is no authority
 fence on this read. Effect detail, impact previews, root/routine joins and screens
 remain later work. Fresh-install qualification: NOT RUN.
+
+## Exact saved tool-mode receipts (P4-27 PR 7a; Part of #109)
+
+`readToolModeChange` loads only the requested MCP stream, with a ten-second read
+limit, then checks current Owner/Admin access once, including after a failed read.
+It uses no write authority fence. A receipt requires the exact silo, stream, event
+id, change id, `mcp.tool_mode_set` type, server source and authenticated human actor.
+The saved `setBy` must agree. Other actors and operations return Unknown.
+The helper selects safe saved fields explicitly; it never copies the event payload.
+
+`setToolPolicy` reads the saved event after append or exact retry and returns the
+same receipt. Retry checks also compare the original write position, found from the
+preceding stream event. Later mode choices or catalogue changes do not replace that receipt.
+The GET reports current policy availability separately and never grants requester
+or assistant access. It makes no provider request, discovers nothing and appends
+nothing. Replay retains the original event reference, time and sequence.
+Other integration commands and fresh-install qualification remain outside this part.

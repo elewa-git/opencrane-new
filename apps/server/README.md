@@ -34,7 +34,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, spending pages, resolution receipts, resumable live updates, tool status and integration facts| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, spending pages, resolution receipts, live updates, tool status and saved tool choices| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|records changes, checked owner pauses, control refusals, child activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -258,7 +258,8 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
    Lists reuse permission facts within the request and check for changes after each
    answer from the permissions service.
 7. **An admin adds a tool server.** The server checks the remote address, lists its
-   tools and leaves them blocked until an admin reviews them. Remote discovery uses
+   tools and leaves them blocked until an admin reviews them. A lost reply to a tool-mode
+   change can be checked by its original reference, even after later changes. Remote discovery uses
    the public address checks shared by `libs/models`.
    Published calls require permission for both the person and the assistant. Removing
    either grant stops new calls and calls waiting to be sent, even while IAM, the

@@ -23,7 +23,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews of declared costs and approval details, dated approvals, memory, owners, providers, free reachability, spending pages, personal account choices and saved call statuses| models["libs/models<br/>AI rules, personal account choices, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews of declared costs and approval details, dated approvals, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and saved call statuses| models["libs/models<br/>AI rules, personal account choices, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
@@ -342,6 +342,10 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+An admin can recover their saved tool-mode choice by its original reference.
+The receipt keeps the original date and revision even after the tools change.
+Current availability is checked separately.
 
 The library saves or clears a person's explicit account choice for a tool server.
 The choice grants no access and does not verify the account. A changed or blocked profile

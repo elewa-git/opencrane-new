@@ -15,7 +15,8 @@ This is one of the packages that build everything from the
 [libs/event-store](../event-store/README.md) uses it to check events before saving
 or returning them. [libs/projections](../projections/README.md) builds read tables,
 and [libs/handlers](../handlers/README.md) queues background work using its definitions.
-The server and the AI access library use the same definitions.
+The server and the AI access library use the same definitions, including the saved
+Allow, Ask or Block choice for a tool.
 
 ```mermaid
 flowchart LR
@@ -24,7 +25,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks saved event shapes, including native access expiry, retry records, personal connection choices and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks saved event shapes, including native access expiry, retry records, personal connection choices, saved tool choices and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 

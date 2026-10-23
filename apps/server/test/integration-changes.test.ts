@@ -23,7 +23,9 @@ let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let counter = 0;
 let logs = '';
-function writeLog(line: string) { logs += line; }
+function writeLog(line: string) {
+  logs += line;
+}
 const logDestination = { write: writeLog };
 const definition = '{"name":"read","description":"PRIVATE-CANARY","inputSchema":{"type":"object"}}';
 const revision = losslessJson(definition).digest;
@@ -48,8 +50,12 @@ async function join(memberId = 'admin', role = 'admin') {
     invitationId: `invite-${memberId}` };
   await append(`member-${memberId}`, 'member.joined', data);
 }
-function memberId(_silo: string, _issuer: string, sub: string) { return Promise.resolve(sub); }
-function unexpected(): never { throw new Error('Unexpected outside work'); }
+function memberId(_silo: string, _issuer: string, sub: string) {
+  return Promise.resolve(sub);
+}
+function unexpected(): never {
+  throw new Error('Unexpected outside work');
+}
 async function initialise() {
   nats = await natsFixture();
   const info = await nats.connection.request('$JS.API.STREAM.INFO.EVENTS');
@@ -70,7 +76,8 @@ async function initialise() {
   const catalogue = { rows: unexpected, tools: unexpected };
   const integrations = { silo: 'acme', store: nats.store, binding, feed: { memberId }, catalogue };
   vi.stubEnv('LOG_LEVEL', 'info');
-  app = buildServer(config, { integrations, logDestination });
+  const options = { integrations, logDestination };
+  app = buildServer(config, options);
   vi.unstubAllEnvs();
   const registration = { serverId: 'fixture', kind: 'remote',
     locator: 'https://fixture.example.test/PRIVATE-CANARY', registeredBy: 'owner' };
@@ -108,23 +115,29 @@ function headers(actor = 'admin', orgId = 'org-acme') {
 }
 function get(changeRef = 'original', serverId = 'fixture', actor = 'admin', orgId = 'org-acme') {
   const url = `/api/org/integrations/${serverId}/changes/${changeRef}`;
-  return app.inject({ url, headers: headers(actor, orgId) });
+  const request = { url, headers: headers(actor, orgId) };
+  return app.inject(request);
 }
 function post(payload = command, actor = 'admin') {
-  return app.inject({ method: 'POST', url: '/api/org/integrations/fixture/tools',
-    headers: headers(actor), payload });
+  const request = { method: 'POST' as const, url: '/api/org/integrations/fixture/tools',
+    headers: headers(actor), payload };
+  return app.inject(request);
 }
 async function recoversOriginal() {
   const appendEvent = nats.store.append.bind(nats.store);
-  async function loseReply(input: Parameters<typeof appendEvent>[0]) {
+  async function loseReply(input: Parameters<typeof appendEvent>[0]): Promise<never> {
     await appendEvent(input);
     throw new Error('PRIVATE-CANARY');
   }
   const lost = vi.spyOn(nats.store, 'append').mockImplementation(loseReply);
   try {
     expect((await post()).statusCode).toBe(503);
-  } finally { lost.mockRestore(); }
+  } finally {
+    lost.mockRestore();
+  }
   const original = await nats.store.readEvent(await nats.store.head('mcp-fixture'));
+  expect(original.event.type).toBe('mcp.tool_mode_set');
+  await readToolPolicy(nats.store, 'acme', 'fixture');
   const receipt = { changeRef: 'original', eventId: original.event.id,
     recordedAt: original.event.time, sequence: original.sequence, serverId: 'fixture',
     connectionId: command.connectionId, toolRevision: revision, mode: 'allow', setBy: 'admin' };
@@ -153,10 +166,13 @@ async function recoversOriginal() {
   const changedMode = { ...command, mode: 'ask' };
   expect((await post(changedMode)).statusCode).toBe(409);
   expect((await post(command, 'owner')).statusCode).toBe(409);
+  const changedPosition = { ...command, expectedSequence: before };
+  expect((await post(changedPosition)).statusCode).toBe(409);
   const stale = { ...command, commandId: 'stale', expectedSequence: before };
   expect((await post(stale)).statusCode).toBe(409);
   expect((await get('stale')).json()).toEqual({ status: 'unknown' });
-  expect(recovered.body + retried.body + logs).not.toContain('PRIVATE-CANARY');
+  const retriedReceipt = retried.json<{ receipt: unknown }>().receipt;
+  expect(recovered.body + JSON.stringify(retriedReceipt) + logs).not.toContain('PRIVATE-CANARY');
 }
 it('recovers a lost save after mode and catalogue changes, dedup expiry and replay', recoversOriginal);
 
@@ -174,16 +190,24 @@ async function rejectsUnrelatedReferences() {
   const saved = rows.find(isOriginal)!;
   for (const patch of [{ subject: 'mcp-other' }, { silo: 'other' },
     { principal: { kind: 'system' as const, id: 'admin' } }, { id: 'different' },
-    { data: { ...command, serverId: 'fixture', setBy: 'owner' } }]) {
-    async function* substituted() { yield { ...saved, event: { ...saved.event, ...patch } }; }
+    { source: 'untrusted' }, { commandId: 'different' },
+    { data: { serverId: 'fixture', connectionId: command.connectionId, toolName: 'read',
+      toolRevision: revision, mode: 'allow', setBy: 'owner' } }]) {
+    const substituted = { ...saved, event: { ...saved.event, ...patch } };
     const originalRead = nats.store.readStream.bind(nats.store);
     async function* replace(stream: string, from?: number, deadline?: number) {
-      if (stream === 'mcp-fixture') { yield* substituted(); return; }
+      if (stream === 'mcp-fixture') {
+        yield substituted;
+        return;
+      }
       yield* originalRead(stream, from, deadline);
     }
     const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(replace);
-    try { expect((await get()).json()).toEqual({ status: 'unknown' }); }
-    finally { spy.mockRestore(); }
+    try {
+      expect((await get()).json()).toEqual({ status: 'unknown' });
+    } finally {
+      spy.mockRestore();
+    }
   }
 }
 function isOriginal(row: Awaited<ReturnType<typeof history>>[number]) {
@@ -195,24 +219,35 @@ async function accessAfterLoading(change: string, failed: boolean) {
   await join();
   const read = nats.store.readStream.bind(nats.store);
   let checks = 0;
+  let pending: Awaited<ReturnType<typeof append>> | undefined;
+  let appendingChange = false;
   async function* intercepted(stream: string, from?: number, deadline?: number) {
-    if (stream === 'member-admin') { checks++; }
+    if (stream === 'member-admin' && !appendingChange) {
+      checks++;
+    }
     if (stream === 'mcp-fixture') {
+      expect(checks).toBe(0);
+      appendingChange = true;
       if (change === 'removed') {
         const data = { memberId: 'admin', removedBy: 'owner' };
-        await append('member-admin', 'member.removed', data, false);
+        pending = await append('member-admin', 'member.removed', data, false);
       } else if (change === 'demoted') {
         const data = { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
-        await append('member-admin', 'member.role_changed', data, false);
+        pending = await append('member-admin', 'member.role_changed', data, false);
       }
-      if (failed) { throw new Error('PRIVATE-CANARY'); }
+      appendingChange = false;
+      if (failed) {
+        throw new Error('PRIVATE-CANARY');
+      }
     }
     yield* read(stream, from, deadline);
   }
   const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(intercepted);
   const permission = vi.spyOn(auth, 'check');
   if (change === 'outage') {
-    permission.mockResolvedValue({ allowed: false, status: 'unavailable', error: new Error('PRIVATE-CANARY') });
+    const unavailable = { allowed: false as const, status: 'unavailable' as const,
+      error: new Error('PRIVATE-CANARY') };
+    permission.mockResolvedValue(unavailable);
   }
   try {
     const response = await get();
@@ -222,40 +257,63 @@ async function accessAfterLoading(change: string, failed: boolean) {
   } finally {
     spy.mockRestore();
     permission.mockRestore();
+    if (pending) {
+      await auth.handler.handle(pending, pgDb(dbs.queue));
+    }
     await join();
   }
 }
+async function successfulLoading(change: string) {
+  await accessAfterLoading(change, false);
+}
+async function failedLoading(change: string) {
+  await accessAfterLoading(change, true);
+}
 it.each(['removed', 'demoted', 'outage'])('checks %s access after successful loading',
-  async function successful(change) { await accessAfterLoading(change, false); });
+  successfulLoading);
 it.each(['removed', 'demoted', 'outage', 'unchanged'])('checks %s access after failed loading',
-  async function failed(change) { await accessAfterLoading(change, true); });
+  failedLoading);
 
 async function readsWithoutEffects() {
   const read = nats.store.readStream.bind(nats.store);
   const realNow = performance.now.bind(performance);
   let offset = 0;
   let checks = 0;
-  function now() { return realNow() + offset; }
+  function now() {
+    return realNow() + offset;
+  }
   async function* slow(stream: string, from?: number, deadline?: number) {
     expect(stream).not.toMatch(/conversation|participation|\*/u);
-    if (stream === 'member-admin') { checks++; expect(offset).toBe(2500); }
+    if (stream === 'member-admin') {
+      checks++;
+      expect(offset).toBe(2500);
+    }
     yield* read(stream, from, deadline);
-    if (stream === 'mcp-fixture') { offset = 2500; }
+    if (stream === 'mcp-fixture') {
+      offset = 2500;
+    }
   }
   const clock = vi.spyOn(performance, 'now').mockImplementation(now);
   const streams = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
   const writes = vi.spyOn(nats.store, 'append').mockImplementation(unexpected);
+  const positions = vi.spyOn(nats.store, 'head').mockImplementation(unexpected);
   const fetches = vi.spyOn(globalThis, 'fetch').mockImplementation(unexpected);
   const requests = vi.spyOn(https, 'request').mockImplementation(unexpected);
   try {
-    expect((await get()).statusCode).toBe(200);
+    const response = await get();
+    expect(response.statusCode).toBe(200);
     expect(checks).toBe(1);
     expect(writes).not.toHaveBeenCalled();
+    expect(positions).not.toHaveBeenCalled();
     expect(fetches).not.toHaveBeenCalled();
     expect(requests).not.toHaveBeenCalled();
   } finally {
-    clock.mockRestore(); streams.mockRestore(); writes.mockRestore();
-    fetches.mockRestore(); requests.mockRestore();
+    clock.mockRestore();
+    streams.mockRestore();
+    writes.mockRestore();
+    positions.mockRestore();
+    fetches.mockRestore();
+    requests.mockRestore();
   }
 }
 it('loads slow history before one access check and performs no outside work', readsWithoutEffects);

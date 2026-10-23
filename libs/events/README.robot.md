@@ -10,6 +10,9 @@ The existing `agent.turn_failed` schema accepts the fixed
 no event type or field. The registry and `docs/architecture/events.md` describe
 the same writer.
 
+The package exports `mcpToolModeSetDataSchema` so receipt recovery validates the
+saved choice with the same schema as the event registry. No event fields change.
+
 ## Dated MCP catalogue evidence
 
 Tool lists carry check and expiry dates; undated lists cannot authorise calls.
