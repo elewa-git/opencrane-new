@@ -49,9 +49,13 @@
               <small>The server could not fit its text on this page.</small></article>
           } @else {
             <button class="fact" type="button" (click)="openFact(fact, $event)">
-              <span>{{ fact.text }}</span><small>r{{ fact.revision }} · {{ fact.kind === 'preference' ? 'Preference' : 'Fact' }}
-                · {{ fact.pinned ? 'Pinned for initial context; loading is not enabled yet' : 'Not pinned' }}
-              </small>
+              @if (fact.text) {
+                <span>{{ fact.text }}</span><small>r{{ fact.revision }} · {{ fact.kind === 'preference' ? 'Preference' : 'Fact' }}
+                  · {{ fact.pinned ? 'Pinned for initial context; loading is not enabled yet' : 'Not pinned' }}
+                </small>
+              } @else {
+                <span>This fact’s text is no longer available.</span>
+              }
             </button>
           }
         }

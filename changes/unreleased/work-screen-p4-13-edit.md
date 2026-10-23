@@ -5,3 +5,6 @@ clears protected text and drafts.
 
 Edit waits for the latest detail after a correction and shows the revision it will save.
 Unavailable text is described separately from forgotten facts.
+
+Quarantined or destroyed facts lose their text from the list, detail and editor.
+Their rows show only that the text is unavailable, including after returning to memory.

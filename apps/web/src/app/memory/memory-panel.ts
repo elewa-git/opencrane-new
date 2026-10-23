@@ -13,7 +13,7 @@ import { readStoreReply } from './memory-panel-store-reply';
 import { storeBytes, storeKindFromEvent, storePayload, storeSourceLabel, storeValidation } from
   './memory-panel-store-input';
 import { MemoryForget, type ForgetTarget } from './memory-forget';
-import { factIndex, focusAfterForget, withoutForgetTarget, withoutForgottenFact } from
+import { factIndex, focusAfterForget, withoutForgetTarget, withoutHiddenFactText } from
   './memory-panel-forget';
 import { firstTrustedSource, scopeUrl, waitForRetry } from
   './memory-panel-reads';
@@ -90,8 +90,8 @@ export class MemoryPanel implements OnInit, OnDestroy {
       this.detailState.set('ready');
     } else if (result.kind === 'missing') {
       const fact = this.selectedFact();
-      if (fact && result.reason === 'forgotten') {
-        this.hideForgottenFact(fact.memoryId);
+      if (fact && ['forgotten', 'quarantined', 'destroyed'].includes(result.reason)) {
+        this.hideFactText(fact.memoryId, result.reason);
         this.selectedFact.set({ ...fact, text: '' });
       }
       this.detailCanCorrect.set(false);
@@ -196,19 +196,19 @@ export class MemoryPanel implements OnInit, OnDestroy {
     if (!this.isCurrentForget(target)) return;
     const index = factIndex(target.memoryId, this.facts());
     const generation = this.generation;
-    this.hideForgottenFact(target.memoryId);
+    this.hideFactText(target.memoryId);
     this.closeDetail();
     this.detailOpener = undefined;
     window.setTimeout(this.focusAfterForget.bind(this, index, generation), 0);
   }
 
-  private hideForgottenFact(memoryId: string): void {
+  private hideFactText(memoryId: string, reason = 'forgotten'): void {
     // Stop older reads before they can restore text that the server has hidden.
     this.listController?.abort();
     this.listRequestId += 1;
     this.detailController?.abort();
     this.query.set('');
-    const remainingFacts = withoutForgottenFact(memoryId, this.facts());
+    const remainingFacts = withoutHiddenFactText(memoryId, this.facts(), reason);
     this.facts.set(remainingFacts);
     this.listState.set(remainingFacts.length ? 'ready' : 'empty');
     this.sources.set([]);

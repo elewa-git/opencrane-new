@@ -650,9 +650,12 @@ come from the same detail snapshot as the next Save command.
 A 409 or conflict status keeps the draft and offers one serial Refresh and review GET.
 The next save gets a new command id. Lost replies, 503 and unknown offer only serial status
 reads with the original id. A 422 returns to editing. Forgotten detail removes old text,
-draft, preview and row. Other unavailable reasons clear the editor and say the text is no
-longer available, without calling it forgotten or removing the list row. This wording also
-applies to the detail read after acceptance. Refresh requires renewed `canCorrect: true`;
+draft, preview and row. Quarantined or destroyed detail clears text from the retained row,
+selected fact, editor draft and snapshot. The row shows only an unavailable message. Older
+list and detail reads are cancelled so they cannot restore the text. Other unavailable
+reasons keep the row and its text, while clearing the editor and saying the text is no
+longer available. These rules also apply to the detail read after acceptance. A temporary
+detail read failure keeps the last row; conflict recovery keeps its draft for another read. Refresh requires renewed `canCorrect: true`;
 false or absent rights never reopen editing. A receipt for another scope or fact stays unknown.
 401/403/404 use the existing access clearing. Scope/requester
 changes destroy the editor and ignore late replies. List announcements contain counts only.

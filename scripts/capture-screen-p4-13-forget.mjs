@@ -310,7 +310,9 @@ try {
 ` +
     `accepted receipt, conflict, forgotten and unavailable detail. One POST per save. Receipts
 ` +
-    `held no fact text; forgotten text left inputs, rows and announcements. Unavailable detail kept its row.
+    `held no fact text; forgotten text left inputs, rows and announcements. Quarantined and destroyed
+` +
+    `detail kept a text-free row after conflict, acceptance, Cancel and Back to memory.
 ` +
     `Dialog actions were at least 44px; no horizontal overflow, browser storage or address change.
 ` +

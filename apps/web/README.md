@@ -226,7 +226,8 @@ a saved message keeps the current subscription instead of opening it twice.
     A changed fact needs review before another save. An uncertain correction offers a
     status check for the original request. Losing access clears the draft. After a correction,
     Edit waits for the latest detail. The editor shows the revision that its next Save sends.
-    If the fact’s text is unavailable, the message says so without claiming it was forgotten.
+    If the server quarantines or destroys a fact’s text, the page clears it from the list,
+    detail and editor. Its row says the text is unavailable without claiming it was forgotten.
 15. **A person forgets one of their facts.** The Memory panel asks them to review the effect
     before sending one request. The fact disappears when the server confirms it is hidden.
     The panel shows whether cleanup is pending, complete or unavailable. An uncertain reply
