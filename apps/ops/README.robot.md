@@ -647,6 +647,13 @@ Startup checks the URL and connects before creating handlers. Errors omit creden
 A lost idle content connection stops the worker; a failed lock cannot prepare a generation.
 Shutdown and startup failure close both pools after draining work.
 
+The handler passes the job attempt's cancellation signal and deadline into preparation.
+Waiting for a content connection and acquiring the lock together have a one-second limit.
+Attempt expiry cancels that wait or stops preparation's history reads. A late read cannot
+reach an append. The conditional append receives the same signal and deadline; the lock
+is released only after preparation stops. `test/gateway-configuration.test.ts` checks
+expiry while waiting and while holding the lock, with no saved generation after either.
+
 `DATABASE_URL` still owns HandlerRuntime, its manifest, checkpoint, queue and receipts.
 No projection tables are created in jobs by this change. Nightly memory and connection
 custody callers keep their current binding until the dependent reaction database task.

@@ -2335,13 +2335,23 @@ Leadership is checked before file replacement, probes and receipt appends.
 Delivery requires the root PostgreSQL `Db`, not the connection already holding the
 budget lock. It takes `gateway-configuration:<silo>`, the same advisory lock as the
 preparation handler. It checks currentness after acquiring that lock and again after
-the final leadership query. The synchronous rename immediately follows that last
-check, while preparation still waits. Obsolete delivery leaves the old file untouched.
+the final leadership query. It then queries the actual gateway lock connection with
+a one-second deadline. This session stays checked out throughout the callback, so a
+successful query confirms the connection holding the lock is still alive. The separate
+budget-leader connection cannot supply that proof. The synchronous rename immediately
+follows this query and the child check, while preparation still waits. Acquiring the
+gateway lock has its own one-second bound. Obsolete delivery leaves the old file untouched.
 `prepareGatewayConfiguration` remains the event-only helper; a live caller must hold
 this shared lock, as the ops handler does. PostgreSQL stores no publication state.
 Regression tests use separate PostgreSQL connections to prove both paths wait on
 this key. Delayed leadership queries save a newer generation or reject leadership;
-refused delivery preserves the file and appends no receipt.
+refused delivery preserves the file and appends no receipt. A TCP fixture delays disconnect
+notification after terminating the acquired lock backend. Another session acquires the
+same lock; delivery must retain both the old bytes and inode and save no receipt.
+Preparation accepts the attempt's signal and deadline. Cancelled reads stop the preparation
+callback before it can append. Append receives those same limits and remains awaited
+before releasing the lock. The handler and attempt tests use real PostgreSQL to check
+waiting, cancellation, release and pool exhaustion.
 Render settings come from the startup gateway options. Memory is optional; when
 present its route bytes are unchanged. Replay performs no delivery or observation.
 

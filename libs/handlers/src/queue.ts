@@ -5,7 +5,7 @@ import { parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { runHandler, type Logger } from "@opencrane/observability";
 import type { Db, Query } from "@opencrane/projections";
 import { withinAttempt } from "./attempt.ts";
-import { checkHandlers, type Handler } from "./registration.ts";
+import { checkHandlers, type Handler, type HandlerAttempt } from "./registration.ts";
 
 function transactionAdapter(tx: Query) {
   return {
@@ -213,7 +213,7 @@ export class HandlerRuntime {
     }
     const event = parsed.event;
     const database = this.options.db;
-    async function attempt(tx: Query) {
+    async function attempt(tx: Query, context: HandlerAttempt) {
       // Hold this attempt until commit, so expiry or replay cannot start
       // another SQL writer while the transaction is running.
       const claim = await tx.query<{ state: string; retry_count: number }>(
@@ -228,7 +228,7 @@ export class HandlerRuntime {
         [handler.name, event.id],
       );
       if (receipt.rows.length) {
-        await handler.handle(event, tx);
+        await handler.handle(event, tx, context);
       }
       job.signal.throwIfAborted();
     }

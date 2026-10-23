@@ -1,12 +1,17 @@
-import { Pool as PgPool, type Pool } from "pg";
+import { Pool as PgPool, type Pool, type PoolClient } from "pg";
 import { toolPolicySchema, memberStateSchema } from "@opencrane/protocol";
 import { QueryDeadlineExceeded, type Db } from "./db.ts";
 import { mapMcpCatalogueRows, type McpCatalogueRow } from './mcp-catalogue.ts';
 import { mapComputerRows, type ComputerDbRow } from './computers.ts';
 
-function clientDb(client: import("pg").PoolClient): Db {
+function clientDb(client: PoolClient): Db {
   return {
-    query: (sql, parameters) => client.query(sql, parameters),
+    query(sql, parameters, options) {
+      if (!options) return client.query(sql, parameters);
+      const query = { text: sql, values: parameters ?? [],
+        query_timeout: remainingQueryTime(options.deadline) };
+      return client.query(query);
+    },
     async transaction(work) {
       try {
         await client.query("BEGIN");
@@ -68,32 +73,114 @@ export function pgDb(pool: Pool): Db {
       }
     },
     async lock(name, work, options) {
-      const client = await pool.connect();
-      let acquired = false;
+      const client = await acquireProjectionLock(pool, name, options);
+      let lost = false;
+      function failed() {
+        lost = true;
+      }
+      client.on('error', failed);
       try {
-        if (options) {
-          await client.query("SELECT set_config('lock_timeout', $1, false)",
-            [`${options.timeoutMs}ms`]);
-        }
-        await client.query(
-          "SELECT pg_advisory_lock(hashtextextended($1, 0))",
-          [`opencrane:projection:${name}`],
-        );
-        acquired = true;
-        return await work(clientDb(client));
+        options?.signal?.throwIfAborted();
+        // Keep this session checked out until the callback has stopped its work.
+        const result = await work(clientDb(client));
+        if (lost) throw new Error('Database lock session lost');
+        return result;
       } finally {
         try {
-          if (acquired) await client.query(
-            "SELECT pg_advisory_unlock(hashtextextended($1, 0))",
-            [`opencrane:projection:${name}`],
-          );
-          if (options) await client.query("RESET lock_timeout");
+          await releaseProjectionLock(client, name, lost);
         } finally {
-          client.release();
+          client.removeListener('error', failed);
         }
       }
     },
   };
+}
+
+async function releaseProjectionLock(client: PoolClient, name: string, lost: boolean) {
+  try {
+    if (!lost) {
+      const unlock = { text: 'SELECT pg_advisory_unlock(hashtextextended($1, 0))',
+        values: [`opencrane:projection:${name}`], query_timeout: 1000 };
+      await client.query(unlock);
+    }
+  } catch (error) {
+    client.release(true);
+    throw error;
+  }
+  client.release(lost);
+}
+
+async function acquireProjectionLock(pool: Pool, name: string,
+  options?: { timeoutMs: number; signal?: AbortSignal }) {
+  options?.signal?.throwIfAborted();
+  const expired = Promise.withResolvers<never>();
+  const deadline = options ? performance.now() + options.timeoutMs : Infinity;
+  let client: PoolClient | undefined;
+  let stopped = false;
+  let released = false;
+  function release() {
+    if (client && !released) {
+      released = true;
+      client.release(true);
+    }
+  }
+  function cancel() {
+    stopped = true;
+    release();
+    expired.reject(new Error('Database lock acquisition cancelled or expired'));
+  }
+  function connectionFailed() {
+    cancel();
+  }
+  async function acquire() {
+    client = await pool.connect();
+    // Return a connection that arrived after the acquisition deadline without using it.
+    if (isStopped()) {
+      release();
+      throw new Error('Database lock acquisition expired');
+    }
+    client.on('error', connectionFailed);
+    await waitForProjectionLock(client, name, options?.timeoutMs, isStopped);
+    if (isStopped()) throw new Error('Database lock acquisition expired');
+    return client;
+  }
+  function isStopped() {
+    return stopped || performance.now() >= deadline;
+  }
+  const timer = options ? setTimeout(cancel, options.timeoutMs) : undefined;
+  options?.signal?.addEventListener('abort', cancel, { once: true });
+  try {
+    return await Promise.race([acquire(), expired.promise]);
+  } catch (error) {
+    stopped = true;
+    release();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    options?.signal?.removeEventListener('abort', cancel);
+    client?.removeListener('error', connectionFailed);
+  }
+}
+
+async function waitForProjectionLock(client: PoolClient, name: string,
+  timeoutMs: number | undefined, stopped: () => boolean) {
+  if (timeoutMs !== undefined) {
+    // Let PostgreSQL notice a cancelled socket even while another session holds the lock.
+    const interval = Math.max(1, Math.min(100, timeoutMs));
+    await client.query("SELECT set_config('lock_timeout', $1, false)", [`${interval}ms`]);
+  }
+  while (!stopped()) {
+    try {
+      await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))',
+        [`opencrane:projection:${name}`]);
+      if (timeoutMs !== undefined) await client.query('RESET lock_timeout');
+      return;
+    } catch (error) {
+      const lockTimedOut = error instanceof Error && 'code' in error && error.code === '55P03';
+      if (timeoutMs === undefined || !lockTimedOut) throw error;
+    }
+  }
+  throw new Error('Database lock acquisition cancelled or expired');
 }
 
 function remainingQueryTime(deadline: number) {

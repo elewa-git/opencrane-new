@@ -22,7 +22,7 @@ flowchart LR
   parent["libs/<br/>shared libraries"] --> handlers["libs/handlers<br/>background job queue"]
   ops["apps/ops<br/>background workers"] -->|runs the workers| handlers
   nats["NATS JetStream<br/>event log"] -->|new events| handlers
-  reactions["libs/models and libs/authz<br/>registered reactions"] -.-> handlers
+  handlers -->|runs work with cancellation and a deadline| reactions["libs/models and libs/authz<br/>registered reactions"]
   handlers -.-> store["libs/event-store<br/>connection and record checks"]
   handlers -.-> events["libs/events<br/>reaction subscriptions"]
   handlers -->|stores the job list| pg["PostgreSQL<br/>database"]
@@ -67,7 +67,9 @@ nice -n 10 npm run typecheck -w libs/handlers
 nice -n 10 npm test -- libs/handlers/test
 ```
 
-Each reaction receives the saved event and a database transaction. This example
+Each reaction receives the saved event, a database transaction and the attempt’s
+cancellation signal and deadline. Gateway preparation uses these limits to stop work
+and release its database lock when the attempt expires. This example
 registers a reaction that only runs a harmless query. A real reaction changes
 its own tables through the same transaction. The name must come from the reaction
 list in `libs/events`:

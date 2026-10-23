@@ -16,10 +16,16 @@ Callers check chat permission first and confirm the matched position in the even
 check their saved work after a restart. It still omits closed human chats. The
 projection only selects candidates; the bridge checks events before cleanup.
 
-`Db.lock` accepts an optional `{timeoutMs}`. PostgreSQL resets this lock timeout before
-returning the client to the pool. Memory commands use 100 ms; projection workers keep
-waiting for their existing exclusive lock. The shared connection helper limits pool
-connection waits to one second. Memory keys expose `status(identity)` without creating
+`Db.lock` accepts optional `{timeoutMs, signal}` settings. The timeout bounds both
+pool acquisition and the advisory-lock wait. A cancelled or expired acquisition destroys
+its connection, including one that arrives late from the pool. Bounded acquisitions use
+at most 100 ms per PostgreSQL lock wait, so the server notices a disconnected waiter.
+The full acquisition deadline does not restart between waits. The callback keeps its
+connection until its work stops; cancellation does not release an active callback's lock.
+Memory commands use 100 ms; projection workers without options retain their existing wait.
+The callback's `query` accepts a deadline and uses the same checked-out connection.
+A failed unlock destroys the connection. The shared connection helper limits ordinary
+pool connection waits to one second. Memory keys expose `status(identity)` without creating
 a key: it distinguishes missing custody, an available key and a destroyed-key marker.
 
 `delegations` fills `delegations` and `computer_delegations` using the ordinary

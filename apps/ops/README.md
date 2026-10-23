@@ -22,7 +22,7 @@ flowchart LR
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves results| nats
-  ops -->|keeps jobs and locks gateway changes| pg["PostgreSQL<br/>jobs and content databases"]
+  ops -->|keeps jobs and locks gateway changes until work stops| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
@@ -39,6 +39,7 @@ The computers run in [Kubernetes](../../GLOSSARY.md#kubernetes).
 - Sets up assistants and claims one computer per assistant, including shared group assistants.
 - Starts and pauses computers and delivers short-lived [passes](../../GLOSSARY.md#access-token).
 - Charges confirmed model costs and stops affected work when a spending limit is reached.
+- Stops expired gateway preparation and releases its database lock.
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
