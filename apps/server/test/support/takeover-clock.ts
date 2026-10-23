@@ -26,13 +26,15 @@ export async function waitForControl(store: EventStore, phase: string) {
   throw new Error('Control did not reach the expected phase');
 }
 
+// Inspect retained entries without adding a server API just for tests.
 export function trackPauseObservations() {
   const writes = vi.spyOn(Map.prototype, 'set');
   function retained() {
     for (let index = 0; index < writes.mock.calls.length; index++) {
       const key: unknown = writes.mock.calls[index]?.[0];
       if (typeof key === 'string' && key.startsWith('["test","assistant"')) {
-        return writes.mock.contexts[index];
+        const context: unknown = writes.mock.contexts[index];
+        if (context instanceof Map) return context;
       }
     }
     return undefined;
