@@ -1,3 +1,5 @@
+import { shortenDuplicateWindow, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { buildServer } from '../src/server.ts';
 import { createEventStore } from '@opencrane/event-store';
@@ -6,7 +8,8 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { recoverChildRequest } from '../src/chat/child-recovery.ts';
 import { childRequestHeld } from '../src/chat/child-hold.ts';
 import { childRequests, conversations } from '@opencrane/projections';
-import { requestChild, createRequestedChild } from '../src/chat/child-requests.ts';
+import { requestChild, createRequestedChild, retryChildRequest, ChildRequestChanged }
+  from '../src/chat/child-requests.ts';
 import { recordChildStartFailure } from '../src/chat/child-failure.ts';
 import { chatHistory } from '../src/chat/commands.ts';
 import { summonFixture } from './support/child-summon.ts';
@@ -15,6 +18,7 @@ let context: Awaited<ReturnType<typeof summonFixture>>;
 async function setup() {
   context = await summonFixture();
   await context.runner.initialise(childRequests);
+  await shortenDuplicateWindow(context.nats);
 }
 async function cleanup() {
   await context.close();
@@ -48,6 +52,10 @@ async function acceptsSavedFailure() {
   expect(response.statusCode, response.body).toBe(202);
   expect(response.json()).toMatchObject({ requestId: request.input.requestId,
     retryId: request.payload.retryId, failureEventId: request.payload.failureEventId, attempt: 2 });
+  const rows = await chatHistory(context.nats.store, 'test', request.input.conversationId);
+  // Pin the saved id for the known silo, parent, request and retry references in this fixture.
+  expect(rows.at(-1)!.event.id).toBe(
+    'child-retry-9d5d5460a9d3693bcf84713fe3d4a0bc08d74cdaa5b4efaa7fad1aaa66ad7fbe');
   const repeated = await context.request(request.input.conversationId, request.path, request.payload);
   expect(repeated.body).toBe(response.body);
   const before = await context.nats.store.head();
@@ -263,14 +271,14 @@ async function lostReply() {
     request.payload)).statusCode).toBe(503);
   fault.mockRestore();
   const before = await chatHistory(context.nats.store, 'test', request.input.conversationId);
-  await delay(120_100);
+  await waitForDuplicateWindow(context.nats);
   await context.restart();
   const response = await context.request(request.input.conversationId, request.path, request.payload);
   expect(response.statusCode).toBe(202);
   expect(response.json()).toEqual(before.at(-1)!.event.data);
   expect(await chatHistory(context.nats.store, 'test', request.input.conversationId)).toEqual(before);
 }
-it('reuses a lost reply after deduplication expires and restart', lostReply, 180_000);
+it('reuses a lost reply after deduplication expires and restart', lostReply);
 
 async function uncertainAccess(kind: string) {
   const request = await failedRequest();
@@ -315,3 +323,136 @@ async function hidesClosedParentFromRemovedRequester() {
   expect(await context.nats.store.head()).toBe(before);
 }
 it('hides a closed parent from its removed requester', hidesClosedParentFromRemovedRequester);
+
+async function ignoresOldWorkerAfterExpiry() {
+  const request = await failedRequest();
+  const response = await context.request(request.input.conversationId, request.path, request.payload);
+  expect(response.statusCode).toBe(202);
+  await waitForDuplicateWindow(context.nats);
+  const before = await context.nats.store.head();
+  await recordChildStartFailure(context.options, request.saved.event.id, request.intent,
+    'create', 'access_refused', 1);
+  expect(await context.nats.store.head()).toBe(before);
+  const status = await context.request(request.input.conversationId,
+    `children/${request.input.requestId}`);
+  expect(status.json()).toEqual({ requestId: request.input.requestId, state: 'queued' });
+}
+it('ignores an old worker after NATS deduplication expires', ignoresOldWorkerAfterExpiry);
+
+async function keepsHistoryOutsideDeadline() {
+  const request = await failedRequest();
+  const original = context.nats.store.readStream.bind(context.nats.store);
+  let completed = 0;
+  async function* slow(...args: Parameters<typeof original>) {
+    yield* original(...args);
+    if (args[0] === `conversation-${request.input.conversationId}` && completed < 2) {
+      completed++;
+      await delay(2100);
+    }
+  }
+  const readSpy = vi.spyOn(context.nats.store, 'readStream');
+  readSpy.mockImplementation(slow);
+  const receipt = await retryChildRequest(context.options, 'alice', request.input.conversationId,
+    request.input.requestId, request.payload);
+  expect(completed).toBe(2);
+  expect(receipt).toMatchObject({ attempt: 2, retryId: request.payload.retryId });
+}
+it('loads both slow histories before starting the authority deadline', keepsHistoryOutsideDeadline);
+
+async function doesNotRetryOtherConflicts() {
+  const request = await failedRequest();
+  const before = await context.nats.store.head();
+  function changed(): Promise<never> {
+    const error = new ChildRequestChanged('Saved record differs');
+    return Promise.reject(error);
+  }
+  const append = vi.spyOn(context.nats.store, 'append');
+  append.mockImplementation(changed);
+  const response = await context.request(request.input.conversationId, request.path, request.payload);
+  expect(response.statusCode).toBe(409);
+  expect(append).toHaveBeenCalledTimes(1);
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('does not repeat a write after a conflict other than an append race', doesNotRetryOtherConflicts);
+
+async function rejectsOtherRequesterBeforeLoadingSource() {
+  const request = await failedRequest();
+  const original = context.nats.store.readStream.bind(context.nats.store);
+  let histories = 0;
+  async function* read(...args: Parameters<typeof original>) {
+    if (args[0] === `conversation-${request.input.conversationId}`) {
+      histories++;
+      if (histories > 1) throw new Error('Source history must stay unread');
+    }
+    yield* original(...args);
+  }
+  const readSpy = vi.spyOn(context.nats.store, 'readStream');
+  readSpy.mockImplementation(read);
+  await expect(retryChildRequest(context.options, 'bob', request.input.conversationId,
+    request.input.requestId, request.payload)).rejects.toThrow('Child request unavailable');
+  expect(histories).toBe(1);
+}
+it('checks request ownership before loading source history', rejectsOtherRequesterBeforeLoadingSource);
+
+async function ignoresOtherRequestReceipt() {
+  const request = await failedRequest();
+  const data = { ...request.payload, conversationId: request.input.conversationId,
+    requestId: 'another-request', attempt: 2 };
+  const event = { ...request.saved.event, id: 'other-request-retry',
+    commandId: 'other-request-retry', type: 'conversation.child_retry_requested', data };
+  await context.nats.seed([event]);
+  const response = await context.request(request.input.conversationId, request.path, request.payload);
+  expect(response.statusCode).toBe(202);
+  expect(response.json()).toMatchObject({ requestId: request.input.requestId, attempt: 2 });
+}
+it('ignores another request receipt with the same retry id', ignoresOtherRequestReceipt);
+
+async function doesNotReuseOtherFailureReceipt() {
+  const request = await failedRequest();
+  expect((await context.request(request.input.conversationId, request.path,
+    request.payload)).statusCode).toBe(202);
+  const payload = { retryId: 'another-retry', failureEventId: 'another-failure' };
+  const before = await context.nats.store.head();
+  const response = await context.request(request.input.conversationId, request.path, payload);
+  expect(response.statusCode).toBe(409);
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('does not reuse a receipt for another failure', doesNotReuseOtherFailureReceipt);
+
+async function recoversReceiptAfterLaterFailure() {
+  const request = await failedRequest();
+  const first = await context.request(request.input.conversationId, request.path, request.payload);
+  expect(first.statusCode).toBe(202);
+  await recordChildStartFailure(context.options, request.saved.event.id, request.intent,
+    'create', 'access_refused', 2);
+  const before = await context.nats.store.head();
+  const repeated = await context.request(request.input.conversationId, request.path, request.payload);
+  expect(repeated.statusCode).toBe(202);
+  expect(repeated.body).toBe(first.body);
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('recovers the same retry receipt after a later failure', recoversReceiptAfterLaterFailure);
+
+async function refusesClosedParentForCurrentRequester() {
+  const request = await failedRequest();
+  const conversationId = request.input.conversationId;
+  await context.append(`conversation-${conversationId}`, 'conversation.closed',
+    { conversationId, closedBy: 'alice' }, false);
+  const before = await context.nats.store.head();
+  const response = await context.request(conversationId, request.path, request.payload);
+  expect(response.statusCode).toBe(409);
+  expect(response.json()).toEqual({ status: 'conflict' });
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('still refuses a legacy closed parent for its current requester',
+  refusesClosedParentForCurrentRequester);
+
+async function keepsSavedFailureAfterExpiry() {
+  const request = await failedRequest();
+  await waitForDuplicateWindow(context.nats);
+  const before = await context.nats.store.head();
+  await recordChildStartFailure(context.options, request.saved.event.id, request.intent,
+    'create', 'access_refused', 1);
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('keeps one saved failure after NATS deduplication expires', keepsSavedFailureAfterExpiry);

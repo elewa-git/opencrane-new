@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { parseEventByType } from '../src/index.ts';
+import { childRetryRequestedEventSchema, parseEventByType } from '../src/index.ts';
 
 const retry = { id: 'retry', commandId: 'retry',
   type: 'conversation.child_retry_requested', source: 'opencrane-server', silo: 'test',
@@ -25,3 +25,9 @@ it.each([{ source: 'computer' }, { subject: 'conversation-other' },
   { principal: { kind: 'system', id: 'computer' } }, { commandId: 'other' },
   { report: { computerId: 'pc', sequence: 1, digest: 'a'.repeat(64) } }])(
   'refuses retry writer %j', refusesWriter);
+
+function rejectsDifferentEventType() {
+  const changed = { ...retry, type: 'conversation.child_requested' };
+  expect(childRetryRequestedEventSchema.safeParse(changed).success).toBe(false);
+}
+it('rejects a different type through the direct retry schema', rejectsDifferentEventType);
