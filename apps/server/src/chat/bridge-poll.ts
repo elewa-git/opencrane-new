@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { readComputerControl } from '@opencrane/auth';
 import type { bridgeControl } from './bridge-control.ts';
 import { watchTakeoverDeadline } from './bridge-deadline.ts';
+import { forgetPauseDeadline } from './bridge-pause-time.ts';
 import type { Logger } from '@opencrane/observability';
 import { history } from '../../../ops/src/lifecycle.ts';
 import { creationEvent } from './private-session.ts';
@@ -183,6 +184,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     const control = await readComputerControl(options.store, options.silo, assistantId);
     if (control?.phase === 'requested' || control?.phase === 'pausing') {
       startDeadline(assistantId);
+    } else {
+      forgetPauseDeadline(options.store, options.silo, assistantId);
     }
     if (assistant.current?.type === 'computer.ready') {
       const computer = computerData.parse(assistant.current.data);

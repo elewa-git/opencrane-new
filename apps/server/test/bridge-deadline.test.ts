@@ -110,9 +110,8 @@ async function checksPositionBeforeHistory() {
   async function* changeBeforeRead(...args: Parameters<typeof read>) {
     if (!changed) {
       changed = true;
-      const event = envelope('test', 'computer-assistant', 'computer.lost', {
-        computerId: 'computer', assistantId: 'assistant',
-      });
+      const data = { computerId: 'computer', assistantId: 'assistant' };
+      const event = envelope('test', 'computer-assistant', 'computer.lost', data);
       await test.seed([event]);
     }
     yield* read(...args);

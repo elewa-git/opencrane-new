@@ -1032,9 +1032,11 @@ it('keeps an active turn renewal denied during failure append outage and then sa
 
 async function expiresBeforeStop() {
   const stops: StopInput[] = [];
-  async function stop(input: StopInput) {
+  function stop(input: StopInput) {
     stops.push(input);
-    return stopped(input, { quietProof: 'complete' });
+    const proof = { quietProof: 'complete' };
+    const report = stopped(input, proof);
+    return Promise.resolve(report);
   }
   const test = await setup(false, stop);
   await test.save();
