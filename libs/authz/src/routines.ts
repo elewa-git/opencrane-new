@@ -14,7 +14,19 @@ function field(event: EventEnvelope, name: string): unknown {
   return Reflect.get(event.data, name);
 }
 
-export async function applyRoutine(client: TupleClient, event: EventEnvelope, receipt: Tuple) {
+async function retiredOwner(store: History | undefined, event: EventEnvelope, routineId: string) {
+  if (!store) {
+    throw new Error('Routine retirement requires saved history');
+  }
+  const saved = await readRoutine(store, event.silo, routineId, event.id);
+  if (!saved.modernCreation || !saved.state?.definition || saved.state.status !== 'retired') {
+    throw new Error('Routine retirement requires a saved modern creation and retirement');
+  }
+  return saved.state.definition.definition.ownerId;
+}
+
+export async function applyRoutine(client: TupleClient, event: EventEnvelope, receipt: Tuple,
+  store?: History) {
   const identity = routineRecordIdentitySchema.parse(event.data);
   if (event.subject !== `routine-${identity.routineId}`) {
     throw new Error('Routine subject mismatch');
@@ -27,19 +39,20 @@ export async function applyRoutine(client: TupleClient, event: EventEnvelope, re
   const silo = objectId('silo', event.silo);
   const filter = { object: target };
   const current = await client.read(filter);
-  let desired: Tuple[];
+  let ownerId: string;
   if (event.type === 'routine.retired') {
-    function retained(tuple: Tuple) {
-      return tuple.relation !== 'active_silo';
-    }
-    desired = current.filter(retained);
+    // Reconstruct the owner at retirement even if earlier permission jobs have not run.
+    ownerId = await retiredOwner(store, event, identity.routineId);
   } else {
     const definition = routineDefinitionSchema.parse(field(event, 'definition'));
-    desired = [
-      { user: silo, object: target, relation: 'silo' },
-      { user: silo, object: target, relation: 'active_silo' },
-      { user: objectId('person', event.silo, definition.ownerId), object: target, relation: 'owner' },
-    ];
+    ownerId = definition.ownerId;
+  }
+  const desired: Tuple[] = [
+    { user: silo, object: target, relation: 'silo' },
+    { user: objectId('person', event.silo, ownerId), object: target, relation: 'owner' },
+  ];
+  if (event.type !== 'routine.retired') {
+    desired.push({ user: silo, object: target, relation: 'active_silo' });
   }
   function missing(tuple: Tuple) {
     function matches(existing: Tuple) {
@@ -59,7 +72,8 @@ export async function applyRoutine(client: TupleClient, event: EventEnvelope, re
   await client.write(writes, deletes);
 }
 
-async function readRoutine(store: History, silo: string, routineId: string) {
+async function readRoutine(store: History, silo: string, routineId: string,
+  throughEventId?: string) {
   let state: RoutineState | undefined;
   let modernCreation = false;
   const receipts: string[] = [];
@@ -76,6 +90,12 @@ async function readRoutine(store: History, silo: string, routineId: string) {
     if (permissionEvents.includes(row.event.type)) {
       receipts.push(row.event.id);
     }
+    if (row.event.id === throughEventId) {
+      return { state, modernCreation, receipts };
+    }
+  }
+  if (throughEventId !== undefined) {
+    throw new Error('Routine retirement was not found in saved history');
   }
   return { state, modernCreation, receipts };
 }

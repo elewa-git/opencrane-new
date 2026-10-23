@@ -24,7 +24,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.->|checks access, receipts and outages| authz
   ops["apps/ops<br/>background workers"] -.-> authz
   authz -->|checks permissions, including routine ownership| fga["OpenFGA<br/>permissions service"]
-  authz -.-> store["libs/event-store<br/>saved changes"]
+  authz -.->|reads saved ownership| store["libs/event-store<br/>saved changes"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
@@ -43,6 +43,7 @@ flowchart LR
 - Rebuild permissions in a fresh OpenFGA store from the saved history.
 - Give routine owners management permission and current admins metadata access only.
   Retired routines keep permitted metadata readers, but cannot be managed.
+  Retirement reads the saved owner even when earlier permission jobs arrive late.
 
 ## Processes it handles
 

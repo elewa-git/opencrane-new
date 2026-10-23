@@ -304,7 +304,7 @@ function createMemberAuthorisation(binding: Binding,
       await requireEarlierRoleChanges(store, event, applied);
     }
     if (event.type.startsWith('routine.')) {
-      return applyRoutine(client, event, receipt);
+      return applyRoutine(client, event, receipt, store);
     }
     if (event.type.startsWith('ownership.')) {
       return applyOwnership(event, receipt);

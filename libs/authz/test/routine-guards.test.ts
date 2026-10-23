@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { event } from '@opencrane/event-store/testing';
+import type { EventEnvelope } from '@opencrane/events';
 import { checkRoutine } from '../src/routines.ts';
 import { supersededEvent } from '../src/backfill.ts';
 import { objectId, TupleClient, type Tuple } from '../src/client.ts';
@@ -10,7 +11,7 @@ const binding = { apiUrl: 'http://127.0.0.1:1', silo: 'test',
   authorizationModelId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' };
 const allowed = { allowed: true, status: 'ok' as const };
 const refused = { allowed: false, status: 'ok' as const };
-const unavailable = { allowed: false, status: 'unavailable' as const };
+const unavailable = { allowed: false as const, status: 'unavailable' as const };
 
 function restore() {
   vi.restoreAllMocks();
@@ -99,7 +100,7 @@ const mismatches = [
 ];
 async function wrongHistory({ subject, field }: typeof mismatches[number]) {
   const context = access();
-  const seed = event('seed', 'ownership-test', 'ownership.seeded');
+  const seed: EventEnvelope = event('seed', 'ownership-test', 'ownership.seeded');
   seed.data = { ownerIds: ['alice'] };
   context.events.push(seed);
   expect(await context.read()).toEqual(allowed);
@@ -120,9 +121,9 @@ it.each(mismatches)('refuses $subject history with a different $field', wrongHis
 
 async function exactAccessReceipts() {
   const context = access();
-  const seed = event('seed', 'ownership-test', 'ownership.seeded');
+  const seed: EventEnvelope = event('seed', 'ownership-test', 'ownership.seeded');
   seed.data = { ownerIds: ['other'] };
-  const appointment = event('appointment', 'ownership-test', 'ownership.transferred');
+  const appointment: EventEnvelope = event('appointment', 'ownership-test', 'ownership.transferred');
   appointment.data = { memberId: 'alice', transferredBy: 'other' };
   const unrelated = { ...appointment, id: 'other-appointment',
     data: { memberId: 'bob', transferredBy: 'other' } };
