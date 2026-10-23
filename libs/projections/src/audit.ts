@@ -43,6 +43,7 @@ const auditTypes = new Set([
   'member.command_refused',
   'member.joined',
   'member.role_changed',
+  'member.ownership_confirmed',
   'member.removed',
   'computer.claimed',
   'silo.owner_bootstrapped',
@@ -105,6 +106,7 @@ const verifiedActorFields: Record<string, string> = {
   'member.removed': 'removedBy',
   'team.created': 'createdBy',
   'ownership.transferred': 'transferredBy',
+  'ownership.stepped_down': 'memberId',
   'takeover.requested': 'requestedBy',
   'takeover.refused': 'actorId',
 };
@@ -133,6 +135,29 @@ function invitationMetadata(event: EventEnvelope, data: Record<string, unknown>)
     memberId: safeId(data['memberId']), invitationId: safeId(data['invitationId']),
     operation, role,
   };
+}
+function membershipMetadata(event: EventEnvelope, data: Record<string, unknown>): Partial<AuditRecord> {
+  const memberId = safeId(data['memberId']);
+  const role = z.enum(['owner', 'admin', 'member']);
+  switch (event.type) {
+    case 'member.role_changed':
+      return { operation: 'role_change', memberId,
+        previousRole: role.safeParse(data['previousRole']).data,
+        newRole: role.safeParse(data['newRole']).data };
+    case 'ownership.transferred': {
+      if (data['awaitingConfirmation'] === true) {
+        return { operation: 'transfer_intent', memberId };
+      }
+      return { operation: 'appointment', memberId, newRole: 'owner' };
+    }
+    case 'member.ownership_confirmed':
+      return { operation: 'ownership_confirmation', memberId, newRole: 'owner',
+        appointmentId: safeId(data['appointmentId']) };
+    case 'ownership.stepped_down':
+      return { operation: 'step_down', memberId, previousRole: 'owner', newRole: 'admin' };
+    default:
+      return {};
+  }
 }
 function isDestinationRule(event: EventEnvelope) {
   return ['egress.destination_allowed', 'egress.destination_revoked'].includes(event.type);
@@ -166,6 +191,7 @@ function metadata(event: EventEnvelope, d: Record<string, unknown>, position: nu
   const cents = amount(d['amountCents'] ?? d['settledCents']);
   const digest = commandRef(event);
   return { ...invitationMetadata(event, d), ...takeoverMetadata(event, d),
+    ...membershipMetadata(event, d),
     eventId: event.id, type: event.type, position, recordedAt: event.time,
     actor: actor(event, d), ...(digest ? { commandRef: digest } : {}),
     source: auditSource(event),
@@ -191,6 +217,9 @@ export const auditTrail: Projection = {
     await db.query(`CREATE INDEX IF NOT EXISTS audit_event_type_bytewise
       ON audit_entries (silo, event_type COLLATE "C", position DESC)`);
     await db.query('DROP INDEX IF EXISTS audit_event_type');
+    await db.query(`CREATE INDEX IF NOT EXISTS audit_ownership_confirmation
+      ON audit_entries (silo, (metadata->>'appointmentId'), (metadata->>'memberId'), position)
+      WHERE event_type = 'member.ownership_confirmed'`);
     for (const key of ['request_id', 'permit_id', 'approval_id', 'conversation_id', 'requester_id', 'turn_id', 'decision']) {
       await db.query(`CREATE INDEX IF NOT EXISTS audit_${key} ON audit_entries (silo, ${key}, position DESC)`);
     }
@@ -430,4 +459,19 @@ function isRecordedDispatch(record: AuditRecord): boolean {
 
 function isDispatchStart(record: AuditRecord): boolean {
   return record.type === 'tool.dispatch_started';
+}
+
+/** Find only the confirmation of this appointment, without reading member history. */
+export async function readAuditOwnershipConfirmation(db: Query, silo: string,
+  intent: AuditRecord): Promise<AuditRecord | undefined> {
+  const result = await db.query<{ metadata: unknown }>(
+    `SELECT metadata FROM audit_entries WHERE silo = $1
+      AND event_type = 'member.ownership_confirmed' AND metadata->>'appointmentId' = $2
+      AND metadata->>'memberId' = $3 AND position > $4 ORDER BY position LIMIT 2`,
+    [silo, intent.eventId, intent.memberId, intent.position]);
+  // Refuse to choose between conflicting confirmations.
+  if (result.rows.length !== 1) {
+    return undefined;
+  }
+  return auditResponseSchema.shape.rows.element.shape.records.element.parse(result.rows[0]!.metadata);
 }

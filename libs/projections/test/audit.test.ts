@@ -22,6 +22,7 @@ function auditAllowListIncludesOwnership(): void {
   const previousAllowList = new RegExp(previousPattern, 'u');
 
   const ownershipTypes = [
+    'member.ownership_confirmed',
     'ownership.seeded',
     'ownership.transferred',
     'ownership.stepped_down',

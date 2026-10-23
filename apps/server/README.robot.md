@@ -1336,7 +1336,8 @@ credential references, bearer material, raw arguments or gateway diagnostics.
 Both routes load a page before checking current event-backed membership and
 OpenFGA once. `GET /api/org/history/:auditId` does the same for one page of
 related records. A removed or demoted caller receives a fixed refusal, including
-when their access changes during the load. PostgreSQL gives each query a
+when their access changes during the load or loading fails. Failed list and detail
+loads wait for the same access check before returning an error. PostgreSQL gives each query a
 one-second limit.
 The access check reads only member and ownership history; it never reads the
 conversation event stream or rejects the result because ordinary chat activity
@@ -4313,3 +4314,24 @@ GET appends no event and makes no model/tool call or budget change.
 access races, SQL timeout, continuation restart and replayed accounting evidence.
 Root/routine joins, month filtering, impact previews and screens remain later work.
 Fresh-install qualification: NOT RUN.
+
+## Role and ownership history progress
+
+Organisation audit detail checks exact `members` projection receipts and OpenFGA
+`projection_event` receipts for each role or ownership record on the bounded page.
+A transfer intent also needs its exact member confirmation and both events' receipts.
+The response keeps `status: recorded`; `progress.readModel` and `progress.iam` report
+receipt processing separately. Missing receipts remain applying. An unavailable receipt
+check returns the fixed 503 response only after checking current access. Ordinary, demoted
+and removed callers receive the same 403 refusal for an existing, missing or foreign
+record, including when IAM is unavailable. No current role or later receipt substitutes for
+an earlier event. Progress is loaded again on each GET and is never saved by replay.
+
+These reads finish before the route's one current Owner/Admin access check. They do not
+load target-member histories or the member directory. List pages retain event facts only.
+`test/audit-membership.test.ts` covers mixed operations, actors, exact receipts, replay,
+blocked reads, access loss and private-value exclusion with NATS, PostgreSQL and OpenFGA.
+It also checks failed progress, list and detail reads for ordinary, demoted and removed
+callers, and fixed loading errors for authorised readers. All loading, successful or
+failed, finishes before the single access check. No write authority fence is used.
+Live qualification remains NOT RUN.
