@@ -187,3 +187,39 @@ async function retainsCheckerAndRestorationFailures() {
 }
 test('the receipt keeps the checker error first when restoring company limits also fails',
   retainsCheckerAndRestorationFailures);
+
+async function sanitisesCombinedFailuresSeparately() {
+  const directory = await mkdtemp(join(tmpdir(), 'rehearsal-combined-errors-'));
+  const environment = 'MODEL_KEY=synthetic-private-value\n';
+  await writeFile(`${directory}/fixture.env`, environment);
+  async function fail() {
+    const errors = [new Error('Original refusal missing synthetic-private-value'),
+      new Error('Restoration unavailable sk-synthetic-fixture-value')];
+    throw new AggregateError(errors, 'Combined failures');
+  }
+  async function capture() {
+    throw new Error('Screenshot failed synthetic-private-value');
+  }
+  function sanitise(value: string) {
+    return sanitiseEvidence(value, directory, directory);
+  }
+  function unavailableSanitiser(): string {
+    throw new Error('Cannot remove private values');
+  }
+  try {
+    const result = await rehearsalStep(fail, capture, sanitise);
+    assert.equal(result.result, 'FAIL');
+    assert.equal(result.reason, 'Original refusal missing [REDACTED]');
+    assert.deepEqual(result.additionalReasons, ['Restoration unavailable [REDACTED]']);
+    assert.equal(result.pictureReason, 'Screenshot failed [REDACTED]');
+    const withheld = await rehearsalStep(fail, capture, unavailableSanitiser);
+    assert.equal(withheld.result, 'FAIL');
+    assert.equal(withheld.reason, 'Failure details withheld');
+    assert.deepEqual(withheld.additionalReasons, ['Failure details withheld']);
+    assert.equal(withheld.pictureReason, 'Failure details withheld');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('combined checker, restoration and picture errors each remove private values',
+  sanitisesCombinedFailuresSeparately);

@@ -76,7 +76,9 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
       const pageNumber = viewer?.getByRole('textbox', {
         name: 'Page number', exact: true, includeHidden: true,
       });
-      if (pageNumber && await pageNumber.count() && await pageNumber.inputValue() === '1') break;
+      if (pageNumber && await pageNumber.count() && await pageNumber.inputValue() === '1') {
+        break;
+      }
       assert(Date.now() < renderedBy, 'PDF preview did not render');
       await delay(100);
     }
@@ -189,6 +191,7 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
   }
   async function companyLimit() {
     const before = await demoBudget(options);
+    let checkFailure: { error: unknown } | undefined;
     try {
       await owner.goto(`${origin}/org/spending`);
       await owner.getByLabel('Budget scope', { exact: true }).selectOption('global');
@@ -210,13 +213,25 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
       const refused = await demoBudget(options);
       assert.equal(refused.todayCents, before.todayCents);
       assert.equal(refused.reservedCents, before.reservedCents);
+    } catch (error) {
+      checkFailure = { error };
+      throw error;
     } finally {
-      await demoCeiling(options, `rehearsal-restore-${randomUUID()}`,
-        before.ceilingCents, before.dailyCeilingCents);
-      const restored = await demoBudget(options);
-      assert.equal(restored.ceilingCents, before.ceilingCents);
-      assert.equal(restored.dailyCeilingCents, before.dailyCeilingCents);
-      await owner.reload();
+      try {
+        await demoCeiling(options, `rehearsal-restore-${randomUUID()}`,
+          before.ceilingCents, before.dailyCeilingCents);
+        const restored = await demoBudget(options);
+        assert.equal(restored.ceilingCents, before.ceilingCents);
+        assert.equal(restored.dailyCeilingCents, before.dailyCeilingCents);
+        await owner.reload();
+      } catch (restorationError) {
+        if (checkFailure) {
+          // Keep the checker failure first and report the failed restoration alongside it.
+          const errors = [checkFailure.error, restorationError];
+          throw new AggregateError(errors, 'Company-limit check and restoration failed');
+        }
+        throw restorationError;
+      }
     }
   }
   async function changeHistory() {
@@ -235,9 +250,13 @@ export async function demoRehearsal(owner: Page, member: Page, options: Options,
         groupSeen = true;
         await picture(owner, '10-group-history');
       }
-      if (limitSeen && groupSeen) return;
+      if (limitSeen && groupSeen) {
+        return;
+      }
       const older = owner.getByRole('button', { name: 'Older history', exact: true });
-      if (!await older.count()) break;
+      if (!await older.count()) {
+        break;
+      }
       await older.click();
       await delay(300);
     }

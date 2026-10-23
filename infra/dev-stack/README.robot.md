@@ -1114,6 +1114,9 @@ history, at 1280 and 390 pixels. Step 5 sends from 390 pixels at both widths.
 A failure stops later steps, which are recorded as NOT RUN.
 Private `demo-rehearsal/<time>/results.json` records each step's result, duration and
 sanitised failure message. A screenshot error cannot replace the checker error.
+If the company-limit check and its restoration both fail, `reason` keeps the checker's
+message and `additionalReasons` records the restoration message. Both remove private
+values separately. A restoration failure after a successful check still fails the step.
 The existing evidence sanitiser removes known credentials and credential patterns;
 failed sanitisation withholds the details. Screenshots mask email addresses, password
 inputs, invitation links and provider-key patterns.
@@ -1124,4 +1127,8 @@ patterns are still checked across the page. The other nine steps have no unscope
 error: `locator('main') resolved to 2 elements`. It passes after the fix and refuses
 missing status, keys outside Models and visible password inputs. Run its fixtures with
 `nice -n 10 node --experimental-strip-types --test infra/dev-stack/demo-rehearsal.test.ts`.
+The recording fixture runs the real rehearsal and budget helpers with browser and HTTP
+substitutes. It checks both failures in `results.json`, the restoration attempt and
+the later steps recorded as NOT RUN. Separate checks cover private values in both
+errors, failed sanitisation and a screenshot failure alongside them.
 Live rehearsal after this correction: NOT RUN.

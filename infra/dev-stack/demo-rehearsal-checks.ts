@@ -28,12 +28,22 @@ export async function rehearsalStep(run: () => Promise<void>,
   const started = performance.now();
   let result = 'PASS';
   let reason: string | undefined;
+  let additionalReasons: string[] | undefined;
   let pictureReason: string | undefined;
+  function sanitisedReason(error: unknown) {
+    return failureReason(error, sanitise);
+  }
   try {
     await run();
   } catch (error) {
     result = 'FAIL';
-    reason = failureReason(error, sanitise);
+    if (error instanceof AggregateError) {
+      reason = sanitisedReason(error.errors[0]);
+      const additionalErrors = error.errors.slice(1);
+      additionalReasons = additionalErrors.map(sanitisedReason);
+    } else {
+      reason = sanitisedReason(error);
+    }
   }
   try {
     await capture(result);
@@ -45,5 +55,6 @@ export async function rehearsalStep(run: () => Promise<void>,
       reason = failureReason(error, sanitise);
     }
   }
-  return { result, reason, pictureReason, elapsedMs: Math.round(performance.now() - started) };
+  return { result, reason, additionalReasons, pictureReason,
+    elapsedMs: Math.round(performance.now() - started) };
 }
