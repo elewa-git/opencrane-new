@@ -21,21 +21,29 @@ function fixture(argv = npmArgv, input = lockfile) {
     return true;
   }
   const params = { processId: 'process-1', argv, cwd: 'file:///workspace', env: {},
-tty: false, pipeStdin: false, arg0: null,
-metadata: { threadId: 'thread-1', toolCallId: 'call-1' } };
+    tty: false, pipeStdin: false, arg0: null,
+    metadata: { threadId: 'thread-1', toolCallId: 'call-1' } };
   const hash = createHash('sha256');
   hash.update(JSON.stringify([argv, params.cwd, input]));
-  const registration = { ...context, threadId: 'thread-1', toolCallId: 'call-1', turnId: 'turn-1',
-operationId: 'operation-1', operationDigest: hash.digest('hex'), generation: 3,
-host: argv[0] === 'npm' ? 'registry.npmjs.org' : 'github.com', port: 443,
-expiresAt: 2000 };
+  const registration = {
+    ...context,
+    threadId: 'thread-1',
+    toolCallId: 'call-1',
+    turnId: 'turn-1',
+    operationId: 'operation-1',
+    operationDigest: hash.digest('hex'),
+    host: argv[0] === 'npm' ? 'registry.npmjs.org' : 'github.com',
+    port: 443,
+    expiresAt: 2000,
+  };
   function lookup(identity: unknown) {
     lookups.push(identity);
-    return { generation: context.generation, registration, input, consume };
+    return { registration, input, consume };
   }
   const request = { id: 1, method: 'process/start', params };
   function validate() {
-return workerRequest(Buffer.from(`${JSON.stringify(request)}\n`), lookup, context, 1000);
+    const frame = Buffer.from(`${JSON.stringify(request)}\n`);
+    return workerRequest(frame, lookup, context, 1000);
   }
   return { request, registration, context, lookups, lookup, consume, validate };
 }

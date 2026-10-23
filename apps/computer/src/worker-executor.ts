@@ -28,7 +28,7 @@ export function workerExecutor(reply: (value: unknown) => void) {
       return;
     }
     try {
-      workerRequest(frame, noRegistration);
+      workerRequest(frame, noRegistration, undefined);
     } catch {
       // Return the same fixed refusal for invalid and unregistered operations.
       refuseWorker(request, reply);

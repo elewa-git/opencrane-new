@@ -1,12 +1,24 @@
 import { createHash } from 'node:crypto';
 import { record } from './http.ts';
 
-type Registration = Readonly<{
-  threadId: string; toolCallId: string; turnId: string; operationId: string;
-  operationDigest: string; generation: number; host: string; port: number; expiresAt: number;
+type Binding = Readonly<{
+  executorId: string;
+  siloId: string;
+  personId: string;
+  computerId: string;
+  processId: string;
+  generation: number;
 }>;
-type Lookup = (threadId: string, toolCallId: string) => {
-  generation: number; registration: Registration; input: string;
+type Registration = Binding & Readonly<{
+  threadId: string; toolCallId: string; turnId: string; operationId: string;
+  operationDigest: string; host: string; port: number; expiresAt: number;
+}>;
+type Lookup = (binding: Binding) => {
+  registration: Registration;
+  input: string;
+  // Claim this exact registration atomically, only while it is current and unused.
+  // Share its consumed state across every lookup and connection; never reset it on retry.
+  consume: () => boolean;
 } | undefined;
 
 const limits = Object.freeze({ wallMs: 300_000, idleMs: 30_000,
@@ -107,7 +119,7 @@ function startFrame(frame: Buffer) {
   }
   const params = record(request['params']);
   only(params, ['processId', 'argv', 'cwd', 'env', 'tty', 'pipeStdin', 'arg0', 'metadata']);
-  text(params['processId']);
+  const processId = text(params['processId']);
   if (params['cwd'] !== 'file:///workspace' || params['tty'] !== false ||
       params['pipeStdin'] !== false || params['arg0'] !== null ||
       Object.keys(record(params['env'])).length !== 0) throw new Error();
@@ -116,33 +128,74 @@ function startFrame(frame: Buffer) {
   const argv = params['argv'];
   if (!Array.isArray(argv)) throw new Error();
   const checked = argv.map(text);
-  return { argv: checked, cwd: params['cwd'], threadId: text(metadata['threadId']),
+  return { processId, argv: checked, cwd: params['cwd'], threadId: text(metadata['threadId']),
     toolCallId: text(metadata['toolCallId']) };
 }
 
-// Read registrations only from supervisor-owned state, never from the request.
-// Native delivery is not proved yet; production supplies no registration.
-export function workerRequest(frame: Buffer, lookup: Lookup, now = Date.now()) {
+function connectionBinding(context: Binding | undefined): Binding {
+  if (!context || !Number.isSafeInteger(context.generation)) throw new Error();
+  const binding = {
+    executorId: text(context.executorId),
+    siloId: text(context.siloId),
+    personId: text(context.personId),
+    computerId: text(context.computerId),
+    processId: text(context.processId),
+    generation: context.generation,
+  };
+  return Object.freeze(binding);
+}
+
+function checkRegistration(saved: Registration, binding: Binding,
+  request: ReturnType<typeof startFrame>, now: number) {
+  if (saved.executorId !== binding.executorId || saved.siloId !== binding.siloId ||
+      saved.personId !== binding.personId || saved.computerId !== binding.computerId ||
+      saved.processId !== binding.processId || saved.generation !== binding.generation) {
+    throw new Error();
+  }
+  if (saved.threadId !== request.threadId || saved.toolCallId !== request.toolCallId ||
+      !Number.isSafeInteger(saved.expiresAt) || now >= saved.expiresAt) throw new Error();
+}
+
+// Supply the current connection binding from supervisor-owned state, never from the frame.
+// Native delivery is not proved yet; production supplies neither binding nor registration.
+export function workerRequest(frame: Buffer, lookup: Lookup,
+  context: Binding | undefined, now = Date.now()) {
   try {
     const request = startFrame(frame);
-    const live = lookup(request.threadId, request.toolCallId);
+    const binding = connectionBinding(context);
+    if (request.processId !== binding.processId) throw new Error();
+    const live = lookup(binding);
     if (!live || Buffer.byteLength(live.input) > limits.frameBytes) throw new Error();
     const saved = live.registration;
-    if (saved.threadId !== request.threadId || saved.toolCallId !== request.toolCallId ||
-        saved.generation !== live.generation || !Number.isSafeInteger(saved.generation) ||
-        !Number.isSafeInteger(saved.expiresAt) || now >= saved.expiresAt) throw new Error();
+    checkRegistration(saved, binding, request, now);
     const prepared = operation(request.argv, live.input);
     if (prepared.host !== saved.host || prepared.port !== saved.port) throw new Error();
     const hash = createHash('sha256');
     hash.update(JSON.stringify([request.argv, request.cwd, live.input]));
     if (hash.digest('hex') !== saved.operationDigest) throw new Error();
     // Copy only reviewed identity fields; never copy credentials from trusted state either.
-    const identity = Object.freeze({ threadId: saved.threadId, toolCallId: saved.toolCallId,
-      turnId: text(saved.turnId), operationId: text(saved.operationId),
-      operationDigest: saved.operationDigest, generation: saved.generation,
-      host: saved.host, port: saved.port, expiresAt: saved.expiresAt });
-    return Object.freeze({ execution: 'disabled' as const, argv: Object.freeze(prepared.argv),
-      env: Object.freeze(prepared.env), cwd: '/operation', identity, limits });
+    const identity = {
+      ...binding,
+      threadId: saved.threadId,
+      toolCallId: saved.toolCallId,
+      turnId: text(saved.turnId),
+      operationId: text(saved.operationId),
+      operationDigest: saved.operationDigest,
+      host: saved.host,
+      port: saved.port,
+      expiresAt: saved.expiresAt,
+    };
+    const plan = {
+      execution: 'disabled' as const,
+      argv: Object.freeze(prepared.argv),
+      env: Object.freeze(prepared.env),
+      cwd: '/operation',
+      identity: Object.freeze(identity),
+      limits,
+    };
+    // Consume only after all checks pass, and before returning a plan to any caller.
+    if (live.consume() !== true) throw new Error();
+    return Object.freeze(plan);
   } catch {
     throw new Error('worker_request_refused');
   }
