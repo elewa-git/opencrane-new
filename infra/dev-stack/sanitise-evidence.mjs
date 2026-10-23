@@ -1,5 +1,6 @@
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, realpathSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const placeholder = '[REDACTED]';
 const sensitiveName = /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PAT/iu;
@@ -55,7 +56,7 @@ function readEnvironmentSecrets(secrets, path) {
   }
 }
 
-function knownSecrets() {
+function knownSecrets(slot, repository) {
   const secrets = new Set();
   for (const name of readdirSync(slot)) {
     const path = resolve(slot, name);
@@ -122,14 +123,22 @@ function redactPatterns(content) {
   redacted = redacted.replace(/\bBearer\s+[^\s"',;}]+/giu, `Bearer ${placeholder}`);
   redacted = redacted.replace(/\bAuthorization\s*:[^\r\n]*/giu,
     `Authorization: ${placeholder}`);
+  redacted = redacted.replace(/\bsk-[A-Za-z0-9_-]{12,}/gu, placeholder);
   return redacted;
 }
 
+export function sanitiseEvidence(content, slot, repository, extraSecrets = []) {
+  const secrets = knownSecrets(slot, repository);
+  for (const secret of extraSecrets) {
+    addSecret(secrets, secret);
+  }
+  const redacted = redactKnownSecrets(content, secrets);
+  return redactPatterns(redacted);
+}
+
 function sanitise() {
-  const secrets = knownSecrets();
   const content = readFileSync(source, 'utf8');
-  let redacted = redactKnownSecrets(content, secrets);
-  redacted = redactPatterns(redacted);
+  let redacted = sanitiseEvidence(content, slot, repository);
   if (!['failure.log', 'last-error.log', 'receipt.json'].includes(basename(source))) {
     const lines = redacted.split('\n');
     const endsWithNewline = lines.at(-1) === '';
@@ -145,9 +154,12 @@ function sanitise() {
   process.stdout.write(redacted);
 }
 
-try {
-  sanitise();
-} catch {
-  // Never print an exception: its message or path could contain a secret.
-  process.exitCode = 1;
+// Keep direct runs working when the daily launcher uses a symlink.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    sanitise();
+  } catch {
+    // Never print an exception: its message or path could contain a secret.
+    process.exitCode = 1;
+  }
 }

@@ -1090,3 +1090,45 @@ step within 180 seconds and successful steps taking longer than 180 seconds. The
 fixture refuses configuration loading to prove the secondary id check runs first.
 The command does not claim or remove a stack. Use `claim.sh` before startup and
 `down.sh --id` after copying the receipt. Live results are in the demo receipt.
+
+## Ten-step demo rehearsal checker
+
+`demo-rehearsal-run.ts` retains the ten-step script used by draft PR #603.
+The original was an operator file under `/tmp/demo-final-rehearsal-evidence/`.
+On an already claimed, owned real secondary, the command is:
+
+```sh
+DEV_STACK_ID=1 DEMO_ALLOWANCE_CENTS=1000 \
+node --experimental-strip-types infra/dev-stack/demo-rehearsal-run.ts
+```
+
+This command makes paid calls. The allowance must be an approved integer from 1 to
+2000 euro cents. Each paid turn first checks charged and held company spending plus
+100 cents against it. This is the retained script's check, not a shared spending counter.
+The command neither starts nor claims a stack. Missing, owner and invalid ids are refused
+before settings load. Each invocation starts a new run; it does not resume paid steps.
+
+The script checks streaming, scanned PDF, action history, Stop, live direct delivery,
+private shared replies, groups and an unopened invite, Models, company limits and change
+history, at 1280 and 390 pixels. Step 5 sends from 390 pixels at both widths.
+A failure stops later steps, which are recorded as NOT RUN.
+Private `demo-rehearsal/<time>/results.json` records each step's result, duration and
+sanitised failure message. A screenshot error cannot replace the checker error.
+If the company-limit check and its restoration both fail, `reason` keeps the checker's
+message and `additionalReasons` records the restoration message. Both remove private
+values separately. A restoration failure after a successful check still fails the step.
+The existing evidence sanitiser removes known credentials and credential patterns;
+failed sanitisation withholds the details. Screenshots mask email addresses, password
+inputs, invitation links and provider-key patterns.
+
+Step 8 scopes “Model answered” to `oc-models main`. Password inputs and provider-key
+patterns are still checked across the page. The other nine steps have no unscoped
+`main` locator. The nested-main fixture failed first with Playwright's strict-mode
+error: `locator('main') resolved to 2 elements`. It passes after the fix and refuses
+missing status, keys outside Models and visible password inputs. Run its fixtures with
+`nice -n 10 node --experimental-strip-types --test infra/dev-stack/demo-rehearsal.test.ts`.
+The recording fixture runs the real rehearsal and budget helpers with browser and HTTP
+substitutes. It checks both failures in `results.json`, the restoration attempt and
+the later steps recorded as NOT RUN. Separate checks cover private values in both
+errors, failed sanitisation and a screenshot failure alongside them.
+Live rehearsal after this correction: NOT RUN.
