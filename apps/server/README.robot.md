@@ -4521,8 +4521,10 @@ waits for the client socket and the regression fails.
 Gateway replacement and disposal use `SIGKILL` for these disposable memory fixtures.
 Memory tool calls finish before disposal. Normal replacement happens during setup,
 with no tool call in progress. Both steps still await the child's exit and close its output pipes.
-Separate regressions pause the gateway process with `SIGSTOP` and require replacement
-or complete cleanup within two seconds. Waiting for graceful shutdown makes both fail.
+Separate regressions pause the gateway process with `SIGSTOP` and require the old
+process to exit, or complete cleanup to finish, within two seconds. Replacement then
+awaits the new process's normal readiness check. A delayed-startup regression keeps
+that wait separate from shutdown. Waiting for graceful shutdown makes both fail.
 The shared models fixture and its normal graceful shutdown remain unchanged.
 
 `test/memory-recall-proof.test.ts` includes both old and current revisions in its
@@ -4601,3 +4603,49 @@ HTTP 403 returns only `status: refused` and `reason: memory_tool_unavailable`.
 No fact append, key or journal file is created. Tools/list still advertises recall alone.
 P4-13 row 6 (#95) owns activation. Next for #97 is row 3: output and process invalidation.
 The remaining #497 guards belong to #302. Fresh-install qualification: NOT RUN.
+
+### Follow-up timing audit, 23 October 2026
+
+The 44 local commits included 13 commits already on main and 31 memory commits.
+Three memory commits changed application code: `215e6a515` added disabled target
+validation, `5e81b2195` split that validation into named functions, and `76c350874`
+returned the fixed configuration refusal through the gateway. Their rebased ids
+are `8778f582f`, `86129a0f8` and `80e906262`. The later preparation and cleanup
+commits changed tests and their notes only. No commit was squashed.
+
+The target checks retain saved and current requester and assistant grants, current
+IAM permissions, the selected tool's reviewed zero-cost Allow, the exact signed
+identity, loaded references, input generation and current revision. Write checks
+reuse their original authority and expiry. Conversation history is loaded before
+the small access checks; the final validation reads only later conversation rows.
+Neither authority test file, the event security rules nor the two-second limit changed.
+No dependency or event type was added by the memory commits.
+
+The earlier 20-run attempt completed four failing runs: 122, 72, 80 and 127 of
+133 tests passed. The fifth run was still running in an orphaned harness when
+this follow-up began. That harness and its children were stopped before the new gate.
+
+The failures have different causes:
+
+- Gateway replacement counted new-process startup against a shutdown timer. The
+  test now checks the old process's exit within two seconds, then awaits readiness.
+  A delayed-startup regression failed before this test-only fix.
+- Team recall calls the real gateway after seeding, server startup and replacement
+  finish. No test read separates that call's signing and delivery. The backend can
+  spend the original pass on cold scope, history, projection and IAM reads. This
+  remains a product timing limit; no deadline was raised or refusal retried.
+- Cold-IAM Correct and Forget controls complete their delayed receipt lookup in
+  `prepareMemoryAccess` before `changeToken` signs. Their remaining failures occur
+  inside the real backend checks after signing, rather than in unfinished test setup.
+- The valid Correct control and Forget controls for grant, scope and parser tests
+  likewise sign only after preparation. A missing `memory_tool_unavailable` reason
+  is a failed control, not proof that the later attack check ran.
+- The Correct and Forget revocation tests did read their observation values after
+  signing. Those reads now finish first. Two clock-based regressions failed before
+  the change. Their real requests still use the original pass and access checks.
+
+Own focused checks: Expected FAIL, three new timing regressions; PASS, those three
+plus the original replacement and four revocation cases, 8/8 after the fixes.
+The rebase onto `e2b562359` retained both sides of three documentation conflicts.
+This follow-up adds only test and documentation changes. The full root suite and
+fresh-install qualification remain NOT RUN.

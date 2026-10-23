@@ -267,15 +267,18 @@ async function replacesPausedGateway() {
     throw new Error('Missing memory fixture gateway');
   }
   expect(child.kill('SIGSTOP')).toBe(true);
+  const exited = once(child, 'exit');
   const restarting = restartMemoryGateway();
-  function restarted() {
-    return 'restarted';
+  function stopped() {
+    return 'stopped';
   }
-  const completed = restarting.then(restarted);
+  const completed = exited.then(stopped);
   const expired = pause(2000, 'still waiting');
   try {
-    expect(await Promise.race([completed, expired])).toBe('restarted');
+    // Bound shutdown separately because starting a new process needs its own readiness wait.
+    expect(await Promise.race([completed, expired])).toBe('stopped');
     expect(child.signalCode).toBe('SIGKILL');
+    await restarting;
     expect(setup.gatewayHealthy()).toBe(true);
   } finally {
     child.kill('SIGKILL');
@@ -2532,7 +2535,6 @@ it.each(changeGrants)('checks %s for %s (recorded=%s) before forget', changeGran
 
 async function changeGrantDuringLineage(operation: 'correct' | 'forget', restore: boolean) {
   const request = await changeRequest(operation);
-  const token = await changeToken(request);
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const scopeSubject = `scope-${scopeId}`;
   const before = await setup.nats.store.head(scopeSubject);
@@ -2571,6 +2573,8 @@ async function changeGrantDuringLineage(operation: 'correct' | 'forget', restore
   }
   const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
   try {
+    // Finish the test's observations before starting the request's original access window.
+    const token = await changeToken(request);
     const response = await sendChange(request, token);
     expect(changed).toBe(true);
     expect(finished).toBe(true);
