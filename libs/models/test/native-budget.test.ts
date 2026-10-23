@@ -823,3 +823,55 @@ async function refusesNativeDispatchAfterDecision(change: string) {
 it.each(['stop', 'deadline', 'lost admission'])(
   'refuses native dispatch after %s and retains only potentially sent work',
   refusesNativeDispatchAfterDecision);
+
+async function preservesNativeDeadline(restart: boolean, expireDuringDecision: boolean) {
+  const context = await setup();
+  try {
+    const binding = child(context, 'original-deadline');
+    await admit(context, binding);
+    const id = await reserve(context, binding, 110);
+    const saved = context.actor.state.reservations[0]!;
+    const originalClock = Date.now();
+    const originalPerformance = performance.now();
+    let elapsed = expireDuringDecision ? 1700 : 2100;
+    function wallClock() {
+      return originalClock + elapsed;
+    }
+    function monotonicClock() {
+      return originalPerformance + elapsed;
+    }
+    vi.spyOn(Date, 'now').mockImplementation(wallClock);
+    vi.spyOn(performance, 'now').mockImplementation(monotonicClock);
+    if (restart) {
+      await context.restartActor();
+    }
+    const position = await context.store.head('budget-test');
+    const allow = allowNative(context, binding);
+    async function delayedDecision(reservationId: string, requestId: string) {
+      const decisionId = await allow(reservationId, requestId);
+      elapsed += 400;
+      return decisionId;
+    }
+    await expect(nativeGrant(context, binding, 110, `call-${binding.turnId}-110`,
+      delayedDecision)).rejects.toThrow(/^Model call retry refused$/u);
+    expect(context.actor.state.reservations).toHaveLength(1);
+    expect(context.actor.state.reservations[0]?.id).toBe(id);
+    expect(context.actor.state.dispatches).toHaveLength(0);
+    const decisions = await history(context.store, `decision-${saved.call.requestId}`, 'test');
+    if (expireDuringDecision) {
+      expect(decisions).toHaveLength(1);
+      expect(context.actor.state.reservations[0]?.settledCents).toBe(0);
+    } else {
+      expect(decisions).toHaveLength(0);
+      expect(await context.store.head('budget-test')).toBe(position);
+      expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(110);
+    }
+    expect(context.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await close(context);
+  }
+}
+it.each([[false, false], [true, false], [false, true], [true, true]])(
+  'keeps the original native expiry; restart=%s, expiry during decision=%s',
+  preservesNativeDeadline);
