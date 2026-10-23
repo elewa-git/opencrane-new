@@ -16,6 +16,7 @@ flowchart LR
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
   ci -->|runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image tests| computer["apps/computer<br/>test image"]
+  actions -->|checks folder guides| readmes["README checker"]
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
   actions -->|restores system packages| cache["Actions cache<br/>downloaded packages"]
   cache -->|supplies saved packages| ci
@@ -49,6 +50,9 @@ scripts launched by tests. A test that reaches Playwright or the image helpers
 must join a fixture group. Both fixture jobs must pass. Documentation-only pull
 requests run documentation checks and the event security tests. Main pushes
 always run all jobs.
+
+Documentation checks also require folder guides and reject ticket and phase
+references in those guides. The README check uses Node and Git without extra installs.
 
 ## How to run or test it
 

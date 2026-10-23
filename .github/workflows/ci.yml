@@ -168,6 +168,7 @@ jobs:
         if: needs.select.outputs.mode == 'docs'
         run: |
           nice -n 10 npm run lint:docs
+          nice -n 10 npm run lint:readmes
           nice -n 10 npm run lint:links
           nice -n 10 npm run lint:changelog
 
