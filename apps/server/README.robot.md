@@ -4478,9 +4478,14 @@ The save uses the original approval position and the write check's deadline.
 
 ### Memory MCP test preparation and cleanup
 
-`test/memory-mcp.test.ts` prepares personal read and write grants before signing
-recall or change controls. It reads the grant streams, checks the saved receipts
-that show each grant was applied, and checks both identities' current permissions.
+`test/memory-mcp.test.ts` checks active membership, its applied OpenFGA receipts,
+and tool-server and personal memory grants before signing recall or change controls.
+It reads each grant stream, checks the saved receipts that show each grant was applied,
+and checks both identities' current permissions. The initial discovery request alone
+cannot prove that this preparation finished: its result may be a cold-start refusal.
+Two recall regressions advance both clocks by 2.2 seconds during the first membership
+or tool-server grant lookup. Both keep the original HTTP 200 recall assertion.
+They fail if either lookup first runs after the control's pass has been signed.
 A first lookup can take longer than the signed pass's two-second lifetime. Both
 change operations have regressions that delay the first event or IAM receipt read
 by 2.2 seconds and still require the exact `memory_tool_unavailable` control reply.

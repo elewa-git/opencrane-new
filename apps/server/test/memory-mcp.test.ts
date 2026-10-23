@@ -14,7 +14,7 @@ import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
 import { envelope, history, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
-  verifyMemoryContext } from '@opencrane/models';
+  verifyMemoryContext, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
@@ -1047,7 +1047,7 @@ function independentFact(fact: { memoryId: string }) {
 async function recalledRemember(commandId: string, query = 'deliver') {
   await grantWrite('member');
   await grantWrite('assistant');
-  await prepareMemoryGrants();
+  await prepareMemoryAccess();
   const recallArguments = { ...call.params.arguments, query, limit: 2 };
   const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
   // Issue the setup recall directly so gateway admission does not spend its short pass.
@@ -2230,7 +2230,7 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   await publishMemory(setup);
   await grantWrite('member');
   await grantWrite('assistant');
-  await prepareMemoryGrants();
+  await prepareMemoryAccess();
   const recallProof = await loadChangeFacts(revision);
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const dependsOn = chat.memoryContext!.references;
@@ -2251,20 +2251,25 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   }
   return request;
 }
-async function prepareMemoryGrants() {
+async function prepareMemoryAccess() {
   // Finish cold event and IAM reads before issuing the control's two-second pass.
   const deadline = performance.now() + 10_000;
-  const resourceTypes = ['memory_read', 'memory_write'];
-  for (const resourceType of resourceTypes) {
-    const subject = grantStream(resourceType, scopeId);
+  await readActiveMember(setup.nats.store, setup.binding, 'alice', 'member', setup.auth.applied);
+  const resources = [
+    { resourceType: 'mcp_server', resourceId: 'memory' },
+    { resourceType: 'memory_read', resourceId: scopeId },
+    { resourceType: 'memory_write', resourceId: scopeId },
+  ];
+  for (const { resourceType, resourceId } of resources) {
+    const subject = grantStream(resourceType, resourceId);
     const grants = await history(setup.nats.store, subject, 'test', deadline);
     for (const grant of grants) {
       const applied = await setup.auth.applied(grant.event.id);
       expect(applied).toBe(true);
     }
-    const requester = await setup.auth.use('person', 'alice', resourceType, scopeId);
+    const requester = await setup.auth.use('person', 'alice', resourceType, resourceId);
     expect(requester.allowed).toBe(true);
-    const assistant = await setup.auth.use('assistant', 'assistant', resourceType, scopeId);
+    const assistant = await setup.auth.use('assistant', 'assistant', resourceType, resourceId);
     expect(assistant.allowed).toBe(true);
   }
 }
