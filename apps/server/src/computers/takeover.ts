@@ -11,7 +11,7 @@ import { ChatRefused, chatAccess, writeChatAccess, type ChatOptions } from '../c
 import { privateSessionCreation, writePrivateSession } from '../chat/private-session.ts';
 import { desktopAccess, viewAccess } from './view-access.ts';
 import { RequesterOnly, ControlConflict, savedControlRefusal, recordControlRefusal,
-  throwControlRefusal } from './takeover-refusals.ts';
+  throwControlRefusal, type ControlWriteCheck } from './takeover-refusals.ts';
 
 export { RequesterOnly, ControlConflict } from './takeover-refusals.ts';
 class ControlUnavailable extends Error {}
@@ -22,7 +22,7 @@ const requestSchema = z.object({
   commandId: id, conversationId: id, requesterEventId: id, generation: z.int().positive(),
 }).strict();
 type ControlRequest = z.infer<typeof requestSchema>;
-type WriteAccess = Awaited<ReturnType<typeof writeChatAccess>>;
+
 const turnOwnerSchema = z.object({ conversationId: id, requesterId: id });
 const readySchema = z.object({
   assistantId: id, computerId: id, generation: z.int().positive(), podUid: id,
@@ -47,7 +47,8 @@ export async function requestControl(options: ChatOptions, memberId: string, raw
   await chatAccess(accessOptions, accessRequest);
   const saved = await savedControlRefusal(options, memberId, input);
   if (saved) throwControlRefusal(saved);
-  const fresh = await refusalAccess(accessOptions, memberId, input, chat, facts);
+  const authority = await refusalAccess(accessOptions, memberId, input, chat, facts);
+  const fresh = commandCheck(options, memberId, input, chat, authority);
   try {
     return await checkedControl(options, memberId, input, chat, facts, accessOptions, fresh);
   } catch (error) {
@@ -85,9 +86,31 @@ async function refusalAccess(options: ChatOptions, memberId: string, input: Cont
   return fresh;
 }
 
+function commandCheck(options: ChatOptions, memberId: string, input: ControlRequest,
+  chat: ChatFacts, authority: ControlWriteCheck): ControlWriteCheck {
+  async function check() {
+    await authority();
+    const refused = await savedControlRefusal(options, memberId, input, authority.deadline);
+    if (refused) throwControlRefusal(refused);
+    const assistantId = chat.created?.['assistantId'];
+    if (typeof assistantId === 'string') {
+      const computer = await readStreamSummary(options.store, options.silo,
+        `computer-${assistantId}`, computerSummary, authority.deadline, takeComputer);
+      const control = computer.control;
+      if (control && control.phase !== 'unverified' && control.commandId === input.commandId) {
+        throw new ControlBindingConflict('Control conflict');
+      }
+    }
+    await authority();
+  }
+  // Check both outcomes inside the append. Its global position condition prevents
+  // either outcome from being saved between this read and publication.
+  return Object.assign(check, { deadline: authority.deadline });
+}
+
 async function checkedControl(options: ChatOptions, memberId: string, input: ControlRequest,
   chat: ChatFacts, facts: ReturnType<typeof takeComputer> | undefined, accessOptions: ChatOptions,
-  authority: WriteAccess) {
+  authority: ControlWriteCheck) {
   if (chat.latestHuman && chat.latestHuman.id !== input.requesterEventId) {
     throw new ControlConflict('Control conflict');
   }
@@ -126,7 +149,7 @@ function affectedTurns(facts: ReturnType<typeof takeComputer>, memberId: string,
 }
 
 async function controlAccess(options: ChatOptions, memberId: string, input: ControlRequest,
-  ready: z.infer<typeof readySchema>, chat: ChatFacts, store: EventStore, authority: WriteAccess) {
+  ready: z.infer<typeof readySchema>, chat: ChatFacts, store: EventStore, authority: ControlWriteCheck) {
   const assistantId = ready.assistantId;
   // Load access history before opening the short write check.
   const accessRequest = { memberId, conversationId: input.conversationId,
@@ -155,7 +178,6 @@ async function controlAccess(options: ChatOptions, memberId: string, input: Cont
   await desktop.fresh();
   await teamFresh?.();
   await fresh();
-  await authority();
 }
 
 async function confirmRequest(store: EventStore, silo: string, conversationId: string,
@@ -185,7 +207,7 @@ function repeatedRequest(previous: NonNullable<ComputerSummary['control']>,
 
 async function saveIntent(options: ChatOptions, memberId: string, input: ControlRequest,
   ready: z.infer<typeof readySchema>, affectedTurnIds: string[], sequence: number,
-  fresh: WriteAccess) {
+  fresh: ControlWriteCheck) {
   const assistantId = ready.assistantId;
   const subject = `computer-${assistantId}`;
   const requested = { ...ready, conversationId: input.conversationId,
@@ -202,6 +224,10 @@ async function saveIntent(options: ChatOptions, memberId: string, input: Control
   const command = { event, expectedSequence: sequence, historyChecked: true as const,
     deadline: fresh.deadline, checkAccess: fresh };
   const result = await options.store.append(command);
+  if (result.status !== 'appended') {
+    const refused = await savedControlRefusal(options, memberId, input, fresh.deadline);
+    if (refused) throw new ControlBindingConflict('Control conflict');
+  }
   if (result.status === 'unavailable') throw new ControlUnavailable('Control unavailable');
   if (result.status === 'rejected') throw new ControlBindingConflict('Control conflict');
   if (result.status !== 'appended') throw new ControlConflict('Control conflict');

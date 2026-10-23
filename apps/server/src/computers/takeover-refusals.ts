@@ -1,11 +1,12 @@
 import type { z } from 'zod';
 import { takeoverRefusedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { envelope } from '@opencrane/models';
-import { ChatRefused, type ChatOptions, type writeChatAccess } from '../chat/access.ts';
+import { ChatRefused, type ChatOptions } from '../chat/access.ts';
 import { refusalDigest } from '../members/refusals.ts';
 
 export class RequesterOnly extends ChatRefused {}
 export class ControlConflict extends Error {}
+export type ControlWriteCheck = (() => Promise<void>) & { deadline: number };
 type Refusal = z.infer<typeof takeoverRefusedDataSchema>;
 type Attempt = { commandId: string; conversationId: string;
   requesterEventId: string; generation: number };
@@ -54,7 +55,7 @@ export async function savedControlRefusal(options: ChatOptions, actorId: string,
 
 export async function recordControlRefusal(options: ChatOptions, actorId: string,
   input: Attempt, reason: Refusal['reason'],
-  fresh: Awaited<ReturnType<typeof writeChatAccess>>) {
+  fresh: ControlWriteCheck) {
   const binding = refusalBinding(options.silo, actorId, input);
   const attempted = { ...binding, reason };
   const parsed = takeoverRefusedDataSchema.safeParse(attempted);
@@ -75,6 +76,9 @@ export async function recordControlRefusal(options: ChatOptions, actorId: string
     // Read back even a lost reply: the append may already have committed.
   }
   const saved = await savedControlRefusal(options, actorId, input, deadline);
-  if (!saved) throw new Error('Control audit unavailable');
+  if (!saved) {
+    await fresh();
+    throw new Error('Control audit unavailable');
+  }
   return throwControlRefusal(saved);
 }
