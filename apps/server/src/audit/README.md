@@ -9,6 +9,7 @@ This folder lets people see why OpenCrane allowed, refused or charged for work. 
 - Checks the exact read-table and permission receipts for role and ownership changes.
 - Limits conversation history to the reader's own requests in a conversation they may read.
 - Loads the history before checking current access, so a slow read cannot return private information to someone removed during loading.
+- Checks access after failed loads too, so errors do not reveal protected records.
 - Tells browsers and shared caches not to store the replies.
 
 These requests only read history. They save no changes and start no assistant work. Missing setup or an unavailable permission check returns an unavailable result rather than history.

@@ -22,6 +22,7 @@ change the current controller or interrupt work. Production control stays disabl
 
 Owners and admins can read safe role and ownership change details. The server checks
 receipts for the exact saved change before showing its progress, then checks current access.
+It still checks access when loading fails, so errors do not reveal protected records.
 
 ## Where it fits
 
