@@ -1,5 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
+import { once } from 'node:events';
+import { Duplex, PassThrough } from 'node:stream';
+import { WebSocket } from 'ws';
+import { until } from '@opencrane/authz/testing';
+import { nextBinaryMessage, recordLeaseNotices } from './support/rfb-viewer.ts';
 import * as crypto from 'node:crypto';
 import * as access from '../src/chat/access.ts';
 import { computerSummary, encodeSession } from '@opencrane/auth';
@@ -29,12 +34,12 @@ async function cleanup() {
   await fixture?.close();
 }
 afterEach(cleanup);
-async function setup(requestsEnabled = true) {
-  fixture = await viewFixture(noDesktop);
+async function setup(requestsEnabled = true, open: Parameters<typeof viewFixture>[0] = noDesktop) {
+  fixture = await viewFixture(open);
   desktopCalls = 0;
   cookies.clear();
   const chat = { ...fixture, store: fixture.nats.store, silo: 'test' };
-  const liveView = { ...chat, open: noDesktop };
+  const liveView = { ...chat, open };
   const options = { chat, liveView, audit: chat, takeoverRequestsEnabled: requestsEnabled };
   app = buildServer(fixture.config, options);
   const message = await fixture.append('conversation-chat', 'message.posted', {
@@ -752,3 +757,68 @@ async function refusalInConversationHistory() {
 }
 it('shows a refusal only in its authenticated requester history, including after rebuild',
   refusalInConversationHistory);
+
+async function refusalKeepsPausedProofAndViewer() {
+  const readable = new PassThrough();
+  const writable = new PassThrough();
+  writable.resume();
+  const desktop = Duplex.from({ readable, writable });
+  const greeting = Buffer.from('RFB 003.008\n');
+  function open() {
+    readable.write(greeting);
+    return Promise.resolve(desktop);
+  }
+  await setup(true, open);
+  await participant();
+  expect((await post()).statusCode).toBe(202);
+  const binding = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
+    podUid: 'fixture', takeoverId: body.commandId, affectedTurnIds: [],
+    bridgeEpoch: 'bridge', supervisorEpoch: 'supervisor' };
+  await fixture.append('computer-assistant', 'takeover.pausing', { ...binding,
+    executionProof: 'exited', quietProof: 'unavailable' });
+  await fixture.append('computer-assistant', 'takeover.paused', { ...binding,
+    quietProof: 'complete' });
+  const before = await computerState();
+  const accessOptions = { ...fixture, silo: 'test', store: fixture.nats.store };
+  const bridge = await takeoverProbe(accessOptions);
+  bridge.gate.mockClear();
+  const admissionHeaders = { ...headers(), 'x-opencrane-view': '1' };
+  const admission = await app.inject({ method: 'POST', url: '/api/conversations/chat/view',
+    headers: admissionHeaders });
+  expect(admission.statusCode).toBe(200);
+  const ticket = admission.json<{ ticket: string }>().ticket;
+  const address = await app.listen({ host: '127.0.0.1', port: 0 });
+  const url = `${address.replace('http:', 'ws:')}/ws/conversations/chat/view`;
+  const socket = new WebSocket(url, ['binary', ticket], { headers: admissionHeaders });
+  const notices = recordLeaseNotices(socket);
+  try {
+    expect(await nextBinaryMessage(socket)).toEqual(greeting);
+    body = { ...body, commandId: 'refused-while-paused' };
+    expect((await post(body, 'bob')).json()).toEqual({
+      status: 'refused', reason: 'requester_only',
+    });
+    expect(await refusalRows()).toHaveLength(1);
+    expect(await computerState()).toEqual(before);
+    expect((await get()).json()).toMatchObject({ status: 'paused' });
+    const count = notices.length;
+    function renewed() { return notices.length > count; }
+    await until(renewed);
+    for (const entry of notices) expect(entry.notice.lease).toBe('valid');
+    const security = nextBinaryMessage(socket);
+    socket.send(greeting);
+    readable.write(Buffer.from([1, 1]));
+    expect(await security).toEqual(Buffer.from([1, 1]));
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    await bridge.control.send();
+    await bridge.control.settled();
+    expect(bridge.gate).not.toHaveBeenCalled();
+    expect(bridge.send).not.toHaveBeenCalled();
+    expect(bridge.stopExecution).not.toHaveBeenCalled();
+  } finally {
+    const closed = once(socket, 'close');
+    socket.terminate();
+    await closed;
+  }
+}
+it('keeps quiet proof, bridge state and an open viewer after a refused attempt',
+  refusalKeepsPausedProofAndViewer);
