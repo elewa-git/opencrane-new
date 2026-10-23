@@ -1070,33 +1070,44 @@ async function recalledRemember(commandId: string, query = 'deliver') {
     recallProof: page.recallProof };
   return { ...call, params: { ...call.params, name: 'remember', arguments: argumentsValue } };
 }
-async function preparesColdRecallAuthority(subject: string) {
-  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+function coldLookupClock() {
   const originalDate = Date.now.bind(Date);
   const originalPerformance = performance.now.bind(performance);
   let elapsed = 0;
-  let coldRead = false;
   function dateNow() {
     return originalDate() + elapsed;
   }
   function performanceNow() {
     return originalPerformance() + elapsed;
   }
+  const dates = vi.spyOn(Date, 'now');
+  dates.mockImplementation(dateNow);
+  const times = vi.spyOn(performance, 'now');
+  times.mockImplementation(performanceNow);
+  function advance() {
+    // Exceed the signed pass without waiting on a timer.
+    elapsed += 2200;
+  }
+  function restore() {
+    times.mockRestore();
+    dates.mockRestore();
+  }
+  return { advance, restore };
+}
+async function preparesColdRecallAuthority(subject: string) {
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  const clock = coldLookupClock();
+  let coldRead = false;
   async function* readStream(...args: Parameters<typeof originalRead>) {
     const conversationSummary = subject === 'conversation-conversation';
     const includesCloses = args[3] === true;
     const selected = args[0] === subject && (!conversationSummary || includesCloses);
     if (selected && !coldRead) {
       coldRead = true;
-      // Advance both clocks to model a cold lookup without waiting on a timer.
-      elapsed += 2200;
+      clock.advance();
     }
     yield* originalRead(...args);
   }
-  const dates = vi.spyOn(Date, 'now');
-  dates.mockImplementation(dateNow);
-  const times = vi.spyOn(performance, 'now');
-  times.mockImplementation(performanceNow);
   const reads = vi.spyOn(setup.nats.store, 'readStream');
   reads.mockImplementation(readStream);
   try {
@@ -1104,8 +1115,7 @@ async function preparesColdRecallAuthority(subject: string) {
     expect(coldRead).toBe(true);
   } finally {
     reads.mockRestore();
-    times.mockRestore();
-    dates.mockRestore();
+    clock.restore();
   }
 }
 const coldRecallSubjects = [
@@ -1117,6 +1127,31 @@ const coldRecallSubjects = [
 it.each(coldRecallSubjects)(
   'finishes a cold access lookup before signing the valid recall control: %s',
   preparesColdRecallAuthority);
+
+async function preparesColdRecallProjection() {
+  const originalQuery = setup.db.query.bind(setup.db);
+  const clock = coldLookupClock();
+  let coldRead = false;
+  async function query<Row extends Record<string, unknown>>(sql: string,
+    parameters?: unknown[], options?: { deadline: number }) {
+    if (!coldRead && sql.includes('FROM memory_facts')) {
+      coldRead = true;
+      clock.advance();
+    }
+    return originalQuery<Row>(sql, parameters, options);
+  }
+  const queries = vi.spyOn(setup.db, 'query');
+  queries.mockImplementation(query);
+  try {
+    await recalledRemember('cold-recall-projection', 'exactly');
+    expect(coldRead).toBe(true);
+  } finally {
+    queries.mockRestore();
+    clock.restore();
+  }
+}
+it('finishes the projected fact search before signing the valid recall control',
+  preparesColdRecallProjection);
 
 async function signedRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
   const parsed = parseMemoryRequest(JSON.stringify(body), rememberHeaders);
