@@ -133,3 +133,48 @@ process.stdout.write(String(live));
 }
 it.each([1001, 1002])('keeps automation under UID %s separate from full quiet proof',
   checksRealAutomation, 60_000);
+
+async function checksWorkerRefusal() {
+  const computer = await uploadComputer();
+  try {
+    const script = `
+import assert from 'node:assert/strict';
+import { workspaceProcess } from '/app/src/files.ts';
+import { connect } from 'node:net';
+import { createInterface } from 'node:readline';
+import { once } from 'node:events';
+const check = "const net = require('node:net'); " +
+  "const socket = net.connect(3000, '127.0.0.1'); " +
+  "socket.on('error', function failed(error) { " +
+  "process.stdout.write(JSON.stringify({uid: process.getuid(), code: error.code})); });";
+const result = await workspaceProcess(['node', '-e', check], Buffer.alloc(0));
+assert.equal(result.exitCode, 0);
+assert.deepEqual(JSON.parse(result.output.toString()), {uid: 1001, code: 'EPERM'});
+const socket = connect('/run/executor/exec.sock');
+const lines = createInterface({ input: socket });
+async function rpc(method, params) {
+  socket.write(JSON.stringify({id: 7, method, params}) + '\\n');
+  const [line] = await once(lines, 'line');
+  return JSON.parse(line);
+}
+await rpc('initialize', { clientName: 'worker-refusal-test' });
+for (const argv of [ ['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund'],
+  ['git', 'clone', '--no-checkout', 'https://github.com/a/b.git'] ]) {
+  const response = await rpc('process/start', { processId: 'worker', argv,
+    cwd: 'file:///workspace', env: {}, tty: false, pipeStdin: false, arg0: null,
+    metadata: {threadId: 'thread-1', toolCallId: 'call-1'} });
+  assert.deepEqual(response, {id: 7,
+    error: {code: -32000, message: 'worker_execution_disabled'}});
+}
+lines.close();
+socket.destroy();
+process.stdout.write('ordinary-denied worker-disabled');
+`;
+    const result = await computer.exec('node', '--experimental-strip-types',
+      '--input-type=module', '-e', script);
+    expect(result).toBe('ordinary-denied worker-disabled');
+  } finally {
+    await computer.close();
+  }
+}
+it('refuses worker launch while ordinary execution remains socket-denied', checksWorkerRefusal, 60_000);
