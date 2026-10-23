@@ -27,6 +27,7 @@ it.each([{ source: 'computer' }, { subject: 'conversation-other' },
   'refuses retry writer %j', refusesWriter);
 
 function rejectsDifferentEventType() {
+  expect(childRetryRequestedEventSchema.safeParse(retry).success).toBe(true);
   const changed = { ...retry, type: 'conversation.child_requested' };
   expect(childRetryRequestedEventSchema.safeParse(changed).success).toBe(false);
 }

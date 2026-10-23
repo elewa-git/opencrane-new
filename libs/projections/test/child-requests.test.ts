@@ -36,14 +36,24 @@ async function seedFailure() {
   await childRequests.apply(storage.db, intent, 3);
   await childRequests.apply(storage.db, failure, 4);
 }
-async function savedFailure() {
+async function savedFailure(silo = 'test') {
   const result = await storage.db.query(
-    'SELECT failed_attempt, failure_id FROM child_requests_v3 WHERE intent_id = $1', ['intent']);
+    'SELECT failed_attempt, failure_id FROM child_requests_v3 WHERE silo = $1 AND intent_id = $2',
+    [silo, 'intent']);
   return result.rows;
 }
 async function keepsUnrelatedFailure(patch: object, silo: string) {
   await seedFailure();
+  if (silo === 'other') {
+    const otherIntent = { ...intent, silo };
+    const otherFailure = { ...failure, silo, id: 'other-failure', commandId: 'other-failure' };
+    await childRequests.apply(storage.db, otherIntent, 3);
+    await childRequests.apply(storage.db, otherFailure, 4);
+  }
   await childRequests.apply(storage.db, retry(patch, silo), 5);
+  if (silo === 'other') {
+    expect(await savedFailure(silo)).toEqual([{ failed_attempt: 1, failure_id: 'other-failure' }]);
+  }
   expect(await savedFailure()).toEqual([{ failed_attempt: 1, failure_id: 'failure' }]);
 }
 it.each([[{}, 'other'], [{ conversationId: 'other' }, 'test'],

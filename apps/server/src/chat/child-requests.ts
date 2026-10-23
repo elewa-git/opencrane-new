@@ -109,11 +109,16 @@ async function check(options: Options, memberId: string, loaded: Loaded,
       parentJoinPosition: access.joinPosition });
   }
   // Reveal closure only after checking current access and source visibility.
-  if (loaded.closed || await participationClosed(options.store, options.silo, input.conversationId,
-    deadline)) throw new ChildRequestClosed('Conversation closed');
+  await requireOpenParent(options, loaded, deadline);
   await fresh?.();
   requireUnfailed(loaded);
   return { initialJoins, fresh };
+}
+async function requireOpenParent(options: Options, loaded: Loaded, deadline: number) {
+  if (loaded.closed || await participationClosed(options.store, options.silo,
+    loaded.input.conversationId, deadline)) {
+    throw new ChildRequestClosed('Conversation closed');
+  }
 }
 async function review(options: Options, memberId: string, loaded: Loaded, writing = true) {
   const { input, source } = loaded;
