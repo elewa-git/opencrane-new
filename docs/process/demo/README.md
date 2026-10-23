@@ -94,6 +94,10 @@ These commands require an interactive terminal and refuse any `OPENCRANE_FLEET_T
 marker, including an empty one. Task launchers export that marker. No task has run
 these commands on the owner stack or checked the real phone path.
 
+The [latest rehearsal](../demo-rehearsal/final-2026-10-23/receipt.md) passed fresh
+startup and both timed smoke widths, then stopped at a browser-checker error on the
+Models page. The remaining script steps are untested. It does not qualify an owner refresh.
+
 Before choosing a SHA, confirm that it is merged into `origin/main`, includes both
 the real-provider and demo-kit changes, includes the qualified Stop image, and has
 an explicit fresh-install PASS. That PASS must include real replies and the demo
@@ -199,6 +203,7 @@ and visible setup-test data. Laptop tunnelling and real-phone access remain unte
 
 ## Where to read more
 
+- [Rehearsal notes](README.robot.md): the latest attempt and qualification status.
 - [Check receipt](../demo-kit/receipt.md): tested source, timings and remaining work.
 - [Development stack contract](../../../infra/dev-stack/README.robot.md): settings and cleanup.
 - [Real reply receipt](../demo-real-model/receipt.md): the earlier paid results and Stop failure.

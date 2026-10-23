@@ -1,0 +1,393 @@
+{
+  "sourceSha": "f377da0af2c0b01d92f23783d2ba4728ef57d175",
+  "result": "FAIL",
+  "failure": "Browser checker error at the Models page",
+  "startup": {
+    "startedAt": "2026-10-23T01:09:12.370464+00:00",
+    "finishedAt": "2026-10-23T01:17:29.964203+00:00",
+    "exitCode": 0,
+    "slot": 1,
+    "allowanceCents": 1000,
+    "sha": "f377da0af2c0b01d92f23783d2ba4728ef57d175"
+  },
+  "smoke": {
+    "sha": "f377da0af2c0b01d92f23783d2ba4728ef57d175",
+    "warmMs": 22646,
+    "warmResult": "PASS",
+    "attempts": [
+      {
+        "width": 1280,
+        "elapsedMs": 62862,
+        "result": "PASS",
+        "steps": [
+          {
+            "name": "streaming",
+            "result": "PASS",
+            "elapsedMs": 9247
+          },
+          {
+            "name": "pdf",
+            "result": "PASS",
+            "elapsedMs": 11076
+          },
+          {
+            "name": "stopped",
+            "result": "PASS",
+            "elapsedMs": 11047
+          },
+          {
+            "name": "direct",
+            "result": "PASS",
+            "elapsedMs": 6039
+          },
+          {
+            "name": "shared",
+            "result": "PASS",
+            "elapsedMs": 10900
+          },
+          {
+            "name": "limit",
+            "result": "PASS",
+            "elapsedMs": 14553
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "elapsedMs": 67916,
+        "result": "PASS",
+        "steps": [
+          {
+            "name": "streaming",
+            "result": "PASS",
+            "elapsedMs": 11224
+          },
+          {
+            "name": "pdf",
+            "result": "PASS",
+            "elapsedMs": 12090
+          },
+          {
+            "name": "stopped",
+            "result": "PASS",
+            "elapsedMs": 13100
+          },
+          {
+            "name": "direct",
+            "result": "PASS",
+            "elapsedMs": 7073
+          },
+          {
+            "name": "shared",
+            "result": "PASS",
+            "elapsedMs": 13984
+          },
+          {
+            "name": "limit",
+            "result": "PASS",
+            "elapsedMs": 10445
+          }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": 1,
+      "name": "streamedReply",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 12135
+    },
+    {
+      "step": 2,
+      "name": "scannedPdf",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 28391
+    },
+    {
+      "step": 3,
+      "name": "actionHistory",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 935
+    },
+    {
+      "step": 4,
+      "name": "stoppedReply",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 12620
+    },
+    {
+      "step": 5,
+      "name": "liveMessage",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 7175
+    },
+    {
+      "step": 6,
+      "name": "sharedReply",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 13407
+    },
+    {
+      "step": 7,
+      "name": "groupAndInvite",
+      "width": 1280,
+      "result": "PASS",
+      "elapsedMs": 12689
+    },
+    {
+      "step": 8,
+      "name": "providerAnswer",
+      "width": 1280,
+      "result": "FAIL",
+      "elapsedMs": 1246,
+      "reason": "Error"
+    },
+    {
+      "step": 9,
+      "name": "companyLimit",
+      "width": 1280,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 10,
+      "name": "changeHistory",
+      "width": 1280,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 1,
+      "name": "streamedReply",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 2,
+      "name": "scannedPdf",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 3,
+      "name": "actionHistory",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 4,
+      "name": "stoppedReply",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 5,
+      "name": "liveMessage",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 6,
+      "name": "sharedReply",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 7,
+      "name": "groupAndInvite",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 8,
+      "name": "providerAnswer",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 9,
+      "name": "companyLimit",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    },
+    {
+      "step": 10,
+      "name": "changeHistory",
+      "width": 390,
+      "result": "NOT RUN",
+      "elapsedMs": 0
+    }
+  ],
+  "spending": {
+    "chargedCents": 38,
+    "heldCents": 69,
+    "allowanceCents": 1000,
+    "reservationCount": 20,
+    "restoredMonthlyCeilingCents": 1000,
+    "restoredDailyCeilingCents": 1000,
+    "reservations": [
+      {
+        "reservedCents": 1,
+        "chargedCents": 1,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 16,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 17,
+        "chargedCents": 0,
+        "heldCents": 17
+      },
+      {
+        "reservedCents": 16,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 16,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 15,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 16,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 15,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 17,
+        "chargedCents": 1,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 17,
+        "chargedCents": 1,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 17,
+        "chargedCents": 0,
+        "heldCents": 17
+      },
+      {
+        "reservedCents": 15,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 18,
+        "chargedCents": 1,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 18,
+        "chargedCents": 1,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 18,
+        "chargedCents": 0,
+        "heldCents": 18
+      },
+      {
+        "reservedCents": 15,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 16,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 16,
+        "chargedCents": 3,
+        "heldCents": 0
+      },
+      {
+        "reservedCents": 17,
+        "chargedCents": 0,
+        "heldCents": 17
+      },
+      {
+        "reservedCents": 15,
+        "chargedCents": 3,
+        "heldCents": 0
+      }
+    ]
+  },
+  "groupChecks": [
+    {
+      "id": "group_chat.create_and_lock_mode",
+      "status": "PASS"
+    },
+    {
+      "id": "group_chat.messages_and_no_activity",
+      "status": "PASS"
+    },
+    {
+      "id": "group_chat.add_join_position",
+      "status": "PASS"
+    },
+    {
+      "id": "group_chat.remove_clears_access",
+      "status": "PASS"
+    },
+    {
+      "id": "group_chat.leave_clears_access",
+      "status": "PASS"
+    },
+    {
+      "id": "group_chat.people_picker_states",
+      "status": "PASS"
+    },
+    {
+      "id": "group_chat.unsupported_combination",
+      "status": "PASS"
+    },
+    {
+      "id": "group_chat.replay_preserves_group",
+      "status": "PASS"
+    }
+  ],
+  "operatorHelpers": {
+    "rehearsal-steps.ts": "63f1ed78c7822e4d82d7e8c1fdba54bf4738326a462a217a957610b165b8fcdf",
+    "rehearsal-redaction.mjs": "36f6b0b8610d96e17c4c5a6a9fe0cd232c2a63ac3d08dd25c5b5348d13aee17b",
+    "steps-before-correction.ts": "08aefec892bef9bb66b6b53458a18187803b6b17a456cab5941f19da271b56ea"
+  },
+  "cleanup": {
+    "result": "PASS",
+    "slot": 1,
+    "directoryRemoved": true,
+    "composeContainersRemaining": 0,
+    "computerNamespaceRemoved": true
+  }
+}
