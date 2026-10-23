@@ -4478,14 +4478,19 @@ The save uses the original approval position and the write check's deadline.
 
 ### Memory MCP test preparation and cleanup
 
-`test/memory-mcp.test.ts` checks active membership, its applied OpenFGA receipts,
-and tool-server and personal memory grants before signing recall or change controls.
-It reads each grant stream, checks the saved receipts that show each grant was applied,
-and checks both identities' current permissions. The initial discovery request alone
-cannot prove that this preparation finished: its result may be a cold-start refusal.
-Two recall regressions advance both clocks by 2.2 seconds during the first membership
-or tool-server grant lookup. Both keep the original HTTP 200 recall assertion.
-They fail if either lookup first runs after the control's pass has been signed.
+`test/memory-mcp.test.ts` checks active membership, tool-server grants and personal
+memory grants before signing recall or change controls. It checks the OpenFGA receipts
+that confirm the member joined, the assistant and conversation were created, and the
+grants were applied. It also checks both identities' resource permissions, permission
+to act for the assistant, and permission to post in the conversation.
+
+The fixture reads the initial chat summary before signing, using its own history
+deadline. A discovery request alone cannot prove that this preparation finished:
+its result may be a cold-start refusal. Four recall regressions advance both clocks
+by 2.2 seconds during the first membership, assistant, tool-server grant or chat-summary
+lookup. Each keeps the original HTTP 200 recall assertion. The summary case delays
+only reads that include older conversation closes, so a raw receipt-history lookup
+cannot hide a missing summary read. Removing only that preparation makes the case fail.
 A first lookup can take longer than the signed pass's two-second lifetime. Both
 change operations have regressions that delay the first event or IAM receipt read
 by 2.2 seconds and still require the exact `memory_tool_unavailable` control reply.

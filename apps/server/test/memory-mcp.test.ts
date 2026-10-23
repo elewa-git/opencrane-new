@@ -2267,6 +2267,7 @@ async function prepareMemoryAccess() {
   const deadline = performance.now() + 10_000;
   const checkApplied = setup.auth.applied.bind(setup.auth);
   await readActiveMember(setup.nats.store, setup.binding, 'alice', 'member', checkApplied);
+  await prepareConversationAccess(deadline);
   const resources = [
     { resourceType: 'mcp_server', resourceId: 'memory' },
     { resourceType: 'memory_read', resourceId: scopeId },
@@ -2284,6 +2285,27 @@ async function prepareMemoryAccess() {
     const assistant = await setup.auth.use('assistant', 'assistant', resourceType, resourceId);
     expect(assistant.allowed).toBe(true);
   }
+}
+async function prepareConversationAccess(deadline: number) {
+  const creations = [
+    { subject: 'assistant-assistant', eventType: 'assistant.created' },
+    { subject: 'conversation-conversation', eventType: 'conversation.created' },
+  ];
+  for (const { subject, eventType } of creations) {
+    const rows = await history(setup.nats.store, subject, 'test', deadline);
+    for (const row of rows) {
+      if (row.event.type === eventType) {
+        const applied = await setup.auth.applied(row.event.id);
+        expect(applied).toBe(true);
+      }
+    }
+  }
+  const acting = await setup.auth.actsFor('alice', 'assistant');
+  expect(acting.allowed).toBe(true);
+  const participation = await setup.auth.conversation('alice', 'conversation', 'post');
+  expect(participation.allowed).toBe(true);
+  // Load the initial chat summary before the signed pass starts its short access checks.
+  await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
 }
 type ChangeRequest = Awaited<ReturnType<typeof changeRequest>>;
 
