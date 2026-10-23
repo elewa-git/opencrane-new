@@ -639,8 +639,21 @@ uses a throwaway namespace and an on-node image with imagePullPolicy Never.
 
 `prepare-gateway-configuration` handles `mcp.server_published`, verifies the saved
 trigger and calls `prepareGatewayConfiguration` under the PostgreSQL advisory lock
-`gateway-configuration:<silo>`. The handler receives the root `Db` from the worker,
-so it obtains a separate connection and shares the lock with gateway delivery.
+`gateway-configuration:<silo>`. The dispatcher requires `CONTENT_DATABASE_URL`,
+pointing to the same content database as models delivery. It uses the existing server
+read role; projection-write credentials are not needed. The handler receives this
+pool's root `Db`, so each lock uses its own connection. There is no jobs URL fallback.
+Startup checks the URL and connects before creating handlers. Errors omit credentials.
+A lost idle content connection stops the worker; a failed lock cannot prepare a generation.
+Shutdown and startup failure close both pools after draining work.
+
+`DATABASE_URL` still owns HandlerRuntime, its manifest, checkpoint, queue and receipts.
+No projection tables are created in jobs by this change. Nightly memory and connection
+custody callers keep their current binding until the dependent reaction database task.
+`test/worker-gateway.test.ts` starts the real dispatcher with two disposable databases
+and a content read role. It pauses real delivery and preparation in both orders, checks
+configuration refusal and connection loss, and checks that jobs stay separate.
+Stage B owns fresh-install live proof; these fixture checks do not establish it.
 Legacy or stale intent completes
 without an append. Store failures retry. Enable it through the normal offline
 handler subscription upgrade before restarting the dispatcher. Replay never runs it.

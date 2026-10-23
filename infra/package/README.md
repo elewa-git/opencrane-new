@@ -23,7 +23,7 @@ flowchart LR
   stack -->|reserves test space| package
   package -->|uses local cluster| devbox
   package -->|starts| apps["Website, server and workers<br/>product requests and background jobs"]
-  package -->|runs| services["Core services<br/>storage and access"]
+  package -->|runs| services["Core services<br/>jobs, content and access"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
 ```
 
@@ -31,6 +31,9 @@ The install runs a fake AI model for testing and creates its first owner through
 saved [events](../../GLOSSARY.md#event). Workers start a computer when the owner
 first chats. Computers belong to assistants, including shared group assistants,
 and remain the same across chats. File storage and virus scanning are outside this package.
+
+The dispatcher keeps its jobs in a separate database. It uses the server's read-only
+content connection to coordinate gateway configuration changes with delivery.
 
 ## What it is responsible for
 

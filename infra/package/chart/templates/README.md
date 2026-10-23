@@ -17,7 +17,7 @@ services they need. Helm fills in the chosen settings before installation.
 | File | What it does |
 | --- | --- |
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
-| `workers.yaml` | Runs the separate background jobs. |
+| `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
 | `data.yaml` | Runs the database and event log, and requests saved storage. |
 | `services.yaml` | Gives the programs private network addresses. |
 | `bootstrap.yaml` | Sets up initial data and the access needed by setup and workers. |

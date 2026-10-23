@@ -37,7 +37,12 @@ The owner bootstrap links the separate development sign-in account to the
 `jente@elewa.ke` owner member in this install. It does not edit the existing
 Zitadel user with that email.
 
-The `runtime` secret supplies text settings to the server and workers. The
+The `runtime` secret supplies text settings to the server and workers.
+The dispatcher maps `DATABASE_URL` to `HANDLER_DATABASE_URL` for its queue, manifest,
+checkpoint and receipts. It maps `CONTENT_DATABASE_URL` to the secret's `DATABASE_URL`,
+the existing server read-role URL, for the gateway configuration lock. It never uses
+`PROJECTION_DATABASE_URL` for this connection. Offline Helm rendering checks both
+references; this does not qualify live gateway delivery in a packaged install. The
 `runtimeFiles` secret holds certificates, model files, the local stub key and
 a fresh 32-byte conversation wrapping key. An init container copies those
 files into memory, gives them to the `node` user and sets mode 0400. The

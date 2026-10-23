@@ -1,0 +1,1 @@
+Gateway preparation and delivery now share a lock in the content database across processes. The dispatcher uses the server's read-only connection for that lock, keeps jobs in their own database, and refuses missing or unavailable content settings before handlers start.

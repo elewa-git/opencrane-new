@@ -410,7 +410,11 @@ and a generated Angular proxy file; application code has no Compose branch.
 `npm run provision` uses only the command NKey/TLS identity. The server receives
 that identity and a read-only PostgreSQL role. Separate members and MCP catalogue
 processes use the projection NKey and own the projection database. The computers
-projection does the same. The dispatcher uses its own NKey and database; pg-boss
+projection does the same. The dispatcher keeps `DATABASE_URL` from `dispatcher.env`
+for jobs. Startup supplies `CONTENT_DATABASE_URL` from `server.env`'s `DATABASE_URL`,
+including on an existing installation. That read-role connection takes the gateway
+configuration lock in the same database used by models delivery. Missing configuration
+refuses dispatcher startup. The dispatcher uses its own NKey; pg-boss
 updates OpenFGA and runs the lifecycle reactions. OpenFGA uses its own PostgreSQL
 database. Startup installs the checked SandboxTemplate, zero-size pool and
 namespace-only ServiceAccount on k3d `ocn`, then writes a short-lived kubeconfig

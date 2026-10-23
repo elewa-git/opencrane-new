@@ -80,7 +80,8 @@ async function fixture(contentSetting?: string, pausePreparation = false) {
   onTestFinished(close);
   async function ready() {
     if (child.exitCode !== null) throw new Error(output);
-    const result = await storage.queue.query("SELECT to_regclass('handler_dispatcher') AS name");
+    const result = await storage.queue.query<{ name: string | null }>(
+      "SELECT to_regclass('handler_dispatcher') AS name");
     return result.rows[0]?.['name'] !== null;
   }
   async function publish(serverId: string) {
@@ -192,8 +193,11 @@ async function sharedLock(preparationFirst: boolean) {
     return (await setup.latest())?.generation === 2;
   }
   await until(secondGeneration);
-  expect((await setup.storage.queue.query("SELECT to_regclass('mcp_servers') AS name"))
-    .rows[0]?.['name']).toBeNull();
+  const tables = await setup.storage.queue.query(
+    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename");
+  expect(tables.rows).toEqual([
+    { tablename: 'handler_dispatcher' }, { tablename: 'handler_receipts' },
+  ]);
   expect((await setup.content.db.query("SELECT to_regclass('handler_dispatcher') AS name"))
     .rows[0]?.['name']).toBeNull();
   expect((await setup.storage.queue.query('SELECT * FROM pgboss.job')).rows.length).toBeGreaterThan(0);
@@ -212,7 +216,8 @@ async function refusesConfiguration(value: string) {
   expect(setup.child.exitCode).toBe(1);
   expect(setup.logs()).toContain('CONTENT_DATABASE_URL');
   expect(setup.logs()).not.toContain('private-canary');
-  expect((await setup.storage.queue.query("SELECT to_regclass('handler_dispatcher') AS name"))
+  expect((await setup.storage.queue.query<{ name: string | null }>(
+      "SELECT to_regclass('handler_dispatcher') AS name"))
     .rows[0]?.['name']).toBeNull();
 }
 it.each(['', 'https://private-canary.invalid/content', 'postgres://user:private-canary@%',
@@ -238,3 +243,43 @@ async function lostContent() {
   expect(setup.logs()).not.toContain('content-canary');
 }
 it('stops without publishing or acknowledging when the content connection is lost', lostContent);
+
+async function lostConnectionWithQueuedPublication() {
+  const setup = await fixture();
+  await until(setup.ready);
+  const held = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  async function holdDeliveryLock() {
+    entered.resolve();
+    await held.promise;
+  }
+  const replacement = setup.content.db.lock!('gateway-configuration:test', holdDeliveryLock);
+  await entered.promise;
+  try {
+    const event = await setup.publish('alpha');
+    await expect.poll(setup.waitingLocks, { timeout: 5000 }).toBe(1);
+    const database = setup.readerUrl.pathname.slice(1);
+    await setup.storage.queue.query(`ALTER DATABASE ${database} ALLOW_CONNECTIONS false`);
+    await setup.content.db.query(`SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity WHERE usename = $1`, [setup.readerUrl.username]);
+    async function unfinishedJob() {
+      const result = await setup.storage.queue.query<{ state: string }>(
+        'SELECT state FROM pgboss.job WHERE name = $1', ['prepare-gateway-configuration']);
+      return result.rows[0]?.state;
+    }
+    await expect.poll(unfinishedJob, { timeout: 5000 }).toBe('retry');
+    expect(await setup.latest()).toBeNull();
+    const receipts = await setup.storage.queue.query(
+      'SELECT * FROM handler_receipts WHERE event_id = $1', [event.id]);
+    expect(receipts.rows).toEqual([]);
+    expect(setup.logs()).not.toContain(setup.readerUrl.href);
+    expect(setup.logs()).not.toContain('content-canary');
+  } finally {
+    held.resolve();
+    await replacement;
+    setup.child.kill('SIGTERM');
+    await setup.exited;
+  }
+}
+it('keeps a queued publication unfinished when its content lock connection is lost',
+  lostConnectionWithQueuedPublication);

@@ -3,7 +3,7 @@ import { scanConnections, connectionCleanupHandler, connectionCustodyFromFile,
   providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
-import { connectEventStore } from '@opencrane/event-store';
+import { connectEventStore, type EventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
   mcpCatalogue, computers, modelAccess, egressPolicy, delegations, routines,
   conversations, childRequests, files, personalSettings, conversationKeys, memoryKeys,
@@ -68,13 +68,13 @@ const db = connectProjectionDb(required('DATABASE_URL'), (error) => {
   process.exitCode = 1;
   stop.abort();
 });
-const connection = await connectNats();
-const store = await createEventStore(connection);
+let connection: Awaited<ReturnType<typeof connectNats>> | undefined;
+let content: ReturnType<typeof connectProjectionDb> | undefined;
 let runtime: HandlerRuntime | undefined;
 let commands: Awaited<ReturnType<typeof connectEventStore>> | undefined;
 let watcher: Promise<void> | undefined;
 let connectionScan: Promise<void> | undefined;
-async function runProjectionWorker(projection: Projection) {
+async function runProjectionWorker(projection: Projection, store: EventStore) {
   const runner = new ProjectionRunner(db.db, store, logger);
   // Hold the database lock while creating shared tables. Other workers may start together.
   async function initialiseProjection(locked: Db) {
@@ -119,7 +119,36 @@ async function runProjectionWorker(projection: Projection) {
     await delay(100, undefined, { signal: stop.signal });
   }
 }
+function contentDatabaseUrl() {
+  const value = required('CONTENT_DATABASE_URL');
+  try {
+    const url = new URL(value);
+    if (!['postgres:', 'postgresql:'].includes(url.protocol) ||
+        !url.hostname || url.pathname.length < 2) {
+      throw new Error('Invalid database address');
+    }
+    return value;
+  } catch {
+    // Keep credentials out of the startup log, including URL parser errors.
+    throw new Error('Invalid CONTENT_DATABASE_URL');
+  }
+}
+function contentFailed() {
+  logger.error('Worker content database connection failed');
+  process.exitCode = 1;
+  stop.abort();
+}
 try {
+  if (mode === 'dispatcher') {
+    content = connectProjectionDb(contentDatabaseUrl(), contentFailed);
+    try {
+      await content.db.query('SELECT 1');
+    } catch {
+      throw new Error('CONTENT_DATABASE_URL unavailable');
+    }
+  }
+  connection = await connectNats();
+  const store = await createEventStore(connection);
   if (mode === 'dispatcher') {
     const silo = required('SILO_ID');
     const commandEnv = Object.fromEntries(Object.entries(process.env)
@@ -132,7 +161,7 @@ try {
       process.env['COMPUTER_POOL'] ?? 'computer', process.env['COMPUTER_STORAGE'] ?? '10Gi');
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
-    const available = [prepareGatewayConfigurationHandler(commands.store, silo, db.db),
+    const available = [prepareGatewayConfigurationHandler(commands.store, silo, content!.db),
       authorisation.handler, ownershipSeedHandler(commands.store),
       ownershipConfirmationHandler(commands.store), budgetStopHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
@@ -228,7 +257,7 @@ try {
   } else {
     const projection = workerProjection();
     if (projection) {
-      await runProjectionWorker(projection);
+      await runProjectionWorker(projection, store);
     }
   }
 } catch (error) {
@@ -247,7 +276,13 @@ try {
       break;
     }
   }
-  await commands?.close();
-  await connection.close();
-  await db.close();
+  const closed = await Promise.allSettled([
+    commands?.close(), connection?.close(), content?.close(), db.close(),
+  ]);
+  for (const result of closed) {
+    if (result.status === 'rejected') {
+      logger.error('Worker connection failed during shutdown');
+      process.exitCode = 1;
+    }
+  }
 }
