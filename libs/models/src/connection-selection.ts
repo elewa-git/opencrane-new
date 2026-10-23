@@ -7,7 +7,7 @@ import { envelope, history } from './actor.ts';
 import { authorityFence } from './authority.ts';
 import { foldConnection } from './bearer-connections.ts';
 import { activeMember, readActiveMember } from './member-authority.ts';
-import { toolPolicyFromRows } from './tool-policy.ts';
+import { connectionServer } from './connection-server.ts';
 import { data } from './state.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
@@ -57,36 +57,22 @@ async function facts(store: EventStore, silo: string, selection: Selection) {
   const deadline = performance.now() + 10_000;
   const serverSubject = `mcp-${selection.serverId}`;
   const rows = await history(store, serverSubject, silo, deadline);
-  const policy = toolPolicyFromRows(rows);
-  function registered(row: StoredEvent) {
-    return row.event.type === 'mcp.server_registered';
-  }
-  function replacesCatalogue(row: StoredEvent) {
-    const types = ['mcp.server_registered', 'mcp.server_discovered', 'mcp.tools_changed'];
-    return types.includes(row.event.type);
-  }
-  const registration = rows.findLast(registered);
-  const catalogue = rows.findLast(replacesCatalogue);
-  const catalogueSequence = catalogue?.sequence ?? 0;
-  const endpoint = z.object({ kind: z.literal('remote'), locator: z.string() });
-  const remote = endpoint.safeParse(registration?.event.data);
+  const server = connectionServer(rows, selection.connectionId);
   const control = `connection-control-${selection.userId}-${selection.serverId}`;
   const controlSequence = await store.head(control, deadline);
-  const positions = new Map([[serverSubject, policy.sequence], [control, controlSequence]]);
+  const positions = new Map([[serverSubject, server.sequence], [control, controlSequence]]);
   let available = false;
   if (selection.action === 'select') {
     const subject = `connection-${selection.userId}-${selection.serverId}-${selection.profileId}`;
     const profileRows = await history(store, subject, silo, deadline);
     const profile = foldConnection(profileRows);
     positions.set(subject, profile.sequence);
-    available = controlSequence === 0 && policy.published &&
-      (policy.reviewRevision ?? 0) > catalogueSequence &&
-      policy.accountMode === 'personal' && policy.connectionId === selection.connectionId &&
-      profileMatchesSelection(profile, selection) && remote.success &&
-      profile.data?.activation.endpointDigest === digest(remote.data.locator);
+    available = controlSequence === 0 && server.available &&
+      profileMatchesSelection(profile, selection) &&
+      profile.data?.activation.endpointDigest === server.endpointDigest;
   }
-  return { available, positions, connectionId: policy.connectionId,
-    expiresAt: Date.parse(policy.expiresAt ?? '') };
+  return { available, positions, connectionId: server.connectionId,
+    expiresAt: server.expiresAt };
 }
 function profileMatchesSelection(profile: ReturnType<typeof foldConnection>,
   selection: Extract<Selection, { action: 'select' }>) {

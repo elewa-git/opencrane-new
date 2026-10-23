@@ -10,7 +10,7 @@ import type { connectionCustody, ConnectionStage } from './connection-custody.ts
 import { envelope, history } from './actor.ts';
 import { authorityFence } from './authority.ts';
 import { activeMember, readActiveMember } from './member-authority.ts';
-import { toolPolicyFromRows } from './tool-policy.ts';
+import { connectionServer } from './connection-server.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const commandSchema = z.strictObject({ action: z.enum(['create', 'rotate']),
@@ -144,30 +144,14 @@ function requireSameEvent(saved: StoredEvent, attempted: EventEnvelope) {
 }
 async function eligibleServer(store: EventStore, silo: string, input: Command) {
   const rows = await history(store, `mcp-${input.serverId}`, silo, performance.now() + 10_000);
-  const policy = toolPolicyFromRows(rows);
-  function registered(row: StoredEvent) {
-    return row.event.type === 'mcp.server_registered';
-  }
-  function reviewed(row: StoredEvent) {
-    return row.event.type === 'mcp.server_reviewed';
-  }
-  function replacedCatalogue(row: StoredEvent) {
-    const types = ['mcp.server_registered', 'mcp.server_discovered', 'mcp.tools_changed'];
-    return types.includes(row.event.type);
-  }
-  const registration = rows.findLast(registered);
-  const review = rows.findLast(reviewed);
-  const catalogue = rows.findLast(replacedCatalogue);
-  const registrationSchema = z.object({ kind: z.literal('remote'), locator: z.string() });
-  const locator = registrationSchema.safeParse(registration?.event.data);
-  if (!policy.published || policy.accountMode !== 'personal' ||
-      policy.connectionId !== input.connectionId || !review ||
-      review.sequence <= (catalogue?.sequence ?? 0) || !locator.success) {
+  const server = connectionServer(rows, input.connectionId);
+  if (!server.available || server.endpointDigest === undefined) {
     throw new Error('Connection server unavailable');
   }
-  return { sequence: policy.sequence, endpointDigest: digest(locator.data.locator),
-    expiresAt: Date.parse(policy.expiresAt!) };
+  return { sequence: server.sequence, endpointDigest: server.endpointDigest,
+    expiresAt: server.expiresAt };
 }
+
 function requireCurrent(state: State, input: Command) {
   if (input.expectedSequence !== state.sequence) {
     throw new Error('Connection conflict');
