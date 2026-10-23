@@ -35,7 +35,7 @@ async function setup(requestsEnabled = true) {
   cookies.clear();
   const chat = { ...fixture, store: fixture.nats.store, silo: 'test' };
   const liveView = { ...chat, open: noDesktop };
-  const options = { chat, liveView, takeoverRequestsEnabled: requestsEnabled };
+  const options = { chat, liveView, audit: chat, takeoverRequestsEnabled: requestsEnabled };
   app = buildServer(fixture.config, options);
   const message = await fixture.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
@@ -724,3 +724,31 @@ async function racesAcceptedAndRefused(first: 'requested' | 'refused') {
 }
 it.each(['requested', 'refused'] as const)(
   'saves one outcome when acceptance and refusal race, %s first', racesAcceptedAndRefused);
+
+async function refusalInConversationHistory() {
+  await setup();
+  await participant();
+  expect((await post(body, 'bob')).statusCode).toBe(403);
+  await fixture.runner.initialise(auditTrail);
+  await fixture.runner.run(auditTrail);
+  function history(member: string) {
+    const request = { url: '/api/conversations/chat/history', headers: headers(member) };
+    return app.inject(request);
+  }
+  const response = await history('bob');
+  expect(response.statusCode).toBe(200);
+  const expected = response.json<{ rows: unknown[] }>();
+  expect(expected.rows).toHaveLength(1);
+  expect(expected.rows[0]).toMatchObject({ conversationId: 'chat', requesterId: 'bob',
+    records: [{ type: 'takeover.refused', actor: { kind: 'person', id: 'bob' } }] });
+  expect((await history('outsider')).statusCode).toBe(403);
+  expect((await history('alice')).json()).toMatchObject({ rows: [] });
+  await fixture.runner.rebuild(auditTrail);
+  expect((await history('bob')).json()).toEqual(expected);
+  await fixture.append('member-bob', 'member.removed', {
+    memberId: 'bob', removedBy: 'alice',
+  });
+  expect((await history('bob')).statusCode).toBe(403);
+}
+it('shows a refusal only in its authenticated requester history, including after rebuild',
+  refusalInConversationHistory);
