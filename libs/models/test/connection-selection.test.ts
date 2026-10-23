@@ -324,3 +324,29 @@ async function wrongClearConnection() {
   expect(await nats.store.head(test.subject)).toBe(0);
 }
 it('refuses a clear naming a different installed connection', wrongClearConnection);
+
+async function clearAfterRegistration() {
+  const test = await fixture();
+  const selected = await test.select();
+  const registration = envelope('test', 'mcp-server', 'mcp.server_registered', {
+    serverId: 'server', kind: 'remote', locator: 'https://replacement.example.test/mcp',
+    registeredBy: 'admin',
+  });
+  try {
+    await nats.seed([registration]);
+    expect(await test.read()).toEqual({ status: 'unavailable', sequence: selected.sequence });
+    const clear = { action: 'clear', serverId: 'server', connectionId: 'installed',
+      expectedSequence: selected.sequence, changeRef: 'clear-after-registration' };
+    await expect(test.select({ ...clear, connectionId: 'other' }))
+      .rejects.toThrow('Selection conflict');
+    const cleared = await test.select(clear);
+    expect(cleared.status).toBe('cleared');
+    expect(await test.read()).toEqual({ status: 'unavailable', sequence: cleared.sequence });
+    expect(await test.select(clear)).toEqual(cleared);
+    expect(test.custody.stage).not.toHaveBeenCalled();
+  } finally {
+    await publishServer();
+  }
+}
+it('clears the saved binding after re-registration before discovery succeeds',
+  clearAfterRegistration);
