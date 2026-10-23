@@ -433,3 +433,67 @@ it.each(['503', 'network', 'invalid'])('keeps the reason and last call after %s'
 it.each([401, 403])('clears saved calls on %s and cannot check them again', clearsRefusedCalls);
 const changedInputs = ['turnId', 'conversationId', 'denied'] as const;
 it.each(changedInputs)('discards a pending call read after %s changes', ignoresOldCalls);
+
+function pendingStatusRead() {
+  let resolve!: (response: Response) => void;
+  let reject!: (error: Error) => void;
+  function rememberCompletion(
+    resolveRead: (response: Response) => void,
+    rejectRead: (error: Error) => void,
+  ): void {
+    resolve = resolveRead;
+    reject = rejectRead;
+  }
+  const promise = new Promise<Response>(rememberCompletion);
+  function reply(value: unknown, status = 200): void {
+    resolve(new Response(JSON.stringify(value), { status }));
+  }
+  function fail(): void {
+    reject(new Error('offline'));
+  }
+  return { promise, reply, fail };
+}
+
+async function renderCompletedRead(
+  fixture: ReturnType<typeof TestBed.createComponent<BudgetStopNotice>>,
+): Promise<void> {
+  function readFinished(): void {
+    expect(fixture.componentInstance['loading']()).toBe(false);
+  }
+  await vi.waitFor(readFinished);
+  fixture.detectChanges();
+}
+
+async function announcesStatusChecks(): Promise<void> {
+  const { fixture } = await mount(savedCalls());
+  const root = rootOf(fixture);
+  const announcement = root.querySelector('[role="status"][aria-live="polite"]');
+  expect(announcement).not.toBeNull();
+  expect(announcement?.getAttribute('aria-atomic')).toBe('true');
+  const pending = pendingStatusRead();
+  vi.mocked(globalThis.fetch).mockReturnValueOnce(pending.promise);
+  const button = checkStatus(root);
+  button.focus();
+  button.click();
+  fixture.detectChanges();
+  expect(announcement?.textContent).toContain('Checking saved status');
+  const changed = savedCalls();
+  changed.calls = [{ reference: 'reserved-call', status: 'charged', chargedCents: 25 }];
+  pending.reply(changed);
+  await renderCompletedRead(fixture);
+  expect(announcement?.textContent).toContain('Saved call status checked');
+  expect(announcement?.textContent).toContain('Recorded charge');
+  expect(document.activeElement).toBe(button);
+  vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error('offline'));
+  button.click();
+  await renderCompletedRead(fixture);
+  expect(announcement?.textContent).toContain('Stop details unavailable');
+  fixture.componentRef.setInput('denied', true);
+  fixture.detectChanges();
+  expect(announcement?.textContent).toContain('Access changed');
+  expect(announcement?.textContent).not.toContain('Recorded charge');
+  expect(root.querySelector('[role="status"]')).toBe(announcement);
+  expect(root.querySelector('[role="alert"]')).toBeNull();
+}
+
+it('politely announces checking, changed calls, failure and access loss', announcesStatusChecks);
