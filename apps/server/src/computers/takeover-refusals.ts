@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import { takeoverRefusedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { envelope } from '@opencrane/models';
-import { ChatRefused, type ChatOptions } from '../chat/access.ts';
+import { ChatRefused, type ChatOptions, type writeChatAccess } from '../chat/access.ts';
 import { refusalDigest } from '../members/refusals.ts';
 
 export class RequesterOnly extends ChatRefused {}
@@ -53,7 +53,8 @@ export async function savedControlRefusal(options: ChatOptions, actorId: string,
 }
 
 export async function recordControlRefusal(options: ChatOptions, actorId: string,
-  input: Attempt, reason: Refusal['reason']) {
+  input: Attempt, reason: Refusal['reason'],
+  fresh: Awaited<ReturnType<typeof writeChatAccess>>) {
   const binding = refusalBinding(options.silo, actorId, input);
   const attempted = { ...binding, reason };
   const parsed = takeoverRefusedDataSchema.safeParse(attempted);
@@ -64,8 +65,10 @@ export async function recordControlRefusal(options: ChatOptions, actorId: string
   event.commandId = event.id;
   event.source = 'opencrane-server';
   event.principal = { kind: 'human', id: actorId };
-  const deadline = performance.now() + 2_000;
-  const command = { event, expectedSequence: 0, historyChecked: true as const, deadline };
+  await fresh();
+  const deadline = fresh.deadline;
+  const command = { event, expectedSequence: 0, historyChecked: true as const,
+    deadline, checkAccess: fresh };
   try {
     await options.store.append(command);
   } catch {

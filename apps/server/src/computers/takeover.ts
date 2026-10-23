@@ -8,7 +8,7 @@ import { takeoverRequestedDataSchema } from '@opencrane/events';
 import { envelope } from '@opencrane/models';
 import { readChatFacts, type ChatFacts } from '../chat/chat-summary.ts';
 import { ChatRefused, chatAccess, writeChatAccess, type ChatOptions } from '../chat/access.ts';
-import { writePrivateSession } from '../chat/private-session.ts';
+import { privateSessionCreation, writePrivateSession } from '../chat/private-session.ts';
 import { desktopAccess, viewAccess } from './view-access.ts';
 import { RequesterOnly, ControlConflict, savedControlRefusal, recordControlRefusal,
   throwControlRefusal } from './takeover-refusals.ts';
@@ -22,6 +22,7 @@ const requestSchema = z.object({
   commandId: id, conversationId: id, requesterEventId: id, generation: z.int().positive(),
 }).strict();
 type ControlRequest = z.infer<typeof requestSchema>;
+type WriteAccess = Awaited<ReturnType<typeof writeChatAccess>>;
 const turnOwnerSchema = z.object({ conversationId: id, requesterId: id });
 const readySchema = z.object({
   assistantId: id, computerId: id, generation: z.int().positive(), podUid: id,
@@ -46,8 +47,9 @@ export async function requestControl(options: ChatOptions, memberId: string, raw
   await chatAccess(accessOptions, accessRequest);
   const saved = await savedControlRefusal(options, memberId, input);
   if (saved) throwControlRefusal(saved);
+  const fresh = await refusalAccess(accessOptions, memberId, input, chat, facts);
   try {
-    return await checkedControl(options, memberId, input, chat, facts, accessOptions);
+    return await checkedControl(options, memberId, input, chat, facts, accessOptions, fresh);
   } catch (error) {
     if (error instanceof ControlBindingConflict) throw error;
     const previous = facts?.control;
@@ -56,17 +58,36 @@ export async function requestControl(options: ChatOptions, memberId: string, raw
       throw error;
     }
     if (error instanceof RequesterOnly) {
-      return recordControlRefusal(options, memberId, input, 'requester_only');
+      return recordControlRefusal(options, memberId, input, 'requester_only', fresh);
     }
     if (error instanceof ControlConflict) {
-      return recordControlRefusal(options, memberId, input, 'control_conflict');
+      return recordControlRefusal(options, memberId, input, 'control_conflict', fresh);
     }
     throw error;
   }
 }
 
+async function refusalAccess(options: ChatOptions, memberId: string, input: ControlRequest,
+  chat: ChatFacts, facts: ReturnType<typeof takeComputer> | undefined) {
+  const subjects: string[] = [];
+  if (chat.created?.['mode'] === 'agent_session') {
+    const session = await privateSessionCreation(options, input.conversationId);
+    subjects.push(`assistant-${session.created.assistantId}`);
+    if (session.assistant.kind === 'team') subjects.push(`team-${session.assistant.ownerId}`);
+    if (session.created.payingGroupId) subjects.push(`team-${session.created.payingGroupId}`);
+  }
+  const ready = readySchema.safeParse(facts?.lifecycle?.event.data);
+  if (ready.success) subjects.push(grantStream('shared_desktop', ready.data.computerId));
+  const accessRequest = { memberId, conversationId: input.conversationId };
+  const fresh = await writeChatAccess(options, accessRequest);
+  fresh.include(...subjects);
+  await fresh();
+  return fresh;
+}
+
 async function checkedControl(options: ChatOptions, memberId: string, input: ControlRequest,
-  chat: ChatFacts, facts: ReturnType<typeof takeComputer> | undefined, accessOptions: ChatOptions) {
+  chat: ChatFacts, facts: ReturnType<typeof takeComputer> | undefined, accessOptions: ChatOptions,
+  authority: WriteAccess) {
   if (chat.latestHuman && chat.latestHuman.id !== input.requesterEventId) {
     throw new ControlConflict('Control conflict');
   }
@@ -83,12 +104,12 @@ async function checkedControl(options: ChatOptions, memberId: string, input: Con
   const ready = parsedReady.data;
   if (ready.generation !== input.generation) throw new ControlConflict('Control conflict');
   const affectedTurnIds = affectedTurns(facts, memberId, input.conversationId);
-  const fresh = await controlAccess(accessOptions, memberId, input, ready, chat, options.store);
+  await controlAccess(accessOptions, memberId, input, ready, chat, options.store, authority);
   const previous = facts.control;
   if (previous) {
     return repeatedRequest(previous, memberId, input);
   }
-  return saveIntent(options, memberId, input, ready, affectedTurnIds, facts.sequence, fresh.deadline);
+  return saveIntent(options, memberId, input, ready, affectedTurnIds, facts.sequence, authority);
 }
 
 function affectedTurns(facts: ReturnType<typeof takeComputer>, memberId: string,
@@ -105,10 +126,11 @@ function affectedTurns(facts: ReturnType<typeof takeComputer>, memberId: string,
 }
 
 async function controlAccess(options: ChatOptions, memberId: string, input: ControlRequest,
-  ready: z.infer<typeof readySchema>, chat: ChatFacts, store: EventStore) {
+  ready: z.infer<typeof readySchema>, chat: ChatFacts, store: EventStore, authority: WriteAccess) {
   const assistantId = ready.assistantId;
   // Load access history before opening the short write check.
-  const accessRequest = { memberId, conversationId: input.conversationId, relation: 'post' as const };
+  const accessRequest = { memberId, conversationId: input.conversationId,
+    relation: 'post' as const, deadline: authority.deadline };
   await viewAccess(options, memberId, input.conversationId);
   const teamFresh = await writePrivateSession(options, memberId, input.conversationId, false);
   const fresh = await writeChatAccess(options, accessRequest);
@@ -133,7 +155,7 @@ async function controlAccess(options: ChatOptions, memberId: string, input: Cont
   await desktop.fresh();
   await teamFresh?.();
   await fresh();
-  return fresh;
+  await authority();
 }
 
 async function confirmRequest(store: EventStore, silo: string, conversationId: string,
@@ -162,7 +184,8 @@ function repeatedRequest(previous: NonNullable<ComputerSummary['control']>,
 }
 
 async function saveIntent(options: ChatOptions, memberId: string, input: ControlRequest,
-  ready: z.infer<typeof readySchema>, affectedTurnIds: string[], sequence: number, deadline: number) {
+  ready: z.infer<typeof readySchema>, affectedTurnIds: string[], sequence: number,
+  fresh: WriteAccess) {
   const assistantId = ready.assistantId;
   const subject = `computer-${assistantId}`;
   const requested = { ...ready, conversationId: input.conversationId,
@@ -177,12 +200,12 @@ async function saveIntent(options: ChatOptions, memberId: string, input: Control
   event.source = 'opencrane-server';
   event.principal = { kind: 'human', id: memberId };
   const command = { event, expectedSequence: sequence, historyChecked: true as const,
-    deadline };
+    deadline: fresh.deadline, checkAccess: fresh };
   const result = await options.store.append(command);
   if (result.status === 'unavailable') throw new ControlUnavailable('Control unavailable');
   if (result.status === 'rejected') throw new ControlBindingConflict('Control conflict');
   if (result.status !== 'appended') throw new ControlConflict('Control conflict');
-  const saved = await readEventAt(options.store, subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(options.store, subject, result.sequence, fresh.deadline);
   if (!saved) throw new ControlUnavailable('Control unavailable');
   // Compare every binding while retaining the first append's generated time.
   const expected = { ...event, time: saved.event.time };
