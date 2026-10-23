@@ -968,7 +968,7 @@ the POST alone does not mark the upload ready.
 
 ## Website behaviour details retained during the guide update
 
-# apps/web
+## apps/web
 
 ## What this is
 
