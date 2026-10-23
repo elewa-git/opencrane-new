@@ -4606,7 +4606,7 @@ The remaining #497 guards belong to #302. Fresh-install qualification: NOT RUN.
 
 ### Follow-up timing audit, 23 October 2026
 
-The 44 local commits included 13 commits already on main and 31 memory commits.
+The 44 local commits included 12 commits already on main and 32 memory commits.
 Three memory commits changed application code: `215e6a515` added disabled target
 validation, `5e81b2195` split that validation into named functions, and `76c350874`
 returned the fixed configuration refusal through the gateway. Their rebased ids
