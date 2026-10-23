@@ -19,6 +19,7 @@ export {
   integrationRowSchema,
   integrationsRefusalSchema,
   integrationsResponseSchema,
+  integrationFactsSchema,
   sharedStateKindSchema,
   type IntegrationRow,
   type IntegrationsResponse,

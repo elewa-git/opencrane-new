@@ -13,8 +13,8 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, call spending pages, saved spending choices, history and tool holds"]
-  server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, retries, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and call statuses, live stop notices and dated approvals| protocol
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, spending pages and choices, integration facts, history and tool holds"]
+  server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests and retries, origin replies, published answers, integration facts, publication facts, spending replies, live stop notices and approvals| protocol
   projections["libs/projections<br/>read tables"] -.->|directory, spending choices and control refusal reasons| protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool lists, publications and not-sent outcomes"]
@@ -63,6 +63,10 @@ A saved receipt alone cannot prove that a gateway is still running.
 - Check archive and read requests, and each person's saved choice in chat lists.
 - Check flat group rows and create, add or remove commands for the People & groups screen.
 - Carry a tool server's saved hold after its catalogue changes.
+
+Saved integration facts separate registration, account requirements, saved grants
+and publication. Their strict reply shape excludes tool definitions and addresses.
+Unavailable checks stay explicit; saved grants do not establish call permission.
 
 ## Processes it handles
 

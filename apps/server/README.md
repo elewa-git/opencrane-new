@@ -30,7 +30,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, spending pages, live updates and saved tool status| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, spending pages, live updates, tool status and integration facts| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|records changes, access-checked control refusals, checked child activations, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -56,6 +56,10 @@ only after the models process allows them.
 - Handles members, groups, ownership, model providers, tool servers and spending settings.
 - Returns permitted change history, saved results and memory facts.
 - Runs the separate models process that checks AI calls, records costs and starts the gateway.
+
+Owners and admins can read separate saved facts for integration registration,
+account requirements, grants and publication. A saved grant does not prove an
+assistant can call. These reads check current admin rights after loading the facts.
 
 ## Folders
 

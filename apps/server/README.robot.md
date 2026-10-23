@@ -3637,6 +3637,32 @@ A saved intent holds all child work; an unavailable read also releases no work.
 `test/child-summon.test.ts` checks real NATS/PostgreSQL/OpenFGA recovery, expiry,
 refused reviews, private status, replay and the delivery/admission hold. Live qualification: NOT RUN.
 
+## Bounded saved integration facts (Part of #623)
+
+GET `/api/org/integrations/:serverId/facts` returns the strict `integrationFactsSchema`.
+It checks the organisation session, loads saved evidence within ten seconds, then
+checks current Owner/Admin membership once. Missing and foreign registrations return
+the same fixed 404. Access loss during a held read returns 403 without facts. All replies
+use `no-store`. Failed reads log a fixed message without the underlying error.
+
+`installed` proves registration only, with its original event id, position and date.
+`connected` reports the saved account mode, connection reference and catalogue check
+date. `none` means no account required, never verified health. Personal/company account
+verification is unavailable. `allowedFor` reuses the existing bounded grant reader,
+returns at most 100 safe receipts and keeps membership status separate. Its total counts
+saved grant rows, including revocations, not people with effective permission. Overflow
+or projection lag makes the list incomplete and its total null; missing IAM receipts
+remain Applying. The response omits names, endpoints and tool definitions.
+
+`availability` is always unavailable with `requester_assistant_required`. Its policy
+and publication fields report saved evidence, not live gateway health. Publication uses
+`readPublication` and checks its Ready result against current event policy and expiry.
+Read time is separate from the saved registration, catalogue and publication dates.
+The GET appends nothing and performs no discovery, probe, credential read or tool call.
+Replay rebuilds the same saved evidence; it does not refresh its observation dates.
+Screen consumption and selected-pair explanation remain later work. Fresh-install
+qualification: NOT RUN.
+
 ## Publication status reads (Part of #45)
 
 GET `/api/org/integrations/:serverId/publication` reads the catalogue projection.

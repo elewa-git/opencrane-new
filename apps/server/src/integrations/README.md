@@ -22,6 +22,11 @@ The models process replaces the gateway file under a PostgreSQL lock shared with
 
 Each configured call is checked again immediately before sending. The tool server must compare the approved tool list and running instance before execution. Published remote calls use their saved destination through the shared checked HTTPS connection. The remote server must promise to refuse calls against a changed tool list. [Memory](../memory/README.md) discovery, recall and remember use these same checks. A reviewed tool's Allow mode also travels with a chat turn, so changing it to Ask prevents an old automatic call.
 
+**Saved facts.** Owners and admins can read registration, account requirements,
+saved grants and publication separately. No account required does not mean a
+connection was tested. Personal and company account verification remains unavailable.
+The reply does not claim permission for an assistant without a selected person and assistant.
+
 **Access.** Owners and admins can read saved grant sources and browse suitable people, groups and assistants in small pages. A grant is a saved permission; its result reports database and permission progress separately. A lost reply can be checked by the original reference without repeating the change. Membership status is shown separately from saved grants. Departed people retain grant history but cannot use tools. Grant lists do not promise that a tool is ready.
 
 Published calls require permission for both the person and the assistant. Removing either grant stops new calls and calls waiting to be sent, even while the permissions service is still applying the change. Giving the grant again allows calls once the saved content and permission updates are current.
@@ -42,7 +47,7 @@ A lost spending-limit reply can be checked by its original request id. Current o
 
 | File | What it does |
 | --- | --- |
-| [routes.ts](routes.ts), [registration.ts](registration.ts) | Serve registration, tool policy, publication, image checks and spending settings. |
+| [routes.ts](routes.ts), [facts.ts](facts.ts), [registration.ts](registration.ts) | Serve registration, tool policy, publication, image checks and spending settings. |
 | [remote.ts](remote.ts), [inventory.ts](inventory.ts), [install-worker.ts](install-worker.ts) | Check remote addresses and collect exact tool definitions. |
 | [remote-catalogue-watch.ts](remote-catalogue-watch.ts) | Keeps the models process's remote checks current. |
 | [access-reads.ts](access-reads.ts), [access-changes.ts](access-changes.ts) | List tool grants and suitable recipients, and save access changes. |
@@ -52,3 +57,10 @@ A lost spending-limit reply can be checked by its original request id. Current o
 ## How it connects
 
 The [server](../../README.md) registers these requests. [Models](../models/README.md) registers the tool-grant routes; [members](../members/README.md) supplies access reviews. The separate [models process](../models-main.ts) runs remote checks, gateway delivery and final decisions using the [models library](../../../../libs/models/README.md). [Background workers](../../../ops/README.md) apply saved changes to read tables and permissions.
+
+```mermaid
+flowchart LR
+  server[Server] --> integrations[Integration requests and saved facts]
+  integrations --> models[Tool rules and spending]
+  integrations --> members[Current membership]
+```
