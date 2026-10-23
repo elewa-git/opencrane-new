@@ -89,3 +89,5 @@ export { scanConnections } from './connection-scan.ts';
 export { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-https.ts';
 
 export { startEgress } from './egress-startup.ts';
+
+export { prepareMemoryReads } from './memory-preparation.ts';

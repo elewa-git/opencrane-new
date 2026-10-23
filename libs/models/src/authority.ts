@@ -17,9 +17,10 @@ export const outputReportTypes: readonly string[] = [
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string,
   fresh?: Awaited<ReturnType<typeof authorityFence>>, conversationRows?: StoredEvent[],
-  grants?: DecisionGrants) {
+  grants?: DecisionGrants, applied?: (eventId: string) => Promise<boolean>) {
   fresh ??= await authorityFence(store, performance.now());
   const auth = memberAuthorisation(binding);
+  const checkApplied = receiptReader(auth, applied);
   const facts = [], receipts: string[] = [];
   let active = true;
   const subjects = [`ownership-${binding.silo}`, `member-${requester}`,
@@ -54,7 +55,10 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
     }
   }
   for (let offset = 0; offset < receipts.length; offset += 16) {
-    if (!(await Promise.all(receipts.slice(offset, offset + 16).map(id => auth.applied(id)))).every(Boolean)) {
+    const batch = receipts.slice(offset, offset + 16);
+    const receiptReads = batch.map(checkApplied);
+    const appliedReceipts = await Promise.all(receiptReads);
+    if (!appliedReceipts.every(Boolean)) {
       throw new Error('IAM projection behind');
     }
   }
@@ -65,6 +69,11 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   if (permissions.some(p => !p.allowed)) throw new Error('Current authority refused');
   await fresh();
   return createHash('sha256').update(JSON.stringify({ facts, permissions, memoryScopes: [], credential: null })).digest('hex');
+}
+
+function receiptReader(auth: ReturnType<typeof memberAuthorisation>,
+  applied: ((eventId: string) => Promise<boolean>) | undefined) {
+  return applied ?? auth.applied.bind(auth);
 }
 
 async function readAuthorityHistories(subjects: string[],

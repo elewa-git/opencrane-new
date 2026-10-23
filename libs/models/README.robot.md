@@ -3292,3 +3292,19 @@ through the gateway and backend, without an approval. Block and missing tools de
 The fixed refusal allowlist also contains `agent_person_scope_only` and
 `memory_tool_unavailable`. Configuration refusals keep the request id in the gateway
 response header. Native admission is unchanged.
+
+## Recall preparation request
+
+The models process asks the memory server to prepare recall before starting the
+short access check or signing the executable control. Preparation uses a separate
+`preparing: true` credential with the original two-second signature lifetime.
+Only its initial authentication uses that lifetime; loading has its own ten-second
+limit. The returned random `preparationId` and `inputGeneration` become signed claims
+on the later control. The preparation credential is refused on the execution route.
+The memory route allows 15 seconds for the HTTP authorisation response so preparation
+can finish. This transport timeout does not extend the signed pass or access deadline.
+
+`prepareMemoryReads` loads turn facts and IAM receipts without retaining a permission
+result. `memoryRights` uses those receipts only for already loaded events and checks
+current OpenFGA permissions and saved grants again. A new access event with no prepared
+receipt refuses the call. Correct and Forget preparation remains later work.

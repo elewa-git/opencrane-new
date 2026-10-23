@@ -4761,3 +4761,24 @@ the six delayed valid controls remain red. The product fix is not source ready.
 Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
 
 The throwaway PostgreSQL container and its volume were removed after the third run.
+
+## Recall preparation before signing
+
+`POST /mcp/memory/server/prepare` accepts a signed memory credential with
+`preparing: true`. This credential can load data but cannot execute a tool.
+The route returns only `preparationId` and `inputGeneration`. It loads chat history,
+IAM receipt facts, scope history and the bounded fact page within ten seconds.
+At most 128 preparations live in this server process. Each has a random id,
+expires after 30 seconds and is removed before any attempt to use it.
+
+The final signed recall binds the id and input generation to the silo, requester,
+assistant, computer generation, conversation, turn, thread, operation, scope,
+request digest, call id and request id. Missing, expired, reused and mismatched
+preparations return the existing generic refusal. There is no cold-read fallback.
+Preparation checks access before reading private facts and discards that result.
+Prepared data contains no permission result. The two-second call checks current
+permissions and small access streams, turn changes and the current memory revision.
+Chat refresh reads only later events; losing its prepared summary refuses the call.
+No preparation or fact text is saved in an event or returned by the preparation route.
+Correct and Forget retain their old path and remain disabled. Their slow-read
+regressions remain outstanding. Fresh-install qualification: NOT RUN.

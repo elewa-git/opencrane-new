@@ -33,6 +33,10 @@ unavailable gate delivery keep the wait pending. Reconnection reads the same res
 HTTP decisions check approval ownership and current write access before saving a
 cancellation, so a foreign approval stays unchanged.
 
+Recall loads chat history and saved memory before the gateway signs its short pass.
+The server keeps that data briefly for one call and checks current access before use.
+Correct and Forget still use their existing checks and remain disabled.
+
 ## Where it fits
 
 This package is the back-end layer. [apps/web](../web/README.md) is the website;
@@ -51,7 +55,7 @@ flowchart LR
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
-  runtime -->|checks permission| server
+  runtime -->|prepares recall, then checks permission| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.

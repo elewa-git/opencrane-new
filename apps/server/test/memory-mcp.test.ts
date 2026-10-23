@@ -155,6 +155,10 @@ function memberId() {
 }
 function captureContext(request: import('fastify').FastifyRequest,
   _reply: import('fastify').FastifyReply, done: () => void) {
+  if (request.url.endsWith('/prepare')) {
+    done();
+    return;
+  }
   capability = String(request.headers['x-memory-context'] ?? '');
   for (const name of ['authorization', 'x-turn-token', 'session-id']) {
     expect(request.headers[name]).toBeUndefined();
@@ -544,21 +548,22 @@ async function signedRecall(target: typeof setup, overrides = {}, body = call) {
   const parsed = parseMemoryRequest(JSON.stringify(body), headers);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
     computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
-    thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
+    thread: 'thread', operation: 'recall', scopes: [parsed.input!.scopeId], contentAccess: 'private',
     bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
   const dispatch = await memoryBinding(target);
-  const preparing = await target.tokens.memoryContext({ ...claims, dispatch, preparing: true },
-    Date.now() + 2000);
+  const preparationClaims = { ...claims, dispatch, preparing: true };
+  const preparing = await target.tokens.memoryContext(preparationClaims, Date.now() + 2000);
   const upstream = target.options.mcpRoutes.find(isMemoryRoute)!.upstream;
-  const preparation = await fetch(`http://${upstream}${route}/prepare`, {
-    method: 'POST', headers: { ...headers, 'content-type': 'application/json',
-      'x-memory-context': preparing }, body: JSON.stringify(body) });
+  const request = { method: 'POST', headers: { ...headers, 'content-type': 'application/json',
+    'x-memory-context': preparing }, body: JSON.stringify(body) };
+  const preparation = await fetch(`http://${upstream}${route}/prepare`, request);
   const prepared: unknown = await preparation.json();
-  const fields = z.object({ preparationId: z.uuid(), inputGeneration: z.string() })
-    .partial().parse(prepared);
-  return target.tokens.memoryContext({ ...claims, dispatch, ...fields, ...overrides },
-    Date.now() + 2000);
+  const schema = z.object({ preparationId: z.uuid().optional(),
+    inputGeneration: z.string().optional() });
+  const fields = schema.parse(prepared);
+  const finalClaims = { ...claims, dispatch, ...fields, ...overrides };
+  return target.tokens.memoryContext(finalClaims, Date.now() + 2000);
 }
 
 async function assertRecallRefused(target: typeof setup, backend: typeof app) {
@@ -937,6 +942,7 @@ it.each(revokedGrants)('refuses a pending backend $resourceType revoke for $gran
 it('refuses when signing or verification is unavailable without reading facts',
   async function unavailableKeys() {
     const noSigner = await startDecision(setup.actor, setup.identity, setup.binding);
+    const token = await signedRecall(setup);
     const database = vi.spyOn(setup.db, 'query');
     try {
       const decisionHeaders = { ...setup.headers, ...headers };
@@ -950,7 +956,6 @@ it('refuses when signing or verification is unavailable without reading facts',
         binding: setup.binding, feed: { memberId }, identity };
       const noVerifier = buildServer(testAuthConfig(), { memory });
       try {
-        const token = await signedRecall(setup);
         const requestHeaders = { ...headers, 'x-memory-context': token };
         const options = { method: 'POST' as const, url: route,
           headers: requestHeaders, payload: call };
@@ -1725,7 +1730,15 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       bodyDigest: parsed.bodyDigest, callId: recallBody.params._meta.callId,
       requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
     const dispatch = await memoryBinding(target);
-    const recalledToken = await target.tokens.memoryContext({ ...claims, dispatch }, Date.now() + 2000);
+    const preparing = await target.tokens.memoryContext({ ...claims, dispatch, preparing: true },
+      Date.now() + 2000);
+    const preparationRequest = { method: 'POST' as const, url: `${route}/prepare`,
+      payload: recallBody, headers: { ...headers, 'x-memory-context': preparing } };
+    const preparationReply = await backend.inject(preparationRequest);
+    const prepared = z.object({ preparationId: z.uuid(), inputGeneration: z.string() })
+      .parse(preparationReply.json());
+    const recalledToken = await target.tokens.memoryContext({ ...claims, dispatch, ...prepared },
+      Date.now() + 2000);
     const readHeaders = { ...headers, 'x-memory-context': recalledToken };
     const readRequest = { method: 'POST' as const, url: route,
       headers: readHeaders, payload: recallBody };
@@ -2865,3 +2878,36 @@ async function refusesPreparation(change: 'missing' | 'reused' | 'expired' | 'mi
 }
 it.each(['missing', 'reused', 'expired', 'mismatched'] as const)(
   'refuses a %s recall preparation', refusesPreparation, 40_000);
+
+async function gatewayPreparation(step: 'history' | 'IAM') {
+  function delay() {
+    return pause(2200);
+  }
+  const timing = timeMemoryPath(setup, step, delay);
+  try {
+    const response = await setup.call(headers, call, route);
+    expect(timing.delayed()).toBe(true);
+    expect(response.status, response.text).toBe(200);
+    expect(decodeJwt(capability)['preparationId']).toEqual(expect.any(String));
+  } finally {
+    timing.restore();
+  }
+}
+it.each(['history', 'IAM'] as const)(
+  'prepares slow %s through the real gateway before signing recall', gatewayPreparation);
+
+async function usesOnlyPreparedReceipts() {
+  const signed = await signedRecall(setup);
+  const receipts = vi.spyOn(setup.auth, 'applied');
+  try {
+    const request = { method: 'POST' as const, url: route, payload: call,
+      headers: { ...headers, 'x-memory-context': signed } };
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(200);
+    expect(receipts).not.toHaveBeenCalled();
+  } finally {
+    receipts.mockRestore();
+  }
+}
+it('uses prepared IAM receipts without loading them inside the signed recall',
+  usesOnlyPreparedReceipts);
