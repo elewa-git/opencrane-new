@@ -87,7 +87,7 @@ export function pgDb(pool: Pool): Db {
         return result;
       } finally {
         try {
-          await releaseProjectionLock(client, name, lost);
+          await releaseProjectionLock(client, name, lost, options !== undefined);
         } finally {
           client.removeListener('error', failed);
         }
@@ -96,12 +96,17 @@ export function pgDb(pool: Pool): Db {
   };
 }
 
-async function releaseProjectionLock(client: PoolClient, name: string, lost: boolean) {
+async function releaseProjectionLock(client: PoolClient, name: string, lost: boolean,
+  resetTimeout: boolean) {
   try {
     if (!lost) {
       const unlock = { text: 'SELECT pg_advisory_unlock(hashtextextended($1, 0))',
         values: [`opencrane:projection:${name}`], query_timeout: 1000 };
       await client.query(unlock);
+      if (resetTimeout) {
+        const reset = { text: 'RESET lock_timeout', query_timeout: 1000 };
+        await client.query(reset);
+      }
     }
   } catch (error) {
     client.release(true);
@@ -173,7 +178,10 @@ async function waitForProjectionLock(client: PoolClient, name: string,
     try {
       await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))',
         [`opencrane:projection:${name}`]);
-      if (timeoutMs !== undefined) await client.query('RESET lock_timeout');
+      if (timeoutMs !== undefined) {
+        // Preserve the caller's timeout for SQL lock waits inside the callback too.
+        await client.query("SELECT set_config('lock_timeout', $1, false)", [`${timeoutMs}ms`]);
+      }
       return;
     } catch (error) {
       const lockTimedOut = error instanceof Error && 'code' in error && error.code === '55P03';

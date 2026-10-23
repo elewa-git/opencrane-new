@@ -23,7 +23,9 @@ at most 100 ms per PostgreSQL lock wait, so the server notices a disconnected wa
 The full acquisition deadline does not restart between waits. The callback keeps its
 connection until its work stops; cancellation does not release an active callback's lock.
 Memory commands use 100 ms; projection workers without options retain their existing wait.
-The callback's `query` accepts a deadline and uses the same checked-out connection.
+The requested lock timeout stays set during the callback and is reset before the
+connection returns to the pool. The callback's `query` accepts a deadline and uses
+the same checked-out connection.
 A failed unlock destroys the connection. The shared connection helper limits ordinary
 pool connection waits to one second. Memory keys expose `status(identity)` without creating
 a key: it distinguishes missing custody, an available key and a destroyed-key marker.
