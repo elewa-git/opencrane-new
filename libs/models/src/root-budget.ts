@@ -247,7 +247,7 @@ export function wasAdmitted(state: BudgetState, reservationId: string) {
   return state.dispatches.some(matchesDispatch);
 }
 
-export type CallRetry = { retryDigest: string; bodyDigest: string };
+export type CallRetry = { retryDigest: string; bodyDigest: string; accessExpiresAt?: number };
 export class CallRetryRefused extends Error {
   constructor() {
     super('Model call retry refused');

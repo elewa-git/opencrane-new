@@ -6,12 +6,19 @@ import type { BudgetActor } from './actor.ts';
 import { CallRetryRefused, turnRootId } from './root-budget.ts';
 import type { ModelCall } from './state.ts';
 
+type NativeCall = {
+  callId: string;
+  accessExpiresAt: number;
+  rootId: string;
+  rootTurn: Pick<ModelCall, 'turnId' | 'threadId'>;
+};
+
 export async function grantModelCall(actor: BudgetActor,
   call: ModelCall & { requestId: string }, amountCents: number,
-  raw: string, fresh: () => Promise<void>, admittedAt: number,
-  allow: (reservationId: string, requestId: string) => Promise<string>) {
+  raw: string, fresh: () => Promise<void>, admittedAt: number | undefined,
+  allow: (reservationId: string, requestId: string) => Promise<string>, native?: NativeCall) {
   // Use the verified turn binding; caller headers cannot choose a root.
-  const rootId = turnRootId(actor.state, call.conversationId, call.turnId);
+  const rootId = native?.rootId ?? turnRootId(actor.state, call.conversationId, call.turnId);
   const bodyHash = createHash('sha256');
   bodyHash.update(raw);
   const bodyDigest = bodyHash.digest('hex');
@@ -31,24 +38,56 @@ export async function grantModelCall(actor: BudgetActor,
   }
   try {
     const retryHash = createHash('sha256');
-    retryHash.update(JSON.stringify([actor.silo, rootId, call.computerId, call.generation,
-      call.conversationId, call.turnId, call.threadId, bodyDigest]));
-    const retry = { retryDigest: retryHash.digest('hex'), bodyDigest };
-    const reservationId = await actor.reserve(call, amountCents, fresh, admittedAt, rootId, retry);
+    let identity = [actor.silo, rootId, call.computerId, call.generation,
+      call.conversationId, call.turnId, call.threadId, bodyDigest];
+    if (native) {
+      // Keep changed bytes or bindings on the same call so the actor refuses replacement holds.
+      identity = [actor.silo, 'native', native.callId];
+    }
+    retryHash.update(JSON.stringify(identity));
+    const retryDigest = retryHash.digest('hex');
+    const expiry = native ? { accessExpiresAt: native.accessExpiresAt } : {};
+    const retry = { retryDigest, bodyDigest, ...expiry };
+    const nativeAccess = native ? nativeRetryAccess(actor, retryDigest, native, fresh) : undefined;
+    const confirmAccess = nativeAccess?.confirmAccess ?? fresh;
+    const reservationId = await actor.reserve(call, amountCents, confirmAccess, admittedAt,
+      rootId, retry, native?.rootTurn);
     function matchesReservation(saved: Reservation) {
       return saved.id === reservationId;
     }
     const saved = actor.state.reservations.find(matchesReservation)!;
     const requestId = saved.call.requestId!;
-    const decisionId = await recoverDecision(actor, saved, allow);
+    const decisionId = await recoverDecision(actor, saved, allow,
+      nativeAccess?.requireOriginalExpiry);
     const dispatch = { callId: requestId, decisionId, bodyDigest,
       reservationId, modelCall: saved.call, rootId };
-    await actor.admitDispatch(dispatch, fresh, admittedAt);
+    await actor.admitDispatch(dispatch, confirmAccess, admittedAt, native?.rootTurn);
     return { reservationId, requestId };
   } catch {
     // Keep an uncertain hold and its original decision available for a later retry.
     throw new CallRetryRefused();
   }
+}
+
+function nativeRetryAccess(actor: BudgetActor, retryDigest: string, native: NativeCall,
+  fresh: () => Promise<void>) {
+  function matchesRetry(saved: Reservation) {
+    return saved.retryDigest === retryDigest;
+  }
+  function requireOriginalExpiry() {
+    // Read the hold again after queue waits; another attempt may have saved it first.
+    const saved = actor.state.reservations.find(matchesRetry);
+    const expiresAt = saved ? saved.accessExpiresAt : native.accessExpiresAt;
+    if (expiresAt === undefined || Date.now() >= expiresAt) {
+      throw new CallRetryRefused();
+    }
+  }
+  async function confirmAccess() {
+    requireOriginalExpiry();
+    await fresh();
+    requireOriginalExpiry();
+  }
+  return { confirmAccess, requireOriginalExpiry };
 }
 
 type Reservation = BudgetState['reservations'][number];
@@ -68,11 +107,14 @@ async function savedDecision(actor: BudgetActor, saved: Reservation) {
   return event.id;
 }
 async function recoverDecision(actor: BudgetActor, saved: Reservation,
-  allow: (reservationId: string, requestId: string) => Promise<string>) {
+  allow: (reservationId: string, requestId: string) => Promise<string>,
+  requireOriginalExpiry?: () => void) {
   const decisionId = await savedDecision(actor, saved);
   if (decisionId !== undefined) {
     return decisionId;
   }
+  // Refuse a missing decision if reading its history used the remaining access time.
+  requireOriginalExpiry?.();
   try {
     return await allow(saved.id, saved.call.requestId!);
   } catch {
