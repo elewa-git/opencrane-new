@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const auditReasons = {
   requester_requested: 'Requester asked for control',
+  requester_only: 'Only the requester may take control',
+  control_conflict: 'Control request conflicts with saved state',
   access_refused: 'Request refused', wrong_identity: 'Invitation is for another account',
   inviter_authority_ended: 'The inviter is no longer an owner or admin',
   identity_mismatch: 'The invitation does not match the intended person',

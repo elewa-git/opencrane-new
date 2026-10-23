@@ -2788,8 +2788,19 @@ Saved requests and identical retries return 202; changed requests return 409,
 access refusals 403, malformed bodies 400 and unavailable dependencies 503.
 All replies use no-store. No error mapping depends on message text.
 
-Part of #58, P3-17 PR 1b. Refusal audit events are deferred to keep this change small.
-PR 1c adds control status to chat history and realtime ready replies. Writer, lease,
+Enabled POSTs that pass authentication, validation and chat access save requester-only
+and control-conflict refusals on `view-<commandId>`. `takeover-refusals.ts` stores only
+attemptId, actorId, inputDigest and the fixed reason. The digest binds the silo,
+authenticated actor and all four validated request fields. Identical retries read the
+saved record without appending, including after a restart. Changed bindings return 409.
+Reusing an accepted command id cannot create a refusal that replaces its saved result.
+A conditional append and readback share a two-second deadline. A lost reply can recover
+the committed record; missing or unreadable evidence returns 503. No refusal writes to
+the computer stream. Authentication, Origin, CSRF, malformed input, chat-access and
+globally disabled refusals create no audit event. GET remains read-only.
+
+Part of #58. PR 1c records refused attempts; chat and realtime control status remain
+separate follow-up work. Writer, lease,
 renewal, return and recovery routes remain unavailable. The accepted
 [design](../../docs/specs/phase-3/p3-17-take-control.md) owns that scope.
 `test/takeover-http.test.ts` covers HTTP guards, competing requests, private status,

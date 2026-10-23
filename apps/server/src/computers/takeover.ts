@@ -10,10 +10,12 @@ import { readChatFacts, type ChatFacts } from '../chat/chat-summary.ts';
 import { ChatRefused, chatAccess, writeChatAccess, type ChatOptions } from '../chat/access.ts';
 import { writePrivateSession } from '../chat/private-session.ts';
 import { desktopAccess, viewAccess } from './view-access.ts';
+import { RequesterOnly, ControlConflict, savedControlRefusal, recordControlRefusal,
+  throwControlRefusal } from './takeover-refusals.ts';
 
-export class RequesterOnly extends ChatRefused {}
-export class ControlConflict extends Error {}
+export { RequesterOnly, ControlConflict } from './takeover-refusals.ts';
 class ControlUnavailable extends Error {}
+class ControlBindingConflict extends ControlConflict {}
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 const requestSchema = z.object({
@@ -42,6 +44,29 @@ export async function requestControl(options: ChatOptions, memberId: string, raw
     options, input.conversationId, input.requesterEventId);
   const accessRequest = { memberId, conversationId: input.conversationId };
   await chatAccess(accessOptions, accessRequest);
+  const saved = await savedControlRefusal(options, memberId, input);
+  if (saved) throwControlRefusal(saved);
+  try {
+    return await checkedControl(options, memberId, input, chat, facts, accessOptions);
+  } catch (error) {
+    if (error instanceof ControlBindingConflict) throw error;
+    const previous = facts?.control;
+    // Preserve an already accepted command when someone reuses its id with changed input.
+    if (previous && previous.phase !== 'unverified' && previous.commandId === input.commandId) {
+      throw error;
+    }
+    if (error instanceof RequesterOnly) {
+      return recordControlRefusal(options, memberId, input, 'requester_only');
+    }
+    if (error instanceof ControlConflict) {
+      return recordControlRefusal(options, memberId, input, 'control_conflict');
+    }
+    throw error;
+  }
+}
+
+async function checkedControl(options: ChatOptions, memberId: string, input: ControlRequest,
+  chat: ChatFacts, facts: ReturnType<typeof takeComputer> | undefined, accessOptions: ChatOptions) {
   if (chat.latestHuman && chat.latestHuman.id !== input.requesterEventId) {
     throw new ControlConflict('Control conflict');
   }
@@ -72,7 +97,7 @@ function affectedTurns(facts: ReturnType<typeof takeComputer>, memberId: string,
   for (const turn of facts.openTurns) {
     const details = turnOwnerSchema.parse(turn.row.event.data);
     if (details.conversationId === conversationId && details.requesterId !== memberId) {
-      throw new ChatRefused('Requester changed');
+      throw new RequesterOnly('Requester only');
     }
     affectedTurnIds.push(turn.turnId);
   }
@@ -155,13 +180,14 @@ async function saveIntent(options: ChatOptions, memberId: string, input: Control
     deadline };
   const result = await options.store.append(command);
   if (result.status === 'unavailable') throw new ControlUnavailable('Control unavailable');
+  if (result.status === 'rejected') throw new ControlBindingConflict('Control conflict');
   if (result.status !== 'appended') throw new ControlConflict('Control conflict');
   const saved = await readEventAt(options.store, subject, result.sequence, performance.now() + 10_000);
   if (!saved) throw new ControlUnavailable('Control unavailable');
   // Compare every binding while retaining the first append's generated time.
   const expected = { ...event, time: saved.event.time };
   if (!isDeepStrictEqual(saved.event, expected)) {
-    throw new ControlConflict('Control conflict');
+    throw new ControlBindingConflict('Control conflict');
   }
   const savedData = takeoverRequestedDataSchema.parse(saved.event.data);
   return { ...savedData, phase: 'requested' as const, position: result.sequence,

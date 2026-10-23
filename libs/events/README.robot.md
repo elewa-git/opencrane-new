@@ -331,6 +331,11 @@ the [accepted design](../../docs/specs/phase-3/p3-14-p3-15-budget-stop.md) recor
 
 ## Control intent
 
+`takeover.refused` belongs to `view-<attemptId>`. Its strict data contains only
+attemptId, actorId, a SHA-256 inputDigest and reason `requester_only` or `control_conflict`.
+Identifiers allow letters, digits, underscores and hyphens, with at most 200 characters.
+It is audit-only: replay must not change control or dispatch a reaction.
+
 `takeover.requested` is strict. It requires the computer, generation, Pod,
 conversation, requester, reviewed human event, takeover and lease references,
 fixed reason and affected turn ids. It belongs to `computer-<assistantId>`.

@@ -106,6 +106,7 @@ const verifiedActorFields: Record<string, string> = {
   'team.created': 'createdBy',
   'ownership.transferred': 'transferredBy',
   'takeover.requested': 'requestedBy',
+  'takeover.refused': 'actorId',
 };
 function actor(event: EventEnvelope, data: Record<string, unknown>): AuditRecord['actor'] {
   const principal = event.principal;

@@ -80,7 +80,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `provider-<providerId>` | company model provider | configuration and verification |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
 | `connection-control-<user>-<server>` | admin block for a member's personal profiles | disabled |
-| `view-<session>` | bounded desktop view | started, stopped |
+| `view-<reference>` | bounded desktop view or refused control attempt | started, stopped, refused |
 | `grant-<resource>` | shared resource (type and id) | given, revoked |
 | `budget-<silo>` | silo budget (all ceilings) | ceiling set, reserved, settled, period started |
 | `scope-<id>` | brain permission scope | memory written, corrected, forgotten, consolidated, promoted |
@@ -253,6 +253,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `computer.view_refused` | authenticated proxy | audit | Safe refusal metadata on `view-<attemptId>`; no connection or lifecycle effect. The additive reason `unavailable` means access checks did not answer within the 5 s retry window, or the member lookup was unavailable. |
 | `computer.view_started` / `computer.view_stopped` | authenticated proxy | audit | Audit on `view-<sessionId>`; no lifecycle effect or replayed connection. Start records a maximum two-minute ticket and stop records its reason. The additive reason `unavailable` means there was no confirmed access for 10 s, either before the first valid lease or after a lease lapsed. |
 | `takeover.requested` | internal requester command | computer control summary, server bridge reaction, audit | Record intent on the computer stream with a conditional append. Refuse new work, deliver the signed bridge gate and request the root supervisor stop. No writer is enabled. |
+| `takeover.refused` | authenticated server command | audit only | Save one refusal on `view-<attemptId>` with actor id, validated input digest and fixed `requester_only` or `control_conflict` reason. Reuse requires the same actor and request. Never append to the computer stream or change work, control or viewing. Uncertain audit storage returns unavailable. |
 | `takeover.pausing` | server bridge reaction | computer control summary, audit | Save matching bridge acceptance and root executor exit on the computer stream with one conditional append. Keep work denied while waiting for complete quiet proof. |
 | `takeover.paused` | server bridge reaction | computer control summary, audit | After saved pausing, save a current bridge quiet reply and complete root receipt with the saved supervisor epoch. One conditional append; work and writer access stay closed. |
 | `takeover.failed` | server failure command; deadline caller deferred to PR 2h | computer control summary, audit | From requested or pausing, save the bound `pause_timeout` reason with one conditional append. Work and writer access stay closed. |

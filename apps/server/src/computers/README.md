@@ -10,6 +10,7 @@ This folder lets people watch an assistant's desktop, take a screenshot and see 
 - Saves authorised screenshots through the normal file checks.
 - Reads saved control requests, including paused and failed results, for chat participants.
 - Records control intent when explicitly enabled and helps check that computer work has stopped.
+- Saves refused control attempts separately from the computer, without interrupting work.
 
 Each [computer](../../../../GLOSSARY.md#computer) belongs to one assistant. A personal assistant has its own; a group's assistant uses one shared computer. Viewing holds one place while the connection opens and until it ends. A confirmed member removal or conversation denial ends the view immediately, even while another access check is slow. A later invitation alone does not restore desktop or file access. Starting a turn or receiving a file does not remove viewing access.
 
@@ -29,6 +30,7 @@ The chat connection sends a signed request to stop work, including to an idle co
 | [desktop.ts](desktop.ts), [rfb.ts](rfb.ts), [view-delivery.ts](view-delivery.ts), [view-timing.ts](view-timing.ts) | Carry read-only desktop pictures, limit waiting data and record timings. |
 | [screenshots.ts](screenshots.ts), [capture.ts](capture.ts) | Capture one desktop picture and submit it as a file. |
 | [takeover-routes.ts](takeover-routes.ts), [takeover.ts](takeover.ts), [stop-executor.ts](stop-executor.ts) | Read or request control preparation and ask the supervisor to stop work. |
+| [takeover-refusals.ts](takeover-refusals.ts) | Saves refused attempts and recovers their original result on retry. |
 
 ## How it connects
 

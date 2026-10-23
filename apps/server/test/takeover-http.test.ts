@@ -5,10 +5,12 @@ import * as access from '../src/chat/access.ts';
 import { computerSummary, encodeSession } from '@opencrane/auth';
 import { createEventStore, type AppendCommand } from '@opencrane/event-store';
 import { auditTrail, readAudit } from '@opencrane/projections';
+import { viewAccess } from '../src/computers/view-access.ts';
 import { parseEventByType } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
 import { buildServer, buildProductionServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
+import { takeoverProbe } from './support/takeover-probe.ts';
 
 let fixture: Awaited<ReturnType<typeof viewFixture>>;
 let app: ReturnType<typeof buildServer>;
@@ -32,7 +34,8 @@ async function setup(requestsEnabled = true) {
   desktopCalls = 0;
   cookies.clear();
   const chat = { ...fixture, store: fixture.nats.store, silo: 'test' };
-  const options = { chat, takeoverRequestsEnabled: requestsEnabled };
+  const liveView = { ...chat, open: noDesktop };
+  const options = { chat, liveView, takeoverRequestsEnabled: requestsEnabled };
   app = buildServer(fixture.config, options);
   const message = await fixture.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
@@ -140,6 +143,7 @@ async function retriesAndLostReplies() {
     { ...body, requesterEventId: 'changed' }, { ...body, generation: 2 }]) {
     expect((await post(changed)).statusCode).toBe(409);
   }
+  expect((await post()).json()).toEqual(first.json());
   expect((await get()).json()).toMatchObject({ status: 'requested', commandId: body.commandId,
     affectedTurnIds: [], eligibleActions: [] });
   const bob = (await get('bob')).json<Record<string, unknown>>();
@@ -158,6 +162,7 @@ async function checksStateBeforeSaving() {
   await setup();
   const before = await fixture.nats.store.head();
   expect((await post({ ...body, generation: 2 })).statusCode).toBe(409);
+  body = { ...body, commandId: 'fresh-attempt' };
   const hidden = await get('outsider');
   expect(hidden.statusCode).toBe(403);
   await fixture.append('computer-assistant', 'computer.suspended', {
@@ -220,6 +225,8 @@ async function competingRequests(sameCommand: boolean) {
     if (row.event.type === 'takeover.requested') intents++;
   }
   expect(intents).toBe(1);
+  const retry = responses[0].statusCode === 202 ? await post() : await post(other, 'alice', 'other');
+  expect(retry.statusCode).toBe(202);
 }
 it.each([false, true])('saves one intent for competing chats, same command id: %s',
   competingRequests);
@@ -484,6 +491,11 @@ async function recordsSafeRefusal(controller: boolean) {
   }
   const member = controller ? 'alice' : 'bob';
   const before = await computerState();
+  const accessOptions = { ...fixture, silo: 'test', store: fixture.nats.store };
+  const viewer = await viewAccess(accessOptions, 'alice', 'chat');
+  const bridge = await takeoverProbe(accessOptions);
+  expect(bridge.gate).toHaveBeenCalledTimes(controller ? 1 : 0);
+  bridge.gate.mockClear();
   const position = await fixture.nats.store.head('computer-assistant');
   const response = await post(body, member);
   expect(response.statusCode).toBe(controller ? 409 : 403);
@@ -495,14 +507,21 @@ async function recordsSafeRefusal(controller: boolean) {
   expect(rows).toHaveLength(1);
   expect(rows[0]?.event).toMatchObject({ type: 'takeover.refused',
     principal: { kind: 'human', id: member }, data: { attemptId: body.commandId,
-      actorId: member, reason: controller ? 'control_conflict' : 'requester_only',
-      inputDigest: expect.stringMatching(/^[a-f0-9]{64}$/u) } });
+      actorId: member, reason: controller ? 'control_conflict' : 'requester_only' } });
+  expect(rows[0]?.event.data).toHaveProperty('inputDigest', expect.stringMatching(/^[a-f0-9]{64}$/u));
   expect(await computerState()).toEqual(before);
+  expect(await viewAccess(accessOptions, 'alice', 'chat')).toMatchObject({
+    computerId: viewer.computerId,
+  });
   expect(await fixture.nats.store.head('computer-assistant')).toBe(position);
   const after = await fixture.nats.store.head();
   expect((await get(member)).statusCode).toBe(200);
   expect(await fixture.nats.store.head()).toBe(after);
   expect(desktopCalls).toBe(0);
+  await bridge.control.send();
+  await bridge.control.settled();
+  expect(bridge.send).not.toHaveBeenCalled();
+  expect(bridge.stopExecution).not.toHaveBeenCalled();
   await fixture.runner.initialise(auditTrail);
   await fixture.runner.run(auditTrail);
   const audit = await readAudit(fixture.db, 'test');
@@ -511,6 +530,9 @@ async function recordsSafeRefusal(controller: boolean) {
       ? 'Control request conflicts with saved state' : 'Only the requester may take control' });
   await fixture.runner.rebuild(auditTrail);
   expect(await readAudit(fixture.db, 'test')).toEqual(audit);
+  expect(bridge.gate).not.toHaveBeenCalled();
+  expect(bridge.send).not.toHaveBeenCalled();
+  expect(bridge.stopExecution).not.toHaveBeenCalled();
   const serialised = JSON.stringify([rows, audit.rows[0], response.json()]);
   for (const forbidden of ['private-turn-canary', 'private-thread', 'private-chat',
     'affectedTurnIds', 'computerId', 'podUid', body.requesterEventId,
@@ -546,7 +568,7 @@ async function uncertainRefusal(mode: 'lost' | 'append' | 'read') {
   await participant();
   const append = fixture.nats.store.append.bind(fixture.nats.store);
   let attempted = false;
-  async function uncertain(command: AppendCommand) {
+  async function uncertain(command: AppendCommand): Promise<never> {
     attempted = true;
     if (mode !== 'append') await append(command);
     throw new Error('private-error-canary');
@@ -578,6 +600,8 @@ async function refusalRestart() {
   const saved = await refusalRows();
   expect(saved).toHaveLength(1);
   await app.close();
+  await fixture.nats.stop();
+  await fixture.nats.restart();
   const store = await createEventStore(fixture.nats.connection);
   const chat = { ...fixture, store, silo: 'test' };
   app = buildServer(fixture.config, { chat, takeoverRequestsEnabled: true });
@@ -590,7 +614,8 @@ async function refusalRestart() {
     expect((await post(changed, 'bob')).statusCode).toBe(409);
   }
   expect((await post(body, 'alice')).statusCode).toBe(409);
-  expect((await post(body, 'alice', 'other')).statusCode).toBe(403);
+  await otherChat();
+  expect((await post(body, 'alice', 'other')).statusCode).toBe(409);
   expect(await refusalRows()).toEqual(saved);
   expect(append).not.toHaveBeenCalled();
 }
