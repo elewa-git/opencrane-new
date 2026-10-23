@@ -90,6 +90,8 @@ it('does not guess a monthly reset while the stop read is pending', () => {
   fixture.componentRef.setInput('turnId', 'message');
   fixture.detectChanges();
   expect(rootOf(fixture).textContent).toContain('Checking stop details');
+  const announcement = rootOf(fixture).querySelector('[role="status"][aria-live="polite"]');
+  expect(announcement?.textContent).toContain('Checking saved status');
   expect(rootOf(fixture).textContent).not.toContain('monthly budget period');
 });
 
@@ -401,6 +403,8 @@ async function clearsRefusedCalls(status: number) {
   await fixture.whenStable();
   fixture.detectChanges();
   expect(rootOf(fixture).textContent).toContain('Access changed');
+  const announcement = rootOf(fixture).querySelector('[role="status"][aria-live="polite"]');
+  expect(announcement?.textContent).toContain('Access changed');
   expect(rootOf(fixture).querySelector('.budget-calls')).toBeNull();
   expect(rootOf(fixture).querySelector('button')).toBeNull();
 }
@@ -497,3 +501,222 @@ async function announcesStatusChecks(): Promise<void> {
 }
 
 it('politely announces checking, changed calls, failure and access loss', announcesStatusChecks);
+
+function expectNoSavedDetails(root: HTMLElement): void {
+  expect(root.querySelector('.budget-calls')).toBeNull();
+  expect(root.textContent).not.toContain('reserved-call');
+  expect(root.textContent).not.toContain('€');
+}
+
+async function clearsSelectionBeforeReply(input: 'conversationId' | 'turnId'): Promise<void> {
+  const { fixture } = await mount(savedCalls());
+  const oldRead = pendingStatusRead();
+  const replacement = pendingStatusRead();
+  const fetch = vi.mocked(globalThis.fetch);
+  fetch.mockReturnValueOnce(oldRead.promise);
+  fetch.mockReturnValueOnce(replacement.promise);
+  checkStatus(rootOf(fixture)).click();
+  fixture.componentRef.setInput(input, 'another');
+  fixture.detectChanges();
+  expectNoSavedDetails(rootOf(fixture));
+  expect(rootOf(fixture).textContent).toContain('Checking stop details');
+  oldRead.reply(savedCalls());
+  await settleStatusReply();
+  fixture.detectChanges();
+  expectNoSavedDetails(rootOf(fixture));
+  replacement.fail();
+  await renderCompletedRead(fixture);
+  expect(rootOf(fixture).textContent).toContain('Stop details unavailable');
+  expectNoSavedDetails(rootOf(fixture));
+}
+
+async function settleStatusReply(): Promise<void> {
+  function afterPendingCallbacks(resolve: () => void): void {
+    setTimeout(resolve, 0);
+  }
+  // Let fetch and JSON callbacks finish without waiting for a newer, pending read.
+  await new Promise<void>(afterPendingCallbacks);
+}
+
+async function hidesUnavailableAfterDenial(): Promise<void> {
+  const { fixture } = await mount(savedCalls());
+  vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error('offline'));
+  checkStatus(rootOf(fixture)).click();
+  await renderCompletedRead(fixture);
+  expect(rootOf(fixture).querySelector('.budget-unavailable')).not.toBeNull();
+  fixture.componentRef.setInput('denied', true);
+  fixture.detectChanges();
+  const root = rootOf(fixture);
+  expect(root.textContent).toContain('Access changed');
+  expect(root.querySelector('.budget-unavailable')).toBeNull();
+  expect(root.querySelector('button')).toBeNull();
+  expectNoSavedDetails(root);
+}
+
+async function ignoresSameSelectionReply(outcome: 'success' | 'failure' | 'refusal'): Promise<void> {
+  const { fixture } = await mount(savedCalls());
+  const oldRead = pendingStatusRead();
+  const replacement = pendingStatusRead();
+  const fetch = vi.mocked(globalThis.fetch);
+  fetch.mockReturnValueOnce(oldRead.promise);
+  fetch.mockReturnValueOnce(replacement.promise);
+  const root = rootOf(fixture);
+  checkStatus(root).click();
+  fixture.componentRef.setInput('reconnectedAt', '2026-10-23T12:00:00Z');
+  fixture.detectChanges();
+  const changed = savedCalls();
+  changed.calls = [{ reference: 'old-reply', status: 'charged', chargedCents: 99 }];
+  if (outcome === 'success') {
+    oldRead.reply(changed);
+  } else if (outcome === 'failure') {
+    oldRead.fail();
+  } else {
+    oldRead.reply({}, 403);
+  }
+  await settleStatusReply();
+  fixture.detectChanges();
+  expect(root.textContent).toContain('reserved-call');
+  expect(root.textContent).not.toContain('old-reply');
+  expect(root.querySelector('.budget-unavailable')).toBeNull();
+  expect(root.textContent).not.toContain('Access changed');
+  expect(checkStatus(root).getAttribute('aria-disabled')).toBe('true');
+  changed.calls = [{ reference: 'latest-reply', status: 'charged', chargedCents: 25 }];
+  replacement.reply(changed);
+  await renderCompletedRead(fixture);
+  expect(root.textContent).toContain('latest-reply');
+  expect(root.textContent).toContain('€0.25');
+  expect(checkStatus(root).getAttribute('aria-disabled')).toBe('false');
+}
+
+async function keepsNewerSameSelectionReply(): Promise<void> {
+  const { fixture } = await mount(savedCalls());
+  const oldRead = pendingStatusRead();
+  const replacement = pendingStatusRead();
+  const fetch = vi.mocked(globalThis.fetch);
+  fetch.mockReturnValueOnce(oldRead.promise);
+  fetch.mockReturnValueOnce(replacement.promise);
+  checkStatus(rootOf(fixture)).click();
+  fixture.componentRef.setInput('endedAt', '2026-10-23T12:00:00Z');
+  fixture.detectChanges();
+  replacement.reply({ status: 'not_stopped' });
+  await renderCompletedRead(fixture);
+  expectNoSavedDetails(rootOf(fixture));
+  oldRead.reply(savedCalls());
+  await settleStatusReply();
+  fixture.detectChanges();
+  expectNoSavedDetails(rootOf(fixture));
+}
+
+async function ignoresReplyBeforeInputEffect(input: 'conversationId' | 'turnId' | 'denied') {
+  const { fixture } = await mount(savedCalls());
+  const pending = pendingStatusRead();
+  vi.mocked(globalThis.fetch).mockReturnValueOnce(pending.promise);
+  checkStatus(rootOf(fixture)).click();
+  const original = fixture.componentInstance['details']();
+  const changed = savedCalls();
+  changed.calls = [{ reference: 'late-reply', status: 'charged', chargedCents: 99 }];
+  const changedValue = input === 'denied' ? true : 'another';
+  // Change only the input read so the input effect cannot mask a missing response check.
+  const inputRead = vi.spyOn(fixture.componentInstance, input);
+  inputRead.mockReturnValue(changedValue);
+  pending.reply(changed);
+  await settleStatusReply();
+  expect(fixture.componentInstance['details']()).toBe(original);
+  inputRead.mockRestore();
+  fixture.componentRef.setInput(input, changedValue);
+  fixture.detectChanges();
+  expectNoSavedDetails(rootOf(fixture));
+}
+
+async function ignoresReplyAfterDestruction(): Promise<void> {
+  const { fixture } = await mount(savedCalls());
+  const pending = pendingStatusRead();
+  vi.mocked(globalThis.fetch).mockReturnValueOnce(pending.promise);
+  checkStatus(rootOf(fixture)).click();
+  const original = fixture.componentInstance['details']();
+  fixture.destroy();
+  const changed = savedCalls();
+  changed.calls = [{ reference: 'late-reply', status: 'charged', chargedCents: 99 }];
+  pending.reply(changed);
+  await settleStatusReply();
+  // Check stored state because a destroyed view cannot render a late reply.
+  expect(fixture.componentInstance['details']()).toBe(original);
+}
+
+async function clearsMissingIdentity(input: 'conversationId' | 'turnId'): Promise<void> {
+  const { fixture } = await mount(savedCalls());
+  const fetch = vi.mocked(globalThis.fetch);
+  fixture.componentRef.setInput(input, '');
+  fixture.detectChanges();
+  expectNoSavedDetails(rootOf(fixture));
+  expect(fetch).toHaveBeenCalledTimes(1);
+}
+
+async function refusesCheckBeforeInputEffect(input: 'conversationId' | 'turnId' | 'denied') {
+  const { fixture } = await mount(savedCalls());
+  fixture.changeDetectorRef.detach();
+  const button = checkStatus(rootOf(fixture));
+  fixture.componentRef.setInput(input, input === 'denied' ? true : '');
+  button.click();
+  expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  fixture.detectChanges();
+  expectNoSavedDetails(rootOf(fixture));
+}
+
+async function refusesCheckAfterAccessFailure(): Promise<void> {
+  const { fixture } = await mount(savedCalls());
+  const button = checkStatus(rootOf(fixture));
+  vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response('{}', { status: 403 }));
+  button.click();
+  await renderCompletedRead(fixture);
+  expect(rootOf(fixture).textContent).toContain('Access changed');
+  // Call the action directly because rendering removes its old button after refusal.
+  fixture.componentInstance['checkStatus']();
+  expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  expectNoSavedDetails(rootOf(fixture));
+  expect(rootOf(fixture).querySelector('button')).toBeNull();
+}
+
+const selectionInputs = ['conversationId', 'turnId'] as const;
+const accessInputs = ['conversationId', 'turnId', 'denied'] as const;
+it.each(selectionInputs)('clears old calls immediately while a changed %s read fails',
+  clearsSelectionBeforeReply);
+it('hides an unavailable status and action when access is denied', hidesUnavailableAfterDenial);
+it.each(['success', 'failure', 'refusal'] as const)(
+  'ignores an older same-selection %s while the replacement is pending', ignoresSameSelectionReply);
+it('keeps a newer same-selection result when an old reply arrives last', keepsNewerSameSelectionReply);
+it.each(accessInputs)('ignores a reply before the changed %s input renders',
+  ignoresReplyBeforeInputEffect);
+it('ignores a reply after the component is destroyed', ignoresReplyAfterDestruction);
+it.each(selectionInputs)('clears saved details when %s is missing', clearsMissingIdentity);
+it.each(accessInputs)('refuses a check before the changed %s input renders',
+  refusesCheckBeforeInputEffect);
+it('refuses a saved status action after an access failure', refusesCheckAfterAccessFailure);
+
+const incompatibleCallAmounts = [
+  { reference: 'held-with-charge', status: 'held', heldCents: 80, chargedCents: 25 },
+  { reference: 'unknown-with-charge', status: 'possibly_sent', heldCents: 40, chargedCents: 25 },
+  { reference: 'charge-with-hold', status: 'charged', heldCents: 80 },
+  { reference: 'released-with-amounts', status: 'released', heldCents: 80, chargedCents: 25 },
+] as const;
+
+async function rejectsIncompatibleCallAmounts(call: typeof incompatibleCallAmounts[number]) {
+  const reply = { ...savedCalls(), calls: [call] };
+  const { fixture } = await mount(reply);
+  expect(rootOf(fixture).textContent).toContain('Stop details unavailable');
+  expectNoSavedDetails(rootOf(fixture));
+}
+
+function keepsCallStatusAuthoritative(): void {
+  const fixture = TestBed.createComponent(BudgetStopNotice);
+  const notice = fixture.componentInstance;
+  // Check display rules separately from the parser, which also rejects these extra amounts.
+  expect(notice['callAmount'](incompatibleCallAmounts[0])).toBe('Reserved: €0.80');
+  expect(notice['callAmount'](incompatibleCallAmounts[1])).toBe('Reserved: €0.40');
+  expect(notice['callAmount'](incompatibleCallAmounts[2])).toBe('');
+  expect(notice['callAmount'](incompatibleCallAmounts[3])).toBe('');
+}
+
+it.each(incompatibleCallAmounts)('rejects incompatible money fields for $reference',
+  rejectsIncompatibleCallAmounts);
+it('uses the call status to decide which supplied amount may be shown', keepsCallStatusAuthoritative);
