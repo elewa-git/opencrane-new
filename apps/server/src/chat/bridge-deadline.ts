@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { readComputerControl, type ComputerControl } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
-import { pauseTimeRemaining } from './bridge-pause-time.ts';
+import { pauseTimeRemaining, forgetPauseDeadline } from './bridge-pause-time.ts';
 import { saveFailed } from './bridge-pausing.ts';
 
 export async function watchTakeoverDeadline(store: EventStore, silo: string,
@@ -17,14 +17,17 @@ export async function watchTakeoverDeadline(store: EventStore, silo: string,
         observedPosition = position;
       }
       if (signal.aborted) return;
-      if (control?.phase === 'requested' || control?.phase === 'pausing') {
-        const remaining = pauseTimeRemaining(store, silo, control);
-        if (remaining === 0) {
-          await saveFailed(store, silo, control, position);
-        } else {
-          wait = Math.min(wait, remaining);
-        }
+      if (control?.phase !== 'requested' && control?.phase !== 'pausing') {
+        forgetPauseDeadline(store, silo, assistantId);
+        return;
       }
+      const remaining = pauseTimeRemaining(store, silo, control);
+      if (remaining === 0) {
+        await saveFailed(store, silo, control, position);
+        forgetPauseDeadline(store, silo, assistantId);
+        return;
+      }
+      wait = Math.min(wait, remaining);
     } catch {
       // Retry the same saved transition after conflicts or outages. Work remains denied.
     }
