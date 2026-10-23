@@ -1,0 +1,1 @@
+- Prevent memory exhaustion when validating oversized constrained collections by updating Zod.
