@@ -107,3 +107,5 @@ export { hostedAdmissionSchema } from './integrations.ts';
 export { childReviewInputSchema, childStartInputSchema, childRequestStatusSchema,
   childRetryInputSchema }
   from './child-requests.ts';
+export { spendingCallsQuerySchema, spendingCallsResponseSchema,
+  type SpendingCallsQuery, type SpendingCallsResponse } from './spending.ts';

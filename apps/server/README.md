@@ -30,7 +30,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, live updates and saved tool status| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, spending pages, live updates and saved tool status| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|records changes, access-checked control refusals, checked child activations, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -275,6 +275,10 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
     person's choice. Other devices see the same choice after the read tables catch up.
     A lost reply can be checked with the original request id. Leaving and joining
     again starts fresh choices. These actions start no assistant work or spending.
+
+Owners and admins can read small pages of recorded call spending. The reply keeps
+money held separate from money charged, with the original dates and safe references.
+The server checks current finance access after loading. A read starts no work.
 
 The server renews computer passes through authenticated Kubernetes access as root.
 It sends the signing public key with the pass so the computer can check its signature

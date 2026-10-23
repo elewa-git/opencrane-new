@@ -334,3 +334,13 @@ resource `sequence` and a strict `cap`: `set` with non-negative safe integer
 `ceilingCents`, `not_configured`, or `unavailable`. It accepts no totals.
 See the [server contract](../../apps/server/README.robot.md#named-spending-choices)
 for filtering, loading and access checks.
+
+## Call spending pages
+
+`spendingCallsQuerySchema` and `spendingCallsResponseSchema` define the strict
+calls-only [spending API](../../apps/server/README.robot.md#bounded-call-spending).
+Only bounded limit, continuation and payer/assistant filters are accepted.
+Rows contain safe references, original UTC dates, integer euro cents and accounting
+evidence. Settled cents may be null; recorded zero remains zero. Replies carry
+checkpoint, generation and continuation, without page totals or private work fields.
+The server tests check these schemas alongside the current finance access rules.

@@ -13,7 +13,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, saved spending choices, history and tool holds"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, call spending pages, saved spending choices, history and tool holds"]
   server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, retries, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and call statuses, live stop notices and dated approvals| protocol
   projections["libs/projections<br/>read tables"] -.->|directory, spending choices and control refusal reasons| protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -83,6 +83,9 @@ Approval cards carry saved UTC decision, use and end times, dated uses and fixed
 cancellation reasons. Older replies can omit these fields.
 Approval cards may name their saved turn. The browser then shows a stopped card
 without decision controls.
+
+Call spending pages carry original dates, safe references, held and settled cents,
+accounting evidence and a continuation. A missing settlement differs from recorded zero.
 
 Spending choice pages carry names, resource revisions and explicit cap states.
 An absent cap differs from a zero cap and from a cap that could not be read.

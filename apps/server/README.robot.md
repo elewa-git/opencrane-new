@@ -4243,3 +4243,38 @@ allocation and first start must check authority, attempt and closure again. IAM 
 uncertainty throw without saving a failure or claiming activation. No route or recovery
 worker calls this command yet. `childRequestHeld` and production start gates remain intact.
 Root allocation, first-start recovery and fresh-install qualification: NOT RUN / remaining.
+
+## Bounded call spending
+
+`GET /api/org/spending` accepts only `limit` (default 20, range 1–50),
+`continuation`, `payingGroupId` and `assistantId`. Both filters compose.
+It uses the existing `integrations.modelDb` projection connection and
+`readSpendingCalls`. The data read shares a two-second deadline, selects at most
+`limit + 1` call rows, and reads no budget JSON or event history. The budget
+stream's latest position must be covered by the projection checkpoint.
+
+After loading, including a failed load, the route checks current Owner/Admin
+membership events and OpenFGA once. It uses no write authority fence. Responses
+always use `Cache-Control: no-store`. Missing sessions receive 401; invalid
+queries 400; denied access 403; missing, old, lagging or timed-out data and IAM
+failures 503. Errors contain only fixed status values.
+
+The strict reply contains `rows`, `sequence`, `generation` and nullable `next`.
+Each row has reservation/permit references, original position, payer/assistant
+references, `reservedAt`, original UTC `day` and `month`, `heldCents`, nullable
+`settledCents` and `evidence`. Zero settlement is recorded zero; null means no
+settlement. Unknown evidence can retain a hold alongside recorded charges.
+There are no page totals, private titles, ancestry or resource links. Opening a
+referenced resource still requires its own access check.
+
+Pass `next` as `continuation`. Its signature binds the silo, filters, projection
+generation and last position. A changed filter, invalid continuation or replaced
+generation returns 409 `{status: "restart"}`; restart without the continuation.
+The generation is checked again after the row read to catch a concurrent rebuild.
+Ordinary settlements may update later pages; this is not an immutable snapshot.
+GET appends no event and makes no model/tool call or budget change.
+
+`test/spending.test.ts` uses real NATS, PostgreSQL and OpenFGA for paging,
+access races, SQL timeout, continuation restart and replayed accounting evidence.
+Root/routine joins, month filtering, impact previews and screens remain later work.
+Fresh-install qualification: NOT RUN.
