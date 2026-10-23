@@ -58,18 +58,18 @@ flowchart LR
 
 ## How to run or test it
 
-Tests share a port picker that avoids outgoing connections and the secondary dev stacks.
-It tries another port if one is busy. Each fixture starts its own NATS server and
-keeps its own event history, while reusing certificates to reduce setup time.
+Tests share a helper that chooses unused listening ports outside the ranges used
+by outgoing connections and the secondary dev stacks. Each fixture starts its own
+NATS server and keeps its own event history, while reusing certificates to reduce
+setup time.
 
-Run the type check and event-store tests with these commands. The test command
-needs the local NATS test server fetched first. The helper `wireSubject` turns an
-event stream name into its NATS name:
+These commands run from the repository root. The test command fetches the required
+tools before running the tests. The helper `wireSubject` turns an event stream
+name into its NATS name:
 
 ```sh
 nice -n 10 npm run typecheck -w libs/event-store
-sh scripts/fetch-nats.sh
-nice -n 10 npx vitest run libs/event-store/test
+nice -n 10 npm test -- libs/event-store/test
 ```
 
 ```ts

@@ -55,14 +55,13 @@ flowchart LR
 
 ## How to run or test it
 
-Run the type check and focused tests with these commands. The tests need the
-local NATS test server. Set `PG_TEST_URL` to a PostgreSQL admin connection whose
-role can create databases to include the PostgreSQL tests:
+These commands run from the repository root. The test command fetches the required
+tools before running the tests. PostgreSQL tests also need `PG_TEST_URL`, a
+PostgreSQL admin connection whose role can create databases:
 
 ```sh
 nice -n 10 npm run typecheck -w libs/handlers
-sh scripts/fetch-nats.sh
-nice -n 10 npx vitest run libs/handlers/test
+nice -n 10 npm test -- libs/handlers/test
 ```
 
 Each reaction receives the saved event and a database transaction. This example

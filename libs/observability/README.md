@@ -49,7 +49,7 @@ flowchart LR
 ## How to run or test it
 
 ```sh
-nice -n 10 npx vitest run libs/observability
+nice -n 10 npm test -- libs/observability
 nice -n 10 npm run typecheck -w libs/observability
 ```
 

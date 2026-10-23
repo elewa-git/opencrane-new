@@ -58,7 +58,7 @@ flowchart LR
 ## How to run or test it
 
 ```sh
-nice -n 10 npx vitest run libs/auth
+nice -n 10 npm test -- libs/auth
 nice -n 10 npm run typecheck -w libs/auth
 ```
 

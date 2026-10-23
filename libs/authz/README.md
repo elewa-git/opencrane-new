@@ -49,15 +49,16 @@ flowchart LR
 2. **A protected request arrives.** The server or models process asks whether the
    person, assistant or group has access. The request proceeds only when OpenFGA
    confirms it and the caller's other access checks pass.
-3. **A person rejoins a chat.** Their permission to read is restored. They see only
-   messages from their new join; the server enforces that history limit.
+3. **A person rejoins a chat.** Their permission to read is restored. In ordinary
+   chats, rejoining restores messages from the new join. In shared child chats,
+   an explicit invitation releases the whole shared history.
 4. **An operator rebuilds permissions.** The library reads the event history into
    a new OpenFGA store. Readers and workers switch to it together before resuming.
 
 ## How to run or test it
 
 ```sh
-nice -n 10 npx vitest run libs/authz
+nice -n 10 npm test -- libs/authz
 nice -n 10 npm run typecheck -w libs/authz
 ```
 

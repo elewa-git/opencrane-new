@@ -61,7 +61,7 @@ Run the type check and focused tests with these commands. A small real call is:
 
 ```sh
 nice -n 10 npm run typecheck -w libs/events
-nice -n 10 npx vitest run libs/events/test
+nice -n 10 npm test -- libs/events/test
 npm run check:events
 ```
 
