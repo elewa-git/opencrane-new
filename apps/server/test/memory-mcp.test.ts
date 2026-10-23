@@ -8,6 +8,7 @@ import { once } from 'node:events';
 import { setTimeout as pause } from 'node:timers/promises';
 import { proxy } from '../../computer/test/server.ts';
 import type { MemoryIdentity } from '@opencrane/events';
+import { EventStore } from '@opencrane/event-store';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
@@ -1107,6 +1108,39 @@ function coldLookupClock() {
   }
   return { advance, restore };
 }
+async function preparesFirstGatewayControl() {
+  await close();
+  const subject = grantStream('memory_read', scopeId);
+  // Keep each calling store for the delayed read.
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const originalRead = EventStore.prototype.readStream;
+  const clock = coldLookupClock();
+  let coldRead = false;
+  async function* readStream(this: EventStore,
+    ...args: Parameters<EventStore['readStream']>) {
+    if (args[0] === subject && !coldRead) {
+      coldRead = true;
+      clock.advance();
+    }
+    yield* originalRead.call(this, ...args);
+  }
+  const reads = vi.spyOn(EventStore.prototype, 'readStream');
+  reads.mockImplementation(readStream);
+  try {
+    await prepare();
+    const argumentsValue = { ...call.params.arguments, limit: 2 };
+    const selectedCall = { ...call, params: { ...call.params, arguments: argumentsValue } };
+    const response = await setup.call(headers, selectedCall, route);
+    expect(coldRead).toBe(true);
+    expect(response.status, response.text).toBe(200);
+  } finally {
+    reads.mockRestore();
+    clock.restore();
+  }
+}
+it('finishes shared read preparation before the first gateway recall',
+  preparesFirstGatewayControl, 120_000);
+
 async function preparesColdRecallAuthority(subject: string) {
   const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
   const clock = coldLookupClock();
