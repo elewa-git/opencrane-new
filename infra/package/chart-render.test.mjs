@@ -40,6 +40,14 @@ function rendersOnlyManifests() {
     assert.equal(typeof resource?.apiVersion, 'string');
     assert.equal(typeof resource?.kind, 'string');
     assert.equal(typeof resource?.metadata?.name, 'string');
+    if (resource.metadata.name === 'worker-dispatcher') {
+      const worker = resource.spec.template.spec.containers[0];
+      const bindings = new Map();
+      for (const setting of worker.env) bindings.set(setting.name, setting.valueFrom);
+      assert.equal(bindings.get('DATABASE_URL').secretKeyRef.key, 'HANDLER_DATABASE_URL');
+      assert.deepEqual(bindings.get('CONTENT_DATABASE_URL').secretKeyRef,
+        { name: values.secrets.runtime, key: 'DATABASE_URL' });
+    }
   }
 }
 
