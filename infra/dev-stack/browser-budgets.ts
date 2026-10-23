@@ -1,9 +1,9 @@
 /// <reference lib="dom" />
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page, Response } from 'playwright';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { history, migrateBudgetDefault } from '@opencrane/models';
@@ -45,9 +45,7 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
     for (const scope of ['paying_group', 'assistant'] as const) assert.equal(starting.ceilings.find(row => row.scope === scope && row.scopeId === (scope === 'assistant' ? assistantId : groupId))?.ceilingCents, 20000, 'Plain startup preserves the owner monthly ceilings');
   }
   const save = async (scope: 'global' | 'paying_group' | 'assistant', scopeId: string, cents: number) => {
-    await owner.goto(`${origin}/org/spending`);
-    const budgetScope = owner.getByLabel('Budget scope', { exact: true });
-    await budgetScope.waitFor({ state: 'visible' });
+    const budgetScope = await loadBudgetEditor(owner, origin);
     await budgetScope.selectOption(scope);
     if (scope === 'global') await owner.getByLabel('Daily safety cap (euro cents)', { exact: true }).fill('5000');
     else await owner.getByLabel(scope === 'assistant' ? 'Assistant id' : 'Paying group id', { exact: true }).fill(scopeId);
@@ -137,6 +135,39 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
     await save('assistant', assistantId, 20000);
     await save('global', groupId, 20000);
     await owner.screenshot({ path: `${output}/fresh-repeat-headroom-390.png`, fullPage: true });
+  }
+}
+
+async function loadBudgetEditor(owner: Page, origin: string): Promise<Locator> {
+  const budgetReadStatuses: number[] = [];
+  const effectReadStatuses: number[] = [];
+  function recordResponse(response: Response) {
+    if (response.request().method() !== 'GET') return;
+    if (response.url() === `${origin}/api/org/models`) {
+      budgetReadStatuses.push(response.status());
+    } else if (response.url() === `${origin}/api/org/effects`) {
+      effectReadStatuses.push(response.status());
+    }
+  }
+  owner.on('response', recordResponse);
+  try {
+    await owner.goto(`${origin}/org/spending`);
+    const budgetScope = owner.getByLabel('Budget scope', { exact: true });
+    await budgetScope.waitFor({ state: 'visible' });
+    return budgetScope;
+  } catch {
+    // Keep the failed page's replies, rather than making new reads after the failure.
+    const evidence = JSON.stringify({ budgetReadStatuses, effectReadStatuses });
+    const screenshot = { path: `${directory}/budget-editor-failure.png`, fullPage: true };
+    const captures = [
+      writeFile(`${directory}/budget-editor-failure.log`, evidence, { mode: 0o600 }),
+      owner.screenshot(screenshot),
+    ];
+    await Promise.allSettled(captures);
+    // Exclude browser errors because they can contain request or page contents.
+    throw new Error('Spending budget editor did not load; inspect private evidence');
+  } finally {
+    owner.off('response', recordResponse);
   }
 }
 

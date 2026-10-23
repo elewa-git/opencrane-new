@@ -157,7 +157,7 @@ async function refusesPersonalAssistant() {
 test('refuses a personal assistant before starting the budget browser journey',
   refusesPersonalAssistant);
 
-async function retainsEditorLoadFailure() {
+async function retainsEditorLoadFailure(statusCode = 503, failScreenshot = false) {
   const fixture = await files.mkdtemp(`${import.meta.dirname}/.budget-load-`);
   const fixtureSource = `${fixture}/browser-budgets.ts`;
   const source = new URL('./browser-budgets.ts', import.meta.url);
@@ -194,16 +194,26 @@ async function retainsEditorLoadFailure() {
   }
   async function goto() {
     navigations++;
-    function url() { return 'http://fixture.test/api/org/models'; }
-    function status() { return 503; }
-    function method() { return 'GET'; }
-    function requestDetails() { return { method }; }
+    function url() {
+      return 'http://fixture.test/api/org/models';
+    }
+    function status() {
+      return statusCode;
+    }
+    function method() {
+      return 'GET';
+    }
+    function requestDetails() {
+      return { method };
+    }
     for (const listener of listeners) {
       listener({ url, status, request: requestDetails });
     }
   }
   async function ready() {}
-  function getByText() { return { waitFor: ready }; }
+  function getByText() {
+    return { waitFor: ready };
+  }
   async function missingEditor() {
     failedWaits++;
     throw new Error('Synthetic driver detail that must stay out of the receipt');
@@ -214,10 +224,15 @@ async function retainsEditorLoadFailure() {
   }
   async function screenshot(options: { path: string }) {
     screenshots.push(options.path);
+    if (failScreenshot) throw new Error('Synthetic screenshot failure');
   }
   async function get() {
-    function status() { return 200; }
-    async function json() { return { budget }; }
+    function status() {
+      return 200;
+    }
+    async function json() {
+      return { budget };
+    }
     return { status, json };
   }
   const requestDetails = { get };
@@ -225,7 +240,9 @@ async function retainsEditorLoadFailure() {
     request: requestDetails } as unknown as Page;
   const store = { readStream } as EventStore;
   try {
-    function viewportSize() { return { width: 1280, height: 900 }; }
+    function viewportSize() {
+      return { width: 1280, height: 900 };
+    }
     const member = { viewportSize } as Page;
     const journey = isolated.browserBudgetJourney(owner, [member], 'http://fixture.test', store,
       'test', 'team-sales', 'sales');
@@ -239,7 +256,8 @@ async function retainsEditorLoadFailure() {
     assert.equal(failedWaits, 1);
     assert.equal(navigations, 2, 'A failed read never resubmits a save or reloads the page');
     const contents = await files.readFile(`${fixture}/budget-editor-failure.log`, 'utf8');
-    assert.deepEqual(JSON.parse(contents), { budgetReadStatuses: [503], effectReadStatuses: [] });
+    const expected = { budgetReadStatuses: [statusCode], effectReadStatuses: [] };
+    assert.deepEqual(JSON.parse(contents), expected);
     assert.equal(screenshots.length, 1);
     assert(screenshots[0]!.endsWith('/budget-editor-failure.png'));
     assert.equal(listeners.size, 0, 'Remove response listeners after the failed load');
@@ -249,5 +267,20 @@ async function retainsEditorLoadFailure() {
   }
 }
 
+async function retainsUnavailableRead() {
+  await retainsEditorLoadFailure();
+}
 test('keeps the actual failed budget load and a screenshot without copying driver errors',
-  retainsEditorLoadFailure);
+  retainsUnavailableRead);
+
+async function retainsRefusedRead() {
+  await retainsEditorLoadFailure(403);
+}
+test('records an access refusal and fails without refreshing or resubmitting a save',
+  retainsRefusedRead);
+
+async function keepsReadWhenScreenshotFails() {
+  await retainsEditorLoadFailure(200, true);
+}
+test('keeps a successful HTTP read when rendering and screenshot capture fail',
+  keepsReadWhenScreenshotFails);

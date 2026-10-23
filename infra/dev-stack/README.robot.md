@@ -2,6 +2,48 @@
 
 For people, read [README.md](README.md) first.
 
+## Spending editor investigation, 23 October 2026
+
+Part of board card #600 and the #32 demo work. **PARTIAL: no root cause proved.**
+The retained attempt
+`nightly-20261022T232200-238bd706-cd43-4315-bb24-b449c3adc9c4`, source `267e038bb`,
+failed in the `save` helper at line 50, called from line 89. It waited for the
+**Budget scope** select on a new Spending page before submitting the next ceiling.
+It was not waiting for a refusal notice, save reply or restored limit.
+
+Evidence is under `~/.opencrane/daily-fresh/` in that attempt's directory.
+`last-error.log` gives the 30-second locator timeout. The retained
+`generated/docs/process/p3-13-live/fresh-paying_group-1280.png` shows a saved zero-cent
+paying-group ceiling. The matching refusal picture shows the group limit notice.
+There is no picture of the failed Spending page. The server log retains only its last
+100 lines, which cover later sign-out checks. Those records do not establish the
+failed page's HTTP responses, rendering state or exact trigger.
+
+The Spending editor, its read handlers and this browser check are unchanged between
+that source and the investigation's `origin/main` base `bc769a1c3`.
+A diagnostic fresh start on claimed secondary slot 1 passed all four budget cases,
+both replay checks and sign-out. Thirty additional read-only page loads and sixty
+further UI saves alternating zero and 20,000 cents also passed. The read-only observer
+ran before the budget cases and may have warmed the page. This is not an exact
+reproduction of the original cold load. The observer and temporary instrumentation
+were removed. The slot was released. Pictures and generated records are retained at
+`~/.opencrane/daily-fresh/budget-diagnostic-20261023/generated/`.
+
+The lasting change captures the next failed editor load. It records only HTTP status
+codes for the original page's GETs to `/api/org/models` and `/api/org/effects`, in
+`budget-editor-failure.log`, plus `budget-editor-failure.png`. It adds no new reads,
+refreshes, write retries or longer waits. Driver error text and response contents are
+not copied into the record or thrown error. The daily launcher's existing retention
+keeps both files before removing the stack. Capturing a picture can fail without
+losing the status record or changing the failed result.
+
+Failing-first test commit: the simulated unavailable budget read reaches the original
+editor wait, then fails because no load record exists. The regression copies the real
+journey into a temporary fixture directory so it cannot touch a running stack's files.
+It also checks a 403 and a successful HTTP read followed by rendering and screenshot
+failure. These reproduce the missing evidence, **not the original fresh-start defect**.
+No product fix is claimed. Money, company limits and access checks are unchanged.
+
 On `ocn-dev`, with Node 22, installed workspaces (`npm ci`), Docker Compose,
 OpenSSL, `flock`, passwordless `sudo` for Tailscale Serve and the model-port firewall, and an authenticated
 Tailscale daemon:
