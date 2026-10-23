@@ -24,7 +24,10 @@ request's history at the old revision. It lets the first request finish before
 returning that history. The second request must return 409 with no second append.
 Without this ordering, Forget can reach the occupied member/scope slot and receive
 503 `memory_busy`, as the existing admission contract requires. No production
-limit is changed. [Own checks and the other 503 causes](../../docs/process/evidence/ci-flakes-3.md).
+limit is changed. A separate correction test keeps the first append held until
+the second HTTP response returns 409. Removing the `MemoryBusy` to `MemoryConflict`
+guard makes that test fail with 503. It also checks one append and the new key.
+[Own checks and the other 503 causes](../../docs/process/evidence/ci-flakes-3.md).
 
 ## Child retry tests and duplicate messages
 

@@ -1,6 +1,6 @@
 # Status-code tests under load
 
-Date: 22 October 2026. Base: `4fb9a34b2a23316f29e0e34ee55ae91848b794f1`.
+Original checks: 22 October 2026. Original base: `4fb9a34b2a23316f29e0e34ee55ae91848b794f1`.
 Environment: Node 22.23.3, Linux, this development worktree; not a fresh installation.
 
 ## Causes
@@ -43,7 +43,177 @@ No new retry loop is added, and no authority test is edited.
 Local logs are `/tmp/ci-flakes-3-main.log`, `/tmp/ci-flakes-3-pr582.log`,
 `/tmp/ci-flakes-3-red.log` and `/tmp/ci-flakes-3-green-focused.log`.
 
-## Validation
+## Corrections and new checks
+
+The branch was rebased onto `9367396af`. Both documentation conflicts kept the
+newer main notes. The rebase finished, and `git merge-base --is-ancestor origin/main HEAD`
+passed before these checks started.
+
+The stale-revision race schedule remains. A separate correction test holds the first
+append until the second HTTP response arrives. It requires 409 while the write slot
+is occupied, one append, a successful first response and an available revision key.
+PASS: this test passes with the existing production guard. Expected FAIL: removing
+only the `MemoryBusy` to `MemoryConflict` conversion changes its reply to 503.
+The production file was restored after that check.
+
+Grant preparation now waits for each latest requester and assistant grant receipt
+through `auth.applied(eventId)`, after loading history. These are the grants used by
+this fixture's call. Other people's grants do not decide this call's access. A test
+adds a requester grant without applying it. Preparation must observe its missing
+receipt and wait. Only the normal handler then applies that grant to OpenFGA.
+Expected FAIL before the wait: preparation finished before checking that receipt.
+PASS after the wait: the receipt is applied before warm-up, and admission holds
+money once without contacting the provider.
+
+There is also a separate way for warm-up to return 403. The fixture's token issuer
+uses a frozen clock. Calling `issue()` again therefore does not renew its two-minute
+turn token after lengthy preparation. The old batch 9's 15,000-edit case took
+129.44 seconds. Its timing is consistent with token expiry; the old log did not
+record the internal error. A deterministic regression moves the issuer clock back
+121 seconds and reproduces 403 with zero reservations. Waiting for real grant
+receipts alone does not repair that expired token. Expected FAIL: issuing again
+still returns 403. PASS: signing a fresh token from the real clock returns 200,
+with the same turn claims and normal 120-second lifetime. All three requests in
+the grant-volume helper now use that preparation. No admission is retried.
+
+Own failing-first commits: `ffcf69d3c` for the missing grant receipt and occupied
+correction, followed by the receipt fix `a3f7a2204`; `e2f43266b` for the expired
+token, followed by the fresh-token fix `821ed6db7`. PASS: the two new decision
+regressions and both grant-volume cases passed together before repetitions began.
+The memory check was also run with and without its production guard.
+
+Logs use `/tmp/ci-flakes-3-fix-` with `memory-green`, `memory-mutation`,
+`receipt-red`, `receipt-green`, `token-red` and `decision-focused` suffixes.
+
+## Remaining warm-up refusal
+
+FAIL: the 3,000-grant case returned 403 at its successful warm-up assertion in
+new batch 16, before the measured admission (`decision-cost.test.ts:494`). The
+fixture already waited for the requester and assistant grant receipts and signed
+a fresh turn token. This is an affected case. It is not counted as a pass or
+explained by the earlier expired-token proof. Its internal refusal reason was
+not captured, so the warm-up issue remains open.
+
+PASS: a separate focused diagnostic ran both grant-volume cases together. Another
+ten separate focused runs of the 3,000-grant case passed. Temporary error logging
+captured the expected cold-read timeouts but did not reproduce the warm-up refusal.
+Those focused diagnostics are extra checks, not replacements for failed full runs.
+The last diagnostics overlapped batches 17 and 18. Batch 18 loaded the temporary
+error logging; the production file was restored before batch 19. No production
+condition or deadline was changed, and no diagnostic logging is committed.
+
+Logs are `/tmp/ci-flakes-3-fix-refusal-diagnostic.log` and
+`/tmp/ci-flakes-3-fix-refusal-1.log` through
+`/tmp/ci-flakes-3-fix-refusal-10.log`. The full run reports retain every failure.
+This change remains PARTIAL and the PR remains draft.
+
+## Current static checks
+
+PASS: full lint, full typecheck, event catalogue agreement (149 types), separate
+Knip and changelog lint. Full lint reported zero errors and 24 warnings in unchanged
+production files. It used `NODE_OPTIONS=--max-old-space-size=6144`. Every command
+used `nice -n 10`. The changed test files also passed focused ESLint.
+
+Logs use `/tmp/ci-flakes-3-fix-` with `lint`, `typecheck`, `events`, `knip`,
+`changelog` and `eslint-focused` suffixes. Documentation lint also passed after
+the new explanations were added.
+
+## New load checks
+
+Dates: 22–23 October 2026. Test code: `821ed6db7`.
+Both changed complete files ran 20 consecutive times,
+with `child-recovery.test.ts` supplying a third worker. There were no retries or
+changes to tests between batches. All commands used `nice -n 10`. A separate
+process used 10 ms of CPU then slept for 20 ms throughout. Full lint and typecheck
+also ran alongside the first batch. Other shared-host work continued.
+
+All fixtures used the throwaway PostgreSQL container `pgtest-ci-flakes-3-fix`,
+with `PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:54889/postgres`. Its
+readiness check passed before testing. Tests started their normal NATS, OpenFGA
+and gateway fixtures. The database container and its volumes were removed after
+the last batch, and the CPU load process stopped.
+
+The command for each batch was:
+
+```sh
+PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:54889/postgres \
+  nice -n 10 npx vitest run \
+  apps/server/test/memory.test.ts \
+  libs/models/test/decision-cost.test.ts \
+  apps/server/test/child-recovery.test.ts \
+  --maxWorkers=3
+```
+
+The number in brackets is the failed test count for that file.
+
+| Batch | Memory, 241 tests | Decision cost, 27 tests | Child recovery, 36 tests |
+| --- | --- | --- | --- |
+| 1 | PASS | FAIL (1) | PASS |
+| 2 | PASS | PASS | PASS |
+| 3 | PASS | PASS | PASS |
+| 4 | PASS | PASS | PASS |
+| 5 | FAIL (2) | FAIL (1) | PASS |
+| 6 | PASS | PASS | PASS |
+| 7 | PASS | FAIL (1) | PASS |
+| 8 | PASS | PASS | PASS |
+| 9 | PASS | PASS | PASS |
+| 10 | PASS | PASS | PASS |
+| 11 | PASS | PASS | PASS |
+| 12 | PASS | PASS | PASS |
+| 13 | PASS | FAIL (1) | PASS |
+| 14 | PASS | FAIL (1) | PASS |
+| 15 | PASS | FAIL (1) | PASS |
+| 16 | FAIL (9) | FAIL (3) | PASS |
+| 17 | PASS | PASS | PASS |
+| 18 | PASS | PASS | PASS |
+| 19 | PASS | PASS | PASS |
+| 20 | FAIL (6) | FAIL (2) | PASS |
+
+- memory.test.ts: 17/20 complete runs passed.
+- decision-cost.test.ts: 12/20 complete runs passed.
+- child-recovery.test.ts: 20/20 complete runs passed.
+
+- PASS: personal HTTP correction allows one change when correction races correct: 20/20.
+- PASS: personal HTTP correction allows one change when correction races forget: 20/20.
+- PASS: personal HTTP correction returns conflict when another correction still occupies the write slot: 20/20.
+- PASS: refreshes an expired fixture turn token before warming admission: 20/20.
+- PASS: waits for the latest model grant receipt before warming admission: 20/20.
+- FAIL: reads 3,000 model grants before the access check and admits within two seconds on later rows: 19/20.
+- PASS: keeps 15,000 edits to one model grantee on later reads within two seconds: 20/20.
+
+The 3,000-grant measured admissions took 385–854 ms (19 measurements).
+The 15,000-grant measured admissions took 71–286 ms (20 measurements).
+
+FAIL: complete-file qualification has the following recorded failures.
+No failed run is counted as a pass.
+
+| File | Failed case | Batches |
+| --- | --- | --- |
+| decision-cost.test.ts | keeps 10,000 members on one model and eight models with 1,000 members cached in one process | 1, 7, 13, 14, 15, 16, 20 |
+| memory.test.ts | personal HTTP correction recovers a saved correction across restart without resending | 5 |
+| memory.test.ts | omits a pinned fact after its previously live dependency becomes expired | 5 |
+| decision-cost.test.ts | lets a cold models process catch up and then admits using only the chat tail | 5, 16, 20 |
+| memory.test.ts | omits a pinned fact after its previously live dependency becomes missing | 16, 20 |
+| memory.test.ts | omits a pinned fact after its previously live dependency becomes damaged | 16, 20 |
+| memory.test.ts | omits preview text when a supporting key is destroyed after candidate selection | 16, 20 |
+| memory.test.ts | keeps the preview available when another turn starts during the read | 16 |
+| memory.test.ts | uses category then bytewise id order, includes unpinned preferences once and omits denied scopes | 16, 20 |
+| memory.test.ts | counts JSON bytes, stops at the first overflow and never backfills | 16 |
+| memory.test.ts | counts UTF-8 bytes, stops at the first overflow and never backfills | 16 |
+| memory.test.ts | admits an exact 16 KiB block and refuses the next byte | 16 |
+| memory.test.ts | rebuilds binding status without any key, model, tool, computer or scheduler port | 16 |
+| decision-cost.test.ts | reads 3,000 model grants before the access check and admits within two seconds on later rows | 16 |
+| memory.test.ts | omits a pinned fact after its previously live dependency becomes destroyed | 20 |
+| memory.test.ts | keeps a delayed append readable after status checks an expired unknown command | 20 |
+
+Reports use `/tmp/ci-flakes-3-fix-repeat-01.json` through
+`/tmp/ci-flakes-3-fix-repeat-20.json`, with matching `.log` files. The summary is
+`/tmp/ci-flakes-3-fix-repeat-results.json`.
+
+NOT RUN: full root suite and fresh-install journeys. The PR remains draft.
+CI was not awaited.
+
+## Earlier load checks
 
 Test code: `0bd5738b205f4bdf4bcaadb888b0e2c2ee8b82c2`.
 The test code stayed unchanged throughout the repetitions. Later changes only

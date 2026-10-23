@@ -550,6 +550,8 @@ next heartbeat.
 Memory race tests keep an old revision while a competing write finishes. They
 wait for that write before checking the stale revision, so the test checks the
 conflict response without depending on how quickly the runner schedules requests.
+A separate test holds the first correction open and requires a conflict while its
+write slot is still occupied.
 
 Child-chat retry tests use private event stores to check lost replies and repeated
 requests. Most tests keep the normal period during which NATS ignores repeated messages.
