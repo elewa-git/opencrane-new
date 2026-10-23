@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { isToolPolicyAvailable } from '@opencrane/projections';
+import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { gatewayObservationSchema } from '@opencrane/events';
 import { modelAccessChangeSchema, modelAccessCommandSchema, toolPolicySchema }
   from '@opencrane/protocol';
@@ -11,6 +13,7 @@ const readback = z.strictObject({ quoteId: z.literal('DEMO-001'), amountCents: z
   slot: z.enum(['morning', 'afternoon']), effectCount: z.int().nonnegative() });
 const evidenceSchema = z.strictObject({
   policy: toolPolicySchema,
+  rehearsedAt: z.iso.datetime(),
   publicationCommandId: z.string().min(1),
   gateway: gatewayObservationSchema,
   grants: z.array(z.strictObject({ command: modelAccessCommandSchema, receipt })),
@@ -29,7 +32,7 @@ export function checkStageBApproval(input: unknown) {
   requireEvidence(parsed.success);
   const data = parsed.data;
   checkPublication(data);
-  checkReviewedTools(data.policy);
+  checkReviewedTools(data.policy, Date.parse(data.rehearsedAt));
   checkGrants(data);
   requireEvidence(data.before.effectCount === 0 && data.before.slot === 'morning');
   requireEvidence(data.waiting.effectCount === 0 && data.waiting.slot === 'morning');
@@ -57,12 +60,27 @@ function checkPublication(data: Evidence) {
     observed.processRef === data.gateway.processRef);
 }
 
-function checkReviewedTools(policy: Evidence['policy']) {
-  requireEvidence(policy.tools.length === 2);
+function checkReviewedTools(policy: Evidence['policy'], rehearsedAt: number) {
+  requireEvidence(isToolPolicyAvailable(policy, rehearsedAt));
+  const catalogue = policy.catalogue;
+  requireEvidence(catalogue && catalogue.serverId === policy.serverId);
+  try {
+    validateMcpCatalogue(catalogue);
+  } catch {
+    throw new Error('Approval evidence refused');
+  }
+  requireEvidence(policy.tools.length === 2 && catalogue.tools?.length === 2);
   for (const tool of policy.tools) {
     const read = tool.name === 'read_fixture_quote' && tool.mode === 'allow' && tool.readOnly;
     const write = tool.name === 'change_delivery_slot' && tool.mode === 'ask' && !tool.readOnly;
     requireEvidence(tool.reviewed && tool.costCents === 0 && (read || write));
+    function matchesName(declaration: NonNullable<typeof catalogue.tools>[number]) {
+      return declaration.name === tool.name;
+    }
+    const declaration = catalogue.tools.find(matchesName);
+    requireEvidence(declaration?.revision === tool.revision);
+    requireEvidence(declaration?.readOnly === tool.readOnly && declaration.costCents === 0);
+    requireEvidence(declaration.review);
   }
   const names = policy.tools.map(toolName);
   const toolNames = new Set(names);

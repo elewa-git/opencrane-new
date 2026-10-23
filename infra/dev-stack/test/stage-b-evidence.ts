@@ -18,6 +18,7 @@ export function approvalEvidence(): StageBApprovalEvidence {
   const before = { quoteId: 'DEMO-001' as const, amountCents: 12500 as const,
     slot: 'morning' as const, effectCount: 0 };
   return {
+    rehearsedAt: '2026-10-23T10:01:00Z',
     publicationCommandId: publication.commandId,
     gateway: { generation: configurationObservation.generation,
       recordDigest: configurationObservation.recordDigest,
