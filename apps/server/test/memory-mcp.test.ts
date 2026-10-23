@@ -1047,6 +1047,7 @@ function independentFact(fact: { memoryId: string }) {
 async function recalledRemember(commandId: string, query = 'deliver') {
   await grantWrite('member');
   await grantWrite('assistant');
+  await prepareMemoryGrants();
   const recallArguments = { ...call.params.arguments, query, limit: 2 };
   const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
   // Issue the setup recall directly so gateway admission does not spend its short pass.
@@ -2192,7 +2193,7 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   await publishMemory(setup);
   await grantWrite('member');
   await grantWrite('assistant');
-  await prepareChangeGrants();
+  await prepareMemoryGrants();
   const recallProof = await loadChangeFacts(revision);
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const dependsOn = chat.memoryContext!.references;
@@ -2213,13 +2214,21 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   }
   return request;
 }
-async function prepareChangeGrants() {
-  // Finish cold grant reads during setup, before issuing the control's two-second pass.
+async function prepareMemoryGrants() {
+  // Finish cold event and IAM reads before issuing the control's two-second pass.
   const deadline = performance.now() + 10_000;
   const resourceTypes = ['memory_read', 'memory_write'];
   for (const resourceType of resourceTypes) {
     const subject = grantStream(resourceType, scopeId);
-    await history(setup.nats.store, subject, 'test', deadline);
+    const grants = await history(setup.nats.store, subject, 'test', deadline);
+    for (const grant of grants) {
+      const applied = await setup.auth.applied(grant.event.id);
+      expect(applied).toBe(true);
+    }
+    const requester = await setup.auth.use('person', 'alice', resourceType, scopeId);
+    expect(requester.allowed).toBe(true);
+    const assistant = await setup.auth.use('assistant', 'assistant', resourceType, scopeId);
+    expect(assistant.allowed).toBe(true);
   }
 }
 type ChangeRequest = Awaited<ReturnType<typeof changeRequest>>;
