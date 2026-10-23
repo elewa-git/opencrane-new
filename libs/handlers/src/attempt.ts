@@ -1,3 +1,4 @@
+import type { HandlerAttempt } from "./registration.ts";
 import type { Query } from "@opencrane/projections";
 
 /** Roll back on abort even when the handler ignores cancellation. */
@@ -5,7 +6,7 @@ export async function withinAttempt<T>(
   transaction: Query,
   signal: AbortSignal,
   seconds: number,
-  work: (query: Query) => Promise<T>,
+  work: (query: Query, attempt: HandlerAttempt) => Promise<T>,
 ): Promise<T> {
   signal.throwIfAborted();
   const deadline = performance.now() + seconds * 1000;
@@ -56,7 +57,8 @@ export async function withinAttempt<T>(
     }
   });
   try {
-    const result = await Promise.race([work(query), aborted]);
+    const context = { signal, deadline };
+    const result = await Promise.race([work(query, context), aborted]);
     await tail;
     if (failed) {
       throw new Error("Handler SQL failed");

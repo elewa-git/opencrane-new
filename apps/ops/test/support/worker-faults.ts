@@ -1,3 +1,4 @@
+import { eventEnvelopeSchema, gatewayConfigurationSchema } from '@opencrane/events';
 import { once } from 'node:events';
 import { mock } from 'node:test';
 import * as lifecycle from '../../src/lifecycle.ts';
@@ -47,4 +48,28 @@ async function observedConnection(...args: Parameters<typeof eventStore.connectE
 }
 
 const storeExports = { ...eventStore, connectEventStore: observedConnection };
-mock.module('@opencrane/event-store', { namedExports: storeExports });
+if (process.env['WORKER_TEST_FAULT'] !== 'preparation') {
+  mock.module('@opencrane/event-store', { namedExports: storeExports });
+}
+
+if (process.env['WORKER_TEST_FAULT'] === 'preparation') {
+  const original = eventStore.connectEventStore;
+  async function pausedConnection(...args: Parameters<typeof original>) {
+    const connected = await original(...args);
+    const append = connected.store.append.bind(connected.store);
+    async function pausedAppend(command: Parameters<typeof append>[0]) {
+      const schema = eventEnvelopeSchema(gatewayConfigurationSchema);
+      const parsed = schema.safeParse(command.event);
+      if (parsed.success && parsed.data.type === 'gateway.configuration_requested' &&
+          parsed.data.data.generation === 2) {
+        process.send?.('preparing');
+        await once(process, 'message');
+      }
+      return append(command);
+    }
+    connected.store.append = pausedAppend;
+    return connected;
+  }
+  const pausedExports = { ...eventStore, connectEventStore: pausedConnection };
+  mock.module('@opencrane/event-store', { namedExports: pausedExports });
+}

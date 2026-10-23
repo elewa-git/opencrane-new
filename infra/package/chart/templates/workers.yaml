@@ -62,6 +62,13 @@ spec:
                 secretKeyRef:
                   name: {{ $root.Values.secrets.runtime | quote }}
                   key: {{ if eq $mode "dispatcher" }}HANDLER_DATABASE_URL{{ else }}PROJECTION_DATABASE_URL{{ end }}
+            {{- if eq $mode "dispatcher" }}
+            - name: CONTENT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.secrets.runtime | quote }}
+                  key: DATABASE_URL
+            {{- end }}
             - { name: NATS_CERT_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.crt" }
             - { name: NATS_KEY_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.key" }
             - { name: NATS_NKEY_SEED_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.seed" }

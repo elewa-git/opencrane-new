@@ -67,7 +67,7 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
     commandEnv[`COMMAND_${setting}`] = value;
   }
   const env = { ...process.env, ...nats.env('dispatcher'), ...commandEnv,
-    DATABASE_URL: connectionString, SILO_ID: 'test', OPENFGA_API_URL: 'http://unused',
+    DATABASE_URL: connectionString, CONTENT_DATABASE_URL: await storage.postgres(), SILO_ID: 'test', OPENFGA_API_URL: 'http://unused',
     OPENFGA_STORE_ID: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     OPENFGA_MODEL_ID: '01ARZ3NDEKTSV4RRFFQ69G5FAV', KUBECONFIG: '/unused',
     KUBE_NAMESPACE: 'test', TOKEN_SIGNING_KEY_FILE: `${directory}/key.pem`,

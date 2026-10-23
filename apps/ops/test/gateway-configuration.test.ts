@@ -8,7 +8,7 @@ import { envelope, history, publicationEntry, readToolPolicy }
   from '@opencrane/models';
 import { prepareGatewayConfigurationHandler } from '../src/gateway-configuration.ts';
 
-async function serialPublications() {
+async function preparationFixture() {
   const nats = await natsFixture();
   onTestFinished(nats.close.bind(nats));
   const faulty = await lostReplyStore(nats.connection);
@@ -45,6 +45,11 @@ async function serialPublications() {
     await nats.seed([event]);
     return event;
   }
+  return { nats, faulty, storage, db, handler, transaction, publish };
+}
+
+async function serialPublications() {
+  const { nats, faulty, db, handler, transaction, publish } = await preparationFixture();
   const alpha = await publish('alpha');
   const bravo = await publish('bravo');
   function unavailableRead(): never {
@@ -118,3 +123,68 @@ function publicationDigest(value: unknown) {
   const encoded = JSON.stringify(value);
   return losslessJson(encoded).digest;
 }
+
+async function cancelsPreparation(stage: 'waiting' | 'preparing', expiry = 'signal') {
+  const setup = await preparationFixture();
+  const event = await setup.publish('cancelled');
+  const controller = new AbortController();
+  const timeoutMs = expiry === 'deadline' ? 250 : 5000;
+  const attempt = { signal: controller.signal, deadline: performance.now() + timeoutMs };
+  const paused = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const competitor = await setup.storage.queue.connect();
+  const lockName = 'opencrane:projection:gateway-configuration:test';
+  const readStream = setup.faulty.store.readStream.bind(setup.faulty.store);
+  async function* delayedRead(...args: Parameters<typeof readStream>) {
+    if (stage === 'preparing' && args[0] === 'gateway-config-test') {
+      entered.resolve();
+      await paused.promise;
+    }
+    yield* readStream(...args);
+  }
+  vi.spyOn(setup.faulty.store, 'readStream').mockImplementation(delayedRead);
+  if (stage === 'waiting') {
+    await competitor.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [lockName]);
+  }
+  const pending = setup.handler.handle(event, setup.transaction, attempt);
+  function failed(error: unknown) {
+    return error;
+  }
+  const result = pending.catch(failed);
+  async function waiting() {
+    const rows = await setup.storage.queue.query(`SELECT pid FROM pg_locks
+      WHERE locktype = 'advisory' AND NOT granted
+      AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
+    return rows.rowCount;
+  }
+  async function canAcquire() {
+    const result = await competitor.query<{ held: boolean }>(
+      'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS held', [lockName]);
+    if (result.rows[0]!.held) {
+      await competitor.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lockName]);
+    }
+    return result.rows[0]!.held;
+  }
+  try {
+    if (stage === 'waiting') await expect.poll(waiting).toBe(1);
+    else await entered.promise;
+    if (expiry === 'signal') controller.abort(new Error('Attempt expired'));
+    if (stage === 'waiting') await expect.poll(waiting, { timeout: 500 }).toBe(0);
+    else await expect.poll(canAcquire, { timeout: 500 }).toBe(true);
+    expect(await result).toBeInstanceOf(Error);
+  } finally {
+    paused.resolve();
+    await competitor.query('SELECT pg_advisory_unlock_all()');
+    competitor.release();
+    await result;
+  }
+  expect(await history(setup.nats.store, 'gateway-config-test', 'test')).toHaveLength(0);
+}
+it.each(['waiting', 'preparing'] as const)('cancels an expired preparation while %s',
+  cancelsPreparation);
+
+async function expiresPreparation(stage: 'waiting' | 'preparing') {
+  await cancelsPreparation(stage, 'deadline');
+}
+it.each(['waiting', 'preparing'] as const)('enforces the preparation deadline while %s',
+  expiresPreparation);

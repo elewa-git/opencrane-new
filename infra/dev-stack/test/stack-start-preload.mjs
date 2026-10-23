@@ -78,7 +78,11 @@ async function execute(command, args) {
 function execFixture() { throw new Error('Use the asynchronous command fixture'); }
 execFixture[promisify.custom] = execute;
 childProcess.execFile = execFixture;
-function spawnFixture(_command, args) {
+function spawnFixture(_command, args, options) {
+  if (args.includes('dispatcher')) {
+    assert.equal(options.env.CONTENT_DATABASE_URL, 'postgres://fixture.invalid/server');
+    assert.equal(options.env.DATABASE_URL, 'postgres://fixture.invalid/dispatcher');
+  }
   const child = new EventEmitter();
   child.pid = nextPid++;
   child.unref = function unref() {};
@@ -160,7 +164,7 @@ export async function generate(origin) {
   if (await exists(directory + '/settings.env')) return;
   await writeEnv('settings', { ORIGIN: origin, SILO_ID: 'fixture', OPENFGA_API_URL: 'https://fga.invalid' });
   for (const name of ['admin', 'projection', 'server', 'command', 'dispatcher', 'minio']) {
-    await writeEnv(name, { DATABASE_URL: 'postgres://fixture.invalid/db' });
+    await writeEnv(name, { DATABASE_URL: 'postgres://fixture.invalid/' + name });
   }
   await save('database-ready', 'ready');
 }

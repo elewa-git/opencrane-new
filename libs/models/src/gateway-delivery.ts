@@ -80,7 +80,7 @@ export function gatewayDelivery(options: {
       async function replace(sibling: string) {
         await requireLeader();
         if (!options.db.lock) throw new Error('Gateway locking unavailable');
-        async function replaceLatest() {
+        async function replaceLatest(locked: Db) {
           if (!await gatewayConfigurationCurrent(options.store, options.silo, record)) {
             throw new Error('Gateway delivery unavailable');
           }
@@ -89,11 +89,16 @@ export function gatewayDelivery(options: {
           if (!await gatewayConfigurationCurrent(options.store, options.silo, record)) {
             throw new Error('Gateway delivery unavailable');
           }
+          // Check the gateway lock connection after all other waits. Budget leadership
+          // uses a different session and cannot prove this lock is still held.
+          const checkOptions = { deadline: performance.now() + 1000 };
+          await locked.query('SELECT 1', [], checkOptions);
           if (!alive()) throw new Error('Gateway delivery unavailable');
           // Avoid yielding between the final check and the atomic file replacement.
           renameSync(sibling, options.configFile);
         }
-        await options.db.lock(`gateway-configuration:${options.silo}`, replaceLatest);
+        const lockOptions = { timeoutMs: 1000 };
+        await options.db.lock(`gateway-configuration:${options.silo}`, replaceLatest, lockOptions);
       }
       await replaceConfiguration(options.configFile, config, replace);
       active = { record, configDigest: rendered.configDigest, response, path };

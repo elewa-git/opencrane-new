@@ -8,18 +8,20 @@ import { createLogger } from "@opencrane/observability";
 import { pgDb, type Query } from "@opencrane/projections";
 import type { EventEnvelope } from "@opencrane/events";
 import { event, natsFixture } from "@opencrane/event-store/testing";
-import { HandlerRuntime, dispatch, type Handler } from "../src/index.ts";
+import { HandlerRuntime, dispatch, type Handler, type HandlerAttempt } from "../src/index.ts";
 import { sessionDiagnostics } from "./session-diagnostics.ts";
 
 export const logger = createLogger("handler-tests", { level: "silent" });
 export async function effect(
   event: EventEnvelope,
   tx: Query,
-  handler = "update-members",
+  handler: string | HandlerAttempt = "update-members",
 ) {
+  // Keep the default fixture name when the runtime supplies attempt limits.
+  const handlerName = typeof handler === 'string' ? handler : 'update-members';
   await tx.query(
     "INSERT INTO handler_effects (handler, event_id, stream) VALUES ($1, $2, $3)",
-    [handler, event.id, event.subject],
+    [handlerName, event.id, event.subject],
   );
 }
 export async function until(check: () => Promise<boolean>, timeout = 15_000) {

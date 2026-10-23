@@ -5,6 +5,7 @@ import { toolPolicyFromRows } from './tool-policy.ts';
 import { publicationDigest, publicationEntry } from './publication.ts';
 
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
+type PreparationLimits = { signal: AbortSignal; deadline: number };
 type ConfigurationStore = Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
 
 export class PublicationUnavailable extends Error {
@@ -31,10 +32,37 @@ function exactMcpSubject(serverId: string) {
   return subject;
 }
 
+async function preparationHistory(store: ConfigurationStore, silo: string, subject: string,
+  limits: PreparationLimits) {
+  const { signal, deadline } = limits;
+  signal.throwIfAborted();
+  const cancelled = Promise.withResolvers<never>();
+  function abort() {
+    cancelled.reject(new Error('Gateway preparation cancelled'));
+  }
+  async function read() {
+    const rows: StoredEvent[] = [];
+    for await (const row of store.readStream(subject, 1, deadline)) {
+      // Stop a late read before it can request more history or reach an append.
+      signal.throwIfAborted();
+      if (row.event.silo !== silo) throw new Error('Wrong silo');
+      rows.push(row);
+    }
+    signal.throwIfAborted();
+    return rows;
+  }
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    return await Promise.race([read(), cancelled.promise]);
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
 async function currentMember(store: ConfigurationStore, silo: string, serverId: string,
-  changeRef: string) {
+  changeRef: string, limits: PreparationLimits) {
   const subject = exactMcpSubject(serverId);
-  const rows = await history(store, subject, silo);
+  const rows = await preparationHistory(store, silo, subject, limits);
   const state = toolPolicyFromRows(rows);
   const intent = state.publication;
   const entry = publicationEntry(state);
@@ -89,11 +117,11 @@ export async function gatewayConfigurationCurrent(store: ConfigurationStore, sil
 }
 
 async function currentCarriedMembers(store: ConfigurationStore, silo: string,
-  previous: Configuration | undefined, serverId: string) {
+  previous: Configuration | undefined, serverId: string, limits: PreparationLimits) {
   const members: Configuration['members'] = [];
   for (const member of previous?.members ?? []) {
     if (member.entry.serverId === serverId) continue;
-    const rows = await history(store, exactMcpSubject(member.entry.serverId), silo);
+    const rows = await preparationHistory(store, silo, exactMcpSubject(member.entry.serverId), limits);
     if (gatewayMemberCurrent(rows, member)) {
       members.push(member);
     }
@@ -102,13 +130,17 @@ async function currentCarriedMembers(store: ConfigurationStore, silo: string,
 }
 
 export async function prepareGatewayConfiguration(store: ConfigurationStore, silo: string,
-  serverId: string, changeRef: string): Promise<Configuration> {
+  serverId: string, changeRef: string, attempt?: PreparationLimits): Promise<Configuration> {
+  const deadline = attempt?.deadline ?? performance.now() + 60_000;
+  const timeout = AbortSignal.timeout(Math.max(0, Math.ceil(deadline - performance.now())));
+  const signal = attempt ? AbortSignal.any([attempt.signal, timeout]) : timeout;
+  const limits = { signal, deadline };
   const subject = `gateway-config-${silo}`;
   wireSubject(subject);
   exactMcpSubject(serverId);
   // Retry a competing append from its saved record, preserving both separate changes.
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const rows = await history(store, subject, silo);
+  for (let retry = 0; retry < 20; retry++) {
+    const rows = await preparationHistory(store, silo, subject, limits);
     const requests = rows.filter(requested);
     const records = requests.map(configurationFromRow);
     for (const record of records) {
@@ -123,14 +155,15 @@ export async function prepareGatewayConfiguration(store: ConfigurationStore, sil
       }
     }
     const previous = records.at(-1);
-    const members = await currentCarriedMembers(store, silo, previous, serverId);
-    const changed = await currentMember(store, silo, serverId, changeRef);
+    const members = await currentCarriedMembers(store, silo, previous, serverId, limits);
+    const changed = await currentMember(store, silo, serverId, changeRef, limits);
     members.push(changed);
     const saved = { changeRef, generation: (previous?.generation ?? 0) + 1,
       rendererVersion: '1' as const, members };
     const record = { ...saved, recordDigest: publicationDigest(saved) };
     const event = envelope(silo, subject, 'gateway.configuration_requested', record);
-    const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0 };
+    signal.throwIfAborted();
+    const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0, signal, deadline };
     const result = await store.append(command);
     if (result.status === 'appended') {
       return record;

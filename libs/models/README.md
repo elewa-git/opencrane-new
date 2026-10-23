@@ -2,6 +2,10 @@
 
 ## What this is
 
+Gateway replacement checks the connection holding its database lock immediately before
+changing the file. A lost connection leaves the old file in place. Expired preparation
+stops before saving a later configuration and releases the lock.
+
 After recorded switch-on, the gateway uses each checked call's provider key.
 It needs no fallback key file, and configuration reloads preserve that choice.
 Switch-on waits for spending to settle. A free provider reachability check needs no
@@ -24,7 +28,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks spending choices and payer limits; records tool starts, remote outcomes and spending; reads spending calls in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, spending call rows and read tables"]
 ```

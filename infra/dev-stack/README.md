@@ -17,7 +17,7 @@ assistant computers run.
 flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|starts in Docker| services["Local services<br/>storage and access"]
+  stack -->|starts in Docker| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps and demo tools; checks chats, replies and ownership| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
@@ -26,10 +26,13 @@ flowchart LR
 ```
 
 The services include [PostgreSQL](../../GLOSSARY.md#postgresql-database) for read
-tables, [NATS](../../GLOSSARY.md#nats) for the event log,
+tables and a separate jobs database, [NATS](../../GLOSSARY.md#nats) for the event log,
 [OpenFGA](../../GLOSSARY.md#openfga-permissions-service) for permissions and
 [MinIO](../../GLOSSARY.md#minio-file-storage) for files.
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) provides test sign-in.
+
+The dispatcher uses the server's read-only content connection to coordinate gateway
+configuration changes. Its background jobs keep their own database.
 
 ## What it is responsible for
 

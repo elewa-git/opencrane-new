@@ -30,7 +30,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  models["libs/models<br/>model and replay tests"] -.->|uses the database test helper| projections
+  models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves role, ownership and control history; keeps private audits outside feeds; saves routines and receipts| pg
@@ -41,6 +41,9 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+Database locks keep related work from overlapping. Callers can limit the wait and
+cancel it. A running callback keeps its lock until its work has stopped.
 
 Remote tool grant lists include each person's membership status. A departure keeps
 the saved grant history, so the server can label the person as departed.

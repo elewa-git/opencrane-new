@@ -57,7 +57,10 @@ The worker locks the fetched queue attempt through its SQL transaction;
 handler writes and the event-id receipt commit together. Abort rolls back even
 when a callback never settles; SQL calls are serialised and each statement
 uses the remaining attempt time. Late callback queries are refused after
-the transaction closes. Any SQL error fails the attempt even if caught. Handlers must write
+the transaction closes. Each callback also receives `{signal, deadline}` as its third
+argument. The signal is the job attempt cancellation; the deadline uses `performance.now()`.
+Reactions with external work must pass these limits into that work. Gateway preparation
+uses them for its content lock, history reads and conditional append. Any SQL error fails the attempt even if caught. Handlers must write
 only through `tx`. Receipts survive queue-job deletion. External services
 need an event-id idempotency protocol of their own; this API cannot make an
 external call atomic with SQL. Do not run the projection runner and this

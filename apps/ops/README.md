@@ -22,7 +22,7 @@ flowchart LR
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves results| nats
-  ops -->|updates tables| pg["PostgreSQL<br/>read tables"]
+  ops -->|keeps jobs and locks gateway changes until work stops| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
@@ -39,6 +39,7 @@ The computers run in [Kubernetes](../../GLOSSARY.md#kubernetes).
 - Sets up assistants and claims one computer per assistant, including shared group assistants.
 - Starts and pauses computers and delivers short-lived [passes](../../GLOSSARY.md#access-token).
 - Charges confirmed model costs and stops affected work when a spending limit is reached.
+- Stops expired gateway preparation and releases its database lock.
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
@@ -84,7 +85,10 @@ People can correct their own facts through HTTP. Correction through tools is sti
 The dispatcher prepares one complete gateway configuration for each current reviewed
 publication request. Jobs for the same silo run in saved order. Old or withdrawn
 requests do nothing. Preparation and file replacement share a PostgreSQL lock, so
-a newer saved generation cannot be overtaken by an older file. Rebuilding tables
+a newer saved generation cannot be overtaken by an older file. The dispatcher uses
+the content database for this lock, with the server's read-only account. It keeps
+its queue in the separate jobs database. Missing or unavailable content settings
+stop startup before handlers run. Rebuilding tables
 never prepares or delivers configuration.
 
 A spending stop creates durable jobs on the existing dispatcher. Each job checks

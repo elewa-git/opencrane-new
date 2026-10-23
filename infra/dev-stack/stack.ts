@@ -616,6 +616,7 @@ async function up(fresh: boolean) {
   await startModels();
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
     { ...await readEnv('dispatcher'), ...binding, MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
+      CONTENT_DATABASE_URL: (await readEnv('server'))['DATABASE_URL']!,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
       ...(secondary ? { COMPUTER_STORAGE: '1Gi' } : {}),
