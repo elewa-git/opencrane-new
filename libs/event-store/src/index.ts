@@ -1,5 +1,5 @@
-export { connectNats } from "./nats-connection.ts";
-export { createEventStore, connectEventStore, EventStore, isEventStoreUnavailable } from "./jetstream.ts";
+export { connectNats, isEventStoreUnavailable } from "./nats-connection.ts";
+export { createEventStore, connectEventStore, EventStore } from "./jetstream.ts";
 export {
   wireSubject,
   decodeEvent,

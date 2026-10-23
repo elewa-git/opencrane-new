@@ -1,5 +1,28 @@
 import { readFile } from "node:fs/promises";
-import { connect, nkeyAuthenticator } from "@nats-io/transport-node";
+import {
+  connect,
+  nkeyAuthenticator,
+  TimeoutError,
+  RequestError,
+  ConnectionError,
+  ClosedConnectionError,
+} from "@nats-io/transport-node";
+import { JetStreamApiError } from "@nats-io/jetstream";
+
+// The SDK does not export JetStreamNotEnabled, so check its name and cause instead.
+export function isEventStoreUnavailable(error: unknown): boolean {
+  return (
+    error instanceof TimeoutError ||
+    error instanceof ConnectionError ||
+    error instanceof ClosedConnectionError ||
+    (error instanceof Error &&
+      error.name === "JetStreamNotEnabled" &&
+      isEventStoreUnavailable(error.cause)) ||
+    (error instanceof RequestError &&
+      (error.isNoResponders() || isEventStoreUnavailable(error.cause))) ||
+    (error instanceof JetStreamApiError && error.status >= 500)
+  );
+}
 
 /** Require TLS before starting the NATS connection. */
 export async function connectNats(env: NodeJS.ProcessEnv = process.env) {

@@ -44,6 +44,8 @@ flowchart LR
   older summaries when their memory allowance is full.
 - Check that the log keeps its history, disallows deletion and uses encrypted
   connections with the right credentials for each program.
+- Give the setup job time to create the log on a busy NATS server. Report a
+  timeout if the server does not reply within five seconds.
 
 ## Processes it handles
 

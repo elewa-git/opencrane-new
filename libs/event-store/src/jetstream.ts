@@ -1,4 +1,4 @@
-import { connectNats } from "./nats-connection.ts";
+import { connectNats, isEventStoreUnavailable } from "./nats-connection.ts";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   jetstream,
@@ -11,9 +11,6 @@ import {
 } from "@nats-io/jetstream";
 import {
   TimeoutError,
-  RequestError,
-  ConnectionError,
-  ClosedConnectionError,
   type NatsConnection,
 } from "@nats-io/transport-node";
 import type { EventEnvelope } from "@opencrane/events";
@@ -123,21 +120,6 @@ function verifyEventsConfig(config: StreamConfig, replicas: number): void {
   }
 }
 
-// The SDK does not export JetStreamNotEnabled, so check its name and cause instead.
-export function isEventStoreUnavailable(error: unknown): boolean {
-  return (
-    error instanceof TimeoutError ||
-    error instanceof ConnectionError ||
-    error instanceof ClosedConnectionError ||
-    (error instanceof Error &&
-      error.name === "JetStreamNotEnabled" &&
-      isEventStoreUnavailable(error.cause)) ||
-    (error instanceof RequestError &&
-      (error.isNoResponders() || isEventStoreUnavailable(error.cause))) ||
-    (error instanceof JetStreamApiError && error.status >= 500)
-  );
-}
-
 // Retry temporary failures for at most one second, or until the caller's earlier deadline.
 async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Infinity,
   signal?: AbortSignal) {
@@ -201,8 +183,11 @@ export async function readBeforeDeadline<Value>(read: () => Promise<Value>, dead
 
 /** The caller opens and closes this authenticated TLS connection. */
 export async function createEventStore(connection: NatsConnection) {
-  const manager = await jetstreamManager(connection, { timeout: requestMs });
-  return new EventStore(jetstream(connection, { timeout: requestMs }), manager);
+  // Use the SDK's normal management timeout when provisioning; keep event reads short.
+  const provisioningManager = await jetstreamManager(connection);
+  const manager = await jetstreamManager(connection, { timeout: requestMs, checkAPI: false });
+  const client = jetstream(connection, { timeout: requestMs });
+  return new EventStore(client, manager, provisioningManager);
 }
 
 /** Processes use this adapter; operators create the EVENTS stream separately. */
@@ -220,9 +205,15 @@ export async function connectEventStore(env: NodeJS.ProcessEnv = process.env) {
 export class EventStore {
   private readonly client: JetStreamClient;
   private readonly manager: JetStreamManager;
-  constructor(client: JetStreamClient, manager: JetStreamManager) {
+  private readonly provisioningManager: JetStreamManager;
+  constructor(
+    client: JetStreamClient,
+    manager: JetStreamManager,
+    provisioningManager: JetStreamManager = manager,
+  ) {
     this.client = client;
     this.manager = manager;
+    this.provisioningManager = provisioningManager;
   }
 
   /** Refuse an incompatible existing stream without changing its configuration. */
@@ -234,12 +225,12 @@ export class EventStore {
     }
     let info;
     try {
-      info = await this.manager.streams.info(streamName);
+      info = await this.provisioningManager.streams.info(streamName);
     } catch (error) {
       if (!(error instanceof JetStreamApiError) || error.code !== 10059) {
         throw error;
       }
-      info = await this.manager.streams.add(eventsConfig(replicas));
+      info = await this.provisioningManager.streams.add(eventsConfig(replicas));
     }
     verifyEventsConfig(info.config, replicas);
   }

@@ -35,6 +35,12 @@ a fixed error before pg-boss stores the failed attempt. It does not log the raw 
 Queue errors
 are logged; dispatcher errors reject its promise and require host restart.
 
+`provision.ts` uses the event-store package's five-second management request
+timeout for EVENTS lookup and creation. The real PostgreSQL/NATS test fixture
+starts that production command against an empty, separate NATS server each time.
+It does not retry provisioning. See the event-store package's
+[timeout contract](../event-store/README.robot.md) for bounds and failure behaviour.
+
 The durable `handler-dispatcher` consumer reads `ev.>` from the beginning,
 with explicit acknowledgements and one unacknowledged message. All subscribed
 jobs and a global SQL checkpoint commit together before acknowledgement.
