@@ -23,7 +23,7 @@ It does not qualify the browser or chat journey. #45, #46 and #63 remain open.
 | Local demo write | PASS | A separate read finds afternoon and exactly one effect after one direct call. This is not an approval-path proof. |
 | Local network refusals | PASS | Private/mixed DNS, another host, wrong TLS hostname, redirects and altered pin/TLS settings are refused. |
 | Slot guard | PASS | Wrong/owner ids and a foreign worktree fail before settings; real claimed slot ownership also passes. |
-| Evidence checker | PASS | Supplied publication, generation, IAM receipts, requester decision, turn, readbacks and zero tool spending must agree. Records here are synthetic unit-test inputs. |
+| Evidence checker | PASS | Supplied publication, saved definitions, current policy, original approval and dispatch records, IAM receipts, turn, readbacks and zero spending must agree. These are synthetic unit-test inputs. |
 | Fresh browser registration, review, grants and publication | NOT RUN | Next split must collect original product receipts. |
 | Demo tools through real Codex/gateway chat | NOT RUN | Next split must connect test-only transport injection at discovery, watch and dispatch in the separate server and models processes. |
 | Spending, Change history, both widths and reload | NOT RUN | No browser evidence collected. |
@@ -37,7 +37,7 @@ opens five TLS connections: discovery, tool listing, read, write, then readback.
 The fixture confirms all five public pins before mapping them to its local listener.
 The checker only validates supplied evidence; it does not collect or authenticate it.
 
-## Checks
+## Earlier checks
 
 All commands ran under `nice -n 10`. Full root suite: NOT RUN, as requested.
 
@@ -71,3 +71,47 @@ Reuse the browser helpers for one fresh install with a deterministic local model
 the pinned real Codex/gateway. Collect original receipts and dated readbacks from that
 run, capture both widths and reload, and reconcile model spending separately from tools.
 Do not count the direct fixture calls or checker unit tests as live approval evidence.
+
+## Evidence checker fixes, 23 October 2026
+
+Source: `a8c51f6d95fba17a2600f33ae1d6e8714ce84a44`, rebased onto
+`2cc0a179f5ce4746590eef9c479216b422b95e91`. The rebase finished and the base
+is an ancestor of this branch. The README diagram keeps both descriptions of the
+dev stack's work from the two branches.
+
+Environment: the local worktree on the shared development machine. This was not a
+fresh install. Tests used normal temporary directories and local TLS fixtures with
+the requested `PG_TEST_URL` set. No stack was started or changed. These tests do
+not use PostgreSQL, so no database container was needed.
+
+The checker now requires the original approval request, human decision, approval use,
+gateway decision and dispatch result. Their ids, tool, call, conversation, turn,
+requester and assistant must agree. Global event-log positions and event times prove
+that approval was saved before dispatch. The actual dispatch start must also follow
+the saved decision. The saved definitions must match the reviewed tools, and the
+product's `isToolPolicyAvailable` checks the policy at `rehearsedAt`.
+
+Tests were committed before each fix. Before the policy fix, seven refusal tests
+reported missing expected exceptions. Before record validation, a direct write with
+only the old approval labels was accepted. After adding record parsing alone, the
+ordering and unrelated-call tests still reported missing expected exceptions.
+
+Logs are retained under `~/.fleet/demo-stage-b-local-fixes/` on this machine. They contain only
+synthetic test records and local check output. The final check results follow below.
+
+Live browser/chat run: **NOT RUN**. Full root suite: **NOT RUN**, as requested.
+Native shell and file-edit consent: **NOT RUN**. This PR remains a draft.
+
+| Check | Status | Observed result |
+| --- | --- | --- |
+| Changed tests, run 1 | PASS | All 21 tests passed. |
+| Changed tests, run 2 | PASS | All 21 tests passed. |
+| Slot guard removal checks | PASS | Each new test failed when its guard was removed; both guards were restored. |
+| Lint | PASS | Repository lint passed, including Knip, Markdown, links, fixture rules, licences and changelog. |
+| Typecheck | PASS | All workspaces, package and dev-stack checks passed. |
+| Event catalogue | PASS | All 151 event types agree. |
+| Changelog | PASS | The branch fragment passes validation. |
+
+The changed-test command was
+`nice -n 10 node --experimental-strip-types --test infra/dev-stack/stage-b-local.test.ts`.
+Both runs had the requested `PG_TEST_URL` set. All checks ran under `nice -n 10`.

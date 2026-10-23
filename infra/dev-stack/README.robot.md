@@ -17,7 +17,22 @@ read. The caller must obtain the claim through `claim.sh`.
 
 `checkStageBApproval` checks supplied policy, original grant command references,
 IAM/content receipts, the matching gateway generation and process, requester approval,
-same-turn reply, fixture readbacks and zero tool spending. Its input is collected
+same-turn reply, fixture readbacks and zero tool spending. `rehearsedAt` records the
+rehearsal time. The product's `isToolPolicyAvailable` must accept the policy at that
+time. The saved catalogue must contain valid definitions whose names, revisions,
+read-only flags and zero costs match the reviewed choices.
+
+`records` contains the original event envelopes and global event-log positions for
+`tool.approval_requested`, `approval.decided`, `approval.used`, `decision.recorded`
+and `tool.dispatch_recorded`. Each record must belong to the same silo and its expected
+stream. Their positions must increase in that order, and their times must agree with
+that order and precede or equal `rehearsedAt`. The approval, consumed permit and dispatch
+must refer to the same call, conversation, turn, requester, assistant and write tool.
+The request must match the reviewed revision, connection, catalogue and arguments.
+The dispatch must start after the saved decision and before the approval expires.
+Missing records, unrelated records and dispatch before approval are refused.
+
+Its input is collected
 evidence, not an authentication mechanism. The caller must obtain those records from
 the product and take the readbacks at the stated stages. Synthetic records in its
 unit tests are not live qualification. Model spending reconciliation, browser capture,
