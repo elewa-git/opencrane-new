@@ -3983,6 +3983,7 @@ upgrade, reviews stay incomplete until the inventory index has been rebuilt.
 Reviews use indexed history changes and report incomplete results when new
 streams have not been checked. Unrelated read receipts do not require reading
 the event log.
+
 ## Takeover timeout checks, 23 October 2026
 
 These are local checks with disposable NATS, OpenFGA and PostgreSQL 17.6 fixtures,
@@ -4026,3 +4027,26 @@ Local logs use `/tmp/p3-17-pr2h-`: `red-race.log`, `red-retire.log`, `red-log.lo
 `typecheck-server-corrected.log`, `events.log`, `lint-final.log`, `tests-2.log`
 `tests-3.log`, `deadline-last.log` and `lint-last.log`.
 The disposable PostgreSQL container and its volume were removed after the checks.
+
+## Exact clock values in timeout tests, 23 October 2026
+
+The test clock starts at an integer millisecond value. This keeps subtraction
+exact for the strict thirty-second boundary checks. Production code is unchanged.
+A temporary fractional start of `2768.001` reproduced the failure with
+`30000.000000000004` instead of `30000`; the temporary change was removed.
+
+Own checks after rebasing onto `9a885e7f9`:
+
+- PASS: the future-time and clock-rollback test passed 50 consecutive separate runs.
+  Its exact assertions still require 30,000 ms, 1 ms and 0 ms at the same boundaries.
+- PASS: all 126 tests in `bridge-control`, `bridge-gate` and `bridge-deadline`
+  passed twice with one worker and the requested local PostgreSQL URL.
+- PASS: typecheck, event catalogue, Knip and changelog checks.
+- FAIL then fixed: full lint found a missing blank line between retained notes
+  after the rebase. Code, dependency and unused-code checks had passed.
+- PASS: documentation, local links, fixtures, package licences and changelog lint
+  after the blank-line fix. All stages of the lint command have now passed.
+
+Every check used `nice -n 10`. Logs use `/tmp/p3-17-pr2h-clock-fix`, including
+`repeat-1.log` through `repeat-50.log` in the directory of that name.
+Full root suite and fresh-install qualification: NOT RUN. The PR remains a draft.
