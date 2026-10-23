@@ -148,3 +148,18 @@ function duplicateHistoryKeepsRetiredState() {
   }
 }
 it('ignores duplicate history delivered after retirement', duplicateHistoryKeepsRetiredState);
+
+function savedDefinitionSurvivesDatabaseOrdering() {
+  const initial = foldRoutine(undefined, saved('routine.created'));
+  const active = foldRoutine(initial, saved('routine.resumed'));
+  if (!active.definition) throw new Error('Missing saved definition');
+  const { name, ...remaining } = active.definition.definition;
+  const reordered = { ...remaining, name };
+  const definition = { ...active.definition, definition: reordered };
+  const restored = { ...active, definition };
+  const due = saved('routine.due');
+  const result = foldRoutine(restored, due);
+  expect(result.activeRun).toEqual(due.data);
+}
+it('accepts a saved definition whose object fields changed order in storage',
+  savedDefinitionSurvivesDatabaseOrdering);

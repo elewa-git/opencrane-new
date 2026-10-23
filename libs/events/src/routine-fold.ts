@@ -38,14 +38,17 @@ function saveRun(state: RoutineState, event: EventEnvelope): RoutineState {
     return state;
   }
   const saved = state.definition;
+  // Restore the schema's field order after reading a definition from JSONB storage.
+  const savedDefinition = saved && schemas.routineDefinitionSchema.parse(saved.definition);
   if (!saved || state.status !== 'active' || run.definitionRevision !== saved.definitionRevision ||
       run.scheduleRevision !== saved.scheduleRevision ||
       run.controlRevision !== saved.controlRevision ||
-      JSON.stringify(run.definition) !== JSON.stringify(saved.definition)) {
+      JSON.stringify(run.definition) !== JSON.stringify(savedDefinition)) {
     throw new Error('A run must use the active saved definition');
   }
   if (state.activeRun) {
-    if (JSON.stringify(state.activeRun) === JSON.stringify(run)) {
+    const activeRun = schemas.routineDueSchema.parse(state.activeRun);
+    if (JSON.stringify(activeRun) === JSON.stringify(run)) {
       return state;
     }
     throw new Error('A routine already has an active run');

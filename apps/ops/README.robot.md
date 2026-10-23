@@ -737,3 +737,18 @@ key removal is pending.
 
 Hosted tools still cannot start through the application. The
 [admission rules](#hosted-mcp-admission) describe the separate Kubernetes checks.
+
+## Routine worker and offline replay
+
+`npm run worker -w apps/ops -- routines` runs the routine read-table projection only.
+It uses the usual projection NATS credentials and `DATABASE_URL`. It never starts
+scheduling, dispatch, jobs, computer wake, model/tool calls or credential delivery.
+
+`npm run replay -- routines --dry-run` reads the saved event positions without writing.
+Stop readers, scheduler, dispatcher and effect workers before running
+`npm run replay -- routines --confirm-routines-stopped --verify`.
+The stopped confirmation is required before connecting to services for a real replay.
+Verification detects a changed row and leaves existing rows/checkpoints intact.
+A failed rebuild rolls back all changes. Replay needs no instruction keys.
+The [projection contract](../../libs/projections/README.robot.md#routine-records-and-offline-replay)
+describes the saved rows and tests. Fresh-install live qualification is NOT RUN.

@@ -349,8 +349,9 @@ delivery order. Duplicate ids return the existing state after schema and stream 
 after later controls or retirement. Legacy records add no facts or applied ids. A failed fold
 leaves its input and its applied ids unchanged. Migration requires a complete paused update.
 An unfinished run stays recorded across controls; completion checks its ids and keeps the first
-result. Custody and live membership/grant/profile checks belong to later PRs. There are no routine
-subscriptions, scheduler, worker, routes, new dependencies or money ledger.
+result. Definition and due comparisons parse stored values again, so JSONB field ordering
+cannot change a binding. Custody and live membership/grant/profile checks belong to later PRs.
+This package registers no subscriptions or processes and provides no routes or money ledger.
 Tests: `nice -n 10 npx vitest run libs/events/test/routines.test.ts libs/events/test/routine-fold.test.ts`.
 
 ### Routine occurrence calculation
