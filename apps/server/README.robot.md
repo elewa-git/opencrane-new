@@ -144,6 +144,37 @@ Logs are `/tmp/ci-flakes-5-changed-1.log`, `/tmp/ci-flakes-5-repeats.log`,
 start, finish, wall time and result. Check logs use `/tmp/ci-flakes-5-` followed
 by `lint-final.log`, `typecheck.log`, `events.log` and `changelog.log`.
 
+### Retry setup correction, 23 October 2026
+
+The retry suite still shortened the window after `summonFixture` saved eleven
+events. The local baseline reproduced the setup failure from the empty-stream
+guard, with all 25 retry tests skipped. The suite now creates the short-window
+NATS fixture before passing it to `summonFixture`. The guard and all assertions
+remain unchanged. This correction changes test setup only.
+
+The call-site search covered `shortenDuplicateWindow`, `shortDuplicateWindowFixture`
+and `summonFixture` throughout the repository. The other shortened fixtures already
+set the window before saving events. The selected files are `child-first-input`,
+`child-recovery`, `child-requests`, `child-retry`, `child-summon` and `duplicate-window`.
+
+Own checks after rebasing onto `76238ab8c`:
+
+- Expected FAIL: the unchanged retry suite refused the eleven saved events during setup.
+- PASS: all six selected test files twice, with 131 tests in each run.
+- PASS: full typecheck, event catalogue and full lint, including Knip and changelog
+  validation. ESLint reported zero errors and 25 function-length warnings.
+
+Both test runs used `nice -n 10`, one worker and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The full root suite and fresh-install journeys were NOT RUN.
+Logs are `/tmp/ci-flakes-5-before.log`, `/tmp/ci-flakes-5-tests-1.log` and
+`/tmp/ci-flakes-5-tests-2.log`. Static check logs use `/tmp/ci-flakes-5-fix-`
+followed by `typecheck.log`, `events.log`, `lint.log` and `changelog.log`.
+
+Main advanced during validation with computer test and documentation changes.
+The final rebase onto `3a3202909` completed. Comparing the PR patch before and
+after that rebase found identical bytes. The server test code is unchanged.
+
 ### Earlier short-window checks
 
 Own checks, 22 October 2026, based on `8a334f3ee`, with Node 22.23.3:
