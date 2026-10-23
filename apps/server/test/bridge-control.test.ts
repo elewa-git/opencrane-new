@@ -1,3 +1,10 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { takeoverClock, waitForControl, trackPauseObservations }
+  from './support/takeover-clock.ts';
+import { createEventStore } from '@opencrane/event-store';
+import { savePausing } from '../src/chat/bridge-pausing.ts';
+import { turnCommand } from '../src/chat/turns.ts';
+import { readComputerControl } from '@opencrane/auth';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -125,7 +132,25 @@ async function bridgeFixture(cachedControl = false) {
     link.socket.ping();
     await pong;
   }
+  const watchers: (() => Promise<void>)[] = [];
+  function startControls(connect = connection, store = options.store) {
+    const watchedOptions = { ...watchOptions, store };
+    const refused = new Set<string>();
+    const watcher = assistantProcessor(watchedOptions, tokens, refused,
+      connect, connectionId, logger);
+    watcher.forgetMissing([conversation]);
+    const abort = new AbortController();
+    const watching = watcher.watchControls(abort.signal);
+    async function stop() {
+      abort.abort();
+      await watching;
+    }
+    watchers.push(stop);
+    const controls = { forgetMissing: watcher.forgetMissing };
+    return Object.assign(stop, controls);
+  }
   async function close() {
+    for (const stop of watchers) await stop();
     link.socket.terminate();
     for (const socket of computers.clients) socket.terminate();
     await link.settled();
@@ -133,9 +158,9 @@ async function bridgeFixture(cachedControl = false) {
     server.close();
     await view.close();
   }
-  return { ...options, objects, bytes, message, link, frames, process, pollStops,
+  return { ...options, objects, bytes, message, link, frames, process, pollStops, logger,
     append: view.append, runner: view.runner, db: view.db,
-    intendControl, upload, flushFrames, close };
+    intendControl, upload, flushFrames, startControls, close };
 }
 
 it('fails each queued input once after close and keeps the original messages', async () => {
@@ -592,3 +617,277 @@ it('sends a manual Stop without waiting for ordinary conversation delivery', asy
     expect.objectContaining({ turnId: turn.turnId, conversationId: 'chat' }),
   ]);
 });
+async function expiresWithoutReadyComputer() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  await test.append('computer-assistant', 'computer.lost', {
+    assistantId: 'assistant', computerId: 'desktop',
+  });
+  const expired = Date.parse(request.time) + 30_000;
+  vi.spyOn(Date, 'now').mockReturnValue(expired);
+  test.startControls();
+  await waitForControl(test.store, 'failed');
+}
+it('fails an old request immediately on restart without a ready computer',
+  expiresWithoutReadyComputer);
+
+async function deadlineWithoutConnection(phase: 'requested' | 'pausing', held: boolean) {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  const clock = takeoverClock(request.time);
+  if (phase === 'pausing') {
+    const control = await readComputerControl(test.store, 'test', 'assistant');
+    if (!control || control.phase !== 'requested') throw new Error('Missing request');
+    const receipt = { kind: 'executor_stop', generation: 1, podUid: 'fixture',
+      takeoverId: 'control', affectedTurnIds: [test.message.id], epoch: 'supervisor',
+      executionQuiet: true, executionInventory: [], desktopInventory: [],
+      quietProof: 'complete', controlEnabled: false };
+    await savePausing(test.store, 'test', control, control.position, 'bridge', receipt);
+  }
+  // Establish the first observation before moving either clock.
+  await test.link.control.send();
+  const connecting = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function unavailable(): Promise<never> {
+    connecting.resolve();
+    if (held) await release.promise;
+    throw new Error('Bridge unavailable');
+  }
+  test.startControls(unavailable);
+  try {
+    await connecting.promise;
+    clock.advance(29_999, -60_000);
+    await delay(300);
+    expect((await readComputerControl(test.store, 'test', 'assistant'))?.phase).toBe(phase);
+    clock.advance(30_000, -60_000);
+    await waitForControl(test.store, 'failed');
+    await test.process();
+    expect(test.frames.filter(isTurnOrFile)).toEqual([]);
+  } finally {
+    release.resolve();
+  }
+}
+it.each([['requested', false], ['requested', true], ['pausing', false], ['pausing', true]] as const)(
+  'expires %s at thirty seconds with backwards time and held connection: %s',
+  deadlineWithoutConnection);
+
+async function retriesOriginalFailure(lostReply: boolean) {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  const clock = takeoverClock(request.time);
+  const info = await test.nats.connection.request('$JS.API.STREAM.INFO.EVENTS');
+  const streamInfo = z.object({ config: z.record(z.string(), z.unknown()) });
+  const details = streamInfo.parse(info.json());
+  const config = details.config;
+  const updated = { ...config, duplicate_window: 100_000_000 };
+  const response = await test.nats.connection.request('$JS.API.STREAM.UPDATE.EVENTS',
+    new TextEncoder().encode(JSON.stringify(updated)));
+  expect(z.object({ error: z.unknown().optional() }).parse(response.json()).error).toBeUndefined();
+  const append = test.store.append.bind(test.store);
+  const attempted = Promise.withResolvers<void>();
+  const ids = new Set<string>();
+  let unavailable = true;
+  async function interrupted(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string(), id: z.string() }).parse(command.event);
+    if (event.type === 'takeover.failed') {
+      ids.add(event.id);
+      attempted.resolve();
+      if (unavailable) {
+        if (lostReply) await append(command);
+        throw new Error('Event store unavailable');
+      }
+    }
+    return append(command);
+  }
+  vi.spyOn(test.store, 'append').mockImplementation(interrupted);
+  clock.advance(30_000);
+  const stop = test.startControls();
+  await attempted.promise;
+  const context = { silo: 'test', assistantId: 'assistant', computerId: 'desktop' };
+  const start = { conversationId: 'chat', turnId: test.message.id,
+    threadId: 'thread', status: 'started' as const };
+  await expect(turnCommand(test.store, context, start)).rejects.toThrow('Computer control');
+  await stop();
+  unavailable = false;
+  await delay(150);
+  clock.advance(180_000);
+  const restarted = await createEventStore(test.nats.connection);
+  test.startControls(undefined, restarted);
+  await waitForControl(test.store, 'failed');
+  await delay(300);
+  const failures = [];
+  for await (const row of test.store.readStream('computer-assistant')) {
+    if (row.event.type === 'takeover.failed') failures.push(row.event);
+  }
+  expect(failures).toHaveLength(1);
+  expect(ids.size).toBe(1);
+  expect(failures[0]?.id).toBe([...ids][0]);
+}
+it.each([false, true])('restarts the original failure after append outage; lost reply: %s',
+  retriesOriginalFailure);
+
+async function secondServerKeepsDeadline() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  const clock = takeoverClock(request.time);
+  await test.link.control.send();
+  const connected = Promise.withResolvers<void>();
+  function unavailable(): Promise<never> {
+    connected.resolve();
+    const error = new Error('Bridge unavailable');
+    return Promise.reject(error);
+  }
+  const first = test.startControls(unavailable);
+  await connected.promise;
+  clock.advance(10_000);
+  const secondStore = await createEventStore(test.nats.connection);
+  const secondOptions = { ...test, store: secondStore };
+  const input = { url: test.link.socket.url, computerId: 'desktop',
+    assistantId: 'assistant', bearer: 'test-token' };
+  const secondLink = await connectBridge(secondOptions, input);
+  try {
+    test.startControls(unavailable, secondStore);
+    await first();
+    clock.advance(30_000, -60_000);
+    await waitForControl(secondStore, 'failed');
+    const position = await secondStore.head('computer-assistant');
+    await test.link.control.send();
+    await delay(300);
+    expect(await secondStore.head('computer-assistant')).toBe(position);
+  } finally {
+    secondLink.socket.terminate();
+    await secondLink.settled();
+  }
+}
+it('keeps the saved deadline on another server after repeated polls and clock rollback',
+  secondServerKeepsDeadline);
+
+async function stopsDeadlineOnShutdown() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  const clock = takeoverClock(request.time);
+  await test.link.control.send();
+  const stop = test.startControls();
+  await stop();
+  clock.advance(60_000);
+  await delay(300);
+  expect((await readComputerControl(test.store, 'test', 'assistant'))?.phase).toBe('requested');
+  const restarted = await createEventStore(test.nats.connection);
+  test.startControls(undefined, restarted);
+  await waitForControl(restarted, 'failed');
+}
+it('stops deadline work on shutdown and fails the old request on restart',
+  stopsDeadlineOnShutdown);
+
+async function retiresForgottenDeadline(pending: boolean) {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  let clock: ReturnType<typeof takeoverClock> | undefined;
+  if (pending) {
+    const request = await test.intendControl();
+    clock = takeoverClock(request.time);
+    await test.link.control.send();
+  }
+  const stop = test.startControls();
+  await delay(300);
+  stop.forgetMissing([]);
+  if (clock) {
+    clock.advance(30_000, -60_000);
+    await waitForControl(test.store, 'failed');
+  }
+  await delay(300);
+  const reads = vi.spyOn(test.store, 'head');
+  await delay(600);
+  await stop();
+  expect(reads).not.toHaveBeenCalled();
+}
+it.each([false, true])(
+  'retires forgotten deadline polling after any pending request finishes: %s',
+  retiresForgottenDeadline);
+
+async function logsFailureOutageOnce() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(request.time) + 30_000);
+  const warning = vi.spyOn(test.logger, 'warn');
+  const append = test.store.append.bind(test.store);
+  const repeated = Promise.withResolvers<void>();
+  let attempts = 0;
+  let unavailable = true;
+  async function fail(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'takeover.failed' && unavailable) {
+      attempts++;
+      if (attempts === 3) repeated.resolve();
+      throw new Error('Private upstream credential and request details');
+    }
+    return append(command);
+  }
+  vi.spyOn(test.store, 'append').mockImplementation(fail);
+  test.startControls();
+  await repeated.promise;
+  expect(warning.mock.calls).toEqual([
+    ['Takeover deadline check unavailable; work remains blocked'],
+  ]);
+  unavailable = false;
+  await waitForControl(test.store, 'failed');
+}
+it('logs a fixed warning once while saving a timeout keeps failing', logsFailureOutageOnce);
+
+async function sharesActiveDeadline() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(request.time) + 30_000);
+  const append = test.store.append.bind(test.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let attempts = 0;
+  async function hold(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'takeover.failed') {
+      attempts++;
+      entered.resolve();
+      await release.promise;
+    }
+    return append(command);
+  }
+  vi.spyOn(test.store, 'append').mockImplementation(hold);
+  test.startControls();
+  try {
+    await entered.promise;
+    await delay(600);
+    expect(attempts).toBe(1);
+  } finally {
+    release.resolve();
+  }
+  await waitForControl(test.store, 'failed');
+}
+it('keeps one deadline watcher while its failure append waits across polls', sharesActiveDeadline);
+
+async function releasesAlreadyFinishedObservation() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  await test.intendControl();
+  const observation = trackPauseObservations();
+  await test.link.control.send();
+  const retained = observation();
+  expect(retained?.size).toBe(1);
+  const failed = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
+    podUid: 'fixture', takeoverId: 'control', affectedTurnIds: [test.message.id],
+    reason: 'pause_timeout' };
+  await test.append('computer-assistant', 'takeover.failed', failed);
+  const stop = test.startControls();
+  await delay(300);
+  await stop();
+  expect((await readComputerControl(test.store, 'test', 'assistant'))?.phase).toBe('failed');
+  expect(retained?.size).toBe(0);
+}
+it('releases a finished observation even when no deadline task was started',
+  releasesAlreadyFinishedObservation);

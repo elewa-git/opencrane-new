@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readComputerControl } from '@opencrane/auth';
 import type { bridgeControl } from './bridge-control.ts';
+import { watchTakeoverDeadline } from './bridge-deadline.ts';
+import { forgetPauseDeadline } from './bridge-pause-time.ts';
 import type { Logger } from '@opencrane/observability';
 import { history } from '../../../ops/src/lifecycle.ts';
 import { creationEvent } from './private-session.ts';
@@ -176,11 +178,17 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     return results.includes(true);
   }
 
-  async function processControl(assistantId: string) {
+  async function processControl(assistantId: string, startDeadline: (id: string) => void) {
     const assistant = await snapshot(assistantId);
-    if (assistant.controlPending && assistant.current?.type === 'computer.ready') {
+    if (!assistant.controlPending) return;
+    const control = await readComputerControl(options.store, options.silo, assistantId);
+    if (control?.phase === 'requested' || control?.phase === 'pausing') {
+      startDeadline(assistantId);
+    } else {
+      forgetPauseDeadline(options.store, options.silo, assistantId);
+    }
+    if (assistant.current?.type === 'computer.ready') {
       const computer = computerData.parse(assistant.current.data);
-      const control = await readComputerControl(options.store, options.silo, assistantId);
       if (control && control.phase !== 'unverified' && !refused.has(computer.computerId)) {
         const link = await connection(computer.computerId, assistantId);
         await link.control.send();
@@ -238,15 +246,25 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
 
   async function watchControls(signal: AbortSignal) {
     const checking = new Map<string, Promise<void>>();
+    const deadlines = new Map<string, Promise<void>>();
     function failed() {
       logger.warn('Bridge control check unavailable; retrying next poll');
+    }
+    function startDeadline(assistantId: string) {
+      if (deadlines.has(assistantId) || signal.aborted) return;
+      function finished() {
+        deadlines.delete(assistantId);
+      }
+      const deadline = watchTakeoverDeadline(options.store, options.silo,
+        assistantId, signal, logger);
+      deadlines.set(assistantId, deadline.finally(finished));
     }
     function start(assistantId: string) {
       if (checking.has(assistantId)) return;
       function finished() {
         checking.delete(assistantId);
       }
-      const checked = processControl(assistantId).catch(failed);
+      const checked = processControl(assistantId, startDeadline).catch(failed);
       checking.set(assistantId, checked.finally(finished));
     }
     try {
@@ -257,6 +275,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     } catch (error) {
       if (!signal.aborted) throw error;
     } finally {
+      await Promise.all(deadlines.values());
       await Promise.all(checking.values());
     }
   }

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { ComputerControl } from '@opencrane/auth';
 import { readEventAt, type EventStore } from '@opencrane/event-store';
 import { envelope } from '@opencrane/models';
+import { pauseDeadline } from './bridge-pause-time.ts';
 
 const identifier = z.string().regex(/^[\w-]{1,200}$/u);
 const stopReceipt = z.object({ kind: z.literal('executor_stop'),
@@ -75,7 +76,11 @@ async function appendControl(store: EventStore, silo: string, control: Control,
   event.commandId = event.id;
   event.source = 'opencrane-server';
   event.principal = { kind: 'system', id: 'opencrane-server' };
-  const command = { event, expectedSequence: position, historyChecked: true as const };
+  // Bound every progress publish and retry by the original takeover limit.
+  // Allow failure to be saved after expiry so an outage cannot erase the outcome.
+  let deadline = performance.now() + 10_000;
+  if (phase !== 'failed') deadline = pauseDeadline(store, silo, control);
+  const command = { event, expectedSequence: position, historyChecked: true as const, deadline };
   const result = await store.append(command);
   if (result.status !== 'appended') throw new Error('Stop unavailable');
   const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);

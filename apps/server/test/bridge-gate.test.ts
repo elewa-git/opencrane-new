@@ -15,6 +15,9 @@ import { fixture as computerFixture } from '../../computer/test/bridge-gate-fixt
 import { requireBridgeGateAuthority } from '../../computer/test/server.ts';
 import { SandboxClient } from '../../ops/test/server.ts';
 import { connectBridge, watchBridges } from '../src/chat/bridge.ts';
+import { takeoverClock, waitForControl } from './support/takeover-clock.ts';
+import { assistantProcessor } from '../src/chat/bridge-poll.ts';
+import { savePausing } from '../src/chat/bridge-pausing.ts';
 import { readyBridgePass } from '../src/chat/bridge-control.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 
@@ -80,7 +83,41 @@ async function setup(real = false, stopExecution?: (input: StopInput) => Promise
     links.push(link);
     return link;
   }
+  const watchers: (() => Promise<void>)[] = [];
+  async function startDeadline(link: ReturnType<typeof connectBridge>
+    | Awaited<ReturnType<typeof connectBridge>>) {
+    const dbs = await databases();
+    const db = pgDb(dbs.queue);
+    async function connection() {
+      const connected = await link;
+      return { ...connected, connectionId: 1 };
+    }
+    function connectionId() { return 1; }
+    const logger = createLogger('deadline-test');
+    const watchOptions = { ...options, db };
+    const refused = new Set<string>();
+    const processor = assistantProcessor(watchOptions, computer.issuer, refused,
+      connection, connectionId, logger);
+    const createdAt = new Date().toISOString();
+    const session = { conversationId: 'chat', assistantId: 'assistant',
+      createdBy: 'alice', mode: 'agent_session' as const, assistantKind: 'personal' as const,
+      createdAt };
+    processor.forgetMissing([session]);
+    const abort = new AbortController();
+    const watching = processor.watchControls(abort.signal);
+    let stopped = false;
+    async function stop() {
+      if (stopped) return;
+      stopped = true;
+      abort.abort();
+      await watching;
+      await dbs.close();
+    }
+    watchers.push(stop);
+    return stop;
+  }
   async function close() {
+    for (const stop of watchers) await stop();
     computer.finish('thread-1');
     for (const link of links) {
       link.socket.terminate();
@@ -93,7 +130,7 @@ async function setup(real = false, stopExecution?: (input: StopInput) => Promise
     await nats.close();
   }
   cleanup = close;
-  return { ...options, computer, frames, peers, ready, append, save, connect, close, url };
+  return { ...options, computer, frames, peers, ready, append, save, connect, startDeadline, close, url };
 }
 
 function quiet(changes = {}) {
@@ -772,3 +809,245 @@ async function requiresCurrentQuiet(changes: Record<string, unknown> | undefined
 it.each([undefined, { epoch: 'old-epoch' }, { preparingTurnIds: ['first'] },
   { runningTurnIds: ['first'] }, { loadedThreadIds: ['thread'] }, { heldApprovalIds: ['hold'] }])(
   'requires current empty bridge proof before complete root proof %j', requiresCurrentQuiet);
+
+async function heldProofDeadline(phase: 'requested' | 'pausing', elapsed: number,
+  deadlineWatching = true) {
+  let stops = 0;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function stop(input: StopInput) {
+    stops++;
+    entered.resolve();
+    await release.promise;
+    return stopped(input, { quietProof: 'complete' });
+  }
+  const test = await setup(true, stop);
+  await test.save();
+  const requested = await readComputerControl(test.store, test.silo, 'assistant');
+  if (!requested || requested.phase !== 'requested') throw new Error('Missing request');
+  const clock = takeoverClock(requested.requestedAt);
+  if (phase === 'pausing') {
+    const input = { computerId: 'computer', podUid: 'pod', generation: 1,
+      takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] };
+    await savePausing(test.store, test.silo, requested, requested.position,
+      'first-epoch', stopped(input));
+  }
+  const link = await test.connect();
+  const stopDeadline = await test.startDeadline(link);
+  await entered.promise;
+  if (!deadlineWatching) await stopDeadline();
+  try {
+    clock.advance(elapsed);
+    if (elapsed >= 30_000 && deadlineWatching) await waitForControl(test.store, 'failed');
+  } finally {
+    release.resolve();
+    await link.control.settled();
+  }
+  const expected = elapsed < 30_000 ? 'paused' : 'failed';
+  await waitForControl(test.store, expected);
+  clock.advance(60_000);
+  await delay(300);
+  await link.control.send();
+  await link.control.settled();
+  const sends = vi.spyOn(link.socket, 'send');
+  const rebuilt = computerSummary.empty();
+  const outcomes = [];
+  for await (const row of test.store.readStream('computer-assistant')) {
+    computerSummary.add(rebuilt, row);
+    if (row.event.type === 'takeover.paused' || row.event.type === 'takeover.failed') {
+      outcomes.push(row.event.type);
+    }
+  }
+  expect(sends).not.toHaveBeenCalled();
+  expect(stops).toBe(1);
+  expect(rebuilt.control?.phase).toBe(expected);
+  expect(outcomes).toEqual([`takeover.${expected}`]);
+  await refusesLateWork(test.computer, link.socket);
+  await expect(test.computer.channel.renew('thread-1')).rejects.toThrow('Turn ended');
+  expect(test.computer.grants.size).toBe(0);
+}
+it.each([['requested', 30_000, true], ['pausing', 29_999, true], ['pausing', 30_000, true],
+  ['pausing', 30_001, true], ['pausing', 30_000, false]] as const)(
+  'enforces the deadline with held %s proof at %i ms and deadline watcher: %s', heldProofDeadline);
+
+async function racesConditionalOutcomes(pausedFirst: boolean) {
+  const entered = Promise.withResolvers<void>();
+  const releaseProof = Promise.withResolvers<void>();
+  async function stop(input: StopInput) {
+    entered.resolve();
+    await releaseProof.promise;
+    return stopped(input, { quietProof: 'complete' });
+  }
+  const test = await setup(true, stop);
+  await test.save();
+  const requested = await readComputerControl(test.store, test.silo, 'assistant');
+  if (!requested || requested.phase !== 'requested') throw new Error('Missing request');
+  const clock = takeoverClock(requested.requestedAt);
+  const input = { computerId: 'computer', podUid: 'pod', generation: 1,
+    takeoverId: 'takeover', affectedTurnIds: ['first', 'second'] };
+  await savePausing(test.store, test.silo, requested, requested.position,
+    'first-epoch', stopped(input));
+  const paused = Promise.withResolvers<void>();
+  const failed = Promise.withResolvers<void>();
+  const releasePaused = Promise.withResolvers<void>();
+  const releaseFailed = Promise.withResolvers<void>();
+  const append = test.store.append.bind(test.store);
+  async function barrier(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'takeover.paused') {
+      paused.resolve();
+      await releasePaused.promise;
+    }
+    if (event.type === 'takeover.failed') {
+      failed.resolve();
+      await releaseFailed.promise;
+    }
+    return append(command);
+  }
+  vi.spyOn(test.store, 'append').mockImplementation(barrier);
+  const link = await test.connect();
+  await test.startDeadline(link);
+  await entered.promise;
+  try {
+    clock.advance(29_999);
+    releaseProof.resolve();
+    await paused.promise;
+    clock.advance(30_000);
+    await failed.promise;
+    if (pausedFirst) {
+      releasePaused.resolve();
+      await link.control.settled();
+    }
+    releaseFailed.resolve();
+    await waitForControl(test.store, 'failed');
+  } finally {
+    releaseProof.resolve();
+    releaseFailed.resolve();
+    releasePaused.resolve();
+    await link.control.settled();
+  }
+  const outcomes = [];
+  for await (const row of test.store.readStream('computer-assistant')) {
+    if (row.event.type === 'takeover.paused' || row.event.type === 'takeover.failed') {
+      outcomes.push(row.event.type);
+    }
+  }
+  expect(outcomes).toEqual(['takeover.failed']);
+}
+it.each([false, true])(
+  'keeps failure when conditional writes race; release paused first: %s',
+  racesConditionalOutcomes);
+
+async function reconnectKeepsDeadline() {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let hold = false;
+  async function stop(input: StopInput) {
+    if (hold) {
+      entered.resolve();
+      await release.promise;
+    }
+    return stopped(input);
+  }
+  const test = await setup(true, stop);
+  await test.save();
+  const requested = await readComputerControl(test.store, test.silo, 'assistant');
+  if (!requested || requested.phase !== 'requested') throw new Error('Missing request');
+  const clock = takeoverClock(requested.requestedAt);
+  const first = await test.connect();
+  await waitForControl(test.store, 'pausing');
+  first.socket.terminate();
+  await first.settled();
+  clock.advance(15_000);
+  hold = true;
+  const reconnected = await test.connect();
+  await test.startDeadline(reconnected);
+  try {
+    await entered.promise;
+    clock.advance(30_000, -60_000);
+    await waitForControl(test.store, 'failed');
+  } finally {
+    release.resolve();
+    await reconnected.control.settled();
+  }
+}
+it('does not renew the original monotonic limit when the bridge reconnects',
+  reconnectKeepsDeadline);
+
+async function outageKeepsActiveWorkDenied() {
+  const stopping = Promise.withResolvers<void>();
+  const releaseStop = Promise.withResolvers<void>();
+  const releaseReplay = Promise.withResolvers<void>();
+  async function stop(input: StopInput) {
+    stopping.resolve();
+    await releaseStop.promise;
+    return stopped(input);
+  }
+  const test = await setup(true, stop, true);
+  expect(test.computer.grants.has('thread-1')).toBe(true);
+  await test.save();
+  const requested = await readComputerControl(test.store, test.silo, 'assistant');
+  if (!requested || requested.phase !== 'requested') throw new Error('Missing request');
+  const clock = takeoverClock(requested.requestedAt);
+  const head = test.store.head.bind(test.store);
+  async function holdReplay(...args: Parameters<typeof head>) {
+    if (args.length === 0) await releaseReplay.promise;
+    return head(...args);
+  }
+  vi.spyOn(test.store, 'head').mockImplementation(holdReplay);
+  const append = test.store.append.bind(test.store);
+  const attempted = Promise.withResolvers<void>();
+  let unavailable = true;
+  async function failedAppend(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (unavailable && event.type === 'takeover.failed') {
+      attempted.resolve();
+      throw new Error('Event store unavailable');
+    }
+    return append(command);
+  }
+  vi.spyOn(test.store, 'append').mockImplementation(failedAppend);
+  const connecting = test.connect();
+  await test.startDeadline(connecting);
+  try {
+    await stopping.promise;
+    clock.advance(30_000);
+    await attempted.promise;
+    expect((await readComputerControl(test.store, test.silo, 'assistant'))?.phase)
+      .toBe('requested');
+    await expect(test.computer.channel.renew('thread-1')).rejects.toThrow('Turn ended');
+    expect(test.computer.grants.size).toBe(0);
+    unavailable = false;
+    await waitForControl(test.store, 'failed');
+  } finally {
+    releaseStop.resolve();
+    releaseReplay.resolve();
+    const link = await connecting;
+    link.socket.terminate();
+    await link.settled();
+  }
+}
+it('keeps an active turn renewal denied during failure append outage and then saves failure',
+  outageKeepsActiveWorkDenied);
+
+async function expiresBeforeStop() {
+  const stops: StopInput[] = [];
+  function stop(input: StopInput) {
+    stops.push(input);
+    const proof = { quietProof: 'complete' };
+    const report = stopped(input, proof);
+    return Promise.resolve(report);
+  }
+  const test = await setup(false, stop);
+  await test.save();
+  const request = await readComputerControl(test.store, test.silo, 'assistant');
+  if (!request || request.phase !== 'requested') throw new Error('Missing request');
+  const link = await test.connect();
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(request.requestedAt) + 30_000);
+  link.control.receive(quiet());
+  await link.control.settled();
+  expect(stops).toEqual([]);
+  expect((await readComputerControl(test.store, test.silo, 'assistant'))?.phase).toBe('failed');
+}
+it('expires an accepted receipt before calling root stop without a deadline watcher',
+  expiresBeforeStop);

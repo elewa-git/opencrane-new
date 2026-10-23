@@ -1,4 +1,5 @@
-import { savePausing, savePaused, type StopExecution } from './bridge-pausing.ts';
+import { savePausing, savePaused, saveFailed, type StopExecution } from './bridge-pausing.ts';
+import { pauseTimeRemaining } from './bridge-pause-time.ts';
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
@@ -115,6 +116,7 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
       const position = await options.store.head(subject);
       const control = await readComputerControl(options.store, options.silo, computer.assistantId);
       if (!control || control.phase === 'unverified') return false;
+      pauseTimeRemaining(options.store, options.silo, control);
       const saved = await facts(options, computer);
       if (!tokens) throw new Error('Bridge issuer unavailable');
       const binding = requireReadyControl(control, saved, computer);
@@ -187,12 +189,20 @@ async function advance(options: Options, computer: Computer,
   if (!control || control.phase === 'unverified' || control.podUid !== podUid) return;
   if (control.phase !== 'requested'
     && !(control.phase === 'pausing' && accepted.type === 'bridge_quiet')) return;
+  if (pauseTimeRemaining(options.store, options.silo, control) === 0) {
+    await saveFailed(options.store, options.silo, control, position);
+    return;
+  }
   const saved = await facts(options, computer);
   const binding = requireReadyControl(control, saved, computer);
   if (!matchesReceipt(accepted, binding, undefined)) return;
   const input = { computerId: computer.computerId, podUid: control.podUid, ...binding };
   const report = await options.stopExecution(input);
   if (!stillAccepted()) return;
+  if (pauseTimeRemaining(options.store, options.silo, control) === 0) {
+    await saveFailed(options.store, options.silo, control, position);
+    return;
+  }
   if (control.phase === 'requested') {
     await savePausing(options.store, options.silo, control, position, accepted.epoch, report);
   } else {

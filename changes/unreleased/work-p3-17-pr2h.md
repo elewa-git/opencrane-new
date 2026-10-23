@@ -1,0 +1,2 @@
+- Take-control attempts now keep their original thirty-second pause limit when a computer is unavailable, a connection stalls or proof arrives late. Expired attempts keep new work blocked and save one failure when the event log is available. Desktop control remains switched off.
+- Queued pause writes now stop at the same deadline. Finished requests release their background checks, and a blocked timeout write logs one safe warning. A fresh server still depends on its wall clock when reconstructing an earlier request.

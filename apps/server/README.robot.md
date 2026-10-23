@@ -3433,10 +3433,36 @@ saved pausing, a current connection's empty bridge proof and a fresh complete ro
 receipt with the saved supervisor epoch. Invalid or missing proof saves no pause.
 Both outcomes use the pausing command's deterministic id and read-back pattern;
 both block work. Failed is allowed only from requested or pausing, with reason
-`pause_timeout`. PR 2h will call it from the 30-second deadline runner, including
-when the bridge or computer is down; that runner and its race/clock/outage tests
-are deferred by the size split. PR 2h also cancels saved approvals and releases
-unadmitted reservations at zero through the existing commands, once.
+`pause_timeout`. `bridge-deadline.ts` runs independently of connection, stop and
+proof waits, including when there is no ready computer. It uses the saved request
+time plus thirty seconds, capped by thirty seconds from the server's first
+monotonic observation. Polls and reconnects share that observation. Clock changes
+can shorten an observed limit but cannot extend it. A fresh store or server loses
+that monotonic observation. It reads the original saved time and fails immediately
+if the wall clock says the request has expired. If that clock moved backwards before
+the new server's first observation, it can allow up to thirty more seconds. This is
+a first-observation cap, not a guarantee across restarts with clock rollback. The worker reuses saved control facts
+until the computer stream changes, but checks the deadline on every poll. Shutdown
+stops the deadline checks. Only requested or pausing control starts a deadline task.
+Each assistant has at most one such task. Removing a chat from discovery keeps its
+active task until the request ends. Completion removes the task and its saved clock
+observation. Assistants without pending control use only ordinary snapshot polling.
+
+The proof path checks the same limit before root stop and after its reply. Pausing
+and paused appends carry that limit into the event store's publish attempts and
+retry waits. A queued append released at expiry cannot publish, even if the failure
+append has not run yet. Conditional writes prevent a delayed proof from replacing
+a saved failure. The store cannot withdraw a publish already sent to NATS. An append outage
+keeps work denied and retries only the original deterministic failure transition.
+Read-back and current saved status prevent duplicate failures after lost replies.
+A deadline task logs `Takeover deadline check unavailable; work remains blocked`
+once if reading or saving fails. It includes no request, receipt or upstream error
+contents. Further attempts in that task do not repeat the warning.
+Tests hold connections and proofs, move both clocks, race conditional writes, and
+restart after an append outage or lost reply beyond the NATS duplicate window.
+They also check unchanged terminal records and work/renewal refusal.
+Approval cancellation, zero release of unadmitted reservations and row 1c refusal
+auditing remain the next part. Native execution and writer requests stay off.
 Writer access, leases and full recovery remain later work. The access
 checks are unchanged. `bridge-gate.test.ts` also covers refusal and lost append replies;
 `supervisor-stop.test.ts` checks real executor children and restart denial.
@@ -3972,3 +3998,70 @@ upgrade, reviews stay incomplete until the inventory index has been rebuilt.
 Reviews use indexed history changes and report incomplete results when new
 streams have not been checked. Unrelated read receipts do not require reading
 the event log.
+
+## Takeover timeout checks, 23 October 2026
+
+These are local checks with disposable NATS, OpenFGA and PostgreSQL 17.6 fixtures,
+not a fresh installation. Test commands use `nice -n 10`, one worker and
+`PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:55799/postgres`.
+
+- Expected FAIL: releasing the queued pause append first at thirty seconds saved
+  paused instead of failed. The test was committed before the append fix.
+- Expected FAIL: forgotten assistants kept polling after completion; timeout append
+  outages produced no warning; an observation could remain after a request ended
+  before its watcher started. Each regression was committed before its fix.
+- PASS: nine separate guard removals caused assertion failures. These covered the
+  first-observation cap, invalid dates, cached history, shutdown after a read,
+  polling sleep, observation removal, terminal phases, single-watcher registration
+  and expiry before root stop. Each guard was restored after its check.
+- PASS: 640 tests across bridge-control, bridge-gate, bridge-deadline, bridge-pausing,
+  bridge-replay and the unchanged event security tests, before the final observation
+  cleanup.
+- PASS: all 126 tests in the three changed test files twice on `ca1c12f47`.
+  Both runs used one worker. The later cleanup edit only names the map before
+  deleting its entry; it changes no condition or deadline. All ten deadline tests
+  and targeted lint passed again after that readability edit.
+- PASS: repository typecheck, the repeated server typecheck after correcting the
+  shared test helper, and the event catalogue check with 149 matching types.
+- PASS: full lint, including Knip, dependency checks, Markdown, links, fixture and
+  licence checks, and changelog validation. ESLint reported zero errors and 24
+  existing warnings about long functions.
+- PASS: the completed rebase onto `58d781331`. Comparing the feature patch before
+  and after the second rebase found identical bytes. Main's manual Stop test and
+  `suspendComputer` import are preserved.
+- FAIL, then corrected: the first focused guard run had two fixture errors. The
+  first lint found three test-helper errors. The first server typecheck after that
+  helper change needed a check that the recorded context was a Map. Assertions and
+  production checks were not relaxed.
+- NOT RUN: the full root suite and fresh-install qualification.
+
+The tests with adjusted clocks simulate append outages. They do not establish shutdown
+bounds during a real read outage or already blocked connection work.
+Local logs use `/tmp/p3-17-pr2h-`: `red-race.log`, `red-retire.log`, `red-log.log`,
+`red-finished.log`, `mutations.log`, `tests-1.log`, `typecheck.log`,
+`typecheck-server-corrected.log`, `events.log`, `lint-final.log`, `tests-2.log`
+`tests-3.log`, `deadline-last.log` and `lint-last.log`.
+The disposable PostgreSQL container and its volume were removed after the checks.
+
+## Exact clock values in timeout tests, 23 October 2026
+
+The test clock starts at an integer millisecond value. This keeps subtraction
+exact for the strict thirty-second boundary checks. Production code is unchanged.
+A temporary fractional start of `2768.001` reproduced the failure with
+`30000.000000000004` instead of `30000`; the temporary change was removed.
+
+Own checks after rebasing onto `9a885e7f9`:
+
+- PASS: the future-time and clock-rollback test passed 50 consecutive separate runs.
+  Its exact assertions still require 30,000 ms, 1 ms and 0 ms at the same boundaries.
+- PASS: all 126 tests in `bridge-control`, `bridge-gate` and `bridge-deadline`
+  passed twice with one worker and the requested local PostgreSQL URL.
+- PASS: typecheck, event catalogue, Knip and changelog checks.
+- FAIL then fixed: full lint found a missing blank line between retained notes
+  after the rebase. Code, dependency and unused-code checks had passed.
+- PASS: documentation, local links, fixtures, package licences and changelog lint
+  after the blank-line fix. All stages of the lint command have now passed.
+
+Every check used `nice -n 10`. Logs use `/tmp/p3-17-pr2h-clock-fix`, including
+`repeat-1.log` through `repeat-50.log` in the directory of that name.
+Full root suite and fresh-install qualification: NOT RUN. The PR remains a draft.
