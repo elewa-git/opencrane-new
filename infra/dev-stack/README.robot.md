@@ -847,6 +847,11 @@ file access. Receipts and screenshots go to `docs/process/p3-18-live/`.
 is applying. It retries within its existing two-minute delivery limit. HTTP 200
 still requires exactly one clean upload; an empty list remains a failure.
 
+`demo-prepare.ts` also retries HTTP 425 with `{status: "applying"}` within its
+existing two-minute delivery limit. It waits for the saved PDF to appear as delivered
+and does not upload it again. `demo-prepare.test.ts` checks two applying replies after
+a lost upload reply, followed by delivery, while keeping the exact write assertions.
+
 The browser starts a draft, attaches `project.pdf` through the native file picker,
 waits for delivery, previews the promoted original and asks for its project code.
 The question does not contain the answer. The stub uses the inline MarkItDown text

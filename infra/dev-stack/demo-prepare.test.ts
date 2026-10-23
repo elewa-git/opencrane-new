@@ -11,6 +11,7 @@ async function recordingRun(hideReceipts: boolean, hideConversationReceipt = fal
   const ceilingWrites: number[] = [];
   const receipts = new Map<string, unknown>();
   let uploaded = false;
+  let applyingReads = 0;
   let ceilingCents = 2000;
   async function respond(request: IncomingMessage, response: ServerResponse) {
     assert.equal(request.headers.cookie, 'synthetic-session');
@@ -50,6 +51,13 @@ async function recordingRun(hideReceipts: boolean, hideConversationReceipt = fal
     if (path === '/api/org/models') result = { budget: { sequence: 2, ceilingCents,
       dailyCeilingCents: ceilingCents, todayCents: 0, monthCents: 0, reservedCents: 0,
       defaultPayingGroupId: 'company', periodStart: null, ceilings: [] } };
+    if (path.endsWith('/files') && uploaded && applyingReads < 2) {
+      applyingReads++;
+      response.statusCode = 425;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ status: 'applying' }));
+      return;
+    }
     if (path.endsWith('/files')) result = { rows: uploaded
       ? [{ name: 'supplier.pdf', status: 'delivered', textPath: 'uploads/demo/supplier.pdf.md' }]
       : [] };
@@ -97,6 +105,7 @@ async function recordingRun(hideReceipts: boolean, hideConversationReceipt = fal
       return;
     }
     await prepareDemo(options, 700);
+    assert.equal(applyingReads, 2);
     await prepareDemo(options, 700);
     assert.deepEqual(writes, ['/api/org/models', '/api/conversations',
       '/api/conversations/demo-supplier-v1/files']);

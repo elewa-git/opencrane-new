@@ -1355,6 +1355,11 @@ and check the immediate read before and after running it. They also keep old
 content unavailable to prove that the list uses projected history. The unchanged
 100,000-message tests check personal and child readers during unrelated turns.
 
+`test/upload.test.ts` retries only HTTP 425 with `{status: "applying"}`, for up to
+five seconds. It runs the files worker between attempts because the fixture has no
+background worker. The saved-file assertions stay unchanged. The held scan stays
+blocked through the list check, so that check still proves unscanned files are absent.
+
 The [upload API](../../docs/architecture/upload-api.md) documents raw-byte POST
 and replayable GET on `/api/conversations/:conversationId/files`. Enable it with
 the chat configuration, `MINIO_URL` and `MINIO_CREDENTIALS_FILE` (a rotating,
