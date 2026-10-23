@@ -1,0 +1,1 @@
+- PDF checks with the free model stand-in read the converted file when inline text is missing, and use the file read's result to answer.

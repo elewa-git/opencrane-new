@@ -18,7 +18,7 @@ flowchart LR
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
   stack -->|sets up or checks test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
-  stack -->|starts programs and checks website readiness| apps["apps/server, ops, web<br/>OpenCrane programs"]
+  stack -->|starts programs, checks website readiness and PDF answers using attached text or a file read| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
   stack -->|checks uploads, provider access, tool reviews and group access loss| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
@@ -44,6 +44,7 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
   package run.
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
+  Read the converted PDF if the text sent with the question lacks the requested fact.
 - Connect and test that provider as the Owner before a fresh stack starts its chat checks.
 - Optionally use a real OpenAI provider on a spare stack, with a separate paid chat check.
 - Allow an explicit owner real-provider start from an interactive terminal, while refusing fleet tasks.
