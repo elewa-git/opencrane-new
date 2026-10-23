@@ -1090,9 +1090,12 @@ async function preparesColdRecallAuthority(subject: string) {
     }
     yield* originalRead(...args);
   }
-  const dates = vi.spyOn(Date, 'now').mockImplementation(dateNow);
-  const times = vi.spyOn(performance, 'now').mockImplementation(performanceNow);
-  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  const dates = vi.spyOn(Date, 'now');
+  dates.mockImplementation(dateNow);
+  const times = vi.spyOn(performance, 'now');
+  times.mockImplementation(performanceNow);
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(readStream);
   try {
     await recalledRemember('cold-recall-authority');
     expect(coldRead).toBe(true);
@@ -2254,7 +2257,8 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
 async function prepareMemoryAccess() {
   // Finish cold event and IAM reads before issuing the control's two-second pass.
   const deadline = performance.now() + 10_000;
-  await readActiveMember(setup.nats.store, setup.binding, 'alice', 'member', setup.auth.applied);
+  const checkApplied = setup.auth.applied.bind(setup.auth);
+  await readActiveMember(setup.nats.store, setup.binding, 'alice', 'member', checkApplied);
   const resources = [
     { resourceType: 'mcp_server', resourceId: 'memory' },
     { resourceType: 'memory_read', resourceId: scopeId },
