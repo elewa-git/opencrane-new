@@ -47,8 +47,9 @@ async function load(options: Options, memberId: string, value: unknown) {
   let source: StoredEvent | undefined;
   let intent: StoredEvent | undefined;
   let sequence = 0;
+  let closed = false;
   for (const row of rows) {
-    if (row.event.type === 'conversation.closed') throw new ChildRequestClosed('Conversation closed');
+    if (row.event.type === 'conversation.closed') closed = true;
     if (row.event.subject === `conversation-${input.conversationId}`) sequence = row.sequence;
     if (row.event.id === input.sourceMessageId) source = row;
     if (row.event.id === intentId) intent = row;
@@ -61,7 +62,7 @@ async function load(options: Options, memberId: string, value: unknown) {
   }
   requireOwnSource(source, input, memberId);
   const failed = childStartFailure(rows, intentId) !== undefined;
-  return { input, source, intent, sequence, failed, rows };
+  return { input, source, intent, sequence, failed, closed, rows };
 }
 function requireOwnSource(source: StoredEvent | undefined, input: Input, memberId: string)
   : asserts source is StoredEvent {
@@ -107,7 +108,8 @@ async function check(options: Options, memberId: string, loaded: Loaded,
     initialJoins.push({ participantId, parentJoinEventId: access.joinEventId,
       parentJoinPosition: access.joinPosition });
   }
-  if (await participationClosed(options.store, options.silo, input.conversationId,
+  // Reveal closure only after checking current access and source visibility.
+  if (loaded.closed || await participationClosed(options.store, options.silo, input.conversationId,
     deadline)) throw new ChildRequestClosed('Conversation closed');
   await fresh?.();
   requireUnfailed(loaded);

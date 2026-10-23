@@ -107,7 +107,8 @@ A member can review a child chat from their own group message, then save its fir
 The requester can retry a saved start failure, up to three attempts. A background worker
 completes missing child creation and first input after a restart or retry.
 It checks the saved request and current permissions each time. These children stay queued;
-they cannot start assistant work yet.
+they cannot start assistant work yet. Retry replies check current access before reporting
+that the parent chat is closed.
 
 Owners and admins can read whether a saved publication is Applying, Ready, Disabled
 or Unknown. Ready requires matching saved gateway and server receipts. Checking a
