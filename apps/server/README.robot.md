@@ -4649,3 +4649,40 @@ plus the original replacement and four revocation cases, 8/8 after the fixes.
 The rebase onto `e2b562359` retained both sides of three documentation conflicts.
 This follow-up adds only test and documentation changes. The full root suite and
 fresh-install qualification remain NOT RUN.
+
+### Three consecutive runs, 23 October 2026
+
+The replacement load gate sampled 4.34 at 17:31:31 UTC, so no minute-long wait
+was needed. All three runs used the same test source, `e2b9a50e5`, one worker,
+`nice -n 10` and a throwaway PostgreSQL 17.6 database through `PG_TEST_URL`.
+The later commits only record these results.
+
+| Run | One-minute load at start | Own result | Failed controls |
+| --- | --- | --- | --- |
+| 1 | 4.34 | FAIL: 134/136 | Personal recall before the two team-assistant loaded-reference checks. |
+| 2 | 7.15 | FAIL: 126/136 | Ten initial Correct or Forget controls before grant, policy, scope, target-proof and operation checks. |
+| 3 | 17.37 | FAIL: 135/136 | Team-scoped assistant-notes recall. |
+
+The runs were consecutive. Load rose during run 2; a separate sample was 18.69.
+The initial below-eight sample does not mean the machine stayed below eight.
+Both cases named in the fix request, all cold-read preparation regressions and all
+three new timing regressions passed in each run. The remaining failures still
+make the three-run gate FAIL.
+
+Every failure happened in a valid control after signing. `recalledRemember` and
+`changeRequest` finish their preparation before signing; `scopedRecall` uses the
+real gateway's signed request. Code inspection places the remaining cold backend
+history, scope and IAM reads inside the original pass. The public generic refusal
+does not identify the exact slow check. These results establish failed controls,
+not successful attack checks or unauthorised access. No request was retried and
+no product deadline or access check was changed.
+
+PASS: full lint, full typecheck after correcting one test claim access, the event
+catalogue with 152 types, Knip and changelog validation. Full lint reported zero
+errors and 25 existing length warnings. The corrected test also passed targeted lint.
+The first typecheck failed on the new helper's property access; its full rerun passed.
+PASS: memory proof and context suites, 106/106 twice. PASS: unchanged event security
+rules, 438/438 once. Logs and JSON reports use `/tmp/p4-15-pr2f-finish-`.
+PASS: the changed memory-dispatch case, 1/1 in each of two runs; the other 92
+cases were not selected. The throwaway database container and its volume were removed.
+The full root suite and fresh-install qualification remain NOT RUN. The PR stays draft.
