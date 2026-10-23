@@ -1677,3 +1677,9 @@ the live journey supplies the real browser and server evidence.
 The transfer check also matches the command id from the current browser request.
 Its failing-first test showed that an earlier appointment of the same person could
 otherwise stand in for a missing appointment in a saved-data run.
+
+The first fresh run on `975f73474` stopped after the ownership appointment was
+accepted. Its Check status button disappeared between a count and an enabled
+check. A failing-first test reproduced that browser race. The read-only status
+control is now checked and activated in one browser operation. This adds no wait
+or write retry. A browser fixture also checks disabled and removed controls.

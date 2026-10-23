@@ -1239,10 +1239,19 @@ async function waitForOwnershipTransfer(page: Page, successorId: string): Promis
   throw new Error('The reviewed ownership transfer did not finish applying within two minutes.');
 }
 
-async function clickStatusWhenEnabled(button: Locator): Promise<boolean> {
-  if (!(await button.count())) return false;
-  if (!(await button.isEnabled())) return false;
-  await button.click();
+export async function clickStatusWhenEnabled(button: Locator): Promise<boolean> {
+  // Check and activate this read-only control together; completion can remove it at any time.
+  return await button.evaluateAll(clickEnabledStatusButton);
+}
+
+function clickEnabledStatusButton(elements: Element[]): boolean {
+  const button = elements[0];
+  if (!button) return false;
+  if (elements.length !== 1 || !(button instanceof HTMLButtonElement)) {
+    throw new Error('Expected one status button');
+  }
+  if (button.disabled) return false;
+  button.click();
   return true;
 }
 

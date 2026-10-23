@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Page } from 'playwright';
+import { chromium, type Page } from 'playwright';
 import { qualifyOwnershipTransfer, type Phase4Assertion } from './browser-phase4.ts';
 
 async function refusesAnAdminFixture() {
@@ -137,3 +137,63 @@ async function doesNotReuseAnEarlierTransfer() {
 
 test('saved-data evidence cannot use an earlier ownership transfer as the current result',
   doesNotReuseAnEarlierTransfer);
+
+async function toleratesAStatusControlThatHasGone() {
+  const { clickStatusWhenEnabled } = await import('./browser-phase4.ts');
+  async function count() {
+    return 1;
+  }
+  async function isEnabled() {
+    throw new Error('The status button was removed after the count');
+  }
+  async function evaluateAll(check: (elements: Element[]) => boolean) {
+    return check([]);
+  }
+  const button = { count, isEnabled, evaluateAll } as unknown as import('playwright').Locator;
+  assert.equal(await clickStatusWhenEnabled(button), false,
+    'A completed change may remove its read-only status control');
+}
+
+test('a status control that disappears after completion does not fail the journey',
+  toleratesAStatusControlThatHasGone);
+
+
+async function activatesOnlyAnAvailableStatusControl() {
+  const { clickStatusWhenEnabled } = await import('./browser-phase4.ts');
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<button disabled>Check status</button><output>0</output>');
+    await page.evaluate(installStatusCounter);
+    const control = page.getByRole('button', { name: 'Check status', exact: true });
+    assert.equal(await clickStatusWhenEnabled(control), false);
+    assert.equal(await page.locator('output').innerText(), '0');
+    await page.evaluate(enableStatusControl);
+    assert.equal(await clickStatusWhenEnabled(control), true);
+    assert.equal(await page.locator('output').innerText(), '1');
+    assert.equal(await clickStatusWhenEnabled(control), false);
+  } finally {
+    await browser.close();
+  }
+}
+
+function installStatusCounter() {
+  const button = document.querySelector('button');
+  const output = document.querySelector('output');
+  if (!button || !output) throw new Error('The status fixture is missing');
+  function recordClick() {
+    if (!button || !output) throw new Error('The status fixture was removed too early');
+    output.textContent = String(Number(output.textContent) + 1);
+    button.remove();
+  }
+  button.addEventListener('click', recordClick);
+}
+
+function enableStatusControl() {
+  const button = document.querySelector('button');
+  if (!button) throw new Error('The status control is missing');
+  button.disabled = false;
+}
+
+test('status checks ignore disabled or removed controls and activate an available control once',
+  activatesOnlyAnAvailableStatusControl);
