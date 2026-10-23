@@ -2,8 +2,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { getEventDefinition, routineDefinitionSchema,
-  type EventEnvelope } from '@opencrane/events';
+import type { EventEnvelope } from '@opencrane/events';
+import { routine, joinedMember } from './routine-fixture.ts';
 import { createStore, memberAuthorisation, rebuildMembers } from '../src/index.ts';
 import { objectId, TupleClient, type Binding } from '../src/client.ts';
 import { openfga } from './services.ts';
@@ -13,39 +13,6 @@ function noSql(): never {
 }
 const db = { query: noSql };
 const exec = promisify(execFile);
-
-function routine(type: string, ownerId = 'alice', id = type): EventEnvelope {
-  const saved = getEventDefinition('routine.created')?.example;
-  if (typeof saved !== 'object' || !saved) {
-    throw new Error('Missing routine example');
-  }
-  const original = routineDefinitionSchema.parse(Reflect.get(saved, 'definition'));
-  const definition = { ...original, ownerId, ownerAdmissionId: `joined-${ownerId}` };
-  let data: unknown = { ...saved, definition, actorId: ownerId };
-  let actorId = ownerId;
-  if (type !== 'routine.created') {
-    actorId = 'admin';
-    const control = { version: 1, routineId: 'orders', definitionRevision: 2,
-      scheduleRevision: 1, controlRevision: 2, actorId, source: 'admin',
-      reason: 'admin_requested', affectedRun: null, next: null };
-    data = control;
-    if (type === 'routine.reassigned') {
-      data = { ...control, definition };
-    }
-  }
-  return { ...event(id, 'routine-orders', type), source: 'opencrane-server',
-    commandId: id, principal: { kind: 'human', id: actorId }, data };
-}
-
-function joinedMember(memberId: string): EventEnvelope {
-  const joined = event(`joined-${memberId}`, `member-${memberId}`);
-  let role = 'member';
-  if (memberId === 'admin') {
-    role = 'admin';
-  }
-  const data = { ...joined.data, role };
-  return { ...joined, data };
-}
 
 async function routinePermissions() {
   const nats = await natsFixture();
