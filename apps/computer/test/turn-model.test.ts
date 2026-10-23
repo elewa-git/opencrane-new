@@ -205,6 +205,8 @@ interface TerminalReasonCase {
 const terminalReasonCases: TerminalReasonCase[] = [
   { stop: true, status: 'interrupted', refusedTool: false, reason: 'stop_interrupted' },
   { stop: true, status: 'failed', refusedTool: false, reason: 'stop_interrupted' },
+  { stop: true, status: 'completed', refusedTool: false, reason: 'stop_interrupted' },
+  { stop: false, status: 'failed', refusedTool: false, reason: 'model_error' },
   { stop: false, status: 'interrupted', refusedTool: false, reason: 'model_error' },
   { stop: true, status: 'interrupted', refusedTool: true, reason: 'restricted_tool_refused' },
 ];

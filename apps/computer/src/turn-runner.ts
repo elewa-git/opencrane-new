@@ -93,6 +93,7 @@ function readAcknowledgedGrant(value: Record<string, unknown>,
 class TurnRunner {
   readonly gate = new BridgeGate();
   private preparingCount = 0;
+  private readonly stoppedTurns = new Set<string>();
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
   private readonly grantInstalls = new Map<string, { pending: number; terminal: boolean }>();
@@ -426,6 +427,7 @@ class TurnRunner {
     this.state.codexTurns.delete(turnId);
     this.turnModels.delete(turnId);
     this.state.cancelled.delete(turnId);
+    this.stoppedTurns.delete(turnId);
     this.state.refusedTools.delete(turnId);
     const session = this.state.sessions.get(turnId);
     this.state.sessions.delete(turnId);
@@ -460,6 +462,8 @@ class TurnRunner {
 
   private failTurn(input: Turn, reason: 'model_error' | 'stop_interrupted' = 'model_error') {
     if (!this.isFinished(input.id)) {
+      // Keep Stop when removing its connection makes Codex report a failure.
+      if (this.stoppedTurns.has(input.id)) reason = 'stop_interrupted';
       const extra: Partial<BridgeReport> = { reason };
       if (this.state.refusedTools.has(input.id)) extra.reason = 'restricted_tool_refused';
       this.appendReport(input, 'agent.turn_failed', extra);
@@ -624,6 +628,7 @@ class TurnRunner {
       return;
     }
 
+    if (!this.gate.closed) this.stoppedTurns.add(turnId);
     this.state.cancelled.add(turnId);
     const heldThread = this.findRunningThread(turnId);
     const endHolds = this.endTurnHolds.bind(this, heldThread);
@@ -748,9 +753,10 @@ class TurnRunner {
   private completeTurn(input: Turn, _threadId: string, params: Record<string, unknown>) {
     const turn = record(params['turn']);
     if (!this.confirmedTerminal(input, turn)) return;
-    if (this.state.refusedTools.has(input.id) || turn['status'] !== 'completed') {
+    if (this.stoppedTurns.has(input.id) || this.state.refusedTools.has(input.id)
+      || turn['status'] !== 'completed') {
       let reason: 'model_error' | 'stop_interrupted' = 'model_error';
-      // Require an interrupted end report: receiving Stop alone does not explain a failure.
+      // Keep the existing interrupted outcome for a computer-wide stop as well.
       if (turn['status'] === 'interrupted' && this.state.cancelled.has(input.id)) {
         reason = 'stop_interrupted';
       }

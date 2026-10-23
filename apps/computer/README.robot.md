@@ -13,16 +13,20 @@ It starts no process on import. Production code keeps using its existing start f
 
 ## Saved turn endings
 
-The runner reports `stop_interrupted` only when a cancelled turn receives an
-interrupted terminal report. Provider and preparation failures use `model_error`;
-a refused private tool keeps `restricted_tool_refused` even when Stop was also received.
-Receiving Stop alone does not change a provider failure into a stopped reply.
+The runner remembers a delivered Stop before removing the turn's access. Any later
+terminal report uses `stop_interrupted`, including a failed stream caused by removing
+its connection before Codex receives `turn/interrupt`. A completed report arriving
+in that interval also keeps Stop. Earlier failures keep `model_error`, even when their
+report reaches the server after its saved Stop request. A refused private tool keeps
+`restricted_tool_refused` even when Stop was also received. Computer-wide gates keep
+their existing terminal checks; they do not create a person-requested Stop.
 These values use the existing `reason` field. The journal retains them on replay.
 Restart recovery saves `bridge_restarted`, even if Stop was saved but not delivered.
 An execution-mode mismatch saves `model_error` before any work runs.
 `apps/server/test/recovery-stop.test.ts` drives the real journal, runner, report writer
-and transcript
-to check that the restart keeps “Reply failed” and partial text, live and after reload.
+and transcript to check both orders of Stop and model failure, plus an undelivered Stop
+followed by a restart. It checks the saved reason, kept text and label live and after
+reload. Removing access triggers the fixture's model failure before `turn/interrupt`.
 Older reports with no reason still use the server's `bridge_interrupted` default.
 `turn-model.test.ts` checks terminal causes and journal reload.
 
