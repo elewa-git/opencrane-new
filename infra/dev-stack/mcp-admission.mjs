@@ -1,8 +1,8 @@
 // Check defaulted Kubernetes fields against the reviewed template before admitting workloads.
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-const namespace = process.argv[2];
-if (!namespace || !/^[a-z0-9-]+$/.test(namespace)) throw new Error('Expected MCP namespace');
+import { mcpNamespace } from './mcp-namespace.mjs';
+const namespace = mcpNamespace(process.argv[2]);
 const templateUrl = new URL('../../apps/ops/mcp-hosted-template.json', import.meta.url);
 const template = JSON.parse(readFileSync(templateUrl));
 const worker = `request.userInfo.username == 'system:serviceaccount:${namespace}:mcp-lifecycle'`;

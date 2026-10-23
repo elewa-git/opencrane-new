@@ -1,10 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { isIPv4 } from 'node:net';
+import { mcpNamespace } from './mcp-namespace.mjs';
 
-const namespace = process.argv[2];
-if (!namespace || !/^[a-z0-9-]+$/.test(namespace) || !namespace.endsWith('-mcp')) {
-  throw new Error('Expected MCP namespace');
-}
+const namespace = mcpNamespace(process.argv[2]);
 function portNumber(value) {
   const port = Number(value);
   if (!/^\d+$/.test(value) || !Number.isInteger(port) || port < 1 || port > 65535) {
@@ -13,15 +10,34 @@ function portNumber(value) {
   return port;
 }
 function upstreamRule(binding) {
-  const [address, port, extra] = binding.split(':');
-  // Require one reviewed IPv4 address, never a hostname, subnet or link-local service.
-  const first = Number(address.split('.')[0]);
-  if (!isIPv4(address) || extra !== undefined || first === 0 || first === 127 ||
-      first >= 224 || address.startsWith('169.254.')) {
-    throw new Error('Expected a reviewed upstream IPv4 address');
+  const [kind, name, port, extra] = binding.split(':');
+  if (kind !== 'pod' || !name || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(name) ||
+      name.length > 63 || extra !== undefined) {
+    throw new Error('Expected an approved in-silo Pod binding: pod:name:port');
   }
-  return { to: [{ ipBlock: { cidr: `${address}/32` } }],
-    ports: [{ protocol: 'TCP', port: portNumber(port) }] };
+  const upstreamNamespace = namespace.slice(0, -4);
+  const upstreamPort = portNumber(port);
+  let upstream;
+  try {
+    const output = execFileSync('kubectl', ['--context=k3d-ocn', '-n', upstreamNamespace,
+      'get', 'pod', name, '-o', 'json'], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    upstream = JSON.parse(output);
+  } catch {
+    throw new Error('Could not check hosted MCP upstream ownership');
+  }
+  const metadata = upstream.metadata;
+  const uid = metadata?.uid;
+  // Bind approval to this Pod's UID so a replacement or reused IP inherits no permission.
+  if (!uid || metadata.name !== name || metadata.namespace !== upstreamNamespace ||
+      metadata.labels?.['opencrane.ai/mcp-upstream'] !== uid ||
+      metadata.deletionTimestamp || !upstream.spec || upstream.spec.hostNetwork === true) {
+    throw new Error('Expected an approved in-silo Pod');
+  }
+  const peer = {
+    namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': upstreamNamespace } },
+    podSelector: { matchLabels: { 'opencrane.ai/mcp-upstream': uid } },
+  };
+  return { to: [peer], ports: [{ protocol: 'TCP', port: upstreamPort }] };
 }
 const ingress = [];
 if (process.argv[3] !== undefined) {
@@ -31,8 +47,9 @@ if (process.argv[3] !== undefined) {
     namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': gatewayNamespace } },
     podSelector: { matchLabels: { app: 'opencrane-gateway' } },
   };
-  ingress.push({ from: [gateway],
-    ports: [{ protocol: 'TCP', port: portNumber(process.argv[3]) }] });
+  const rule = { from: [gateway],
+    ports: [{ protocol: 'TCP', port: portNumber(process.argv[3]) }] };
+  ingress.push(rule);
 }
 const bindings = process.argv.slice(4);
 const egress = bindings.map(upstreamRule);
