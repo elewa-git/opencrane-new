@@ -302,6 +302,7 @@ async function seedBusyAssistant() {
   await append(`assistant-${assistantId}`, 'assistant.created', {
     assistantId, kind: 'team', ownerId: 'group-00', name: 'Busy assistant',
   });
+  await project();
   const claim = getEventDefinition('computer.claimed')!.example;
   await append(`computer-${assistantId}`, 'computer.claimed', { ...claim, assistantId });
   const turns = [];
@@ -317,7 +318,6 @@ async function seedBusyAssistant() {
     }
   }
   await nats.seed(turns);
-  await project();
 }
 async function listsBusyAssistant() {
   const assistantId = 'z-busy';
@@ -342,7 +342,7 @@ function busyAssistantRegression() {
   it('lists an assistant with 1,001 computer events and observes later retirement',
     listsBusyAssistant);
 }
-describe('busy assistant choices', busyAssistantRegression);
+
 
 async function listsStoredGroupValues() {
   const longName = 'N'.repeat(201);
@@ -410,3 +410,5 @@ async function listsLongGroupName() {
   });
 }
 it('lists a saved 201-character group name', listsLongGroupName);
+
+describe('busy assistant choices', busyAssistantRegression);
