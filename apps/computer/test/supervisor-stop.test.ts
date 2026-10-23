@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { WebSocket } from 'ws';
 import { expect, it } from 'vitest';
 import { uploadComputer } from '../../server/test/support/upload-computer.ts';
+import { pauseBridgeCodex } from './pause-bridge-codex.ts';
 
 type Computer = Awaited<ReturnType<typeof uploadComputer>>;
 const attempt = {
@@ -11,6 +12,7 @@ const attempt = {
 };
 
 async function control(computer: Computer, input = attempt, uid = 0) {
+  await pauseBridgeCodex(computer);
   const script = `
 import { request } from 'node:http';
 process.setgroups([]);
@@ -326,6 +328,16 @@ while (true) {
     expect(before).toContain('/bin/cat');
     expect(before).toContain('setInterval');
     expect(before).toContain('app-server');
+    const bridgeCodexPid = await pauseBridgeCodex(computer);
+    const bridgeCodexStatus = await computer.read(`/proc/${bridgeCodexPid}/status`);
+    const bridgeCodexState = /^State:\s+([A-Zt])/mu.exec(bridgeCodexStatus)?.[1];
+    expect(bridgeCodexState).toBe('T');
+    const runningExecutors = await inventory(computer);
+    expect(runningExecutors).toContain('exec-server');
+    expect(runningExecutors).toContain('codex-code-mode-host');
+    expect(runningExecutors).toContain('/bin/cat');
+    expect(runningExecutors).toContain('setInterval');
+    expect(runningExecutors).toContain('app-server');
     if (failure) await computer.exec('rm', '/usr/bin/python3');
     let result = await boundControl(computer);
     if (failure) {
@@ -419,6 +431,7 @@ it('keeps executor admission closed when a crash leaves an unreadable gate',
   damagedGateStaysClosed, 60_000);
 
 async function boundControl(computer: Computer, changes = {}) {
+  await pauseBridgeCodex(computer);
   const helper = `
 import { spawnSync } from 'node:child_process';
 const result = spawnSync('node', ['--experimental-strip-types', '/app/src/stop-executor.ts'], {

@@ -66,6 +66,15 @@ nice -n 10 npm run test:image -w apps/computer
 nice -n 10 npm run typecheck -w apps/computer
 ```
 
+The image build requires the Linux Codex programs. A missing download stops the build
+before image checks begin.
+
+Repository CI builds a separate test image once for the tests that need it.
+The [CI test guide](../../scripts/ci/README.md) explains how those files are grouped.
+Supervisor tests pause the bridge's Codex process before checking stopped executors.
+Its background workers would otherwise change during the process check. The bridge,
+executors, private Codex processes and desktop keep running until the test stops them.
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): image settings, security limits and detailed checks.
