@@ -312,6 +312,7 @@ function runDownloadScenario(scenario: DownloadScenario): Promise<void> {
 const originalViewportWidth = globalThis.innerWidth;
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   history.replaceState({}, '', '/');
@@ -2097,3 +2098,182 @@ async function loadsChatWithDeliveredUpload(outcome: string) {
 }
 it.each(['saved', 'kept_existing'])(
   'loads the workspace with legacy rows and an upload with outcome %s', loadsChatWithDeliveredUpload);
+
+function replacementChatSocket() {
+  const send = vi.fn();
+  const socket: SocketLike = {
+    readyState: 1, onopen: null, onclose: null, onerror: null, onmessage: null,
+    send, close: vi.fn(),
+  };
+  return { socket, send };
+}
+
+async function retainsRateLimitedSession(viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  const chat = context.fixture.componentInstance['chat'];
+  context.setMessageStatus(0);
+  expect(await chat.send('An uncertain message')).toBe(false);
+  context.setMessageStatus(200);
+  context.fixture.componentInstance['draft'].set('Keep my draft');
+  context.socket.onopen?.(new Event('open'));
+  const toolHistory = runningToolRows();
+  const message = { ...toolHistory[0], position: 2 };
+  const tool = { ...toolHistory[1], position: 3 };
+  sendConversationRow(context.socket, message);
+  sendConversationRow(context.socket, tool);
+  await context.fixture.whenStable();
+  context.fixture.detectChanges();
+  const { socket: replacement, send } = replacementChatSocket();
+  context.socketFactory.mockReturnValue(replacement);
+  const posts = [...context.postBodies];
+  expect(posts).toHaveLength(1);
+  vi.useFakeTimers();
+  context.socket.onclose?.(new CloseEvent('close', { code: 1013, reason: 'rate limit' }));
+  context.fixture.detectChanges();
+  expect(chat.selected()).toBe('chat');
+  expect(chat['position']).toBe(3);
+  expect(chat.rows()).toHaveLength(3);
+  expect(context.fixture.componentInstance['draft']()).toBe('Keep my draft');
+  expect(context.root.textContent).toContain('screen.png');
+  expect(context.root.textContent).not.toContain('You no longer have access');
+  await vi.advanceTimersByTimeAsync(500);
+  replacement.onopen?.(new Event('open'));
+  context.fixture.detectChanges();
+  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({
+    type: 'subscribe', topic: 'conversation', conversationId: 'chat', since: 3, generation: 1,
+  }));
+  const finished = { id: 'finished', position: 4, type: 'agent.tool_call_finished',
+    time: '2026-10-04T10:02:00Z', data: { turnId: 'message', callId: 'tool-call-1',
+      serverId: 'fixture-erp', toolName: 'read_order' } };
+  const completed = { id: 'completed', position: 5, type: 'agent.message_completed',
+    time: '2026-10-04T10:03:00Z', data: { turnId: 'message', text: 'Order read once' } };
+  sendConversationRow(replacement, tool);
+  sendConversationRow(replacement, finished);
+  sendConversationRow(replacement, completed);
+  sendConversationReady(replacement, 'chat', 5);
+  context.fixture.detectChanges();
+  function rowPosition(row: ChatRow): number {
+    return row.position;
+  }
+  expect(chat.rows().map(rowPosition)).toEqual([1, 2, 3, 4, 5]);
+  expect(context.root.textContent).toContain('Order read once');
+  expect(context.fixture.componentInstance['draft']()).toBe('Keep my draft');
+  expect(chat.selected()).toBe('chat');
+  expect(chat['position']).toBe(5);
+  expect(context.postBodies).toEqual(posts);
+  expect(send).toHaveBeenCalledTimes(1);
+  context.fixture.destroy();
+}
+
+it.each([390, 1280])(
+  'retains a rate-limited session at %ipx and resumes without resending uncertain work',
+  retainsRateLimitedSession);
+
+async function purgesRevokedReconnect(refusal: string, viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  const chat = context.fixture.componentInstance['chat'];
+  context.fixture.componentInstance['draft'].set('Private waiting draft');
+  context.fixture.componentInstance['preview'].set('uploads/chat/screen/screen.png');
+  context.setReply(503);
+  await context.fixture.componentInstance['capture'].start('chat', []);
+  context.setMessageStatus(0);
+  await chat.send('Uncertain private message');
+  context.setMessageStatus(200);
+  const { socket: replacement } = replacementChatSocket();
+  context.socketFactory.mockReturnValue(replacement);
+  const oldReceive = context.socket.onmessage;
+  vi.useFakeTimers();
+  context.socket.onclose?.(new CloseEvent('close', { code: 1013, reason: 'rate limit' }));
+  context.fixture.detectChanges();
+  await vi.advanceTimersByTimeAsync(500);
+  replacement.onopen?.(new Event('open'));
+  context.fixture.detectChanges();
+  let releaseHistory: (response: Response) => void = () => undefined;
+  function holdResponse(resolve: (response: Response) => void): void {
+    releaseHistory = resolve;
+  }
+  const heldHistory = new Promise<Response>(holdResponse);
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Expected the workspace HTTP fixture');
+  function holdHistory(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    if (path.includes('/messages') && !init?.method) return heldHistory;
+    return originalFetch!(input, init);
+  }
+  vi.mocked(fetch).mockImplementation(holdHistory);
+  const refresh = chat.refresh();
+  const receive = replacement.onmessage;
+  if (refusal === '1008') {
+    replacement.onclose?.(new CloseEvent('close', { code: 1008 }));
+  } else {
+    const refused = { version: 1, topic: 'conversation', type: 'refused',
+      conversationId: 'chat', position: 1, generation: 1 };
+    receive?.(new MessageEvent('message', { data: JSON.stringify(refused) }));
+  }
+  releaseHistory(new Response(JSON.stringify({ rows: [screenshotRow(2)],
+    position: 2, generation: 1, computerState: 'ready' })));
+  await refresh;
+  const late = { version: 1, topic: 'conversation', type: 'event',
+    conversationId: 'chat', position: 3, generation: 1, row: screenshotRow(3) };
+  const lateEvent = new MessageEvent('message', { data: JSON.stringify(late) });
+  oldReceive?.(lateEvent);
+  receive?.(lateEvent);
+  await vi.advanceTimersByTimeAsync(1000);
+  context.fixture.detectChanges();
+  expect(context.root.textContent).toContain('You no longer have access');
+  expect(context.root.textContent).not.toContain('screen.png');
+  expect(chat.rows()).toEqual([]);
+  expect(chat.selected()).toBe('');
+  expect(chat['position']).toBe(0);
+  expect(chat['pending']).toBeUndefined();
+  expect(context.fixture.componentInstance['draft']()).toBe('');
+  expect(context.fixture.componentInstance['preview']()).toBe('');
+  expect(context.fixture.componentInstance['capture'].state()).toEqual({ phase: 'idle' });
+  expect(location.search).toBe('');
+  expect(context.socketFactory).toHaveBeenCalledTimes(2);
+  context.fixture.destroy();
+}
+
+const revokedReconnectScenarios = [
+  ['1008', 390],
+  ['1008', 1280],
+  ['refused', 390],
+  ['refused', 1280],
+] as const;
+
+it.each(revokedReconnectScenarios)(
+  'purges a session revoked during the rate-limit wait on %s at %ipx and ignores late replies',
+  purgesRevokedReconnect);
+
+async function cancelsReconnectAfterRefusedRead(viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  const chat = context.fixture.componentInstance['chat'];
+  context.fixture.componentInstance['draft'].set('Private draft during the wait');
+  context.socket.onopen?.(new Event('open'));
+  const oldReceive = context.socket.onmessage;
+  vi.useFakeTimers();
+  context.socket.onclose?.(new CloseEvent('close', { code: 1013, reason: 'rate limit' }));
+  context.fixture.detectChanges();
+  context.denyFeedRead();
+  await chat.refresh();
+  await vi.advanceTimersByTimeAsync(1000);
+  const late = { version: 1, topic: 'conversation', type: 'event',
+    conversationId: 'chat', position: 2, generation: 1, row: screenshotRow(2) };
+  oldReceive?.(new MessageEvent('message', { data: JSON.stringify(late) }));
+  context.fixture.detectChanges();
+  expect(context.socketFactory).toHaveBeenCalledTimes(1);
+  expect(context.root.textContent).toContain('You no longer have access');
+  expect(context.root.textContent).not.toContain('screen.png');
+  expect(chat.rows()).toEqual([]);
+  expect(chat.selected()).toBe('');
+  expect(chat['position']).toBe(0);
+  expect(context.fixture.componentInstance['draft']()).toBe('');
+  context.fixture.destroy();
+}
+
+it.each([390, 1280])(
+  'cancels the pending reconnect when a read reports revocation during the wait at %ipx',
+  cancelsReconnectAfterRefusedRead);

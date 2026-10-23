@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { once } from 'node:events';
 import type { FastifyInstance } from 'fastify';
 import { connect } from 'node:net';
 import { WebSocket } from 'ws';
@@ -79,9 +80,76 @@ describe('WebSocket upgrade requires a session', () => {
   let app: FastifyInstance | undefined;
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app?.close();
     app = undefined;
   });
+
+  async function authenticatedSocket() {
+    const started = await startServer();
+    app = started.app;
+    const headers = {
+      Origin: ALLOWED_ORIGIN,
+      Cookie: `${authConfig.cookieName}=${validSessionCookie()}`,
+    };
+    const socket = new WebSocket(started.url, { headers });
+    await once(socket, 'open');
+    return socket;
+  }
+
+  async function closesExcessTrafficRetryably(): Promise<void> {
+    const socket = await authenticatedSocket();
+    // Hold the window still while real frames travel through the authenticated connection.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+    const replies: string[] = [];
+    function recordReply(data: Buffer): void {
+      replies.push(data.toString());
+    }
+    function waitForClose(resolve: (close: { code: number; reason: string }) => void): void {
+      function closed(code: number, reason: Buffer): void {
+        resolve({ code, reason: reason.toString() });
+      }
+      socket.once('close', closed);
+    }
+    const closed = new Promise(waitForClose);
+    socket.on('message', recordReply);
+    try {
+      for (let index = 1; index <= 20; index++) {
+        socket.send(JSON.stringify({ type: 'hello', text: `allowed-${index}` }));
+      }
+      socket.send(JSON.stringify({ type: 'hello', text: 'excess message' }));
+      expect(await closed).toEqual({ code: 1013, reason: 'rate limit' });
+      expect(replies).toHaveLength(20);
+      expect(replies[0]).toContain('"text":"allowed-1"');
+      expect(replies[19]).toContain('"text":"allowed-20"');
+      expect(replies.join('\n')).not.toContain('excess message');
+    } finally {
+      socket.terminate();
+    }
+  }
+
+  it('closes the 21st message retryably before handling it', closesExcessTrafficRetryably);
+
+  async function acceptsFreshWindow(): Promise<void> {
+    const socket = await authenticatedSocket();
+    const windowStart = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(windowStart);
+    try {
+      for (const elapsed of [0, 1000]) {
+        clock.mockReturnValue(windowStart + elapsed);
+        for (let index = 1; index <= 20; index++) {
+          const received = once(socket, 'message');
+          socket.send(JSON.stringify({ type: 'hello', text: 'within limit' }));
+          await received;
+        }
+        expect(socket.readyState).toBe(WebSocket.OPEN);
+      }
+    } finally {
+      socket.terminate();
+    }
+  }
+
+  it('accepts twenty messages and another twenty in a new window', acceptsFreshWindow);
 
   it('refuses an upgrade with no session cookie at all, with 401, before completing it', async () => {
     const started = await startServer();

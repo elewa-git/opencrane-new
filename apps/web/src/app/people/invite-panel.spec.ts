@@ -4,12 +4,12 @@ import { invitationCommandSchema } from '@opencrane/protocol';
 import { InvitePanel } from './invite-panel';
 
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
-  configurable: true, value: function showModal(this: HTMLDialogElement): void {
+  configurable: true, writable: true, value: function showModal(this: HTMLDialogElement): void {
     this.setAttribute('open', '');
   },
 });
 Object.defineProperty(HTMLDialogElement.prototype, 'close', {
-  configurable: true, value: function close(this: HTMLDialogElement): void {
+  configurable: true, writable: true, value: function close(this: HTMLDialogElement): void {
     this.removeAttribute('open');
   },
 });
@@ -334,3 +334,26 @@ it.each(['Cancel', 'access loss'])('ignores an identity reply after %s', async (
   expect(requests.some((request) => request.url === '/api/invitations')).toBe(false);
   expect(root.querySelector<HTMLInputElement>('#invitation-link')).toBeNull();
 });
+
+function replacesAndRestoresDialogMethod(method: 'showModal' | 'close'): void {
+  const dialogPrototype = HTMLDialogElement.prototype;
+  const originalMethod: unknown = Object.getOwnPropertyDescriptor(dialogPrototype, method)?.value;
+  const replacement = vi.fn();
+  const replacementMethods = { [method]: replacement };
+  const originalMethods = { [method]: originalMethod };
+  const originalDescriptor = { value: originalMethod };
+  try {
+    Object.assign(dialogPrototype, replacementMethods);
+    const dialog = document.createElement('dialog');
+    dialog[method]();
+    expect(replacement).toHaveBeenCalledOnce();
+    Object.assign(dialogPrototype, originalMethods);
+    const restoredMethod: unknown = Object.getOwnPropertyDescriptor(dialogPrototype, method)?.value;
+    expect(restoredMethod).toBe(originalMethod);
+  } finally {
+    Object.defineProperty(dialogPrototype, method, originalDescriptor);
+  }
+}
+
+it.each(['showModal', 'close'] as const)(
+  'lets another spec replace and restore dialog %s', replacesAndRestoresDialogMethod);

@@ -17,7 +17,7 @@ shared rules for checking messages before the website shows them.
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and actions"] --> web
-  web -->|requests and live updates| server["apps/server<br/>the back end"]
+  web -->|requests and resumable live updates| server["apps/server<br/>the back end"]
   server -.->|recovery tests use the transcript helper| web
   web["apps/web<br/>sign-in, chat, calls, saved spending status and admin pages"] -->|requests, saved call status and live updates| server["apps/server<br/>the back end"]
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
@@ -103,6 +103,9 @@ see the status and reference without amounts.
    A chat turn is one message and its reply. Stop requests an end to that reply;
    a budget stop separately explains that a spending limit ended work.
    Colleague chats send human text and never start assistant work.
+   A socket rate limit keeps the selected chat, saved messages and draft while the
+   connection retries. Recovery reads missing updates without resending work.
+   Losing access still clears protected content, including files and drafts.
 3. **Files, memory and viewing.** A person opens the session panel to read permitted
    facts or files, or watch the computer. The viewer checks permission before connecting
    and clears its picture when permission expires or the session closes.

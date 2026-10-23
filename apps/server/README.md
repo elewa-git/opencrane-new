@@ -30,7 +30,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, spending pages, live updates, tool status and integration facts| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, spending pages, resumable live updates, tool status and integration facts| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|records changes, access-checked control refusals, checked child activations, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -295,6 +295,8 @@ tools. Older computers receive Allow tools only, so either update order is safe.
 The server checks browser connections with a heartbeat every 15 seconds by default.
 Tests can shorten the interval. A missed reply still closes the connection on the
 next heartbeat.
+Sending too many messages in one second closes the connection with a retryable response.
+The browser can reconnect and keep the chat. Losing access still clears its content.
 
 ## How to run or test it
 

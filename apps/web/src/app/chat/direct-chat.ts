@@ -613,12 +613,13 @@ export class DirectChat implements OnInit, OnDestroy {
       this.subscribed = false;
       return;
     }
+    // Watch readiness before catch-up so finishing it triggers the subscription.
+    if (this.historyState() !== 'ready' && !this.historyNeedsCatchUp) return;
     if (this.historyNeedsCatchUp) {
       this.historyNeedsCatchUp = false;
       void this.recoverAfterSocketResync();
       return;
     }
-    if (this.historyState() !== 'ready') return;
     if (this.socketConversationId !== this.selectedConversationId()) return;
     this.sendSubscription();
   }

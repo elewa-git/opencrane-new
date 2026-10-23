@@ -1003,6 +1003,15 @@ requires credentials on the next sign-in (which may first select a remembered
 account); see the [live evidence](../../docs/process/signin-evidence.md).
 Invalid callbacks return 400; `/ws` upgrades require a valid cookie and matching Origin.
 The socket supports resumable members subscriptions, plus the existing hello and event-validation demos; it never appends events.
+
+Browser sockets accept at most 20 messages per one-second window. The next message
+closes with 1013 and the fixed reason `rate limit` before parsing or handling it.
+Malformed messages count too. This temporary limit does not mean access was lost.
+The 64 KiB buffered-byte limit and heartbeat are unchanged. Session, repeated
+subscription and access refusals still close with 1008.
+`websocket-auth.test.ts` checks real authenticated frames, the unhandled excess
+message and a fresh time window. `realtime.test.ts` also checks malformed traffic,
+refusals, slow consumers and heartbeats with the normal service fixtures.
 See [protocol schemas](../../libs/protocol/README.md) for real request examples.
 
 `POST /members/join` requires the encrypted session cookie, JSON and an `Origin`

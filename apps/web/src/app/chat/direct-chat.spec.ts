@@ -2528,3 +2528,137 @@ async function abortsReplacedHistory(): Promise<void> {
 
 it('aborts an older history read before replacing it and ignores its late reply',
   abortsReplacedHistory);
+
+function deliverChatRow(socket: SocketLike, conversationId: string,
+  row: ReturnType<typeof eventRow>): void {
+  const update = { version: 1, topic: 'conversation', type: 'event', conversationId,
+    position: row.position, generation: 1, row };
+  socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(update) }));
+}
+
+async function retainsRateLimitedChat(mode: string, viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
+  const api = createFetchFixture();
+  let conversationId = 'existing';
+  if (mode === 'group') {
+    api.addGroupConversation();
+    conversationId = 'group-chat';
+  }
+  const rows = [eventRow(1, 'bob', 'First saved message'),
+    eventRow(2, 'alice', 'Second saved message')];
+  function savedHistory(request: RequestRecord): Response | undefined {
+    if (request.method === 'POST' && request.url.includes('/messages')) return reply({}, 503);
+    if (request.method !== 'GET' || !request.url.includes('/messages')) return undefined;
+    return reply({ rows, position: rows.length, generation: 1,
+      computerState: 'not_applicable' });
+  }
+  api.override(savedHistory);
+  const fixture = await mountWithoutReady(api, conversationId);
+  await waitForText(fixture, 'Second saved message');
+  await settle(fixture);
+  enterMessage(fixture, 'An uncertain message');
+  await settle(fixture);
+  const posts = api.requests.filter(isPost);
+  expect(posts).toHaveLength(1);
+  typeDraft(fixture, 'Keep this draft');
+  const socket = api.sockets.at(-1);
+  if (!socket) throw new Error('Expected an open chat socket');
+  const applied = eventRow(3, 'bob', 'Applied before the close');
+  rows.push(applied);
+  deliverChatRow(socket, conversationId, applied);
+  await settle(fixture);
+  api.pauseSocketOpening();
+  vi.useFakeTimers();
+  socket.onclose?.(new CloseEvent('close', { code: 1013, reason: 'rate limit' }));
+  fixture.detectChanges();
+  expect(root(fixture).textContent).toContain('Reconnecting');
+  expect(root(fixture).textContent).toContain('Applied before the close');
+  expect(messageField(fixture).value).toBe('Keep this draft');
+  expect(fixture.componentInstance['selectedConversationId']()).toBe(conversationId);
+  expect(fixture.componentInstance['position']).toBe(3);
+  rows.push(eventRow(4, 'bob', 'Saved while disconnected'));
+  await vi.advanceTimersByTimeAsync(500);
+  expect(api.sockets).toHaveLength(2);
+  const replacement = api.sockets[1];
+  if (!replacement) throw new Error('Expected a replacement socket');
+  replacement.onopen?.(new Event('open'));
+  fixture.detectChanges();
+  await vi.advanceTimersByTimeAsync(0);
+  function hasResumedSubscription(): void {
+    fixture.detectChanges();
+    expect(api.sentSocketMessages).toHaveLength(2);
+  }
+  await vi.waitFor(hasResumedSubscription);
+  expect(JSON.parse(api.sentSocketMessages[1] ?? '{}')).toEqual({
+    type: 'subscribe', topic: 'conversation', conversationId, since: 4, generation: 1,
+  });
+  deliverChatRow(replacement, conversationId, rows[3]!);
+  deliverChatRow(replacement, conversationId, eventRow(5, 'bob', 'Live after reconnect'));
+  fixture.detectChanges();
+  expect(root(fixture).querySelectorAll('article.message')).toHaveLength(5);
+  expect(root(fixture).textContent).toContain('Saved while disconnected');
+  expect(root(fixture).textContent).toContain('Live after reconnect');
+  expect(messageField(fixture).value).toBe('Keep this draft');
+  expect(api.sentSocketMessages).toHaveLength(2);
+  expect(api.requests.filter(isPost)).toEqual(posts);
+  expect(api.requestCounts).toEqual({ turns: 0, models: 0 });
+  fixture.destroy();
+}
+
+const rateLimitedChatScenarios = [
+  ['direct', 390],
+  ['direct', 1280],
+  ['group', 390],
+  ['group', 1280],
+] as const;
+
+it.each(rateLimitedChatScenarios)(
+  'retains a rate-limited %s chat at %ipx and catches up once', retainsRateLimitedChat);
+
+async function revokedDuringReconnect(viewportWidth: number): Promise<void> {
+  vi.stubGlobal('innerWidth', viewportWidth);
+  const api = createFetchFixture();
+  const fixture = await mount(api);
+  await openExisting(fixture);
+  typeDraft(fixture, 'Private waiting draft');
+  const socket = api.sockets.at(-1);
+  if (!socket?.onmessage) throw new Error('Expected an open chat socket');
+  const oldReceive = socket.onmessage;
+  const held = deferredReply();
+  function holdHistory(request: RequestRecord): Promise<Response> | undefined {
+    if (request.method === 'GET' && request.url.includes('/messages')) return held.promise;
+    return undefined;
+  }
+  api.override(holdHistory);
+  api.pauseSocketOpening();
+  vi.useFakeTimers();
+  socket.onclose?.(new CloseEvent('close', { code: 1013, reason: 'rate limit' }));
+  fixture.detectChanges();
+  await vi.advanceTimersByTimeAsync(500);
+  const replacement = api.sockets.at(-1);
+  replacement?.onopen?.(new Event('open'));
+  fixture.detectChanges();
+  await vi.advanceTimersByTimeAsync(0);
+  // Represent removal during the wait by the server refusing the replacement connection.
+  replacement?.onclose?.(new CloseEvent('close', { code: 1008 }));
+  held.release(reply({ rows: [eventRow(3, 'bob', 'Late protected history')],
+    position: 3, generation: 1, computerState: 'not_applicable' }));
+  const late = { version: 1, topic: 'conversation', type: 'event',
+    conversationId: 'existing', position: 4, generation: 1,
+    row: eventRow(4, 'bob', 'Late protected socket message') };
+  oldReceive(new MessageEvent('message', { data: JSON.stringify(late) }));
+  await vi.advanceTimersByTimeAsync(1000);
+  fixture.detectChanges();
+  expect(root(fixture).textContent).toContain('You no longer have access');
+  expect(root(fixture).querySelectorAll('article.message, textarea')).toHaveLength(0);
+  expect(root(fixture).textContent).not.toContain('Late protected');
+  expect(fixture.componentInstance['position']).toBe(0);
+  expect(fixture.componentInstance['draft']()).toBe('');
+  expect(fixture.componentInstance['selectedConversationId']()).toBe('');
+  expect(api.sockets).toHaveLength(2);
+  fixture.destroy();
+}
+
+it.each([390, 1280])(
+  'never restores a chat revoked during the rate-limit reconnect wait at %ipx',
+  revokedDuringReconnect);
