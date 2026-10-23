@@ -1,0 +1,1 @@
+- Spending calls have replayable internal read pages filtered by their saved payer and assistant. Old holds and late settlements keep their original attribution; installed budget projections rebuild both totals and call rows together. HTTP reads and screens remain later work.

@@ -1,9 +1,6 @@
 import type { Logger } from '@opencrane/observability';
 import { ProjectionRunner, type Db, type Query, type EventSource } from '@opencrane/projections';
-import { budgets, replayBudgets } from './state.ts';
-
-// Version 2 restores paying groups from reservation envelopes in pre-P3-13 rows.
-const budgetProjectionVersion = 2;
+import { budgets, replayBudgets, budgetProjectionVersion } from './accounting.ts';
 async function versions(db: Query) {
   await db.query('CREATE TABLE IF NOT EXISTS projection_versions (name TEXT PRIMARY KEY, version INTEGER NOT NULL)');
 }
@@ -16,6 +13,23 @@ async function removeReplay(db: Query) {
 async function rows(db: Query, table: string) {
   return (await db.query(`SELECT * FROM ${table} ORDER BY silo`)).rows;
 }
+async function callRows(db: Query, table: string, after: [string, string]) {
+  const result = await db.query<{ silo: string; reservation_id: string }>(
+    `SELECT * FROM ${table} WHERE (silo, reservation_id) > ($1, $2)
+      ORDER BY silo, reservation_id LIMIT 200`, after);
+  return result.rows;
+}
+async function sameCalls(db: Query) {
+  let after: [string, string] = ['', ''];
+  while (true) {
+    const live = await callRows(db, 'model_budget_calls', after);
+    const replayed = await callRows(db, 'model_budget_calls_replay', after);
+    if (JSON.stringify(live) !== JSON.stringify(replayed)) return false;
+    if (live.length < 200) return true;
+    const last = live.at(-1)!;
+    after = [last.silo, last.reservation_id];
+  }
+}
 async function rebuildLocked(db: Db, source: EventSource, logger: Logger, verify: boolean) {
   const runner = new ProjectionRunner(db, source, logger);
   await runner.initialise(budgets);
@@ -25,16 +39,21 @@ async function rebuildLocked(db: Db, source: EventSource, logger: Logger, verify
   await runner.initialise(replayBudgets);
   try {
     await runner.run(replayBudgets, { toSequence: previousSequence });
-    const unchanged = JSON.stringify(await rows(db, 'model_budgets')) === JSON.stringify(await rows(db, 'model_budgets_replay'));
+    const budgetsUnchanged = JSON.stringify(await rows(db, 'model_budgets')) === JSON.stringify(await rows(db, 'model_budgets_replay'));
+    const callsUnchanged = await sameCalls(db);
+    const unchanged = budgetsUnchanged && callsUnchanged;
     if (verify && !unchanged) throw new Error('Rebuilt budgets state differs from the live projection');
     const sequence = await source.head();
     await runner.run(replayBudgets, { toSequence: sequence });
     await db.transaction(async tx => {
       await tx.query("SET LOCAL lock_timeout = '250ms'");
-      await tx.query('LOCK TABLE model_budgets, model_budgets_replay IN ACCESS EXCLUSIVE MODE');
+      await tx.query(`LOCK TABLE model_budgets, model_budgets_replay,
+        model_budget_calls, model_budget_calls_replay IN ACCESS EXCLUSIVE MODE`);
       // Retain the live table object and its reader grants.
       await tx.query('TRUNCATE model_budgets');
       await tx.query('INSERT INTO model_budgets SELECT * FROM model_budgets_replay');
+      await tx.query('TRUNCATE model_budget_calls');
+      await tx.query('INSERT INTO model_budget_calls SELECT * FROM model_budget_calls_replay');
       await replayBudgets.drop(tx);
       await tx.query('DELETE FROM projection_events WHERE projection = $1', [budgets.name]);
       await tx.query('UPDATE projection_events SET projection = $1 WHERE projection = $2', [budgets.name, replayBudgets.name]);
