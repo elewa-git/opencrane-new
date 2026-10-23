@@ -28,6 +28,7 @@
   "license": "AGPL-3.0-or-later",
   "description": "The AI access and spending library for OpenCrane.",
   "devDependencies": {
-    "@nats-io/jetstream": "3.4.0"
+    "@nats-io/jetstream": "3.4.0",
+    "@openfga/sdk": "0.9.7"
   }
 }

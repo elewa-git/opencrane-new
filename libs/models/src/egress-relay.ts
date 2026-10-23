@@ -4,8 +4,13 @@ import { egressDestinationSchema } from '@opencrane/events';
 import { connectEgressDestination, systemTransport, type EgressTransport } from './egress-guard.ts';
 
 type Destination = { host: string; port: number };
-type Registration = Destination & { permitId: string; expiresAt: number;
-  recheck?: () => Promise<void>; confirm?: () => Promise<void> };
+type Registration = Destination & {
+  permitId: string;
+  expiresAt: number;
+  proofStartedAt?: number;
+  recheck?: () => Promise<void>;
+  confirm?: () => Promise<void>;
+};
 type CloseReason = 'finished' | 'failed' | 'refused' | 'expired' | 'revoked' | 'unavailable';
 export type EgressCloseRecord = Destination & {
   permitId: string;
@@ -18,6 +23,18 @@ export type EgressCloseRecord = Destination & {
   closedAt: number;
 };
 type CloseRecord = (record: EgressCloseRecord) => void;
+type Prepare = (request: Registration) => Promise<void | (() => void)>;
+
+// Leave time for socket teardown inside the two-second outage limit.
+const proofLifetimeMs = 1900;
+
+export class EgressRecheckFailure extends Error {
+  readonly reason: 'revoked' | 'unavailable';
+  constructor(reason: 'revoked' | 'unavailable', cause: unknown) {
+    super('egress_recheck_failed', { cause });
+    this.reason = reason;
+  }
+}
 
 class Relay {
   readonly listener = createServer(this.accept.bind(this));
@@ -27,7 +44,11 @@ class Relay {
   private connectedAt: number | null = null;
   private closed = false;
   private checking = false;
+  private pending: Promise<void> | undefined;
   private readonly watch: NodeJS.Timeout;
+  private watchdog: NodeJS.Timeout | undefined;
+  expiry: NodeJS.Timeout | undefined;
+  private proofDeadline: number;
 
   readonly registration: Registration;
   private readonly registeredAt: number;
@@ -36,12 +57,15 @@ class Relay {
 
   constructor(registration: Registration, registeredAt: number,
     onClose: CloseRecord, transport: EgressTransport) {
+    const started = registration.proofStartedAt ?? performance.now();
+    this.proofDeadline = started + proofLifetimeMs;
     this.registration = registration;
     this.registeredAt = registeredAt;
     this.onClose = onClose;
     this.transport = transport;
     this.watch = setInterval(this.check, 500);
     this.watch.unref();
+    if (registration.recheck) this.watchProof();
   }
 
   close(reason: CloseReason) {
@@ -50,12 +74,15 @@ class Relay {
     }
     this.closed = true;
     clearInterval(this.watch);
+    clearTimeout(this.watchdog);
+    // Keep valid receipt times when the wall clock moves backwards.
+    const closedAt = Math.max(Date.now(), this.registeredAt, this.connectedAt ?? 0);
     const record: EgressCloseRecord = {
       permitId: this.registration.permitId, host: this.registration.host,
       port: this.registration.port, address: this.address, reason,
       bytesSent: this.upstream?.bytesWritten ?? 0,
       bytesReceived: this.incoming?.bytesWritten ?? 0,
-      registeredAt: this.registeredAt, connectedAt: this.connectedAt, closedAt: Date.now(),
+      registeredAt: this.registeredAt, connectedAt: this.connectedAt, closedAt,
     };
     this.incoming?.destroy();
     this.upstream?.destroy();
@@ -66,17 +93,49 @@ class Relay {
     }
   }
 
+  stop(reason: CloseReason) {
+    this.close(reason);
+    clearTimeout(this.expiry);
+    this.listener.close();
+    return this.pending;
+  }
+
+  private watchProof = () => {
+    const remaining = this.proofDeadline - performance.now();
+    if (remaining <= 0) {
+      this.close('unavailable');
+      return;
+    }
+    this.watchdog = setTimeout(this.watchProof, remaining);
+    this.watchdog.unref();
+  };
+
   private check = () => {
     if (this.checking || this.closed || !this.registration.recheck) return;
     this.checking = true;
-    const checking = this.registration.recheck().catch(this.revoked);
-    void checking.finally(this.checked);
+    const started = performance.now();
+    const checking = this.refresh(started).catch(this.recheckFailed);
+    this.pending = checking.finally(this.checked);
   };
-  private revoked = () => {
-    this.close('revoked');
+  private async refresh(started: number) {
+    await this.registration.recheck!();
+    if (this.closed) return;
+    if (performance.now() >= this.proofDeadline) {
+      this.close('unavailable');
+      return;
+    }
+    // Date proof from the start of its reads, never from a delayed reply.
+    this.proofDeadline = started + proofLifetimeMs;
+    clearTimeout(this.watchdog);
+    this.watchProof();
+  }
+  private recheckFailed = (error: unknown) => {
+    const reason = error instanceof EgressRecheckFailure ? error.reason : 'unavailable';
+    this.close(reason);
   };
   private checked = () => {
     this.checking = false;
+    this.pending = undefined;
   };
 
   private accept(socket: Socket) {
@@ -128,7 +187,7 @@ class Relay {
       this.close('expired');
       return;
     }
-    this.connectedAt = Date.now();
+    this.connectedAt = Math.max(Date.now(), this.registeredAt);
     result.upstream.write(result.initialData);
     socket.pipe(result.upstream);
     result.upstream.pipe(socket);
@@ -139,14 +198,15 @@ export class EgressRelayRegistry {
   private stopped = false;
   private readonly permits = new Set<string>();
   private readonly relays = new Map<string, Relay>();
+  private readonly closing: Promise<void>[] = [];
 
   private readonly onClose: CloseRecord;
   private readonly transport: EgressTransport;
 
-  private readonly prepare: ((request: Registration) => Promise<void>) | undefined;
+  private readonly prepare: Prepare | undefined;
 
   constructor(onClose: CloseRecord, transport = systemTransport,
-    prepare?: (request: Registration) => Promise<void>) {
+    prepare?: Prepare) {
     this.onClose = onClose;
     this.transport = transport;
     this.prepare = prepare;
@@ -163,9 +223,14 @@ export class EgressRelayRegistry {
     }
     // Reserve before awaiting the listener, so concurrent registrations cannot reuse a permit.
     this.permits.add(request.permitId);
-    await this.prepare?.(request);
-    await request.confirm?.();
-    if (this.stopped) throw new Error('egress_registration_refused');
+    const cancelPreparation = await this.prepare?.(request);
+    try {
+      await request.confirm?.();
+      if (this.stopped) throw new Error('egress_registration_refused');
+    } catch (error) {
+      cancelPreparation?.();
+      throw error;
+    }
     const registration = { ...request, ...destination };
     const relay = new Relay(registration, registeredAt, this.onClose, this.transport);
     this.relays.set(request.permitId, relay);
@@ -176,6 +241,7 @@ export class EgressRelayRegistry {
       relays.delete(request.permitId);
     }
     const timer = setTimeout(expire, request.expiresAt - Date.now());
+    relay.expiry = timer;
     timer.unref();
     try {
       relay.listener.listen(0, '127.0.0.1');
@@ -212,7 +278,13 @@ export class EgressRelayRegistry {
   closeAll(reason: 'revoked' | 'unavailable' = 'revoked') {
     this.stopped = true;
     for (const relay of this.relays.values()) {
-      relay.close(reason);
+      const pending = relay.stop(reason);
+      if (pending) this.closing.push(pending);
     }
+    this.relays.clear();
+  }
+
+  waitForChecks() {
+    return Promise.all(this.closing);
   }
 }

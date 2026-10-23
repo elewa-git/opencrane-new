@@ -1,9 +1,11 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { OpenFgaClient } from '@openfga/sdk';
 import { Server } from 'node:net';
 import { once } from 'node:events';
 import { chmod, copyFile, readFile, readdir, stat, writeFile, rename, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { recoverEgressReceipt } from '../src/egress-receipt.ts';
-import { parseEventByType } from '@opencrane/events';
+import { egressObservationId, parseEventByType } from '@opencrane/events';
 import { startEgress } from '../src/egress-startup.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, it, onTestFinished, vi } from 'vitest';
@@ -13,6 +15,7 @@ import { decodeJwt } from 'jose';
 import { verifyEgressCapability } from '@opencrane/auth';
 import { failingPublishStore } from '@opencrane/event-store/testing';
 import { history } from '../src/event-history.ts';
+import { BudgetActor } from '../src/actor.ts';
 import { fixture } from './fixture.ts';
 import { egressFixture } from './egress-fixture.ts';
 import { clientHello } from './egress-hello-fixture.ts';
@@ -23,6 +26,8 @@ async function setup(missing?: string, problem = 'missing', team = false) {
   // Allow the test services to drain before removing their temporary data.
   onTestFinished(facts.close.bind(facts), 30_000);
   await facts.stopDispatch();
+  // Stop job polling too, so its database and retry timers cannot outlive egress shutdown.
+  await facts.runtime.stop();
   const positions: number[] = [];
   for (const [scope, subjectId] of [['silo', 'test'], ['person', 'alice'],
     ['assistant', 'assistant']] as const) {
@@ -244,6 +249,8 @@ async function changesDuringDispatchRetry(change: string) {
   const append = test.facts.nats.store.append.bind(test.facts.nats.store);
   const register = test.gateway.registry.register.bind(test.gateway.registry);
   const registration = vi.spyOn(test.gateway.registry, 'register');
+  const maps = vi.spyOn(Map.prototype, 'set');
+  onTestFinished(maps.mockRestore.bind(maps));
   onTestFinished(registration.mockRestore.bind(registration));
   async function expiredRegistration(input: Parameters<typeof register>[0]) {
     expireAuthority();
@@ -313,6 +320,18 @@ async function changesDuringDispatchRetry(change: string) {
   expect(outcomes[0]!.event.type).toBe('egress.observed');
   expect(outcomes[0]!.event.data).toMatchObject({ requestId, permitId: requestId,
     channel: 'command', outcome: 'error' });
+  if (change === 'registration-deadline') {
+    await test.gateway.runtime.flush();
+    const id = egressObservationId('test', requestId);
+    function isReceipt(args: unknown[]) {
+      return args[0] === id;
+    }
+    const index = maps.mock.calls.findIndex(isReceipt);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const receipts = maps.mock.contexts[index];
+    if (!(receipts instanceof Map)) throw new Error('Missing receipt map');
+    expect(receipts.has(id)).toBe(false);
+  }
 }
 it.each(['destination', 'turn', 'deadline', 'registration-deadline', 'expiry', 'none'])(
   'rechecks %s after the real budget dispatch append retries', changesDuringDispatchRetry);
@@ -643,3 +662,295 @@ async function separateReceipts() {
   }
 }
 it('saves a separate receipt for each of two open permits', separateReceipts);
+
+async function dependencyOutage(kind: string) {
+  const test = await setup();
+  const bearer = await test.token();
+  const held = Promise.withResolvers<{ allowed: boolean; status: 'ok' }>();
+  async function duringRelay(socket: import('node:net').Socket) {
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2100) });
+    const started = performance.now();
+    function rejectRead(): never {
+      throw new Error('private-canary');
+    }
+    function holdRead() {
+      return held.promise;
+    }
+    function unavailablePermission() {
+      const result = { allowed: false as const, status: 'unavailable' as const,
+        error: new Error('private-canary') };
+      return Promise.resolve(result);
+    }
+    let restore: (() => void) | undefined;
+    if (kind === 'store-read') {
+      await test.facts.append('assistant-assistant', 'assistant.settings_changed',
+        { assistantId: 'assistant', changedBy: 'alice', changedFields: ['model'] });
+      const spy = vi.spyOn(test.facts.nats.store, 'readStream').mockImplementation(rejectRead);
+      restore = spy.mockRestore.bind(spy);
+    } else if (kind === 'store') {
+      const spy = vi.spyOn(test.facts.nats.store, 'head').mockImplementation(rejectRead);
+      restore = spy.mockRestore.bind(spy);
+    } else if (kind === 'leader') {
+      const replacement = new BudgetActor(test.facts.nats.store, 'test');
+      await replacement.start();
+    } else if (kind === 'sdk') {
+      const spy = vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(rejectRead);
+      restore = spy.mockRestore.bind(spy);
+    } else if (kind === 'permission') {
+      const spy = vi.spyOn(test.facts.auth, 'check').mockImplementation(unavailablePermission);
+      restore = spy.mockRestore.bind(spy);
+    } else {
+      const implementation = kind === 'iam-hang' ? holdRead : rejectRead;
+      const spy = vi.spyOn(test.facts.auth, 'checkApplied').mockImplementation(implementation);
+      restore = spy.mockRestore.bind(spy);
+    }
+    try {
+      await closed;
+      expect(performance.now() - started).toBeLessThan(2000);
+      expect(socket.destroyed).toBe(true);
+    } finally {
+      restore?.();
+      held.resolve({ allowed: true, status: 'ok' });
+    }
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+  expect(await closeObservation(test, bearer)).toMatchObject({
+    outcome: 'unknown', relay: { reason: 'unavailable' } });
+  expect(await test.tunnel(bearer)).toBe(403);
+  expect(test.gateway.connected()).toBe(1);
+}
+it.each(['sdk', 'store', 'store-read', 'iam-rejection', 'iam-hang', 'permission', 'leader'])(
+  'closes a live relay as unavailable after losing %s proof', dependencyOutage);
+
+async function recoversWhileRunning(lostReply: boolean) {
+  const test = await setup();
+  const bearer = await test.token();
+  const subject = `egress-${decodeJwt(bearer).jti!}`;
+  const append = test.facts.nats.store.append.bind(test.facts.nats.store);
+  let attempts = 0;
+  async function loseReply(input: Parameters<typeof append>[0]) {
+    const saved = await append(input);
+    const event = z.object({ subject: z.string() }).parse(input.event);
+    if (event.subject === subject) {
+      attempts++;
+      throw new Error('private-canary');
+    }
+    return saved;
+  }
+  if (lostReply) {
+    const spy = vi.spyOn(test.facts.nats.store, 'append').mockImplementation(loseReply);
+    onTestFinished(spy.mockRestore.bind(spy));
+  }
+  async function duringRelay(socket: import('node:net').Socket) {
+    const closed = once(socket, 'close', { signal: AbortSignal.timeout(2100) });
+    await test.facts.nats.stop();
+    await closed;
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    duringRelay)).toBe(200);
+  const directory = join(test.gateway.directory, 'egress');
+  async function retained() {
+    return readdir(directory);
+  }
+  await expect.poll(retained).toHaveLength(1);
+  await test.gateway.runtime.flush();
+  await test.facts.nats.restart();
+  async function observations() {
+    return history(test.facts.nats.store, subject, 'test');
+  }
+  await expect.poll(observations, { timeout: 5000 }).toHaveLength(1);
+  expect(await closeObservation(test, bearer)).toMatchObject({
+    outcome: 'unknown', relay: { reason: 'unavailable' } });
+  await test.gateway.runtime.flush();
+  expect(await observations()).toHaveLength(1);
+  if (lostReply) expect(attempts).toBe(1);
+  expect(await test.tunnel(bearer)).toBe(403);
+  expect(test.gateway.connected()).toBe(1);
+}
+it.each([false, true])('retries retained receipts without restart; lost reply: %s',
+  recoversWhileRunning);
+
+async function boundedShutdown(recover: boolean) {
+  const test = await setup();
+  // Stop fixture workers before counting timers owned by egress shutdown.
+  const workers = test.facts.runtime.boss.getWipData({ includeInternal: true });
+  expect(workers).toHaveLength(0);
+  const bearer = await test.token();
+  const subject = `egress-${decodeJwt(bearer).jti!}`;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const read = test.facts.nats.store.readStream.bind(test.facts.nats.store);
+  let reads = 0;
+  async function* holdReceipt(...args: Parameters<typeof read>) {
+    if (args[0] === subject) {
+      reads++;
+      entered.resolve();
+      await release.promise;
+    }
+    yield* read(...args);
+  }
+  const spy = vi.spyOn(test.facts.nats.store, 'readStream').mockImplementation(holdReceipt);
+  onTestFinished(spy.mockRestore.bind(spy));
+  expect(await test.tunnel(bearer)).toBe(200);
+  await entered.promise;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  function restoreClock() {
+    vi.useRealTimers();
+    release.resolve();
+  }
+  onTestFinished(restoreClock);
+  let stopped = false;
+  function stopFinished() {
+    stopped = true;
+  }
+  const closing = test.gateway.runtime.close().then(stopFinished);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(stopped).toBe(false);
+  expect(reads).toBe(1);
+  if (recover) release.resolve();
+  else await vi.advanceTimersByTimeAsync(1);
+  await closing;
+  expect(stopped).toBe(true);
+  expect(vi.getTimerCount()).toBe(0);
+  restoreClock();
+  await test.gateway.runtime.flush();
+  spy.mockRestore();
+  const rows = await history(test.facts.nats.store, subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(test.gateway.connected()).toBe(1);
+}
+it.each([false, true])('bounds shutdown while a receipt waits; recovery: %s', boundedShutdown);
+
+async function shutdownWaitsForRecheck() {
+  const test = await setup();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function recheck() {
+    entered.resolve();
+    await release.promise;
+  }
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
+    'clearInterval', 'performance', 'Date'] });
+  function restoreClock() {
+    vi.useRealTimers();
+    release.resolve();
+  }
+  onTestFinished(restoreClock);
+  const request = { ...destination, permitId: randomUUID(), expiresAt: Date.now() + 60_000,
+    recheck };
+  await test.gateway.registry.register(request);
+  await vi.advanceTimersByTimeAsync(500);
+  await entered.promise;
+  test.gateway.registry.closeAll('unavailable');
+  let stopped = false;
+  function stopFinished() {
+    stopped = true;
+  }
+  const closing = test.gateway.runtime.close().then(stopFinished);
+  await test.gateway.runtime.flush();
+  expect(stopped).toBe(false);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(stopped).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  await closing;
+  expect(vi.getTimerCount()).toBe(0);
+  release.resolve();
+  restoreClock();
+}
+it('waits at most two seconds for a recheck after an earlier shutdown signal',
+  shutdownWaitsForRecheck);
+
+async function shutdownIncludesNewReceipts() {
+  const test = await setup();
+  const first = randomUUID();
+  const second = randomUUID();
+  const firstEntered = Promise.withResolvers<void>();
+  const secondEntered = Promise.withResolvers<void>();
+  const firstRelease = Promise.withResolvers<void>();
+  const secondRelease = Promise.withResolvers<void>();
+  const read = test.facts.nats.store.readStream.bind(test.facts.nats.store);
+  async function* holdReceipt(...args: Parameters<typeof read>) {
+    if (args[0] === `egress-${first}`) {
+      firstEntered.resolve();
+      await firstRelease.promise;
+    }
+    if (args[0] === `egress-${second}`) {
+      secondEntered.resolve();
+      await secondRelease.promise;
+    }
+    yield* read(...args);
+  }
+  const spy = vi.spyOn(test.facts.nats.store, 'readStream').mockImplementation(holdReceipt);
+  function cleanup() {
+    vi.useRealTimers();
+    firstRelease.resolve();
+    secondRelease.resolve();
+    spy.mockRestore();
+  }
+  onTestFinished(cleanup);
+  const request = { ...destination, expiresAt: Date.now() + 60_000 };
+  await test.gateway.registry.register({ ...request, permitId: first });
+  test.gateway.registry.closePermit(first);
+  await firstEntered.promise;
+  const earlier = test.gateway.runtime.flush();
+  await test.gateway.registry.register({ ...request, permitId: second });
+  let stopped = false;
+  function stopFinished() {
+    stopped = true;
+  }
+  const closing = test.gateway.runtime.close().then(stopFinished);
+  await secondEntered.promise;
+  firstRelease.resolve();
+  await earlier;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(stopped).toBe(false);
+  vi.useRealTimers();
+  secondRelease.resolve();
+  await closing;
+  const rows = await history(test.facts.nats.store, `egress-${second}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(test.gateway.connected()).toBe(0);
+}
+it('joins receipts created after an earlier retry batch when shutting down',
+  shutdownIncludesNewReceipts);
+
+async function delayedDispatchProof() {
+  const test = await setup();
+  const bearer = await test.token();
+  const append = test.facts.nats.store.append.bind(test.facts.nats.store);
+  const held = Promise.withResolvers<{ allowed: boolean; status: 'ok' }>();
+  let lostAt = 0;
+  let restoreIam: (() => void) | undefined;
+  function hang() {
+    return held.promise;
+  }
+  async function delayReply(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'budget.call_dispatch_admitted') {
+      lostAt = performance.now();
+      const iam = vi.spyOn(test.facts.auth, 'checkApplied').mockImplementation(hang);
+      restoreIam = iam.mockRestore.bind(iam);
+      await delay(1200);
+    }
+    return result;
+  }
+  const spy = vi.spyOn(test.facts.nats.store, 'append').mockImplementation(delayReply);
+  function restore() {
+    spy.mockRestore();
+    restoreIam?.();
+    held.resolve({ allowed: true, status: 'ok' });
+  }
+  onTestFinished(restore);
+  async function waitForClose(socket: import('node:net').Socket) {
+    await once(socket, 'close');
+    expect(performance.now() - lostAt).toBeLessThan(2000);
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    waitForClose)).toBe(200);
+  expect(await closeObservation(test, bearer)).toMatchObject({
+    relay: { reason: 'unavailable' } });
+}
+it('counts delayed dispatch replies against the initial IAM proof lifetime', delayedDispatchProof);

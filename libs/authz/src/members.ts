@@ -363,10 +363,19 @@ function createMemberAuthorisation(binding: Binding,
     await client.write(writes, unwanted);
   }
 
+  function checkApplied(eventId: string) {
+    const receipt = { user: object, relation: 'applied',
+      object: objectId('projection_event', binding.silo, eventId) };
+    return client.check(receipt);
+  }
+
   return {
     binding,
+    checkApplied,
     async applied(eventId: string) {
-      return (await client.check({ user: object, relation: 'applied', object: objectId('projection_event', binding.silo, eventId) })).allowed;
+      // Keep boolean callers' existing handling of missing or unavailable receipts.
+      const result = await checkApplied(eventId);
+      return result.allowed;
     },
     provider(memberId: string, providerId: string, relation: 'read' | 'manage') {
       return client.check({ user: objectId('person', binding.silo, memberId), relation,

@@ -22,11 +22,11 @@ flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews of declared costs and approval details, dated approvals, memory, owners, providers, free reachability, spending, personal account choices and saved call statuses| models["libs/models<br/>AI rules, personal account choices, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
-  models -.-> auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
+  models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|shares spending choice checks between listing and saving, checks installation payer limits, native request cost, recovery and saved access expiry, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, proof that a remote call was not sent, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, read tables and database test helper"]
+  models -->|shares spending choice checks between listing and saving, checks installation payer limits, native request cost, recovery, saved access expiry, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, proof that a remote call was not sent, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers and retries saved closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, read tables and database test helper"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -102,9 +102,16 @@ Neither checker admits an image or starts it; malware and vulnerability checks r
 
 The models process prepares private connection relays and records their closure.
 It checks access and spending again while a relay is open. Removing access ends it.
+Losing storage, permissions or current spending proof closes affected sockets within
+two seconds, including time spent admitting the connection. A stalled check or late
+reply cannot extend that time. Permission-service failures remain distinct from removed
+access. Relay receipt checks ask for the permission-service status separately,
+so other callers keep their existing receipt checks.
+Spending proof reads do not delay money commands.
 Changing another team member's membership leaves a valid relay open.
-Restart recovers saved closure records without reopening connections. Outside networking
-remains switched off while outage and crash handling await qualification.
+Pending closure records retry after storage recovers, without restarting. Restart
+recovers saved closure records without reopening connections. Outside networking
+remains switched off. Crash recovery and live qualification are still pending.
 
 Tool mode changes require the server’s declared zero cost and approval details
 for both Allow and Ask. Admin review locks those values before a tool can be enabled.

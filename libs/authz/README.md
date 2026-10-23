@@ -21,7 +21,7 @@ rebuilt from the log.
 flowchart LR
   parent["libs/<br/>shared libraries"] --> authz["libs/authz<br/>who may use what"]
   server["apps/server<br/>back end"] -.-> authz
-  models["libs/models<br/>AI access and spending"] -.-> authz
+  models["libs/models<br/>AI access and spending"] -.->|checks access, receipts and outages| authz
   ops["apps/ops<br/>background workers"] -.-> authz
   authz -->|checks and updates permissions| fga["OpenFGA<br/>permissions service"]
   authz -.-> store["libs/event-store<br/>saved changes"]
@@ -37,6 +37,8 @@ flowchart LR
 - Give the people named in a side conversation, a child chat started from another
   chat, access to it. Keep its creator's permission to manage participants separate.
 - Refuse access when OpenFGA cannot give a reliable answer.
+- Let connection checks distinguish a permission-service outage from a missing
+  applied change. Keep existing yes-or-no receipt checks available to other callers.
 - Keep delayed or repeated events from restoring access that was removed.
 - Rebuild permissions in a fresh OpenFGA store from the saved history.
 

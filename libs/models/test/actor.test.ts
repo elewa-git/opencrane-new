@@ -1,6 +1,7 @@
+import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay.ts';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import { countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
 import { createLogger } from '@opencrane/observability';
@@ -591,3 +592,155 @@ async function recoversReplacementReceipt() {
 }
 it('recovers the exact stop receipt saved by a replacement budget actor',
   recoversReplacementReceipt);
+
+async function relayReadsDoNotBlockMoney() {
+  const position = await nats.store.head('budget-test');
+  const replies: (() => void)[] = [];
+  function delayedHead() {
+    const result = Promise.withResolvers<number>();
+    function reply() {
+      result.resolve(position);
+    }
+    replies.push(reply);
+    setTimeout(reply, 400);
+    return result.promise;
+  }
+  const spy = vi.spyOn(nats.store, 'head').mockImplementation(delayedHead);
+  vi.useFakeTimers({ toFake: ['performance', 'setTimeout', 'clearTimeout',
+    'setInterval', 'clearInterval', 'Date'] });
+  const records: EgressCloseRecord[] = [];
+  function capture(record: EgressCloseRecord) {
+    records.push(record);
+  }
+  const registry = new EgressRelayRegistry(capture);
+  function recheck() {
+    return actor.requireCurrent(performance.now() + 2000);
+  }
+  function cleanup() {
+    registry.closeAll();
+    spy.mockRestore();
+    for (const reply of replies) reply();
+    vi.useRealTimers();
+  }
+  onTestFinished(cleanup);
+  for (let index = 0; index < 4; index++) {
+    const request = { host: 'registry.npmjs.org', port: 443, permitId: String(index),
+      expiresAt: Date.now() + 60_000, recheck };
+    await registry.register(request);
+  }
+  await vi.advanceTimersByTimeAsync(1900);
+  expect(records).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(100);
+  let reserved = false;
+  function reservationSaved() {
+    reserved = true;
+  }
+  const saving = reserve().then(reservationSaved);
+  // Let real NATS finish the append without advancing the proof-read timers.
+  await delay(100);
+  expect(reserved).toBe(true);
+  cleanup();
+  await saving;
+}
+it('keeps four healthy relays open without putting proof reads ahead of money',
+  relayReadsDoNotBlockMoney);
+
+async function currentProofDeadline() {
+  const position = await nats.store.head('budget-test');
+  const deadline = performance.now() + 2000;
+  function lateHead() {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(deadline);
+    onTestFinished(clock.mockRestore.bind(clock));
+    return Promise.resolve(position);
+  }
+  const spy = vi.spyOn(nats.store, 'head').mockImplementation(lateHead);
+  onTestFinished(spy.mockRestore.bind(spy));
+  await expect(actor.requireCurrent(deadline)).rejects.toThrow('Budget writer unavailable');
+}
+it('refuses current-writer proof whose matching position arrives at the deadline',
+  currentProofDeadline);
+
+async function currentProofWaitsForAppend() {
+  const append = nats.store.append.bind(nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function holdReply(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    entered.resolve();
+    await release.promise;
+    return result;
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(holdReply);
+  function cleanup() {
+    release.resolve();
+    spy.mockRestore();
+  }
+  onTestFinished(cleanup);
+  const reservation = reserve();
+  await entered.promise;
+  let checked = false;
+  let failure: unknown;
+  function failed(error: unknown) {
+    checked = true;
+    failure = error;
+  }
+  function completed() {
+    checked = true;
+  }
+  const checking = actor.requireCurrent(performance.now() + 2000).then(completed, failed);
+  await delay(50);
+  expect(checked).toBe(false);
+  release.resolve();
+  await reservation;
+  await checking;
+  expect(checked).toBe(true);
+  expect(failure).toBeUndefined();
+}
+it('waits for its own unfinished append before proving the budget writer is current',
+  currentProofWaitsForAppend);
+
+async function moneyDuringProofRead() {
+  const head = nats.store.head.bind(nats.store);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let reads = 0;
+  async function holdFirstRead(...args: Parameters<typeof head>) {
+    const position = await head(...args);
+    reads++;
+    if (reads === 1) {
+      entered.resolve();
+      await release.promise;
+    }
+    return position;
+  }
+  const spy = vi.spyOn(nats.store, 'head').mockImplementation(holdFirstRead);
+  function cleanup() {
+    release.resolve();
+    spy.mockRestore();
+  }
+  onTestFinished(cleanup);
+  const checking = actor.requireCurrent(performance.now() + 2000);
+  await entered.promise;
+  const reservation = await reserve();
+  release.resolve();
+  await checking;
+  expect(actor.state.reservations).toMatchObject([{ id: reservation, amountCents: 1 }]);
+  expect(reads).toBe(2);
+}
+it('rechecks a position read that overlapped a money command without blocking that command',
+  moneyDuringProofRead);
+
+async function failedWriterCannotProveCurrent() {
+  const cause = new Error('private-canary');
+  function unavailable() {
+    return Promise.resolve({ status: 'unavailable' as const, cause });
+  }
+  const spy = vi.spyOn(nats.store, 'append').mockImplementation(unavailable);
+  onTestFinished(spy.mockRestore.bind(spy));
+  await expect(reserve()).rejects.toThrow('Budget writer lost its fence');
+  spy.mockRestore();
+  await expect(actor.requireCurrent(performance.now() + 2000))
+    .rejects.toThrow('Budget writer unavailable');
+}
+it('refuses proof from a failed writer even when its saved position still matches',
+  failedWriterCannotProveCurrent);
