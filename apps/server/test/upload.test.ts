@@ -59,7 +59,7 @@ it('refuses a cyclic FAT chain quickly while other HTTP requests stay responsive
 
 it('scans before storage, publishes only clean files and rebuilds its list from events', async () => {
   const { natsFixture } = await import('@opencrane/event-store/testing');
-  const { databases, openfga } = await import('@opencrane/authz/testing');
+  const { databases, openfga, until: wait } = await import('@opencrane/authz/testing');
   const { createStore, memberAuthorisation } = await import('@opencrane/authz');
   const { pgDb, ProjectionRunner, members, conversations, files, connectMemberFeed } = await import('@opencrane/projections');
   const { BudgetActor, envelope, history } = await import('@opencrane/models');
@@ -78,6 +78,22 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
   const headers = { origin: new URL(config.redirectUri).origin, 'content-type': 'application/octet-stream', 'x-file-name': 'notes.txt', 'idempotency-key': 'upload',
     cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org', roles: [], authTime: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+300 })}` };
   const url = '/api/conversations/conversation/files';
+  async function readFiles() {
+    const request = { url, headers };
+    let response = await app.inject(request);
+    async function listIsAvailable() {
+      if (response.statusCode !== 425) {
+        return true;
+      }
+      expect(response.json()).toEqual({ status: 'applying' });
+      // Run the worker here because this fixture has no background projection loop.
+      await runner.run(files);
+      response = await app.inject(request);
+      return response.statusCode !== 425;
+    }
+    await wait(listIsAvailable, 5000);
+    return response;
+  }
   function uploadRequest(key: string, payload: Buffer, name = 'notes.txt') {
     const requestHeaders = {
       ...headers,
@@ -149,8 +165,7 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     const removedUpload = await app.inject(teamUpload);
     expect(removedUpload.statusCode, removedUpload.body).toBe(403);
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.from('Meeting at ten.') })).statusCode).toBe(201);
-    await runner.run(files);
-    const list = await app.inject({ url, headers });
+    const list = await readFiles();
     expect(list.statusCode).toBe(200); expect(list.json()).toMatchObject({ rows: [{ name: 'notes.txt', status: 'uploaded', size: 15 }] });
     const path = (list.json<{ rows: { path: string }[] }>().rows[0]!).path;
     const previewUrl = `${url}/view?path=${encodeURIComponent(path)}&preview=true`;
@@ -163,14 +178,14 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     expect((await app.inject({ url: `${url}/view?path=../../private`, headers })).statusCode).toBe(404);
     expect((await app.inject({ url: `/api/conversations/other/files/view?path=${encodeURIComponent(path)}`, headers })).statusCode).toBe(403);
     await runner.rebuild(files);
-    expect((await app.inject({ url, headers })).json()).toEqual(list.json());
+    expect((await readFiles()).json()).toEqual(list.json());
     expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
     const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
     const infected = await app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'infected' }, payload: eicar });
     expect(infected.statusCode).toBe(422); expect(infected.body).toContain('malware detected');
     expect((await history(nats.store, 'conversation-conversation', 'test')).filter(row => row.event.type === 'file.rejected')).toHaveLength(1);
     await runner.run(files);
-    expect((await app.inject({ url, headers })).json()).toEqual(list.json());
+    expect((await readFiles()).json()).toEqual(list.json());
     expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
     expect(await services.client.listObjectsV2('files', '', true).toArray()).toHaveLength(1);
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.from('Meeting at ten.') })).statusCode).toBe(201);
@@ -195,7 +210,6 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       options, 'alice', 'conversation', 'oversized-helper', 'notes.txt', oversizedBytes,
     );
     await expect(oversizedUpload).rejects.toMatchObject(expectedSizeRefusal);
-    const { until: wait } = await import('@opencrane/authz/testing');
     let release: () => void = () => {};
     function holdScan(resolve: () => void) {
       release = resolve;
@@ -217,9 +231,10 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     try {
       expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
       expect(await services.client.listObjectsV2('files', '', true).toArray()).toHaveLength(1);
+      // Keep the scan blocked until the list proves that unscanned bytes are absent.
+      expect((await readFiles()).json()).toEqual(list.json());
     } finally { release(); }
-    expect((await app.inject({ url, headers })).json()).toEqual(list.json());
-    release(); expect((await pending).statusCode).toBe(201);
+    expect((await pending).statusCode).toBe(201);
     function unexpectedScanFailure() {
       return Promise.reject(new Error('Scanner failed unexpectedly'));
     }
@@ -333,7 +348,14 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       expect(await computer.read(path + '.md')).toBe(editedText);
       await runner.run(files);
       await runner.rebuild(files);
-      expect((await app.inject({ url, headers })).json()).toMatchObject({ rows: [{ status: 'delivered', deliveryOutcome: 'kept_existing' }, {}, {}, { status: 'delivered', name: 'project.pdf', deliveryOutcome: 'saved' }] });
+      const expectedFiles = { rows: [
+        { status: 'delivered', deliveryOutcome: 'kept_existing' },
+        {},
+        {},
+        { status: 'delivered', name: 'project.pdf', deliveryOutcome: 'saved' },
+      ] };
+      const deliveredFiles = await readFiles();
+      expect(deliveredFiles.json()).toMatchObject(expectedFiles);
     } finally { link.socket.terminate(); await link.settled(); await computer.close(); await rm(directory, { recursive: true, force: true }); }
 
   } finally { await app.close(); await feed.close(); await fga.close(); await nats.close(); await dbs.close(); await services.close(); }

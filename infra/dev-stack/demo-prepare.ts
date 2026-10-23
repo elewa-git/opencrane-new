@@ -149,6 +149,11 @@ async function preparePersonalPdf(options: Options) {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     const response = await request(options, path);
+    if (response.status === 425) {
+      assert.deepEqual(await response.json(), { status: 'applying' });
+      await delay(100);
+      continue;
+    }
     assert(response.ok, 'Demo files unavailable');
     const list = await response.json() as { rows: Array<{ name: string; status: string }> };
     function supplier(file: typeof list.rows[number]) {
