@@ -158,6 +158,8 @@ function captureContext(request: import('fastify').FastifyRequest,
 async function close() {
   const currentApp = app;
   app = undefined!;
+  // Disconnect unfinished test requests before waiting for the backend to close.
+  currentApp?.server.closeAllConnections();
   await currentApp?.close();
   const currentSetup = setup;
   setup = undefined!;
