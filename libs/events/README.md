@@ -3,9 +3,7 @@
 ## What this is
 
 The list of every kind of event OpenCrane records, and the exact data each one carries.
-An [event](../../GLOSSARY.md#event) is a saved record of something that happened,
-such as a member joining or a message being sent. This package gives the server,
-background workers and database readers one agreed way to understand those records.
+An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including new memory text, and still accepts older encrypted events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates without starting work.
 
 ## Where it fits
 
@@ -22,8 +20,9 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|reads event shapes| events
   store["libs/event-store<br/>saved event log"] -.->|checks event shapes| events
   projections["libs/projections<br/>read tables"] -.-> events
-  handlers["libs/handlers<br/>background jobs"] -.-> events
-  models["libs/models<br/>AI access and spending"] -.-> events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, tool stops, cleanup and nightly memory records| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks saved event shapes, including native access expiry and retry records| events
+  computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
 ## What it is responsible for

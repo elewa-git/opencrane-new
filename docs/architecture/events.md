@@ -422,7 +422,12 @@ requesterId, conversationId, turnId, threadId, assistantId, computerId, generati
 payingGroupId and allowanceCents (1–1,000). Allocation holds no money.
 `budget.reserved.rootId` optionally links the call's sole hold to that root.
 Rooted model holds also save optional `retryDigest` and `bodyDigest` SHA-256 values.
-The retry hash covers the silo, root, computer, generation, conversation, turn and
+Internal native holds hash `[silo, "native", callId]`, using the verified internal call id.
+Their saved `accessExpiresAt` is the original access expiry in Unix milliseconds.
+Recovery checks that expiry before saving a decision and during dispatch checks,
+including after a writer restart. Older native holds without it refuse recovery.
+The original two-second access limit still applies; retries never extend it.
+The ordinary retry hash covers the silo, root, computer, generation, conversation, turn and
 thread from verified credentials, plus the exact forwarded body's hash. It never
 uses caller-selected retry headers. Only an open, unadmitted hold without send,
 effect or security evidence can be reused. Its complete call binding and amount

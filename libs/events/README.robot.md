@@ -34,6 +34,9 @@ turn's root for zero-cost calls. The actor checks it after refreshing access and
 refuses stopped roots. Old records without this field still replay.
 New reservations carry `dispatchGate: 1`; older records remain readable.
 Rooted model holds add optional SHA-256 `retryDigest` and `bodyDigest` fields.
+Native holds also save `accessExpiresAt`, a nonnegative safe integer of Unix milliseconds.
+This is the original access expiry, not the hold's settlement timeout. Replay preserves
+it. Native recovery refuses an older hold without that date and never extends it.
 The models actor uses these to recover the same open, unadmitted hold and original
 request/decision ids. A body mismatch refuses admission. Admitted, settled, expired,
 uncertain or evidence-bearing holds cannot grant another send. Old holds without

@@ -107,6 +107,7 @@ export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   rootId: z.string().optional(), call: callSchema, dispatchGate: z.literal(1).optional(),
   retryDigest: z.string().optional(), bodyDigest: z.string().optional(),
+  accessExpiresAt: z.int().nonnegative().optional(),
   expired: z.literal(true).optional(), outcome: z.enum(['unknown', 'not_dispatched']).optional(),
   settledCents: z.int().nonnegative().optional(), outcomeUnknown: z.boolean().optional() });
 const ceilingsSchema = z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: z.string(), ceilingCents: z.int().nonnegative() }));
@@ -166,6 +167,7 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
       rootId: z.string().optional().parse(d['rootId']),
       retryDigest: z.string().optional().parse(d['retryDigest']),
       bodyDigest: z.string().optional().parse(d['bodyDigest']),
+      accessExpiresAt: z.int().nonnegative().optional().parse(d['accessExpiresAt']),
       call: callSchema.parse({ ...data({ ...event, data: d['modelCall'] }), payingGroupId: d['payingGroupId'] }) });
   } else if (event.type === 'budget.reservation_expired') {
     function matchesReservation(reservation: BudgetState['reservations'][number]) {

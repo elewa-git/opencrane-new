@@ -8,6 +8,7 @@ import type { ModelCall } from './state.ts';
 
 type NativeCall = {
   callId: string;
+  accessExpiresAt: number;
   rootId: string;
   rootTurn: Pick<ModelCall, 'turnId' | 'threadId'>;
 };
@@ -44,23 +45,49 @@ export async function grantModelCall(actor: BudgetActor,
       identity = [actor.silo, 'native', native.callId];
     }
     retryHash.update(JSON.stringify(identity));
-    const retry = { retryDigest: retryHash.digest('hex'), bodyDigest };
-    const reservationId = await actor.reserve(call, amountCents, fresh, admittedAt,
+    const retryDigest = retryHash.digest('hex');
+    const expiry = native ? { accessExpiresAt: native.accessExpiresAt } : {};
+    const retry = { retryDigest, bodyDigest, ...expiry };
+    const nativeAccess = native ? nativeRetryAccess(actor, retryDigest, native, fresh) : undefined;
+    const confirmAccess = nativeAccess?.confirmAccess ?? fresh;
+    const reservationId = await actor.reserve(call, amountCents, confirmAccess, admittedAt,
       rootId, retry, native?.rootTurn);
     function matchesReservation(saved: Reservation) {
       return saved.id === reservationId;
     }
     const saved = actor.state.reservations.find(matchesReservation)!;
     const requestId = saved.call.requestId!;
-    const decisionId = await recoverDecision(actor, saved, allow);
+    const decisionId = await recoverDecision(actor, saved, allow,
+      nativeAccess?.requireOriginalExpiry);
     const dispatch = { callId: requestId, decisionId, bodyDigest,
       reservationId, modelCall: saved.call, rootId };
-    await actor.admitDispatch(dispatch, fresh, admittedAt, native?.rootTurn);
+    await actor.admitDispatch(dispatch, confirmAccess, admittedAt, native?.rootTurn);
     return { reservationId, requestId };
   } catch {
     // Keep an uncertain hold and its original decision available for a later retry.
     throw new CallRetryRefused();
   }
+}
+
+function nativeRetryAccess(actor: BudgetActor, retryDigest: string, native: NativeCall,
+  fresh: () => Promise<void>) {
+  function matchesRetry(saved: Reservation) {
+    return saved.retryDigest === retryDigest;
+  }
+  function requireOriginalExpiry() {
+    // Read the hold again after queue waits; another attempt may have saved it first.
+    const saved = actor.state.reservations.find(matchesRetry);
+    const expiresAt = saved ? saved.accessExpiresAt : native.accessExpiresAt;
+    if (expiresAt === undefined || Date.now() >= expiresAt) {
+      throw new CallRetryRefused();
+    }
+  }
+  async function confirmAccess() {
+    requireOriginalExpiry();
+    await fresh();
+    requireOriginalExpiry();
+  }
+  return { confirmAccess, requireOriginalExpiry };
 }
 
 type Reservation = BudgetState['reservations'][number];
@@ -80,11 +107,14 @@ async function savedDecision(actor: BudgetActor, saved: Reservation) {
   return event.id;
 }
 async function recoverDecision(actor: BudgetActor, saved: Reservation,
-  allow: (reservationId: string, requestId: string) => Promise<string>) {
+  allow: (reservationId: string, requestId: string) => Promise<string>,
+  requireOriginalExpiry?: () => void) {
   const decisionId = await savedDecision(actor, saved);
   if (decisionId !== undefined) {
     return decisionId;
   }
+  // Refuse a missing decision if reading its history used the remaining access time.
+  requireOriginalExpiry?.();
   try {
     return await allow(saved.id, saved.call.requestId!);
   } catch {

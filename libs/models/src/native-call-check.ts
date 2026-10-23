@@ -122,7 +122,9 @@ export async function reserveNativeCall(actor: BudgetActor, store: EventStore, a
     contextDigest: binding.delegationId, requestId: randomUUID() };
   const rootTurn = { turnId: binding.rootTurnId, threadId: binding.rootThreadId };
   // Accept identity only from an internal verified call. Bridge delivery remains disabled.
-  const native = { callId, rootId: binding.rootId, rootTurn };
+  // Save a wall-clock expiry because a restarted writer has a different monotonic clock.
+  const accessExpiresAt = Date.now() + Math.floor(fresh.deadline - performance.now());
+  const native = { callId, rootId: binding.rootId, rootTurn, accessExpiresAt };
   return grantModelCall(actor, call, amountCents, raw, fresh, undefined, allow, native);
 }
 

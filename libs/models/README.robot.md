@@ -2921,7 +2921,12 @@ and refuse, rather than allocate another. The actor compares the exact body dige
 computed cents and complete call binding, including delegation, generation, model,
 tariff and payer. A retry uses the original reservation and request ids and recovers
 the exact saved allow decision. Unknown reads retain the hold. Ordinary call retry
-identity is unchanged. Recovery and dispatch reuse the original access deadline.
+identity is unchanged. Native holds save `accessExpiresAt` in Unix milliseconds,
+converted from the remaining original access deadline before reservation. Replay keeps
+that date. Recovery checks it before decision saving and before and after each access
+refresh in the actor queue. Expiry before recovery adds no decision or budget event;
+expiry during dispatch releases only proven-unsent work at zero. Older native holds
+without the date refuse recovery. Ordinary call recovery is unchanged.
 
 The existing PostgreSQL `budget-leader:<silo>` session lock elects the single writer.
 Tests use that lock during writer reload, separate NATS clients and barriers to race
@@ -2929,7 +2934,7 @@ two retries. They assert one hold, one decision and at most one dispatch admissi
 They also cover lost committed reserve, decision and dispatch replies; changed
 bindings without replacement or release; Stop and deadline expiry after reservation;
 and production refusal with no body read or hold. Previously admitted or unknown
-work remains held. No event or browser/header identity is added.
+work remains held. No event type or browser/header identity is added.
 
 Native token minting, both `multi_agent=false` settings and the refusal before body
 reading remain unchanged. Row 3 owns enablement. Fresh-install qualification: NOT RUN.
@@ -3034,3 +3039,15 @@ the measurement. Both calls must return 200. The measured call adds exactly one
 reservation, reads no old grants and finishes within two seconds. Neither successful
 hold is settled. The separate saved-Allow timeout test retains its 503 refusal and
 requires the unsent hold to settle at zero without releasing an earlier hold.
+
+## Native recovery regression checks
+
+`native-budget.test.ts` advances both clocks by 2,100 ms after a 110-cent hold.
+Recovery refuses without another hold, decision or dispatch, with and without writer
+restart. A second case starts recovery at 1,700 ms and crosses the original deadline
+while saving the decision; it refuses dispatch and releases the unsent hold at zero.
+`native-retry-identity.test.ts` checks each excluded call fact before later validation,
+pins the silo and native namespace, and tries valid competing roots and bindings.
+Each competitor succeeds with a distinct call id, but cannot replace the original hold.
+An older native hold without a saved expiry remains held and cannot be recovered.
+A decision-history read that crosses the expiry refuses before saving a missing decision.

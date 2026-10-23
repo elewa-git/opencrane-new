@@ -22,6 +22,8 @@ export const budgetRootStoppedDataSchema = z.discriminatedUnion('reason', [
 // Keep older holds readable; only new rooted model calls carry retry hashes.
 export const budgetCallRetrySchema = z.object({
   dispatchGate: z.literal(1).optional(),
+  // Keep the original native access expiry in Unix milliseconds through writer restarts.
+  accessExpiresAt: z.int().nonnegative().optional(),
   retryDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
   bodyDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
 });

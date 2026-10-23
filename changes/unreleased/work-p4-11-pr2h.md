@@ -1,1 +1,2 @@
 - Recover one internal native model call's original spending hold and decision after a lost save reply or writer restart. Refuse changed requests and admit a send at most once. Native execution remains disabled.
+- Keep the original two-second access deadline when recovering an internal native call, including after a spending writer restart. Expired or undated native holds cannot grant a send.

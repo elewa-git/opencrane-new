@@ -829,11 +829,9 @@ async function preservesNativeDeadline(restart: boolean, expireDuringDecision: b
   try {
     const binding = child(context, 'original-deadline');
     await admit(context, binding);
-    const id = await reserve(context, binding, 110);
-    const saved = context.actor.state.reservations[0]!;
     const originalClock = Date.now();
     const originalPerformance = performance.now();
-    let elapsed = expireDuringDecision ? 1700 : 2100;
+    let elapsed = 0;
     function wallClock() {
       return originalClock + elapsed;
     }
@@ -844,6 +842,9 @@ async function preservesNativeDeadline(restart: boolean, expireDuringDecision: b
     dateClock.mockImplementation(wallClock);
     const performanceClock = vi.spyOn(performance, 'now');
     performanceClock.mockImplementation(monotonicClock);
+    const id = await reserve(context, binding, 110);
+    const saved = context.actor.state.reservations[0]!;
+    elapsed = expireDuringDecision ? 1700 : 2100;
     if (restart) {
       await context.restartActor();
     }
