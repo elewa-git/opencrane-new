@@ -1070,6 +1070,43 @@ async function recalledRemember(commandId: string, query = 'deliver') {
     recallProof: page.recallProof };
   return { ...call, params: { ...call.params, name: 'remember', arguments: argumentsValue } };
 }
+async function preparesColdRecallAuthority(subject: string) {
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  const originalDate = Date.now.bind(Date);
+  const originalPerformance = performance.now.bind(performance);
+  let elapsed = 0;
+  let coldRead = false;
+  function dateNow() {
+    return originalDate() + elapsed;
+  }
+  function performanceNow() {
+    return originalPerformance() + elapsed;
+  }
+  async function* readStream(...args: Parameters<typeof originalRead>) {
+    if (args[0] === subject && !coldRead) {
+      coldRead = true;
+      // Advance both clocks to model a cold lookup without waiting on a timer.
+      elapsed += 2200;
+    }
+    yield* originalRead(...args);
+  }
+  const dates = vi.spyOn(Date, 'now').mockImplementation(dateNow);
+  const times = vi.spyOn(performance, 'now').mockImplementation(performanceNow);
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  try {
+    await recalledRemember('cold-recall-authority');
+    expect(coldRead).toBe(true);
+  } finally {
+    reads.mockRestore();
+    times.mockRestore();
+    dates.mockRestore();
+  }
+}
+const coldRecallSubjects = ['member-alice', grantStream('mcp_server', 'memory')];
+it.each(coldRecallSubjects)(
+  'finishes a cold access lookup before signing the valid recall control: %s',
+  preparesColdRecallAuthority);
+
 async function signedRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
   const parsed = parseMemoryRequest(JSON.stringify(body), rememberHeaders);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
