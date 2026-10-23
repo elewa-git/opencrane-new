@@ -107,7 +107,8 @@ The HTTP forget command is not built yet.
 
 3. **Saved routine records are read again.** `foldRoutine` rebuilds their definition
    and run facts. It remembers each modern event's id and ignores that event if it
-   arrives again, even after later changes. It grants no access and starts no work.
+   arrives again, even after later changes. Definitions still match when a database
+   returns their fields in a different order. It grants no access and starts no work.
 
 4. **A caller previews a routine schedule.** It supplies the time and the last used
    local date, if there is one. The library returns future dates and clock-change

@@ -870,3 +870,23 @@ which rolls back the transaction. Ordinary projection writes keep their existing
 The spending choices route supplies the same deadline for checkpoints, candidates and caps.
 The route tests hold exclusive locks on all three tables and require a reply before
 releasing the lock, then check that a later request succeeds.
+
+## Routine records and offline replay
+
+`routines` uses `ProjectionRunner` and the strict event parser with `foldRoutine`.
+`routines` stores current facts and their last event id and position.
+`routine_occurrences` stores each due with its frozen definition, activation, Stop
+request and first terminal result. It retains the due event id/position and terminal
+reference. Late records must match the original run even after later runs finish.
+Skipped dates and missed ranges are single rows. A missed range is identified within
+its silo/routine by schedule revision and first/last local dates. It is never expanded.
+Legacy facts remain `legacy-needs-migration` with `executionAvailable: false`.
+Instructions remain ciphertext; projection and replay accept no decryption port.
+
+`rebuildRoutineProjection` holds the runner lock and uses the ordinary runner inside
+one PostgreSQL transaction. Drop/create, receipts, checkpoint and generation roll back
+on interruption. `verify` compares all rows at the live checkpoint before catching up
+to the captured event position. Keep readers and workers stopped until commit.
+Tests: `PG_TEST_URL=… nice -n 10 npx vitest run libs/projections/test/routines.test.ts`.
+They use real NATS/PostgreSQL and guarded worker/replay child processes.
+Fresh-install live qualification is NOT RUN.

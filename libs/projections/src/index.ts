@@ -67,3 +67,6 @@ export { shouldReplaceMemoryRevision } from './memory-revision.ts';
 export { readPublication, publicationChange } from './publication-status.ts';
 
 export { childRequests } from './child-requests.ts';
+
+export { routines } from './routines.ts';
+export { rebuildRoutineProjection } from './routine-rebuild.ts';

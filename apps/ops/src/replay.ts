@@ -12,6 +12,7 @@ import {
   connectProjectionDb,
   readEvents,
   rebuildAuditProjection,
+  rebuildRoutineProjection,
   rebuildConversationsProjection,
   rebuildMemberProjection,
   rebuildGroupProjection,
@@ -29,13 +30,15 @@ import {
 const usage =
   "Usage: npm run replay -- " +
   "<members|groups|providers|model-access|mcp-catalogue|computers|budgets|audit|" +
-  "conversations|memory|openfga> " +
+  "conversations|memory|routines|openfga> " +
   "[--dry-run] [--verify] [--confirm-openfga-stopped] [--confirm-memory-stopped] " +
-  "[--confirm-conversations-stopped] [--list-stores | --delete-store <id>]";
+  "[--confirm-conversations-stopped] [--confirm-routines-stopped] " +
+  "[--list-stores | --delete-store <id>]";
 const replayOptions = {
   "dry-run": { type: "boolean", default: false },
   verify: { type: "boolean", default: false },
   "confirm-openfga-stopped": { type: "boolean", default: false },
+  "confirm-routines-stopped": { type: "boolean", default: false },
   "confirm-memory-stopped": { type: "boolean", default: false },
   "confirm-conversations-stopped": { type: "boolean", default: false },
   "list-stores": { type: "boolean", default: false },
@@ -50,6 +53,7 @@ const postgresRebuilds = new Map([
   ['computers', rebuildComputersProjection],
   ['budgets', rebuildBudgetProjection],
   ['audit', rebuildAuditProjection],
+  ['routines', rebuildRoutineProjection],
 ]);
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -159,6 +163,13 @@ function validateConversationsReplay(
   }
 }
 
+function validateRoutineReplay(projection: string, dryRun: boolean, stopped: boolean): void {
+  if (projection === 'routines' && !dryRun && !stopped) {
+    throw new Error('Routine replay requires readers, scheduler, dispatcher and effect workers '
+      + 'to stop; pass --confirm-routines-stopped');
+  }
+}
+
 async function replayMemory(db: Db, source: EventSource, env: NodeJS.ProcessEnv): Promise<number> {
   const keys = memoryKeys(required(env, 'MEMORY_KEY_DIRECTORY'));
   const custody = { decrypt: keys.decrypt };
@@ -231,7 +242,7 @@ export async function replay(
   if (storeActionRequested(listStores, deleteStoreId)) {
     const hasReplayOptions = parsed.values['dry-run'] || parsed.values.verify
       || parsed.values['confirm-openfga-stopped'] || parsed.values['confirm-memory-stopped']
-      || parsed.values['confirm-conversations-stopped'];
+      || parsed.values['confirm-conversations-stopped'] || parsed.values['confirm-routines-stopped'];
     validateStoreAction(projection, listStores, deleteStoreId, hasReplayOptions);
     await manageOpenFgaStores(listStores, deleteStoreId, env);
     return;
@@ -240,6 +251,8 @@ export async function replay(
     parsed.values['confirm-memory-stopped'], parsed.values.verify);
   validateConversationsReplay(projection, parsed.values['dry-run'],
     parsed.values['confirm-conversations-stopped'], parsed.values.verify);
+  validateRoutineReplay(projection, parsed.values['dry-run'],
+    parsed.values['confirm-routines-stopped']);
   const nats = await connectEventStore(env);
   try {
     if (parsed.values["dry-run"]) {

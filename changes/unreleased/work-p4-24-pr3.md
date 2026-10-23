@@ -1,0 +1,1 @@
+Routine definitions and occurrence history can now be rebuilt without starting work. Instructions stay encrypted, finished runs keep their original identity and result, and missed dates stay compact. A dedicated projection worker and guarded offline replay command support recovery and verification.

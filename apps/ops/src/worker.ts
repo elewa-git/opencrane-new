@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
-  mcpCatalogue, computers, modelAccess, egressPolicy, delegations,
+  mcpCatalogue, computers, modelAccess, egressPolicy, delegations, routines,
   conversations, childRequests, files, personalSettings, conversationKeys, memoryKeys,
   memoryProjection,
   type Projection, type Db,
@@ -34,7 +34,7 @@ function required(name: string): string {
 }
 const mode = process.argv[2];
 const modes = ['members', 'mcp-catalogue', 'computers', 'dispatcher', 'budgets',
-  'conversations', 'audit', 'files', 'memory', 'delegations'];
+  'conversations', 'audit', 'files', 'memory', 'delegations', 'routines'];
 if (!modes.includes(mode ?? '')) {
   throw new Error(
     `Expected one of: ${modes.join(', ')}`,
@@ -53,7 +53,7 @@ function workerProjection() {
     return memoryProjection(custody);
   }
   const projections: Record<string, Projection> = {
-    files, audit: auditTrail, conversations, members, budgets, delegations,
+    files, audit: auditTrail, conversations, members, budgets, delegations, routines,
     computers, 'mcp-catalogue': mcpCatalogue,
   };
   if (!mode) {

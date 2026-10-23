@@ -34,7 +34,8 @@
       "entry": [
         "test/**/*.test.ts",
         "test/support/nightly-process.ts",
-        "test/support/worker-faults.ts"
+        "test/support/worker-faults.ts",
+        "test/support/routine-effects.ts"
       ],
       "project": [
         "src/**/*.ts",

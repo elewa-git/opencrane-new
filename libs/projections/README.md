@@ -25,9 +25,9 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses the database test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history with saved and missing tool evidence, memory and surveys"]
-  server["apps/server<br/>back end"] -->|reads spending choices with a time limit, and tables including closed assistant chats for cleanup, bounded grant lists with membership status, choices and join times| pg["PostgreSQL<br/>database"]
-  projections -->|keeps native refusal audits, child requests and retries outside feeds; saves ordered reply batches, public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
+  ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes| projections["libs/projections<br/>read tables, history, routines and memory"]
+  server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
+  projections -->|saves chat rows, routines, occurrences, receipts and history| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and reads unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
@@ -173,6 +173,11 @@ Closing a chat keeps that message position. Later reports and repeated closes ca
 these details. The reports remain in the feed so their saved evidence is available.
 
 ## Processes it handles
+
+The routines worker copies saved definitions and runs into read tables. Instructions
+stay encrypted. Each run keeps its original owner, assistant and paying group after
+later edits. Missed dates stay in one compact record. Rebuilding these tables starts
+no work and requires readers and workers to be stopped.
 
 The conversations worker builds an index of child requests from saved events. It keeps
 event references, ids and failed attempt numbers. Recovery skips failed requests until the requester saves a retry.
