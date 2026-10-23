@@ -9,7 +9,7 @@ export type Page = { scopeId: string; facts: PageFact[]; returnedCount: number;
   nextCursor: string | null };
 export type Detail = { status: 'unavailable'; scopeId: string; memoryId: string;
   revision: number | null; reason: string } | { scopeId: string; fact: Fact; sources: Source[];
-  canForget: boolean };
+  canForget: boolean; canCorrect?: boolean };
 
 type RecordValue = Record<string, unknown>;
 
@@ -68,6 +68,7 @@ export function isDetail(value: unknown): value is Detail {
   if (!isObject(value)) return false;
   if (value['status'] === 'unavailable') return true;
   return typeof value['scopeId'] === 'string' && typeof value['canForget'] === 'boolean' &&
+    (value['canCorrect'] === undefined || typeof value['canCorrect'] === 'boolean') &&
     isFact(value['fact']) &&
     Array.isArray(value['sources']) && value['sources'].every(isSource);
 }

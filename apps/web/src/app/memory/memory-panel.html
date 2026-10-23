@@ -31,7 +31,8 @@
         Search input is invalid. Use up to eight terms and 256 characters.
       </p>
     }
-    <div class="results" aria-live="polite">
+    <div class="results">
+      <span class="sr-only" aria-live="polite">{{ facts().length }} facts on this page</span>
       @if (listState() === 'loading') { <p role="status">Searching memory…</p> }
       @else if (listState() === 'unavailable') {
         <p role="alert">Memory could not be loaded. Try again later.</p>
@@ -48,9 +49,13 @@
               <small>The server could not fit its text on this page.</small></article>
           } @else {
             <button class="fact" type="button" (click)="openFact(fact, $event)">
-              <span>{{ fact.text }}</span><small>{{ fact.kind === 'preference' ? 'Preference' : 'Fact' }}
-                · {{ fact.pinned ? 'Pinned for initial context; loading is not enabled yet' : 'Not pinned' }}
-              </small>
+              @if (fact.text) {
+                <span>{{ fact.text }}</span><small>r{{ fact.revision }} · {{ fact.kind === 'preference' ? 'Preference' : 'Fact' }}
+                  · {{ fact.pinned ? 'Pinned for initial context; loading is not enabled yet' : 'Not pinned' }}
+                </small>
+              } @else {
+                <span>This fact’s text is no longer available.</span>
+              }
             </button>
           }
         }
@@ -96,6 +101,14 @@
           <button class="store-open" type="button" (click)="openStore($event)">Remember a fact</button>
           @if (detailCanForget()) {
             <button class="forget-open" type="button" (click)="openForget($event)">Forget</button>
+          }
+        }
+        @for (fact of [selectedFact()]; track fact?.memoryId) {
+          @if (fact) {
+            <oc-memory-edit [fact]="fact" [scopeId]="selectedScope()"
+              [enabled]="detailState() === 'ready' && detailCanCorrect() &&
+                currentScopeKind() === 'person'"
+              (refreshed)="detailLoaded($event, true)" (accessLost)="revoke()" />
           }
         }
       </dialog>

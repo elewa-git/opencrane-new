@@ -6,8 +6,10 @@ import { chatFixture } from './chat-fixture.mjs';
 import { serveWebBuild } from './serve-web-build.mjs';
 import { pageHasNoOverflow, waitForFonts } from './visual-helpers.mjs';
 
+const editing = process.argv.includes('--edit');
 const origin = 'https://memory-forget.opencrane.test';
-const output = resolve('docs/process/screen-p4-13-forget');
+const output = resolve(editing ? 'docs/process/screen-p4-13-edit' :
+  'docs/process/screen-p4-13-forget');
 const build = resolve('apps/web/dist/web/browser');
 const fact = { memoryId: 'fact-one', revision: 3,
   text: 'The quarterly planning session is usually held on Thursday.',
@@ -28,7 +30,16 @@ async function serveMemory(page, scenario, posts) {
     const path = new URL(request.url()).pathname;
     let body;
     let status = 200;
-    if (path === '/api/memory/scopes') body = { scopes: [scope] };
+    if (path.endsWith('/correct')) {
+      posts.push(JSON.parse(request.postData() || '{}'));
+      if (scenario !== 'accepted' && !scenario.endsWith('-accepted')) {
+        status = 409;
+        body = { outcome: 'conflict' };
+      }
+      else body = { operation: 'correct', outcome: 'accepted', scopeId: scope.scopeId,
+        memoryId: fact.memoryId, revision: 4, acceptedAt: '2026-10-20T09:20:00Z',
+        contentStatus: 'current', cleanupStatus: 'pending' };
+    } else if (path === '/api/memory/scopes') body = { scopes: [scope] };
     else if (path.endsWith('/facts/fact-one/forget')) {
       posts.push(JSON.parse(request.postData() || '{}'));
       if (scenario === 'conflict' || scenario === 'forgotten-detail') {
@@ -39,10 +50,20 @@ async function serveMemory(page, scenario, posts) {
     } else if (path.includes('/changes/')) body = receipt('forgotten');
     else if (path.endsWith('/facts/fact-one')) {
       detailReads += 1;
-      if (scenario === 'forgotten-detail' && detailReads > 1) {
+      const hiddenText = scenario.startsWith('quarantined-') || scenario.startsWith('destroyed-');
+      if ((['forgotten-detail', 'unavailable'].includes(scenario) || hiddenText) && detailReads > 1) {
+        let reason = 'forgotten';
+        if (scenario === 'unavailable' || scenario.startsWith('quarantined-')) reason = 'quarantined';
+        if (scenario.startsWith('destroyed-')) reason = 'destroyed';
         body = { status: 'unavailable', scopeId: scope.scopeId, memoryId: fact.memoryId,
-          revision: 4, reason: 'forgotten' };
-      } else body = { scopeId: scope.scopeId, fact, sources: [], canForget: true };
+          revision: 4, reason };
+      } else {
+        let current = fact;
+        if (editing && detailReads > 1) current = { ...fact, revision: 4,
+          text: 'The quarterly planning session is now held on Friday.' };
+        body = { scopeId: scope.scopeId, fact: current, sources: [], canForget: true,
+          canCorrect: editing };
+      }
     } else {
       body = { scopeId: scope.scopeId, facts: [fact], returnedCount: 1, nextCursor: null };
     }
@@ -179,11 +200,133 @@ async function captureWidth(browser, width) {
   } finally { await forgottenPage.close(); }
 }
 
+async function captureEditWidth(browser, width) {
+  for (const scenario of ['accepted', 'conflict', 'forgotten-detail', 'unavailable']) {
+    const posts = [];
+    const page = await openPage(browser, width, scenario, posts);
+    try {
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      const sheet = page.getByRole('dialog', { name: 'Edit fact', exact: true });
+      await sheet.getByRole('textbox').fill('The planning session is now on Friday.');
+      if (scenario === 'accepted') await capture(page, 'MEM-33', width);
+      await sheet.getByRole('button', { name: 'Save correction' }).click();
+      if (scenario === 'accepted') {
+        await page.getByText('Corrected in your memory · r4').waitFor();
+        await page.locator('.detail-text').filter({ hasText: 'now held on Friday' }).waitFor();
+        await capture(page, 'MEM-34', width);
+        const receipt = await page.locator('.edit-receipt').textContent();
+        assert(!receipt.includes(fact.text));
+      } else {
+        await sheet.getByText('This fact changed before your edit was saved').waitFor();
+        if (scenario === 'forgotten-detail') {
+          await sheet.getByRole('button', { name: 'Refresh and review' }).click();
+          await sheet.getByText('This fact was forgotten. Your edit wasn’t applied.').waitFor();
+          assert.equal(await page.locator('oc-memory-edit textarea').count(), 0);
+          await assertFactHidden(page);
+        }
+        if (scenario === 'unavailable') {
+          await sheet.getByRole('button', { name: 'Refresh and review' }).click();
+          const unavailableMessage = sheet.getByText(
+            'This fact’s text is no longer available. Your edit wasn’t applied.');
+          await unavailableMessage.waitFor();
+          const sheetText = await sheet.textContent();
+          assert(!sheetText.includes('forgotten'));
+          const fields = page.locator('oc-memory-edit textarea');
+          assert.equal(await fields.count(), 0);
+          const rows = page.locator('button.fact');
+          assert.equal(await rows.count(), 1);
+        }
+        await capture(page, `MEM-35-${scenario}`, width);
+      }
+      assert.equal(posts.length, 1);
+      assert.equal(await page.evaluate(storageCount), 0);
+      assert(!page.url().includes(fact.memoryId));
+    } finally { await page.close(); }
+  }
+}
+
+async function assertNoProtectedEditText(page) {
+  const panel = page.locator('oc-memory-panel');
+  const text = await panel.textContent();
+  assert(!text.includes(fact.text), 'The page retained the original fact text');
+  assert(!text.includes('Private correction draft'), 'The page retained the editor draft');
+  const fields = panel.locator('input, textarea');
+  for (const field of await fields.all()) {
+    const value = await field.inputValue();
+    assert(!value.includes(fact.text), 'An input retained the original fact text');
+    assert(!value.includes('Private correction draft'), 'An input retained the editor draft');
+  }
+}
+
+async function verifyUnavailableEdit(browser, width, reason, outcome) {
+  const posts = [];
+  const page = await openPage(browser, width, `${reason}-${outcome}`, posts);
+  try {
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const sheet = page.getByRole('dialog', { name: 'Edit fact', exact: true });
+    await sheet.getByRole('textbox').fill('Private correction draft');
+    await sheet.getByRole('button', { name: 'Save correction' }).click();
+    if (outcome === 'conflict') {
+      await sheet.getByRole('button', { name: 'Refresh and review' }).click();
+    }
+    await sheet.getByText('This fact’s text is no longer available. Your edit wasn’t applied.')
+      .waitFor();
+    const rows = page.locator('button.fact');
+    assert.equal(await rows.count(), 1);
+    assert.equal(await sheet.locator('textarea, .preview').count(), 0);
+    assert(!(await sheet.textContent()).includes('forgotten'));
+    await assertNoProtectedEditText(page);
+    await inspect(page, width);
+    await sheet.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await assertNoProtectedEditText(page);
+    await page.getByRole('button', { name: 'Back to memory' }).click();
+    await rows.getByText('This fact’s text is no longer available.', { exact: true }).waitFor();
+    assert.equal(await rows.count(), 1);
+    await assertNoProtectedEditText(page);
+    assert.equal(posts.length, 1);
+  } finally {
+    await page.close();
+  }
+}
+
 const browser = await chromium.launch();
 try {
   await mkdir(output, { recursive: true });
-  for (const width of [1280, 390]) await captureWidth(browser, width);
-  await writeFile(`${output}/receipt.md`, `# Personal memory forget screen receipt\n\n` +
+  for (const width of [1280, 390]) {
+    if (editing) {
+      await captureEditWidth(browser, width);
+      for (const reason of ['quarantined', 'destroyed']) {
+        for (const outcome of ['conflict', 'accepted']) {
+          await verifyUnavailableEdit(browser, width, reason, outcome);
+        }
+      }
+    }
+    else await captureWidth(browser, width);
+  }
+  await writeFile(`${output}/receipt.md`, editing ? `# Personal memory correction screens
+
+` +
+    `PASS: intercepted replies at 1280px and 390px, reduced motion. Captured edit,
+` +
+    `accepted receipt, conflict, forgotten and unavailable detail. One POST per save. Receipts
+` +
+    `held no fact text; forgotten text left inputs, rows and announcements. Quarantined and destroyed
+` +
+    `detail kept a text-free row after conflict, acceptance, Cancel and Back to memory.
+` +
+    `Dialog actions were at least 44px; no horizontal overflow, browser storage or address change.
+` +
+    `The desktop editor keeps the shared centred ModalSheet, as the forget sheet does.
+` +
+    `The reference uses a right-hand drawer. That cross-screen change is deferred.
+` +
+    `MEM-35 messages use plain status text without the reference alert-card style.
+` +
+    `NOT RUN: fresh-install journey, real keyboard and assistive technology. No dev stack or model call.
+` +
+    `Source base: ${process.env['SCREEN_SOURCE_SHA'] || 'working tree'}, with working-tree edits; date: ${new Date().toISOString()}.
+` :
+    `# Personal memory forget screen receipt\n\n` +
     `PASS: intercepted memory replies at 1280px and 390px with reduced motion.\n` +
     `Captured detail, review, pending, forgotten, conflict, searched acceptance and a\n` +
     `forgotten detail after conflict. The review showed no fact text. Search input, list\n` +
@@ -191,5 +334,6 @@ try {
     `Each confirmation sent one POST.\n` +
     `Visible dialog buttons were at least 44px high. No horizontal overflow, browser storage\n` +
     `or fact id in the address was found. No dev stack or live journey was run.\n`);
-  console.log('PASS Personal memory forget screen captures');
+  console.log(editing ? 'PASS Personal memory correction screen captures' :
+    'PASS Personal memory forget screen captures');
 } finally { await browser.close(); }

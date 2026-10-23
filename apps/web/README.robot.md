@@ -635,10 +635,34 @@ labels. Pending and unknown outcomes use `GET /api/memory/:scopeId/changes/:comm
 never POST again. Only one status read runs at a time, and a late pending reply cannot replace
 a final outcome. Conflict offers one fresh detail read. A 401, 403 or 404 clears protected
 state. Late replies after a scope or requester change are ignored. The command remains in component memory
-only. Group and assistant-notes forget, edit, unpin and store Undo have no controls here.
+only. Group and assistant-notes forget and edit, unpin and store Undo have no controls here.
 `memory-panel-forget.spec.ts` covers the review, one POST, safe outcome and refusals.
 `npm run visual:screen-p4-13-forget` captures both widths with intercepted replies;
 see [the receipt](../../docs/process/screen-p4-13-forget/receipt.md).
+
+Personal detail shows Edit only with `canCorrect: true`. The child editor keeps one target
+per component. Only text changes; kind, pin and expiry come from the detail revision.
+`storeValidation` checks the 4,096-byte limit and controls. Cancel/Escape send nothing.
+Save locks dismissal and sends one `/correct` POST. Its text-free receipt shows accepted
+revision, UTC time and old-revision cleanup status, then one detail GET replaces row and detail.
+Edit stays disabled until that read finishes. Both editor revision labels and the saved date
+come from the same detail snapshot as the next Save command.
+A 409 or conflict status keeps the draft and offers one serial Refresh and review GET.
+The next save gets a new command id. Lost replies, 503 and unknown offer only serial status
+reads with the original id. A 422 returns to editing. Forgotten detail removes old text,
+draft, preview and row. Quarantined or destroyed detail clears text from the retained row,
+selected fact, editor draft and snapshot. The row shows only an unavailable message. Older
+list and detail reads are cancelled so they cannot restore the text. Other unavailable
+reasons keep the row and its text, while clearing the editor and saying the text is no
+longer available. These rules also apply to the detail read after acceptance. A temporary
+detail read failure keeps the last row; conflict recovery keeps its draft for another read. Refresh requires renewed `canCorrect: true`;
+false or absent rights never reopen editing. A receipt for another scope or fact stays unknown.
+401/403/404 use the existing access clearing. Scope/requester
+changes destroy the editor and ignore late replies. List announcements contain counts only.
+`memory-panel-edit.spec.ts` covers these guards. `npm run visual:screen-p4-13-edit` uses
+intercepted replies; see [the receipt](../../docs/process/screen-p4-13-edit/receipt.md).
+Part b remains: receipt cleanup re-check and wording for non-current `contentStatus`.
+Fresh-install qualification and real phone keyboard: NOT RUN.
 
 `LiveView.open` obtains admission and loads the viewer. `connectViewer` connects
 the socket and lease channel; `startViewer` attaches the desktop display.
