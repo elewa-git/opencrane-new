@@ -463,7 +463,9 @@ class TurnRunner {
   private failTurn(input: Turn, reason: 'model_error' | 'stop_interrupted' = 'model_error') {
     if (!this.isFinished(input.id)) {
       // Keep Stop when removing its connection makes Codex report a failure.
-      if (this.stoppedTurns.has(input.id)) reason = 'stop_interrupted';
+      if (this.stoppedTurns.has(input.id)) {
+        reason = 'stop_interrupted';
+      }
       const extra: Partial<BridgeReport> = { reason };
       if (this.state.refusedTools.has(input.id)) extra.reason = 'restricted_tool_refused';
       this.appendReport(input, 'agent.turn_failed', extra);
@@ -628,7 +630,9 @@ class TurnRunner {
       return;
     }
 
-    if (!this.gate.closed) this.stoppedTurns.add(turnId);
+    if (!this.gate.closed) {
+      this.stoppedTurns.add(turnId);
+    }
     this.state.cancelled.add(turnId);
     const heldThread = this.findRunningThread(turnId);
     const endHolds = this.endTurnHolds.bind(this, heldThread);

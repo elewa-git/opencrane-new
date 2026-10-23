@@ -343,7 +343,8 @@ async function finishesOldInstallationBeforeReusingThread() {
     }
     const terminals = test.frames.filter(firstTerminal);
     expect(terminals).toHaveLength(1);
-    expect(terminals[0]).toMatchObject({ type: 'agent.turn_failed', reason: 'stop_interrupted' });
+    const expectedTerminal = { type: 'agent.turn_failed', reason: 'stop_interrupted' };
+    expect(terminals[0]).toMatchObject(expectedTerminal);
   } finally {
     release.resolve();
     await test.close();
