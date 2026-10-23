@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
 import type { AppendCommand } from '@opencrane/event-store';
@@ -6,10 +7,10 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
-import { saveBearerConnection, changePersonalConnection } from '../src/bearer-connections.ts';
+import { saveBearerConnection, changePersonalConnection, foldConnection } from '../src/bearer-connections.ts';
 import { changeConnectionSelection, foldConnectionSelection, readConnectionSelection }
   from '../src/connection-selection.ts';
 
@@ -125,28 +126,58 @@ it.each([{ userId: 'other' }, { ownerId: 'other' }, { ownerKind: 'company' },
   'refuses forged or stale selection input %j', invalidInput);
 
 async function invalidProfile(kind: string) {
-  const owner = await fixture();
   const test = await fixture();
-  const rows = await history(nats.store, owner.profileSubject, 'test');
-  const original = rows[0]!.event;
-  const saved = connectionCreatedDataSchema.parse(original.data);
-  let replacement: unknown = saved;
-  if (kind === 'legacy') replacement = { ...saved, activation: undefined };
-  if (kind === 'incomplete') {
-    replacement = { ...saved, activation: { ...saved.activation, uid: undefined } };
+  const rows = await history(nats.store, test.profileSubject, 'test');
+  expect(foldConnection(rows).status).toBe('saved_unverified');
+  const changed = structuredClone(rows);
+  const row = changed[0]!;
+  const saved = connectionCreatedDataSchema.parse(row.event.data);
+  const activation = saved.activation!;
+  if (kind === 'legacy') {
+    row.event.data = { ...saved, activation: undefined };
+  } else if (kind === 'incomplete') {
+    row.event.data = { ...saved, activation: { ...activation, uid: undefined } };
+  } else if (kind === 'company' || kind === 'validation') {
+    row.event.data = { ...saved, activation: { ...activation, ownerKind: kind } };
+  } else {
+    if (kind === 'foreign') {
+      saved.userId = 'another-person';
+      activation.changedBy = saved.userId;
+      row.event.principal = { kind: 'human', id: saved.userId };
+    } else if (kind === 'server') {
+      saved.serverId = 'another-server';
+    } else if (kind === 'profile') {
+      saved.profile = 'another-profile';
+    } else if (kind === 'installation') {
+      activation.connectionId = 'another-installation';
+    } else if (kind === 'endpoint') {
+      activation.endpointDigest = 'a'.repeat(64);
+    }
+    row.event.subject = `connection-${saved.userId}-${saved.serverId}-${saved.profile}`;
+    row.event.data = saved;
+    // Keep the supplied profile valid on its own so only the selection binding rejects it.
+    expect(foldConnection(changed).status).toBe('saved_unverified');
   }
-  if (kind === 'company' || kind === 'validation') {
-    replacement = { ...saved, activation: { ...saved.activation, ownerKind: kind } };
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* substituteProfile(subject: string, from?: number, deadline?: number) {
+    if (subject === test.profileSubject) {
+      yield* changed;
+      return;
+    }
+    yield* readStream(subject, from, deadline);
   }
-  const event = { ...original, id: `invalid-${test.userId}`, subject: test.profileSubject,
-    data: replacement };
-  await nats.seed([event]);
-  const revision = await nats.store.head(test.profileSubject);
-  await expect(test.select({ ...test.command, profileRevision: revision })).rejects.toThrow();
+  const fault = vi.spyOn(nats.store, 'readStream');
+  fault.mockImplementation(substituteProfile);
+  try {
+    await expect(test.select()).rejects.toThrow('Selection conflict');
+  } finally {
+    fault.mockRestore();
+  }
   expect(await nats.store.head(test.subject)).toBe(0);
 }
-it.each(['foreign', 'legacy', 'incomplete', 'company', 'validation'])(
-  'refuses a %s profile without saving a choice', invalidProfile);
+it.each(['foreign', 'legacy', 'incomplete', 'company', 'validation',
+  'server', 'profile', 'installation', 'endpoint'])(
+  'refuses a profile with only the %s fault', invalidProfile);
 
 async function changeProfile(test: Awaited<ReturnType<typeof fixture>>, action: string) {
   if (action === 'rotate') {
@@ -350,3 +381,43 @@ async function clearAfterRegistration() {
 }
 it('clears the saved binding after re-registration before discovery succeeds',
   clearAfterRegistration);
+
+async function blockedLegacyReview() {
+  const test = await fixture();
+  const definition = '{"inputSchema":{"type":"object"},"name":"read"}';
+  const hash = createHash('sha256');
+  hash.update(definition);
+  const revision = hash.digest('hex');
+  const tool = { name: 'read', revision, reviewed: false, definition, costCents: 0 };
+  const tools = [tool];
+  const schemaDigest = catalogueDigest(tools);
+  const now = Date.now();
+  const discovery = envelope('test', 'mcp-server', 'mcp.server_discovered', {
+    serverId: 'server', connectionId: 'installed', accountMode: 'personal',
+    tools, toolCount: 1, schemaDigest, checkedAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + 300_000).toISOString(),
+  });
+  try {
+    await nats.seed([discovery]);
+    const policyRevision = await nats.store.head('mcp-server');
+    const choice = { name: 'read', revision, reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+    const review = envelope('test', 'mcp-server', 'mcp.server_reviewed', {
+      serverId: 'server', connectionId: 'installed', accountMode: 'personal',
+      catalogueDigest: schemaDigest, policyRevision, reviewedBy: 'admin', tools: [choice],
+    });
+    review.principal = { kind: 'human', id: 'admin' };
+    const publication = envelope('test', 'mcp-server', 'mcp.server_published', {
+      serverId: 'server', publishedBy: 'admin',
+    });
+    await nats.seed([review, publication]);
+    await expect(test.select()).rejects.toThrow('Selection conflict');
+    const input = { ...test.input, profileId: 'new-profile', changeRef: 'new-profile' };
+    await expect(test.save(input)).rejects.toThrow('Connection server unavailable');
+    expect(test.custody.stage).not.toHaveBeenCalled();
+    expect(await nats.store.head(test.subject)).toBe(0);
+  } finally {
+    await publishServer();
+  }
+}
+it('refuses selection and bearer staging after a blocked legacy review and publication',
+  blockedLegacyReview);
