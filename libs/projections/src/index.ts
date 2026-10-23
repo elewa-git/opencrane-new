@@ -30,7 +30,7 @@ export {
 } from './conversations.ts';
 
 export { emptyToolPolicy, applyToolPolicy, isToolPolicyAvailable, isToolReviewCurrent, reviewedToolChoices } from './tool-policy.ts';
-export { auditTrail, readAudit, readAuditDetail } from './audit.ts';
+export { auditTrail, readAudit, readAuditDetail, readAuditOwnershipConfirmation } from './audit.ts';
 export { rebuildAuditProjection } from './audit-rebuild.ts';
 
 export { conversationKeys } from './keys.ts';

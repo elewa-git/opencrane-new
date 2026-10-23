@@ -20,6 +20,9 @@ does not prove a business change succeeded. Reading history never sends a tool c
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.
 
+Owners and admins can read safe role and ownership change details. The server checks
+receipts for the exact saved change before showing its progress, then checks current access.
+
 ## Where it fits
 
 This package is the back-end layer. [apps/web](../web/README.md) is the website;
@@ -35,7 +38,7 @@ flowchart LR
   server -->|records changes, access-checked control refusals, checked child activations, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads conversations and history with saved and missing tool outcomes| postgres
+  server -->|reads conversations, history and exact role and ownership receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|checks permission| server

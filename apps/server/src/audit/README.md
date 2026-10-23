@@ -6,6 +6,7 @@ This folder lets people see why OpenCrane allowed, refused or charged for work. 
 
 - Returns filtered pages of saved decisions and changes.
 - Returns details of one organisation history entry to a current owner or admin.
+- Checks the exact read-table and permission receipts for role and ownership changes.
 - Limits conversation history to the reader's own requests in a conversation they may read.
 - Loads the history before checking current access, so a slow read cannot return private information to someone removed during loading.
 - Tells browsers and shared caches not to store the replies.
@@ -16,6 +17,7 @@ These requests only read history. They save no changes and start no assistant wo
 
 | File | What it does |
 | --- | --- |
+| [membership-progress.ts](membership-progress.ts) | Reads receipts for the saved role or ownership change. |
 | [routes.ts](routes.ts) | Checks filters, reads history and checks access before returning it. |
 
 ## How it connects

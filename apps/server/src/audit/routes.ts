@@ -6,6 +6,7 @@ import type { EventStore } from '@opencrane/event-store';
 import { auditFilterSchema, auditDetailFilterSchema } from '@opencrane/protocol';
 import { readAudit, readAuditDetail, type Query, type connectMemberFeed } from '@opencrane/projections';
 import { currentMembership } from '@opencrane/models';
+import { readMembershipProgress } from './membership-progress.ts';
 import { sessionFor } from '../members/routes.ts';
 
 export interface AuditOptions {
@@ -59,6 +60,9 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) return reply.code(403).send({ status: 'refused' });
       const result = await readAuditDetail(options.db, options.silo, auditId, filter);
+      if (result) {
+        await readMembershipProgress(options.db, options.binding, result.records);
+      }
       const allowed = await access(options, memberId);
       if (!allowed) return reply.code(403).send({ status: 'refused' });
       if (!result) return reply.code(404).send({ status: 'not_found' });

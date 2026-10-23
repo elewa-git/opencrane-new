@@ -354,3 +354,11 @@ Disabled, Applying, Unknown and Ready. Availability cannot be Ready without a se
 requester and assistant, so this contract permits only unavailable. Account mode `none`
 means no account required; other account verification remains unavailable.
 See the [server contract](../../apps/server/README.robot.md#bounded-saved-integration-facts-part-of-623).
+
+## Role and ownership audit detail
+
+Audit operations also include `role_change`, `transfer_intent`, `appointment`,
+`ownership_confirmation` and `step_down`. Optional previousRole, newRole and appointmentId
+carry only event-proved facts. The detail-only `progress` object has `readModel` and `iam`
+(current/applying) plus a fresh UTC `checkedAt`. It reports receipt processing, not the
+person's current role, permission to act, or proof that a later change did not supersede it.

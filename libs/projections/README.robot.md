@@ -903,3 +903,17 @@ Fresh-install live qualification is NOT RUN.
 `conversation.child_activated` is excluded before conversation feed insertion, list
 updates and notifications. Replay uses the same exclusion. The v3 recovery index is
 unchanged; it still completes at first input and does not schedule activation.
+
+## Role and ownership audit facts
+
+Role changes retain memberId, previousRole and newRole. Ownership operations distinguish
+`transfer_intent`, legacy `appointment`, `ownership_confirmation` and `step_down`.
+Confirmations keep appointmentId. Appointments and confirmations record the new Owner
+role; intents do not claim a role change. Step-down records the known Owner-to-Admin change.
+These facts do not claim that the current member still has that role. Person attribution
+still needs a matching human principal. Confirmation reactions remain system actors.
+
+`readAuditOwnershipConfirmation` uses a silo-bound appointment index and reads at most two
+records. It also matches the affected member and requires a later position. Missing or
+conflicting confirmations cannot prove progress. Run `npm run replay -- audit` after this
+upgrade, then `npm run replay -- audit --verify`. Replay never stores live progress.

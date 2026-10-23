@@ -49,14 +49,15 @@ async function setup() {
   runner = new ProjectionRunner(db, nats.store, logger);
   await runner.initialise(members);
   await runner.initialise(auditTrail);
-  for (const role of ['owner', 'admin', 'member'] as const) {
+  for (const role of ['owner', 'admin', 'member', 'reader'] as const) {
+    const memberRole = role === 'reader' ? 'member' : role;
     const invited = saved('member.invited', `invite-${role}`, {
-      memberId: role, role, email: `${canary}@example.test`, invitedBy: 'owner',
+      memberId: role, role: memberRole, email: `${canary}@example.test`, invitedBy: 'owner',
       invitationId: `invitation-${role}`, invitedIdentity: { issuer: config.issuerUrl, sub: role },
       expiresAt: '2030-01-01T00:00:00Z',
     });
     const joined = saved('member.joined', `join-${role}`, {
-      memberId: role, role, email: `${canary}@example.test`, displayName: canary,
+      memberId: role, role: memberRole, email: `${canary}@example.test`, displayName: canary,
       invitationId: `invitation-${role}`,
     }, role);
     await append(invited);
@@ -115,8 +116,9 @@ async function safeMetadata() {
   const expected = [
     { operation: 'role_change', memberId: 'member', previousRole: 'member', newRole: 'admin' },
     { operation: 'transfer_intent', memberId: 'member' },
-    { operation: 'ownership_confirmation', memberId: 'member', appointmentId: 'intent' },
-    { operation: 'appointment', memberId: 'member' },
+    { operation: 'ownership_confirmation', memberId: 'member',
+      appointmentId: 'intent', newRole: 'owner' },
+    { operation: 'appointment', memberId: 'member', newRole: 'owner' },
     { operation: 'step_down', memberId: 'owner', previousRole: 'owner', newRole: 'admin' },
   ];
   for (const event of events) await append(event);
@@ -128,10 +130,14 @@ async function safeMetadata() {
     expect(record.recordedAt).toBe(event.time);
     const kind = event === confirmation ? 'system' : 'person';
     expect(record.actor).toEqual({ kind, id: event.principal!.id });
-    expect(record.commandRef).toBe(createHash('sha256').update(event.commandId!).digest('hex'));
+    const hash = createHash('sha256');
+    hash.update(event.commandId!);
+    expect(record.commandRef).toBe(hash.digest('hex'));
     expect(record.status).toBe('recorded');
   }
+  expect((await detail('intent')).newRole).toBeUndefined();
   const before = await readAudit(pgDb(dbs.queue), 'test');
+  expect(JSON.stringify(before)).not.toContain('checkedAt');
   expect(JSON.stringify(before)).not.toContain(canary);
   const appends = vi.spyOn(nats.store, 'append');
   await rebuildAuditProjection(pgDb(dbs.queue), nats.store, logger, { verify: true });
@@ -148,27 +154,53 @@ async function safeMetadata() {
 }
 it('keeps distinct safe role and ownership facts and verified actors through replay', safeMetadata);
 
-async function exactProgress() {
+async function exactProgress(intentFirst: boolean) {
   await append(role);
   await append(intent);
   await runner.run(auditTrail);
   const appends = vi.spyOn(nats.store, 'append');
-  expect(await detail('role')).toMatchObject({ progress: { readModel: 'applying', iam: 'applying' } });
+  const firstRead = await detail('role');
+  expect(firstRead).toMatchObject({ progress: { readModel: 'applying', iam: 'applying' } });
   await runner.run(members);
+  if (intentFirst) await auth.handler.handle(intent, db);
   expect(await detail('intent')).toMatchObject({ progress: { readModel: 'applying', iam: 'applying' } });
   expect(await detail('role')).toMatchObject({ progress: { readModel: 'current', iam: 'applying' } });
   expect(appends).not.toHaveBeenCalled();
   appends.mockRestore();
+  const otherIntent = saved('ownership.transferred', 'other-intent', {
+    memberId: 'member', transferredBy: 'owner', awaitingConfirmation: true,
+  });
+  const otherConfirmation = saved('member.ownership_confirmed', 'other-confirmation', {
+    memberId: 'member', appointmentId: 'other-intent',
+  });
+  await append(otherIntent);
+  await append(otherConfirmation);
+  await runner.run(auditTrail);
+  await runner.run(members);
+  await auth.handler.handle(otherIntent, db);
+  await auth.handler.handle(otherConfirmation, db);
+  expect(await detail('intent')).toMatchObject({
+    progress: { readModel: 'applying', iam: 'applying' },
+  });
   await append(confirmation);
   const later = saved('member.role_changed', 'later', {
     memberId: 'member', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
   });
   await append(later);
   await runner.run(auditTrail);
+  expect(await detail('confirmation')).toMatchObject({
+    progress: { readModel: 'applying', iam: 'applying' },
+  });
+  expect(await detail('intent')).toMatchObject({
+    progress: { readModel: 'applying', iam: 'applying' },
+  });
   await runner.run(members);
+  expect(await detail('confirmation')).toMatchObject({
+    progress: { readModel: 'current', iam: 'applying' },
+  });
   await auth.handler.handle(confirmation, pgDb(dbs.queue));
   await auth.handler.handle(later, pgDb(dbs.queue));
-  expect(await detail('intent')).toMatchObject({ progress: { readModel: 'current', iam: 'applying' } });
+  expect(await detail('intent')).toMatchObject({ progress: { readModel: 'current', iam: intentFirst ? 'current' : 'applying' } });
   await auth.handler.handle(intent, db);
   expect(await detail('intent')).toMatchObject({ progress: { readModel: 'current', iam: 'current' } });
   expect(await detail('confirmation')).toMatchObject({
@@ -178,12 +210,15 @@ async function exactProgress() {
   const before = await readAudit(pgDb(dbs.queue), 'test');
   await rebuildAuditProjection(pgDb(dbs.queue), nats.store, logger, { verify: true });
   await auth.handler.handle(role, pgDb(dbs.queue));
-  expect(await detail('role')).toMatchObject({ progress: { readModel: 'current', iam: 'current' } });
+  const lastRead = await detail('role');
+  expect(lastRead).toMatchObject({ progress: { readModel: 'current', iam: 'current' } });
+  expect(lastRead.progress?.checkedAt).not.toBe(firstRead.progress?.checkedAt);
   expect(await readAudit(pgDb(dbs.queue), 'test')).toEqual(before);
   const missing = await app.inject({ url: '/api/org/history/unknown', headers: headers() });
   expect(missing.statusCode).toBe(404);
 }
-it('checks exact content and IAM receipts afresh despite later roles and replay', exactProgress);
+it.each([true, false])(
+  'checks exact receipts despite later roles and replay, intent IAM first: %s', exactProgress);
 
 async function blockedRead(change: 'demotion' | 'removal' | 'slow') {
   await append(role);
@@ -207,6 +242,9 @@ async function blockedRead(change: 'demotion' | 'removal' | 'slow') {
           });
         }
         await append(event);
+        // Exclude the fixture write when counting the route's access reads.
+        reads.mockClear();
+        heads.mockClear();
       }
     }
     return query<Row>(...args);
@@ -218,8 +256,11 @@ async function blockedRead(change: 'demotion' | 'removal' | 'slow') {
   expect(blocked).toBe(true);
   expect(response.statusCode).toBe(change === 'slow' ? 200 : 403);
   if (change !== 'slow') expect(response.body).not.toContain('member');
-  expect(reads.mock.calls.map(call => call[0])).toEqual(['member-admin', 'ownership-test']);
-  if (change === 'slow') expect(heads).not.toHaveBeenCalled();
+  function subject(call: Parameters<typeof nats.store.readStream>) {
+    return call[0];
+  }
+  expect(reads.mock.calls.map(subject)).toEqual(['member-admin', 'ownership-test']);
+  expect(heads).not.toHaveBeenCalled();
 }
 it.each(['demotion', 'removal', 'slow'] as const)(
   'checks access once after a blocked progress read: %s', blockedRead);
@@ -230,7 +271,7 @@ async function privateReads() {
   await append(foreign);
   await runner.run(auditTrail);
   for (const path of ['', '/role']) {
-    for (const [member, org] of [['member', 'org-acme'], ['outsider', 'org-acme'],
+    for (const [member, org] of [['reader', 'org-acme'], ['outsider', 'org-acme'],
       ['admin', 'foreign-org']]) {
       const response = await app.inject({ url: `/api/org/history${path}`,
         headers: headers(member, org) });
