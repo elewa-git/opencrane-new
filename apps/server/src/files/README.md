@@ -14,6 +14,8 @@ This folder handles files people attach to conversations. It checks the file's c
 
 A file waits in server memory while [ClamAV](../../../../GLOSSARY.md#clamav-virus-scanner) scans it. Only a clean file reaches the files bucket; an infected file receives a rejection. File access follows the latest join, so a later participant cannot fetch older attachments. A later invitation alone does not undo a saved removal. Replies tell browsers and caches not to store private results.
 
+File lists use the saved read tables before checking newer events. They return a waiting response while the file table catches up with a saved upload. The website checks again before showing the upload as Ready. Other chat activity does not hold up the list, and old messages do not need to be replayed.
+
 Delivery sends each file once per computer connection and waits for its receipt, meaning confirmation of arrival. Reconnection can try delivery again. Waiting for a receipt leaves spending stops and approval checks available. Saved control intent holds files that have not started transmission; one already being sent can finish.
 
 ## Main files

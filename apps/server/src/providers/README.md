@@ -13,6 +13,8 @@ This folder lets owners and admins connect OpenCrane to AI model providers. It h
 
 A turn is one message and the assistant's reply. New managed turns use the assistant's chosen provider or the installation default. Renewing, repeating or closing a saved turn keeps its original model and provider. Running turns keep their original path during a pause. Provider lists also report that the model-access requests are available. Starting or cancelling the pause saves a change.
 
+Provider requests report when saved membership or ownership is still being applied. The caller can wait briefly and repeat the same command id after that reply.
+
 Switch-on requires a default provider and waits for earlier calls to finish charging or release their unused money. A lost reply can be checked by its original request id. Repeating switch-on refuses if later evidence has reopened a hold, even though the original switch-on stays saved. Changes during the retry's reads also refuse it. [Effects](../effects/README.md) explains how uncertain calls are resolved. Conflicting requests cannot return an unsaved provider choice as saved.
 
 The separate models process reads the saved switch-on choice at startup and on later checks. After switch-on, it takes the provider key selected for each checked call. A leftover fallback-key setting stops startup; an older running process exits and needs restarting. Gateway configuration reloads keep the same provider mode. Both server processes use the same conversation-key protection in a packaged installation.

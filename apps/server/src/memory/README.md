@@ -12,7 +12,7 @@ This folder lets people review, save, correct and forget information the assista
 - Previews eligible facts for a saved private turn without sending text to a computer.
 - Records choices and shows saved status for future nightly upkeep; running that upkeep remains disabled.
 
-A memory fact is one saved piece of information. Its scope says whose memory it belongs to: a person, a group or an assistant's notes. [Grants](../../../../GLOSSARY.md#grant) say who may read and write it. Reads wait until the [read table](../../../../GLOSSARY.md#read-table-projection), a database copy built from saved changes, has caught up. They need the memory worker and its existing private key directory. Destroyed or quarantined facts return status without text.
+A memory fact is one saved piece of information. Its scope says whose memory it belongs to: a person, a group or an assistant's notes. [Grants](../../../../GLOSSARY.md#grant) say who may read and write it. Reads return unavailable while the [read table](../../../../GLOSSARY.md#read-table-projection), a database copy built from saved changes, is behind. A later request can succeed after the memory worker catches up. They need the memory worker and its existing private key directory. Destroyed or quarantined facts return status without text.
 
 **Reading sources.** Each source is checked separately. Denied references stay hidden. A chat source requires current access and the latest join before the server looks up that message. A member statement is described without naming its author. Write permission is checked before inspecting a fact. Slow permission checks leave database connections free.
 

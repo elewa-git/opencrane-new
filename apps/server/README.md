@@ -50,6 +50,9 @@ only after the models process allows them.
 
 ## Folders
 
+[src/main.ts](src/main.ts) starts the server; [src/models-main.ts](src/models-main.ts) starts the models process.
+[src/server.ts](src/server.ts) builds the server. Tests live in `test/`, with shared helpers in [test/support/](test/support/).
+
 | Folder | What it does |
 | --- | --- |
 | [assistants](src/assistants/README.md) | Sets up shared assistants and lists the ones a person may use. |
