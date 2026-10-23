@@ -1,5 +1,5 @@
 import { savePausing, savePaused, saveFailed, type StopExecution } from './bridge-pausing.ts';
-import { pauseTimeRemaining } from './bridge-deadline.ts';
+import { pauseTimeRemaining } from './bridge-pause-time.ts';
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
