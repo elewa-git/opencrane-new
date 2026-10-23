@@ -6,6 +6,7 @@ import { mock, test } from 'node:test';
 import { chromium, type Page } from 'playwright';
 import { checkChangeHistory } from './demo-rehearsal-checks.ts';
 import { demoRehearsal } from './demo-rehearsal.ts';
+import { demoBrowser } from './demo-browser.ts';
 import { RehearsalPage } from './test/rehearsal-page.ts';
 
 type Step = { step: number; width: number; result: string; pictures: string[] };
@@ -116,7 +117,7 @@ async function picturesShowHistoryRows() {
   const browser = await chromium.launch({ headless: true, channel: 'chromium' });
   try {
     const page = await browser.newPage();
-    page.setDefaultTimeout(1000);
+    page.setDefaultTimeout(5000);
     const html = `<style>oc-audit { display: block; } article { padding: 20px; }</style>
       <oc-audit><h1>Change history</h1><article style="height: 1200px">Earlier call</article>
       <article>budget.ceiling_set</article><div style="height: 1200px"></div>
@@ -139,6 +140,21 @@ async function picturesShowHistoryRows() {
       }
       await checkChangeHistory(page, picture);
       assert.deepEqual(saved, new Set(['10-limit-history', '10-group-history']));
+      const paginated = `<oc-audit><h1>Change history</h1><div id="rows">
+        <article>budget.ceiling_set</article><button onclick="older()">Older history</button>
+        </div></oc-audit><script>
+        function older() {
+          document.querySelector('#rows').innerHTML = '';
+          setTimeout(showOlder, 600);
+        }
+        function showOlder() {
+          document.querySelector('#rows').innerHTML = '<article>team.created</article>';
+        }
+        </script>`;
+      await page.setContent(paginated);
+      saved.clear();
+      await checkChangeHistory(page, picture);
+      assert.deepEqual(saved, new Set(['10-limit-history', '10-group-history']));
       await page.setContent('<oc-audit><h1>Change history</h1><article>Unrelated</article></oc-audit>');
       await assert.rejects(checkChangeHistory(page, picture),
         /Change history shows limits and groups/u);
@@ -150,3 +166,73 @@ async function picturesShowHistoryRows() {
 }
 test('history pictures show both matching rows at both widths and missing rows still fail',
   picturesShowHistoryRows);
+
+async function smokeRequiresSavedPictures() {
+  const directory = await mkdtemp(join(tmpdir(), 'smoke-pictures-'));
+  const owner = new RehearsalPage();
+  const member = new RehearsalPage();
+  member.refusalMissing = false;
+  const origin = 'https://rehearsal.example.invalid';
+  const options = { origin, cookie: '', directory };
+  const budget = { sequence: 1, defaultPayingGroupId: null, periodStart: null,
+    todayCents: 10, monthCents: 10, reservedCents: 0, ceilingCents: 1000,
+    dailyCeilingCents: 700, ceilings: [] };
+  const saved = new Set<string>();
+  async function fetchFixture(address: string, init?: RequestInit) {
+    const url = new URL(address);
+    const prefix = '/api/org/models/changes/';
+    if (url.pathname.startsWith(prefix)) {
+      const id = url.pathname.slice(prefix.length);
+      if (saved.has(id)) {
+        return Response.json({ status: 'appended' });
+      }
+      return Response.json({}, { status: 404 });
+    }
+    assert.equal(url.pathname, '/api/org/models');
+    if (init?.method === 'POST') {
+      const data = JSON.parse(String(init.body)) as {
+        commandId: string; ceilingCents: number; dailyCeilingCents: number;
+      };
+      saved.add(data.commandId);
+      budget.ceilingCents = data.ceilingCents;
+      budget.dailyCeilingCents = data.dailyCeilingCents;
+    }
+    return Response.json({ budget });
+  }
+  async function missingPicture(): Promise<void> {
+    throw new Error('Synthetic picture failure');
+  }
+  const network = mock.method(globalThis, 'fetch', fetchFixture);
+  try {
+    for (const width of [1280, 390]) {
+      const result = await demoBrowser(owner as unknown as Page, member as unknown as Page,
+        options, `${origin}/workspace?conversation=private`, directory, width);
+      assert.equal(result.result, 'PASS');
+      assert.equal(result.steps.length, 6);
+      for (const step of result.steps) {
+        assert.equal(step.result, 'PASS');
+        for (const person of ['owner', 'member']) {
+          const path = `${directory}/${step.name}-${person}-${width}.png`;
+          assert.equal(await readFile(path, 'utf8'), 'Synthetic picture fixture');
+        }
+      }
+    }
+    const pictures = mock.method(member, 'screenshot', missingPicture);
+    try {
+      const result = await demoBrowser(owner as unknown as Page, member as unknown as Page,
+        options, `${origin}/workspace?conversation=private`, directory, 390);
+      assert.equal(result.result, 'FAIL');
+      for (const step of result.steps) {
+        assert.equal(step.result, 'FAIL', 'A failed member picture cannot pass the step');
+      }
+    } finally {
+      pictures.mock.restore();
+    }
+    assert.equal(budget.dailyCeilingCents, 700);
+  } finally {
+    network.mock.restore();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('every smoke PASS saves both browser pictures and a missing picture fails',
+  smokeRequiresSavedPictures);

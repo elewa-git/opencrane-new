@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Page } from 'playwright';
+import { chromium, type Page } from 'playwright';
 import { timedSmoke } from './demo-smoke.ts';
+import { answer } from './real-model-journey.ts';
 
 function warmPage(sharedSessionDelay = false) {
   let location = '';
@@ -24,7 +25,7 @@ function warmPage(sharedSessionDelay = false) {
     return true;
   }
   async function click() {}
-  function last() {
+  function nth() {
     return element;
   }
   function locator() {
@@ -44,7 +45,7 @@ function warmPage(sharedSessionDelay = false) {
     count,
     isEnabled,
     click,
-    last,
+    nth,
     locator,
     getByRole,
     getByText,
@@ -220,18 +221,20 @@ async function stopsWhileComposerLoads() {
   const browser = await chromium.launch({ headless: true, channel: 'chromium' });
   try {
     const page = await browser.newPage();
-    const body = `<oc-chat-composer><textarea aria-label="Message your agent"
+    const body = `<section class="transcript" aria-busy="false"></section>
+      <oc-chat-composer><textarea aria-label="Message your agent"
       onkeydown="if(event.key==='Enter') start()"></textarea></oc-chat-composer>
       <script>
       function stopped() {
         localStorage.setItem('stopped', 'yes');
         document.querySelector('article').innerHTML =
-          '<div class="prose">London is a city.</div><span>Stopped · partial reply kept</span>';
+          '<div class="prose">London is a city.</div>' +
+          '<span class="turn-status">Stopped · partial reply kept</span>';
       }
       function start() {
         document.body.innerHTML = '<oc-chat-composer>Loading your workspace…</oc-chat-composer>' +
           '<article aria-label="Agent reply"><div class="prose">London is a city.</div>' +
-          '<span class="caret">|</span><button onclick="stopped()">Stop</button></article>';
+          '<button onclick="stopped()">Stop</button></article>';
       }
       if (localStorage.getItem('stopped')) { start(); stopped(); }
       </script>`;
@@ -247,7 +250,8 @@ async function stopsWhileComposerLoads() {
     assert.equal(await reply.locator('.prose').innerText(), 'London is a city.');
   } finally { await browser.close(); }
 }
-test('demo Stop uses the reply control while the composer is loading', stopsWhileComposerLoads);
+test('demo Stop uses the reply control without a caret while the composer is loading',
+  stopsWhileComposerLoads);
 
 async function failsWithinDeadline() {
   let milliseconds = 0;
@@ -276,3 +280,79 @@ async function exceedsDeadlineDespitePassing() {
 }
 test('one failed step refuses the smoke even within 180 seconds', failsWithinDeadline);
 test('all passing steps still refuse the smoke beyond 180 seconds', exceedsDeadlineDespitePassing);
+
+async function checksReply(mode: string) {
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(5000);
+    const body = `<section class="transcript" aria-busy="false">
+      <article aria-label="Agent reply"><div class="prose">Earlier 437</div><p class="turn-status">Done</p></article>
+      <textarea aria-label="Message your agent" onkeydown="send(event)"></textarea>
+      <div id="sent"></div></section><script>
+      function send(event) {
+        if (event.key !== 'Enter') {
+          return;
+        }
+        const mode = new URL(location.href).searchParams.get('mode');
+        let prose = mode === 'wrong' ? 'Incorrect' : '437';
+        if (mode === 'unfinished') {
+          prose += '<p>Done</p>';
+        }
+        const status = mode === 'unfinished' ? '' : '<p class="turn-status">Done</p>';
+        if (mode === 'missing') {
+          return;
+        }
+        const reply = '<article aria-label="Agent reply"><div class="prose">' +
+          prose + '</div>' + status + '</article>';
+        document.querySelector('#sent').insertAdjacentHTML('beforeend', reply);
+        localStorage.setItem('reply', document.querySelector('#sent').innerHTML);
+      }
+      const saved = localStorage.getItem('reply') || '';
+      const changed = new URL(location.href).searchParams.get('mode') === 'changed';
+      document.querySelector('#sent').innerHTML = changed ? saved.replace('437', '438') : saved;
+      </script>`;
+    async function respond(route: import('playwright').Route) {
+      await route.fulfill({ contentType: 'text/html', body });
+    }
+    await page.route('http://answer.test/**', respond);
+    await page.goto(`http://answer.test/?mode=${mode}`);
+    if (mode === 'completed') {
+      await answer(page, 'Calculate the result', [/\b437\b/u]);
+      assert.equal(await page.locator('.caret').count(), 0,
+        'The reply finished in the Enter handler, before the completion wait');
+      await answer(page, 'Calculate the result', [/\b437\b/u]);
+    } else {
+      let failure = /locator.waitFor: Timeout/u;
+      if (mode === 'wrong') {
+        failure = /must contain the expected fact/u;
+      }
+      if (mode === 'changed') {
+        failure = /Reload keeps the answer/u;
+      }
+      await assert.rejects(answer(page, 'Calculate the result', [/\b437\b/u]), failure);
+    }
+  } finally {
+    await browser.close();
+  }
+}
+async function acceptsCompletedReply() {
+  await checksReply('completed');
+}
+async function refusesEarlierReply() {
+  await checksReply('missing');
+}
+async function refusesWrongFacts() {
+  await checksReply('wrong');
+}
+async function refusesUnfinishedReply() {
+  await checksReply('unfinished');
+}
+async function refusesChangedReload() {
+  await checksReply('changed');
+}
+test('a reply completed before waiting passes, including a repeated question', acceptsCompletedReply);
+test('an earlier correct answer cannot pass a send with no new reply', refusesEarlierReply);
+test('wrong reply facts still fail', refusesWrongFacts);
+test('Done inside unfinished reply prose cannot pass the completion check', refusesUnfinishedReply);
+test('changed reply text after reload still fails', refusesChangedReload);

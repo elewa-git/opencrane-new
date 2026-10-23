@@ -3,11 +3,31 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { Page } from 'playwright';
 
 export async function checkProviderAnswer(owner: Page) {
-  const models = owner.locator('oc-models main');
+  const models = owner.locator('oc-models main [data-provider-id="dev-openai"]');
   await models.getByText('Model answered', { exact: true }).waitFor();
   assert.equal(await owner.locator('input[type="password"]:visible').count(), 0);
   const text = await owner.locator('body').innerText();
   assert(!/sk-[A-Za-z0-9_-]{12,}/u.test(text), 'Provider key is hidden');
+}
+
+export async function choosePerson(page: Page, origin: string, memberId: string) {
+  const response = await page.request.get(`${origin}/api/chat/colleagues?limit=50`);
+  assert.equal(response.status(), 200);
+  const people = await response.json() as {
+    rows: Array<{ memberId: string; displayName?: string }>;
+  };
+  function chosen(person: { memberId: string }) {
+    return person.memberId === memberId;
+  }
+  const person = people.rows.find(chosen);
+  assert(person, 'The selected colleague exists');
+  const selectedName = person.displayName ?? person.memberId;
+  await page.locator('#colleague-search').fill(selectedName);
+  const label = page.getByText(selectedName, { exact: true });
+  const choices = page.locator('.colleague-option');
+  const matchingLabel = { has: label };
+  const matchingPerson = choices.filter(matchingLabel);
+  await matchingPerson.click();
 }
 
 function failureReason(error: unknown, sanitise: (value: string) => string) {
