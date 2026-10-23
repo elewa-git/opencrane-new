@@ -255,13 +255,13 @@ it('fails closed when OpenFGA is unavailable, and closes an existing socket on r
     expect((await closed)[0]).toBe(1011);
   } finally { await fga.resume(); }
 }, 15_000);
-it('limits each connection to 20 messages per second', async () => {
+it('limits each connection to 20 messages per second with a retryable close', async () => {
   const client = await connect();
   // Count malformed messages against the same rate limit.
   client.ws.removeAllListeners('message');
   const closed = once(client.ws, 'close');
   for (let i = 0; i < 21; i++) client.ws.send('{');
-  expect((await closed)[0]).toBe(1008);
+  expect((await closed)[0]).toBe(1013);
 });
 it('drops live deltas for a paused consumer and replays every missing position on reconnect', async () => {
   let changeCount = 0;

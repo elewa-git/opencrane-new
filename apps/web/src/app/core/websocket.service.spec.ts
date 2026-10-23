@@ -187,17 +187,23 @@ describe('WebSocketService', () => {
     expect(sockets).toHaveLength(1);
   });
 
-  it('reconnects after a non-policy server close', () => {
+  it.each([1011, 1013])('reconnects after close %i without reporting access loss', code => {
     vi.useFakeTimers();
     const service = setup(() => 1);
+    const accessLost = vi.fn();
+    service.accessLost.subscribe(accessLost);
     service.connect('/ws');
     sockets[0]?.triggerOpen();
 
-    sockets[0]?.triggerClose(1011);
+    sockets[0]?.triggerClose(code);
 
     expect(service.state()).toBe('reconnecting');
-    vi.advanceTimersByTime(500);
+    vi.advanceTimersByTime(499);
+    expect(sockets).toHaveLength(1);
+    vi.advanceTimersByTime(1);
     expect(sockets).toHaveLength(2);
+    expect(accessLost).not.toHaveBeenCalled();
+    expect(sockets[1]?.sent).toEqual([]);
   });
 
   it('resets the backoff once a reconnect succeeds', () => {
