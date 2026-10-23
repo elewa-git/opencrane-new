@@ -2,8 +2,9 @@
 
 **FAIL: the phone-width checker reused an existing invitation's email address.**
 No owner refresh commit is qualified. This is the second final rehearsal for #569.
-Fresh startup, both timed smoke widths and all ten desktop steps passed. Phone steps
-1–6 passed. Step 7 failed, and steps 8–10 are **NOT RUN**.
+Fresh startup, both timed smoke widths and desktop steps 1–9 passed. Desktop step 10
+is **PARTIAL** because its picture does not show the required history rows. Phone
+steps 1–6 passed. Step 7 failed, and steps 8–10 are **NOT RUN** on phone.
 
 The [failure picture](07-failure-owner-390.png) says: “This email already has an
 invitation. Renewing it isn't available yet. Nothing was created.” The checker uses
@@ -79,7 +80,7 @@ whole-task cap. Times include the step's picture. Step 5 sends from 390px at bot
 | 7. Group chat and unopened invite | [PASS, 10,546 ms](07-unopened-invite-1280.png) | [FAIL, 129,785 ms](07-failure-owner-390.png) |
 | 8. Model answered, key hidden | [PASS, 1,501 ms](08-providerAnswer-1280.png) | NOT RUN |
 | 9. Company refusal and restore | [PASS, 12,445 ms](09-member-refusal-1280.png) | NOT RUN |
-| 10. Limit and group change history | [PASS, 1,788 ms](10-limit-history-1280.png) | NOT RUN |
+| 10. Limit and group change history | [PARTIAL (checker PASS; no picture evidence), 1,788 ms](10-limit-history-1280.png) | NOT RUN |
 
 Supporting pictures show the upload ready at [1280px](02-upload-ready-1280.png) and
 [390px](02-upload-ready-390.png), PDF preview/download at [1280px](02-preview-download-1280.png)
@@ -90,8 +91,10 @@ Group chat and group display completed at both widths before the failed invitati
 [phone chat](07-group-chat-390.png), [phone group](07-group-390.png).
 The desktop run also captured [restored limits](09-companyLimit-1280.png) and the
 [change-history page](10-group-history-1280.png). The history checker found both limit
-and group changes in the page text. Its viewport pictures stayed at the top of the
-page, so those particular rows are not visible in the pictures.
+and group changes in the page text and returned PASS. Its viewport pictures stayed at
+the top of the page, so those particular rows are not visible in the pictures. Step 10
+therefore remains PARTIAL for qualification; no picture from this run verifies the
+required visible history demonstration.
 
 ## Spending and cleanup
 
