@@ -26,8 +26,11 @@ let runner: ProjectionRunner;
 let logs: string;
 
 function event(type: string, subject: string, data: Record<string, unknown>) {
-  const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(type)!.example);
-  return envelope('test', subject, type, { ...example, ...data });
+  const definition = getEventDefinition(type)!;
+  const dataSchema = z.record(z.string(), z.unknown());
+  const example = dataSchema.parse(definition.example);
+  const payload = { ...example, ...data };
+  return envelope('test', subject, type, payload);
 }
 async function append(saved: EventEnvelope) {
   const expectedSequence = await nats.store.head(saved.subject);
@@ -52,7 +55,7 @@ async function setup() {
     callback();
   }
   const sink = new Writable({ write });
-  const logger = createLogger('dispatch-audit-test', { destination: sink });
+  const logger = createLogger('dispatch-audit-test', { destination: sink, level: 'info' });
   runner = new ProjectionRunner(db, nats.store, logger);
   await runner.initialise(members);
   await runner.initialise(auditTrail);
@@ -161,7 +164,9 @@ async function savedOutcome(outcome: Outcome) {
     saved.decision.id, saved.start.id, saved.observation.id,
   ]);
   expect(row.records[1]).toMatchObject({ type: 'tool.dispatch_started', status: 'recorded' });
-  expect(row.records[2]).toMatchObject({ type: 'tool.dispatch_recorded', status: expectedStatus });
+  expect(row.records[2]).toMatchObject({
+    type: 'tool.dispatch_recorded', status: expectedStatus, source: 'gateway',
+  });
   expect(row.outcome).toBe(expectedStatus);
   expect(await list(saved.requestId, expectedStatus)).toEqual(before);
   expect(row.reservedCents).toBeUndefined();
@@ -170,6 +175,7 @@ async function savedOutcome(outcome: Outcome) {
   expect(firstDetail.records.map(recordId)).toEqual([
     saved.observation.id, saved.start.id, saved.decision.id,
   ]);
+  expect(firstDetail.records[0]?.source).toBe('gateway');
   // Deliver the saved observation again, then rebuild all rows from the real event store.
   const position = firstDetail.records[0]!.position;
   await auditTrail.apply(pgDb(dbs.queue), saved.observation, position);
@@ -187,6 +193,8 @@ async function savedOutcome(outcome: Outcome) {
   expect(await nats.store.head()).toBe(head);
   const rows = await dbs.queue.query('SELECT * FROM audit_entries');
   expect(JSON.stringify(rows.rows)).not.toContain(canary);
+  expect(logs).toContain('handler.completed');
+  expect(logs).toContain(saved.observation.id);
   expect(logs).not.toContain(canary);
   expect(await nats.store.head('budget-test')).toBe(0);
 }
@@ -239,6 +247,109 @@ async function boundedUnknown() {
 it('keeps missing and adapter-unknown dispatch uncertain with bounded, ordered evidence',
   boundedUnknown);
 
+const missingOutcomeCases = [
+  { order: 'start first', rebuild: false },
+  { order: 'start last', rebuild: false },
+  { order: 'start first', rebuild: true },
+  { order: 'start last', rebuild: true },
+];
+async function missingOutcome(testCase: typeof missingOutcomeCases[number]) {
+  const saved = dispatchEvents();
+  const effectData = {
+    permitId: saved.requestId, outcome: 'success', costCents: 0,
+    tool: canary, destination: canary,
+  };
+  const genericEffect = event('effect.observed', 'effect-generic', effectData);
+  const evidence = [saved.start, genericEffect];
+  const expectedIds = [saved.start.id, genericEffect.id];
+  if (testCase.order === 'start last') {
+    evidence.reverse();
+    expectedIds.reverse();
+  }
+  await append(saved.decision);
+  // Process each arrival so the final event must refresh the saved outcome filter.
+  for (const savedEvent of evidence) {
+    await append(savedEvent);
+    await runner.run(auditTrail);
+  }
+  const head = await nats.store.head();
+  const appends = vi.spyOn(nats.store, 'append');
+  if (testCase.rebuild) {
+    const logger = createLogger('missing-dispatch-replay', { level: 'silent' });
+    await rebuildAuditProjection(pgDb(dbs.queue), nats.store, logger);
+  }
+  const unknown = await list(saved.requestId, 'unknown');
+  expect(unknown.rows).toHaveLength(1);
+  expect(unknown.rows[0]?.outcome).toBe('unknown');
+  expect(await list(saved.requestId)).toEqual(unknown);
+  const success = await list(saved.requestId, 'success');
+  expect(success.rows).toEqual([]);
+  expectedIds.unshift(saved.decision.id);
+  expect(unknown.rows[0]?.records.map(recordId)).toEqual(expectedIds);
+  expectedIds.reverse();
+  const records = await detail(saved.decision.id);
+  expect(records.records.map(recordId)).toEqual(expectedIds);
+  expect(appends).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(head);
+}
+it.each(missingOutcomeCases)(
+  'keeps a missing dispatch outcome unknown despite generic success: $order, rebuild=$rebuild',
+  missingOutcome);
+
+async function isolatesStarts(reference: 'permit' | 'approval') {
+  const saved = dispatchEvents('responded');
+  const other = dispatchEvents();
+  // Share only the dispatch observation's approval to test dispatch isolation.
+  saved.decision.correlation = {};
+  if (reference === 'permit') {
+    other.start.correlation = { permit: saved.requestId };
+  } else {
+    other.start.correlation = { approval: saved.approvalId };
+  }
+  const events = [saved.decision, saved.start, saved.observation, other.decision, other.start];
+  for (const savedEvent of events) {
+    await append(savedEvent);
+  }
+  await runner.run(auditTrail);
+  const expectedIds = [saved.decision.id, saved.start.id, saved.observation.id];
+  const page = await list(saved.requestId);
+  expect(page.rows).toHaveLength(1);
+  expect(page.rows[0]?.records.map(recordId)).toEqual(expectedIds);
+  expect(page.rows[0]?.outcome).toBe('recorded');
+  expectedIds.reverse();
+  const records = await detail(saved.decision.id);
+  expect(records.records.map(recordId)).toEqual(expectedIds);
+  const otherPage = await list(other.requestId);
+  expect(otherPage.rows).toHaveLength(1);
+  expect(otherPage.rows[0]?.outcome).toBe('unknown');
+  expect(otherPage.rows[0]?.records.map(recordId)).toEqual([other.decision.id, other.start.id]);
+}
+it.each(['permit', 'approval'] as const)(
+  'keeps another attempt\'s dispatch start out of list and detail despite a shared %s',
+  isolatesStarts);
+
+async function preservesRefusedDecision(decision: 'ask' | 'deny') {
+  const saved = dispatchEvents('responded');
+  const dataSchema = z.record(z.string(), z.unknown());
+  const data = dataSchema.parse(saved.decision.data);
+  saved.decision.data = { ...data, outcome: decision };
+  await append(saved.decision);
+  await append(saved.start);
+  await append(saved.observation);
+  await runner.run(auditTrail);
+  const page = await list(saved.requestId, 'not_dispatched');
+  expect(page.rows).toHaveLength(1);
+  expect(page.rows[0]?.decision).toBe(decision);
+  expect(page.rows[0]?.outcome).toBe('not_dispatched');
+  expect(page.rows[0]?.records.map(recordId)).toEqual([
+    saved.decision.id, saved.start.id, saved.observation.id,
+  ]);
+  expect(await list(saved.requestId)).toEqual(page);
+}
+it.each(['ask', 'deny'] as const)(
+  'keeps an %s decision not dispatched even when a related dispatch has responded',
+  preservesRefusedDecision);
+
 async function isolatesAttempts() {
   const saved = dispatchEvents('responded');
   const other = dispatchEvents('outcome_unknown');
@@ -270,9 +381,11 @@ async function isolatesAttempts() {
   }
   for (const member of ['member', 'admin']) {
     if (member === 'admin') {
-      await append(event('member.role_changed', 'member-admin', {
+      const roleChangeData = {
         memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
-      }));
+      };
+      const roleChange = event('member.role_changed', 'member-admin', roleChangeData);
+      await append(roleChange);
     }
     for (const path of ['', `/${saved.decision.id}`]) {
       const reply = await app.inject({ url: `/api/org/history${path}`, headers: headers(member) });
@@ -280,7 +393,9 @@ async function isolatesAttempts() {
       expect(reply.body).not.toContain(saved.decision.id);
     }
   }
-  await append(event('member.removed', 'member-admin', { memberId: 'admin' }));
+  const removalData = { memberId: 'admin' };
+  const removal = event('member.removed', 'member-admin', removalData);
+  await append(removal);
   for (const path of ['', `/${saved.decision.id}`]) {
     const reply = await app.inject({ url: `/api/org/history${path}`, headers: headers() });
     expect(reply.statusCode).toBe(403);
