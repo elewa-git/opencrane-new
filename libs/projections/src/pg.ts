@@ -1,6 +1,6 @@
 import { Pool as PgPool, type Pool } from "pg";
 import { toolPolicySchema, memberStateSchema } from "@opencrane/protocol";
-import type { Db } from "./db.ts";
+import { QueryDeadlineExceeded, type Db } from "./db.ts";
 import { mapMcpCatalogueRows, type McpCatalogueRow } from './mcp-catalogue.ts';
 import { mapComputerRows, type ComputerDbRow } from './computers.ts';
 
@@ -33,7 +33,10 @@ function clientDb(client: import("pg").PoolClient): Db {
 /** The caller owns the pool, TLS settings and pool error listener. */
 export function pgDb(pool: Pool): Db {
   return {
-    query: (sql, parameters) => pool.query(sql, parameters),
+    query(sql, parameters, options) {
+      if (options) return queryBeforeDeadline(pool, sql, parameters, options.deadline);
+      return pool.query(sql, parameters);
+    },
     async transaction(work) {
       const client = await pool.connect();
       let released = false;
@@ -91,6 +94,51 @@ export function pgDb(pool: Pool): Db {
       }
     },
   };
+}
+
+function remainingQueryTime(deadline: number) {
+  const remaining = Math.floor(deadline - performance.now());
+  if (remaining <= 0) throw new QueryDeadlineExceeded();
+  return remaining;
+}
+
+async function queryBeforeDeadline<Row extends Record<string, unknown>>(pool: Pool,
+  sql: string, parameters: unknown[] | undefined, deadline: number): Promise<{ rows: Row[] }> {
+  const expired = Promise.withResolvers<never>();
+  function expire() {
+    expired.reject(new QueryDeadlineExceeded());
+  }
+  const timer = setTimeout(expire, remainingQueryTime(deadline));
+  async function read() {
+    const client = await pool.connect();
+    let completed = false;
+    try {
+      // Check again after waiting for a connection. Never start an expired query.
+      remainingQueryTime(deadline);
+      await client.query('BEGIN');
+      const timeout = `${remainingQueryTime(deadline)}ms`;
+      await client.query("SELECT set_config('statement_timeout', $1, true)", [timeout]);
+      const result = await client.query<Row>(sql, parameters);
+      remainingQueryTime(deadline);
+      await client.query('COMMIT');
+      completed = true;
+      return result;
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === '57014') {
+        throw new QueryDeadlineExceeded();
+      }
+      throw error;
+    } finally {
+      // Destroy failed connections to roll back and clear their local timeout.
+      client.release(!completed);
+    }
+  }
+  try {
+    // Bound pool acquisition as well as SQL. A late connection is released by read().
+    return await Promise.race([read(), expired.promise]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function connectProjectionDb(

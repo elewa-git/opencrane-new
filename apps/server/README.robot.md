@@ -3652,13 +3652,22 @@ Each row has `id`, `displayName`, the resource stream's `sequence`, and `cap`.
 A cap is `set` with safe integer `ceilingCents`, `not_configured`, or `unavailable`.
 Zero remains a set cap. Budget failures or stale budget state yield unavailable caps.
 Missing or lagging directory checkpoints return `status: applying`, never a complete empty list.
-The route reads at most three exact streams per candidate within a ten-second
-history deadline. It refuses streams over 1,000 events and scans no wildcard stream.
+The route uses the same resource eligibility reader as spending saves. It reads compact
+summaries of the group, assistant and computer streams within a ten-second deadline.
+Cold reads catch up incrementally; later reads start after the last saved position.
+Each summary kind retains at most 64 streams and 2 MiB. A partial cold read keeps its
+progress for a later request. Ordinary turn and membership history has no event-count cap.
+No wildcard stream is scanned. Each PostgreSQL read gets a statement timeout for the
+remaining request time; waiting for a pooled connection also observes that deadline.
 After loading, it checks event-log Owner/Admin membership and OpenFGA once.
 Reads have no authority fence, append no events, use fixed refusals and always send `no-store`.
 
 `test/budget-choices.test.ts` covers real NATS/PostgreSQL/OpenFGA paging, resource revisions,
-caps, lag, access refusal, IAM outage and changes during a blocked load.
+caps, lag, access refusal, IAM outage and changes during a blocked load. It also checks
+an assistant with 1,001 computer events, stored colon ids, 201-character group names,
+continuation, and locked candidate, checkpoint and budget tables. A timed-out read still
+checks caller access. Save-command id validation stays unchanged; older stored ids can
+be displayed and paged even when the command API cannot accept them.
 Screens, accounting indexes and fresh-install qualification remain outside this change.
 
 ## Shared remote transport

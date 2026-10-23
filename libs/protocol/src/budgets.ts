@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { teamCreatedDataSchema } from '@opencrane/events';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 const cents = z.int().nonnegative();
@@ -16,9 +17,12 @@ export const budgetSummarySchema = z.object({
 });
 export type BudgetSummary = z.infer<typeof budgetSummarySchema>;
 
+// Accept saved resource ids, including older ids outside the command API's format.
+const storedChoiceId = teamCreatedDataSchema.shape.teamId.regex(/^[^.*>\s]+$/u);
+const storedChoiceName = teamCreatedDataSchema.shape.name;
 export const budgetChoicesQuerySchema = z.object({
   kind: z.enum(['paying_group', 'assistant']),
-  after: id.optional(),
+  after: storedChoiceId.optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 }).strict();
 const budgetChoiceCap = z.discriminatedUnion('status', [
@@ -29,10 +33,10 @@ const budgetChoiceCap = z.discriminatedUnion('status', [
 export const budgetChoicesResponseSchema = z.object({
   status: z.enum(['current', 'applying']),
   rows: z.array(z.object({
-    id, displayName: z.string().min(1).max(200),
+    id: storedChoiceId, displayName: storedChoiceName,
     sequence: z.int().positive(), cap: budgetChoiceCap,
   }).strict()).max(50),
-  next: id.nullable(),
+  next: storedChoiceId.nullable(),
 }).strict();
 
 const stopReason = z.object({

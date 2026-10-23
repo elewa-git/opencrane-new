@@ -836,3 +836,14 @@ Older exact Allow reviews without approval details remain readable during replay
 but all their tools become unreviewed Block and publication is cleared. The fold still
 checks their original digests, connection, account, reviewer and dates. New review
 commands refuse the incomplete choice before appending it.
+
+## Request deadlines for database reads
+
+`Query.query` accepts an optional third argument, `{ deadline }`, measured with
+`performance.now()`. The PostgreSQL pool adapter bounds connection waiting and sets
+`statement_timeout` to the remaining time inside a separate transaction. A successful
+query commits and clears the local setting. A failed query destroys its connection,
+which rolls back the transaction. Ordinary projection writes keep their existing path.
+The spending choices route supplies the same deadline for checkpoints, candidates and caps.
+The route tests hold exclusive locks on all three tables and require a reply before
+releasing the lock, then check that a later request succeeds.

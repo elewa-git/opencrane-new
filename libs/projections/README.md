@@ -26,7 +26,7 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses the database test helper| projections
   ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
-  server["apps/server<br/>back end"] -->|reads tables, including closed assistant chats for cleanup, bounded grant lists with membership status, choices and join times| pg["PostgreSQL<br/>database"]
+  server["apps/server<br/>back end"] -->|reads spending choices with a time limit, and tables including closed assistant chats for cleanup, bounded grant lists with membership status, choices and join times| pg["PostgreSQL<br/>database"]
   projections -->|keeps native refusal audits and child requests outside feeds; saves ordered reply batches, public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and reads unfinished child requests| projections
@@ -273,3 +273,6 @@ approval revisions and check dates unchanged. Rebuilding the tables never sends 
 
 Hosted image admission reports dated check results. All four checks must pass before
 an image is admitted. Admission grants no tool access and starts no process.
+
+Spending choice reads give the database a time limit. If a table stays locked, the page can report
+that it is temporarily unavailable.

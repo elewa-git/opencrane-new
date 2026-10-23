@@ -1,7 +1,15 @@
+export class QueryDeadlineExceeded extends Error {
+  constructor() {
+    super('Database read expired');
+    this.name = 'QueryDeadlineExceeded';
+  }
+}
+
 export interface Query {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(
     sql: string,
     parameters?: unknown[],
+    options?: { deadline: number },
   ): Promise<{ rows: Row[] }>;
 }
 export interface Db extends Query {

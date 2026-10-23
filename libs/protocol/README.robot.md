@@ -320,7 +320,10 @@ stage, reason, attempt 1–3 and failureEventId. The server checks access before
 ## Named spending choices
 
 `budgetChoicesQuerySchema` accepts only `kind: paying_group | assistant`, optional
-opaque-id `after` and `limit` (default 20, maximum 50).
+stored-id `after` and `limit` (default 20, maximum 50). Choice names reuse the stored
+team name schema. Choice ids and continuation accept saved resource ids, including a
+colon, while rejecting NATS wildcard and separator characters. Save-command ids keep
+their existing narrower validation; displaying an older id does not authorise a save.
 `budgetChoicesResponseSchema` strictly checks `status: current | applying`, up to
 50 rows and nullable `next`. Each strict row carries `id`, `displayName`, positive
 resource `sequence` and a strict `cap`: `set` with non-negative safe integer

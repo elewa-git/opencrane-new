@@ -1,3 +1,5 @@
+import { clearTimeout, setTimeout } from 'node:timers';
+import { z } from 'zod';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -228,9 +230,10 @@ it('distinguishes absent, zero and lagging caps and rejects unsafe money', capsA
 async function failedBudgetRead() {
   const database = options.modelDb!;
   const original = database.query.bind(database);
-  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+    readOptions?: { deadline: number }) {
     if (sql.includes('FROM model_budgets')) throw new Error('Protected upstream reply');
-    return original<Row>(sql, values);
+    return original<Row>(sql, values, readOptions);
   }
   database.query = query;
   try {
@@ -264,12 +267,13 @@ async function changesDuringLoad(demote: boolean) {
   const original = database.query.bind(database);
   const loaded = Promise.withResolvers<void>();
   const resume = Promise.withResolvers<void>();
-  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+  async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+    readOptions?: { deadline: number }) {
     if (sql.includes('WITH selected_groups')) {
       loaded.resolve();
       await resume.promise;
     }
-    return original<Row>(sql, values);
+    return original<Row>(sql, values, readOptions);
   }
   database.query = query;
   const pending = request('kind=paying_group', 'admin');
@@ -303,13 +307,14 @@ async function seedBusyAssistant() {
     assistantId, kind: 'team', ownerId: 'group-00', name: 'Busy assistant',
   });
   await project();
-  const claim = getEventDefinition('computer.claimed')!.example;
+  const claim = z.record(z.string(), z.unknown()).parse(
+    getEventDefinition('computer.claimed')!.example);
   await append(`computer-${assistantId}`, 'computer.claimed', { ...claim, assistantId });
   const turns = [];
   for (let index = 0; index < 500; index++) {
     const turnId = `busy-turn-${index}`;
     for (const type of ['computer.turn_started', 'computer.turn_closed']) {
-      const example = getEventDefinition(type)!.example;
+      const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(type)!.example);
       const data = { ...example, assistantId, turnId };
       getEventDefinition(type)!.dataSchema.parse(data);
       const record = { ...event(`choice-${++serial}`, `computer-${assistantId}`, type),
@@ -371,7 +376,10 @@ async function boundsLockedRead(table: string, sub = 'owner') {
   await client.query(`LOCK TABLE ${table} IN ACCESS EXCLUSIVE MODE`);
   let timer: ReturnType<typeof setTimeout> | undefined;
   function expire(resolve: (value: undefined) => void) {
-    timer = setTimeout(resolve, 10_500);
+    function finish() {
+      resolve(undefined);
+    }
+    timer = setTimeout(finish, 10_500);
   }
   const expired = new Promise<undefined>(expire);
   const pending = request('kind=paying_group', sub);

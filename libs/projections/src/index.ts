@@ -1,3 +1,4 @@
+export { QueryDeadlineExceeded } from './db.ts';
 export { type Db, type Query } from "./db.ts";
 export {
   pgDb,

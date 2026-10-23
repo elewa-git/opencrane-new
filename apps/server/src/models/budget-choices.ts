@@ -1,10 +1,8 @@
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { assistantCreatedDataSchema, assistantSettingsChangedDataSchema,
-  teamCreatedDataSchema } from '@opencrane/events';
-import { MemberAccessRefused, readActiveMember, readBudget } from '@opencrane/models';
+import type { EventStore } from '@opencrane/event-store';
+import { MemberAccessRefused, readActiveMember, readBudget, readBudgetResource } from '@opencrane/models';
 import { budgetChoicesQuerySchema, budgetChoicesResponseSchema } from '@opencrane/protocol';
-import { readModelAccessCandidates, type Query } from '@opencrane/projections';
+import { readModelAccessCandidates, QueryDeadlineExceeded, type Query } from '@opencrane/projections';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { z } from 'zod';
 import type { IntegrationOptions } from '../integrations/routes.ts';
@@ -51,46 +49,77 @@ export function registerBudgetChoices(app: FastifyInstance, config: AuthConfig,
 
 async function loadPage(options: ReadOptions, query: ChoiceQuery): Promise<Page> {
   const deadline = performance.now() + 10_000;
+  const bounded = { ...options, modelDb: queryBeforeDeadline(options.modelDb, deadline) };
   const position = await options.store.head(undefined, deadline);
-  const kind = query.kind === 'paying_group' ? 'team' : 'assistant';
-  const checkpoints = await options.modelDb.query<{ name: string; sequence: string }>(
+  const status = await loadStatus(bounded.modelDb, query.kind, position);
+  const candidates = await selectCandidates(bounded, query);
+  const caps = await loadCaps(bounded, deadline);
+  const rows = await buildRows(bounded, query.kind, candidates.selected, caps, deadline);
+  if (performance.now() >= deadline) throw new Error('Choices read expired');
+  return { status, rows, next: candidates.next };
+}
+
+function queryBeforeDeadline(database: Query, deadline: number): Query {
+  const readOptions = { deadline };
+  async function query<Row extends Record<string, unknown>>(sql: string, parameters?: unknown[]) {
+    if (performance.now() >= deadline) throw new Error('Choices read expired');
+    return database.query<Row>(sql, parameters, readOptions);
+  }
+  return { query };
+}
+
+async function loadStatus(database: Query, kind: ChoiceQuery['kind'], position: number) {
+  const required = kind === 'paying_group' ? ['groups'] : ['groups', 'model-access'];
+  const checkpoints = await database.query<{ name: string; sequence: string }>(
     'SELECT name, sequence FROM projection_checkpoints WHERE name = ANY($1::text[])',
-    [['groups', 'model-access']]);
-  const required = query.kind === 'paying_group' ? ['groups'] : ['groups', 'model-access'];
+    [required]);
   function caughtUp(name: string) {
     function matches(row: { name: string; sequence: string }) {
       return row.name === name && Number(row.sequence) >= position;
     }
     return checkpoints.rows.some(matches);
   }
-  const status = required.every(caughtUp) ? 'current' : 'applying';
+  return required.every(caughtUp) ? 'current' : 'applying';
+}
+
+async function selectCandidates(options: ReadOptions, query: ChoiceQuery) {
+  const kind = query.kind === 'paying_group' ? 'team' : 'assistant';
   const candidates = await readModelAccessCandidates(options.modelDb, options.silo,
     kind, query.after, query.limit);
   const selected = candidates.slice(0, query.limit);
-  const caps = await loadCaps(options, deadline);
-  const rows: Page['rows'] = [];
-  for (const candidate of selected) {
-    let resource;
-    if (query.kind === 'assistant') {
-      resource = await loadAssistantChoice(options, candidate.id, deadline);
-    } else {
-      resource = await loadGroupChoice(options, candidate.id, deadline);
-    }
-    if (!resource) continue;
-    function matchesCap(cap: NonNullable<typeof caps>[number]) {
-      return cap.scope === query.kind && cap.scopeId === candidate.id;
-    }
-    const saved = caps?.find(matchesCap);
-    let cap: Page['rows'][number]['cap'] = { status: 'unavailable' };
-    if (caps) {
-      cap = saved ? { status: 'set', ceilingCents: saved.ceilingCents }
-        : { status: 'not_configured' };
-    }
-    rows.push({ ...resource, cap });
+  let next: string | null = null;
+  if (candidates.length > query.limit) next = selected.at(-1)?.id ?? null;
+  return { selected, next };
+}
+
+type Caps = Awaited<ReturnType<typeof loadCaps>>;
+function capFor(caps: Caps, kind: ChoiceQuery['kind'], id: string): Page['rows'][number]['cap'] {
+  if (!caps) return { status: 'unavailable' };
+  function matches(cap: NonNullable<Caps>[number]) {
+    return cap.scope === kind && cap.scopeId === id;
   }
-  if (performance.now() > deadline) throw new Error('Choices read expired');
-  const next = candidates.length > query.limit ? selected.at(-1)?.id ?? null : null;
-  return { status, rows, next };
+  const saved = caps.find(matches);
+  if (!saved) return { status: 'not_configured' };
+  return { status: 'set', ceilingCents: saved.ceilingCents };
+}
+
+async function buildRows(options: ReadOptions, kind: ChoiceQuery['kind'],
+  candidates: { id: string }[], caps: Caps, deadline: number) {
+  const rows: Page['rows'] = [];
+  try {
+    for (const candidate of candidates) {
+      const resource = await readBudgetResource(options.store, options.silo,
+        kind, candidate.id, deadline);
+      if (!resource) continue;
+      const cap = capFor(caps, kind, candidate.id);
+      const row = { ...resource, cap };
+      rows.push(row);
+    }
+  } catch (cause) {
+    // Treat corrupt resource history as unavailable, separately from caller access.
+    throw new Error('Choices unavailable', { cause });
+  }
+  return rows;
 }
 
 async function loadCaps(options: ReadOptions, deadline: number) {
@@ -98,53 +127,9 @@ async function loadCaps(options: ReadOptions, deadline: number) {
     const position = await options.store.head(`budget-${options.silo}`, deadline);
     const budget = await readBudget(options.modelDb, options.silo);
     if (budget.sequence >= position) return budget.ceilings;
-  } catch {
+  } catch (error) {
+    if (error instanceof QueryDeadlineExceeded) throw error;
     // Keep a failed or incomplete cap read distinct from a confirmed absence.
   }
   return undefined;
-}
-
-async function readChoiceRecords(options: ReadOptions, subject: string, deadline: number) {
-  const rows: StoredEvent[] = [];
-  for await (const row of options.store.readStream(subject, 1, deadline)) {
-    if (row.event.silo !== options.silo || row.event.subject !== subject ||
-      rows.length >= 1000) throw new Error('Choices unavailable');
-    rows.push(row);
-  }
-  return rows;
-}
-
-async function loadGroupChoice(options: ReadOptions, id: string, deadline: number) {
-  const rows = await readChoiceRecords(options, `team-${id}`, deadline);
-  for (const { event } of rows) {
-    if (event.type !== 'team.created') continue;
-    const saved = teamCreatedDataSchema.parse(event.data);
-    if (saved.teamId !== id) throw new Error('Choices unavailable');
-    return { id, displayName: saved.name, sequence: rows.at(-1)!.sequence };
-  }
-  return undefined;
-}
-
-async function loadAssistantChoice(options: ReadOptions, id: string, deadline: number) {
-  const rows = await readChoiceRecords(options, `assistant-${id}`, deadline);
-  let created: z.infer<typeof assistantCreatedDataSchema> | undefined;
-  let active = true;
-  for (const { event } of rows) {
-    if (event.type === 'assistant.created') {
-      created = assistantCreatedDataSchema.parse(event.data);
-      if (created.assistantId !== id) throw new Error('Choices unavailable');
-    }
-    if (event.type === 'assistant.settings_changed') {
-      const settings = assistantSettingsChangedDataSchema.parse(event.data);
-      if (settings.assistantId !== id) throw new Error('Choices unavailable');
-      if (settings.active !== undefined) active = settings.active;
-    }
-  }
-  if (!created || created.kind !== 'team' || !active) return undefined;
-  const computer = await readChoiceRecords(options, `computer-${id}`, deadline);
-  for (const { event } of computer) {
-    if (event.type === 'computer.retired') return undefined;
-  }
-  if (!await loadGroupChoice(options, created.ownerId, deadline)) return undefined;
-  return { id, displayName: created.name ?? id, sequence: rows.at(-1)!.sequence };
 }

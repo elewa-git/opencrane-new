@@ -26,7 +26,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, proof that a remote call was not sent, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, read tables and database test helper"]
+  models -->|shares spending choice checks between listing and saving, checks installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, proof that a remote call was not sent, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, read tables and database test helper"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -477,3 +477,6 @@ but the public package exports do not expose the writer.
 
 The projections package reads publication status from saved delivery receipts.
 Reading status never asks this library to deliver or probe a configuration.
+
+Spending choices and spending saves use the same group and assistant checks. Small summaries keep
+those checks from rereading old work on every request.

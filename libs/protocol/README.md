@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, history and tool holds"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, saved spending choices, history and tool holds"]
   server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests, saved start failures and invitations, origin replies, published answers and interim updates, publication facts, gateway receipts, saved chat choices, spending stop replies and call statuses, live stop notices and dated approvals| protocol
   projections["libs/projections<br/>read tables"] -.->|directory and spending choices| protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -121,3 +121,6 @@ const message = clientMessageSchema.parse({ type: 'hello', text: 'Hello' });
 
 Hosted image admission reports dated check results. All four checks must pass before
 an image is admitted. Admission grants no tool access and starts no process.
+
+Spending choice replies accept saved group names and ids, including older values. Displaying a
+choice does not change the checks used to save its limit.
