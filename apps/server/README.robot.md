@@ -3844,3 +3844,111 @@ Separate test runs can share worker ids, so listeners are checked before use.
 
 Provider tests retry gateway startup at most twice after a port conflict. Each
 retry updates the provider check URL to use the replacement gateway port.
+
+## Server guide text retained during the documentation update
+
+The server reads file lists from saved read tables before checking newer events.
+Old messages do not need replay just to find out whether uploads are ready.
+File lists return a waiting response while their table catches up with a saved
+upload. The website checks again before showing the upload as ready. Other chat
+activity does not hold up the list.
+
+Remote tool grant reads show a person's membership separately from their saved
+grant. A departed person keeps their grant history and cannot use tools.
+
+When a chat closes, the back end ends waiting requests and asks the computer to
+stop work already under way. It keeps checking saved events after a restart and
+can repair a missing record that says a computer turn ended. Other chats on the
+same computer continue. This also works for older closes saved with chat
+participation. If a shared computer reports a start after cleanup ended the
+request, the server records a refusal tied to that turn and accepts its failure.
+
+The server sends spending changes to the models process. It checks each chosen
+group and shared assistant before saving. Personal assistants cannot receive a
+new cap. The saved installation payer needs no group record. An unavailable
+choice asks the admin to correct the editor; lost admin access still clears the
+page. Owners and admins can read small pages of named groups and active shared
+assistants. Each choice includes its saved revision and whether a cap is set,
+absent or unavailable. The server checks current access after loading the page.
+
+The back end reads unfinished child requests from a table kept by the
+conversations worker. It checks each saved request and current access before
+continuing the child. A proven refusal is saved and stops recovery. Only the
+requester can read its status. Temporary access outages remain queued. Failed
+requests cannot be retried yet.
+
+Closed chats keep displayed output as it stood when the chat closed. Later
+assistant reports, decisions, tool dispatches, child publications and agent or
+system posts remain saved, but do not appear in history or live updates. Human
+posts remain visible. Saved human posts remain readable. The list keeps showing
+closed. History checks current participation after loading, before opening the
+saved text.
+
+Record a budget refusal before telling the computer that a chat turn cannot
+start. The member sees the saved spending notice even when no model call was
+made. Reconnecting recovers the notice from the saved refusal if the computer
+restarted before the notice was saved.
+
+The models process follows the recorded switch-on when choosing how to call a
+provider. After switch-on it uses the checked call's saved provider key. A
+leftover fallback key setting stops startup. Configuration reloads keep the
+same mode.
+
+The server asks the root supervisor to stop executors after the computer accepts
+a signed work gate. It saves pausing after checking both receipts, then saves
+paused only when the current bridge and root supervisor both prove quiet. This
+grants no control.
+
+Personal memory writes refuse access withdrawn before the fact is saved,
+including a removed write grant or a disabled assistant. They keep the original
+access time limit.
+
+When a closed shared chat refuses a delayed turn, the server accepts the
+computer's matching failure report. The turn stays closed and other chats keep
+their connection. Reports containing output still need a saved, admitted turn.
+
+Members can review a saved child answer and publish its text to the parent chat.
+They can also publish a saved reply from a running turn or write an interim
+update. The entry credits the person who publishes it. Files are unavailable.
+Publication refuses an answer if its turn fails or its output is lost before the
+parent entry is saved. Unrelated child messages still allow publication.
+
+Owners and admins receive a member directory and current management flags for
+active people. An ordinary member receives only a small header for one person.
+
+The provider list reports when model access routes are available. Those routes
+let admins read and change grants for people, groups and assistants. Provider
+requests report when saved membership or ownership is still being applied. A
+caller can wait briefly and repeat the same command id after that reply.
+
+The chat connection notifies authorised readers when a spending stop is saved
+for an original request they can see. A status read supplies the saved reason
+and work state, including after reconnect. The notice carries no spending
+amounts. If loading an update takes more than ten seconds, the connection
+closes so the client can reconnect and read the saved status.
+
+The bridge sends a saved spending stop before files, new work or approval
+replies for that turn. It checks for new stops after waiting for a connection or
+preparing work, then reads again immediately before sending a turn. It repeats
+an unfinished stop after a lost message or reconnection. Work stopped by a
+spending limit stays stopped when that limit rises. Other turns on the same
+computer can continue. While a chat's stop check is unfinished, delivery waits
+for that chat and keeps other chats moving. Receiving a file receipt does not
+start the same check again.
+
+Owners and admins can request publication of an exact reviewed tool list. The
+request alone does not enable calls. Tool access explanations show why a person
+and their assistant have access. Members can read their own explanation for
+servers they can access. Owners and admins can read others. Guessed private
+servers and tools receive the same refusal. Missing-grant replies contain
+permission reasons only. Missing account support and unavailable permission
+checks have separate reasons. These reads explain saved access. They do not
+approve or start a tool call.
+
+Member access and departure reviews use indexed stream names to read saved
+grants, groups and assistants. Removed access stays incomplete until permission
+receipts arrive. Reviews stop above 100 groups or 500 distinct people. After an
+upgrade, reviews stay incomplete until the inventory index has been rebuilt.
+Reviews use indexed history changes and report incomplete results when new
+streams have not been checked. Unrelated read receipts do not require reading
+the event log.
