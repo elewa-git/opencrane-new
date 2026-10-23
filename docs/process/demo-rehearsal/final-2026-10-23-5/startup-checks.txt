@@ -1,0 +1,23 @@
+PASS dev-only owner bootstrap: jente-rosseel owner; OpenFGA owner=true
+PASS provider setup: switched on managed calls
+PASS website readiness: 41257ms
+PASS existing members/assistants have model grant history, including explicit revocations
+PASS sign-in: owner and member via Zitadel + PKCE at the selected stack origin at 390px, and member at 1280px, in separate browser contexts
+PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me
+PASS wrong organisation: real Zitadel token refused by a different server org pin; no session
+PASS expired session: real two-second login cookie refused by session and protected API routes
+PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
+PASS new member and assistant model grants reach OpenFGA before chat
+PASS real replies: streaming, reload, Stop, later member and supplier PDF
+PASS Phase 4 browser journey; receipt run-demo-final-rehearsal-5-20261023.json
+PASS npm run replay -- members --verify
+PASS npm run replay -- mcp-catalogue --verify
+PASS loopback HTTP web page
+PASS token boundary: empty 303 body; manual/follow fetch, XHR, DOM and page cookies expose no ID token
+PASS logs: no ID token in the five stack process logs
+PASS form sign-out: top-level POST → 303 → Zitadel → home; no chooser, no session cookie; no-session POST refused
+PASS next sign-in: remembered identity still requires credentials; successful reauthentication
+PASS listener check: all secondary host ports on loopback
+Stack ready: http://127.0.0.1:25106/org/integrations (Zitadel sign-in)
+PASS demo groups and assistant saved; computer readiness is not checked
+Secondary 1 ready for rehearsal; release with down.sh --id 1.

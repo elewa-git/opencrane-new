@@ -4,6 +4,21 @@ For people, read [README.md](README.md) first.
 
 ## Latest qualification attempt
 
+The fifth 23 October 2026 attempt for #569 is **PASS**. The qualified source is
+`f11df5c56fe08e4bac477cc4c3f375288568c0cd`, the starting `origin/main`, including
+the checker-3 correction in #615 and the Stop correction in #611. Fresh startup,
+both timed smoke widths and all twenty script checks passed on the first run.
+The [receipt](../demo-rehearsal/final-2026-10-23-5/receipt.md) records every step,
+picture, duration, spending observation and cleanup. No retry was needed.
+
+The task used 47 charged cents and 85 held cents: 132 of its 1,000-cent allowance.
+Both company limits were restored to 1,000 cents. Secondary slot 1 was removed.
+The owner guide now pins this qualified source; the owner refresh itself remains
+**NOT RUN**. Laptop tunnelling, physical phone access, Safari and shared-assistant
+computer-disk isolation remain untested. No product or checker code changed.
+
+### Previous attempts
+
 The fourth 23 October 2026 attempt for #569 is **FAIL**. Fresh startup, both timed
 smoke widths and desktop script steps 1–5 passed. Desktop step 6 timed out waiting
 for the shared assistant's streaming indicator. Its failure picture shows the
@@ -19,8 +34,6 @@ Both company ceilings were restored to 1,000 cents and secondary slot 1 was remo
 No checker, product code, event contract, dependency or protected test changed.
 The orchestrator owns the follow-up. The
 [second attempt](../demo-rehearsal/final-2026-10-23-2/receipt.md) remains available.
-
-### Previous attempts
 
 Attempt 3 for #569 on 23 October 2026 is **FAIL**. The pinned source was
 `62c404b3a072dfe9c0e3fe838f5d4ffd3860641e`, including the checker fixes in #606 and #608.

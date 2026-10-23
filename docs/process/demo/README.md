@@ -48,7 +48,9 @@ request records is not a recovery step. Assistant creation does not prove readin
 
 ### Secondary rehearsal
 
-Only one live rehearsal uses the shared machine at a time. A prior real-model rehearsal passed Stop, but the latest phone-width run failed at Stop and the full rehearsal still needs a passing run. Keep the remaining allowance for all paid runs together within 2,000 cents per UTC day, including unknown
+Only one live rehearsal uses the shared machine at a time. The latest fresh rehearsal
+passed both screen widths, including Stop and keeping the partial reply after reload.
+Keep the remaining allowance for all paid runs together within 2,000 cents per UTC day, including unknown
 holds. Startup's 2,000-cent ceiling is per stack; it is not a shared daily counter.
 
 **The secondary launcher uses a fresh start. It wipes the claimed stack's conversations,
@@ -85,23 +87,17 @@ name this run's reservations, charges and holds, and failed warm-up still has ti
 
 ### OWNER-RUN: refreshing the owner checkout
 
-**A complete real-demo fresh-install PASS is still required before this sequence.**
-The owner real-mode command, refreshed image, PDF seed and timed smoke are available. The latest fresh rehearsal failed. There is no qualified owner SHA in this guide.
+The qualified source is `f11df5c56fe08e4bac477cc4c3f375288568c0cd`.
+Its [fresh-install receipt](../demo-rehearsal/final-2026-10-23-5/receipt.md) records
+successful startup, both timed smoke widths and all ten demo steps at each width.
+The owner real-mode command, refreshed image, PDF seed and timed smoke are available.
 These commands require an interactive terminal and refuse any `OPENCRANE_FLEET_TASK`
 marker, including an empty one. Task launchers export that marker. No task has run
 these commands on the owner stack or checked the real phone path.
 
-The [latest rehearsal](../demo-rehearsal/final-2026-10-23-4/receipt.md) passed fresh
-startup, both timed smoke widths and the first five desktop script steps. The next
-step timed out waiting for the shared assistant's streaming indicator, although its
-picture shows a completed answer. The remaining desktop steps and the phone script
-are untested. It does not qualify an owner refresh.
-
-The previous rehearsal passed startup and the desktop smoke. Its phone-width smoke
-failed at Stop; a later read showed “Reply failed” with partial text kept. Its separate
-ten-step script was not run. The earlier attempt passed startup, both timed smoke
-widths and all ten desktop script steps, but its phone script reused the desktop
-invitation address. Its last three steps were untested.
+The latest rehearsal passed on its first run. It used 47 charged cents and counted
+85 held cents in full. Both company limits were restored and the secondary stack
+was removed. Earlier failed attempts remain recorded in the rehearsal notes.
 
 Before choosing a SHA, confirm that it is merged into `origin/main`, includes both
 the real-provider and demo-kit changes, includes the qualified Stop image, and has
@@ -114,8 +110,8 @@ reading configuration. A failed or interrupted real start restores the previous 
 mode and stops services launched by that start. It cannot restore data erased by `--fresh`.
 
 The first command stops existing services from their existing checkout. Keeping that
-checkout path avoids transferring its ownership marker. Replace the SHA placeholder
-with the full 40-character merged SHA from the fresh-install receipt before proceeding.
+checkout path avoids transferring its ownership marker. The command below pins the
+full 40-character merged SHA from the fresh-install receipt.
 
 `--fresh` wipes the owner's conversations, uploaded files, budgets, local service data
 and computer disks, and replaces generated service credentials. Existing cloud sign-in
@@ -126,7 +122,7 @@ uses product APIs; it does not change the existing owner bootstrap.
 # OWNER-RUN ONLY, after every prerequisite above is satisfied.
 cd /home/jente/dev/opencrane-new
 infra/dev-stack/down.sh --id owner
-export DEMO_SHA=REPLACE_WITH_FULL_QUALIFIED_MERGED_SHA
+export DEMO_SHA=f11df5c56fe08e4bac477cc4c3f375288568c0cd
 printf '%s\n' "$DEMO_SHA" | rg '^[0-9a-f]{40}$' || exit 1
 git fetch origin
 git merge-base --is-ancestor "$DEMO_SHA" origin/main || exit 1

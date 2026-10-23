@@ -1,0 +1,22 @@
+[
+{"step": 1, "name": "streamedReply", "width": 1280, "result": "PASS", "pictures": ["01-streamedReply-1280.png"], "elapsedMs": 12119},
+{"step": 2, "name": "scannedPdf", "width": 1280, "result": "PASS", "pictures": ["02-upload-ready-1280.png", "02-preview-download-1280.png", "02-scannedPdf-1280.png"], "elapsedMs": 38398},
+{"step": 3, "name": "actionHistory", "width": 1280, "result": "PASS", "pictures": ["03-actionHistory-1280.png"], "elapsedMs": 1679},
+{"step": 4, "name": "stoppedReply", "width": 1280, "result": "PASS", "pictures": ["04-stoppedReply-1280.png"], "elapsedMs": 14286},
+{"step": 5, "name": "liveMessage", "width": 1280, "result": "PASS", "pictures": ["05-member-phone-1280.png", "05-liveMessage-1280.png"], "elapsedMs": 10522},
+{"step": 6, "name": "sharedReply", "width": 1280, "result": "PASS", "pictures": ["06-private-shared-reply-1280.png", "06-sharedReply-1280.png"], "elapsedMs": 18100},
+{"step": 7, "name": "groupAndInvite", "width": 1280, "result": "PASS", "pictures": ["07-group-chat-1280.png", "07-group-1280.png", "07-unopened-invite-1280.png", "07-groupAndInvite-1280.png"], "elapsedMs": 12190},
+{"step": 8, "name": "providerAnswer", "width": 1280, "result": "PASS", "pictures": ["08-providerAnswer-1280.png"], "elapsedMs": 1372},
+{"step": 9, "name": "companyLimit", "width": 1280, "result": "PASS", "pictures": ["09-member-refusal-1280.png", "09-companyLimit-1280.png"], "elapsedMs": 16923},
+{"step": 10, "name": "changeHistory", "width": 1280, "result": "PASS", "pictures": ["10-limit-history-1280.png", "10-limit-history-1280.png", "10-group-history-1280.png", "10-changeHistory-1280.png"], "elapsedMs": 3571},
+{"step": 1, "name": "streamedReply", "width": 390, "result": "PASS", "pictures": ["01-streamedReply-390.png"], "elapsedMs": 13176},
+{"step": 2, "name": "scannedPdf", "width": 390, "result": "PASS", "pictures": ["02-upload-ready-390.png", "02-preview-download-390.png", "02-scannedPdf-390.png"], "elapsedMs": 35765},
+{"step": 3, "name": "actionHistory", "width": 390, "result": "PASS", "pictures": ["03-actionHistory-390.png"], "elapsedMs": 1514},
+{"step": 4, "name": "stoppedReply", "width": 390, "result": "PASS", "pictures": ["04-stoppedReply-390.png"], "elapsedMs": 14408},
+{"step": 5, "name": "liveMessage", "width": 390, "result": "PASS", "pictures": ["05-member-phone-390.png", "05-liveMessage-390.png"], "elapsedMs": 7775},
+{"step": 6, "name": "sharedReply", "width": 390, "result": "PASS", "pictures": ["06-private-shared-reply-390.png", "06-sharedReply-390.png"], "elapsedMs": 15845},
+{"step": 7, "name": "groupAndInvite", "width": 390, "result": "PASS", "pictures": ["07-group-chat-390.png", "07-group-390.png", "07-unopened-invite-390.png", "07-groupAndInvite-390.png"], "elapsedMs": 11161},
+{"step": 8, "name": "providerAnswer", "width": 390, "result": "PASS", "pictures": ["08-providerAnswer-390.png"], "elapsedMs": 990},
+{"step": 9, "name": "companyLimit", "width": 390, "result": "PASS", "pictures": ["09-member-refusal-390.png", "09-companyLimit-390.png"], "elapsedMs": 15983},
+{"step": 10, "name": "changeHistory", "width": 390, "result": "PASS", "pictures": ["10-limit-history-390.png", "10-limit-history-390.png", "10-group-history-390.png", "10-changeHistory-390.png"], "elapsedMs": 2430}
+]
