@@ -441,6 +441,43 @@ async function waitsForGrantReceiptBeforeWarmUp() {
 it('waits for the latest model grant receipt before warming admission',
   waitsForGrantReceiptBeforeWarmUp);
 
+async function finishesFirstAssistantReadBeforeWarmUp() {
+  const setup = await fixture();
+  const store = setup.nats.store;
+  const read = store.readStream.bind(store);
+  let assistantReadDelayed = false;
+  async function* slowFirstAssistantRead(...args: Parameters<typeof read>) {
+    if (args[0] === 'assistant-assistant' && !assistantReadDelayed) {
+      assistantReadDelayed = true;
+      // Reproduce a cold lookup taking longer than the HTTP admission budget.
+      await delay(2200);
+    }
+    yield* read(...args);
+  }
+  try {
+    await setup.stopDispatch();
+    const requesterUse = await setup.auth.use('person', 'alice', 'model', 'gpt-6-luna');
+    const assistantUse = await setup.auth.use('assistant', 'assistant', 'model', 'gpt-6-luna');
+    expect(requesterUse.allowed).toBe(true);
+    expect(assistantUse.allowed).toBe(true);
+    const reads = vi.spyOn(store, 'readStream');
+    reads.mockImplementation(slowFirstAssistantRead);
+    await waitForDecisionGrants(setup, performance.now() + 15_000);
+    const headers = await freshDecisionHeaders(setup);
+    const ready = await decide(setup, setup.options.decisionUrl, headers);
+    expect(assistantReadDelayed).toBe(true);
+    expect(ready.status, ready.text).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('finishes a slow first assistant history read before warming admission',
+  finishesFirstAssistantReadBeforeWarmUp);
+
 async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee: boolean) {
   const setup = await fixture();
   const store = setup.nats.store;
