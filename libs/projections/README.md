@@ -24,6 +24,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
+  models["libs/models<br/>model and replay tests"] -.->|uses the database test helper| projections
   ops["apps/ops<br/>workers"] -->|fills memory setup and choices, nightly reviews, provider, spending, child, declared free tool costs and approval details, tool review, reload cancellation, restoration and publication status, destination, inventory and survey tables; checks memory correction and cleanup| projections["libs/projections<br/>read tables, change history, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables, including closed assistant chats for cleanup, bounded grant lists with membership status, choices and join times| pg["PostgreSQL<br/>database"]
   projections -->|keeps native refusal audits and child requests outside feeds; saves ordered reply batches, public chat rows, activity, closing details, control references, private choices, confirmed owners, startup review and historical fact links| pg
@@ -223,6 +224,8 @@ records its position and continues with later events.
    An offline conversation rebuild restores the same details from the saved events.
 
 ## How to run or test it
+
+Tests that also need models live in `libs/models/test`.
 
 Run the type check and focused tests with these commands. The tests need the
 local NATS test server fetched first:

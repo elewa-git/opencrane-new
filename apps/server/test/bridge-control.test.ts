@@ -15,7 +15,7 @@ import { assistantSnapshot, processConversation, type AgentSession }
   from '../src/chat/bridge-conversation.ts';
 import { listOpenConversations } from '@opencrane/projections';
 import { viewFixture } from './support/view-fixture.ts';
-import { suspendComputer } from '../../ops/src/lifecycle.ts';
+import { suspendComputer } from '../../ops/test/server.ts';
 
 type Fixture = Awaited<ReturnType<typeof bridgeFixture>>;
 let fixture: Fixture | undefined;

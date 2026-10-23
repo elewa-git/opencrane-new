@@ -6,6 +6,11 @@ Repository CI builds the upload test image in one fixture job. Its base and runt
 use separate caches, written only by main pushes. See the
 [CI test contracts](../../scripts/ci/README.robot.md) for file coverage and reports.
 
+## Test dependencies
+
+The test helper re-exports only the computer modules used by server integration tests.
+It starts no process on import. Production code keeps using its existing start files.
+
 ## Saved turn endings
 
 The runner reports `stop_interrupted` only when a cancelled turn receives an
@@ -15,7 +20,7 @@ Receiving Stop alone does not change a provider failure into a stopped reply.
 These values use the existing `reason` field. The journal retains them on replay.
 Restart recovery saves `bridge_restarted`, even if Stop was saved but not delivered.
 An execution-mode mismatch saves `model_error` before any work runs.
-`apps/web/test/recovery-stop.test.ts` drives the real journal, runner, report writer
+`apps/server/test/recovery-stop.test.ts` drives the real journal, runner, report writer
 and transcript
 to check that the restart keeps “Reply failed” and partial text, live and after reload.
 Older reports with no reason still use the server's `bridge_interrupted` default.

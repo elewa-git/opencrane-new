@@ -13,7 +13,7 @@ import { Client } from 'minio/dist/esm/minio.mjs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
-import { bridgeChannel } from '../../computer/src/channel.ts';
+import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import type { AgentSession } from '../src/chat/bridge-conversation.ts';

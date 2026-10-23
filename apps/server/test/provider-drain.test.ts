@@ -121,11 +121,18 @@ async function recordsAndRecovers() {
   expect((await request('POST', 'primary', command)).json()).toEqual(saved.json());
   expect((await request('GET')).json()).toMatchObject({ draining: false });
   await runner.run(providers);
-  const original = await dbs.queue.query('SELECT * FROM providers');
+  // Reorder physical storage to check replay without relying on the order of stored rows.
+  await dbs.queue.query(`CREATE INDEX provider_drain_test_order
+    ON providers (silo DESC, provider_id DESC)`);
+  await dbs.queue.query('CLUSTER providers USING provider_drain_test_order');
+  await dbs.queue.query('DROP INDEX provider_drain_test_order');
+  const providerRows = 'SELECT * FROM providers ORDER BY silo, provider_id';
+  const original = await dbs.queue.query(providerRows);
   const options = { verify: true };
   await rebuildProviderProjection(pgDb(dbs.queue), nats.reader,
     createLogger('provider-drain-replay', { level: 'silent' }), options);
-  expect((await dbs.queue.query('SELECT * FROM providers')).rows).toEqual(original.rows);
+  const rebuilt = await dbs.queue.query(providerRows);
+  expect(rebuilt.rows).toEqual(original.rows);
   expect(await nats.store.head()).toBe(position + 1);
 }
 it('records one event per drain change and recovers old replies without repeating a change',

@@ -5,7 +5,7 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { request, type IncomingMessage } from 'node:http';
 import { setTimeout as pause } from 'node:timers/promises';
-import { proxy } from '../../computer/src/proxy.ts';
+import { proxy } from '../../computer/test/server.ts';
 import type { MemoryIdentity } from '@opencrane/events';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';

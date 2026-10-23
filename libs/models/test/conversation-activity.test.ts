@@ -4,8 +4,8 @@ import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import {
   conversations, ProjectionRunner, readConversation, rebuildConversationsProjection,
-} from '../src/index.ts';
-import { database } from './database.ts';
+} from '@opencrane/projections';
+import { database } from '@opencrane/projections/testing';
 
 async function activityFixture() {
   const nats = await natsFixture();

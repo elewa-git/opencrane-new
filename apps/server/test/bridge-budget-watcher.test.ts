@@ -14,7 +14,7 @@ import { Client } from 'minio/dist/esm/minio.mjs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
-import { SandboxClient } from '../../ops/src/kubernetes.ts';
+import { SandboxClient } from '../../ops/test/server.ts';
 import { watchBridges } from '../src/chat/bridge.ts';
 import { chatHistory } from '../src/chat/commands.ts';
 import { viewFixture } from './support/view-fixture.ts';

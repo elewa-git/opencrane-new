@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { PassThrough } from 'node:stream';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
-import { memoryFreeConfig, privateConfig, privateEnvironments } from '../../computer/src/codex-config.ts';
-import { codexConnection } from '../../computer/src/codex-connection.ts';
-import { privateCodexLaunch } from '../../computer/src/private-codex.ts';
+import { memoryFreeConfig, privateConfig, privateEnvironments } from '../../computer/test/server.ts';
+import { codexConnection } from '../../computer/test/server.ts';
+import { privateCodexLaunch } from '../../computer/test/server.ts';
 
 const disablesToolsAndPersistentHistoryInThePrivate = () => {
   const config = privateConfig('test-model');

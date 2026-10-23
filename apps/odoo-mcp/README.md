@@ -21,6 +21,7 @@ flowchart LR
   apps --> computer["apps/computer<br/>assistant computer"]
   caller["Standalone HTTP caller"] -->|discovery or read| adapter
   adapter -->|fixed read requests| odoo["Odoo"]
+  adapter -.->|reads exact JSON| events["libs/events<br/>shared data rules"]
 ```
 
 ## What it is responsible for
@@ -44,6 +45,8 @@ flowchart LR
 4. **A caller asks to replace a note.** The server refuses without contacting Odoo.
 
 ## How to run or test it
+
+The server uses the shared events package to read JSON without losing number precision.
 
 The standalone process listens only on the local machine. `PORT` chooses its port.
 `ODOO_ORIGIN` and `ODOO_DATABASE` choose the upstream instance. Without them, only

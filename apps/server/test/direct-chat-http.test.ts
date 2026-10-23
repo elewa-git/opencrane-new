@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { tokenIssuer } from '@opencrane/auth';
-import { SandboxClient } from '../../ops/src/kubernetes.ts';
+import { SandboxClient } from '../../ops/test/server.ts';
 import { watchBridges } from '../src/chat/bridge.ts';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';

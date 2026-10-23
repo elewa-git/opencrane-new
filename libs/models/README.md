@@ -18,6 +18,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
+  models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, reviews of declared costs and approval details, dated approvals, memory, owners, providers, free reachability, spending and saved call statuses| models["libs/models<br/>AI rules, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
@@ -25,7 +26,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, remote outcomes, proof that a remote call was not sent, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store<br/>event log"]
+  models -->|checks spending choices, installation payer limits, native request cost, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, proof that a remote call was not sent, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers saved closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, read tables and database test helper"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -443,6 +444,7 @@ The admission timing tests wait for cold history to finish before measuring a ca
 They check that a cold refusal holds no money and that the measured call adds one hold.
 Separate timeout checks require unsent holds to settle at zero euro cents.
 The measured call must still finish within two seconds.
+Tests here also check conversation and delegation read tables against model events.
 
 ```sh
 npm test -- libs/models

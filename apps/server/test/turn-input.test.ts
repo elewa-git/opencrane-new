@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { expect, it } from 'vitest';
-import { turnInput } from '../../computer/src/turn-input.ts';
+import { turnInput } from '../../computer/test/server.ts';
 
 const files = [{ fileId: 'pdf', name: 'project.pdf', mime: 'application/pdf' },
   { fileId: 'text', name: 'notes.txt', mime: 'text/plain' }];

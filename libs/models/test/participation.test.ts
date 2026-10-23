@@ -2,8 +2,8 @@ import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
-import { conversations, ProjectionRunner, readConversation, rebuildConversationsProjection } from '../src/index.ts';
-import { database } from './database.ts';
+import { conversations, ProjectionRunner, readConversation, rebuildConversationsProjection } from '@opencrane/projections';
+import { database } from '@opencrane/projections/testing';
 
 async function replaysParticipation() {
   const nats = await natsFixture();

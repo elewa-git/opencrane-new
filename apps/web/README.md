@@ -10,6 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
+  server -.->|recovery tests use the transcript helper| web
   web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, one subscription per connection, upload list checks, catch-up after reconnects and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows saved Stop outcomes and real failures for replies and screenshots| capture["Reply and screenshot status<br/>workspace and viewer"]
@@ -229,6 +230,8 @@ a saved message keeps the current subscription instead of opening it twice.
     first fact's pending outcome stays on the page.
 
 ## How to run or test it
+
+Server recovery tests use the browser transcript through `test/chat-state.ts`.
 
 ```sh
 npm run dev -w apps/web

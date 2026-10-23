@@ -10,6 +10,7 @@ This is the background workers layer. `apps/server` records events, and these wo
 
 ```mermaid
 flowchart LR
+  server -.->|integration tests use the lifecycle helper| ops
   server["apps/server<br/>the back end"] -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events, human chat requests, departures, owner appointments, connection changes and memory facts| ops["apps/ops<br/>workers and memory replay"]
   ops -->|records gateway preparations, departure changes and spending stops| nats
@@ -141,6 +142,8 @@ from saved events before its workers resume if the job tables were lost. If a fa
 unavailable report was lost, the dispatcher records it after the event store recovers.
 
 ## How to run or test it
+
+Server integration tests use `test/server.ts` to exercise computer lifecycle work.
 
 ```sh
 npm run worker -w apps/ops -- members

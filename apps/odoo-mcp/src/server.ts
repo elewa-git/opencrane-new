@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { losslessJson } from '@opencrane/models';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { z } from 'zod';
 import { callTool, catalogue, discover } from './tools.ts';
 import { upstreamSchema } from './odoo.ts';

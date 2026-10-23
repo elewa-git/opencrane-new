@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { chatRowSchema } from '@opencrane/protocol';
-import { reportJournal, type BridgeReport } from '../../computer/src/report-journal.ts';
-import { parseTurn, turnRunner } from '../../computer/src/turn-runner.ts';
-import { chatCommand, chatHistory } from '../../server/src/chat/commands.ts';
-import { chatDisplayData, hasDisplayText } from '../../server/src/chat/display.ts';
-import { conversationKeys } from '../../server/src/chat/keys.ts';
-import { recordReport } from '../../server/src/chat/reports.ts';
-import { transcript } from '../src/app/chat/chat-state.ts';
+import { reportJournal, type BridgeReport } from '../../computer/test/server.ts';
+import { parseTurn, turnRunner } from '../../computer/test/server.ts';
+import { chatCommand, chatHistory } from '../src/chat/commands.ts';
+import { chatDisplayData, hasDisplayText } from '../src/chat/display.ts';
+import { conversationKeys } from '../src/chat/keys.ts';
+import { recordReport } from '../src/chat/reports.ts';
+import { transcript } from '../../web/test/chat-state.ts';
 
 async function keepsRecoveryFailureAfterUndeliveredStop() {
   const nats = await natsFixture();

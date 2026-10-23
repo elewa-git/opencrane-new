@@ -3,8 +3,8 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import type { StoredEvent } from '@opencrane/event-store';
 import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
-import { conversations, ProjectionRunner } from '../src/index.ts';
-import { database } from './database.ts';
+import { conversations, ProjectionRunner } from '@opencrane/projections';
+import { database } from '@opencrane/projections/testing';
 
 it.each(['conversation.created', 'participant.added', 'agent.turn_started'])(
   'rejects %s when replay would change a direct conversation audience or dispatch mode',

@@ -18,7 +18,7 @@ Only a derived `failed` turn gets that activity. Old feed rows need no migration
 or replay change. `agent.output_lost` without text keeps “Didn't complete · nothing
 was repeated”. Human group chats use the separate direct-chat view and start no
 agent turn. Regression coverage is in `chat-state.spec.ts`.
-`test/recovery-stop.test.ts` uses the real journal, runner and report writer to
+`apps/server/test/recovery-stop.test.ts` uses the real journal, runner and report writer to
 check a saved Stop that never reaches the runner before restart. It checks the
 transcript both as the failure arrives and after loading the saved rows again.
 The Node test configuration includes the Node 22 promise types used by the report writer.
@@ -244,6 +244,13 @@ while desktop access stays separate. `POST /api/assistants` records one assistan
 owner group, fixed paying group, name and grants. The server assigns its computer later.
 The list shows the returned lifecycle and busy fields. This API has no failed-provisioning
 retry, add-computer command or queue count. A lost computer is not shown as a failed create.
+
+## Test dependencies
+
+The test helper exports only `transcript`. Recovery tests live under `apps/server/test`,
+so checking browser tests no longer loads the server and computer source.
+The package declares ECMAScript modules so Node can load the helper with the server's
+existing strict TypeScript settings.
 
 ## Entrypoint and usage
 

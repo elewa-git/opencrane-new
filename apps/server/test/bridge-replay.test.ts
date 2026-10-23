@@ -6,7 +6,7 @@ import { BudgetActor, envelope } from '@opencrane/models';
 import { tokenIssuer, turnTokenAudience } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { conversations, pgDb, ProjectionRunner } from '@opencrane/projections';
-import { SandboxClient } from '../../ops/src/kubernetes.ts';
+import { SandboxClient } from '../../ops/test/server.ts';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -19,11 +19,11 @@ import { connectBridge, watchBridges } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { recordReport } from '../src/chat/reports.ts';
-import { bridgeChannel } from '../../computer/src/channel.ts';
+import { bridgeChannel } from '../../computer/test/server.ts';
 import { reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
-import { history, suspendComputer } from '../../ops/src/lifecycle.ts';
+import { history, suspendComputer } from '../../ops/test/server.ts';
 
 async function bridgeTokens(fixture: { directory: string }) {
   const keyOptions = {

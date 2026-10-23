@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "ES2024.Promise", "ESNext.Array"]
+  },
+  "include": [
+    "apps/computer/src", "apps/computer/test",
+    "apps/demo-mcp/src", "apps/demo-mcp/test",
+    "apps/odoo-mcp/src", "apps/odoo-mcp/test",
+    "apps/ops/src", "apps/ops/test",
+    "apps/server/src", "apps/server/test",
+    "libs/*/src", "libs/*/test"
+  ]
+}

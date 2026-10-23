@@ -10,8 +10,8 @@ import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
-import { approvalHolds } from '../../computer/src/approval-holds.ts';
-import { bridgeChannel } from '../../computer/src/channel.ts';
+import { approvalHolds } from '../../computer/test/server.ts';
+import { bridgeChannel } from '../../computer/test/server.ts';
 
 it('authenticates, overlaps conversations and replays a strict report sequence after disconnect', async () => {
   const directory = await mkdtemp(`${tmpdir()}/bridge-`), server = createServer();

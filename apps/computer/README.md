@@ -21,6 +21,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 
 ```mermaid
 flowchart LR
+  server -.->|integration tests use the computer helper| computer
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts, pauses and delivers passes and public keys| computer
   server["apps/server<br/>the back end"] <-->|turns, files, shared history, stops, saved Stop, restart or failure reasons, report acknowledgements and signed gates| computer
@@ -113,6 +114,7 @@ does not limit how long its reply can wait. Approval waits have their own 15-min
 
 Tests share a port picker that keeps listeners away from outgoing connections
 and the secondary dev stacks. It tries another port if one is already busy.
+Server integration tests use `test/server.ts` to exercise the bridge and turn runner.
 
 ```sh
 npm run build:image -w apps/computer

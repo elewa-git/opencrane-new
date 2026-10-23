@@ -16,6 +16,12 @@ directory. No capture output is kept outside it. Ordinary tests check both outpu
 paths, the permissions and removal without needing the capture image.
 See [the commands and results](../../docs/process/p3-5-pr12capture/receipt.md).
 
+## Test dependencies
+
+The conversation activity, direct-mode, participation and delegation replay tests live
+here because they use models. They use `@opencrane/projections/testing` for disposable
+PostgreSQL databases. Set `PG_TEST_URL` before running them.
+
 ## Egress socket checks
 
 P3-20 #61 PR 2b is split again to keep this change near 600 lines.

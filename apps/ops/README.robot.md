@@ -8,6 +8,11 @@ projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
 
+## Test dependencies
+
+The test helper exposes the Kubernetes client, lifecycle functions and memory cleanup
+to server integration tests. It runs no worker and changes no production start file.
+
 ## Delegated task worker
 
 `npm run worker -w apps/ops -- delegations` fills the delegation and computer-root
