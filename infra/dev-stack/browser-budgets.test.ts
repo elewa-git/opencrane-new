@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
+import files from 'node:fs/promises';
 import { test } from 'node:test';
 import { request, type Page } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
@@ -155,3 +156,98 @@ async function refusesPersonalAssistant() {
 }
 test('refuses a personal assistant before starting the budget browser journey',
   refusesPersonalAssistant);
+
+async function retainsEditorLoadFailure() {
+  const fixture = await files.mkdtemp(`${import.meta.dirname}/.budget-load-`);
+  const fixtureSource = `${fixture}/browser-budgets.ts`;
+  const source = new URL('./browser-budgets.ts', import.meta.url);
+  await files.copyFile(source, fixtureSource);
+  const configuration = `export const directory = ${JSON.stringify(fixture)};\n`
+    + `export const root = ${JSON.stringify(fixture)};\n`;
+  await files.writeFile(`${fixture}/config.ts`, configuration);
+  for (const width of [1280, 390]) {
+    await files.writeFile(`${fixture}/workspace-${width}.png`, 'Synthetic screenshot');
+  }
+  const isolated = await import(fixtureSource) as typeof import('./browser-budgets.ts');
+  const screenshots: string[] = [];
+  const listeners = new Set<(response: unknown) => void>();
+  let failedWaits = 0;
+  let navigations = 0;
+  const totals = { todayCents: 0, monthCents: 0, reservedCents: 0, ceilingCents: 20000 };
+  const budget = { ...totals, sequence: 1, defaultPayingGroupId: 'installation-default',
+    periodStart: null, dailyCeilingCents: 5000, ceilings: [] };
+  const assistantData = { assistantId: 'team-sales', ownerId: 'sales', kind: 'team',
+    payingGroupId: 'sales' };
+  const assistant = envelope('test', 'assistant-team-sales', 'assistant.created', assistantData);
+  const ceilingData = { scope: 'global', ceilingCents: 20000, dailyCeilingCents: 5000,
+    defaultPayingGroupId: 'installation-default', setBy: 'installation' };
+  const ceiling = envelope('test', 'budget-test', 'budget.ceiling_set', ceilingData);
+  async function* readStream(subject: string) {
+    const event = subject === 'budget-test' ? ceiling : assistant;
+    yield { event, sequence: 1 };
+  }
+  function on(_name: string, listener: (response: unknown) => void) {
+    listeners.add(listener);
+  }
+  function off(_name: string, listener: (response: unknown) => void) {
+    listeners.delete(listener);
+  }
+  async function goto() {
+    navigations++;
+    function url() { return 'http://fixture.test/api/org/models'; }
+    function status() { return 503; }
+    function method() { return 'GET'; }
+    function requestDetails() { return { method }; }
+    for (const listener of listeners) {
+      listener({ url, status, request: requestDetails });
+    }
+  }
+  async function ready() {}
+  function getByText() { return { waitFor: ready }; }
+  async function missingEditor() {
+    failedWaits++;
+    throw new Error('Synthetic driver detail that must stay out of the receipt');
+  }
+  function getByLabel(name: string) {
+    assert.equal(name, 'Budget scope');
+    return { waitFor: missingEditor };
+  }
+  async function screenshot(options: { path: string }) {
+    screenshots.push(options.path);
+  }
+  async function get() {
+    function status() { return 200; }
+    async function json() { return { budget }; }
+    return { status, json };
+  }
+  const requestDetails = { get };
+  const owner = { goto, getByText, getByLabel, screenshot, on, off, setViewportSize: ready,
+    request: requestDetails } as unknown as Page;
+  const store = { readStream } as EventStore;
+  try {
+    function viewportSize() { return { width: 1280, height: 900 }; }
+    const member = { viewportSize } as Page;
+    const journey = isolated.browserBudgetJourney(owner, [member], 'http://fixture.test', store,
+      'test', 'team-sales', 'sales');
+    let failure: unknown;
+    try {
+      await journey;
+    } catch (error) {
+      failure = error;
+    }
+    assert(failure instanceof Error);
+    assert.equal(failedWaits, 1);
+    assert.equal(navigations, 2, 'A failed read never resubmits a save or reloads the page');
+    const contents = await files.readFile(`${fixture}/budget-editor-failure.log`, 'utf8');
+    assert.deepEqual(JSON.parse(contents), { budgetReadStatuses: [503], effectReadStatuses: [] });
+    assert.equal(screenshots.length, 1);
+    assert(screenshots[0]!.endsWith('/budget-editor-failure.png'));
+    assert.equal(listeners.size, 0, 'Remove response listeners after the failed load');
+    assert.equal(failure.message, 'Spending budget editor did not load; inspect private evidence');
+  } finally {
+    await files.rm(fixture, { recursive: true, force: true });
+  }
+}
+
+test('keeps the actual failed budget load and a screenshot without copying driver errors',
+  retainsEditorLoadFailure);
