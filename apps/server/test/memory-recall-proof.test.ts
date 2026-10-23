@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { expect, it } from 'vitest';
 import type { MemoryContext } from '@opencrane/models';
+import { MemoryRefused } from '../src/memory/access.ts';
 import { checkRecallProof, recallProof, recallProofBytes } from '../src/memory/recall-proof.ts';
 
 const secret = 'test-only-recall-proof-secret';
@@ -141,3 +142,22 @@ function exactProofBytes() {
   expect(recallProofBytes(secret, context, 20, generation)).toBe(withProof - withoutProof);
 }
 it('reserves the exact proof field bytes including the saved input generation', exactProofBytes);
+
+function refusesOtherTargetRevision(operation: 'correct' | 'forget') {
+  const selectedContext = { ...context, operation };
+  const oldReference = { ...dependency, revision: 1 };
+  const target = { ...dependency, revision: 2 };
+  // Include both revisions so the separate returned-reference check accepts either proof.
+  const loaded = [oldReference, target];
+  const currentProof = recallProof(secret, selectedContext, [target], inputGeneration);
+  checkRecallProof(secret, selectedContext, currentProof, loaded, inputGeneration, target);
+
+  const oldProof = recallProof(secret, selectedContext, [oldReference], inputGeneration);
+  function checkOldProof() {
+    checkRecallProof(secret, selectedContext, oldProof, loaded, inputGeneration, target);
+  }
+  expect(checkOldProof).toThrow(MemoryRefused);
+}
+it.each(['correct', 'forget'] as const)(
+  'requires the exact %s target revision even when both revisions are dependencies',
+  refusesOtherTargetRevision);
