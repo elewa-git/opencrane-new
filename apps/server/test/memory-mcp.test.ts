@@ -552,18 +552,24 @@ async function signedRecall(target: typeof setup, overrides = {}, body = call) {
     bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
   const dispatch = await memoryBinding(target);
-  const preparationClaims = { ...claims, dispatch, preparing: true };
+  const fields = await prepareSignedMemory(target, { ...claims, dispatch }, body, headers);
+  const finalClaims = { ...claims, dispatch, ...fields, ...overrides };
+  return target.tokens.memoryContext(finalClaims, Date.now() + 2000);
+}
+
+async function prepareSignedMemory(target: typeof setup, claims: Record<string, unknown>,
+  body: unknown, requestHeaders: typeof headers) {
+  const preparationClaims = { ...claims, preparing: true };
   const preparing = await target.tokens.memoryContext(preparationClaims, Date.now() + 2000);
   const upstream = target.options.mcpRoutes.find(isMemoryRoute)!.upstream;
-  const request = { method: 'POST', headers: { ...headers, 'content-type': 'application/json',
-    'x-memory-context': preparing }, body: JSON.stringify(body) };
+  const request = { method: 'POST', headers: { ...requestHeaders,
+    'content-type': 'application/json', 'x-memory-context': preparing },
+    body: JSON.stringify(body) };
   const preparation = await fetch(`http://${upstream}${route}/prepare`, request);
   const prepared: unknown = await preparation.json();
   const schema = z.object({ preparationId: z.uuid().optional(),
     inputGeneration: z.string().optional() });
-  const fields = schema.parse(prepared);
-  const finalClaims = { ...claims, dispatch, ...fields, ...overrides };
-  return target.tokens.memoryContext(finalClaims, Date.now() + 2000);
+  return schema.parse(prepared);
 }
 
 async function assertRecallRefused(target: typeof setup, backend: typeof app) {
@@ -2501,8 +2507,10 @@ async function changeToken(request: ChangeRequest, overrides = {}) {
     thread: 'thread', operation: request.body.params.name,
     scopes: [request.body.params.arguments['scopeId']], contentAccess: 'private',
     bodyDigest: parsed.bodyDigest, callId: metadata.callId, requestId: randomUUID(),
-    contextPosition: 0, dispatch, ...overrides };
-  return setup.tokens.memoryContext(claims, Date.now() + 2000);
+    contextPosition: 0, dispatch };
+  const fields = await prepareSignedMemory(setup, claims, request.body, request.requestHeaders);
+  const finalClaims = { ...claims, ...fields, ...overrides };
+  return setup.tokens.memoryContext(finalClaims, Date.now() + 2000);
 }
 async function sendChange(request: ChangeRequest, token?: string) {
   const signed = token ?? await changeToken(request);
@@ -2816,13 +2824,14 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
   let body: unknown = call;
   let requestHeaders = headers;
   let token = '';
+  let change: ChangeRequest | undefined;
   if (operation === 'recall') {
     // Sign only after the server finishes the deliberately slow preparation.
   } else {
     const request = await changeRequest(operation, false);
     body = request.body;
     requestHeaders = request.requestHeaders;
-    token = await changeToken(request);
+    change = request;
   }
   async function delay() {
     await pause(2200);
@@ -2835,6 +2844,7 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
   const timing = timeMemoryPath(setup, step, delay);
   try {
     if (operation === 'recall') token = await signedRecall(setup);
+    if (change) token = await changeToken(change);
     const forwardedHeaders = { ...requestHeaders, 'content-type': 'application/json',
       'x-memory-context': token };
     const payload = JSON.stringify(body);
@@ -2911,3 +2921,45 @@ async function usesOnlyPreparedReceipts() {
 }
 it('uses prepared IAM receipts without loading them inside the signed recall',
   usesOnlyPreparedReceipts);
+
+async function reusedForgetPreparation() {
+  const request = await changeRequest('forget', false);
+  const original = await changeToken(request);
+  const first = await sendChange(request, original);
+  expect(first.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+  const claims = decodeJwt(original);
+  claims['dispatch'] = await memoryBinding(setup);
+  const reused = await setup.tokens.memoryContext(claims, Date.now() + 2000);
+  const response = await sendChange(request, reused);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses a reused Forget preparation with a fresh signed pass', reusedForgetPreparation);
+
+async function revokedDuringCorrectPreparation() {
+  const request = await changeRequest('correct', false);
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+  let revoked = false;
+  async function* slowScope(...args: Parameters<typeof readStream>) {
+    yield* readStream(...args);
+    if (args[0] === `scope-${scopeId}` && !revoked) {
+      revoked = true;
+      await pause(2200);
+      const fields = { resourceType: 'memory_write', resourceId: scopeId,
+        granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
+      await setup.append(grantStream('memory_write', scopeId), 'grant.revoked', fields);
+    }
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(slowScope);
+  let signed: string;
+  try {
+    signed = await changeToken(request);
+  } finally {
+    reads.mockRestore();
+  }
+  expect(revoked).toBe(true);
+  expect(decodeJwt(signed)['preparationId']).toEqual(expect.any(String));
+  const response = await sendChange(request, signed);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses revocation during slow Correct preparation with a fresh pass',
+  revokedDuringCorrectPreparation);
