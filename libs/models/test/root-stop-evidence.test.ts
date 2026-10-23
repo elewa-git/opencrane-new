@@ -1,3 +1,4 @@
+import { replayBudgets } from '../src/accounting.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -8,7 +9,7 @@ import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { BudgetActor, budgetSummary, budgets, envelope, history, priceTableId,
   readBudget } from '../src/index.ts';
-import { replayBudgets, type BudgetState } from '../src/state.ts';
+import { type BudgetState } from '../src/state.ts';
 import { rootTotals } from '../src/root-budget.ts';
 
 type Reason = 'requester_stop' | 'turn_ended' | 'access_revoked';

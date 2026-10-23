@@ -1,3 +1,4 @@
+import { replayBudgets } from '../src/accounting.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -8,7 +9,7 @@ import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { BudgetActor, budgetSummary, envelope, history, priceTableId,
   budgets, readBudget, totals } from '../src/index.ts';
-import { applyBudget, emptyBudget, replayBudgets, type BudgetState } from '../src/state.ts';
+import { applyBudget, emptyBudget, type BudgetState } from '../src/state.ts';
 import { checkRootReservation, rootTotals } from '../src/root-budget.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;

@@ -1,10 +1,12 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { ProjectionRunner, type Query } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { BudgetActor, envelope } from '../src/actor.ts';
-import { budgets, priceTableId, totals } from '../src/state.ts';
+import { priceTableId, totals } from '../src/state.ts';
+import { budgets } from '../src/accounting.ts';
 import { initialiseBudgetProjection, rebuildBudgetProjection } from '../src/rebuild.ts';
 import * as models from '../src/index.ts';
 
@@ -50,7 +52,7 @@ async function allPages(filters: { payingGroupId?: string; assistantId?: string 
   db: Query = postgres.db) {
   const rows: models.SpendingCall[] = [];
   let after = 0;
-  for (let page = 0; page < 30; page += 1) {
+  for (let page = 0; page < 150; page += 1) {
     const result = await models.readSpendingCalls(db, 'test', { ...filters, after, limit: 2 });
     expect(result.rows.length).toBeLessThanOrEqual(2);
     rows.push(...result.rows);
@@ -65,7 +67,7 @@ function reservationId(row: models.SpendingCall) { return row.reservationId; }
 async function pagesMixedCalls() {
   const sales: string[] = [];
   const shared: string[] = [];
-  for (let index = 0; index < 7; index += 1) {
+  for (let index = 0; index < 71; index += 1) {
     sales.push(await actor.reserve(call(), 120));
     shared.push(await actor.reserve(call('support', 'sales-assistant'), 30));
     await actor.reserve(call('support', 'support-assistant'), 60);
@@ -76,16 +78,21 @@ async function pagesMixedCalls() {
   await runner.run(budgets);
   const all = await allPages();
   const ids = all.map(reservationId);
-  expect(new Set(ids).size).toBe(21);
-  expect(all).toHaveLength(21);
+  expect(new Set(ids).size).toBe(213);
+  expect(all).toHaveLength(213);
   for (const row of all) expect(row.silo).toBe('test');
   const payerRows = await allPages({ payingGroupId: 'sales' });
   expect(payerRows.map(reservationId)).toEqual(sales);
   const assistantRows = await allPages({ assistantId: 'sales-assistant' });
-  expect(assistantRows).toHaveLength(14);
+  expect(assistantRows).toHaveLength(142);
   const combined = await allPages({ payingGroupId: 'support', assistantId: 'sales-assistant' });
   expect(combined.map(reservationId)).toEqual(shared);
   expect(await allPages({ payingGroupId: 'absent' })).toEqual([]);
+  const defaultPage = await models.readSpendingCalls(postgres.db, 'test');
+  expect(defaultPage.rows).toHaveLength(20);
+  const rebuilt = await rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true });
+  expect(rebuilt.changed).toBe(false);
+  expect(await allPages()).toEqual(all);
   await expect(models.readSpendingCalls(postgres.db, 'test', { limit: 51 })).rejects.toThrow();
   await expect(models.readSpendingCalls(postgres.db, 'test', { after: -1 })).rejects.toThrow();
 }
@@ -107,7 +114,11 @@ async function keepsOriginalMoney() {
   const oldHold = await actor.reserve(call(), 120);
   const late = await actor.reserve(call('support', 'support-assistant'), 100);
   const conflict = await actor.reserve(call(), 120);
+  await runner.run(budgets);
+  const initial = await allPages();
   clock = new Date('2026-11-01T00:01:00.000Z');
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
   await actor.configure({ scope: 'global', ceilingCents: 20_000, setBy: 'owner',
     defaultPayingGroupId: 'support' });
   const receipt = await settle(late, 70);
@@ -115,6 +126,9 @@ async function keepsOriginalMoney() {
   await settle(conflict, 180);
   await runner.run(budgets);
   const before = await allPages();
+  for (let index = 0; index < before.length; index += 1) {
+    expect(before[index]?.position).toBe(initial[index]?.position);
+  }
   const position = await nats.store.head();
   await actor.settleRecorded(late, receipt);
   expect(await nats.store.head()).toBe(position);
@@ -136,11 +150,12 @@ async function keepsOriginalMoney() {
   expect({ held, settled }).toEqual({ held: 240, settled: 250 });
   expect(totals(actor.state, clock)).toMatchObject({ reservedCents: held, monthCents: 0 });
   expect(totals(actor.state, new Date('2026-10-31'))).toMatchObject({ monthCents: settled });
+  const actorBefore = structuredClone(actor.state);
   const result = await rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true });
   expect(result.changed).toBe(false);
   expect(await allPages()).toEqual(before);
   expect(await nats.store.head()).toBe(position);
-  expect(actor.state.reservations).toHaveLength(3);
+  expect(actor.state).toEqual(actorBefore);
 }
 it('keeps old holds and original late charges, preserves conflicting money and replays without effects',
   keepsOriginalMoney);
@@ -200,3 +215,30 @@ async function boundedReads() {
   expect(JSON.stringify(plan.rows)).not.toContain('Sort');
 }
 it('reads only bounded indexed rows with a database deadline and no event history', boundedReads);
+
+async function boundsLockedReads() {
+  let release = () => {};
+  let acquired = () => {};
+  function holdLock(resolve: () => void) { release = resolve; }
+  function markAcquired(resolve: () => void) { acquired = resolve; }
+  const held = new Promise<void>(holdLock);
+  const ready = new Promise<void>(markAcquired);
+  async function lock(tx: Query) {
+    await tx.query('LOCK TABLE model_budget_calls IN ACCESS EXCLUSIVE MODE');
+    acquired();
+    await held;
+  }
+  const locked = postgres.db.transaction(lock);
+  await ready;
+  try {
+    const read = models.readSpendingCalls(postgres.db, 'test', {}, performance.now() + 150);
+    const watchdog = delay(3000, 'read did not expire');
+    await expect(Promise.race([read, watchdog])).rejects.toThrow('Database read expired');
+  } finally {
+    release();
+    await locked;
+  }
+  expect(await allPages()).toEqual([]);
+}
+it('expires a blocked database read while the lock remains held and recovers afterwards',
+  boundsLockedReads);

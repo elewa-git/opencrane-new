@@ -526,16 +526,16 @@ No stack or paid provider call proves this route yet.
   unchanged configuration and scope per UTC day for exhaustion, including across actor recovery. All decisions use `decision.recorded` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.
 - `budgets` is a PostgreSQL projection using the existing runner. The worker
-  upgrades projection version 2 by replaying legacy rows before resuming.
+  upgrades projection version 3 by replaying budget and call rows before resuming.
   Rebuild online with `npm run replay -- budgets --verify`; a repair changes
   the generation and preserves the live table's reader grants.
   `GET /api/org/models` uses live owner/admin authorisation and returns models, prices, the task-routing table and context threshold,
   today's/month's settled cents, outstanding reserved cents and both ceilings.
   Its `budget` field includes each configured group/assistant ceiling and totals.
 
-The prototype stores reservation history in one JSON projection row and rereads
-small entity histories. Large histories need compaction/indexing later; the event
-stream remains the source of truth. Manual resolution of uncertain effects and
+The budget summary still stores reservation history in one JSON projection row.
+Call pages use separate indexed rows. Summary compaction remains later work; the
+event stream remains the source of truth. Manual resolution of uncertain effects and
 price administration are Phase 3 work. A hold that may have been sent is never
 refunded by time. A hold that was never allowed or sent is released at zero cents.
 
@@ -3117,3 +3117,35 @@ The expired-catalogue fixture derives both dates from one timestamp. Its five-mi
 lifetime must remain valid even when the clock advances between reads. A regression
 advances the clock by one millisecond per read, checks the discovery data against its
 schema and still requires `Selection conflict` without saving a choice.
+
+## Spending call accounting (P4-26 row 8, first part)
+
+`readSpendingCalls` is an internal read, with no HTTP route. It returns 20 rows by
+default, at most 50, plus `next`, the last reservation position when another page
+exists. Pass that position as `after` with the same silo and filters. Indexes cover
+silo/position, payer, assistant and both filters. Each query shares a two-second
+read deadline by default; callers may supply their remaining deadline. Returned
+`sequence` and `generation` describe the budgets checkpoint read before the rows;
+they do not promise an immutable snapshot across pages. Later settlements keep the
+original position. No read loads `model_budgets` or reads event history.
+
+`accounting.ts` owns the existing budgets projection and its new `model_budget_calls`
+table. It reuses `applyBudget` and `totals` for held and settled euro cents. Rows keep
+silo, reservation, permit, payer, assistant, original time and held/settled evidence.
+A null settlement means no recorded settlement; zero is a recorded amount. Unknown
+outcomes retain the safety hold alongside the maximum saved settlement. These are
+accounting states, not proof of dispatch or completion. No private call text is copied.
+
+Version 3 replays installed data and replaces both tables in one transaction,
+retaining reader grants. Verification compares both tables, reading call rows in batches of 200. An incomplete legacy
+call that the shared budget fold cannot read makes the upgrade and reader unavailable;
+it does not invent attribution or claim an empty result. Missing upgrades also refuse.
+The existing actor remains the only money writer. Replay receives only an event
+reader, runs no reactions, and cannot dispatch, settle, release or schedule work.
+
+`test/accounting.test.ts` uses real NATS/PostgreSQL and actor writes for two payers
+and assistants, mixed paging, conflicting/duplicate settlement, UTC rollover,
+upgrades, locked-read deadlines and replay equality. Existing root tests still exercise the same projection.
+Callers must check current finance access once after loading. There is no authority
+fence on this read. Effect detail, impact previews, root/routine joins and screens
+remain later work. Fresh-install qualification: NOT RUN.

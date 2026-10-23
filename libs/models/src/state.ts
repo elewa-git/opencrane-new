@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
-import { parseEventByType, budgetExhaustedDataSchema, budgetStopReasonSchema,
+import { budgetExhaustedDataSchema, budgetStopReasonSchema,
   budgetCallDispatchAdmittedDataSchema, budgetRootAllowanceSetDataSchema,
   budgetRootStoppedDataSchema,
   optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
-import type { Projection, Query } from '@opencrane/projections';
+import type { Query } from '@opencrane/projections';
 
 // Pinned standard USD prices, 2 October 2026, at the existing EUR 95/100 planning FX.
 // Integer euro cents per billion tokens retain the $0.125 cache-write rate exactly.
@@ -118,7 +118,7 @@ const stoppedWorkSchema = z.object({ conversationId: z.string(), turnId: z.strin
 const rootSchema = budgetRootAllowanceSetDataSchema.extend({
   position: z.int().nonnegative(), stop: budgetRootStoppedDataSchema.optional(),
 });
-const stateSchema = z.object({ dailyCeilingCents: z.int().nonnegative(), ceilingCents: z.int().nonnegative(),
+export const stateSchema = z.object({ dailyCeilingCents: z.int().nonnegative(), ceilingCents: z.int().nonnegative(),
   periodStart: z.string().optional(), defaultPayingGroupId: z.string().optional(), ceilings: ceilingsSchema.default([]), sequence: z.int().nonnegative().default(0),
   roots: z.array(rootSchema).default([]), reservations: z.array(reservationSchema), limits: z.array(budgetStopReasonSchema).default([]),
   dispatches: z.array(budgetCallDispatchAdmittedDataSchema).default([]),
@@ -471,24 +471,6 @@ export async function readBudget(db: Query, silo: string): Promise<BudgetState> 
   if (!result.rows[0]) throw new Error('Budget not initialised');
   return stateSchema.parse(result.rows[0].state);
 }
-// ponytail: one JSON row holds Phase 2 history; split reservations into rows when volume demands it.
-function budgetProjection(name: string, table: string): Projection { return {
-  name,
-  async create(db) { await db.query(`CREATE TABLE IF NOT EXISTS ${table} (silo TEXT PRIMARY KEY, state JSONB NOT NULL)`); },
-  async drop(db) { await db.query(`DROP TABLE IF EXISTS ${table}`); },
-  async apply(db, event, position) {
-    if (!event.type.startsWith('budget.')) return;
-    if (!parseEventByType(event).success) throw new Error('Invalid budget event');
-    const rows = await db.query<{ state: unknown }>(`SELECT state FROM ${table} WHERE silo = $1`, [event.silo]);
-    const state = rows.rows[0] ? stateSchema.parse(rows.rows[0].state) : emptyBudget();
-    applyBudget(state, event, position);
-    await db.query(`INSERT INTO ${table} VALUES ($1, $2) ON CONFLICT (silo) DO UPDATE SET state = $2`, [event.silo, JSON.stringify(state)]);
-  },
-}; }
-export const budgets = budgetProjection('model-budgets', 'model_budgets');
-export const replayBudgets = budgetProjection('model-budgets-replay', 'model_budgets_replay');
-
-
 export type ModelUsage = {
   inputTokens: number;
   outputTokens: number;

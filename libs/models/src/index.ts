@@ -1,3 +1,4 @@
+export { budgets, readSpendingCalls, type SpendingCall } from './accounting.ts';
 export { readBudgetResource } from './budget-resource.ts';
 export { budgetChange } from './budget-change.ts';
 export { budgetStopHandler, queuedPayer } from './budget-stop-handler.ts';
@@ -6,7 +7,7 @@ export { settlementHandler } from './settlement-handler.ts';
 export { BudgetActor, envelope, history, migrateBudgetDefault } from './actor.ts';
 export { startDecision } from './decision.ts';
 export { startGateway, ingestUsage, gatewayUsage } from './gateway.ts';
-export { budgets, readBudget, budgetSummary, totals, models, priceTableId, costCents, reservationCents, requestReservationCents, shortContextTokens } from './state.ts';
+export { readBudget, budgetSummary, totals, models, priceTableId, costCents, reservationCents, requestReservationCents, shortContextTokens } from './state.ts';
 export { taskRouting, modelForTask, type TaskKind } from './routing.ts';
 export { readToolPolicy, toolPolicyFromRows, setToolPolicy, reviewToolPolicy } from './tool-policy.ts';
 export { modelGrantHandler, migrateModelGrants } from './grants.ts';

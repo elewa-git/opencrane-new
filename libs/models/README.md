@@ -26,7 +26,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|locks preparation during replacement; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|shares spending choice checks between listing and saving, checks installation payer limits, native request cost, recovery, saved access expiry, access, saved work and the root allowance; records tool starts, permit-bound remote outcomes, proof that a remote call was not sent, not-sent outcomes, admissions, retry bindings, spending, unsent releases and relay closures; recovers and retries saved closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, read tables and database test helper"]
+  models -->|checks spending choices and payer limits; records tool starts, remote outcomes and spending; reads spending calls in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, spending call rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -115,6 +115,10 @@ remains switched off. Crash recovery and live qualification are still pending.
 
 Tool mode changes require the server’s declared zero cost and approval details
 for both Allow and Ask. Admin review locks those values before a tool can be enabled.
+
+Spending call records can be read in small pages, filtered by their saved payer and
+assistant. They keep the original date, held money and recorded settlement after
+rollover or replay. Reading these records never permits spending.
 
 ## What it is responsible for
 
@@ -359,6 +363,9 @@ usable when its sources are still current. These checks read no private text.
 
 Saved spending stops explain the limits that applied to one turn. The server
 uses the same payer choice as admission and the stop handler.
+
+Spending call history is read in small pages from saved rows. A page keeps the
+original reservation order and does not load the whole budget record.
 
 A saved spending stop makes the dispatcher record Stop for each affected unfinished
 turn and queued message. It checks the conversation index has caught up first.
