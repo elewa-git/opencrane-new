@@ -94,6 +94,37 @@ function skipsExcludedFolder(folder) {
 
 test.each(excludedFolders)('allows %s folders and everything inside them', skipsExcludedFolder);
 
+function requiresReadmeForExcludedPackageName(folder) {
+  const files = { [`libs/${folder}/index.ts`]: '' };
+  trackFiles(files);
+
+  const result = runCheck();
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain(`Missing README.md in folder: libs/${folder}\n`);
+}
+
+test.each(excludedFolders)(
+  'requires a package README even when the package is called %s',
+  requiresReadmeForExcludedPackageName,
+);
+
+function requiresTrackedReadmeOnDisk() {
+  const files = {
+    'libs/example/README.md': '# Example\n',
+    'libs/example/index.ts': '',
+  };
+  trackFiles(files);
+  rmSync(join(repository, 'libs/example/README.md'));
+
+  const result = runCheck();
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('Missing README.md in folder: libs/example\n');
+}
+
+test('reports a tracked README removed from disk as missing', requiresTrackedReadmeOnDisk);
+
 function allowsTopLevelSource() {
   const files = {
     'libs/example/README.md': '# Example\n',
