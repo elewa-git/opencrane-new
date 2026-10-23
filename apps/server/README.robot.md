@@ -1196,8 +1196,13 @@ Conversation filters remain `requestId`, `turnId`, `decision` and `before`, with
 at most 50). Detail accepts `before` and `limit` (20 by default, at most 50).
 Both cursors are exclusive event positions. List rows carry no more than 20
 related records and mark further evidence; detail pages can read all of it.
+Saved tool starts and observations use these same list and detail routes and metadata
+fields. The [audit projection contract](../../libs/projections/README.robot.md) explains
+their status meanings and the required replay for existing installations.
+`test/audit-dispatch.test.ts` checks these reads with real NATS, PostgreSQL and OpenFGA.
 Decision and observed outcome are separate. An allowed request
-without an observation reads `unknown`, never success. The
+with a saved tool start but no saved dispatch outcome reads `unknown`, even if a
+generic effect reports success. The outcome filter and rebuild preserve this result. The
 [shared response contract](../../libs/protocol/src/audit.ts) is strict and permits
 only fixed readable reasons. Run the `audit` ops worker alongside the existing
 projections. API startup enables these reads with the existing event store,

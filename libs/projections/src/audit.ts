@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import type { EventEnvelope } from '@opencrane/events';
+import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { auditReasons, auditResponseSchema, auditDetailSchema, type AuditRow,
   type AuditRecord, type AuditFilter, type AuditDetailFilter } from '@opencrane/protocol';
 import type { Query } from './db.ts';
@@ -31,6 +31,8 @@ const auditTypes = new Set([
   'budget.exhausted',
   // Security and gateway records explain refused or observed work.
   'tool.approval_requested',
+  'tool.dispatch_started',
+  'tool.dispatch_recorded',
   'credential.released',
   'security.alert_raised',
   'gateway.observation_recorded',
@@ -60,6 +62,32 @@ export function isAuditEventType(type: string): boolean {
     }
   }
   return false;
+}
+function isDispatchEvent(type: string): boolean {
+  return type === 'tool.dispatch_started' || type === 'tool.dispatch_recorded';
+}
+function auditData(event: EventEnvelope): Record<string, unknown> {
+  const dataSchema = z.record(z.string(), z.unknown());
+  if (isDispatchEvent(event.type)) {
+    const definition = getEventDefinition(event.type)!;
+    const dispatchSchema = definition.dataSchema;
+    const parseResult = dispatchSchema.safeParse(event.data);
+    if (!parseResult.success) {
+      // Keep rejected arguments, replies and credentials out of projection errors.
+      throw new Error('Invalid dispatch audit event');
+    }
+    return dataSchema.parse(parseResult.data);
+  }
+  return dataSchema.parse(event.data);
+}
+function dispatchStatus(outcome: unknown): AuditRecord['status'] {
+  if (outcome === 'outcome_unknown') {
+    return 'unknown';
+  }
+  if (outcome === 'not_dispatched') {
+    return 'not_dispatched';
+  }
+  return 'recorded';
 }
 const identifier = z.string().regex(/^[\w:.-]{1,300}$/u);
 const safeId = (value: unknown) => identifier.safeParse(value).data;
@@ -110,6 +138,9 @@ function isDestinationRule(event: EventEnvelope) {
 }
 function auditSource(event: EventEnvelope): AuditRecord['source'] {
   if (event.type === 'decision.recorded') return 'decision';
+  if (event.type === 'tool.dispatch_recorded') {
+    return 'gateway';
+  }
   if (isDestinationRule(event)) return 'authoritative';
   if (/^(effect|gateway|egress)\./u.test(event.type)) return 'gateway';
   if (event.type.startsWith('agent.')) return 'computer';
@@ -124,7 +155,12 @@ function takeoverMetadata(event: EventEnvelope, data: Record<string, unknown>) {
     requesterEventId: safeId(data['requesterEventId']), affectedTurnCount: turns?.length };
 }
 function metadata(event: EventEnvelope, d: Record<string, unknown>, position: number): AuditRecord {
-  const status = z.enum(['allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched']).safeParse(d['outcome']).data;
+  let status: AuditRecord['status'] | undefined = z.enum([
+    'allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched',
+  ]).safeParse(d['outcome']).data;
+  if (isDispatchEvent(event.type)) {
+    status = dispatchStatus(d['outcome']);
+  }
   const reason = typeof d['reason'] === 'string' ? Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ?? 'Recorded reason withheld' : undefined;
   const cents = amount(d['amountCents'] ?? d['settledCents']);
   const digest = commandRef(event);
@@ -163,10 +199,12 @@ export const auditTrail: Projection = {
   async drop(db) { await db.query('DROP TABLE IF EXISTS audit_entries'); },
   async apply(db, event, position) {
     if (!isAuditEventType(event.type)) return;
-    const d = z.record(z.string(), z.unknown()).parse(event.data);
+    const d = auditData(event);
     const call = z.record(z.string(), z.unknown()).safeParse(d['modelCall']).data ?? {};
     const request = firstId(d['requestId'], call['requestId'], event.correlation.request);
-    const permit = firstId(d['permitId'], event.correlation.permit);
+    // Bind dispatch evidence to its saved request, never another attempt's correlation.
+    const permit = isDispatchEvent(event.type) ? undefined :
+      firstId(d['permitId'], event.correlation.permit);
     const approval = firstId(d['approvalId'], event.correlation.approval);
     const anchor = isAnchor(event, request, permit, approval);
     const digest = z.string().regex(/^[a-f0-9]{64}$/u).safeParse(d['contextDigest']).data;
@@ -183,7 +221,8 @@ export const auditTrail: Projection = {
       event.time, event.type, record.actor?.kind === 'unverified' ? null : record.actor?.id,
       record.status].map(value => value ?? null));
     if (anchor || ['effect.observed', 'egress.observed', 'budget.settled',
-      'security.alert_raised', 'gateway.observation_recorded'].includes(event.type)) {
+      'security.alert_raised', 'gateway.observation_recorded',
+      'tool.dispatch_started', 'tool.dispatch_recorded'].includes(event.type)) {
       await refreshOutcomes(db, event.silo, request, permit, event.id);
     }
   },
@@ -304,7 +343,8 @@ async function readEvidence(db: Query, silo: string, anchor: Entry,
   parameters.push(limit);
   const sql = `SELECT e.* FROM audit_entries e WHERE e.silo = $1 ${excludeAnchor}
     ${beforeCondition} AND (${anchorCondition}${direct} OR
-      (e.approval_id IS NOT NULL AND EXISTS (
+      (e.event_type NOT IN ('tool.dispatch_started', 'tool.dispatch_recorded')
+        AND e.approval_id IS NOT NULL AND EXISTS (
         SELECT 1 FROM audit_entries linked WHERE linked.silo = $1
           AND linked.approval_id = e.approval_id AND ${matching})))
     ORDER BY e.position DESC LIMIT $${parameters.length}`;
@@ -313,7 +353,8 @@ async function readEvidence(db: Query, silo: string, anchor: Entry,
 
 async function readSignals(db: Query, silo: string, anchor: Entry): Promise<Entry[]> {
   const types = ['effect.observed', 'egress.observed', 'security.alert_raised',
-    'budget.settled', 'budget.reserved', 'gateway.observation_recorded'];
+    'budget.settled', 'budget.reserved', 'gateway.observation_recorded',
+    'tool.dispatch_started', 'tool.dispatch_recorded'];
   const parameters = [silo, anchor.event_id, anchor.request_id, anchor.permit_id,
     anchor.conversation_id, anchor.turn_id, anchor.requester_id, types];
   const direct = evidenceCondition('e');
@@ -362,9 +403,26 @@ function explain(anchor: Entry, entries: Entry[], signals: Entry[],
 
 function observedOutcome(decision: AuditRow['decision'], records: AuditRecord[], effect?: AuditRecord, settlement?: AuditRecord) {
   if (records.some(r => r.type === 'security.alert_raised')) return 'unknown';
+  const dispatch = records.findLast(isRecordedDispatch);
+  // Keep transport evidence separate from business success and generic gateway observations.
+  if (dispatch && decision === 'allow') {
+    return dispatch.status;
+  }
+  // Keep a saved start without its outcome unknown, even after generic success.
+  if (decision === 'allow' && records.some(isDispatchStart)) {
+    return 'unknown';
+  }
   if (effect && decision === 'allow') return effect.status;
   if (settlement?.status === 'not_dispatched' || ['ask', 'deny'].includes(decision)) return 'not_dispatched';
   if (decision === 'allow') return 'unknown';
   const gateway = records.findLast(r => r.type === 'gateway.observation_recorded');
   return gateway ? gateway.status === 'unknown' ? 'unknown' : 'error' : 'recorded';
+}
+
+function isRecordedDispatch(record: AuditRecord): boolean {
+  return record.type === 'tool.dispatch_recorded';
+}
+
+function isDispatchStart(record: AuditRecord): boolean {
+  return record.type === 'tool.dispatch_started';
 }

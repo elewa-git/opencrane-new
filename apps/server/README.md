@@ -11,6 +11,10 @@ assistant's [computer](../../GLOSSARY.md#computer).
 A second program here, the [models process](../../GLOSSARY.md#models-process), checks
 AI calls against spending limits and tool rules.
 
+Change history includes saved tool hand-offs and transport observations.
+A hand-off without a saved outcome stays unknown, even when other evidence reports success. A response
+does not prove a business change succeeded. Reading history never sends a tool call.
+
 ## Where it fits
 
 This package is the back-end layer. [apps/web](../web/README.md) is the website;
@@ -21,15 +25,15 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>the back end"]
-  server -.-> libs["libs/*<br/>shared code"]
-  server -->|saves changes| nats["NATS<br/>the event log"]
+  web["apps/web<br/>the website"] -->|requests, live updates and saved tool status| server["apps/server<br/>the back end"]
+  server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -->|records changes, including saved tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads data| postgres
+  server -->|reads conversations and history with saved and missing tool outcomes| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
-  computer -->|AI and tool calls| gateway["agentgateway<br/>the AI gateway"]
-  gateway -->|checks permission| server
+  computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
+  runtime -->|checks permission| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.

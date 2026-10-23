@@ -30,7 +30,8 @@ function auditAllowListIncludesOwnership(): void {
     const previouslyAllowed = previousAllowList.test(event.type);
     const ownershipEvidence = ownershipTypes.includes(event.type);
     const invitationEvidence = ['member.invited', 'member.command_refused'].includes(event.type);
-    const expected = previouslyAllowed || ownershipEvidence || invitationEvidence;
+    const dispatchEvidence = ['tool.dispatch_started', 'tool.dispatch_recorded'].includes(event.type);
+    const expected = previouslyAllowed || ownershipEvidence || invitationEvidence || dispatchEvidence;
     expect(isAuditEventType(event.type), event.type).toBe(expected);
   }
 }
@@ -406,3 +407,31 @@ async function filtersEveryPage(testCase: FilterCase): Promise<void> {
   }
 }
 it.each(filterCases)('returns exactly the $name matches across every page', filtersEveryPage);
+
+async function rejectsUnsafeDispatchData(): Promise<void> {
+  const db = await database('pg');
+  try {
+    await auditTrail.create(db.db);
+    for (const type of ['tool.dispatch_started', 'tool.dispatch_recorded']) {
+      const saved = fixture(type, type);
+      const data = z.record(z.string(), z.unknown()).parse(saved.data);
+      for (const field of ['arguments', 'reply', 'credential']) {
+        const invalid = { ...saved, data: { ...data, [field]: canary } };
+        const applying = auditTrail.apply(db.db, invalid, 1);
+        await expect(applying).rejects.toThrow('Invalid dispatch audit event');
+      }
+    }
+    const recorded = fixture('tool.dispatch_recorded', 'invalid-adapter');
+    const data = z.record(z.string(), z.unknown()).parse(recorded.data);
+    const invalid = { ...recorded, data: { ...data,
+      evidence: 'adapter_response_received', outcome: 'responded' } };
+    await expect(auditTrail.apply(db.db, invalid, 1))
+      .rejects.toThrow('Invalid dispatch audit event');
+    const rows = await db.db.query('SELECT * FROM audit_entries');
+    expect(rows.rows).toEqual([]);
+  } finally {
+    await db.close();
+  }
+}
+it('strictly validates dispatch data without storing arguments, replies or credentials',
+  rejectsUnsafeDispatchData);
