@@ -3,6 +3,243 @@
 Original checks: 22 October 2026. Original base: `4fb9a34b2a23316f29e0e34ee55ae91848b794f1`.
 Environment: Node 22.23.3, Linux, this development worktree; not a fresh installation.
 
+## Further grant warm-up checks on 23 October
+
+Source: `63e519a8b251c2919b953d01af2e377df3fb8901`.
+The branch was fetched and rebased onto `f377da0af`, then onto `289462570` after
+main gained documentation. Both rebases finished. The second update changed only
+the accepted memory design and its release note.
+
+### The preparation gap and its proof
+
+The old helper finished the model grant summary and waited for the latest Alice
+and assistant OpenFGA receipts. It did not finish the first reads of the small
+ownership, member and assistant histories. Those reads still started inside the
+HTTP warm-up's two-second budget.
+
+A diagnostic captured a NATS timeout in the assistant-history read in `context`
+during the separate 10,000-member case. The long-grant warm-up uses the same read
+path. A new regression first confirms both model permissions are allowed. It then
+delays only the first assistant-history lookup by 2,200 ms. With grant preparation
+alone, HTTP warm-up returns 403 instead of 200. This also fails after all temporary
+production logging is removed.
+
+Expected FAIL: test-first commit `90c324d0c`. PASS after fix `63e519a8b`: the renamed
+`prepareDecisionWarmUp` finishes the first reads of `ownership-test`, `member-alice`
+and `assistant-assistant` under the existing preparation deadline. The HTTP call
+still reads current access again with a fresh two-second deadline. No prepared
+access decision or old positions are trusted by that call.
+
+PASS: the delayed-read regression, receipt regression, expired-token regression,
+3,000-grant case and 15,000-edit case passed together after the fix. The new
+regression requires 200, one unsettled reservation and no provider call. The two
+long-grant cases retain their original 200 responses, reservation checks, zero
+old grant rows and less-than-two-second assertion. The 15,000-edit and
+10,000-member input sizes are unchanged. No admission is retried.
+
+Logs are `/tmp/ci-flakes-3-fix2-authority-red.log`, `authority-red-clean.log` and
+`authority-green.log`, with the green JSON report beside them.
+
+The earlier natural 3,000-grant warm-up refusal was not reproduced in this round's
+baseline diagnostics. The controlled delay proves a remaining preparation gap;
+it does not establish the internal reason for that earlier recorded request.
+Production files, permission checks and deadlines are unchanged by this fix.
+
+### Which grants are applied
+
+The fixture uses manual grants. It awaits the OpenFGA handler for Alice and the
+assistant before returning the fixture. Each handler write saves its permission
+tuple and receipt together. A tuple is OpenFGA's stored permission relationship.
+The decision path does not read a SQL grants checkpoint.
+
+The synthetic grants are added only to NATS after background event delivery
+stops. Their permissions for other members are deliberately never applied to
+OpenFGA. Waiting for every synthetic grant receipt would stall these tests.
+`prepareDecisionWarmUp` waits for the model grant summary and the latest Alice and
+assistant receipts before completing the three small history reads above.
+
+### Consecutive runs after the fix
+
+All twenty full-file runs used the committed test code above, without temporary
+production or test diagnostics. Each command used `nice -n 10` and three workers.
+Runs 1 and 2 included both changed test files and child recovery. Runs 3–20 used
+decision fence and child recovery as the two load companions. The normal fixtures
+started their own NATS, OpenFGA and gateway services.
+
+All runs set `PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:55463/postgres`.
+The disposable `pgtest-ci-flakes-3-fix2` database passed `pg_isready` before tests.
+This is the development worktree, not a fresh installation. The parent had nice
+value 10, so commands started with another `nice -n 10` ran at 19. A separate
+process at the same priority used 10 ms of CPU and slept for 20 ms throughout. Full
+lint and typecheck overlapped the first two batches. Other shared-host work continued.
+
+The command for runs 1 and 2 was:
+
+```sh
+PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:55463/postgres \
+  nice -n 10 npx vitest run \
+  libs/models/test/decision-cost.test.ts \
+  apps/server/test/memory.test.ts \
+  apps/server/test/child-recovery.test.ts --maxWorkers=3 \
+  --reporter=default --reporter=json \
+  --outputFile=/tmp/ci-flakes-3-fix2-fixed-repeat-01.json
+```
+
+Runs 3–20 replaced `memory.test.ts` with
+`libs/models/test/decision-fence.test.ts`. Each run used its own numbered JSON and
+text log. There were no test-name filters, skipped tests or retries within a run.
+All twenty runs finished on the same committed test code.
+
+The numbers beside FAIL are failed-case counts. The two measurement columns are
+milliseconds for the measured admission, after successful HTTP warm-up.
+
+| Run | Decision cost, 28 | 3,000 grants, ms | 15,000 edits, ms | Memory, 241 | Decision fence, 75 | Child recovery, 36 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | FAIL (2) | 1226 | 422 | FAIL (3) | NOT RUN | PASS |
+| 2 | FAIL (2) | 658 | 308 | FAIL (1) | NOT RUN | PASS |
+| 3 | PASS | 701 | 135 | NOT RUN | PASS | PASS |
+| 4 | PASS | 567 | 107 | NOT RUN | PASS | PASS |
+| 5 | FAIL (1) | 620 | 152 | NOT RUN | PASS | PASS |
+| 6 | PASS | 479 | 91 | NOT RUN | PASS | PASS |
+| 7 | PASS | 430 | 103 | NOT RUN | PASS | PASS |
+| 8 | PASS | 725 | 116 | NOT RUN | PASS | PASS |
+| 9 | FAIL (1) | 486 | 149 | NOT RUN | PASS | PASS |
+| 10 | PASS | 463 | 81 | NOT RUN | PASS | PASS |
+| 11 | PASS | 453 | 73 | NOT RUN | PASS | PASS |
+| 12 | PASS | 622 | 153 | NOT RUN | PASS | PASS |
+| 13 | PASS | 675 | 84 | NOT RUN | PASS | PASS |
+| 14 | PASS | 662 | 123 | NOT RUN | PASS | PASS |
+| 15 | PASS | 382 | 121 | NOT RUN | PASS | PASS |
+| 16 | PASS | 651 | 151 | NOT RUN | PASS | PASS |
+| 17 | PASS | 538 | 106 | NOT RUN | PASS | PASS |
+| 18 | FAIL (1) | 342 | 73 | NOT RUN | PASS | PASS |
+| 19 | FAIL (1) | 471 | 130 | NOT RUN | PASS | PASS |
+| 20 | PASS | 582 | 95 | NOT RUN | PASS | PASS |
+
+- PASS: the delayed-read, grant-receipt and expired-token regressions each passed 20/20.
+- PASS: the 3,000-grant and 15,000-edit cases each passed 20/20.
+- PASS: the measured 3,000-grant calls took 342–1226 ms.
+- PASS: the measured 15,000-edit calls took 73–422 ms.
+- FAIL: complete decision-cost files passed 14/20.
+- FAIL: the 10,000-member case passed 15/20; its input size was kept.
+- FAIL: the cold-chat catch-up case passed 18/20.
+- FAIL: complete memory files passed 0/2.
+- PASS: both correction races and the occupied-slot conflict case passed in both memory runs, six case executions in total.
+- PASS: decision fence passed 18/18 and child recovery passed 20/20.
+
+Every failed case is retained below. None is counted as a passing run.
+
+| File | Failed case | Runs |
+| --- | --- | --- |
+| memory.test.ts | omits a pinned fact after its previously live dependency becomes missing | 1 |
+| memory.test.ts | rebuilds binding status without any key, model, tool, computer or scheduler port | 1, 2 |
+| memory.test.ts | checks the original command after an accepted append loses its reply | 1 |
+| decision-cost.test.ts | lets a cold models process catch up and then admits using only the chat tail | 1, 2 |
+| decision-cost.test.ts | keeps 10,000 members on one model and eight models with 1,000 members cached in one process | 1, 2, 5, 9, 19 |
+| decision-cost.test.ts | refuses a fresh computer.suspended from opencrane-server after warming the summaries | 18 |
+
+Run 18's computer-suspension case reached its existing 40-second test timeout.
+Its refusal assertion did not complete, so it is not a pass for that condition.
+The other failed cases above are unchanged by this fixture fix. Complete-file
+qualification remains PARTIAL, despite the affected long-grant cases passing.
+
+Reports are `/tmp/ci-flakes-3-fix2-fixed-repeat-01.json` through
+`fixed-repeat-20.json`, with matching `.log` files. The summary is
+`/tmp/ci-flakes-3-fix2-fixed-results.json`.
+
+### Final rebase after qualification
+
+Main advanced while the twenty runs were in progress. A `git fetch origin`
+and rebase onto `bdd78f557` completed after qualification. A further fetch and
+rebase onto `62c404b3a` also finished when main gained more demo tooling. These
+updates added demo tools and an unselected upload test, with documentation and
+workflow steps.
+The compared 1,660 source files were unchanged. This includes the affected test
+files, libraries, server runtime and fixture helpers, package files, lockfile,
+Vitest configuration and scripts, including gateway fetch scripts. The timing
+results above therefore describe the same test and runtime code after this rebase.
+
+The test-first commit is now `b8ae1d585` (tested as `90c324d0c`), and the fix is now
+`95da00838` (tested as `63e519a8b`). Each pair has the same decision-cost test blob.
+The comparison is saved in `/tmp/ci-flakes-3-fix2-final-rebase-proof.json`.
+
+### Final checks and cleanup
+
+PASS: full lint, full typecheck, event catalogue agreement (149 types), separate
+Knip and changelog lint on the fix commit. Full lint reported zero errors and
+24 existing warnings. It used `NODE_OPTIONS=--max-old-space-size=6144`.
+All checks and tests ran under `nice -n 10`.
+
+PASS after the rebase onto `bdd78f557`: full lint, full typecheck, event catalogue
+agreement (149 types), separate Knip and changelog lint. Full lint again reported zero
+errors and 24 warnings. Its Markdown and link checks also passed: 281 files and
+1,971 links, with zero errors. These refreshed logs use
+`/tmp/ci-flakes-3-fix2-rebased-` with the same five check endings below.
+
+PASS after the last rebase onto `62c404b3a`: full lint, full typecheck, event
+catalogue agreement, separate Knip and changelog lint. Lint reported zero errors
+and 24 warnings; its Markdown and link checks passed again. These logs use
+`/tmp/ci-flakes-3-fix2-latest-` with the same five check endings below.
+
+The first instrumented lint attempt failed on three unnecessary temporary lint
+comments. They were removed before the successful rerun. The final checks above
+used the committed code without any temporary production or test diagnostics.
+
+Final check logs use `/tmp/ci-flakes-3-fix2-final-` with `lint`, `typecheck`,
+`events`, `knip` and `changelog` endings. The test-first logs above retain both the
+expected failing result and the passing result after the fix.
+
+PASS: the load process stopped after the last batch. The disposable PostgreSQL
+container and its volumes were removed with
+`docker rm -f -v pgtest-ci-flakes-3-fix2`.
+
+NOT RUN: full root suite and fresh-install journeys. CI was not awaited. The PR
+remains draft.
+
+### Baseline diagnostics before the fix
+
+The baseline used the same assertions and input sizes, with temporary refusal and
+warm-up timing logs. All fourteen full-file runs finished. None was cancelled.
+The 3,000-grant and 15,000-edit cases passed 14/14; these baseline runs do not replace
+the twenty runs on the fix above.
+
+| Run | Decision cost, 27 | Memory, 241 | Decision fence, 75 | Child recovery, 36 |
+| --- | --- | --- | --- | --- |
+| 1 | FAIL (1) | FAIL (1) | NOT RUN | PASS |
+| 2 | PASS | PASS | NOT RUN | PASS |
+| 3 | PASS | PASS | NOT RUN | PASS |
+| 4 | PASS | NOT RUN | PASS | PASS |
+| 5 | PASS | NOT RUN | PASS | PASS |
+| 6 | PASS | NOT RUN | PASS | PASS |
+| 7 | PASS | NOT RUN | PASS | PASS |
+| 8 | PASS | NOT RUN | PASS | PASS |
+| 9 | FAIL (1) | NOT RUN | PASS | PASS |
+| 10 | PASS | NOT RUN | PASS | PASS |
+| 11 | FAIL (1) | NOT RUN | PASS | PASS |
+| 12 | PASS | NOT RUN | PASS | PASS |
+| 13 | FAIL (2) | NOT RUN | PASS | PASS |
+| 14 | PASS | NOT RUN | PASS | PASS |
+
+Baseline failures are retained:
+
+- Decision cost: the 10,000-member case failed in runs 1, 11 and 13. The cold-chat
+  catch-up case failed in runs 9 and 13.
+- Memory: the supporting-key preview case failed in run 1.
+- Decision fence and child recovery passed every time they ran.
+
+Reports are `/tmp/ci-flakes-3-fix2-trace-01.json` through `trace-14.json`, with
+matching `.log` files. The summary is `/tmp/ci-flakes-3-fix2-trace-results.json`.
+
+Two earlier full diagnostic batches also used memory and child recovery as
+companions. Both passed the 3,000-grant and 15,000-edit cases but failed the
+10,000-member case. The first memory run passed 241/241; the second failed its
+binding-status rebuild case. Child recovery passed 36/36 in both. Their logs use
+`/tmp/ci-flakes-3-fix2-diagnostic` and `diagnostic2`, with `.log` and `.json` endings.
+
+PASS: thirty extra focused runs of the original 3,000-grant case. The other cases
+were excluded by their test names in these diagnostics. They do not replace any
+full-file run. Logs use `/tmp/ci-flakes-3-fix2-focused-01.log` through `focused-30.log`.
+
 ## Causes
 
 | Test | Cause of 503 | Change |
