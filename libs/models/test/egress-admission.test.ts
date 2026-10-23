@@ -1,9 +1,11 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { OpenFgaClient } from '@openfga/sdk';
 import { Server } from 'node:net';
 import { once } from 'node:events';
 import { chmod, copyFile, readFile, readdir, stat, writeFile, rename, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { recoverEgressReceipt } from '../src/egress-receipt.ts';
-import { parseEventByType } from '@opencrane/events';
+import { egressObservationId, parseEventByType } from '@opencrane/events';
 import { startEgress } from '../src/egress-startup.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, it, onTestFinished, vi } from 'vitest';
@@ -245,6 +247,8 @@ async function changesDuringDispatchRetry(change: string) {
   const append = test.facts.nats.store.append.bind(test.facts.nats.store);
   const register = test.gateway.registry.register.bind(test.gateway.registry);
   const registration = vi.spyOn(test.gateway.registry, 'register');
+  const maps = vi.spyOn(Map.prototype, 'set');
+  onTestFinished(maps.mockRestore.bind(maps));
   onTestFinished(registration.mockRestore.bind(registration));
   async function expiredRegistration(input: Parameters<typeof register>[0]) {
     expireAuthority();
@@ -314,6 +318,16 @@ async function changesDuringDispatchRetry(change: string) {
   expect(outcomes[0]!.event.type).toBe('egress.observed');
   expect(outcomes[0]!.event.data).toMatchObject({ requestId, permitId: requestId,
     channel: 'command', outcome: 'error' });
+  if (change === 'registration-deadline') {
+    await test.gateway.runtime.flush();
+    const id = egressObservationId('test', requestId);
+    function isReceipt(args: unknown[]) {
+      return args[0] === id;
+    }
+    const index = maps.mock.calls.findIndex(isReceipt);
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(maps.mock.contexts[index]!.has(id)).toBe(false);
+  }
 }
 it.each(['destination', 'turn', 'deadline', 'registration-deadline', 'expiry', 'none'])(
   'rechecks %s after the real budget dispatch append retries', changesDuringDispatchRetry);
@@ -675,6 +689,9 @@ async function dependencyOutage(kind: string) {
     } else if (kind === 'leader') {
       const replacement = new BudgetActor(test.facts.nats.store, 'test');
       await replacement.start();
+    } else if (kind === 'sdk') {
+      const spy = vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(rejectRead);
+      restore = spy.mockRestore.bind(spy);
     } else if (kind === 'permission') {
       const spy = vi.spyOn(test.facts.auth, 'check').mockImplementation(unavailablePermission);
       restore = spy.mockRestore.bind(spy);
@@ -699,7 +716,7 @@ async function dependencyOutage(kind: string) {
   expect(await test.tunnel(bearer)).toBe(403);
   expect(test.gateway.connected()).toBe(1);
 }
-it.each(['store', 'store-read', 'iam-rejection', 'iam-hang', 'permission', 'leader'])(
+it.each(['sdk', 'store', 'store-read', 'iam-rejection', 'iam-hang', 'permission', 'leader'])(
   'closes a live relay as unavailable after losing %s proof', dependencyOutage);
 
 async function recoversWhileRunning(lostReply: boolean) {
@@ -891,3 +908,41 @@ async function shutdownIncludesNewReceipts() {
 }
 it('joins receipts created after an earlier retry batch when shutting down',
   shutdownIncludesNewReceipts);
+
+async function delayedDispatchProof() {
+  const test = await setup();
+  const bearer = await test.token();
+  const append = test.facts.nats.store.append.bind(test.facts.nats.store);
+  const held = Promise.withResolvers<boolean>();
+  let lostAt = 0;
+  let iam: ReturnType<typeof vi.spyOn> | undefined;
+  function hang() {
+    return held.promise;
+  }
+  async function delayReply(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'budget.call_dispatch_admitted') {
+      lostAt = performance.now();
+      iam = vi.spyOn(test.facts.auth, 'applied').mockImplementation(hang);
+      await delay(1200);
+    }
+    return result;
+  }
+  const spy = vi.spyOn(test.facts.nats.store, 'append').mockImplementation(delayReply);
+  function restore() {
+    spy.mockRestore();
+    iam?.mockRestore();
+    held.resolve(true);
+  }
+  onTestFinished(restore);
+  async function waitForClose(socket: import('node:net').Socket) {
+    await once(socket, 'close');
+    expect(performance.now() - lostAt).toBeLessThan(2000);
+  }
+  expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
+    waitForClose)).toBe(200);
+  expect(await closeObservation(test, bearer)).toMatchObject({
+    relay: { reason: 'unavailable' } });
+}
+it('counts delayed dispatch replies against the initial IAM proof lifetime', delayedDispatchProof);
