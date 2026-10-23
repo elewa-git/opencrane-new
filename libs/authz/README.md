@@ -84,6 +84,12 @@ const authorisation = memberAuthorisation({
 const decision = await authorisation.check('alice', 'admin');
 ```
 
+## Folders
+
+| Folder | What it does |
+| --- | --- |
+| [model](model/README.md) | Describes who may use each kind of OpenCrane resource. |
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): permission rules, retries, rebuilding and test setup.

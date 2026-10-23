@@ -59,4 +59,3 @@ nice -n 10 npm test -- apps/odoo-mcp/test
 
 - [README.robot.md](README.robot.md): exact settings, request rules, limits and checks.
 - [Local Odoo setup](../../infra/odoo/README.md): made-up records for read tests.
-- [Technical design for developers](../../docs/specs/phase-3/p3-12-odoo-draft-note.md): the planned product connection.
