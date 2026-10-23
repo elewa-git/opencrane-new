@@ -1,0 +1,11 @@
+[
+{"check": "demo-fixtures-1", "result": "PASS", "exitCode": 0, "elapsedMs": 81915},
+{"check": "demo-fixtures-2", "result": "PASS", "exitCode": 0, "elapsedMs": 88715},
+{"check": "security-rules", "result": "PASS", "exitCode": 0, "elapsedMs": 3792},
+{"check": "lint", "result": "PASS", "exitCode": 0, "elapsedMs": 410190},
+{"check": "typecheck-interrupted", "result": "PARTIAL", "runnerExitCode": 143, "reason": "The validation runner ended before recording the typecheck result."},
+{"check": "typecheck-complete", "result": "PASS", "exitCode": 0, "elapsedMs": 292010},
+{"check": "events", "result": "PASS", "exitCode": 0, "elapsedMs": 832},
+{"check": "knip", "result": "PASS", "exitCode": 0, "elapsedMs": 6282},
+{"check": "changelog", "result": "PASS", "exitCode": 0, "elapsedMs": 412}
+]
