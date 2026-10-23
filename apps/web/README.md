@@ -91,7 +91,8 @@ pages explain these limits instead of showing invented data.
 
 A spending stop keeps its reason beside saved call statuses. A reservation, an unknown
 outcome, a recorded charge and a released reservation have different labels. Check status
-reads the original turn again and politely announces its progress and result. Participants see the status and reference without amounts.
+reads the original turn again and politely announces its progress and result. Participants
+see the status and reference without amounts.
 
 ## Processes it handles
 

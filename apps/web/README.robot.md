@@ -497,6 +497,8 @@ cannot restore details after the conversation, turn or access changes. Two pendi
 send one GET. A persistent polite status region announces checking, saved call statuses,
 unavailable reads and access loss without moving focus. It never uses an alert.
 Call details stay in memory and never enter browser storage or the address.
+Changing conversation or turn clears them before its read finishes, even if that read fails.
+The component tests hold replacement reads pending to check this clearing and reply ordering.
 A `not_stopped` reply keeps the older generic notice because the saved row gives no scope or reset. A reset adds a dated line but
 never restarts the old turn. `npm run visual:screen-p3-14-stop` captures both widths.
 `npm run visual:screen-p3-14-calls` checks and captures WRK-43, participant, changed-status
