@@ -156,7 +156,7 @@ async function bridgeFixture(cachedControl = false) {
     server.close();
     await view.close();
   }
-  return { ...options, objects, bytes, message, link, frames, process, pollStops,
+  return { ...options, objects, bytes, message, link, frames, process, pollStops, logger,
     append: view.append, runner: view.runner, db: view.db,
     intendControl, upload, flushFrames, startControls, close };
 }
@@ -807,3 +807,33 @@ async function retiresForgottenDeadline(pending: boolean) {
 it.each([false, true])(
   'retires forgotten deadline polling after any pending request finishes: %s',
   retiresForgottenDeadline);
+
+async function logsFailureOutageOnce() {
+  fixture = await bridgeFixture();
+  const test = fixture;
+  const request = await test.intendControl();
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(request.time) + 30_000);
+  const warning = vi.spyOn(test.logger, 'warn');
+  const append = test.store.append.bind(test.store);
+  const repeated = Promise.withResolvers<void>();
+  let attempts = 0;
+  let unavailable = true;
+  async function fail(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'takeover.failed' && unavailable) {
+      attempts++;
+      if (attempts === 3) repeated.resolve();
+      throw new Error('Private upstream credential and request details');
+    }
+    return append(command);
+  }
+  vi.spyOn(test.store, 'append').mockImplementation(fail);
+  test.startControls();
+  await repeated.promise;
+  expect(warning.mock.calls).toEqual([
+    ['Takeover deadline check unavailable; work remains blocked'],
+  ]);
+  unavailable = false;
+  await waitForControl(test.store, 'failed');
+}
+it('logs a fixed warning once while saving a timeout keeps failing', logsFailureOutageOnce);
