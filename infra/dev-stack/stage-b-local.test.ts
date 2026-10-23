@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { exchangeRemote, prepareRemote } from '@opencrane/models';
@@ -29,6 +29,36 @@ async function refuseSlotsBeforeSettings() {
   }
 }
 test('wrong, owner and foreign slots refuse before settings', refuseSlotsBeforeSettings);
+
+async function refuseInvalidMatchingClaim() {
+  const home = await mkdtemp(`${tmpdir()}/stage-b-invalid-slot-`);
+  const directory = `${home}/.config/opencrane/dev-stack-3`;
+  try {
+    await mkdir(directory, { recursive: true });
+    await writeFile(`${directory}/stack-owner`, 'worktree=/worktree\npid=1\n');
+    await assert.rejects(requireStageBStack('3', '3', home, '/worktree'),
+      /Secondary slot mismatch/u);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+test('an invalid slot refuses even when its claim and owner match', refuseInvalidMatchingClaim);
+
+async function refuseRedirectedSlot() {
+  const home = await mkdtemp(`${tmpdir()}/stage-b-redirected-slot-`);
+  const parent = `${home}/.config/opencrane`;
+  const target = `${home}/redirected`;
+  try {
+    await mkdir(parent, { recursive: true });
+    await mkdir(target);
+    await writeFile(`${target}/stack-owner`, 'worktree=/worktree\npid=1\n');
+    await symlink(target, `${parent}/dev-stack-1`);
+    await assert.rejects(requireStageBStack('1', '1', home, '/worktree'), /Foreign stack/u);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+test('a symlink refuses even when the redirected owner matches', refuseRedirectedSlot);
 
 async function localDemoRoundTrip() {
   const fixture = await demoRemoteFixture();
@@ -192,3 +222,59 @@ function keepEvidenceErrorsPrivate() {
   assert.throws(check, { message: 'Approval evidence refused' });
 }
 test('invalid evidence errors contain no supplied values', keepEvidenceErrorsPrivate);
+
+function refuseUnavailablePolicy() {
+  const evidence = approvalEvidence();
+  Reflect.deleteProperty(evidence.policy, 'catalogue');
+  assertRefused(evidence);
+}
+test('a policy without a saved catalogue refuses', refuseUnavailablePolicy);
+
+function refuseExpiredPolicy() {
+  const evidence = approvalEvidence();
+  evidence.policy.expiresAt = '2026-10-23T10:00:00Z';
+  assertRefused(evidence);
+}
+test('a policy whose freshness expired at rehearsal time refuses', refuseExpiredPolicy);
+
+function refuseStartupReview() {
+  const evidence = approvalEvidence();
+  evidence.policy.startupReviewRequired = true;
+  assertRefused(evidence);
+}
+test('a policy awaiting startup review refuses', refuseStartupReview);
+
+function refuseMissingFreshness() {
+  for (const field of ['checkedAt', 'expiresAt']) {
+    const evidence = approvalEvidence();
+    Reflect.deleteProperty(evidence.policy, field);
+    assertRefused(evidence);
+  }
+}
+test('a policy without either freshness date refuses', refuseMissingFreshness);
+
+function assertRefused(evidence: unknown) {
+  function check() { checkStageBApproval(evidence); }
+  assert.throws(check, /Approval evidence refused/u);
+}
+
+function refuseMissingDefinition() {
+  const evidence = approvalEvidence();
+  Reflect.deleteProperty(evidence.policy.catalogue!.tools![0]!, 'definition');
+  assertRefused(evidence);
+}
+test('a catalogue without its saved definition refuses', refuseMissingDefinition);
+
+function refuseUnrelatedDefinition() {
+  const evidence = approvalEvidence();
+  evidence.policy.tools[0]!.revision = 'd'.repeat(64);
+  assertRefused(evidence);
+}
+test('a reviewed choice for a different saved definition refuses', refuseUnrelatedDefinition);
+
+function refuseFutureFreshness() {
+  const evidence = approvalEvidence();
+  evidence.policy.checkedAt = '2026-10-23T10:02:00Z';
+  assertRefused(evidence);
+}
+test('freshness checked after the rehearsal refuses', refuseFutureFreshness);
