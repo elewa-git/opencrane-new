@@ -664,7 +664,7 @@ it('saves a separate receipt for each of two open permits', separateReceipts);
 async function dependencyOutage(kind: string) {
   const test = await setup();
   const bearer = await test.token();
-  const held = Promise.withResolvers<boolean>();
+  const held = Promise.withResolvers<{ allowed: boolean; status: 'ok' }>();
   async function duringRelay(socket: import('node:net').Socket) {
     const closed = once(socket, 'close', { signal: AbortSignal.timeout(2100) });
     const started = performance.now();
@@ -699,7 +699,7 @@ async function dependencyOutage(kind: string) {
       restore = spy.mockRestore.bind(spy);
     } else {
       const implementation = kind === 'iam-hang' ? holdRead : rejectRead;
-      const spy = vi.spyOn(test.facts.auth, 'applied').mockImplementation(implementation);
+      const spy = vi.spyOn(test.facts.auth, 'checkApplied').mockImplementation(implementation);
       restore = spy.mockRestore.bind(spy);
     }
     try {
@@ -708,7 +708,7 @@ async function dependencyOutage(kind: string) {
       expect(socket.destroyed).toBe(true);
     } finally {
       restore?.();
-      held.resolve(true);
+      held.resolve({ allowed: true, status: 'ok' });
     }
   }
   expect(await test.gateway.tunnel(bearer, 'registry.npmjs.org:443', clientHello(),
@@ -915,7 +915,7 @@ async function delayedDispatchProof() {
   const test = await setup();
   const bearer = await test.token();
   const append = test.facts.nats.store.append.bind(test.facts.nats.store);
-  const held = Promise.withResolvers<boolean>();
+  const held = Promise.withResolvers<{ allowed: boolean; status: 'ok' }>();
   let lostAt = 0;
   let restoreIam: (() => void) | undefined;
   function hang() {
@@ -926,7 +926,7 @@ async function delayedDispatchProof() {
     const event = z.object({ type: z.string() }).parse(command.event);
     if (event.type === 'budget.call_dispatch_admitted') {
       lostAt = performance.now();
-      const iam = vi.spyOn(test.facts.auth, 'applied').mockImplementation(hang);
+      const iam = vi.spyOn(test.facts.auth, 'checkApplied').mockImplementation(hang);
       restoreIam = iam.mockRestore.bind(iam);
       await delay(1200);
     }
@@ -936,7 +936,7 @@ async function delayedDispatchProof() {
   function restore() {
     spy.mockRestore();
     restoreIam?.();
-    held.resolve(true);
+    held.resolve({ allowed: true, status: 'ok' });
   }
   onTestFinished(restore);
   async function waitForClose(socket: import('node:net').Socket) {
