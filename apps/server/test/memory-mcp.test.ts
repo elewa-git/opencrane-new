@@ -2608,7 +2608,7 @@ async function preparesLineageObservation(operation: 'correct' | 'forget') {
   async function memoryContext(...args: Parameters<typeof originalContext>) {
     const signed = await originalContext(...args);
     // Start observing after the valid control; the next scope read belongs to test setup.
-    if (args[0].operation === operation) observe = true;
+    if (args[0]['operation'] === operation) observe = true;
     return signed;
   }
   const positions = vi.spyOn(setup.nats.store, 'head');
