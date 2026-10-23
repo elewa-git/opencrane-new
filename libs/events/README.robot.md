@@ -772,3 +772,6 @@ and lifecycle changes with exact receipts. Legacy events give no routine permiss
 The [permission contract](../authz/README.robot.md#routine-permissions) describes
 retired metadata, read checks and the stopped-services model/subscription upgrade.
 Other routine events still start no work.
+
+`routineControlSchema` is exported for the internal owner pause to validate and compare
+saved control facts. Its event shape and subscriptions are unchanged; it starts no work.

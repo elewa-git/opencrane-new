@@ -1,4 +1,4 @@
-import { applyRoutine, checkRoutine } from './routines.ts';
+import { applyRoutine, checkRoutine, loadRoutineAccess } from './routines.ts';
 import type { EventStore } from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
 import { supersededEvent, removedParticipant, ownerAtTransfer,
@@ -375,6 +375,9 @@ function createMemberAuthorisation(binding: Binding,
 
   return {
     binding,
+    loadRoutineAccess(memberId: string, routineId: string) {
+      return loadRoutineAccess(binding, client, store, memberId, routineId);
+    },
     routine(memberId: string, routineId: string, relation: 'read_metadata' | 'manage') {
       return checkRoutine(binding, client, store, memberId, routineId, relation);
     },

@@ -20,7 +20,7 @@ The server and the AI access library use the same definitions.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|checks conversation-linked control refusals, saved child answers, requests, activations, retries and failures| events
+  server["apps/server<br/>back end"] -.->|checks routine pauses, conversation control refusals, child answers, requests, activations, retries and failures| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
@@ -42,6 +42,7 @@ flowchart LR
   following a saved change, subscribe to each event type.
 - Rebuild routine definitions and preview future dates for scheduled work, including
   clock changes, without starting that work.
+  Share the same pause record checks with the server's internal owner operation.
 
 ## Processes it handles
 
