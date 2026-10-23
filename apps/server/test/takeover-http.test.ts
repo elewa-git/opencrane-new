@@ -573,15 +573,19 @@ async function uncertainRefusal(mode: 'lost' | 'append' | 'read') {
   await participant();
   const append = fixture.nats.store.append.bind(fixture.nats.store);
   let attempted = false;
+  let committed = false;
   async function uncertain(command: AppendCommand): Promise<never> {
     attempted = true;
-    if (mode !== 'append') await append(command);
+    if (mode !== 'append') {
+      const result = await append(command);
+      committed = result.status === 'appended';
+    }
     throw new Error('private-error-canary');
   }
   vi.spyOn(fixture.nats.store, 'append').mockImplementation(uncertain);
   const read = fixture.nats.store.readStream.bind(fixture.nats.store);
   async function* unreadable(...args: Parameters<typeof read>) {
-    if (mode === 'read' && attempted && args[0].startsWith('view-')) {
+    if (mode === 'read' && committed && args[0].startsWith('view-')) {
       throw new Error('private-read-canary');
     }
     yield* read(...args);
@@ -822,3 +826,30 @@ async function refusalKeepsPausedProofAndViewer() {
 }
 it('keeps quiet proof, bridge state and an open viewer after a refused attempt',
   refusalKeepsPausedProofAndViewer);
+
+async function unavailableOutcomeCheck() {
+  await setup();
+  await participant();
+  const store = fixture.nats.store;
+  const append = store.append.bind(store);
+  const read = store.readStream.bind(store);
+  let appending = false;
+  async function checkedAppend(command: AppendCommand) {
+    appending = true;
+    return append(command);
+  }
+  async function* unavailable(...args: Parameters<typeof read>) {
+    if (appending && args[0] === `view-${body.commandId}`) {
+      throw new Error('Outcome read unavailable');
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(store, 'append').mockImplementation(checkedAppend);
+  vi.spyOn(store, 'readStream').mockImplementation(unavailable);
+  expect((await post(body, 'bob')).statusCode).toBe(503);
+  expect(appending).toBe(true);
+  vi.restoreAllMocks();
+  expect(await refusalRows()).toEqual([]);
+}
+it('saves nothing when the outcome check inside the refusal append is unavailable',
+  unavailableOutcomeCheck);
