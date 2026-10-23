@@ -114,9 +114,10 @@ async function reviewedPublication() {
   const tools = [tool];
   const schemaDigest = catalogueDigest(tools);
   const captured = Date.now();
-  await append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', toolCount: 1,
+  const publicationSetup = { serverId: 'fixture', toolCount: 1,
     connectionId: 'installed-fixture', accountMode: 'none', tools, schemaDigest,
-    checkedAt: new Date(captured).toISOString(), expiresAt: new Date(captured + 300_000).toISOString() });
+    checkedAt: new Date(captured).toISOString(), expiresAt: new Date(captured + 300_000).toISOString() };
+  await append('mcp-fixture', 'mcp.server_discovered', publicationSetup);
   const policy = await readToolPolicy(nats.store, 'acme', 'fixture');
   const review = { commandId: 'review', expectedSequence: policy.sequence,
     policyRevision: policy.policyRevision, catalogueDigest: schemaDigest,
@@ -173,8 +174,9 @@ async function distinctSavedFacts() {
   expect(comparison).toEqual(before);
   expect(after.loadedAt).not.toBe(before.loadedAt);
   expect(await nats.store.head()).toBe(position);
-  await append('gateway-config-acme', 'gateway.configuration_observed',
-    { ...observation, outcome: 'loaded', generation: record.generation + 1 });
+  const wrongGenerationObservation = { ...observation, outcome: 'loaded',
+    generation: record.generation + 1 };
+  await append('gateway-config-acme', 'gateway.configuration_observed', wrongGenerationObservation);
   await project();
   expect(await facts()).toMatchObject({ availability: { publication: { status: 'applying' } } });
   await append('gateway-config-acme', 'gateway.configuration_observed',
