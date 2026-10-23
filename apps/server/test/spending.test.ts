@@ -51,7 +51,7 @@ async function reserve(index: number, writer = actor) {
   const reservationId = await writer.reserve(call, 120);
   return { reservationId, permitId: reservationId, payingGroupId, assistantId,
     position: await nats.store.head('budget-acme'), reservedAt: clock.toISOString(),
-    day: '2026-10-31', month: '2026-10', heldCents: 120, settledCents: null, evidence: 'held' };
+    day: clock.toISOString().slice(0, 10), month: clock.toISOString().slice(0, 7), heldCents: 120, settledCents: null, evidence: 'held' };
 }
 async function initialise() {
   nats = await natsFixture();
@@ -63,7 +63,8 @@ async function initialise() {
     feed: { memberId }, catalogue: { rows: noCalls, tools: noCalls } };
   const auth = memberAuthorisation(binding);
   for (const [id, role] of [['owner', 'owner'], ['admin', 'admin'], ['member', 'member'],
-    ['removed', 'admin'], ['denied', 'admin'], ['demote', 'admin'], ['revoke', 'admin']]) {
+    ['removed', 'admin'], ['denied', 'admin'], ['demote', 'admin'], ['revoke', 'admin'],
+    ['demote-failed', 'admin'], ['revoke-failed', 'admin']]) {
     const joined = await append(`member-${id}`, 'member.joined', {
       memberId: id, role, email: `${id}@example.test`, displayName: id,
     });
@@ -73,6 +74,7 @@ async function initialise() {
   actor = new BudgetActor(nats.store, 'acme', now);
   await actor.start(20_000, 20_000, 'sales');
   for (let index = 0; index < 63; index++) {
+    if (index === 33) clock = new Date('2026-11-01T00:00:00.000Z');
     const row = await reserve(index);
     expected.push({ ...row, evidence: 'held' });
   }
@@ -133,13 +135,46 @@ async function filtersCompose() {
   }
 }
 it('composes payer and assistant filters without foreign rows', filtersCompose);
+async function monthPages() {
+  const before = await nats.store.head();
+  const state = structuredClone(actor.state);
+  for (const month of ['2026-10', '2026-11', '2026-12']) {
+    for (const filters of [{}, { payingGroupId: 'sales' }, { assistantId: 'sales-assistant' },
+      { payingGroupId: 'support', assistantId: 'sales-assistant' }]) {
+      function matches(row: Page['rows'][number]) {
+        return row.month === month &&
+          (!filters.payingGroupId || row.payingGroupId === filters.payingGroupId) &&
+          (!filters.assistantId || row.assistantId === filters.assistantId);
+      }
+      for (const limit of ['1', '50']) {
+        const query = new URLSearchParams({ ...filters, month, limit }).toString();
+        const found: Page['rows'] = [];
+        let next: string | null = null;
+        do {
+          let currentQuery = query;
+          if (next !== null) currentQuery += `&continuation=${next}`;
+          const result = await page(currentQuery);
+          expect(result.rows.length).toBeLessThanOrEqual(Number(limit));
+          found.push(...result.rows);
+          next = result.next;
+        } while (next);
+        expect(found).toEqual(expected.filter(matches));
+      }
+    }
+  }
+  expect(await nats.store.head()).toBe(before);
+  expect(actor.state).toEqual(state);
+}
+it('pages original UTC months with both filters and limits 1 and 50 without duplicates', monthPages);
 async function rejectsQuery(query: string) {
   const response = await request(query);
   expect(response.statusCode).toBe(400);
   expect(response.json()).toEqual({ status: 'refused' });
 }
 it.each(['limit=0', 'limit=51', 'limit=1.5', 'limit=9007199254740992', 'limit=2&limit=3',
-  'month=2026-10', 'rootId=private', 'after=1', 'payingGroupId=', 'assistantId=*',
+  'month=', 'month=2026-1', 'month=26-10', 'month=2026-00', 'month=2026-13',
+  'month=2026-10-01', 'month=2026-10Z', 'month=2026-10%20', 'month=2026-10&month=2026-11',
+  'rootId=private', 'after=1', 'payingGroupId=', 'assistantId=*',
   'total=true'])('rejects unsupported or invalid query %s', rejectsQuery);
 async function refusesCaller(sub: string) {
   const response = await request('', sub);
@@ -169,21 +204,22 @@ async function changesDuringRead(action: string) {
     if (sql.includes('FROM model_budget_calls')) {
       loaded.resolve();
       await resume.promise;
+      if (action.endsWith('-failed')) throw new Error('Private loading failure');
     }
     return original<Row>(sql, values, readOptions);
   }
   database.query = query;
   let sub = 'owner';
-  if (action === 'demote' || action === 'revoke') sub = action;
-  const pending = request('', sub);
+  if (action.startsWith('demote') || action.startsWith('revoke')) sub = action;
+  const pending = request('month=2026-10', sub);
   try {
     await Promise.race([loaded.promise, delay(3000)]);
-    if (action === 'demote') {
-      await append('member-demote', 'member.role_changed', {
+    if (action.startsWith('demote')) {
+      await append(`member-${sub}`, 'member.role_changed', {
         memberId: sub, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
       });
-    } else if (action === 'revoke') {
-      await append('member-revoke', 'member.removed', { memberId: sub, removedBy: 'owner' });
+    } else if (action.startsWith('revoke')) {
+      await append(`member-${sub}`, 'member.removed', { memberId: sub, removedBy: 'owner' });
     } else if (action === 'rebuild') {
       await original(`UPDATE projection_generations SET generation = generation + 1
         WHERE name = 'model-budgets'`);
@@ -204,7 +240,7 @@ async function changesDuringRead(action: string) {
     database.query = original;
   }
 }
-it.each(['chat', 'demote', 'revoke', 'rebuild'])('checks current access after held data read: %s',
+it.each(['chat', 'demote', 'revoke', 'demote-failed', 'revoke-failed', 'rebuild'])('checks current access after held data read: %s',
   changesDuringRead);
 async function refusesUnavailable(kind: string) {
   const database = options.modelDb!;
@@ -223,14 +259,15 @@ async function refusesUnavailable(kind: string) {
       }
       if (kind === 'absent') return { rows: [] };
       if (kind === 'lag') {
-        return original<Row>('SELECT 3 AS version, 0 AS sequence, 1 AS generation');
+        return original<Row>(`SELECT version, 0 AS sequence, 1 AS generation
+          FROM projection_versions WHERE name = 'model-budgets'`);
       }
     }
     return original<Row>(sql, values, readOptions);
   }
   database.query = query;
   try {
-    const response = await request();
+    const response = await request('month=2026-10');
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ status: 'unavailable' });
     await refusesCaller('member');
@@ -243,7 +280,7 @@ async function lockedRead() {
   const client = await dbs.queue.connect();
   await client.query('BEGIN');
   await client.query('LOCK TABLE model_budget_calls IN ACCESS EXCLUSIVE MODE');
-  const pending = request();
+  const pending = request('month=2026-10');
   try {
     const response = await Promise.race([pending, delay(3000)]);
     expect(response).toBeDefined();
@@ -259,7 +296,16 @@ async function lockedRead() {
 it('expires SQL while the lock remains held and recovers', lockedRead);
 async function continuationBinding() {
   const first = await page('limit=1&payingGroupId=support');
+  const october = await page('limit=1&month=2026-10');
+  for (const month of ['', '&month=2026-11']) {
+    const response = await request(`continuation=${october.next}${month}`);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'restart' });
+  }
+  expect((await page(`month=2026-10&continuation=${october.next}&limit=1`)).rows)
+    .toEqual([expected[1]]);
   for (const query of [`continuation=${first.next}`, `continuation=${first.next}x`,
+    `continuation=${first.next}&payingGroupId=support&month=2026-10`,
     `continuation=${first.next}&payingGroupId=support&assistantId=sales-assistant`]) {
     const response = await request(query);
     expect(response.statusCode).toBe(409);
@@ -295,7 +341,9 @@ async function accountingEvidence() {
   await settle(late!.reservationId, 70);
   await reserve(0);
   await runner.run(budgets);
-  const before = await page('limit=50');
+  const before = await page('limit=50&month=2026-10');
+  expect(before.rows).toHaveLength(33);
+  expect(before.next).toBeNull();
   expect(before.rows.slice(0, 4)).toMatchObject([
     { settledCents: 0, heldCents: 0, evidence: 'settled' },
     { settledCents: 0, heldCents: 0, evidence: 'not_dispatched' },
@@ -303,11 +351,13 @@ async function accountingEvidence() {
     { settledCents: 70, day: '2026-10-31', month: '2026-10' },
   ]);
   expect(before.rows[4]).toMatchObject({ settledCents: null, heldCents: 120 });
-  const next = await page(`limit=50&continuation=${before.next}`);
+  const next = await page('limit=50&month=2026-11');
+  expect(next.rows).toHaveLength(31);
+  for (const row of next.rows) expect(row.month).toBe('2026-11');
   expect(next.rows.at(-1)).toMatchObject({ month: '2026-11', day: '2026-11-01' });
   const position = await nats.store.head();
   await rebuildBudgetProjection(pgDb(dbs.queue), nats.reader, logger, { verify: true });
-  expect((await page('limit=50')).rows).toEqual(before.rows);
+  expect((await page('limit=50&month=2026-10')).rows).toEqual(before.rows);
   expect(await nats.store.head()).toBe(position);
 }
 it('preserves zero, null, release, unknown holds and late original-period charges through replay',
@@ -332,8 +382,10 @@ async function boundedReadOnly() {
   nats.store.readStream = read;
   const before = await nats.store.head();
   try {
-    const result = await page('limit=50');
-    expect(result.rows).toHaveLength(50);
+    const state = structuredClone(actor.state);
+    const result = await page('limit=50&month=2026-10');
+    expect(result.rows).toHaveLength(33);
+    expect(actor.state).toEqual(state);
     const startedDeadline = statements[0]!.deadline;
     expect(startedDeadline).toBeDefined();
     for (const statement of statements) {

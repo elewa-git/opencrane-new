@@ -48,7 +48,7 @@ async function close() {
 beforeEach(initialise);
 afterEach(close);
 
-async function allPages(filters: { payingGroupId?: string; assistantId?: string } = {},
+async function allPages(filters: { payingGroupId?: string; assistantId?: string; month?: string } = {},
   db: Query = postgres.db) {
   const rows: models.SpendingCall[] = [];
   let after = 0;
@@ -134,6 +134,8 @@ async function keepsOriginalMoney() {
   expect(await nats.store.head()).toBe(position);
   await runner.run(budgets);
   expect(await allPages()).toEqual(before);
+  expect(await allPages({ month: '2026-10' })).toEqual(before);
+  expect(await allPages({ month: '2026-11' })).toEqual([]);
   expect(before).toMatchObject([
     { reservationId: oldHold, permitId: oldHold, payingGroupId: 'sales',
       heldCents: 120, settledCents: null, evidence: 'held', day: '2026-10-31', month: '2026-10' },
@@ -231,7 +233,8 @@ async function boundsLockedReads() {
   const locked = postgres.db.transaction(lock);
   await ready;
   try {
-    const read = models.readSpendingCalls(postgres.db, 'test', {}, performance.now() + 150);
+    const read = models.readSpendingCalls(postgres.db, 'test',
+      { month: '2026-10' }, performance.now() + 150);
     const watchdog = delay(3000, 'read did not expire');
     await expect(Promise.race([read, watchdog])).rejects.toThrow('Database read expired');
   } finally {
@@ -242,3 +245,51 @@ async function boundsLockedReads() {
 }
 it('expires a blocked database read while the lock remains held and recovers afterwards',
   boundsLockedReads);
+
+async function upgradesMonthSelection() {
+  await actor.reserve(call(), 120);
+  clock = new Date('2026-11-01T00:00:00.000Z');
+  await actor.reserve(call('support', 'support-assistant'), 70);
+  await runner.run(budgets);
+  const before = await allPages();
+  await postgres.db.query('UPDATE projection_versions SET version = 3 WHERE name = $1',
+    [budgets.name]);
+  await expect(models.readSpendingCalls(postgres.db, 'test')).rejects.toThrow('unavailable');
+  const position = await nats.store.head();
+  await initialiseBudgetProjection(postgres.db, nats.reader, logger);
+  expect(await allPages()).toEqual(before);
+  expect(await allPages({ month: '2026-10' })).toEqual([before[0]]);
+  expect(await allPages({ month: '2026-11' })).toEqual([before[1]]);
+  await rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true });
+  expect(await allPages()).toEqual(before);
+  expect(await nats.store.head()).toBe(position);
+}
+it('upgrades installed call rows for month selection without changing their order',
+  upgradesMonthSelection);
+
+async function indexedMonthReads() {
+  await actor.reserve(call(), 120);
+  await runner.run(budgets);
+  await postgres.db.query('ALTER TABLE model_budgets RENAME TO inaccessible_budgets');
+  await postgres.db.query('SET enable_seqscan = off');
+  for (const filters of [{}, { payingGroupId: 'sales' }, { assistantId: 'sales-assistant' },
+    { payingGroupId: 'sales', assistantId: 'sales-assistant' }]) {
+    async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+      options?: { deadline: number }) {
+      expect(options?.deadline).toBeGreaterThan(performance.now());
+      if (sql.includes('FROM model_budget_calls')) {
+        expect(values?.at(-1)).toBe(3);
+        const plan = await postgres.db.query(`EXPLAIN ${sql}`, values);
+        const details = JSON.stringify(plan.rows);
+        expect(details).toContain('Index Cond');
+        expect(details).toContain('2026-10');
+        expect(details).not.toContain('Filter:');
+        expect(details).not.toContain('Sort');
+      }
+      return postgres.db.query<Row>(sql, values, options);
+    }
+    expect(await allPages({ ...filters, month: '2026-10' }, { query })).toHaveLength(1);
+  }
+}
+it('selects each month and scope combination through an ordered index without scanning other rows',
+  indexedMonthReads);
