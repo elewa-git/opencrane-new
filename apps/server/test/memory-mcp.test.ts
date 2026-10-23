@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
-import { envelope, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
+import { envelope, history, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
   verifyMemoryContext } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -2138,6 +2138,7 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   await publishMemory(setup);
   await grantWrite('member');
   await grantWrite('assistant');
+  await prepareChangeGrants();
   const recallProof = await loadChangeFacts(revision);
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const dependsOn = chat.memoryContext!.references;
@@ -2157,6 +2158,15 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
     expect(control.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
   }
   return request;
+}
+async function prepareChangeGrants() {
+  // Finish cold grant reads during setup, before issuing the control's two-second pass.
+  const deadline = performance.now() + 10_000;
+  const resourceTypes = ['memory_read', 'memory_write'];
+  for (const resourceType of resourceTypes) {
+    const subject = grantStream(resourceType, scopeId);
+    await history(setup.nats.store, subject, 'test', deadline);
+  }
 }
 type ChangeRequest = Awaited<ReturnType<typeof changeRequest>>;
 
