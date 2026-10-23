@@ -16,14 +16,14 @@ access to a model or tool without a grant.
 
 ## Assistant
 
-An assistant is the AI helper each member gets. It acts for that member and can do
-only what its grants allow.
+An assistant is an AI helper that does work for a person or group. It can do only
+what its grants and the current requester's rights allow.
 
 ## Computer
 
 A computer is the private computer in the cloud where an assistant does its work.
-A personal assistant keeps the same computer for all its conversations, and its
-files survive restarts.
+Each assistant has one computer across its conversations, including a shared group
+assistant whose members share that computer. Its saved files survive restarts.
 
 ## Bridge
 
@@ -34,7 +34,7 @@ server to Codex. It sends progress and results back so the server can record the
 
 Codex is OpenAI's AI agent, a program that carries out a request step by step instead
 of only answering it. It runs inside each computer, calls AI models and uses the
-computer's tools.
+computer's tools. Developers also use Codex as a coding helper to build OpenCrane.
 
 ## Model and model provider
 
@@ -98,14 +98,14 @@ server then checks that the account belongs to this silo's company.
 
 ## Access token
 
-An access token is a short-lived digital pass that proves who is asking. It expires
-soon, so a stolen one is quickly useless.
+An access token, also called a pass, is a short-lived digital proof of who is asking.
+It expires soon, so a stolen one is quickly useless.
 
 ## agentgateway (AI gateway)
 
-agentgateway is the AI gateway: every model call, and some tool calls, pass through
-it. Before it sends a call on, it asks the [models process](#models-process) whether
-the call is allowed.
+agentgateway is the AI gateway: every model call and calls to reviewed, published
+MCP tools pass through it. It asks the [models process](#models-process) whether
+each call is allowed; shell and file tools run locally inside the computer.
 
 ## Models process
 
@@ -114,9 +114,9 @@ agentgateway's permission questions, keeps the AI budgets and starts agentgatewa
 
 ## MCP server (tool server)
 
-A tool server connects outside tools, such as a web browser or a business system, to
-an AI agent. MCP, the Model Context Protocol, is the standard way these calls are
-made.
+A tool server is a small program that gives an AI agent named actions, such as
+looking up an order in a business system. MCP, the Model Context Protocol, is the
+shared standard for describing those actions and calling them.
 
 ## Tool rule (Allow, Ask, Block)
 
@@ -193,14 +193,111 @@ Claim has four meanings in OpenCrane:
 
 ## Private turn
 
-A private turn is work in a member's team session that runs in a fresh, tool-free
-Codex process. Its files use a memory volume on the shared computer. Swap can
-still write those files and process memory to disk. Isolation is not yet proven
-on a live computer; memory features stay off until it is. After a restart,
-unfinished work fails and is never repeated.
+A private turn is a question and reply in a member's own session with a shared
+assistant. It runs in a fresh, short-lived Codex process with no tools, so it is
+kept apart from other members' work on that assistant's computer.
+Its temporary files live in working memory, but the host can copy that memory to
+disk when memory runs short. Full isolation still needs live checks, so memory
+features remain disabled during these turns; unfinished work fails after a restart.
 
 ## Memory-free turn
 
-A memory-free turn can use tools and the shared disk. It continues its earlier
-memory-free Codex thread and receives no earlier private context. Personal
-sessions always use this kind of turn.
+A memory-free turn runs without personal or group memory facts. It can use tools
+and files on the assistant's computer, and continues the same conversation in Codex,
+with its earlier memory-free messages but no earlier private-turn context.
+Personal assistant sessions use this mode; on a shared assistant's computer, its
+files are shared too.
+
+## Turn (chat turn)
+
+A turn, or chat turn, is one message to an assistant and the work it does to reply.
+One turn can include several AI calls and tool actions.
+
+## Shared assistant (group assistant)
+
+A shared assistant belongs to a group rather than one person. Members use their
+own sessions with it on the group's one shared computer.
+
+## Paying group
+
+A paying group is the group whose budget pays for a request. It may be chosen for
+a shared assistant or fall back to the installation's default group.
+
+## Stop
+
+Stop is the chat action a person uses to end the assistant's current reply.
+It does not prove that an outside service has cancelled an action already sent.
+
+## Budget stop
+
+A budget stop ends affected assistant work because a saved spending limit has
+been reached or reduced. It comes from spending rules rather than a person
+pressing Stop, and does not erase charges or uncertain costs.
+
+## Hold, settle and release
+
+A hold sets money aside before a call so another call cannot spend it.
+Settlement charges the confirmed cost; release returns unused money to the
+available budget when the outcome is known.
+
+## Child chat and child request
+
+A child chat is a side conversation started from another chat. A child request
+records the side task and where its answer should go; it does not grant access
+beyond the people and assistant allowed to take part.
+
+## Publication
+
+Publication sends a reviewed tool server's settings to the AI gateway.
+Saving the request does not mean the gateway has applied it yet; a separate status
+reports whether the current settings are ready.
+
+## NATS
+
+NATS is the service that keeps OpenCrane's event log and carries new events to
+background programs. JetStream is the part of NATS that stores messages so they
+can be read again later.
+
+## Helm
+
+Helm is a package installer for Kubernetes. It installs a set of programs and their
+settings together, and can update or remove that named installation.
+
+## Event core
+
+The event core is the shared code that defines and saves events, builds read tables
+and runs background reactions. It turns the saved record of changes into the data
+and actions the product needs.
+
+## Pass
+
+A pass is another name for an [access token](#access-token), the short-lived digital
+proof that lets a program make a request on someone's behalf.
+
+## Slot (spare dev stack)
+
+A slot is one of the two spare places for a separate development stack on a developer
+machine. A worktree claims it before use, so its ports and data stay separate from
+other test copies and the owner's own stack.
+
+## Fleet
+
+The fleet is the group of AI coding agents that build OpenCrane. These agents work
+on the development machine; they are separate from the assistants people use inside
+the product.
+
+## Memory fact
+
+A memory fact is a saved piece of information, such as a preference, that an assistant
+may use later. Saving it does not give it the authority to change access or spending rules.
+
+## Memory scope
+
+A memory scope says whose saved memory a fact belongs to: a person, a group or an
+assistant's notes. Access is checked for that scope before a fact can be read or changed.
+
+## Receipt
+
+A receipt is a confirmation of a saved change or a completed action. A save receipt
+confirms the event was recorded; a separate applied receipt confirms that a worker
+or service has carried it out.

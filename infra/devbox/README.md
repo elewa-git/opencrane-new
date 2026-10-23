@@ -1,52 +1,54 @@
-# infra/devbox
+# Developer machine setup
 
 ## What this is
 
-A setup script that prepares an Ubuntu machine for local OpenCrane development.
-It installs the tools and local Kubernetes cluster used to run sandboxed computers.
-It also starts a local image registry (a store for container images) and a MinIO file store
-inside the cluster. The dev stack keeps uploads in its own MinIO, so nothing uses this one yet.
+This package prepares an Ubuntu machine for local OpenCrane development.
+It installs the tools and small Kubernetes system where each assistant's private
+computer runs, including computers for shared group assistants.
 
 ## Where it fits
 
-This is part of the infrastructure layer. It prepares a developer's machine before
-[`infra/dev-stack`](../dev-stack/README.md) starts the rest of OpenCrane.
-[Kubernetes](../../GLOSSARY.md#kubernetes) runs the sandboxed computers.
-[gVisor](../../GLOSSARY.md#gvisor) adds a security layer around the programs inside them.
+This is infrastructure used before [infra/dev-stack](../dev-stack/README.md)
+starts the rest of OpenCrane. It uses k3d, a way to run a small
+[Kubernetes](../../GLOSSARY.md#kubernetes) system on one machine.
+[gVisor](../../GLOSSARY.md#gvisor) adds a security layer around each
+[computer](../../GLOSSARY.md#computer).
 
 ```mermaid
 flowchart LR
   infra["infra<br/>infrastructure"] --> devbox["infra/devbox<br/>machine setup"]
-  devbox -->|creates cluster| cluster["k3d cluster<br/>local Kubernetes"]
-  devbox -->|starts registry| registry["Local registry<br/>image store"]
-  devbox -->|installs file store| minio["MinIO<br/>file storage"]
-  stack["infra/dev-stack<br/>local OpenCrane"] -->|uses cluster| cluster
-  cluster -->|runs computers| computers["apps/computer<br/>sandboxed work"]
+  infra --> stack["infra/dev-stack<br/>local OpenCrane"]
+  infra --> package["infra/package<br/>Helm install"]
+  devbox -->|creates| cluster["k3d cluster<br/>local Kubernetes"]
+  devbox -->|starts| registry["Local registry<br/>image store"]
+  stack -->|uses| cluster
+  package -->|uses| cluster
+  cluster -->|runs| computers["apps/computer<br/>assistant computers"]
 ```
 
 ## What it is responsible for
 
-- Install tools that run a local Kubernetes cluster, with gVisor as an extra security layer.
-- Create a local Kubernetes cluster named `ocn` with gVisor for sandboxed computers.
-- Install Agent Sandbox, which manages sandboxed computers in the cluster.
-- Start a local image registry and a MinIO file store inside the cluster.
-  The dev stack keeps uploads in a separate MinIO, so nothing uses this one yet.
-- Add an 8 GB swap file to give the machine extra memory when needed.
-- Check that the Kubernetes API is bound only to the local machine.
+- Installs fixed versions of the tools and checks their downloads have not been tampered with.
+- Creates the local Kubernetes system with gVisor and Agent Sandbox, which manages computers.
+- Starts a local store for container images.
+- Installs a [MinIO](../../GLOSSARY.md#minio-file-storage) file store in the cluster.
+  Current upload handling uses the dev stack's separate MinIO; this copy is unused.
+- Adds an 8 GB swap file, which lets the machine use disk space when memory runs short.
+- Checks that the cluster can only be controlled from this machine, not from the network.
 
 ## Processes it handles
 
-1. **A developer prepares a machine.** `setup.sh` downloads pinned tools and checks their
-   checksums. It creates the cluster and proves that the registry and gVisor work.
-2. **A developer runs setup again.** The script reuses installed tools and the existing
-   cluster. It stops if the cluster or the registry can be reached from outside this machine.
-3. **A developer removes the local cluster.** The developer deletes the cluster and
-   registry with k3d. The setup script itself never deletes them.
+1. **A developer prepares a machine.** Setup downloads and checks the tools,
+   creates the local cluster and checks that image downloads and gVisor work.
+2. **A developer runs setup again.** It reuses installed tools and the existing
+   cluster. It stops if the cluster or image store can be reached from outside this machine.
+3. **A developer removes the cluster.** Separate k3d commands delete the cluster
+   and image store. Deleting the cluster also removes its MinIO data.
 
 ## How to run or test it
 
-The setup command runs from the repository root on an x86-64 Ubuntu machine with Docker
-and passwordless `sudo`. k3d creates the local cluster and registry.
+Setup runs from the repository root on an x86-64 Ubuntu machine with Docker and
+passwordless `sudo`. The operator notes explain what remains after removal.
 
 ```sh
 ./infra/devbox/setup.sh
@@ -54,11 +56,8 @@ k3d cluster delete ocn
 k3d registry delete ocn-registry
 ```
 
-Deleting the cluster also deletes the files kept in its MinIO.
-
 ## Where to read more
 
-- [README.robot.md](README.robot.md): pinned versions, image digests and network checks.
-- [infra/dev-stack](../dev-stack/README.md): the local OpenCrane stack that uses this box.
-- [apps/computer](../../apps/computer/README.md): the sandboxed computers this cluster runs.
-- [Glossary](../../GLOSSARY.md): plain meanings of Kubernetes, containers and other terms.
+- [README.robot.md](README.robot.md): tool versions, image settings and network checks.
+- [infra/dev-stack](../dev-stack/README.md): the local product copy that uses this machine.
+- [apps/computer](../../apps/computer/README.md): the computers this cluster runs.

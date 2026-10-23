@@ -1,0 +1,1 @@
+- The root and infrastructure guides explain the current system in plain words, with smaller diagrams and detailed operator notes. The Odoo notes keep the 20-line order limit, and test examples use the root npm scripts.

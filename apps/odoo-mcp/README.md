@@ -1,65 +1,62 @@
-# apps/odoo-mcp
+# Odoo tool server
 
 ## What this is
 
-A standalone tool server that reads one draft Odoo sales order at a time.
-Odoo is business software for sales, stock and accounts. MCP, the
-[Model Context Protocol](../../GLOSSARY.md#mcp-server-tool-server), lets an assistant use tools.
-It describes its tools and reads orders with the credential supplied for that request.
-Replacing notes remains unavailable.
+This is a small tool server that reads draft sales orders from Odoo, the business
+software for sales, stock and accounts. The planned product connection would let an
+assistant suggest a new order note for a person to approve; today this server only
+reads orders, and no other OpenCrane application calls it yet.
 
 ## Where it fits
 
-This is a separate application under `apps`, alongside `apps/server` (the product back end)
-and `apps/computer` (the assistant's computer). Neither application calls it yet.
-It runs on the local machine and connects to the Odoo instance chosen by the operator.
+This is in the tool servers layer under `apps`, alongside the back end and assistant
+computers. A [tool server](../../GLOSSARY.md#mcp-server-tool-server) gives an AI agent
+named actions through MCP, a shared standard for tool calls. Test callers use this
+server directly with an Odoo account's access key.
 
 ```mermaid
 flowchart LR
   apps["apps<br/>applications"] --> adapter["apps/odoo-mcp<br/>Odoo tool server"]
-  apps --> server["apps/server<br/>product back end"]
-  apps --> computer["apps/computer<br/>assistant computer"]
-  caller["Standalone HTTP caller"] -->|discovery or read| adapter
-  adapter -->|fixed read requests| odoo["Odoo"]
+  apps --> server["apps/server<br/>back end"]
+  apps --> computer["apps/computer<br/>assistant computers"]
+  caller["Test caller<br/>for now"] -->|reads an order| adapter
+  adapter -->|checks account access| odoo["Odoo<br/>business software"]
   adapter -.->|reads exact JSON| events["libs/events<br/>shared data rules"]
 ```
 
 ## What it is responsible for
 
-- Describe the two tools without contacting Odoo or needing a credential.
-- Return complete protocol, argument and result definitions.
-- Check that request headers and metadata agree.
-- Check note sizes in UTF-8 bytes without shortening the text.
-- Read only draft orders with at most twenty lines, without shortening their contents.
-- Return exact facts and escaped text for display, with a version and note digest.
-- Use each request's credential and let Odoo check that account's access.
-- Refuse all writes.
+- Describes its read and note-changing tools without contacting Odoo.
+- Reads one complete draft order using the account supplied for that request.
+- Returns the order as Odoo holds it, a safe copy for showing on screen, and a
+  fingerprint so later changes can be spotted.
+- Refuses orders that exceed its limits, including orders with more than 20 lines.
+- Refuses requests it does not expect and all writes.
 
 ## Processes it handles
 
-1. **A caller discovers tools.** The server returns protocol and tool definitions.
-2. **A caller sends an unsupported request.** The server refuses sessions, batches,
-   unknown methods and mismatched protocol information.
-3. **A caller reads an order.** The server requests fixed fields from Odoo and returns
-   the complete result. Missing, inaccessible, non-draft and oversized records are refused.
-4. **A caller asks to replace a note.** The server refuses without contacting Odoo.
+1. **A caller asks what tools exist.** The server returns the tool descriptions and
+   the rules for their inputs and results. No Odoo access key is needed for this list.
+2. **A caller reads an order.** The server asks Odoo for fixed order fields using the
+   caller's key. Missing, inaccessible, non-draft and oversized orders are refused.
+3. **A caller asks to replace a note.** The listed note-changing tool always refuses
+   without contacting Odoo. Safe writes and the product chat connection remain planned.
 
 ## How to run or test it
 
 The server uses the shared events package to read JSON without losing number precision.
 
-The standalone process listens only on the local machine. `PORT` chooses its port.
-`ODOO_ORIGIN` and `ODOO_DATABASE` choose the upstream instance. Without them, only
-discovery is available. Credentials arrive in each request, never in startup settings.
-These tests need no Odoo credentials or running fixture.
+The server listens only on the local machine. Reading orders needs an Odoo address
+and database; each request supplies its own access key. The ordinary tests use fake
+Odoo replies and need no running Odoo service.
 
 ```sh
 npm start -w apps/odoo-mcp
-nice -n 10 npx vitest run apps/odoo-mcp/test
+nice -n 10 npm test -- apps/odoo-mcp/test
 ```
 
 ## Where to read more
 
-- [README.robot.md](README.robot.md): exact contracts, limits and remaining work.
-- [Odoo fixture](../../infra/odoo/README.md): local fake records for read tests.
-- [Accepted design](../../docs/specs/phase-3/p3-12-odoo-draft-note.md): the planned product connection.
+- [README.robot.md](README.robot.md): exact settings, request rules, limits and checks.
+- [Local Odoo setup](../../infra/odoo/README.md): made-up records for read tests.
+- [Technical design for developers](../../docs/specs/phase-3/p3-12-odoo-draft-note.md): the planned product connection.
