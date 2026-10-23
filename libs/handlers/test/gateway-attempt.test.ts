@@ -97,8 +97,10 @@ async function forwardsAttemptLimits() {
   onTestFinished(setup.close);
   let called = false;
   let limits: HandlerAttempt | undefined;
+  let abortedDuringHandler: boolean | undefined;
   async function handle(_event: unknown, transaction: Query, attempt?: HandlerAttempt) {
     limits = attempt;
+    abortedDuringHandler = attempt?.signal.aborted;
     await transaction.query('SELECT 1');
     called = true;
   }
@@ -114,7 +116,7 @@ async function forwardsAttemptLimits() {
   }
   await until(completed);
   expect(limits?.signal).toBeInstanceOf(AbortSignal);
-  expect(limits?.signal.aborted).toBe(false);
+  expect(abortedDuringHandler).toBe(false);
   expect(limits?.deadline).toBeGreaterThan(started);
   expect(limits?.deadline).toBeLessThanOrEqual(performance.now() + 60_000);
 }
