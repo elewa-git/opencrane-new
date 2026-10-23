@@ -12,8 +12,13 @@ A second program here, the [models process](../../GLOSSARY.md#models-process), c
 AI calls against spending limits and tool rules.
 
 Change history includes saved tool hand-offs and transport observations.
+Control refusals recheck access before saving and appear in the requester’s
+conversation history. Each control command can save only one outcome.
 A hand-off without a saved outcome stays unknown, even when other evidence reports success. A response
 does not prove a business change succeeded. Reading history never sends a tool call.
+
+Refused control attempts in enabled test setups save a small audit record. They do not
+change the current controller or interrupt work. Production control stays disabled.
 
 ## Where it fits
 
@@ -27,7 +32,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, live updates and saved tool status| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
+  server -->|records changes, access-checked control refusals, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations and history with saved and missing tool outcomes| postgres

@@ -161,6 +161,9 @@ access by itself.
 
 ## Control history
 
+`requester_only` and `control_conflict` have fixed human-readable refusal descriptions
+in auditReasons. Refusal records use the existing actor, time and event reference fields.
+
 Audit records may include computer id, generation, takeover/lease references,
 reviewed requester event and affected-turn count. These are references, never
 bearer credentials. Private affected-turn lists are not part of organisation history.

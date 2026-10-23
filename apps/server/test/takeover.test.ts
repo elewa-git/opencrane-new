@@ -60,11 +60,15 @@ async function keepsIntentAndReplay() {
   await fixture.runner.initialise(auditTrail);
   await fixture.runner.run(auditTrail);
   const audit = await readAudit(fixture.db, 'test');
-  expect(audit.rows[0]?.records[0]).toMatchObject({
+  function isIntent(row: typeof audit.rows[number]) {
+    return row.records[0]?.type === 'takeover.requested';
+  }
+  const intent = audit.rows.find(isIntent);
+  expect(intent?.records[0]).toMatchObject({
     computerId: 'desktop', generation: 1, takeoverId: 'control-one',
     affectedTurnCount: 0,
   });
-  expect(typeof audit.rows[0]?.records[0]?.recordedAt).toBe('string');
+  expect(typeof intent?.records[0]?.recordedAt).toBe('string');
   await fixture.runner.rebuild(auditTrail);
   expect(await readAudit(fixture.db, 'test')).toEqual(audit);
 }
@@ -114,7 +118,8 @@ async function racesIntent(other: 'intent' | 'turn') {
     vi.restoreAllMocks();
     const control = await readComputerControl(options.store, 'test', 'assistant');
     if (!control) {
-      const saved = await requestControl(options, 'alice', input);
+      const retry = { ...input, commandId: 'after-turn' };
+      const saved = await requestControl(options, 'alice', retry);
       expect(saved.affectedTurnIds).toEqual([message.id]);
     }
   }

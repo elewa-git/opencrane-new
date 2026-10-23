@@ -11,6 +11,9 @@ remains the record of what happened, so these tables can be rebuilt.
 Workers save adjacent pieces of a streamed reply together. This keeps live
 text and the final Stop result from waiting behind hundreds of separate commits.
 
+Refused control attempts appear in the requester’s conversation history with the
+verified person and a fixed reason. Rebuilding that history does not change computer control or running work.
+
 ## Where it fits
 
 OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
@@ -25,9 +28,9 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses the database test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes| projections["libs/projections<br/>read tables, history, routines and memory"]
+  ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
-  projections -->|saves chat rows, routines, occurrences, receipts and history| pg
+  projections -->|saves chat rows and control refusals in history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|selects nightly memory inputs and reads unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]

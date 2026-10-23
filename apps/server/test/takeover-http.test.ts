@@ -1,13 +1,21 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
+import { once } from 'node:events';
+import { Duplex, PassThrough } from 'node:stream';
+import { WebSocket } from 'ws';
+import { until } from '@opencrane/authz/testing';
+import { nextBinaryMessage, recordLeaseNotices } from './support/rfb-viewer.ts';
 import * as crypto from 'node:crypto';
 import * as access from '../src/chat/access.ts';
-import { encodeSession } from '@opencrane/auth';
-import type { AppendCommand } from '@opencrane/event-store';
+import { computerSummary, encodeSession } from '@opencrane/auth';
+import { createEventStore, type AppendCommand } from '@opencrane/event-store';
+import { auditTrail, readAudit } from '@opencrane/projections';
+import { viewAccess } from '../src/computers/view-access.ts';
 import { parseEventByType } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
 import { buildServer, buildProductionServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
+import { takeoverProbe } from './support/takeover-probe.ts';
 
 let fixture: Awaited<ReturnType<typeof viewFixture>>;
 let app: ReturnType<typeof buildServer>;
@@ -26,12 +34,13 @@ async function cleanup() {
   await fixture?.close();
 }
 afterEach(cleanup);
-async function setup(requestsEnabled = true) {
-  fixture = await viewFixture(noDesktop);
+async function setup(requestsEnabled = true, open: Parameters<typeof viewFixture>[0] = noDesktop) {
+  fixture = await viewFixture(open);
   desktopCalls = 0;
   cookies.clear();
   const chat = { ...fixture, store: fixture.nats.store, silo: 'test' };
-  const options = { chat, takeoverRequestsEnabled: requestsEnabled };
+  const liveView = { ...chat, open };
+  const options = { chat, liveView, audit: chat, takeoverRequestsEnabled: requestsEnabled };
   app = buildServer(fixture.config, options);
   const message = await fixture.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
@@ -139,6 +148,7 @@ async function retriesAndLostReplies() {
     { ...body, requesterEventId: 'changed' }, { ...body, generation: 2 }]) {
     expect((await post(changed)).statusCode).toBe(409);
   }
+  expect((await post()).json()).toEqual(first.json());
   expect((await get()).json()).toMatchObject({ status: 'requested', commandId: body.commandId,
     affectedTurnIds: [], eligibleActions: [] });
   const bob = (await get('bob')).json<Record<string, unknown>>();
@@ -157,6 +167,7 @@ async function checksStateBeforeSaving() {
   await setup();
   const before = await fixture.nats.store.head();
   expect((await post({ ...body, generation: 2 })).statusCode).toBe(409);
+  body = { ...body, commandId: 'fresh-attempt' };
   const hidden = await get('outsider');
   expect(hidden.statusCode).toBe(403);
   await fixture.append('computer-assistant', 'computer.suspended', {
@@ -219,6 +230,8 @@ async function competingRequests(sameCommand: boolean) {
     if (row.event.type === 'takeover.requested') intents++;
   }
   expect(intents).toBe(1);
+  const retry = responses[0].statusCode === 202 ? await post() : await post(other, 'alice', 'other');
+  expect(retry.statusCode).toBe(202);
 }
 it.each([false, true])('saves one intent for competing chats, same command id: %s',
   competingRequests);
@@ -454,3 +467,389 @@ async function productionDisabled() {
   expect((await post()).statusCode).toBe(503);
 }
 it('keeps requests disabled in the production route set', productionDisabled);
+
+async function refusalRows() {
+  const rows = [];
+  for await (const row of fixture.nats.store.readStream(`view-${body.commandId}`)) {
+    rows.push(row);
+  }
+  return rows;
+}
+async function computerState() {
+  const state = computerSummary.empty();
+  for await (const row of fixture.nats.store.readStream('computer-assistant')) {
+    computerSummary.add(state, row);
+  }
+  return state;
+}
+async function recordsSafeRefusal(controller: boolean) {
+  await setup();
+  await participant();
+  await fixture.append('computer-assistant', 'computer.turn_started', {
+    assistantId: 'assistant', computerId: 'desktop', conversationId: 'private-chat',
+    turnId: 'private-turn-canary', threadId: 'private-thread', requesterId: 'alice',
+    task: 'chat_turn',
+  });
+  if (controller) {
+    expect((await post()).statusCode).toBe(202);
+    body = { ...body, commandId: 'second-tab' };
+  }
+  const member = controller ? 'alice' : 'bob';
+  const before = await computerState();
+  const accessOptions = { ...fixture, silo: 'test', store: fixture.nats.store };
+  const viewer = await viewAccess(accessOptions, 'alice', 'chat');
+  const bridge = await takeoverProbe(accessOptions);
+  expect(bridge.gate).toHaveBeenCalledTimes(controller ? 1 : 0);
+  bridge.gate.mockClear();
+  const position = await fixture.nats.store.head('computer-assistant');
+  const response = await post(body, member);
+  expect(response.statusCode).toBe(controller ? 409 : 403);
+  const expected = controller ? { status: 'conflict' }
+    : { status: 'refused', reason: 'requester_only' };
+  expect(response.json()).toEqual(expected);
+  expect((await post(body, member)).json()).toEqual(expected);
+  const rows = await refusalRows();
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.event).toMatchObject({ type: 'takeover.refused',
+    principal: { kind: 'human', id: member }, data: { attemptId: body.commandId,
+      actorId: member, reason: controller ? 'control_conflict' : 'requester_only' } });
+  expect(rows[0]?.event.data).toHaveProperty('inputDigest', expect.stringMatching(/^[a-f0-9]{64}$/u));
+  expect(await computerState()).toEqual(before);
+  expect(await viewAccess(accessOptions, 'alice', 'chat')).toMatchObject({
+    computerId: viewer.computerId,
+  });
+  expect(await fixture.nats.store.head('computer-assistant')).toBe(position);
+  const after = await fixture.nats.store.head();
+  expect((await get(member)).statusCode).toBe(200);
+  expect(await fixture.nats.store.head()).toBe(after);
+  expect(desktopCalls).toBe(0);
+  await bridge.control.send();
+  await bridge.control.settled();
+  expect(bridge.send).not.toHaveBeenCalled();
+  expect(bridge.stopExecution).not.toHaveBeenCalled();
+  await fixture.runner.initialise(auditTrail);
+  await fixture.runner.run(auditTrail);
+  const audit = await readAudit(fixture.db, 'test');
+  expect(audit.rows[0]?.records[0]).toMatchObject({ type: 'takeover.refused',
+    actor: { kind: 'person', id: member }, reason: controller
+      ? 'Control request conflicts with saved state' : 'Only the requester may take control' });
+  await fixture.runner.rebuild(auditTrail);
+  expect(await readAudit(fixture.db, 'test')).toEqual(audit);
+  expect(bridge.gate).not.toHaveBeenCalled();
+  expect(bridge.send).not.toHaveBeenCalled();
+  expect(bridge.stopExecution).not.toHaveBeenCalled();
+  const serialised = JSON.stringify([rows, audit.rows[0], response.json()]);
+  for (const forbidden of ['private-turn-canary', 'private-thread', 'private-chat',
+    'affectedTurnIds', 'computerId', 'podUid', body.requesterEventId,
+    headers(member).cookie, 'ciphertext']) {
+    expect(serialised).not.toContain(forbidden);
+  }
+}
+it.each([false, true])('records one safe refusal without changing work, controller=%s',
+  recordsSafeRefusal);
+
+async function concurrentRefusals() {
+  await setup();
+  await participant();
+  const append = fixture.nats.store.append.bind(fixture.nats.store);
+  const both = Promise.withResolvers<void>();
+  let arrivals = 0;
+  async function together(command: AppendCommand) {
+    arrivals++;
+    if (arrivals === 2) both.resolve();
+    await both.promise;
+    return append(command);
+  }
+  vi.spyOn(fixture.nats.store, 'append').mockImplementation(together);
+  const replies = await Promise.all([post(body, 'bob'), post(body, 'bob')]);
+  expect(arrivals).toBe(2);
+  for (const reply of replies) expect(reply.statusCode).toBe(403);
+  expect(await refusalRows()).toHaveLength(1);
+}
+it('recovers one refusal for concurrent identical attempts', concurrentRefusals);
+
+async function uncertainRefusal(mode: 'lost' | 'append' | 'read') {
+  await setup();
+  await participant();
+  const append = fixture.nats.store.append.bind(fixture.nats.store);
+  let attempted = false;
+  let committed = false;
+  async function uncertain(command: AppendCommand): Promise<never> {
+    attempted = true;
+    if (mode !== 'append') {
+      const result = await append(command);
+      committed = result.status === 'appended';
+    }
+    throw new Error('private-error-canary');
+  }
+  vi.spyOn(fixture.nats.store, 'append').mockImplementation(uncertain);
+  const read = fixture.nats.store.readStream.bind(fixture.nats.store);
+  async function* unreadable(...args: Parameters<typeof read>) {
+    if (mode === 'read' && committed && args[0].startsWith('view-')) {
+      throw new Error('private-read-canary');
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(unreadable);
+  const reply = await post(body, 'bob');
+  expect(attempted).toBe(true);
+  expect(reply.statusCode).toBe(mode === 'lost' ? 403 : 503);
+  expect(reply.json()).toEqual(mode === 'lost'
+    ? { status: 'refused', reason: 'requester_only' } : { status: 'unavailable' });
+  vi.restoreAllMocks();
+  expect(await refusalRows()).toHaveLength(mode === 'append' ? 0 : 1);
+}
+it.each(['lost', 'append', 'read'] as const)(
+  'confirms the saved refusal or reports unavailable after %s uncertainty', uncertainRefusal);
+
+async function refusalRestart() {
+  await setup();
+  await participant();
+  expect((await post(body, 'bob')).statusCode).toBe(403);
+  const saved = await refusalRows();
+  expect(saved).toHaveLength(1);
+  await app.close();
+  await fixture.nats.stop();
+  await fixture.nats.restart();
+  const store = await createEventStore(fixture.nats.connection);
+  const chat = { ...fixture, store, silo: 'test' };
+  app = buildServer(fixture.config, { chat, takeoverRequestsEnabled: true });
+  const append = vi.spyOn(store, 'append');
+  // Require saved history to answer; broker duplicate detection cannot help here.
+  expect((await post(body, 'bob')).statusCode).toBe(403);
+  expect(append).not.toHaveBeenCalled();
+  for (const changed of [{ ...body, generation: 2 },
+    { ...body, requesterEventId: 'changed' }]) {
+    expect((await post(changed, 'bob')).statusCode).toBe(409);
+  }
+  expect((await post(body, 'alice')).statusCode).toBe(409);
+  await otherChat();
+  expect((await post(body, 'alice', 'other')).statusCode).toBe(409);
+  expect(await refusalRows()).toEqual(saved);
+  expect(append).not.toHaveBeenCalled();
+}
+it('recovers refusals after server restart and conflicts on changed actor or request',
+  refusalRestart);
+
+async function removalDuringRefusal(stage: 'read' | 'append') {
+  await setup();
+  await participant();
+  const store = fixture.nats.store;
+  const read = store.readStream.bind(store);
+  const append = store.append.bind(store);
+  let removed = false;
+  async function removeMember() {
+    if (removed) return;
+    removed = true;
+    await fixture.append('member-bob', 'member.removed', {
+      memberId: 'bob', removedBy: 'alice',
+    });
+  }
+  async function* removeDuringRead(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (stage === 'read' && args[0] === `view-${body.commandId}`) await removeMember();
+  }
+  async function removeDuringAppend(command: AppendCommand) {
+    if (stage === 'append') await removeMember();
+    return append(command);
+  }
+  vi.spyOn(store, 'readStream').mockImplementation(removeDuringRead);
+  vi.spyOn(store, 'append').mockImplementation(removeDuringAppend);
+  const response = await post(body, 'bob');
+  expect(removed).toBe(true);
+  expect(response.json()).not.toEqual({ status: 'refused', reason: 'requester_only' });
+  vi.restoreAllMocks();
+  expect(await refusalRows()).toEqual([]);
+}
+it.each(['read', 'append'] as const)(
+  'saves no refusal when membership ends during refusal %s', removalDuringRefusal);
+
+async function retainsAuthorityDeadline() {
+  await setup();
+  const store = fixture.nats.store;
+  const append = store.append.bind(store);
+  const read = store.readStream.bind(store);
+  let originalDeadline: number | undefined;
+  let refusalDeadline: number | undefined;
+  let readbackDeadline: number | undefined;
+  async function conflict(command: AppendCommand) {
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success) throw new Error('Expected a valid event');
+    if (parsed.event.type === 'takeover.requested') {
+      originalDeadline = command.deadline;
+      return { status: 'conflict' as const };
+    }
+    refusalDeadline = command.deadline;
+    return append(command);
+  }
+  async function* readback(...args: Parameters<typeof read>) {
+    if (refusalDeadline && args[0] === `view-${body.commandId}`) readbackDeadline = args[2];
+    yield* read(...args);
+  }
+  vi.spyOn(store, 'append').mockImplementation(conflict);
+  vi.spyOn(store, 'readStream').mockImplementation(readback);
+  expect((await post()).statusCode).toBe(409);
+  expect(originalDeadline).toBeTypeOf('number');
+  expect(refusalDeadline).toBe(originalDeadline);
+  expect(readbackDeadline).toBe(originalDeadline);
+  expect(await refusalRows()).toHaveLength(1);
+}
+it('keeps the checked authority deadline after an intent append conflicts',
+  retainsAuthorityDeadline);
+
+async function racesAcceptedAndRefused(first: 'requested' | 'refused') {
+  await setup();
+  const stale = { ...body, generation: 2 };
+  const append = fixture.nats.store.append.bind(fixture.nats.store);
+  const both = Promise.withResolvers<void>();
+  const firstSaved = Promise.withResolvers<void>();
+  let arrivals = 0;
+  async function ordered(command: AppendCommand) {
+    arrivals++;
+    if (arrivals === 2) both.resolve();
+    await both.promise;
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success) throw new Error('Expected a valid event');
+    if (parsed.event.type !== `takeover.${first}`) await firstSaved.promise;
+    const result = await append(command);
+    if (parsed.event.type === `takeover.${first}`) firstSaved.resolve();
+    return result;
+  }
+  vi.spyOn(fixture.nats.store, 'append').mockImplementation(ordered);
+  const replies = await Promise.all([post(), post(stale)]);
+  vi.restoreAllMocks();
+  const saved = await refusalRows();
+  for await (const row of fixture.nats.store.readStream('computer-assistant')) {
+    if (row.event.type === 'takeover.requested') saved.push(row);
+  }
+  expect(saved).toHaveLength(1);
+  expect(saved[0]?.event.type).toBe(`takeover.${first}`);
+  expect(replies[0]?.statusCode).toBe(first === 'requested' ? 202 : 409);
+  expect(replies[1]?.statusCode).toBe(409);
+  const before = await fixture.nats.store.head();
+  expect((await post()).json()).toEqual(replies[0]?.json());
+  expect((await post(stale)).json()).toEqual(replies[1]?.json());
+  expect(await fixture.nats.store.head()).toBe(before);
+}
+it.each(['requested', 'refused'] as const)(
+  'saves one outcome when acceptance and refusal race, %s first', racesAcceptedAndRefused);
+
+async function refusalInConversationHistory() {
+  await setup();
+  await participant();
+  expect((await post(body, 'bob')).statusCode).toBe(403);
+  await fixture.runner.initialise(auditTrail);
+  await fixture.runner.run(auditTrail);
+  function history(member: string) {
+    const request = { url: '/api/conversations/chat/history', headers: headers(member) };
+    return app.inject(request);
+  }
+  const response = await history('bob');
+  expect(response.statusCode).toBe(200);
+  const expected = response.json<{ rows: unknown[] }>();
+  expect(expected.rows).toHaveLength(1);
+  expect(expected.rows[0]).toMatchObject({ conversationId: 'chat', requesterId: 'bob',
+    records: [{ type: 'takeover.refused', actor: { kind: 'person', id: 'bob' } }] });
+  expect((await history('outsider')).statusCode).toBe(403);
+  expect((await history('alice')).json()).toMatchObject({ rows: [] });
+  await fixture.runner.rebuild(auditTrail);
+  expect((await history('bob')).json()).toEqual(expected);
+  await fixture.append('member-bob', 'member.removed', {
+    memberId: 'bob', removedBy: 'alice',
+  });
+  expect((await history('bob')).statusCode).toBe(403);
+}
+it('shows a refusal only in its authenticated requester history, including after rebuild',
+  refusalInConversationHistory);
+
+async function refusalKeepsPausedProofAndViewer() {
+  const readable = new PassThrough();
+  const writable = new PassThrough();
+  writable.resume();
+  const desktop = Duplex.from({ readable, writable });
+  const greeting = Buffer.from('RFB 003.008\n');
+  function open() {
+    readable.write(greeting);
+    return Promise.resolve(desktop);
+  }
+  await setup(true, open);
+  await participant();
+  expect((await post()).statusCode).toBe(202);
+  const binding = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
+    podUid: 'fixture', takeoverId: body.commandId, affectedTurnIds: [],
+    bridgeEpoch: 'bridge', supervisorEpoch: 'supervisor' };
+  await fixture.append('computer-assistant', 'takeover.pausing', { ...binding,
+    executionProof: 'exited', quietProof: 'unavailable' });
+  await fixture.append('computer-assistant', 'takeover.paused', { ...binding,
+    quietProof: 'complete' });
+  const before = await computerState();
+  const accessOptions = { ...fixture, silo: 'test', store: fixture.nats.store };
+  const bridge = await takeoverProbe(accessOptions);
+  bridge.gate.mockClear();
+  const admissionHeaders = { ...headers(), 'x-opencrane-view': '1' };
+  const admission = await app.inject({ method: 'POST', url: '/api/conversations/chat/view',
+    headers: admissionHeaders });
+  expect(admission.statusCode).toBe(200);
+  const ticket = admission.json<{ ticket: string }>().ticket;
+  const address = await app.listen({ host: '127.0.0.1', port: 0 });
+  const url = `${address.replace('http:', 'ws:')}/ws/conversations/chat/view`;
+  const socket = new WebSocket(url, ['binary', ticket], { headers: admissionHeaders });
+  const notices = recordLeaseNotices(socket);
+  try {
+    expect(await nextBinaryMessage(socket)).toEqual(greeting);
+    body = { ...body, commandId: 'refused-while-paused' };
+    expect((await post(body, 'bob')).json()).toEqual({
+      status: 'refused', reason: 'requester_only',
+    });
+    expect(await refusalRows()).toHaveLength(1);
+    expect(await computerState()).toEqual(before);
+    expect((await get()).json()).toMatchObject({ status: 'paused' });
+    const count = notices.length;
+    function renewed() { return notices.length > count; }
+    await until(renewed);
+    for (const entry of notices) expect(entry.notice.lease).toBe('valid');
+    const security = nextBinaryMessage(socket);
+    socket.send(greeting);
+    readable.write(Buffer.from([1, 1]));
+    expect(await security).toEqual(Buffer.from([1, 1]));
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    await bridge.control.send();
+    await bridge.control.settled();
+    expect(bridge.gate).not.toHaveBeenCalled();
+    expect(bridge.send).not.toHaveBeenCalled();
+    expect(bridge.stopExecution).not.toHaveBeenCalled();
+  } finally {
+    const closed = once(socket, 'close');
+    socket.terminate();
+    await closed;
+  }
+}
+it('keeps quiet proof, bridge state and an open viewer after a refused attempt',
+  refusalKeepsPausedProofAndViewer);
+
+async function unavailableOutcomeCheck() {
+  await setup();
+  await participant();
+  const store = fixture.nats.store;
+  const append = store.append.bind(store);
+  const read = store.readStream.bind(store);
+  let appending = false;
+  async function checkedAppend(command: AppendCommand) {
+    appending = true;
+    return append(command);
+  }
+  async function* unavailable(...args: Parameters<typeof read>) {
+    if (appending && args[0] === `view-${body.commandId}`) {
+      throw new Error('Outcome read unavailable');
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(store, 'append').mockImplementation(checkedAppend);
+  vi.spyOn(store, 'readStream').mockImplementation(unavailable);
+  expect((await post(body, 'bob')).statusCode).toBe(503);
+  expect(appending).toBe(true);
+  vi.restoreAllMocks();
+  expect(await refusalRows()).toEqual([]);
+}
+it('saves nothing when the outcome check inside the refusal append is unavailable',
+  unavailableOutcomeCheck);

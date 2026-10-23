@@ -2,6 +2,17 @@ import { z } from 'zod';
 import { event } from './definition.ts';
 
 const id = z.string().min(1).max(200);
+const refusalId = z.string().regex(/^[\w-]{1,200}$/u);
+export const takeoverRefusedDataSchema = z.object({
+  attemptId: refusalId, actorId: refusalId, conversationId: refusalId,
+  inputDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  reason: z.enum(['requester_only', 'control_conflict']),
+}).strict();
+const refusedExample = { attemptId: 'attempt_1', actorId: 'member_1', conversationId: 'conv_1',
+  inputDigest: 'a'.repeat(64), reason: 'requester_only' as const };
+const refused = event('takeover.refused', 'view',
+  'An authenticated control attempt was refused. Existing work and control are unchanged.',
+  takeoverRefusedDataSchema, refusedExample);
 export const takeoverRequestedDataSchema = z.object({
   assistantId: id, computerId: id, generation: z.int().positive(), podUid: id,
   conversationId: id, requesterId: id, requesterEventId: id, takeoverId: id, leaseId: id,
@@ -47,4 +58,4 @@ const timeoutExample = { ...failedExample, reason: 'pause_timeout' as const };
 const failed = event('takeover.failed', 'computer',
   'The pause deadline expired. Work and control stay closed.',
   takeoverFailedDataSchema, timeoutExample);
-export const takeoverEvents = [requested, pausing, paused, failed];
+export const takeoverEvents = [refused, requested, pausing, paused, failed];

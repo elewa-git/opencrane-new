@@ -106,6 +106,7 @@ const verifiedActorFields: Record<string, string> = {
   'team.created': 'createdBy',
   'ownership.transferred': 'transferredBy',
   'takeover.requested': 'requestedBy',
+  'takeover.refused': 'actorId',
 };
 function actor(event: EventEnvelope, data: Record<string, unknown>): AuditRecord['actor'] {
   const principal = event.principal;
@@ -209,6 +210,10 @@ export const auditTrail: Projection = {
     const anchor = isAnchor(event, request, permit, approval);
     const digest = z.string().regex(/^[a-f0-9]{64}$/u).safeParse(d['contextDigest']).data;
     const record = metadata(event, d, position);
+    let requesterId = firstId(d['requesterId'], call['requesterId'], d['requestedBy']);
+    if (event.type === 'takeover.refused' && record.actor?.kind === 'person') {
+      requesterId = record.actor.id;
+    }
     await db.query(`INSERT INTO audit_entries (silo,event_id,position,anchor,request_id,permit_id,
       approval_id,conversation_id,turn_id,requester_id,decision,context_digest,metadata,
       recorded_at,event_type,actor_id,outcome)
@@ -216,7 +221,7 @@ export const auditTrail: Projection = {
       ON CONFLICT (silo, event_id) DO NOTHING`, [event.silo, event.id, position, anchor, request, permit, approval,
       firstId(d['conversationId'], call['conversationId'], event.correlation.conversation),
       firstId(d['turnId'], call['turnId'], event.correlation.turn),
-      firstId(d['requesterId'], call['requesterId'], d['requestedBy']),
+      requesterId,
       event.type === 'decision.recorded' ? d['outcome'] : null, digest, JSON.stringify(record),
       event.time, event.type, record.actor?.kind === 'unverified' ? null : record.actor?.id,
       record.status].map(value => value ?? null));
