@@ -67,15 +67,18 @@ function isDispatchEvent(type: string): boolean {
   return type === 'tool.dispatch_started' || type === 'tool.dispatch_recorded';
 }
 function auditData(event: EventEnvelope): Record<string, unknown> {
+  const dataSchema = z.record(z.string(), z.unknown());
   if (isDispatchEvent(event.type)) {
-    const parsed = getEventDefinition(event.type)!.dataSchema.safeParse(event.data);
-    if (!parsed.success) {
+    const definition = getEventDefinition(event.type)!;
+    const dispatchSchema = definition.dataSchema;
+    const parseResult = dispatchSchema.safeParse(event.data);
+    if (!parseResult.success) {
       // Keep rejected arguments, replies and credentials out of projection errors.
       throw new Error('Invalid dispatch audit event');
     }
-    return z.record(z.string(), z.unknown()).parse(parsed.data);
+    return dataSchema.parse(parseResult.data);
   }
-  return z.record(z.string(), z.unknown()).parse(event.data);
+  return dataSchema.parse(event.data);
 }
 function dispatchStatus(outcome: unknown): AuditRecord['status'] {
   if (outcome === 'outcome_unknown') {
@@ -219,7 +222,7 @@ export const auditTrail: Projection = {
       record.status].map(value => value ?? null));
     if (anchor || ['effect.observed', 'egress.observed', 'budget.settled',
       'security.alert_raised', 'gateway.observation_recorded',
-      'tool.dispatch_recorded'].includes(event.type)) {
+      'tool.dispatch_started', 'tool.dispatch_recorded'].includes(event.type)) {
       await refreshOutcomes(db, event.silo, request, permit, event.id);
     }
   },
@@ -351,7 +354,7 @@ async function readEvidence(db: Query, silo: string, anchor: Entry,
 async function readSignals(db: Query, silo: string, anchor: Entry): Promise<Entry[]> {
   const types = ['effect.observed', 'egress.observed', 'security.alert_raised',
     'budget.settled', 'budget.reserved', 'gateway.observation_recorded',
-    'tool.dispatch_recorded'];
+    'tool.dispatch_started', 'tool.dispatch_recorded'];
   const parameters = [silo, anchor.event_id, anchor.request_id, anchor.permit_id,
     anchor.conversation_id, anchor.turn_id, anchor.requester_id, types];
   const direct = evidenceCondition('e');
@@ -405,6 +408,10 @@ function observedOutcome(decision: AuditRow['decision'], records: AuditRecord[],
   if (dispatch && decision === 'allow') {
     return dispatch.status;
   }
+  // Keep a saved start without its outcome unknown, even after generic success.
+  if (decision === 'allow' && records.some(isDispatchStart)) {
+    return 'unknown';
+  }
   if (effect && decision === 'allow') return effect.status;
   if (settlement?.status === 'not_dispatched' || ['ask', 'deny'].includes(decision)) return 'not_dispatched';
   if (decision === 'allow') return 'unknown';
@@ -414,4 +421,8 @@ function observedOutcome(decision: AuditRow['decision'], records: AuditRecord[],
 
 function isRecordedDispatch(record: AuditRecord): boolean {
   return record.type === 'tool.dispatch_recorded';
+}
+
+function isDispatchStart(record: AuditRecord): boolean {
+  return record.type === 'tool.dispatch_started';
 }

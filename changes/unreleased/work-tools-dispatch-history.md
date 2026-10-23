@@ -1,1 +1,1 @@
-- Change history includes saved tool hand-offs and transport observations, without treating a response as business success or inventing a charge. Rebuild the audit projection after upgrading to include existing histories.
+- Change history includes saved tool hand-offs and transport observations, without treating a response as business success or inventing a charge. A hand-off without a saved dispatch outcome stays unknown even when generic evidence reports success, including after a rebuild. Rebuild the audit projection after upgrading to include existing histories.

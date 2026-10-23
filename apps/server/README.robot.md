@@ -1201,7 +1201,8 @@ fields. The [audit projection contract](../../libs/projections/README.robot.md) 
 their status meanings and the required replay for existing installations.
 `test/audit-dispatch.test.ts` checks these reads with real NATS, PostgreSQL and OpenFGA.
 Decision and observed outcome are separate. An allowed request
-without an observation reads `unknown`, never success. The
+with a saved tool start but no saved dispatch outcome reads `unknown`, even if a
+generic effect reports success. The outcome filter and rebuild preserve this result. The
 [shared response contract](../../libs/protocol/src/audit.ts) is strict and permits
 only fixed readable reasons. Run the `audit` ops worker alongside the existing
 projections. API startup enables these reads with the existing event store,
