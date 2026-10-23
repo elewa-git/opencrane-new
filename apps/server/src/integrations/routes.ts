@@ -1,3 +1,4 @@
+import { readIntegrationFacts } from './facts.ts';
 import { budgetChange } from '@opencrane/models';
 import { readPublication, publicationChange } from '@opencrane/projections';
 import { readHostedAdmission, requestHostedCheck } from '@opencrane/models';
@@ -46,10 +47,11 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
     '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/discovery',
     '/api/org/integrations/:serverId/admission', '/api/org/integrations/:serverId/checks',
     '/api/org/integrations/discovery', '/api/org/integrations/changes/:commandId',
+    '/api/org/integrations/:serverId/facts',
   ];
   for (const path of paths) {
     const readOnly = path.endsWith('/discovery') || path.endsWith('/:commandId') ||
-      path.endsWith('/admission');
+      path.endsWith('/admission') || path.endsWith('/facts');
     let method: ('GET' | 'POST')[] = ['GET', 'POST'];
     if (readOnly) {
       method = ['GET'];
@@ -58,7 +60,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
       method = ['POST'];
     }
     async function handleIntegration(request: FastifyRequest, reply: FastifyReply) {
-      if (path.endsWith('/publication') || path.endsWith('/:commandId')) {
+      if (path.endsWith('/publication') || path.endsWith('/:commandId') || path.endsWith('/facts')) {
         reply.header('cache-control', 'no-store');
       }
       const session = sessionFor(request, config, now());
@@ -85,6 +87,13 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
 async function checkedIntegrationRequest(path: string, request: FastifyRequest,
   reply: FastifyReply, config: AuthConfig, options: IntegrationOptions,
   memberId: string, now: Date) {
+  if (path.endsWith('/facts')) {
+    if (!options.store || !options.modelDb) {
+      return reply.code(503).send({ status: 'unavailable' });
+    }
+    const sources = { ...options, store: options.store, db: options.modelDb };
+    return readIntegrationFacts(request, reply, sources, memberId);
+  }
   const authorisation = memberAuthorisation(options.binding);
   if (path === '/api/org/models/changes/:commandId') {
     const { commandId } = budgetChangeParameters.parse(request.params);

@@ -1,0 +1,1 @@
+- Admins can read separate saved integration registration, account requirements, bounded grants and publication facts. Missing evidence stays explicit, and saved grants never imply permission for an arbitrary assistant.

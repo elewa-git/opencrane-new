@@ -69,3 +69,45 @@ export const hostedAdmissionSchema = z.strictObject({
   status: z.enum(['checking', 'rejected', 'unavailable', 'admitted', 'expired']),
   checks: hostedImageCheckedSchema.shape.checks.optional(),
 });
+
+
+const factId = z.string().regex(/^[\w-]{1,200}$/u);
+const factDate = z.iso.datetime({ offset: true });
+const factProgress = z.enum(['current', 'applying']);
+const savedGrantFact = z.strictObject({
+  granteeKind: z.enum(['member', 'team', 'assistant']), granteeId: factId,
+  state: z.enum(['granted', 'revoked']), eventId: factId, eventTime: factDate,
+  sequence: z.int().positive(), iam: factProgress, projection: factProgress,
+  membershipStatus: z.enum(['joined', 'invited', 'departed', 'unknown']).nullable(),
+});
+const savedPublicationFact = z.strictObject({
+  status: z.enum(['disabled', 'applying', 'unknown', 'ready']),
+  changeRef: factId.optional(), requestedAt: factDate.optional(), observedAt: factDate.optional(),
+  generation: z.int().positive().optional(),
+  recordDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  stage: z.enum(['read', 'preparation', 'observation', 'receipt']).optional(),
+  reason: z.enum(['unavailable', 'not_prepared', 'not_current', 'deadline', 'not_observed']).optional(),
+});
+export const integrationFactsSchema = z.strictObject({
+  serverId: factId, loadedAt: factDate,
+  installed: z.strictObject({
+    status: z.literal('registered'), eventId: factId, recordedAt: factDate,
+    sequence: z.int().positive(),
+  }),
+  connected: z.strictObject({
+    status: z.enum(['unknown', 'no_account_required', 'verification_unavailable']),
+    accountMode: z.enum(['none', 'personal', 'company']).nullable(),
+    connectionId: factId.nullable(), checkedAt: factDate.nullable(),
+  }),
+  allowedFor: z.strictObject({
+    basis: z.literal('saved_grants'), complete: z.boolean(), grantTotal: z.int().nonnegative().nullable(),
+    sequence: z.int().nonnegative(), projection: factProgress, iam: factProgress,
+    grants: z.array(savedGrantFact).max(100),
+  }),
+  availability: z.strictObject({
+    status: z.literal('unavailable'), reason: z.literal('requester_assistant_required'),
+    policy: z.enum(['current', 'unavailable']), sequence: z.int().nonnegative(),
+    reviewRevision: z.int().positive().nullable(), checkedAt: factDate.nullable(),
+    expiresAt: factDate.nullable(), publication: savedPublicationFact,
+  }),
+});

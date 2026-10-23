@@ -344,3 +344,13 @@ Rows contain safe references, original UTC dates, integer euro cents and account
 evidence. Settled cents may be null; recorded zero remains zero. Replies carry
 checkpoint, generation and continuation, without page totals or private work fields.
 The server tests check these schemas alongside the current finance access rules.
+
+## Saved integration facts
+
+`integrationFactsSchema` strictly separates `installed`, `connected`, `allowedFor`
+and `availability`. Dates and safe event/configuration references describe saved evidence.
+Grant receipts are capped at 100; incomplete lists carry a null total. Publication retains
+Disabled, Applying, Unknown and Ready. Availability cannot be Ready without a selected
+requester and assistant, so this contract permits only unavailable. Account mode `none`
+means no account required; other account verification remains unavailable.
+See the [server contract](../../apps/server/README.robot.md#bounded-saved-integration-facts-part-of-623).

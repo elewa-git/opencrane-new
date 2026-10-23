@@ -107,6 +107,10 @@ export async function readToolAccess(request: FastifyRequest, reply: FastifyRepl
   if (!await registered(options, serverId, deadline)) {
     return reply.code(404).send({ status: 'not_found' });
   }
+  return reply.send(await loadToolAccess(options, serverId, deadline));
+}
+
+export async function loadToolAccess(options: GroupOptions, serverId: string, deadline: number) {
   const subject = grantStream('mcp_server', serverId);
   const expectedSequence = await options.store.head(subject, deadline);
   const projection = await progress(options, deadline);
@@ -125,5 +129,5 @@ export async function readToolAccess(request: FastifyRequest, reply: FastifyRepl
   const response = { serverId, expectedSequence, loadedAt: new Date().toISOString(),
     canManage: true, grants, complete, grantTotal: complete ? grants.length : null,
     projection: { ...projection, iam } };
-  return reply.send(response);
+  return response;
 }
