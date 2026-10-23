@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
-import { connectionCreatedDataSchema, connectionSelectedDataSchema } from '@opencrane/events';
+import { connectionCreatedDataSchema, connectionSelectedDataSchema,
+  mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -903,13 +904,15 @@ async function wrongReadIdentity(field: 'userId' | 'serverId') {
   profiles[0]!.event.data = profile;
   expect(foldConnection(profiles).status).toBe('saved_unverified');
   const serverRows = await history(nats.store, 'mcp-server', 'test');
-  function registration(row: StoredEvent) {
-    return row.event.type === 'mcp.server_registered';
-  }
-  const server = serverRows.slice(serverRows.findLastIndex(registration));
+  const server = structuredClone(serverRows);
   for (const record of server) {
+    const fields = eventData(record.event);
+    if (record.event.type === 'mcp.tools_changed' && fields['catalogue']) {
+      const catalogue = mcpServerDiscoveredDataSchema.parse(fields['catalogue']);
+      fields['catalogue'] = { ...catalogue, serverId: data.serverId };
+    }
     record.event.subject = `mcp-${data.serverId}`;
-    record.event.data = { ...eventData(record.event), serverId: data.serverId };
+    record.event.data = { ...fields, serverId: data.serverId };
   }
   expect(toolPolicyFromRows(server).published).toBe(true);
   const readStream = nats.store.readStream.bind(nats.store);
