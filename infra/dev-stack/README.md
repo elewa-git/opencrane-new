@@ -20,7 +20,7 @@ flowchart LR
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|starts programs, checks website readiness and PDF answers using attached text or a file read| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|owns Helm installs and sets the gateway IP| package["package<br/>local Helm install"]
-  stack -->|checks spending, uploads, provider access, rehearsals, tools and group access loss| apps
+  stack -->|checks spending, uploads, provider access, rehearsals at both widths, tools and group access loss| apps
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|checks computer and hosted tool rules in the cluster| devbox
 ```
@@ -72,6 +72,8 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
   Rehearsals save the previous company limits and restore them when they finish or stop.
   Private records identify the run's calls, charges and money still held.
   The separate ten-step rehearsal checks the Models page inside the organisation page.
+  Each rehearsal uses separate invitation addresses and chat messages for its width and attempt.
+  It saves pictures before reporting a step as passed. Its history pictures show the matching rows.
   It saves failure messages with private values removed, even if a screenshot fails.
   If restoring company limits also fails, it saves both errors and keeps the checker's error first.
 - Put the package gateway Service IP in the computer settings before a chat turn starts.

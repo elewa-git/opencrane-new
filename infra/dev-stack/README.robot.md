@@ -1268,3 +1268,42 @@ substitutes. It checks both failures in `results.json`, the restoration attempt 
 the later steps recorded as NOT RUN. Separate checks cover private values in both
 errors, failed sanitisation and a screenshot failure alongside them.
 Live rehearsal after this correction: NOT RUN.
+
+### Repeated widths and step pictures
+
+Each checker invocation creates a random attempt id. Invitations, personal and shared
+chat prompts, direct and group messages, refusal prompts and limit restoration commands
+include that id and the current width. The chat screens create fresh conversation and
+command ids through their existing controls. The Stop helper accepts the same labelled
+prompt; its existing callers retain their original prompt.
+
+The checker opens a fresh draft before the arithmetic and PDF steps. Action history and
+Stop use that width's PDF conversation. Direct and group chats start from the new-chat
+page. The shared-assistant step starts a new private session, which the limit step then
+uses. The existing Acacia group and shared assistant are read and reused, without
+changing their members or settings. Models is read only. Company limits are shared:
+the refusal still needs the daily cap to equal charged cents, so the cap is not varied
+for uniqueness. The existing controls create a fresh save command, and restoration uses
+the attempt and width. Both original limits must be confirmed restored before continuing.
+The history check retains its existing event matches and twenty-page limit.
+
+Each PASS in `results.json` includes a non-empty `pictures` list. Paths are added only
+after screenshot saving finishes. A missing or failed picture fails the step. History
+pictures scroll the matching limit and group rows into view before saving. Existing
+masking, failure sanitisation and all reply, download, refusal and spending assertions
+remain in place.
+
+`demo-rehearsal-repeat.test.ts` runs both widths twice against one recording fixture.
+The fixture refuses a duplicate invitation address and checks saved files for every PASS.
+It also checks prompts, unique restoration requests and restoration of both limits.
+The first run against the old checker failed at phone step 7 with
+“Invitation email already exists”. A separate browser fixture puts both history rows
+below the first viewport and checks that each row is inside its picture at both widths.
+Missing history entries still fail. Run both changed test files with:
+
+```sh
+nice -n 10 node --experimental-strip-types --test \
+  infra/dev-stack/demo-rehearsal.test.ts infra/dev-stack/demo-rehearsal-repeat.test.ts
+```
+
+These fixtures make no paid calls and start no stack. Live qualification remains NOT RUN.

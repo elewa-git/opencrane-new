@@ -29,9 +29,10 @@ export async function answer(page: Page, prompt: string, facts: RegExp[]) {
   assert.equal(await reply.locator('.prose').innerText(), text, 'Reload keeps the answer');
 }
 
-export async function stop(page: Page) {
+export async function stop(page: Page,
+  prompt = 'Write a long numbered list of 200 European cities and describe each one.') {
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
-  await composer.fill('Write a long numbered list of 200 European cities and describe each one.');
+  await composer.fill(prompt);
   await composer.press('Enter');
   await page.locator('.caret').waitFor();
   const reply = page.getByRole('article', { name: 'Agent reply', exact: true }).last();
