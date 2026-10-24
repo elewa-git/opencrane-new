@@ -41,6 +41,7 @@ configuration changes. Its background jobs keep their own database.
 - Prepares Kubernetes so background workers can start one
   [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
 - Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
+  The stand-in also runs on its own for computer startup checks.
 - Runs browser checks for chat, files, people, groups, shared assistants and spending.
   Checks money in admin Change history and keeps it out of member action history.
   Scrolls waiting approvals into view before saving desktop and phone pictures.

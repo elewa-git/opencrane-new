@@ -110,6 +110,8 @@ another. Those direct calls are test coverage, not approval qualification.
 The free model understands `STAGE_B_READ` and `STAGE_B_WRITE` rehearsal messages.
 It calls only the matching tool offered by Codex and refuses a missing tool. It
 returns to its normal reply after receiving a tool result, without repeating the call.
+The model loads the tools helper only for those rehearsal messages. Ordinary replies
+still run from the single-file model stub used by the wake Pod check.
 The evidence checker still requires original approval and dispatch records.
 
 ```sh
