@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
+import { effectResolvedDataSchema, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { auditReasons, auditResponseSchema, auditDetailSchema, type AuditRow,
   type AuditRecord, type AuditFilter, type AuditDetailFilter } from '@opencrane/protocol';
 import type { Query } from './db.ts';
@@ -69,6 +69,9 @@ function isDispatchEvent(type: string): boolean {
 }
 function auditData(event: EventEnvelope): Record<string, unknown> {
   const dataSchema = z.record(z.string(), z.unknown());
+  if (event.type === 'effect.resolved') {
+    return resolutionData(event);
+  }
   if (isDispatchEvent(event.type)) {
     const definition = getEventDefinition(event.type)!;
     const dispatchSchema = definition.dataSchema;
@@ -80,6 +83,22 @@ function auditData(event: EventEnvelope): Record<string, unknown> {
     return dataSchema.parse(parseResult.data);
   }
   return dataSchema.parse(event.data);
+}
+function resolutionData(event: EventEnvelope): Record<string, unknown> {
+  const parsed = effectResolvedDataSchema.safeParse(event.data);
+  if (!parsed.success) {
+    // Keep private evidence and rejected fields out of projection errors.
+    throw new Error('Invalid resolution audit event');
+  }
+  const data = parsed.data;
+  const receiptId = z.string().regex(/^[\w-]{1,200}$/u);
+  if (event.source !== 'opencrane-server' || event.subject !== `effect-${data.permitId}` ||
+      data.reservationId !== data.permitId || event.principal?.kind !== 'human' ||
+      event.principal.id !== data.resolvedBy || !receiptId.safeParse(data.resolvedBy).success ||
+      !receiptId.safeParse(data.permitId).success) {
+    throw new Error('Invalid resolution audit event');
+  }
+  return data;
 }
 function dispatchStatus(outcome: unknown): AuditRecord['status'] {
   if (outcome === 'outcome_unknown') {
@@ -99,6 +118,7 @@ interface Entry extends Record<string, unknown> {
   conversation_id: string | null; turn_id: string | null; requester_id: string | null; metadata: unknown;
 }
 const verifiedActorFields: Record<string, string> = {
+  'effect.resolved': 'resolvedBy',
   'budget.ceiling_set': 'setBy',
   'mcp.tool_mode_set': 'setBy',
   'member.invited': 'invitedBy',
@@ -169,6 +189,9 @@ function isDestinationRule(event: EventEnvelope) {
 }
 function auditSource(event: EventEnvelope): AuditRecord['source'] {
   if (event.type === 'decision.recorded') return 'decision';
+  if (event.type === 'effect.resolved') {
+    return 'authoritative';
+  }
   if (event.type === 'tool.dispatch_recorded') {
     return 'gateway';
   }
@@ -195,8 +218,14 @@ function metadata(event: EventEnvelope, d: Record<string, unknown>, position: nu
   const reason = typeof d['reason'] === 'string' ? Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ?? 'Recorded reason withheld' : undefined;
   const cents = amount(d['amountCents'] ?? d['settledCents']);
   const digest = commandRef(event);
+  let savedOutcome: AuditRecord['savedOutcome'];
+  if (event.type === 'effect.resolved') {
+    savedOutcome = z.enum(['settled', 'released']).parse(d['outcome']);
+  }
   return { ...invitationMetadata(event, d), ...takeoverMetadata(event, d),
     ...membershipMetadata(event, d),
+    // Keep a saved money choice separate from observations and budget settlement.
+    savedOutcome,
     eventId: event.id, type: event.type, position, recordedAt: event.time,
     actor: actor(event, d), ...(digest ? { commandRef: digest } : {}),
     source: auditSource(event),

@@ -55,6 +55,7 @@ export const auditRecordSchema = z.object({
   role: z.enum(['owner', 'admin', 'member']).optional(),
   recordedAt: z.iso.datetime({ offset: true }).optional(),
   actor: actor.optional(), commandRef: digest.optional(),
+  savedOutcome: z.enum(['settled', 'released']).optional(),
   eventId: id, type: id, position: z.number().int().positive(),
   source: z.enum(['decision', 'gateway', 'computer', 'authoritative']),
   status: z.enum(['allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched', 'recorded']),

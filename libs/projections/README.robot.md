@@ -976,3 +976,25 @@ Run `npm run replay -- audit` after upgrading to fill older audit rows, followed
 by `npm run replay -- audit --verify`. Rebuild restores facts only. The server
 checks current receipt progress separately; replay runs no admission, invitation,
 provisioning or grant reaction.
+
+## Saved resolution history
+
+`effect.resolved` records use `source: authoritative`, `status: recorded`,
+`actor`, `recordedAt`, `position`, the SHA-256 `commandRef` and `amountCents`.
+Only `savedOutcome: settled | released` is new. Zero stays zero. The original
+event identifies the resolver; later observations and equal amounts never replace it.
+Observations still control observed outcomes, and only `budget.settled` supplies
+the row's settled amount. Saving a resolution proves neither external completion
+nor hold release. Settlement progress is not part of this metadata.
+
+The projection checks the strict payload, server source, exact effect subject,
+permit/reservation equality and matching human principal/resolvedBy before saving.
+Permit and resolver ids follow the original receipt's identifier rules. Invalid
+records stop projection with a fixed error containing no payload or evidence.
+Reads retain their existing silo, conversation and paging restrictions.
+
+Run `npm run replay -- audit` after upgrading, then
+`npm run replay -- audit --verify`. This fills older rows with the checked metadata.
+Replay runs no resolution, settlement or release reaction and makes no upstream call.
+The focused server and protocol `audit-resolution.test.ts` suites cover races,
+invalid records, zero, paging, replay and access loss.

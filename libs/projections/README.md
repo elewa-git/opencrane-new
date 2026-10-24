@@ -21,6 +21,9 @@ They do not copy sign-in identities or treat them as verified people.
 It keeps appointment requests separate from confirmations and step-downs.
 Removal records include a safe recorded reason when one exists, without private details.
 
+Saved spending resolutions keep the original person, date and chosen amount,
+plus a reference to the saved change. They do not prove an external action finished or that held money was released.
+
 ## Where it fits
 
 OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
@@ -37,7 +40,7 @@ flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
-  projections -->|saves admission, removal, role, ownership and control history; keeps private audits outside feeds; saves routines and receipts| pg
+  projections -->|saves admission, removal, role, ownership, control and spending history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
