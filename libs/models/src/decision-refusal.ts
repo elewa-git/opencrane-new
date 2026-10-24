@@ -3,7 +3,7 @@ import { ZodError } from 'zod';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
 
 const refusalReasons = new Map([
-  ['Budget writer lost its fence', 'budget_writer_replaced'],
+  ['Budget writer lost its fence', 'budget_write_refused'],
   ['Budget writer unavailable', 'budget_writer_unavailable'],
   ['Budget append contention', 'budget_append_contention'],
   ['MCP dispatch expired', 'dispatch_expired'],
