@@ -1714,6 +1714,27 @@ async function closesWithSlowConnection() {
 }
 it('closes an expired idle stage after a slow database connection', closesWithSlowConnection);
 
+async function pagedScanWithUnavailableReads() {
+  const readStream = events.store.readStream.bind(events.store);
+  let reads = 0;
+  async function* interrupted(...parameters: Parameters<typeof readStream>) {
+    reads += 1;
+    if (reads === 2 || reads === 3) {
+      throw new Error('Synthetic event history unavailable');
+    }
+    yield* readStream(...parameters);
+  }
+  const reading = vi.spyOn(events.store, 'readStream');
+  reading.mockImplementation(interrupted);
+  try {
+    await pagedScan(false);
+  } finally {
+    reading.mockRestore();
+  }
+}
+it('loads saved history before checking paging through every candidate',
+  pagedScanWithUnavailableReads);
+
 async function slowAndUnknownPages() {
   const test = await candidateFixture();
   for (let index = 1; index < 26; index += 1) {
