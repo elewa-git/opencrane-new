@@ -3189,8 +3189,8 @@ and keep its 100 ms acquisition deadline. Their lock holder waits for its real l
 Other cleanup tests wait for their real lock so a slow
 connection cannot replace the condition they intend to check with an early refusal.
 The 53-candidate paging test awaits every stage, checks all 53 copies exist before
-scanning, and compares the full
-list of returned names with the saved names. Each name must also have exactly one deletion
+scanning, and compares the full list of returned names with the saved names.
+Each name must also have exactly one deletion
 with the original UID and resourceVersion. Both uninterrupted and restarted scans keep
 these checks. The restart waits for its remaining page to finish before checking deletion.
 A regression advances the monotonic clock by 101 ms on each of the first two real pool
@@ -3201,6 +3201,15 @@ real locks without changing production's 100 ms limit. No sleep or retry is adde
 A second regression advances the same clock during one real pool acquisition before
 idle cleanup. It reproduces an early retained result rather than the expected deletion,
 then passes with the shared waiting fixture.
+The paging fixture reads its one saved revocation from NATS before starting the scan.
+All 53 generations share that unchanged history. Its read fixture checks the requested
+profile and starting position, then returns fresh copies of the saved rows. It restores
+live reads before checking that the event store still holds exactly one revocation.
+This keeps per-candidate live read deadlines out of a test about paging. Other cleanup
+tests keep their real NATS reads, including the history-failure and late-activation cases.
+A regression fails the second and third live reads. Without fixed history, the first
+page again examines 25 candidates but deletes 23. The paging fixture uses the confirmed
+history instead, without retrying a failed candidate or weakening its exactly-once checks.
 The mixed-page test uses two real NATS stores and retains the other silo's current copy
 without adding anything to the worker's store. Timer tests check the default at 899,999
 and 900,000 milliseconds and retry an unknown page after an intervening success.

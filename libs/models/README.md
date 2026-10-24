@@ -549,6 +549,7 @@ Scan tests wait for the scan to report each completed page.
 Cleanup tests wait for each database lock, except when checking lock contention.
 The paging test checks that all 53 saved credentials are listed and deleted exactly
 once, including after a restart.
+It loads the saved revocation before scanning. Separate cleanup tests keep using live history.
 
 With a disposable test database configured through `PG_TEST_URL`, run the focused
 accounting tests with:

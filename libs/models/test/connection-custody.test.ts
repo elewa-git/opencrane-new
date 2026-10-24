@@ -1618,6 +1618,17 @@ async function pagedScan(restart: boolean) {
     expect(saved.status).toBe('staged');
   }
   await test.invalidate();
+  const savedRows = await history(events.store, test.subject, 'test');
+  expect(savedRows).toHaveLength(1);
+  expect(savedRows[0]!.event.type).toBe('connection.revoked');
+  async function* savedHistory(subject: string, fromSequence = 1) {
+    expect(subject).toBe(test.subject);
+    for (const row of savedRows) {
+      if (row.sequence >= fromSequence) {
+        yield structuredClone(row);
+      }
+    }
+  }
   const names = [...test.store.secrets.keys()];
   expect(names).toHaveLength(53);
   const entered = Promise.withResolvers<void>();
@@ -1629,6 +1640,9 @@ async function pagedScan(restart: boolean) {
     }
   }
   test.store.onList(pauseSecondPage);
+  // Keep history fixed so this test checks paging rather than live read deadlines.
+  const reading = vi.spyOn(events.store, 'readStream');
+  reading.mockImplementation(savedHistory);
   const scan = runningScan(test);
   try {
     if (restart) {
@@ -1654,7 +1668,11 @@ async function pagedScan(restart: boolean) {
     }
   } finally {
     release.resolve();
-    await scan.close();
+    try {
+      await scan.close();
+    } finally {
+      reading.mockRestore();
+    }
   }
   const listedNames = [...test.store.listedNames];
   listedNames.sort();
@@ -1728,6 +1746,7 @@ async function pagedScanWithUnavailableReads() {
   reading.mockImplementation(interrupted);
   try {
     await pagedScan(false);
+    expect(reads).toBe(1);
   } finally {
     reading.mockRestore();
   }
