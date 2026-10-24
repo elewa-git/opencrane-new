@@ -4,7 +4,8 @@ import { grantRevokedDataSchema, mcpServerDiscoveredDataSchema,
 import type { EventStore } from '@opencrane/event-store';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
 import type { ApprovalCard } from '@opencrane/protocol';
-import type { z } from 'zod';
+import { z } from 'zod';
+import { readComputerControl } from '@opencrane/auth';
 import { history } from './event-history.ts';
 
 type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
@@ -71,4 +72,38 @@ export function policyReason(type: string, data: unknown, request: Request): Rea
   ];
   if (changesRules.includes(type)) return 'policy_changed';
   return undefined;
+}
+
+const computerIdentity = z.object({ assistantId: z.string(), computerId: z.string(),
+  generation: z.int().positive().optional() });
+
+export async function approvalTakenOver(store: EventStore, silo: string, request: Request,
+  requestPosition: number, deadline: number) {
+  const control = await readComputerControl(store, silo, request.assistantId, deadline);
+  if (!control || control.phase === 'unverified' || control.assistantId !== request.assistantId
+    || !control.affectedTurnIds.includes(request.turnId)) return false;
+  const identity = await approvalComputerIdentity(store, silo, request, requestPosition, deadline);
+  return identity?.assistantId === request.assistantId
+    && identity.computerId === control.computerId && identity.generation === control.generation;
+}
+
+async function approvalComputerIdentity(store: EventStore, silo: string, request: Request,
+  requestPosition: number, deadline: number) {
+  let identity: z.infer<typeof computerIdentity> | undefined;
+  // Recover the generation at the request, not a replacement computer's current generation.
+  const subject = `computer-${request.assistantId}`;
+  for await (const row of store.readStream(subject, 1, deadline)) {
+    if (row.event.silo !== silo) throw new Error('Wrong silo');
+    if (row.sequence >= requestPosition) break;
+    if (!['computer.claimed', 'computer.ready', 'computer.resumed'].includes(row.event.type)) {
+      continue;
+    }
+    const next = computerIdentity.parse(row.event.data);
+    if (next.generation === undefined && identity?.computerId === next.computerId
+      && identity.assistantId === next.assistantId) {
+      next.generation = identity.generation;
+    }
+    identity = next;
+  }
+  return identity;
 }

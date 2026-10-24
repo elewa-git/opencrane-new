@@ -1,10 +1,14 @@
+import { parseEventByType } from '@opencrane/events';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { envelope } from '@opencrane/models';
+import { envelope, history, readApproval, decideApproval } from '@opencrane/models';
+import { createEventStore } from '@opencrane/event-store';
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 import { bridgeApprovals } from '../src/chat/bridge-approvals.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -20,7 +24,7 @@ const request = {
 const waiting = { type: 'approval_waiting', approvalId, conversationId: 'chat', turnId: 'turn' };
 
 async function setup() {
-  nats = await natsFixture();
+  nats = await shortDuplicateWindowFixture();
 }
 async function cleanup() {
   vi.restoreAllMocks();
@@ -406,3 +410,182 @@ async function settlesChangedPolicy() {
   expect(rows.at(-1)?.event.type).toBe('approval.cancelled');
 }
 it('cancels a held approval promptly after its tool policy changes', settlesChangedPolicy);
+
+const takeover = { assistantId: 'assistant', computerId: 'computer', generation: 1,
+  podUid: 'pod', conversationId: 'chat', requesterId: 'alice', requesterEventId: 'turn',
+  takeoverId: 'takeover', leaseId: 'takeover', reason: 'requester_requested',
+  affectedTurnIds: ['turn', 'second'] };
+async function prepareTakeoverApproval() {
+  await append('computer-assistant', 'computer.claimed', {
+    assistantId: 'assistant', computerId: 'computer', generation: 1, tokenId: 'token:test',
+  });
+  await seedRequest({ policySequence: await seedLiveTurn() });
+}
+async function saveTakeover(changes = {}) {
+  await append('computer-assistant', 'takeover.requested', { ...takeover, ...changes });
+}
+async function readCurrent() {
+  return readApproval(nats.store, 'test', approvalId);
+}
+async function cancelsTwoTurns() {
+  await prepareTakeoverApproval();
+  const secondId = 'b'.repeat(64);
+  const original = await readCurrent();
+  await append('conversation-second', 'agent.turn_started', {
+    conversationId: 'second', turnId: 'second', assistantId: 'assistant',
+  });
+  await append(`approval-${secondId}`, 'tool.approval_requested', {
+    ...original.request, approvalId: secondId, conversationId: 'second', turnId: 'second',
+  });
+  await append(`approval-${secondId}`, 'approval.decided', {
+    approvalId: secondId, decidedBy: 'alice', decision: 'approved',
+  });
+  await saveTakeover();
+  for (const id of [approvalId, secondId]) {
+    const current = await readApproval(nats.store, 'test', id);
+    expect(current).toMatchObject({ state: 'cancelled', cancelReason: 'takeover' });
+    const rows = await history(nats.store, `approval-${id}`, 'test');
+    expect(current.endedAt).toBe(rows.at(-1)?.event.time);
+    expect(await readApproval(nats.store, 'test', id)).toEqual(current);
+    expect(await nats.store.head(`approval-${id}`)).toBe(current.sequence);
+  }
+}
+it('saves one dated cancellation for requested and approved waits on two affected turns',
+  cancelsTwoTurns);
+
+async function keepsUnrelated(changes: object) {
+  await prepareTakeoverApproval();
+  if ('generation' in changes) {
+    await append('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'new-pod',
+    });
+  }
+  await saveTakeover(changes);
+  const current = await readCurrent();
+  expect(current.state).toBe('requested');
+  async function fresh() { await Promise.resolve(); }
+  const decision = await decideApproval(nats.store, 'test', approvalId, 'alice',
+    'approved', true, fresh, current);
+  expect(decision.status).toBe('appended');
+  expect((await readCurrent()).state).toBe('approved');
+}
+it.each([{ generation: 2 }, { affectedTurnIds: ['other'] },
+  { assistantId: 'other' }, { computerId: 'other' }])(
+  'keeps an approval usable when takeover does not match %j', keepsUnrelated);
+
+async function keepsTerminal(type: string, data: object) {
+  await prepareTakeoverApproval();
+  await append(`approval-${approvalId}`, type, { approvalId, ...data });
+  const before = await readCurrent();
+  await saveTakeover();
+  expect(await readCurrent()).toEqual(before);
+}
+it.each([
+  ['approval.used', { permitId: 'permit' }],
+  ['approval.decided', { decidedBy: 'alice', decision: 'rejected' }],
+  ['approval.expired', {}], ['approval.cancelled', { cancelReason: 'turn_stopped' }],
+])('retains the saved terminal receipt for %s', keepsTerminal);
+
+async function keepsUsedEvidence() {
+  const permitId = '00000000-0000-4000-8000-000000000001';
+  await prepareTakeoverApproval();
+  await append(`approval-${approvalId}`, 'approval.used', { approvalId, permitId });
+  const dispatch = { requestId: permitId, approvalId, conversationId: 'chat', turnId: 'turn',
+    serverId: 'fixture', toolName: 'write', outcome: 'not_dispatched',
+    evidence: 'connection_refused', callId: 'call', logicalRequestId: approvalId,
+    startedAt: new Date().toISOString(), durationMs: 0 };
+  await append(`decision-${permitId}`, 'tool.dispatch_recorded', dispatch);
+  const before = await readCurrent();
+  expect(before.canRetry).toBe(true);
+  const evidence = await history(nats.store, `decision-${permitId}`, 'test');
+  await saveTakeover();
+  expect(await readCurrent()).toMatchObject({ state: 'outcome_unknown',
+    usedAt: before.usedAt, uses: before.uses, canRetry: false });
+  expect(await history(nats.store, `decision-${permitId}`, 'test')).toEqual(evidence);
+}
+it('keeps used approval evidence and disables an unsent retry during takeover', keepsUsedEvidence);
+
+async function noticesControlOnly() {
+  await prepareTakeoverApproval();
+  const first = watcher();
+  first.approvals.receive(waiting);
+  await poll(first.approvals);
+  expect(first.send).not.toHaveBeenCalled();
+  await saveTakeover();
+  await poll(first.approvals);
+  await poll(first.approvals);
+  const settlement = JSON.stringify({ type: 'approval_settled', approvalId, state: 'cancelled' });
+  expect(first.send).toHaveBeenCalledExactlyOnceWith(settlement);
+  const second = watcher();
+  second.approvals.receive(waiting);
+  await poll(second.approvals);
+  expect(second.send).toHaveBeenCalledExactlyOnceWith(settlement);
+}
+it('notices only computer changes and cancels the original wait after reconnect',
+  noticesControlOnly);
+
+async function recoversCancellation(lostReply: boolean) {
+  await prepareTakeoverApproval();
+  await saveTakeover();
+  const appendEvent = nats.store.append.bind(nats.store);
+  async function failCancellation(command: Parameters<typeof appendEvent>[0]) {
+    if (!isCancellation(command.event)) return appendEvent(command);
+    if (lostReply) await appendEvent(command);
+    return { status: 'unavailable' as const, cause: new Error('Append unavailable') };
+  }
+  const fault = vi.spyOn(nats.store, 'append').mockImplementation(failCancellation);
+  const first = watcher();
+  first.approvals.receive(waiting);
+  await poll(first.approvals);
+  expect(first.send).not.toHaveBeenCalled();
+  expect(first.approvals.size).toBe(1);
+  fault.mockRestore();
+  await waitForDuplicateWindow(nats);
+  const connection = await nats.client('command');
+  const restarted = await createEventStore(connection);
+  const second = readApproval(restarted, 'test', approvalId);
+  const third = readCurrent();
+  const results = await Promise.all([second, third]);
+  expect(results[0]).toEqual(results[1]);
+  expect(results[0]).toMatchObject({ state: 'cancelled', cancelReason: 'takeover' });
+  const rows = await history(nats.store, `approval-${approvalId}`, 'test');
+  expect(rows).toHaveLength(2);
+  expect(results[0]?.endedAt).toBe(rows[1]?.event.time);
+}
+it.each([false, true])('recovers one cancellation after append failure (lost reply: %s)',
+  recoversCancellation);
+
+async function racesApproval() {
+  await prepareTakeoverApproval();
+  const current = await readCurrent();
+  await saveTakeover();
+  let cancelling = false;
+  const release = Promise.withResolvers<void>();
+  const appendEvent = nats.store.append.bind(nats.store);
+  async function holdCancellation(command: Parameters<typeof appendEvent>[0]) {
+    if (isCancellation(command.event)) {
+      cancelling = true;
+      await release.promise;
+    }
+    return appendEvent(command);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(holdCancellation);
+  const reading = readCurrent();
+  try {
+    function cancellationStarted() { return cancelling; }
+    await expect.poll(cancellationStarted).toBe(true);
+    async function fresh() { await Promise.resolve(); }
+    await decideApproval(nats.store, 'test', approvalId, 'alice', 'approved', true,
+      fresh, current);
+  } finally {
+    release.resolve();
+  }
+  expect(await reading).toMatchObject({ state: 'cancelled', cancelReason: 'takeover' });
+  expect((await readCurrent()).state).toBe('cancelled');
+}
+it('cannot restore permission when Approve races a cancellation append', racesApproval);
+
+function isCancellation(value: unknown) {
+  const parsed = parseEventByType(value);
+  return parsed.success && parsed.event.type === 'approval.cancelled';
+}

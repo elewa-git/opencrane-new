@@ -1258,3 +1258,9 @@ It clears the picture when permission expires or the session closes.
 - [The shared words used in these guides](../../GLOSSARY.md).
 - [Screenshot screens and browser checks](../../docs/process/p3-18-screens/README.md).
 - [Ownership screen binding and receipt](../../docs/process/p4-2-screens/README.md).
+
+## Takeover cancellation wording
+
+Approval cards map `cancelReason: takeover` to “Cancelled: desktop takeover” with
+the existing dash glyph and saved end time. The approval component tests include
+this cause. This adds no desktop control screen or action.

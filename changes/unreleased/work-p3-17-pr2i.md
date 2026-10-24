@@ -1,0 +1,3 @@
+Save cancellation of unused tool approvals affected by a matching desktop takeover. Approval polling notices computer changes, keeps saved outcomes after retries and sends the local work gate before replying. Desktop takeover remains disabled.
+
+Check approval ownership and current write access before saving cancellation from an HTTP decision. Refused foreign-chat requests and members removed during loading leave approvals unchanged.

@@ -160,6 +160,11 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
     if (!sending) sending = sendUntilChecked(sendOnce).finally(finishedSending);
     return sending;
   }
+  async function beforeApproval() {
+    await send();
+    const control = await readComputerControl(options.store, options.silo, computer.assistantId);
+    if (control && !sent) throw new Error('Bridge gate unavailable');
+  }
   function settled() {
     return Promise.all([sending, pausing]);
   }
@@ -177,7 +182,7 @@ export function bridgeControl(options: Options, computer: Computer, tokens: Toke
     }
     return true;
   }
-  return { send, receive, settled, get receipt() { return receipt; } };
+  return { send, receive, settled, beforeApproval, get receipt() { return receipt; } };
 }
 
 async function advance(options: Options, computer: Computer,

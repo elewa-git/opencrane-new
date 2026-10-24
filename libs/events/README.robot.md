@@ -13,6 +13,13 @@ the same writer.
 The package exports `mcpToolModeSetDataSchema` so receipt recovery validates the
 saved choice with the same schema as the event registry. No event fields change.
 
+## Takeover approval cancellation
+
+The fixed `takeover` cancellation cause is shared by event and approval reply
+schemas. No new data field or event type is introduced. The saved cancellation time
+supplies `endedAt`. Used approvals retain their existing evidence. The exact behaviour
+is described in the [approval API](../../docs/api/approvals.md).
+
 ## Dated MCP catalogue evidence
 
 Tool lists carry check and expiry dates; undated lists cannot authorise calls.

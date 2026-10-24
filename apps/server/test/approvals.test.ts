@@ -903,12 +903,13 @@ async function refusesCallsAndApprovalsDuringControl() {
     await f.append('computer-assistant', 'takeover.requested', data);
     expect((await f.decide()).statusCode).toBe(409);
     expect((await f.call()).status).toBe(403);
-    expect((await f.decide('rejected')).statusCode).toBe(200);
+    expect((await f.decide('rejected')).statusCode).toBe(409);
+    expect((await f.read()).cards[0]?.state).toBe('cancelled');
   } finally {
     await f.close();
   }
 }
-it('refuses a late approval during control but allows explicit denial',
+it('keeps the saved cancellation final after a late approval or denial',
   refusesCallsAndApprovalsDuringControl);
 
 async function refusesApprovedOldTokenDuringControl() {
@@ -934,7 +935,7 @@ async function refusesApprovedOldTokenDuringControl() {
     await expect(setup.issue()).rejects.toThrow('Computer control is pending');
     expect((await setup.call(undefined, oldHeaders)).status).toBe(403);
     expect(setup.received()).toBe(0);
-    expect((await setup.read()).cards[0]?.state).toBe('approved');
+    expect((await setup.read()).cards[0]?.state).toBe('cancelled');
   } finally {
     await setup.close();
   }
@@ -991,7 +992,7 @@ async function refusesIntentDuringApprovalChecks() {
     try {
       expect((await setup.decide()).statusCode).toBe(503);
       expect(intended).toBe(true);
-      expect((await setup.read()).cards[0]?.state).toBe('requested');
+      expect((await setup.read()).cards[0]?.state).toBe('cancelled');
       expect(setup.received()).toBe(0);
       const rows = await history(setup.nats.store, 'approval-' +
         (await setup.read()).cards[0]!.approvalId, 'test');
@@ -1049,6 +1050,122 @@ it('returns the same refusal for missing and inaccessible approvals to one autho
       await setup.close();
     }
   });
+
+async function saveTakeover(setup: Awaited<ReturnType<typeof approvalFixture>>) {
+  const control = { assistantId: 'assistant', computerId: 'computer', generation: 1,
+    podUid: 'fixture', conversationId: 'conversation', requesterId: 'alice',
+    requesterEventId: 'turn', takeoverId: 'control', leaseId: 'control',
+    reason: 'requester_requested', affectedTurnIds: ['turn'] };
+  await setup.append('computer-assistant', 'takeover.requested', control);
+}
+
+async function savesAuthorisedHttpCancellation() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const session = setup.headers();
+    const { cards, csrf } = await setup.read(session);
+    const approvalId = cards[0]!.approvalId;
+    const subject = `approval-${approvalId}`;
+    await saveTakeover(setup);
+    const response = await setup.app.inject({ method: 'POST',
+      url: '/api/conversations/conversation/approvals',
+      headers: { ...session, 'x-csrf-token': csrf },
+      payload: { approvalId, decision: 'rejected' } });
+    expect(response.statusCode, response.body).toBe(409);
+    const rows = await history(setup.nats.store, subject, 'test');
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.event.type).toBe('approval.cancelled');
+    expect(rows[1]!.event.data).toEqual({ approvalId, cancelReason: 'takeover' });
+    await setup.restartReader();
+    const restored = await setup.read(session);
+    expect(restored.cards[0]).toMatchObject({ state: 'cancelled', cancelReason: 'takeover',
+      endedAt: rows[1]!.event.time });
+    expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  } finally {
+    await setup.close();
+  }
+}
+it('saves one takeover cancellation through an authorised HTTP decision',
+  savesAuthorisedHttpCancellation);
+
+async function refusesForeignTakeoverCancellation() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const session = setup.headers();
+    const { cards, csrf } = await setup.read(session);
+    const current = await readApproval(setup.nats.store, 'test', cards[0]!.approvalId);
+    const approvalId = 'c'.repeat(64);
+    const subject = `approval-${approvalId}`;
+    const request = { ...current.request, approvalId, conversationId: 'other-conversation',
+      requesterId: 'bob' };
+    await setup.append(subject, 'tool.approval_requested', request);
+    await saveTakeover(setup);
+    const before = await history(setup.nats.store, subject, 'test');
+    const response = await setup.app.inject({ method: 'POST',
+      url: '/api/conversations/conversation/approvals',
+      headers: { ...session, 'x-csrf-token': csrf },
+      payload: { approvalId, decision: 'rejected' } });
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(await history(setup.nats.store, subject, 'test')).toEqual(before);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses a foreign chat approval without saving its takeover cancellation',
+  refusesForeignTakeoverCancellation);
+
+async function refusesTakeoverCancellationAfterRemoval(removal: 'member' | 'participant') {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const session = setup.headers();
+    const { cards, csrf } = await setup.read(session);
+    const approvalId = cards[0]!.approvalId;
+    const subject = `approval-${approvalId}`;
+    await saveTakeover(setup);
+    const before = await history(setup.nats.store, subject, 'test');
+    const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+    let removed = false;
+    async function* removeDuringRead(...args: Parameters<typeof readStream>) {
+      for await (const row of readStream(...args)) {
+        if (args[0] === subject && !removed) {
+          removed = true;
+          if (removal === 'member') {
+            await setup.append('member-alice', 'member.removed', {
+              memberId: 'alice', removedBy: 'owner',
+            });
+          } else {
+            await setup.append('participation-conversation', 'participant.removed', {
+              conversationId: 'conversation', participantId: 'alice', removedBy: 'owner',
+            });
+          }
+        }
+        yield row;
+      }
+    }
+    const reader = vi.spyOn(setup.nats.store, 'readStream');
+    reader.mockImplementation(removeDuringRead);
+    try {
+      const response = await setup.app.inject({ method: 'POST',
+        url: '/api/conversations/conversation/approvals',
+        headers: { ...session, 'x-csrf-token': csrf },
+        payload: { approvalId, decision: 'rejected' } });
+      expect(removed).toBe(true);
+      expect(response.statusCode, response.body).toBe(403);
+    } finally {
+      reader.mockRestore();
+    }
+    expect(await history(setup.nats.store, subject, 'test')).toEqual(before);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(['member', 'participant'] as const)(
+  'saves no takeover cancellation after %s removal during approval history loading',
+  refusesTakeoverCancellationAfterRemoval);
 
 const datedApprovalEnds = [
   ['approval.decided', { decision: 'approved', decidedBy: 'alice' }, 'approved',

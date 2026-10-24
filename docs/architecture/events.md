@@ -367,7 +367,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `tool.approval_requested` | decision service (mode Ask) | approvals (optional dispatchBinding hash binds the reviewed backend and instance generation) | notify the requester; approval card |
 | `approval.decided` | requester | approvals | deliver the decision to the computer (wake it) |
 | `approval.expired` | timer | approvals | tell the computer |
-| `approval.cancelled` | decision service / approval reader | approvals | close the card when its logical turn or binding changes; optional typed `cancelReason` records a proved cause |
+| `approval.cancelled` | decision service / approval reader | approvals | close the card when its logical turn or binding changes, or a matching saved takeover cancels unused consent; optional typed `cancelReason` records a proved cause |
 | `approval.used` | decision service (single use) | approvals | — |
 | `effect.observed` | gateway log ingest | audit, usage | settle the actual cost; with no matching permit or a reservation overrun → `security.alert_raised`; a rooted overrun also saves `budget.root_stopped` |
 | `effect.uncertain` | settle timeout or `computer.lost` | audit, effects | notify for manual resolution |

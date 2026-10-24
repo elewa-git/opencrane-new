@@ -18,10 +18,18 @@ Expiry keeps its original `expiresAt` as well as the time expiry was recorded.
 `cancelReason` is an optional fixed code copied from `approval.cancelled`.
 Old cancellations have no reason. New cancellations distinguish stopped or ended
 turns, a new message or turn, conversation closure, unpublication, changed connection,
-policy, schema or profile, and a revoked direct requester or assistant tool grant.
+policy, schema or profile, a revoked direct requester or assistant tool grant, and takeover.
 A missing turn or elapsed catalogue check without a saved cause has no reason.
 Removing a grant and later restoring it does not revive the old approval.
 These reasons contain no review values, arguments, tool results or credentials.
+
+`takeover` means a verified saved control request covers this approval's assistant,
+computer generation and exact turn. Reading or polling cancels requested and approved,
+unused consent with one conditional append. Generation comes from computer identity
+records preceding the approval request. The cancellation's saved time supplies `endedAt`.
+A lost reply or restart returns that same result. Failed persistence sends no settlement.
+Used approvals keep their outcome and dispatch evidence; takeover disables their retry.
+Saved denial, expiry and cancellation remain final. No scheduler scans offline waits.
 
 `POST` to the same route accepts `{ approvalId, decision }`, with decisions
 `approved`, `rejected` and `retry`. Only the requester can act. Origin, CSRF and

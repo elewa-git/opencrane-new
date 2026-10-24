@@ -13,6 +13,7 @@ const waitingSchema = z.object({
 }).strict();
 type Waiting = z.infer<typeof waitingSchema> & {
   approvalHead?: number;
+  computerHead?: number;
   conversationHead?: number;
   participationHead?: number;
   policyHead?: number;
@@ -31,7 +32,8 @@ function matchesRequest(request: z.infer<typeof toolApprovalRequestedDataSchema>
 }
 
 export function bridgeApprovals(store: EventStore, silo: string, assistantId: string,
-  socket: Pick<WebSocket, 'readyState' | 'send'>, sentStops = new Map<string, number>()) {
+  socket: Pick<WebSocket, 'readyState' | 'send'>, sentStops = new Map<string, number>(),
+  beforeSettlement?: () => Promise<void>) {
   const waiting = new Map<string, Waiting>();
 
   function receive(value: unknown) {
@@ -58,6 +60,7 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     const deadline = performance.now() + 10_000;
     const subject = `approval-${entry.approvalId}`;
     const approvalHead = await store.head(subject, deadline);
+    const computerHead = await store.head(`computer-${assistantId}`, deadline);
     const conversationHead = await store.head(`conversation-${entry.conversationId}`, deadline);
     const participationHead = await store.head(`participation-${entry.conversationId}`, deadline);
     let policyHead: number | undefined;
@@ -66,6 +69,7 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     }
     const expired = entry.expiresAt !== undefined && Date.now() >= entry.expiresAt;
     if (entry.approvalHead === approvalHead && entry.conversationHead === conversationHead
+      && entry.computerHead === computerHead
       && entry.participationHead === participationHead
       && entry.policyHead === policyHead && !expired) return;
     const rows = await history(store, subject, silo, deadline);
@@ -85,17 +89,26 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     const result = await readApproval(store, silo, entry.approvalId, { deadline });
     if (socket.readyState !== WebSocket.OPEN) return;
     if (result.state !== 'requested') {
-      await sendSavedStop(entry, deadline);
-      sendSettlement(entry.approvalId, result.state);
-      waiting.delete(entry.approvalId);
+      await sendCheckedSettlement(entry, result.state, computerHead, deadline);
       return;
     }
     // Keep the positions from before the read, so a concurrent change gets another look.
     entry.approvalHead = approvalHead;
+    entry.computerHead = computerHead;
     entry.conversationHead = conversationHead;
     entry.participationHead = participationHead;
     entry.policyHead = checkedPolicyHead;
     entry.expiresAt = Date.parse(request.expiresAt);
+  }
+
+  async function sendCheckedSettlement(entry: Waiting, state: string,
+    computerHead: number, deadline: number) {
+    await sendSavedStop(entry, deadline);
+    await beforeSettlement?.();
+    // Retry if control changed during the read or gate delivery, before sending any wake.
+    if (await store.head(`computer-${assistantId}`, deadline) !== computerHead) return;
+    sendSettlement(entry.approvalId, state);
+    waiting.delete(entry.approvalId);
   }
 
   async function sendSavedStop(entry: Waiting, deadline: number) {

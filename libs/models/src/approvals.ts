@@ -6,7 +6,8 @@ import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-st
 import { readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
-import { approvalGrantRevoked, approvalPolicyChange } from './approval-cancellation.ts';
+import { approvalGrantRevoked, approvalPolicyChange, approvalTakenOver }
+  from './approval-cancellation.ts';
 import { approvalRecord } from './approval-record.ts';
 import type { JsonValue } from '@opencrane/events/lossless-json';
 import type { mcpPolicy } from './mcp.ts';
@@ -22,6 +23,7 @@ type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assi
 type FreshAuthority = (() => Promise<void>) & { deadline?: number };
 interface ApprovalReadOptions {
   requesterOnly?: boolean;
+  deferInvalidation?: boolean;
   fromSequence?: number;
   approvalRows?: StoredEvent[];
   now?: Date;
@@ -119,7 +121,8 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
 export async function readApproval(store: EventStore, silo: string, approvalId: string,
   options: ApprovalReadOptions = {}):
   Promise<{ request: Request; state: ApprovalCard['state']; sequence: number;
-    requestPosition: number; conversationPosition: number; canRetry: boolean } &
+    requestPosition: number; conversationPosition: number; canRetry: boolean;
+    invalidation?: EventEnvelope } &
     ReturnType<typeof approvalRecord>> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
@@ -129,18 +132,28 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   const { state, permitId } = record;
   const sequence = rows.at(-1)!.sequence;
   let conversationPosition = 0;
-  const canRetry = await verifiedRetry(store, silo, approvalId, permitId, deadline, state);
+  let canRetry = await verifiedRetry(store, silo, approvalId, permitId, deadline, state);
   const needsCurrentChecks = canRetry || ['requested', 'approved'].includes(state);
   if (needsCurrentChecks) {
     const checked = await invalidated(store, silo, request, rows[0]!.sequence,
       deadline, options.conversationRows);
     conversationPosition = checked.conversationPosition;
-    const terminal = approvalTerminalState(checked.closed, request.expiresAt, now);
+    let terminal = approvalTerminalState(checked.closed, request.expiresAt, now);
+    if (checked.cancelReason === 'takeover' && permitId) {
+      // Retain dispatch evidence even when takeover prevents an explicitly requested retry.
+      canRetry = false;
+      terminal = undefined;
+    }
     if (terminal) {
       const data = { approvalId };
       const cancellation = { ...data, cancelReason: checked.cancelReason };
       const payload = terminal === 'cancelled' ? cancellation : data;
       const event = envelope(silo, `approval-${approvalId}`, `approval.${terminal}`, payload);
+      if (options.deferInvalidation) {
+        // Let the HTTP command check ownership and current write access before saving.
+        return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence,
+          conversationPosition, canRetry, invalidation: event };
+      }
       const result = await store.append({ event, expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
       const readOptions = { now, deadline, conversationRows: options.conversationRows };
@@ -194,6 +207,9 @@ export function closesDecisionTurn(event: EventEnvelope, turnId: string) {
 async function invalidated(store: EventStore, silo: string, request: Request,
   requestPosition: number, deadline: number,
   conversationRows?: StoredEvent[]) {
+  if (await approvalTakenOver(store, silo, request, requestPosition, deadline)) {
+    return { closed: true, conversationPosition: 0, cancelReason: 'takeover' as const };
+  }
   const rows = conversationRows ?? await history(
     store, `conversation-${request.conversationId}`, silo, deadline);
   function startsBoundTurn(row: StoredEvent) {
@@ -258,6 +274,16 @@ function approvalActionRefusal(current: Awaited<ReturnType<typeof readApproval>>
   return undefined;
 }
 
+async function saveApprovalInvalidation(store: EventStore, event: EventEnvelope,
+  expectedSequence: number, fresh: FreshAuthority) {
+  await fresh();
+  const command: AppendCommand = { event, expectedSequence };
+  if (fresh.deadline !== undefined) command.deadline = fresh.deadline;
+  const result = await store.append(command);
+  if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
+  return { status: 'conflict' } as const;
+}
+
 // Reuse checked command facts and read only later conversation changes during the short check.
 export async function decideApproval(store: EventStore, silo: string, approvalId: string,
   memberId: string, decision: 'approved' | 'rejected' | 'retry', recentAuth: boolean,
@@ -265,6 +291,9 @@ export async function decideApproval(store: EventStore, silo: string, approvalId
   const beganAt = performance.now();
   if (current.request.approvalId !== approvalId || current.request.requesterId !== memberId) {
     throw new Error('Requester only');
+  }
+  if (current.invalidation) {
+    return saveApprovalInvalidation(store, current.invalidation, current.sequence, fresh);
   }
   const retry = decision === 'retry';
   const refusal = approvalActionRefusal(current, decision, recentAuth);

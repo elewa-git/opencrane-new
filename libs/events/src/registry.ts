@@ -358,7 +358,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     data.approvalExpiredDataSchema,
     { approvalId: 'appr_1' },
   ),
-  event('approval.cancelled', 'approval', 'The logical turn or reviewed binding closed.',
+  event('approval.cancelled', 'approval', 'The logical turn or reviewed binding closed, or takeover cancelled unused consent.',
     approvalCancelledDataSchema, { approvalId: 'appr_1', cancelReason: 'turn_ended' }),
   event(
     'approval.used',

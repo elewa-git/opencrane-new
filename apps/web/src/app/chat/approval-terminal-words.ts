@@ -26,6 +26,7 @@ const cancellationWords: Record<CancelReason, ReasonWords> = {
   grant_revoked: { words: 'No longer valid: a tool grant was revoked', glyph: 'closed' },
   schema_changed: { words: 'No longer valid: tool schema changed', glyph: 'failed' },
   profile_changed: { words: 'No longer valid: profile changed', glyph: 'failed' },
+  takeover: { words: 'Cancelled: desktop takeover', glyph: 'dash' },
 };
 
 function useCount(card: ApprovalCard): number {

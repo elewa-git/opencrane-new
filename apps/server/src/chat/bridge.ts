@@ -240,8 +240,9 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     socket.close(1008, reason);
   }
   const sentStops = new Map<string, number>();
-  const approvals = bridgeApprovals(options.store, options.silo, input.assistantId, socket, sentStops);
   const control = bridgeControl(options, input, tokens, socket, refuse);
+  const approvals = bridgeApprovals(options.store, options.silo, input.assistantId, socket,
+    sentStops, control.beforeApproval);
   function closed(code: number) {
     if (code === 1008 && !control.receipt) rejection ??= 'Bridge gate refused';
   }

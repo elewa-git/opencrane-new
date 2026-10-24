@@ -2,6 +2,17 @@
 
 For people, read [README.md](README.md) first.
 
+## Takeover approval cancellation
+
+`readApproval` reuses `readComputerControl`. Only a verified control with the exact
+assistant and affected turn can cancel. Computer identity before the approval request
+supplies its computer id and generation, including older resume records without a new
+generation. A newer replacement cannot cancel consent from a different generation.
+The existing conditional append and readback save one `approval.cancelled` with
+`cancelReason: takeover`. Concurrent readers and a racing decision reload the saved
+result. Used consent retains dispatch evidence and cannot retry during matching control.
+History loads do not add conversation or computer streams to access watches.
+
 ## Local demo TLS fixture
 
 `@opencrane/models/testing/remote-mcp` accepts an optional HTTP request handler after
@@ -3204,3 +3215,18 @@ The GET reports current policy availability separately and never grants requeste
 or assistant access. It makes no provider request, discovers nothing and appends
 nothing. Replay retains the original event reference, time and sequence.
 Other integration commands and fresh-install qualification remain outside this part.
+
+`readApproval` reuses `readComputerControl`. Only a verified control with the exact
+assistant and affected turn can cancel. Computer identity before the approval request
+supplies its computer id and generation, including older resume records without a new
+generation. A newer replacement cannot cancel consent from a different generation.
+The existing conditional append and readback save one `approval.cancelled` with
+`cancelReason: takeover`. Concurrent readers and a racing decision reload the saved
+result. Used consent retains dispatch evidence and cannot retry during matching control.
+History loads do not add conversation or computer streams to access watches.
+
+`readApproval` accepts `deferInvalidation` for HTTP commands. It returns the saved
+state plus a prepared `invalidation` event without appending. After the server has
+checked ownership and write authority, `decideApproval` confirms access and saves
+that event with the checked sequence and deadline. A refused command saves nothing.
+The command never reloads full conversation history inside that short check.
