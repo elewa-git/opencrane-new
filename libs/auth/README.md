@@ -7,6 +7,7 @@ and [computers](../../GLOSSARY.md#computer). This library checks sign-in with
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) and keeps the person's session
 in a protected browser cookie. It also makes passes for each assistant's computer
 and for each reply in a chat, so those requests can be checked.
+It can also make scanner passes tied to a trusted service and its silo.
 
 ## Where it fits
 
@@ -18,7 +19,7 @@ may do. It reads saved computer records to check computer and chat passes.
 
 ```mermaid
 flowchart LR
-  parent["libs/<br/>shared libraries"] --> auth["libs/auth<br/>sign-in and passes"]
+  parent["libs/<br/>shared libraries"] --> auth["libs/auth<br/>sign-in and service passes"]
   server["apps/server<br/>back end"] -.->|checks sign-in and passes| auth
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.-> auth
@@ -42,6 +43,8 @@ flowchart LR
   using saved records alone. Sign separate stop requests that cannot authorise AI calls.
 - Make one-minute passes for a computer to reach an approved outside service.
   Delivery of these passes to computers is not switched on yet.
+- Make scanner passes for a configured server or image worker, and check the
+  service, silo, purpose and request. Scanner connections do not use them yet.
 
 ## Processes it handles
 
@@ -54,6 +57,9 @@ flowchart LR
 4. **An assistant replies.** A worker gives a ready computer its pass. The server
    gives each chat turn a separate pass.
    The models process checks both before allowing an AI call.
+5. **A service prepares a scan.** The library can give a configured server a pass
+   for an upload, or an image worker a pass for an image. A checker needs only the
+   public keys and the trusted service settings. Each pass lasts two minutes.
 
 ## How to run or test it
 
