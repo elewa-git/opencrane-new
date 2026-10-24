@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
@@ -16,7 +16,21 @@ type Mount = {
 };
 type Compose = { services: Record<string, { volumes?: Mount[] }> };
 
+async function prepareServiceEnvironment(home: string) {
+  const files = {
+    postgres: 'POSTGRES_PASSWORD=synthetic-postgres-password\n',
+    nats: 'NATS_AUTH_TOKEN=synthetic-nats-token\n',
+    openfga: 'OPENFGA_DATASTORE_ENGINE=memory\n',
+    minio: 'MINIO_ROOT_USER=synthetic-user\nMINIO_ROOT_PASSWORD=synthetic-minio-password\n',
+    models: 'SILO_ID=synthetic-silo\n',
+  };
+  for (const [service, contents] of Object.entries(files)) {
+    await writeFile(`${home}/${service}.env`, contents);
+  }
+}
+
 async function composeConfiguration(home: string, secondary: boolean): Promise<Compose> {
+  await prepareServiceEnvironment(home);
   const environment = {
     PATH: process.env['PATH'],
     HOME: home,
