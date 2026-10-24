@@ -70,5 +70,5 @@ The [server](../../README.md) registers these requests. [Models](../models/READM
 flowchart LR
   server[Server] --> integrations["integrations<br/>tool settings and receipts"]
   integrations --> models[Tool rules and spending]
-  integrations -->|checks membership after loading profile history| members[Current membership]
+  integrations -->|reads signed-in identity| members[Current membership]
 ```
