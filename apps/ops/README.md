@@ -22,7 +22,7 @@ flowchart LR
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves results| nats
-  ops -->|keeps jobs and locks gateway changes until work stops| pg["PostgreSQL<br/>jobs and content databases"]
+  ops -->|keeps jobs, reads content and coordinates changes| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
@@ -87,7 +87,8 @@ publication request. Jobs for the same silo run in saved order. Old or withdrawn
 requests do nothing. Preparation and file replacement share a PostgreSQL lock, so
 a newer saved generation cannot be overtaken by an older file. The dispatcher uses
 the content database for this lock, with the server's read-only account. It keeps
-its queue in the separate jobs database. Missing or unavailable content settings
+its queue in the separate jobs database. When private connection cleanup is configured,
+staging and cleanup share a profile lock in content too. Missing or unavailable content settings
 stop startup before handlers run. Rebuilding tables
 never prepares or delivers configuration.
 
@@ -100,6 +101,8 @@ in Kubernetes. The worker records absence before status becomes Sleeping. It can
 wake a tool or release credentials. Rebuilding read tables does no Kubernetes work.
 
 The dispatcher also uses PostgreSQL's job queue to check enabled memory scopes each night.
+It reads candidate scopes and their progress from the content database using a read-only
+account. If those tables are behind or unavailable, it keeps the trigger for recovery.
 It records why a dirty scope is blocked or missed. Failed triggers keep their original night
 until startup or a later night can record the missed result. It sends no memory task to a computer.
 It records `no_changes` when a forgotten fact leaves nothing eligible. Later nights skip

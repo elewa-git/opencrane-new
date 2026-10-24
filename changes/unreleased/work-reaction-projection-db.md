@@ -1,0 +1,1 @@
+Nightly memory checks now read the content database while keeping their queues in jobs. Configured private connection cleanup shares staging's content database lock, so cleanup waits while staging is in progress. Dreaming execution remains disabled.

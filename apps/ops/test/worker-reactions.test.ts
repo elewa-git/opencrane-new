@@ -69,8 +69,8 @@ async function wiredNightly(action: string) {
   const occurrence = new Date('2026-10-12T02:00:00Z');
   await setup.scan(occurrence);
   const first = await setup.records();
-  expect(first).toMatchObject([{ action, date: '2026-10-12',
-    intendedAt: '2026-10-12T02:00:00.000Z' }]);
+  const expectedRun = { action, date: '2026-10-12', intendedAt: '2026-10-12T02:00:00.000Z' };
+  expect(first).toMatchObject([expectedRun]);
   await setup.project();
   await setup.scan(occurrence);
   await setup.stop();
@@ -151,16 +151,19 @@ async function sharedProfileLock(path: string) {
   const position = await setup.nats.store.head(subject);
   const pending = { ...stage, generation: 2, operationId: 'pending', expectedSequence: position };
   const stages = [stage, pending];
-  setup.recover.mockResolvedValue({ status: 'recovered', identity });
-  setup.remove.mockResolvedValue({ status: 'deleted' });
+  const recovered = { status: 'recovered' as const, identity };
+  const deleted = { status: 'deleted' as const };
+  setup.recover.mockResolvedValue(recovered);
+  setup.remove.mockResolvedValue(deleted);
   const held = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>();
   async function stageInFlight() {
     entered.resolve();
     await held.promise;
   }
+  await setup.reader.db.query('SELECT 1');
   const staging = withConnectionStage(setup.reader.db, stage, stageInFlight);
-  await entered.promise;
+  await Promise.race([entered.promise, staging]);
   try {
     const scanning = Promise.withResolvers<void>();
     async function listStages() {
@@ -204,7 +207,8 @@ async function sharedProfileLock(path: string) {
     await staging;
   }
   if (path === 'handler') {
-    function removed() {
+    async function removed() {
+      await setup.clock.tick(1000);
       return setup.remove.mock.calls.length === 1;
     }
     await until(removed);

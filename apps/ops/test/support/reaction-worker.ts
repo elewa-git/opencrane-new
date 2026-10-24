@@ -26,11 +26,13 @@ export async function reactionWorker() {
   const reader = projections.connectProjectionDb(readerUrl.href, connectionFailed);
   const nats = await natsFixture();
   const clock = new TestClock('2026-10-12T02:00:00Z');
-  const logger = createLogger('reaction-worker-test', { level: 'silent' });
-  const custody = connectionCustody('http://127.0.0.1:1', 'test',
-    { currentKeyId: 'test', keys: { test: Buffer.alloc(32) } }, '/unused');
+  const loggerOptions = { level: 'silent' };
+  const logger = createLogger('reaction-worker-test', loggerOptions);
+  const keyring = { currentKeyId: 'test', keys: { test: Buffer.alloc(32) } };
+  const custody = connectionCustody('http://127.0.0.1:1', 'test', keyring, '/unused');
   const candidates = vi.spyOn(custody, 'candidates');
-  candidates.mockResolvedValue({ status: 'listed', stages: [], continuation: undefined });
+  const emptyPage = { status: 'listed' as const, stages: [], continuation: undefined };
+  candidates.mockResolvedValue(emptyPage);
   const recover = vi.spyOn(custody, 'recover');
   const remove = vi.spyOn(custody, 'remove');
   const ordering: string[] = [];
@@ -42,7 +44,8 @@ export async function reactionWorker() {
   const previousExitCode = process.exitCode;
   const previousArguments = process.argv;
   const signalListeners = new Map([
-    ['SIGINT', process.listeners('SIGINT')], ['SIGTERM', process.listeners('SIGTERM')],
+    ['SIGINT' as const, process.listeners('SIGINT')],
+    ['SIGTERM' as const, process.listeners('SIGTERM')],
   ]);
 
   function connect(url: string, failed: () => void) {
@@ -62,6 +65,7 @@ export async function reactionWorker() {
   async function timedScan(...args: Parameters<typeof scanNightlyMemory>) {
     await scanNightlyMemory(args[0], args[1], args[2], args[3], selectionTime);
   }
+  // Replace the wall clock only; keep the real queue, callback and failed-trigger recovery.
   class Runtime extends handlers.HandlerRuntime {
     override async startNightly(callback: (occurrence: Date) => Promise<void>) {
       scan = callback;
@@ -158,7 +162,7 @@ export async function reactionWorker() {
     const previous = signalListeners.get('SIGTERM')!;
     for (const listener of process.listeners('SIGTERM')) {
       if (!previous.includes(listener)) {
-        listener();
+        listener('SIGTERM');
       }
     }
     await running;
