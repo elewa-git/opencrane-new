@@ -75,3 +75,38 @@ async function refusesRevocationDuringRetry(switchOn: boolean) {
 it.each([false, true])(
   'refuses a root after revocation during a failed publish (switch-on: %s)',
   refusesRevocationDuringRetry);
+
+async function refusesRetryPastDeadline(switchOn: boolean) {
+  const started = performance.now();
+  const deadline = started + 2000;
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  if (switchOn) await saveSwitchOn();
+  const before = await nats.store.head('budget-test');
+  const publish = client.publish.bind(client);
+  let failed = false;
+  let conflictPending = switchOn;
+  async function failOnce(...args: Parameters<typeof publish>) {
+    if (conflictPending) {
+      conflictPending = false;
+      return publish(...args);
+    }
+    if (!failed) {
+      failed = true;
+      clock.mockReturnValue(deadline + 1);
+      throw new TimeoutError();
+    }
+    return publish(...args);
+  }
+  client.publish = failOnce;
+  try {
+    await expect(actor.setRootAllowance(binding, 1, undefined, deadline)).rejects.toThrow();
+  } finally {
+    clock.mockRestore();
+  }
+  expect(failed).toBe(true);
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.roots).toEqual([]);
+}
+it.each([false, true])(
+  'refuses a root when a failed publish passes the original deadline (switch-on: %s)',
+  refusesRetryPastDeadline);
