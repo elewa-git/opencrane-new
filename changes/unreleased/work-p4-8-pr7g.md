@@ -1,0 +1,1 @@
+- Saved child requests now recover through activation after a restart, including requests with an existing first input. Proven refusals remain available for retry; assistant starts stay held.

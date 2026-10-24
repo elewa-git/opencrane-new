@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import type { EventEnvelope } from '@opencrane/events';
+import { childActivatedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { childRequests } from '../src/index.ts';
 import { database } from './database.ts';
 
@@ -38,7 +38,7 @@ async function seedFailure() {
 }
 async function savedFailure(silo = 'test') {
   const result = await storage.db.query(
-    'SELECT failed_attempt, failure_id FROM child_requests_v3 WHERE silo = $1 AND intent_id = $2',
+    'SELECT failed_attempt, failure_id FROM child_requests_v4 WHERE silo = $1 AND intent_id = $2',
     [silo, 'intent']);
   return result.rows;
 }
@@ -86,7 +86,8 @@ async function retiresOnlyActivation() {
   await childRequests.apply(storage.db, intent, 3);
   const input = { ...intent, id: 'input', commandId: 'input', subject: 'conversation-child',
     type: 'message.posted', data: { conversationId: 'child', authorKind: 'human',
-      authorId: 'alice', contentType: 'text', ciphertext: 'ZW5jcnlwdGVkLW1lc3NhZ2U=', keyId: 'key:child' } };
+      authorId: 'alice', contentType: 'text',
+      ciphertext: 'ZW5jcnlwdGVkLW1lc3NhZ2U=', keyId: 'key:child' } };
   await childRequests.apply(storage.db, input, 5);
   expect(await savedFailure()).toHaveLength(1);
   await childRequests.apply(storage.db, activation, 6);
@@ -95,12 +96,14 @@ async function retiresOnlyActivation() {
 it('keeps saved first inputs queued until matching activation', retiresOnlyActivation);
 async function keepsWrongActivation(patch: object, silo: string) {
   await childRequests.apply(storage.db, intent, 3);
-  const data = { ...activation.data as object, ...patch };
-  const event = { ...activation, silo, data };
+  const saved = childActivatedDataSchema.parse(activation.data);
+  const data = { ...saved, ...patch };
+  const event = { ...activation, silo, data, subject: `conversation-${data.conversationId}` };
   await childRequests.apply(storage.db, event, 6);
   expect(await savedFailure()).toHaveLength(1);
 }
-it.each([[{ firstInputId: 'other' }, 'test'], [{ intentEventId: 'other' }, 'test'],
+it.each([[{ conversationId: 'other' }, 'test'], [{ firstInputId: 'other' }, 'test'],
+  [{ intentEventId: 'other' }, 'test'],
   [{ parentConversationId: 'other' }, 'test'], [{ requestId: 'other' }, 'test'],
   [{ intentPosition: 2 }, 'test'], [{}, 'other']])(
   'keeps candidates for mismatched activation %j in silo %s', keepsWrongActivation);

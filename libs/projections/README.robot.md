@@ -839,11 +839,12 @@ Rebuild the MCP catalogue on upgrade so earlier publication events gain this pos
 
 `childRequests` is a separate projection filled by the conversations worker. It records
 only silo, parent, request and intent id/position, child id, first-input id and failure references.
-The name `child-requests-v3` and table `child_requests_v3` force an upgrade replay.
+The name `child-requests-v4` and table `child_requests_v4` force an upgrade replay.
 Failure events mark the matching intent. A retry clears only its named failure at the next
-attempt; recovery reads only unfailed rows. The matching saved
-input removes the candidate. The index supplies candidates, never permission or proof
-that a stage can run. It does not write a conversation feed row or contain source text.
+attempt; recovery reads only unfailed rows. First input keeps the candidate queued.
+Only activation with matching silo, parent, child, request, intent id/position and first-input id
+removes it. The event schema also checks the child subject and server writer. The index
+supplies candidates, never permission or proof that a stage can run. It does not write a conversation feed row or contain source text.
 Stop the conversations worker and server readers before `ProjectionRunner.rebuild(childRequests)`.
 Replay performs
 only database writes. A new installation or upgrade builds this separate index from
@@ -922,8 +923,8 @@ Fresh-install live qualification is NOT RUN.
 ## Child activation records
 
 `conversation.child_activated` is excluded before conversation feed insertion, list
-updates and notifications. Replay uses the same exclusion. The v3 recovery index is
-unchanged; it still completes at first input and does not schedule activation.
+updates and notifications. Replay uses the same exclusion. The v4 recovery index keeps
+saved first inputs queued and retires them only when matching activation is saved.
 
 ## Role and ownership audit facts
 

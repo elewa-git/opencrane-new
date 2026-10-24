@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as authz from '@opencrane/authz';
+import { createEventStore } from '@opencrane/event-store';
 import { eventEnvelopeSchema, conversationCreatedDataSchema } from '@opencrane/events';
 import { childRequests, conversations, members } from '@opencrane/projections';
 import type { Db } from '@opencrane/projections';
@@ -169,7 +170,7 @@ it.each(['conversation.child_requested', 'conversation.created', 'message.posted
 async function retriesUntilWorkerBuildsTable() {
   const { intent } = await savedRequest('conversation.child_requested');
   // Remove the test's earlier projection records to model a fresh installation.
-  await context.db.query('DROP TABLE child_requests_v3');
+  await context.db.query('DROP TABLE child_requests_v4');
   await context.db.query('DELETE FROM projection_checkpoints WHERE name = $1',
     [childRequests.name]);
   await context.db.query('DELETE FROM projection_events WHERE projection = $1',
@@ -226,7 +227,7 @@ async function reference(parent: string) {
   await context.runner.run(childRequests);
   const result = await context.db.query(
     `SELECT silo, parent_id, intent_id, intent_position, child_id, first_input_id
-    FROM child_requests_v3 WHERE silo = $1 AND parent_id = $2`, ['test', parent]);
+    FROM child_requests_v4 WHERE silo = $1 AND parent_id = $2`, ['test', parent]);
   return result.rows[0]!;
 }
 async function refusesChangedReferences() {
@@ -249,10 +250,10 @@ async function rebuildsWithoutEffects() {
   const unfinished = await savedRequest('message.posted');
   expect(await reference(unfinished.input.conversationId)).toBeDefined();
   const before = await context.nats.store.head();
-  const original = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');
+  const original = await context.db.query('SELECT * FROM child_requests_v4 ORDER BY intent_position');
   expect(JSON.stringify(original.rows)).not.toContain('canary');
   await context.runner.rebuild(childRequests);
-  const rebuilt = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');
+  const rebuilt = await context.db.query('SELECT * FROM child_requests_v4 ORDER BY intent_position');
   expect(rebuilt.rows).toEqual(original.rows);
   expect(await context.nats.store.head()).toBe(before);
 }
@@ -351,9 +352,9 @@ async function savesOneFailureAndStops() {
   const before = await context.nats.store.head(`conversation-${input.conversationId}`);
   expect((await context.request(input.conversationId, 'children', start)).statusCode).toBe(409);
   await context.runner.run(childRequests);
-  const indexed = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');
+  const indexed = await context.db.query('SELECT * FROM child_requests_v4 ORDER BY intent_position');
   await context.runner.rebuild(childRequests);
-  expect((await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position')).rows)
+  expect((await context.db.query('SELECT * FROM child_requests_v4 ORDER BY intent_position')).rows)
     .toEqual(indexed.rows);
   const reads = vi.spyOn(context.nats.store, 'readStream');
   const stop = worker();
@@ -381,7 +382,7 @@ function isFailure(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
 it('saves one racing refusal, hides it from other readers and never resumes it', savesOneFailureAndStops);
 
 async function processRecoversAndStops(fault: string) {
-  const { intent } = await savedRequest('conversation.child_requested');
+  const { intent } = await savedRequest('message.posted');
   await context.runner.run(conversations);
   const binding = context.options.binding;
   const server = await startServer({ ...context.nats.env(), SILO_ID: 'test',
@@ -421,10 +422,23 @@ async function processRecoversAndStops(fault: string) {
 it.each(['recover', 'fail'])('runs configured recovery and handles process %s',
   processRecoversAndStops);
 
-async function keepsUncertainWorkQueued(kind: string) {
-  const { input, intent } = await savedRequest('conversation.child_requested');
+async function keepsUncertainWorkQueued(kind: string, stage: string) {
+  const { input, intent } = await savedRequest(stage);
   const row = await reference(input.conversationId);
   if (kind === 'outage') await context.fga.pause();
+  if (kind === 'applying' && stage === 'message.posted') {
+    const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+    const original = authz.memberAuthorisation;
+    function lagging(...args: Parameters<typeof original>) {
+      const auth = original(...args);
+      async function applied(eventId: string) {
+        if (eventId === child[0]!.event.id) return false;
+        return auth.applied(eventId);
+      }
+      return { ...auth, applied };
+    }
+    vi.spyOn(authz, 'memberAuthorisation').mockImplementation(lagging);
+  }
   try {
     await expect(recoverChildRequest(context.options, row)).rejects.toThrow();
     const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
@@ -433,6 +447,7 @@ async function keepsUncertainWorkQueued(kind: string) {
       .not.toContain('failed');
   } finally {
     if (kind === 'outage') await context.fga.resume();
+    vi.restoreAllMocks();
   }
   const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
   if (child[0]) await context.auth.handler.handle(child[0].event, context.db);
@@ -440,7 +455,9 @@ async function keepsUncertainWorkQueued(kind: string) {
   await recoverChildRequest(context.options, row);
   expect(await chatHistory(context.nats.store, 'test', intent.childConversationId)).toHaveLength(3);
 }
-it.each(['outage', 'applying'])('keeps %s queued then completes missing saves', keepsUncertainWorkQueued);
+it.each([['outage', 'conversation.child_requested'], ['applying', 'conversation.child_requested'],
+  ['outage', 'message.posted'], ['applying', 'message.posted']])(
+  'keeps %s queued after %s then completes missing saves', keepsUncertainWorkQueued);
 
 async function losesFailureReply() {
   const previous = context;
@@ -637,14 +654,14 @@ async function storesExactAttemptAndDeletesCompletedRow() {
       attempt: 3, stage: 'create', reason: 'access_refused' } };
   await childRequests.apply(context.db, failure, 1);
   const indexed = await context.db.query(
-    'SELECT failed_attempt FROM child_requests_v3 WHERE intent_id = $1',
+    'SELECT failed_attempt FROM child_requests_v4 WHERE intent_id = $1',
     [failedRow['intent_id']]);
   expect(indexed.rows).toEqual([{ failed_attempt: 3 }]);
   const completed = await savedRequest('conversation.created');
   await recoverChildRequest(context.options, await reference(completed.input.conversationId));
   await context.runner.run(childRequests);
   const remaining = await context.db.query(
-    'SELECT * FROM child_requests_v3 WHERE child_id = $1', [completed.intent.childConversationId]);
+    'SELECT * FROM child_requests_v4 WHERE child_id = $1', [completed.intent.childConversationId]);
   expect(remaining.rows).toEqual([]);
 }
 it('stores the exact failed attempt and deletes the completed child index row',
@@ -681,8 +698,11 @@ async function recoversActivationAppend(saved: boolean) {
   expect(before).toHaveLength(saved ? 3 : 2);
   await waitForDuplicateWindow(context.nats);
   await context.restart();
+  const connection = await context.nats.client('command');
+  const store = await createEventStore(connection);
+  const other = { ...context.options, store };
   const outcomes = await Promise.allSettled([recoverChildRequest(context.options, row),
-    recoverChildRequest(context.options, row)]);
+    recoverChildRequest(other, row)]);
   expect(outcomes).toContainEqual({ status: 'fulfilled', value: undefined });
   await recoverChildRequest(context.options, row);
   const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);

@@ -30,7 +30,7 @@ export function childStartFailure(rows: StoredEvent[], intentEventId: string) {
   return childStartState(rows, intentEventId).failure;
 }
 export async function recordChildStartFailure(options: Pick<ChatOptions, 'store' | 'silo'>,
-  intentEventId: string, intent: ChildRequest, stage: 'create' | 'first_input',
+  intentEventId: string, intent: ChildRequest, stage: 'create' | 'first_input' | 'activation',
   reason: 'access_refused' | 'conversation_closed' | 'record_changed', attempt = 1) {
   const rows = await chatHistory(options.store, options.silo, intent.conversationId);
   const current = childStartState(rows, intentEventId);

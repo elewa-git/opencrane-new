@@ -152,7 +152,7 @@ once after loading history. It returns `{state: 'unknown'}` for missing ids and 
 person's ids alike. The requester receives `{requestId, state: 'queued'}` and
 `childConversationId` once creation exists. No source text or audience is returned.
 A saved failure returns `{state: 'failed', requestId, stage, reason, attempt, failureEventId}`.
-Stages are `create` or `first_input`; reasons are `access_refused`, `conversation_closed`
+Stages are `create`, `first_input` or `activation`; reasons are `access_refused`, `conversation_closed`
 or `record_changed`. This reply contains no child id, source text or audience.
 Failure and retry records never appear in chat feeds or message history.
 All replies disable caching. New children stay held before delivery, computer resume,

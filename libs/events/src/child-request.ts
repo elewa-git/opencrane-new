@@ -46,7 +46,7 @@ const childRequestEvent = event('conversation.child_requested', 'conversation',
 export const childStartFailedDataSchema = z.strictObject({
   conversationId: chatIdSchema, requestId: chatIdSchema, childConversationId: chatIdSchema,
   intentEventId: chatIdSchema, attempt: z.int().min(1).max(3),
-  stage: z.enum(['create', 'first_input']),
+  stage: z.enum(['create', 'first_input', 'activation']),
   reason: z.enum(['access_refused', 'conversation_closed', 'record_changed']),
 });
 const failedEnvelope = eventEnvelopeSchema(childStartFailedDataSchema);

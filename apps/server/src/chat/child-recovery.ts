@@ -5,6 +5,7 @@ import { readEventAt } from '@opencrane/event-store';
 import type { Logger } from '@opencrane/observability';
 import { isChatRefused, type ChatOptions } from './access.ts';
 import { chatHistory } from './commands.ts';
+import { activateRequestedChild } from './child-activation.ts';
 import { childStartState, recordChildStartFailure } from './child-failure.ts';
 import { createRequestedChild, addChildFirstInput, ChildRequestClosed,
   ChildRequestChanged, ChildRequestRefused, ChildRequestRace } from './child-requests.ts';
@@ -18,7 +19,7 @@ const referenceSchema = z.strictObject({
 function participantId(join: ChildRequest['initialJoins'][number]) {
   return join.participantId;
 }
-export async function recoverChildRequest(options: Options, value: unknown) {
+async function readIntent(options: Options, value: unknown) {
   const reference = referenceSchema.parse(value);
   if (reference.silo !== options.silo) {
     throw new Error('Child recovery reference unavailable');
@@ -33,28 +34,40 @@ export async function recoverChildRequest(options: Options, value: unknown) {
       parsed.data.data.firstInputId !== reference.first_input_id) {
     throw new Error('Child recovery reference unavailable');
   }
+  return parsed.data;
+}
+export async function recoverChildRequest(options: Options, value: unknown) {
+  const intent = await readIntent(options, value);
   // Derive every choice from the saved intent, never from the index or a queue row.
-  const data = parsed.data.data;
+  const data = intent.data;
   const input = { conversationId: data.conversationId, sourceMessageId: data.sourceMessageId,
     requestId: data.requestId, assistantId: data.assistantId, payingGroupId: data.payingGroupId,
     allowanceBoundCents: data.allowanceBoundCents,
     participantIds: data.initialJoins.map(participantId) };
   const parent = await chatHistory(options.store, options.silo, data.conversationId);
-  const current = childStartState(parent, parsed.data.id);
+  const current = childStartState(parent, intent.id);
   if (current.failure) return;
   const child = await chatHistory(options.store, options.silo, data.childConversationId);
+  let hasInput = false;
   for (const row of child) {
-    if (row.event.id === data.firstInputId) return;
+    if (row.event.id === data.firstInputId) hasInput = true;
   }
-  let stage: 'create' | 'first_input' = 'create';
+  let stage: 'create' | 'first_input' | 'activation' = 'create';
   try {
     if (child.length === 0) await createRequestedChild(options, data.createdBy, input);
     stage = 'first_input';
-    await addChildFirstInput(options, data.createdBy, input);
+    if (!hasInput) await addChildFirstInput(options, data.createdBy, input);
+    stage = 'activation';
+    await activateRequestedChild(options, data.createdBy, input, current.attempt);
   } catch (error) {
     const reason = failureReason(error);
     if (!reason) throw error;
-    await recordChildStartFailure(options, parsed.data.id, data, stage, reason, current.attempt);
+    // Check the log before recording refusal: another worker may already have activated it.
+    const latest = await chatHistory(options.store, options.silo, data.childConversationId);
+    for (const row of latest) {
+      if (row.event.type === 'conversation.child_activated') throw error;
+    }
+    await recordChildStartFailure(options, intent.id, data, stage, reason, current.attempt);
   }
 }
 
@@ -69,7 +82,7 @@ function failureReason(error: unknown) {
 
 async function recoverPage(options: Options, after: number, logger: Logger, signal: AbortSignal) {
   const result = await options.db.query(`SELECT silo, parent_id, intent_id, intent_position,
-    child_id, first_input_id FROM child_requests_v3
+    child_id, first_input_id FROM child_requests_v4
     WHERE failed_attempt IS NULL AND silo = $1 AND intent_position > $2
     ORDER BY intent_position LIMIT 32`,
   [options.silo, after]);

@@ -3755,7 +3755,7 @@ not record reductions above spent-plus-held money as stops.
 concurrent edits, replay, restricted receipts, slow history, role loss, unrelated
 chat activity and unavailable or lagging history. Fresh-install qualification: NOT RUN.
 
-## Child recovery before activation (P4-8 PR 7b)
+## Child recovery through activation (P4-8 PR 7g)
 
 `chat/child-recovery.ts` starts with the configured chat service and stops before its
 connections close. The conversations worker builds `childRequests`; the server reads it
@@ -3768,10 +3768,18 @@ commands verify the child, copied text, original joins and current access. Conve
 history stays outside the short access check. Errors use fixed log messages without
 source text. The bridge hold remains unchanged.
 
+The v4 index retains saved first inputs until a matching activation arrives. Recovery derives
+its attempt from parent history and uses `activateRequestedChild` to check the saved input.
+It records proven activation refusals with the existing safe reasons. Before saving a refusal,
+it rereads the child and leaves any observed activation queued for reconciliation instead.
+An index row proves neither current access nor absence of execution. Ambiguous appends,
+IAM lag and outages remain queued. Rebuilding the index runs no commands; activation
+removes the candidate so later scans stop reading it. Tests cover crashes before and after
+append, lost replies beyond broker deduplication, two workers, restart and retained holds.
+
 The durable handler host is in apps/ops; the checked commands and conversation keys are
-in apps/server. Durable job integration,
-public retry, activation, root allocation
-and dispatch remain later work. No second event dispatcher or execution path is added.
+in apps/server. Durable job integration, root selection, first-start recovery and dispatch
+remain later work. No second event dispatcher or execution path is added.
 `test/child-recovery.test.ts` covers crashes, competing workers, changed index records,
 replay and access refusals with disposable NATS, PostgreSQL and OpenFGA.
 `test/child-summon.test.ts` checks the bridge hold after background recovery.
@@ -3972,7 +3980,7 @@ The [retry API](../../docs/api/group-chats.md#reviewed-child-requests) permits t
 `test/child-retry.test.ts` checks saved receipts, concurrent retry ids, lost replies beyond
 deduplication expiry, current access, later failures, missing input and index rebuild.
 Failure recording checks the worker's original attempt before saving, so an old worker
-cannot fail a later retry. The conversations worker rebuilds `child-requests-v3`.
+cannot fail a later retry. The conversations worker rebuilds `child-requests-v4`.
 Closure found in the parent history is reported only after current requester access
 and source visibility pass. A removed requester receives the same status and body
 for a closed parent as for an unknown request. Authorised callers still get 409.
@@ -4314,8 +4322,9 @@ Retries verify the full saved binding and return its original row, beyond broker
 This is admission-time ordering across streams, not an atomic parent/child transaction.
 A parent change after the final check can still precede the child append. Later root
 allocation and first start must check authority, attempt and closure again. IAM and storage
-uncertainty throw without saving a failure or claiming activation. No route or recovery
-worker calls this command yet. `childRequestHeld` and production start gates remain intact.
+uncertainty throw without saving a failure or claiming activation. The recovery worker calls
+this command after saving or finding the first input. `childRequestHeld` and production
+start gates remain intact.
 First-start recovery and fresh-install qualification remain unfinished.
 
 ### Checked child root allocation
@@ -4335,8 +4344,9 @@ Access changes saved during a failed publish are checked before the next attempt
 The first-call bound uses `reservationCents` with the full supported context and the
 server's 2,000-token output cap. It never reduces the reviewed allowance to fit capacity.
 One budget append records the root; allocation creates no hold, turn, pass or send.
-Retries retain the saved root, including its stop. The hold, recovery worker and start
-gates are unchanged. Tests cover allocation, refusals, queued revocation, lost replies,
+Retries retain the saved root, including its stop. The hold and start gates are unchanged;
+recovery calls activation but never allocation. Tests cover allocation, refusals, queued
+revocation, lost replies,
 actor restart, projection replay and held delivery after allocation.
 
 ## Bounded call spending
