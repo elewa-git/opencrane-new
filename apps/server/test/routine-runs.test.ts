@@ -140,6 +140,67 @@ async function mixedPages() {
 }
 it('pages mixed records, keeps ranges compact and preserves order and first results on replay',
   mixedPages, 30_000);
+async function completeRun(occurrenceId: string) {
+  const binding = { occurrenceId, rootId: `root-${occurrenceId}`,
+    conversationId: `conversation-${occurrenceId}`, messageId: `message-${occurrenceId}`,
+    turnId: `turn-${occurrenceId}` };
+  const due = record('routine.due', binding);
+  const finished = record('routine.run_finished', binding);
+  await save(due);
+  await save(finished);
+  return finished;
+}
+async function lateTerminalRecord() {
+  const firstFinished = await completeRun('run-a');
+  const secondFinished = await completeRun('run-b');
+  const before = await page();
+  expect(before.rows).toHaveLength(2);
+  expect(before.rows[0]).toMatchObject({ occurrenceId: 'run-a', outcome: 'cancelled',
+    finishedAt: firstFinished.time });
+  expect(before.rows[1]).toMatchObject({ occurrenceId: 'run-b', outcome: 'cancelled',
+    finishedAt: secondFinished.time });
+  const late = record('routine.run_finished', {
+    ...objectData(firstFinished.data), outcome: 'succeeded' });
+  await save(late);
+  const after = await page();
+  expect(after.rows).toEqual(before.rows);
+  expect((await request('', 'bob')).statusCode).toBe(403);
+  await rebuildRoutineProjection(db, nats.reader, logger, { verify: true });
+  const rebuilt = await page();
+  expect(rebuilt.rows).toEqual(before.rows);
+  expect((await request('', 'bob')).statusCode).toBe(403);
+}
+it('keeps both first outcomes readable after an older run finishes again and after rebuild',
+  lateTerminalRecord);
+
+const changedRunBindings = [
+  ['rootId', 'other-root'],
+  ['conversationId', 'other-conversation'],
+  ['messageId', 'other-message'],
+  ['turnId', 'other-turn'],
+  ['definitionRevision', 2],
+  ['scheduleRevision', 2],
+  ['controlRevision', 2],
+] as const;
+async function invalidLateTerminalRecord(field: string, value: string | number) {
+  const firstFinished = await completeRun('run-a');
+  await completeRun('run-b');
+  const before = await page();
+  expect(before.rows).toHaveLength(2);
+  const late = record('routine.run_finished', {
+    ...objectData(firstFinished.data), [field]: value });
+  await save(late, false);
+  // Check access directly so a lagging projection cannot hide a missing binding check.
+  const auth = memberAuthorisation(binding, nats.store);
+  const saved = await auth.loadRoutineAccess('alice', 'orders');
+  expect(await saved.check('read_metadata')).toEqual({ allowed: false,
+    status: 'unavailable', reason: 'history_unavailable' });
+  const denied = await auth.loadRoutineAccess('bob', 'orders');
+  expect(await denied.check('read_metadata')).toEqual({ allowed: false, status: 'ok' });
+}
+it.each(changedRunBindings)('refuses a late terminal record with a changed %s',
+  invalidLateTerminalRecord);
+
 async function continuations() {
   for (let index = 0; index < 3; index++) {
     await save(record('routine.occurrence_skipped', { occurrenceId: `skip-${index}` }));
