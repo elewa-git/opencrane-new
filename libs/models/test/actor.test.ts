@@ -879,3 +879,151 @@ async function admitsAfterRepeatedConflicts(change: string) {
 it.each(['unchanged', 'revoked', 'expired', 'writer'])(
   'checks every budget conflict and keeps the original deadline: %s',
   admitsAfterRepeatedConflicts);
+
+async function remainsUsableAfterPublishDeadline() {
+  const reservationId = await reserve(false, 'verify-late-publish');
+  const reservation = actor.state.reservations[0]!;
+  const admission = { callId: 'verify-late-publish', decisionId: 'verify-late-decision',
+    bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
+  const started = performance.now();
+  const deadline = started + 2000;
+  const decisionClock = vi.spyOn(performance, 'now');
+  decisionClock.mockReturnValue(started);
+  onTestFinished(decisionClock.mockRestore.bind(decisionClock));
+  let checks = 0;
+  async function checkAccess() {
+    checks += 1;
+    if (checks === 2 || checks === 4) {
+      const memberId = `late-unrelated-${checks}`;
+      const payload = { memberId, email: `${memberId}@example.test`,
+        displayName: 'Unrelated', role: 'member' };
+      const event = envelope('test', `member-${memberId}`, 'member.joined', payload);
+      const command = { event, expectedSequence: 0 };
+      const saved = await nats.store.append(command);
+      expect(saved.status).toBe('appended');
+    }
+    if (checks === 6) {
+      // Let the last access check pass just before the store sees the deadline.
+      decisionClock.mockReturnValue(deadline);
+      decisionClock.mockReturnValueOnce(deadline - 0.001);
+    }
+    if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+  }
+  checkAccess.deadline = deadline;
+  await expect(actor.admitDispatch(admission, checkAccess))
+    .rejects.toThrow();
+  expect(performance.now()).toBe(deadline);
+  decisionClock.mockRestore();
+  expect(checks).toBe(6);
+  expect(actor.state.dispatches).toHaveLength(0);
+  const rows = await history(nats.store, 'budget-test', 'test');
+  function isAdmission(row: typeof rows[number]) {
+    return row.event.type === 'budget.call_dispatch_admitted';
+  }
+  expect(rows.filter(isAdmission)).toHaveLength(0);
+  await reserve();
+  expect(actor.state.reservations).toHaveLength(2);
+}
+it('keeps the writer usable when the original deadline expires before retry publish',
+  remainsUsableAfterPublishDeadline);
+
+async function refusesBeforeFirstPublish(boundary: string) {
+  const reservationId = await reserve(false, 'first-publish-refused');
+  const reservation = actor.state.reservations[0]!;
+  const admission = { callId: 'first-publish-refused', decisionId: 'first-decision',
+    bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
+  const started = performance.now();
+  const deadline = started + 2000;
+  const decisionClock = vi.spyOn(performance, 'now');
+  decisionClock.mockReturnValue(started);
+  onTestFinished(decisionClock.mockRestore.bind(decisionClock));
+  let checks = 0;
+  async function checkAccess() {
+    checks += 1;
+    if (boundary === 'before store' && checks === 1) {
+      decisionClock.mockReturnValue(deadline);
+      decisionClock.mockReturnValueOnce(deadline - 0.001);
+    }
+    if (checks === 2) {
+      if (boundary === 'revoked') {
+        throw new Error('Authority changed');
+      }
+      decisionClock.mockReturnValue(deadline);
+    }
+    if (performance.now() >= deadline) {
+      throw new Error('Authority snapshot expired');
+    }
+  }
+  checkAccess.deadline = deadline;
+  await expect(actor.admitDispatch(admission, checkAccess)).rejects.toThrow();
+  decisionClock.mockRestore();
+  expect(checks).toBe(boundary === 'before store' ? 1 : 2);
+  expect(actor.state.dispatches).toHaveLength(0);
+  const rows = await history(nats.store, 'budget-test', 'test');
+  function isAdmission(row: typeof rows[number]) {
+    return row.event.type === 'budget.call_dispatch_admitted';
+  }
+  expect(rows.filter(isAdmission)).toHaveLength(0);
+  await reserve();
+  expect(actor.state.reservations).toHaveLength(2);
+}
+it.each(['before store', 'expired', 'revoked'])(
+  'keeps the budget writer usable after refusal before the first publish: %s',
+  refusesBeforeFirstPublish);
+
+async function refusesAfterLostRepeatedPublishReply(change: string) {
+  const faulty = await lostReplyStore(nats.connection);
+  actor = new BudgetActor(faulty.store, 'test', now);
+  await actor.start();
+  const reservationId = await reserve(false, 'lost-repeated-publish');
+  const reservation = actor.state.reservations[0]!;
+  const admission = { callId: 'lost-repeated-publish', decisionId: 'lost-decision',
+    bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
+  const started = performance.now();
+  const deadline = started + 2000;
+  const decisionClock = vi.spyOn(performance, 'now');
+  decisionClock.mockReturnValue(started);
+  onTestFinished(decisionClock.mockRestore.bind(decisionClock));
+  let checks = 0;
+  async function checkAccess() {
+    checks += 1;
+    if (checks === 2 || checks === 4) {
+      const memberId = `lost-unrelated-${checks}`;
+      const payload = { memberId, email: `${memberId}@example.test`,
+        displayName: 'Unrelated member', role: 'member' };
+      const event = envelope('test', `member-${memberId}`, 'member.joined', payload);
+      const command = { event, expectedSequence: 0 };
+      const saved = await nats.store.append(command);
+      expect(saved.status).toBe('appended');
+    }
+    if (checks === 6) {
+      faulty.loseNextReply();
+    }
+    if (checks === 7) {
+      if (change === 'revoked') {
+        throw new Error('Authority changed');
+      }
+      decisionClock.mockReturnValue(deadline);
+    }
+    if (performance.now() >= deadline) {
+      throw new Error('Authority snapshot expired');
+    }
+  }
+  checkAccess.deadline = deadline;
+  await expect(actor.admitDispatch(admission, checkAccess))
+    .rejects.toThrow('Budget writer lost its fence');
+  decisionClock.mockRestore();
+  expect(checks).toBe(7);
+  expect(actor.state.dispatches).toHaveLength(0);
+  const rows = await history(nats.store, 'budget-test', 'test');
+  function isAdmission(row: typeof rows[number]) {
+    return row.event.type === 'budget.call_dispatch_admitted';
+  }
+  expect(rows.filter(isAdmission)).toHaveLength(1);
+  await expect(reserve()).rejects.toThrow('Budget writer unavailable');
+  await expect(actor.admitDispatch(admission, checkAccess))
+    .rejects.toThrow('Budget writer unavailable');
+}
+it.each(['expired', 'revoked'])(
+  'stops the writer when a repeated publish loses its reply before access is %s',
+  refusesAfterLostRepeatedPublishReply);

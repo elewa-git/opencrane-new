@@ -392,7 +392,9 @@ async function refusesExpiryDuringAccessCheck() {
   const command = { event: event('expired-access-check'), expectedSequence: 0,
     deadline: started + 2000, historyChecked: true as const, checkAccess };
   try {
-    expect(await fixture.store.append(command)).toMatchObject({ status: 'unavailable' });
+    expect(await fixture.store.append(command)).toMatchObject({
+      status: 'unavailable', notPublished: true,
+    });
   } finally {
     clock.mockRestore();
   }
@@ -401,7 +403,7 @@ async function refusesExpiryDuringAccessCheck() {
 it('refuses an append when its access check exceeds the original deadline',
   refusesExpiryDuringAccessCheck);
 
-async function preservesUncertainAccessFailure() {
+async function refusesAccessWithoutPublishing() {
   fixture = await natsFixture();
   const cause = new Error('Access read unavailable');
   function checkAccess() {
@@ -409,10 +411,12 @@ async function preservesUncertainAccessFailure() {
   }
   const command = { event: event('unavailable-access-check'), expectedSequence: 0,
     deadline: performance.now() + 2000, historyChecked: true as const, checkAccess };
-  expect(await fixture.store.append(command)).toEqual({ status: 'unavailable', cause });
+  expect(await fixture.store.append(command)).toEqual({
+    status: 'unavailable', cause, notPublished: true,
+  });
   expect(await fixture.store.head('member-alice')).toBe(0);
 }
-it('keeps an unavailable access check uncertain without publishing', preservesUncertainAccessFailure);
+it('reports an access refusal before any publish', refusesAccessWithoutPublishing);
 
 async function checksPublicationPositionAtNats() {
   fixture = await natsFixture();
@@ -444,3 +448,21 @@ async function checksPublicationPositionAtNats() {
 }
 it('checks the publication log position atomically when NATS receives the write',
   checksPublicationPositionAtNats);
+
+async function refusesBeforeStartingAppend(reason: string) {
+  fixture = await natsFixture();
+  const controller = new AbortController();
+  let deadline = performance.now() + 2000;
+  if (reason === 'expired') {
+    deadline = performance.now();
+  } else {
+    controller.abort(new Error('Permission withdrawn'));
+  }
+  const command = { event: event('never-published'), expectedSequence: 0,
+    deadline, signal: controller.signal };
+  const result = await fixture.store.append(command);
+  expect(result).toMatchObject({ status: 'unavailable', notPublished: true });
+  expect(await fixture.store.head('member-alice')).toBe(0);
+}
+it.each(['expired', 'cancelled'])(
+  'reports that no publish started when append was already %s', refusesBeforeStartingAppend);
