@@ -2458,7 +2458,9 @@ async function loadChangeFacts(revision: number) {
   const loaded = { ...data, action: 'loaded', delivery: 'initial', additions,
     byteCount: 1, scopePositions: [{ scopeId, position }] };
   await seedEvidence(loaded);
-  const token = await signedRecall(setup);
+  // Build a proof for the seeded references without delivering a recall.
+  const claims = await recallClaims(setup);
+  const token = await preparationToken(setup, claims);
   const parsed = parseMemoryRequest(JSON.stringify(call), headers);
   const context = await verifyMemoryContext(token, setup.identity, parsed);
   const { recallProof } = await import('../src/memory/recall-proof.ts');
