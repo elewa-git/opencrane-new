@@ -182,7 +182,8 @@ try {
     if (custodyFile) {
       custody = await connectionCustodyFromFile(custodyFile);
       if (custody) {
-        available.push(connectionCleanupHandler(commands.store, db.db, custody, silo));
+        const cleanup = connectionCleanupHandler(commands.store, content!.db, custody, silo);
+        available.push(cleanup);
         connectionCleanupAvailable = true;
       } else {
         logger.warn('Connection cleanup disabled: custody file is missing');
@@ -222,7 +223,7 @@ try {
           stop.abort();
         }
         // Let dispatch start even while custody is slow. Shutdown waits for the current page.
-        const scanning = scanConnections(commandStore, db.db, custody, logger,
+        const scanning = scanConnections(commandStore, content!.db, custody, logger,
           silo, stop.signal);
         connectionScan = scanning.catch(scanFailed);
       }
@@ -238,7 +239,7 @@ try {
       }
       await dispatcherRuntime.work();
       async function scanNightly(occurrence: Date) {
-        await scanNightlyMemory(db.db, commandStore, silo, occurrence);
+        await scanNightlyMemory(content!.db, commandStore, silo, occurrence);
       }
       await dispatcherRuntime.startNightly(scanNightly);
       function deliverCredentials(id: string, token: import('@opencrane/auth').IssuedToken) {

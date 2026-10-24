@@ -518,7 +518,10 @@ A fresh-install HTTP journey is NOT RUN.
 
 Part of #99, P4-17 PR 2. The dispatcher starts native scheduling only after its
 subscription manifest is accepted and event workers are registered. The trigger
-uses the same database adapter and process. It also queues a startup scan.
+keeps its queue in the jobs database and runs in the dispatcher process. It also queues
+a startup scan. Candidate bindings and the memory checkpoint are read through
+`CONTENT_DATABASE_URL`, using the existing read role. Missing or lagging checkpoints
+fail the scan and retain trigger recovery; they never mean an empty or clean scope.
 Scans require the memory checkpoint to reach a fixed event position, then page
 100 binding rows at a time. Each scope history has its own ten-second deadline.
 Bindings begin on the next UTC night. Clean and disabled scopes append nothing.
@@ -547,7 +550,10 @@ cannot extend the original fifteen-minute window. An unresolved `due` record ski
 No model, tool, computer or budget port is available to the scan.
 
 Tests: `apps/ops/test/nightly-memory.test.ts` uses real PostgreSQL and NATS,
-including two child processes. Live fresh-install qualification remains NOT RUN.
+including two child processes. `test/worker-reactions.test.ts` runs the wired callback
+with separate jobs/content databases and a read-only content role. It checks refused,
+missed and no_changes results, duplicates, restart, unavailable checkpoints and retained
+trigger recovery. Live dreaming and fresh-install qualification remain NOT RUN.
 
 ## Departure cleanup
 
@@ -655,8 +661,10 @@ is released only after preparation stops. `test/gateway-configuration.test.ts` c
 expiry while waiting and while holding the lock, with no saved generation after either.
 
 `DATABASE_URL` still owns HandlerRuntime, its manifest, checkpoint, queue and receipts.
-No projection tables are created in jobs by this change. Nightly memory and connection
-custody callers keep their current binding until the dependent reaction database task.
+Nightly projection reads and configured connection cleanup also use the content pool.
+No projection tables are created in jobs. Connection cleanup and scans take the same
+content profile lock as staging, through separate clients. Custody stays optional;
+this binding does not configure or enable it.
 `test/worker-gateway.test.ts` starts the real dispatcher with two disposable databases
 and a content read role. It pauses real delivery and preparation in both orders, checks
 configuration refusal and connection loss, and checks that jobs stay separate.
@@ -684,7 +692,11 @@ The file contains `apiUrl` (loopback HTTP proxy), `namespace`, `journalDirectory
 `currentKeyId` and `keys` (a map of ids to base64 HMAC values, each 32–128 bytes).
 The file belongs in private secret-store mounts, never in events, logs or source control.
 The worker shares the namespace, keyring and journal directory with the staging host.
-Older key ids stay configured while their generations exist.
+Older key ids stay configured while their generations exist. The worker also shares
+the content database with staging, so their profile locks coordinate with each other.
+The wired lock tests use synthetic custody; the existing custody suite retains the
+exact UID/resourceVersion deletion checks. Connection-loss tests drain active work
+before either database pool closes.
 
 The handler uses the normal five retries with exponential backoff, starting at one second.
 After exhaustion it keeps material and the failed job. Operators can retry the original job;
