@@ -4910,6 +4910,7 @@ Own PASS: full lint (zero errors, 26 warnings), Knip, full typecheck, event cata
 Focused lint and server typecheck also passed after the final fixture changes.
 No dependency or business event was added. Authority and event-security tests were not edited.
 Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
+
 ## Internal owner retirement (P4-24 PR 4c; Part of #106)
 
 `src/routine-retire.ts` exports `retireRoutine(store, binding, memberId, input)`.
