@@ -4456,7 +4456,7 @@ and unavailable errors contain fixed descriptions only. No definition is returne
 database. It checks recovery, conflicts, refusals, queued access changes, expiry,
 slow history and replay with execution services forbidden. Run it under `nice -n 10`
 with `PG_TEST_URL` pointing to a disposable test database.
-Routes, admin intervention, retire/reassign/resume, active-root Stop, scheduling and
+Routes, admin intervention, reassign/resume, active-root Stop, scheduling and
 execution remain later work. Fresh-install execution qualification: NOT RUN.
 
 Bridge approval entries include the computer stream position in their change check.
@@ -4910,3 +4910,29 @@ Own PASS: full lint (zero errors, 26 warnings), Knip, full typecheck, event cata
 Focused lint and server typecheck also passed after the final fixture changes.
 No dependency or business event was added. Authority and event-security tests were not edited.
 Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
+## Internal owner retirement (P4-24 PR 4c; Part of #106)
+
+`src/routine-retire.ts` exports `retireRoutine(store, binding, memberId, input)`.
+It accepts the same strict input fields and change-reference format as owner pause.
+It loads history before the two-second write window and checks the exact IAM receipts
+and current owner management permission. Only the small membership and ownership
+streams enter the access check. The routine position guards against concurrent changes.
+
+One conditional append saves `routine.retired`. Saved facts supply the actor and
+revisions; source is `owner`, reason is `owner_requested`, and `next` is null.
+It refuses legacy records, retired routines and active occurrences. It increments only
+control revision. Execution stays disabled and retirement cannot restore scheduling.
+
+An exact retry returns the original `{ status: 'confirmed', changeId, eventId, position }`.
+Saved identity binds the original owner, target, preceding position and all revisions.
+Recovery checks current `read_metadata` access once, including retirement's IAM receipt.
+It does not require the management permission retirement removed or start a write window.
+Missing receipts, removed owners and IAM outages refuse. Replies and errors contain no
+instructions, credentials or service details.
+
+`test/routine-retire.test.ts` covers active and paused records, concurrent requests,
+lost replies past deduplication expiry and NATS restart, refusal cases, queued changes,
+publish retries, slow history and both permission and content replay. Run it with
+`nice -n 10` and `PG_TEST_URL` set to the disposable test database.
+There is no route, admin intervention, reassignment, scheduler or Stop reaction.
+Fresh-install execution qualification: NOT RUN.

@@ -1,0 +1,1 @@
+- A routine's owner can now save an internal retirement when no run is active and recover the original result after a lost reply. Retirement keeps permitted history and removes management; routine execution stays disabled.

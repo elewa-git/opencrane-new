@@ -2,10 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
-import { EventStore, type AppendCommand, type StoredEvent } from '@opencrane/event-store';
-import { jetstream, jetstreamManager } from '@nats-io/jetstream';
-import { TimeoutError } from '@nats-io/transport-node';
-import { event } from '@opencrane/event-store/testing';
+import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
+import { event, failingPublishStore } from '@opencrane/event-store/testing';
 import { foldRoutine, getEventDefinition, type RoutineState } from '@opencrane/events';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
@@ -82,7 +80,8 @@ async function savesOneRetirement(status: string) {
   const saved = await rows();
   expect(saved).toHaveLength(status === 'paused' ? 3 : 2);
   expect(saved.at(-1)?.event.data).toEqual({ version: 1, routineId: 'orders',
-    definitionRevision: 1, scheduleRevision: 1, controlRevision: input.expectedControlRevision + 1, actorId: 'alice',
+    definitionRevision: 1, scheduleRevision: 1,
+    controlRevision: input.expectedControlRevision + 1, actorId: 'alice',
     source: 'owner', reason: 'owner_requested', affectedRun: null,
     next: null });
   let replayed: RoutineState | undefined;
@@ -336,12 +335,10 @@ it.each(['missing receipt', 'removed', 'outage'])(
   'refuses committed recovery with %s', refusesRecoveryWithoutAccess, 30_000);
 
 async function changesDuringPublishRetry(condition: string) {
-  const client = jetstream(nats.connection);
-  const manager = await jetstreamManager(nats.connection);
-  const store = new EventStore(client, manager);
+  const retry = await failingPublishStore(nats.connection);
   const started = performance.now();
   const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
-  async function failPublish(): Promise<never> {
+  async function changeBeforeRetry() {
     if (condition === 'expiry') {
       clock.mockReturnValue(started + 2001);
     } else {
@@ -351,11 +348,10 @@ async function changesDuringPublishRetry(condition: string) {
       }
       await nats.seed([changed]);
     }
-    throw new TimeoutError();
   }
-  const publish = vi.spyOn(client, 'publish').mockImplementationOnce(failPublish);
-  await expect(retireRoutine(store, binding, 'alice', input)).rejects.toThrow();
-  expect(publish).toHaveBeenCalledTimes(condition === 'reassignment' ? 2 : 1);
+  retry.failNextPublish(changeBeforeRetry);
+  await expect(retireRoutine(retry.store, binding, 'alice', input)).rejects.toThrow();
+  expect(retry.publishAttempts()).toBe(condition === 'reassignment' ? 2 : 1);
   vi.restoreAllMocks();
   const saved = await rows();
   function isRetirement(row: StoredEvent) {
@@ -365,3 +361,15 @@ async function changesDuringPublishRetry(condition: string) {
 }
 it.each(['reassignment', 'removal', 'expiry'])(
   'refuses %s during publish retry', changesDuringPublishRetry);
+
+async function refusesMalformedPrincipal() {
+  const saved = routine('routine.retired');
+  const data = { version: 1, routineId: 'orders', definitionRevision: 1,
+    scheduleRevision: 1, controlRevision: 2, actorId: 'alice', source: 'owner',
+    reason: 'owner_requested', affectedRun: null, next: null };
+  const mismatched = { ...saved, commandId: input.changeId, data };
+  await nats.seed([mismatched]);
+  await expect(retire('admin')).rejects.toThrow('Routine retirement unavailable');
+}
+it('refuses a saved record whose principal differs from its actor',
+  refusesMalformedPrincipal);
