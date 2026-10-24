@@ -12,6 +12,22 @@ The existing independent pause deadline watcher is unchanged. This work adds no 
 of offline waits, reservation release, writer, lease, return or recovery command.
 Takeover remains disabled. Fresh-install qualification is NOT RUN.
 
+## Tool history and the shared request deadline
+
+Ordinary MCP decisions read conversation history before taking the access snapshot.
+History and access keep the same two-second request deadline. The gateway keeps its
+original two-second authorisation timeout. Managed-model and memory preparation keep
+their existing separate deadlines, including memory's fifteen-second gateway wait.
+
+`test/integration-access-gateway.test.ts` checks an ordinary tool call, 2,100 ms spent
+on history, and 1,900 ms on history followed by 200 ms on access. It advances the
+monotonic clock while real service timers keep running. The ordinary call must send
+once. Both over-budget calls must return 403 with one saved refusal, no remote
+connection and no reservation. All require full history to precede access reads.
+
+[The investigation](../../docs/process/evidence/ci-flakes-8.md) records the
+main-branch comparison and own checks.
+
 ## Provider access during startup
 
 Provider routes return HTTP 425 with `{ status: 'access_applying' }` when the existing

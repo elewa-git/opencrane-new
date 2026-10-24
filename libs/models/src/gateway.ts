@@ -210,6 +210,11 @@ export async function ingestUsage(actor: BudgetActor, file: string,
 }
 
 export function gatewayUsage(line: string) {
+  // Keep configuration probes out of call usage. They send no model or tool request.
+  const configurationCheck = /\broute=default\/configuration(?=\s|$)/u;
+  if (configurationCheck.test(line)) {
+    return undefined;
+  }
   const tool = toolObservation(line);
   if (tool) return tool;
   const status = logNumber(line, 'http\\.status');

@@ -14,6 +14,14 @@ function keepsProviderJwtFailure() {
 }
 it('keeps provider-route JWT refusals in the gateway audit', keepsProviderJwtFailure);
 
+function ignoresConfigurationChecks(status: number) {
+  const line = `route=default/configuration http.status=${status}`;
+  expect(gatewayUsage(line)).toBeUndefined();
+}
+it.each([200, 401, 403])('keeps configuration checks out of call usage (%s)',
+  ignoresConfigurationChecks);
+
+
 const STDERR_AFTER_EXIT_MS = 150;
 
 const mockState = vi.hoisted(() => ({ exitBeforeStderrDrain: false, withContext: false }));

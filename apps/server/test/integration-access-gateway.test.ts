@@ -495,3 +495,55 @@ async function restoresGrant() {
 }
 it('restores a revoked grant only after its original content and IAM receipts are current',
   restoresGrant, 60_000);
+
+async function boundsToolHistory(historyMs: number, accessMs: number, expectedAllowed: boolean) {
+  const context = await gatewayFixture();
+  await context.grant('member');
+  await context.grant('assistant');
+  const store = context.setup.nats.store;
+  const originalRead = store.readStream.bind(store);
+  const requestStarted = performance.now();
+  let elapsed = 0;
+  let accessStarted = false;
+  const historyAccessStates: boolean[] = [];
+  // Advance decision time only at these reads; keep real service timers running.
+  function currentTime() {
+    return requestStarted + elapsed;
+  }
+  async function* slowHistory(...parameters: Parameters<typeof originalRead>) {
+    const subject = parameters[0];
+    if (subject === 'member-alice' && !accessStarted) {
+      accessStarted = true;
+      elapsed += accessMs;
+    }
+    const fullHistory = subject === 'conversation-conversation' && parameters[1] === 1;
+    if (fullHistory) {
+      historyAccessStates.push(accessStarted);
+    }
+    yield* originalRead(...parameters);
+    if (fullHistory) {
+      elapsed += historyMs;
+    }
+  }
+  const clock = vi.spyOn(performance, 'now');
+  const read = vi.spyOn(store, 'readStream');
+  clock.mockImplementation(currentTime);
+  read.mockImplementation(slowHistory);
+  try {
+    if (expectedAllowed) {
+      await allowed(context);
+    } else {
+      await denied(context);
+    }
+    expect(elapsed).toBe(historyMs + accessMs);
+    expect(historyAccessStates).toEqual([false]);
+    expect(context.setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    read.mockRestore();
+    clock.mockRestore();
+  }
+}
+const toolHistoryBudgets = [[0, 0, true], [2100, 0, false], [1900, 200, false]] as const;
+it.each(toolHistoryBudgets)(
+  'keeps tool history within the shared budget (%i ms history, %i ms access)',
+  boundsToolHistory, 60_000);

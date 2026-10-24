@@ -25,6 +25,35 @@ The existing conditional append and readback save one `approval.cancelled` with
 result. Used consent retains dispatch evidence and cannot retry during matching control.
 History loads do not add conversation or computer streams to access watches.
 
+## Tool history and the shared request deadline
+
+Ordinary MCP decisions keep the original two-second deadline from request start.
+They read full conversation history before taking the access snapshot, then check
+only later activity and the small access streams. They do not restart the clock
+after history. The gateway keeps its original two-second authorisation timeout.
+Managed-model and memory preparation retain main's separate deadlines, including
+the fifteen-second memory gateway wait.
+
+`test/decision-fence.test.ts` keeps its refusal and money assertions unchanged.
+It checks history plus access exceeding two seconds, and a late decision after the
+gateway has timed out. The latter must record a refusal and leave no reservation or
+uncertain hold. `apps/server/test/integration-access-gateway.test.ts` also advances
+the monotonic clock by 2,100 ms after history, or by 1,900 ms after history and
+200 ms during access. Both must return 403 with no remote call. Its ordinary call
+still requires 200, one remote call and the same request bytes. All cases require
+full history to load before access reads.
+
+## Gateway configuration checks and call usage
+
+`gatewayUsage` ignores the exact `default/configuration` route for every HTTP status.
+The route only confirms which configuration the running gateway serves. It sends no
+model or tool request. Previously, its successful probes became random
+`gateway.observation_recorded` events with `observation_missing`. Those writes could
+change the global event position during a conditional budget append and stop the writer.
+Ordinary model, tool and provider refusal observations keep their existing behaviour.
+`test/gateway-start.test.ts` checks 200, 401 and 403 control responses, alongside the
+existing provider JWT refusal test.
+
 ## Private gateway refusal diagnostics
 
 The decision service logs `Gateway request refused` at warn level before recording a

@@ -519,6 +519,10 @@ Workers keep copies belonging to other silos without checking or changing them.
 Tests share a port picker that keeps listeners away from outgoing connections
 and the secondary dev stacks. It tries another port if one is already busy.
 Gateway startup errors keep recent safe details, including port conflicts.
+Gateway configuration checks do not count as model or tool calls. Their access logs
+create no call observations and do not compete with saving a budget reservation.
+Ordinary tool calls load conversation history before checking access. History and
+access share the original two-second request budget and gateway timeout.
 The admission timing tests wait for cold history and applied model grant receipts
 before measuring a call. They issue a fresh turn token after preparation, with the
 normal two-minute lifetime.
