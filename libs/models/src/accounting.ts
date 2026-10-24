@@ -3,7 +3,7 @@ import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 import { applyBudget, data, emptyBudget, stateSchema, totals, type BudgetState } from './state.ts';
 
-export const budgetProjectionVersion = 4;
+export const budgetProjectionVersion = 5;
 type Reservation = BudgetState['reservations'][number];
 const pageSchema = z.object({
   after: z.int().nonnegative().default(0),
@@ -21,6 +21,87 @@ const callSchema = z.object({
   evidence: z.enum(['held', 'settled', 'unknown', 'not_dispatched']),
 });
 export type SpendingCall = z.infer<typeof callSchema> & { day: string; month: string };
+
+const effectPageSchema = pageSchema.pick({ after: true, limit: true }).extend({
+  permitId: z.string().min(1).optional(),
+});
+const effectSchema = z.object({
+  silo: z.string(), eventId: z.string(), permitId: z.string(),
+  position: z.coerce.number().int().positive(), time: z.iso.datetime({ offset: true }),
+  type: z.enum(['effect.observed', 'effect.uncertain', 'effect.resolved']),
+  outcome: z.enum(['success', 'error', 'settled', 'released']).nullable(),
+  costCents: z.coerce.number().int().nonnegative().nullable(),
+  settledCents: z.coerce.number().int().nonnegative().nullable(),
+  resolvedBy: z.string().nullable(), changeRef: z.string().nullable(),
+});
+async function createBudgetEffects(db: Query, table: string) {
+  await db.query(`CREATE TABLE IF NOT EXISTS ${table} (
+    silo TEXT NOT NULL, event_id TEXT NOT NULL, permit_id TEXT NOT NULL,
+    position BIGINT NOT NULL, time TEXT NOT NULL, type TEXT NOT NULL, outcome TEXT,
+    cost_cents BIGINT, settled_cents BIGINT, resolved_by TEXT, change_ref TEXT,
+    PRIMARY KEY (silo, event_id))`);
+  await db.query(`CREATE INDEX IF NOT EXISTS ${table}_position ON ${table} (silo, position)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS ${table}_permit
+    ON ${table} (silo, permit_id, position)`);
+}
+async function saveBudgetEffect(db: Query, table: string, event: EventEnvelope, position: number) {
+  if (!parseEventByType(event).success) throw new Error('Invalid effect event');
+  const payload = data(event);
+  const permitId = z.string().parse(payload['permitId']);
+  let resolvedBy: string | null = null;
+  let changeRef: string | null = null;
+  // Confirm the same server and human binding used by saved resolution receipts.
+  if (event.type === 'effect.resolved' && event.source === 'opencrane-server' &&
+      event.subject === `effect-${permitId}` && payload['reservationId'] === permitId &&
+      event.principal?.kind === 'human' && payload['resolvedBy'] === event.principal.id) {
+    resolvedBy = event.principal.id;
+    changeRef = event.commandId ?? null;
+  }
+  const row = effectSchema.parse({ silo: event.silo, eventId: event.id, permitId, position,
+    time: event.time, type: event.type, outcome: payload['outcome'] ?? null,
+    costCents: payload['costCents'] ?? null, settledCents: payload['settledCents'] ?? null,
+    resolvedBy, changeRef });
+  // Keep conflicting observations as separate records; redelivery keeps the original position.
+  await db.query(`INSERT INTO ${table} VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+    ON CONFLICT (silo, event_id) DO NOTHING`, [row.silo, row.eventId, row.permitId,
+    row.position, row.time, row.type, row.outcome, row.costCents, row.settledCents,
+    row.resolvedBy, row.changeRef]);
+}
+function spendingEffect(row: Record<string, unknown>) {
+  return effectSchema.parse(row);
+}
+
+/** Read saved records only. Callers must check finance access after loading, including failures. */
+export async function readSpendingEffects(db: Query, silo: string,
+  input: z.input<typeof effectPageSchema> = {}, deadline = performance.now() + 2000) {
+  const page = effectPageSchema.parse(input);
+  const options = { deadline };
+  const progress = await db.query<{ version: number; sequence: string; generation: string }>(
+    `SELECT version, sequence, generation FROM projection_versions
+      JOIN projection_checkpoints USING (name) JOIN projection_generations USING (name)
+      WHERE name = $1`, ['model-budgets'], options);
+  const saved = progress.rows[0];
+  if (!saved || saved.version < budgetProjectionVersion) {
+    throw new Error('Spending effects unavailable');
+  }
+  const conditions = ['silo = $1', 'position > $2'];
+  const parameters: unknown[] = [silo, page.after];
+  if (page.permitId !== undefined) {
+    parameters.push(page.permitId);
+    conditions.push(`permit_id = $${parameters.length}`);
+  }
+  parameters.push(page.limit + 1);
+  const result = await db.query(`SELECT silo, event_id AS "eventId", permit_id AS "permitId",
+    position, time, type, outcome, cost_cents AS "costCents", settled_cents AS "settledCents",
+    resolved_by AS "resolvedBy", change_ref AS "changeRef" FROM model_budget_effects
+    WHERE ${conditions.join(' AND ')} ORDER BY position LIMIT $${parameters.length}`,
+  parameters, options);
+  const selected = result.rows.slice(0, page.limit);
+  const rows = selected.map(spendingEffect);
+  let next: number | null = null;
+  if (result.rows.length > page.limit) next = rows.at(-1)!.position;
+  return { rows, next, sequence: Number(saved.sequence), generation: Number(saved.generation) };
+}
 
 async function createBudgetCalls(db: Query, table: string) {
   await db.query(`CREATE TABLE IF NOT EXISTS ${table} (
@@ -107,16 +188,23 @@ export async function readSpendingCalls(db: Query, silo: string,
 // Keep call reads separate while retaining the existing budget summary fold.
 function budgetProjection(name: string, table: string): Projection {
   const callsTable = table.replace('model_budgets', 'model_budget_calls');
+  const effectsTable = table.replace('model_budgets', 'model_budget_effects');
   async function create(db: Query) {
     await db.query(`CREATE TABLE IF NOT EXISTS ${table}
       (silo TEXT PRIMARY KEY, state JSONB NOT NULL)`);
     await createBudgetCalls(db, callsTable);
+    await createBudgetEffects(db, effectsTable);
   }
   async function drop(db: Query) {
-    await db.query(`DROP TABLE IF EXISTS ${table}, ${callsTable}`);
+    await db.query(`DROP TABLE IF EXISTS ${table}, ${callsTable}, ${effectsTable}`);
   }
   async function apply(db: Query, event: EventEnvelope,
     position: number) {
+    if (event.type === 'effect.observed' || event.type === 'effect.uncertain' ||
+        event.type === 'effect.resolved') {
+      await saveBudgetEffect(db, effectsTable, event, position);
+      return;
+    }
     if (!event.type.startsWith('budget.')) return;
     if (!parseEventByType(event).success) throw new Error('Invalid budget event');
     const rows = await db.query<{ state: unknown }>(

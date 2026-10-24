@@ -565,7 +565,7 @@ No stack or paid provider call proves this route yet.
   unchanged configuration and scope per UTC day for exhaustion, including across actor recovery. All decisions use `decision.recorded` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.
 - `budgets` is a PostgreSQL projection using the existing runner. The worker
-  upgrades projection version 3 by replaying budget and call rows before resuming.
+  upgrades older projections to version 5 by replaying budget, call and effect rows before resuming.
   Rebuild online with `npm run replay -- budgets --verify`; a repair changes
   the generation and preserves the live table's reader grants.
   `GET /api/org/models` uses live owner/admin authorisation and returns models, prices, the task-routing table and context threshold,
@@ -3232,10 +3232,10 @@ A null settlement means no recorded settlement; zero is a recorded amount. Unkno
 outcomes retain the safety hold alongside the maximum saved settlement. These are
 accounting states, not proof of dispatch or completion. No private call text is copied.
 
-Version 4 adds month indexes over the saved reservation time, for all combinations
-of the payer and assistant filters. It replays installed data and replaces both
-tables in one transaction,
-retaining reader grants. Verification compares both tables, reading call rows in batches of 200. An incomplete legacy
+Version 5 adds saved effect records alongside the call rows and their month indexes.
+It replays installed data and replaces all three tables in one transaction,
+retaining reader grants, event receipts and the checkpoint. Verification compares all
+three tables, reading call and effect rows in batches of 200. An incomplete legacy
 call that the shared budget fold cannot read makes the upgrade and reader unavailable;
 it does not invent attribution or claim an empty result. Missing upgrades also refuse.
 The existing actor remains the only money writer. Replay receives only an event
@@ -3247,6 +3247,32 @@ upgrades, locked-read deadlines and replay equality. Existing root tests still e
 Callers must check current finance access once after loading. There is no authority
 fence on this read. Effect detail, impact previews, root/routine joins and screens
 remain later work. Fresh-install qualification: NOT RUN.
+
+### Saved effect accounting records (P4-26 PR 8d; Part of #108)
+
+The internal `readSpendingEffects` in `accounting.ts` reads `model_budget_effects`.
+It returns 20 records by default, at most 50, selecting one extra row to find the next
+page. `after` is the last returned original event position; optional `permitId` narrows
+the silo's records. Both query shapes have ordered indexes. `sequence` and `generation`
+describe the checkpoint read before the rows, as with call reads. These are not snapshots
+across pages. The shared read deadline defaults to two seconds. Missing tables,
+outdated versions and expired reads refuse; there is no history or budget JSON fallback.
+
+Each saved observation, uncertainty or resolution keeps its own event id, position,
+time, type, outcome and applicable integer cents. Zero differs from a missing amount.
+Redelivery keeps one row; conflicting observations keep separate rows. Resolver and
+change references require the matching server, human and permit binding used by resolution
+receipts. Evidence references, usage, private work fields and event payloads are not copied.
+A saved resolution does not confirm an outside effect, settle money or release a hold.
+Late records leave the call's original month and hold unchanged.
+
+The existing budgets worker writes these rows in the checkpoint transaction. Replay
+checks every comparison batch and replaces the tables together, without reactions or
+event appends. `test/accounting.test.ts` covers mixed paging, duplicate delivery,
+resolver identity, late evidence, bounded indexed reads, missing/locked tables,
+old-version upgrades, grants, corruption beyond the first batch and replacement rollback.
+Callers must check current finance access once after loading, including failed loads.
+No public export, HTTP route, settlement logic or new worker is added here.
 
 ## Exact saved tool-mode receipts (P4-27 PR 7a; Part of #109)
 

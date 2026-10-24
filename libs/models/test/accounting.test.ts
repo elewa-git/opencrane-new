@@ -1,12 +1,14 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { wireSubject } from '@opencrane/event-store';
+import { jetstream } from '@nats-io/jetstream';
 import { createLogger } from '@opencrane/observability';
 import { ProjectionRunner, type Query } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { BudgetActor, envelope } from '../src/actor.ts';
-import { priceTableId, totals } from '../src/state.ts';
-import { budgets } from '../src/accounting.ts';
+import { data, priceTableId, totals } from '../src/state.ts';
+import { budgets, readSpendingEffects } from '../src/accounting.ts';
 import { initialiseBudgetProjection, rebuildBudgetProjection } from '../src/rebuild.ts';
 import * as models from '../src/index.ts';
 
@@ -295,3 +297,264 @@ async function indexedMonthReads() {
 }
 it('selects each month and scope combination through an ordered index without scanning other rows',
   indexedMonthReads);
+
+function effectEvent(index: number, permitId = 'permit', silo = 'test') {
+  const observed = { permitId, computerId: 'private-computer', tool: 'private-tool',
+    destination: 'private-destination', costCents: index, outcome: 'success',
+    usage: { inputTokens: 100, outputTokens: 10, priceTableId: 'private-tariff' } };
+  let type = 'effect.observed';
+  let payload: unknown = observed;
+  if (index % 3 === 1) {
+    type = 'effect.uncertain';
+    payload = { permitId, computerId: 'private-computer', reason: 'missing_usage' };
+  } else if (index % 3 === 2) {
+    type = 'effect.resolved';
+    payload = { permitId, reservationId: permitId, resolvedBy: 'owner',
+      outcome: 'settled', settledCents: 0, evidence: [{ kind: 'provider_receipt',
+        reference: 'private-receipt', digest: '0'.repeat(64), amountCents: 0 }] };
+  }
+  const saved = envelope(silo, `effect-${permitId}`, type, payload);
+  return { ...saved, source: 'opencrane-server',
+    principal: { kind: 'human' as const, id: 'owner' } };
+}
+async function effectPages(permitId?: string) {
+  const rows = [];
+  let after = 0;
+  while (true) {
+    const page = await readSpendingEffects(postgres.db, 'test', { permitId, after, limit: 50 });
+    expect(page.rows.length).toBeLessThanOrEqual(50);
+    rows.push(...page.rows);
+    if (page.next === null) return rows;
+    expect(page.next).toBeGreaterThan(after);
+    after = page.next;
+  }
+}
+async function pagesSavedEffects() {
+  const expectedIds: string[] = [];
+  const permitIds: string[] = [];
+  for (let index = 0; index < 213; index += 1) {
+    const permitId = index % 2 === 0 ? 'permit' : 'other-permit';
+    const saved = effectEvent(index, permitId);
+    await nats.seed([saved, effectEvent(index, permitId, 'foreign')]);
+    expectedIds.push(saved.id);
+    if (permitId === 'permit') permitIds.push(saved.id);
+  }
+  await runner.run(budgets);
+  const all = await effectPages();
+  function eventId(row: { eventId: string }) { return row.eventId; }
+  expect(all.map(eventId)).toEqual(expectedIds);
+  const filtered = await effectPages('permit');
+  expect(filtered.map(eventId)).toEqual(permitIds);
+  expect(await effectPages('absent')).toEqual([]);
+  const first = await readSpendingEffects(postgres.db, 'test');
+  expect(first.rows).toHaveLength(20);
+  expect(first.next).toBe(all[19]?.position);
+  expect(first.sequence).toBe(await nats.store.head());
+  expect(first.generation).toBeGreaterThanOrEqual(0);
+  expect(all.slice(0, 3)).toMatchObject([
+    { type: 'effect.observed', outcome: 'success', costCents: 0,
+      settledCents: null, resolvedBy: null, changeRef: null },
+    { type: 'effect.uncertain', outcome: null, costCents: null, settledCents: null },
+    { type: 'effect.resolved', outcome: 'settled', costCents: null,
+      settledCents: 0, resolvedBy: 'owner' },
+  ]);
+  expect(JSON.stringify(all)).not.toContain('private-');
+  await expect(readSpendingEffects(postgres.db, 'test', { limit: 51 })).rejects.toThrow();
+  await expect(readSpendingEffects(postgres.db, 'test', { after: -1 })).rejects.toThrow();
+  await verifiesEffectReplay(all);
+}
+it('pages mixed saved effect records by original position and permit without private or foreign data',
+  pagesSavedEffects);
+
+async function accountingStorage() {
+  const result = await postgres.db.query(`SELECT
+    (SELECT jsonb_agg(row_data ORDER BY silo) FROM model_budgets row_data) AS budgets,
+    (SELECT jsonb_agg(row_data ORDER BY silo, reservation_id)
+      FROM model_budget_calls row_data) AS calls,
+    (SELECT jsonb_agg(row_data ORDER BY event_id) FROM projection_events row_data
+      WHERE projection = 'model-budgets') AS receipts,
+    (SELECT sequence FROM projection_checkpoints WHERE name = 'model-budgets') AS checkpoint,
+    (SELECT jsonb_agg(ROW(oid, relname, relacl) ORDER BY relname) FROM pg_class
+      WHERE relname IN ('model_budgets', 'model_budget_calls', 'model_budget_effects')) AS grants`);
+  return result.rows;
+}
+async function verifiesEffectReplay(all: Awaited<ReturnType<typeof effectPages>>) {
+  await postgres.db.query(`GRANT SELECT ON model_budgets, model_budget_calls,
+    model_budget_effects TO PUBLIC`);
+  const before = await accountingStorage();
+  const actorBefore = structuredClone(actor.state);
+  const head = await nats.store.head();
+  const page = await readSpendingEffects(postgres.db, 'test');
+  await rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true });
+  expect(await effectPages()).toEqual(all);
+  expect(await accountingStorage()).toEqual(before);
+  // Corrupt a test-silo record after the 213 foreign-silo records in verification order.
+  await postgres.db.query('UPDATE model_budget_effects SET cost_cents = 999 WHERE event_id = $1',
+    [all.at(-1)!.eventId]);
+  await expect(rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true }))
+    .rejects.toThrow('differs');
+  expect(await accountingStorage()).toEqual(before);
+  await rebuildBudgetProjection(postgres.db, nats.reader, logger);
+  expect(await effectPages()).toEqual(all);
+  const repaired = await readSpendingEffects(postgres.db, 'test');
+  expect(repaired.generation).toBe(page.generation + 1);
+  await postgres.db.query('TRUNCATE model_budget_effects');
+  await postgres.db.query('UPDATE projection_versions SET version = 4 WHERE name = $1',
+    [budgets.name]);
+  await expect(readSpendingEffects(postgres.db, 'test')).rejects.toThrow('unavailable');
+  await initialiseBudgetProjection(postgres.db, nats.reader, logger);
+  expect(await effectPages()).toEqual(all);
+  expect(await accountingStorage()).toEqual(before);
+  expect(await nats.store.head()).toBe(head);
+  expect(actor.state).toEqual(actorBefore);
+}
+
+async function preservesSeparateEvidence() {
+  const permitId = await actor.reserve(call(), 120);
+  clock = new Date('2026-11-01T00:01:00.000Z');
+  const resolution = effectEvent(2, permitId);
+  const saved = { ...resolution, time: '2026-11-01T01:01:00+01:00' };
+  await nats.seed([saved]);
+  await runner.run(budgets);
+  const resolved = await effectPages(permitId);
+  expect(resolved).toMatchObject([{ eventId: saved.id, time: saved.time,
+    type: 'effect.resolved', settledCents: 0, changeRef: saved.commandId, resolvedBy: 'owner' }]);
+  const calls = await allPages();
+  expect(calls).toMatchObject([{ month: '2026-10', heldCents: 120, settledCents: null }]);
+  const first = effectEvent(0, permitId);
+  const conflict = effectEvent(3, permitId);
+  await nats.seed([first, conflict]);
+  await runner.run(budgets);
+  const before = await effectPages(permitId);
+  expect(before).toHaveLength(3);
+  expect(before.slice(1)).toMatchObject([{ costCents: 0 }, { costCents: 3 }]);
+  // Deliver the same event again without the transport's temporary deduplication key.
+  const stream = jetstream(nats.connection);
+  await stream.publish(wireSubject(first.subject), JSON.stringify(first));
+  await runner.run(budgets);
+  expect(await effectPages(permitId)).toEqual(before);
+  expect(await allPages()).toEqual(calls);
+  const head = await nats.store.head();
+  const actorBefore = structuredClone(actor.state);
+  await rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true });
+  expect(await effectPages(permitId)).toEqual(before);
+  expect(await allPages()).toEqual(calls);
+  expect(await nats.store.head()).toBe(head);
+  expect(actor.state).toEqual(actorBefore);
+}
+it('keeps duplicate and conflicting evidence distinct from settlement and the original month hold',
+  preservesSeparateEvidence);
+
+async function verifiesResolverIdentity() {
+  const valid = effectEvent(2);
+  const validData = data(valid);
+  const wrongReservation = { ...effectEvent(2), data: {
+    ...validData, reservationId: 'another-permit' } };
+  const records = [valid, { ...effectEvent(2), source: 'computer' },
+    { ...effectEvent(2), principal: { kind: 'human' as const, id: 'another-person' } },
+    { ...effectEvent(2), principal: { kind: 'system' as const, id: 'owner' } },
+    { ...effectEvent(2), subject: 'effect-another-permit' }, wrongReservation];
+  await nats.seed(records);
+  await runner.run(budgets);
+  const rows = await effectPages();
+  expect(rows[0]).toMatchObject({ resolvedBy: 'owner', changeRef: valid.commandId });
+  for (const row of rows.slice(1)) {
+    expect(row).toMatchObject({ resolvedBy: null, changeRef: null });
+  }
+}
+it('exposes resolver details only for the matching server, human and permit binding',
+  verifiesResolverIdentity);
+
+async function boundedEffectReads() {
+  await nats.seed([effectEvent(0)]);
+  await runner.run(budgets);
+  await postgres.db.query('ALTER TABLE model_budgets RENAME TO inaccessible_budgets');
+  await postgres.db.query('ALTER TABLE model_budget_calls RENAME TO inaccessible_calls');
+  async function checkIndexes(tx: Query) {
+    await tx.query('SET LOCAL enable_seqscan = off');
+    for (const permitId of [undefined, 'permit']) {
+      const deadline = performance.now() + 2000;
+      const statements: string[] = [];
+      async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+        options?: { deadline: number }) {
+        statements.push(sql);
+        expect(options?.deadline).toBe(deadline);
+        if (sql.includes('FROM model_budget_effects')) {
+          expect(values?.at(-1)).toBe(51);
+          const plan = await tx.query(`EXPLAIN ${sql}`, values);
+          const details = JSON.stringify(plan.rows);
+          expect(details).toContain('Index Cond');
+          expect(details).not.toContain('Filter:');
+          expect(details).not.toContain('Sort');
+        }
+        return tx.query<Row>(sql, values, options);
+      }
+      const result = await readSpendingEffects({ query }, 'test', { permitId, limit: 50 }, deadline);
+      expect(result.rows).toHaveLength(1);
+      expect(statements).toHaveLength(2);
+    }
+  }
+  await postgres.db.transaction(checkIndexes);
+}
+it('reads effects through bounded ordered indexes without budget JSON, calls or stream scans',
+  boundedEffectReads);
+
+async function refusesUnavailableEffects() {
+  let release = () => {};
+  let acquired = () => {};
+  function holdLock(resolve: () => void) { release = resolve; }
+  function markAcquired(resolve: () => void) { acquired = resolve; }
+  const held = new Promise<void>(holdLock);
+  const ready = new Promise<void>(markAcquired);
+  async function lock(tx: Query) {
+    await tx.query('LOCK TABLE model_budget_effects IN ACCESS EXCLUSIVE MODE');
+    acquired();
+    await held;
+  }
+  const locked = postgres.db.transaction(lock);
+  await ready;
+  try {
+    const read = readSpendingEffects(postgres.db, 'test', {}, performance.now() + 150);
+    await expect(Promise.race([read, delay(3000, 'read did not expire')]))
+      .rejects.toThrow('Database read expired');
+  } finally {
+    release();
+    await locked;
+  }
+  expect(await effectPages()).toEqual([]);
+  await postgres.db.query('DELETE FROM projection_checkpoints WHERE name = $1', [budgets.name]);
+  await expect(readSpendingEffects(postgres.db, 'test')).rejects.toThrow('unavailable');
+  await runner.initialise(budgets);
+  await postgres.db.query('DROP TABLE model_budget_effects');
+  await expect(readSpendingEffects(postgres.db, 'test')).rejects.toThrow();
+  await expect(readSpendingEffects(postgres.db, 'test', {}, performance.now() - 1))
+    .rejects.toThrow('Database read expired');
+}
+it('refuses missing or locked effect projections within the read deadline', refusesUnavailableEffects);
+
+async function rollsBackFailedReplacement() {
+  await actor.reserve(call(), 120);
+  await nats.seed([effectEvent(1)]);
+  await runner.run(budgets);
+  const before = await accountingStorage();
+  const page = await readSpendingEffects(postgres.db, 'test');
+  await actor.reserve(call(), 70);
+  await nats.seed([effectEvent(3)]);
+  await postgres.db.query(`ALTER TABLE model_budget_effects
+    ADD CONSTRAINT refuse_new_observation CHECK (cost_cents IS NULL)`);
+  const actorBefore = structuredClone(actor.state);
+  const head = await nats.store.head();
+  await expect(rebuildBudgetProjection(postgres.db, nats.reader, logger)).rejects.toThrow();
+  expect(await accountingStorage()).toEqual(before);
+  expect(await readSpendingEffects(postgres.db, 'test')).toEqual(page);
+  await postgres.db.query('ALTER TABLE model_budget_effects DROP CONSTRAINT refuse_new_observation');
+  await rebuildBudgetProjection(postgres.db, nats.reader, logger);
+  const rebuilt = await readSpendingEffects(postgres.db, 'test');
+  expect(rebuilt.rows).toHaveLength(2);
+  expect(rebuilt.sequence).toBe(head);
+  expect(await allPages()).toHaveLength(2);
+  expect(await nats.store.head()).toBe(head);
+  expect(actor.state).toEqual(actorBefore);
+}
+it('rolls back rows, receipts and checkpoint together when replacement fails',
+  rollsBackFailedReplacement);

@@ -1,0 +1,1 @@
+- Save separate accounting records for observed, uncertain and resolved effects, with bounded internal reads and replay that preserves their original positions. Public effect pages remain unchanged.

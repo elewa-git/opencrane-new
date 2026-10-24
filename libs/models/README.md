@@ -140,6 +140,14 @@ remains switched off. Crash recovery and live qualification are still pending.
 Tool mode changes require the server’s declared zero cost and approval details
 for both Allow and Ask. Admin review locks those values before a tool can be enabled.
 
+Background workers copy saved events into spending read tables. Internal readers can
+page through effect records without loading the whole history. Rebuilding these tables
+leaves the original budget decisions intact and makes no outside calls.
+
+A call first needs permission and enough budget. The model or tool outcome can then
+settle its held money. A saved resolution stays separate from an observed outcome;
+saving it does not prove an outside action happened.
+
 Spending call records can be read in small pages, filtered by their saved payer and
 assistant. They keep the original date, held money and recorded settlement after
 rollover or replay. Reading these records never permits spending.
@@ -355,6 +363,7 @@ Retrying an unchanged model call can recover its original unsent hold and saved 
   Accept the model request that follows a tool result under the same spending limits.
 - Start agentgateway without giving its provider key to the server or computer.
 - Record what the AI provider used. When the result of a call is unknown, keep the held money in place until an owner or admin settles it.
+- Keep separate read tables for calls and saved effect records. Include safe accounting details, without private work or provider receipt contents.
 - Give new members and assistants access to the active models ([grants](../../GLOSSARY.md#grant)), record the silo's first owner, store the AI provider settings that admins enter, and show spending history without private details.
 
 A tool offered in Allow mode is refused if its policy changes to Ask during that
@@ -516,6 +525,15 @@ The cleanup retry test waits for its database lock and for the queue to record f
 before checking that every attempt sent a delete request.
 Connection command tests also wait for their locks, except when checking lock contention.
 Scan tests wait for the scan to report each completed page.
+
+With a disposable test database configured through `PG_TEST_URL`, run the focused
+accounting tests with:
+
+```sh
+nice -n 10 npx vitest run libs/models/test/accounting.test.ts --maxWorkers=1
+```
+
+The wider package checks are:
 
 ```sh
 npm test -- libs/models
