@@ -1,0 +1,50 @@
+{
+  "status": "FAIL",
+  "step": "audience",
+  "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+  "grants": [
+    {
+      "command": {
+        "commandId": "635b1ad6-fdfd-42be-8dcc-f1a7922d2313",
+        "expectedSequence": 0,
+        "action": "grant",
+        "granteeKind": "member",
+        "granteeId": "zitadel-owner"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "635b1ad6-fdfd-42be-8dcc-f1a7922d2313",
+        "operation": "grant.given",
+        "sequence": 245,
+        "changeId": "e98cf890-0bf3-442a-a96b-c7b1f5776cb5",
+        "currentSequence": 245,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    }
+  ],
+  "posts": [
+    {
+      "path": "/api/org/integrations/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/access/changes",
+      "status": 200,
+      "command": {
+        "commandId": "635b1ad6-fdfd-42be-8dcc-f1a7922d2313",
+        "expectedSequence": 0,
+        "action": "grant",
+        "granteeKind": "member",
+        "granteeId": "zitadel-owner"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "635b1ad6-fdfd-42be-8dcc-f1a7922d2313",
+        "operation": "grant.given",
+        "sequence": 245,
+        "changeId": "e98cf890-0bf3-442a-a96b-c7b1f5776cb5",
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    }
+  ]
+}
