@@ -185,7 +185,9 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions,
   }
 
   async function prepareTarget(route: Route, deadline: number) {
-    if (!route.locator) return;
+    if (!route.locator) {
+      return;
+    }
     const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
     const signal = AbortSignal.timeout(duration);
     return prepareRemote(route.locator, options?.remoteNetwork ?? {}, signal);
@@ -229,7 +231,9 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions,
       try {
         // Save the HTTPS attempt before admission so a refusal can prove nothing was sent.
         stage = 'dispatch_start';
-        if (route.locator) observe = await recordStarted(permit, deadline);
+        if (route.locator) {
+          observe = await recordStarted(permit, deadline);
+        }
         stage = 'budget_admission';
         await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
         stage = 'tool_admission';
@@ -240,7 +244,9 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions,
           requireFreshDispatch(req, res, permit);
         }
         stage = 'dispatch_start';
-        if (!route.locator) observe = await recordStarted(permit, deadline);
+        if (!route.locator) {
+          observe = await recordStarted(permit, deadline);
+        }
         stage = 'final_access';
         if (permit.gatewayBinding) {
           await permit.confirmAccess();

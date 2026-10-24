@@ -60,7 +60,9 @@ export class BudgetActor {
     confirmAccess?: AccessCheck, deadline = confirmAccess?.deadline) {
     // Keep one limit across all conflicts, including callers without an explicit deadline.
     const retryDeadline = deadline ?? performance.now() + 2000;
-    if (confirmAccess) deadline = retryDeadline;
+    if (confirmAccess) {
+      deadline = retryDeadline;
+    }
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
     this.requireReservationWrites(event, confirmAccess);
     // Reuse replayed history; configure checks its caller's command id before this append.
@@ -69,7 +71,8 @@ export class BudgetActor {
       ...(deadline === undefined ? {} : { deadline }) };
     let result = await this.store.append(command);
     while (result.status === 'conflict') {
-      if (!await this.canRepeatAppend(confirmAccess !== undefined, retryDeadline)) {
+      const canRepeat = await this.canRepeatAppend(confirmAccess !== undefined, retryDeadline);
+      if (!canRepeat) {
         throw new Error('Budget append contention');
       }
       this.requireReservationWrites(event, confirmAccess);

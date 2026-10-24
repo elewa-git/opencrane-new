@@ -2,10 +2,11 @@
 
 ## Current product correction, 24 October 2026
 
-The branch was fetched and rebased onto `origin/main`. Both rebases completed without
-conflicts. The final base is `cecab99b68d47fc0f7d857261592fa79ff422965`; its additional
-change only affects the unrelated custody fixture and documentation. The product
-files in this correction are unchanged by that rebase. The earlier investigation below is retained as history; its unexplained
+The branch was fetched and rebased onto `origin/main`. The rebases completed without
+conflicts. The final base is `e3b79fc6b9504c9c136ddd9b1c57e7eed3dd2288`. Main added
+the unrelated custody fixture and child-chat change during testing. Neither rebase
+changed this correction’s product files or the selected test files. The earlier
+investigation below is retained as history; its unexplained
 refusals are not reclassified as timing failures.
 
 Two unrelated member writes can interrupt consecutive conditional budget publishes.
@@ -25,19 +26,19 @@ another writer or an unavailable append caused the refusal.
 
 ### Current failing-first checks
 
-- `28e62c685` commits the real-NATS, two-conflict actor cases before `32dc0d2d8`.
+- `34d339cd3` commits the real-NATS, two-conflict actor cases before `fd78b80a2`.
   FAIL before the fix: unchanged access was refused and the original deadline was
   missing from conflict operations. PASS after the fix: eight conflict cases,
   including expiry, revocation, changed budget and continued writer use.
-- `84fbc2a52` commits the pre-admission HTTP recovery case before `298d99fa4`.
+- `1ce232545` commits the pre-admission HTTP recovery case before `191e61d36`.
   FAIL before the fix: consumed approval had `canRetry: false` after a refusal
   with no remote connection. PASS after the fix: both recovery cases send once,
   refuse the competing retry, keep two approval uses and reserve no money.
-- `5483576cf` commits the private diagnostic cases before `5c54fe47e`.
+- `4e2184dcb` commits the private diagnostic cases before `9e9a3b7e1`.
   FAIL before the fix: dispatch refusals had no diagnostic. PASS after the fix:
   fixed labels and elapsed time are present; private canaries, permits and stacks
-  are absent. `3e1610d99` first requires an accurate budget-refusal label, followed
-  by `b24ec8cb6`. Both diagnostic cases then pass twice.
+  are absent. `92c0b501c` first requires an accurate budget-refusal label, followed
+  by `dc2b70d36`. Both diagnostic cases then pass twice.
 
 Initial logs are `/tmp/ci-flakes-11-{actor,approval,diagnostics}-{red,green}.log`.
 Later logs and JSON reports are in `/tmp/ci-flakes-11-followup/`.
@@ -87,8 +88,10 @@ The full root suite and fresh-install journeys are NOT RUN.
 | Changelog validation after the final rebase | PASS |
 | Markdown after the final rebase | PASS |
 
-The second rebase adds only the custody fixture and its documentation from main.
-It leaves the product files and all selected test files unchanged.
+Full lint passed before the later rebases. They add main’s custody fixture and
+child-chat change, leaving this correction’s product files and selected tests
+unchanged. Post-rebase checks passed. Focused ESLint also passed for all changed
+TypeScript files and the final readability changes.
 The final diagnostic label was checked twice separately after its wording change.
 
 ### Every current stress invocation
@@ -147,7 +150,6 @@ Logs and JSON reports are `/tmp/ci-flakes-11-followup/pass{1,2}.{log,json}`,
 Static logs are in the same folder. The throwaway PostgreSQL container was removed
 with its volume after the tests. No extra load-only suite was needed: the selected
 suites overlapped every stress invocation. CI is not awaited.
-
 
 ### Current failures and what is known
 
