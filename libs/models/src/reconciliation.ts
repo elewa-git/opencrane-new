@@ -26,6 +26,11 @@ export async function readEffectChange(store: EventStore, silo: string, permitId
   const subject = `effect-${permitId}`;
   const rows = await history(store, subject, silo, deadline);
   if (performance.now() >= deadline) throw new Error('Effect read expired');
+  return savedResolutionReceipt(rows, silo, permitId, changeRef);
+}
+
+function savedResolutionReceipt(rows: StoredEvent[], silo: string, permitId: string,
+  changeRef: string) {
   function matchesChange(row: StoredEvent) {
     return row.event.commandId === changeRef;
   }
@@ -34,7 +39,8 @@ export async function readEffectChange(store: EventStore, silo: string, permitId
   // Refuse ambiguous or untrusted records instead of confirming another caller's result.
   const saved = matches[0]!;
   const event = saved.event;
-  if (matches.length !== 1 || event.type !== 'effect.resolved' || event.subject !== subject ||
+  if (matches.length !== 1 || event.type !== 'effect.resolved' ||
+      event.silo !== silo || event.subject !== `effect-${permitId}` ||
       event.source !== 'opencrane-server' || event.principal?.kind !== 'human') {
     throw new Error('Invalid resolution receipt');
   }
@@ -46,6 +52,18 @@ export async function readEffectChange(store: EventStore, silo: string, permitId
   const receipt = { changeRef, eventId: event.id, position: saved.sequence, time: event.time,
     resolvedBy: data.resolvedBy, outcome: data.outcome, settledCents: data.settledCents };
   return resolutionReceiptSchema.parse(receipt);
+}
+
+function originalResolutionReceipt(rows: StoredEvent[], silo: string, permitId: string) {
+  function isResolution(row: StoredEvent) {
+    return row.event.type === 'effect.resolved';
+  }
+  const resolutions = rows.filter(isResolution);
+  if (resolutions.length === 0) return null;
+  // Require one saved resolution; a later equal amount cannot identify the original operator.
+  if (resolutions.length !== 1) throw new Error('Invalid resolution receipt');
+  const changeRef = id.parse(resolutions[0]!.event.commandId);
+  return savedResolutionReceipt(rows, silo, permitId, changeRef);
 }
 
 async function reservation(store: EventStore, silo: string, permitId: string, deadline: number) {
@@ -77,7 +95,9 @@ export async function readEffect(store: EventStore, silo: string, permitId: stri
   id.parse(permitId);
   const deadline = performance.now() + 10_000;
   const records = await effectRecords(store, silo, permitId, deadline);
-  return records?.current;
+  if (!records) return undefined;
+  const resolutionReceipt = originalResolutionReceipt(records.rows, silo, permitId);
+  return { ...records.current, resolutionReceipt };
 }
 
 async function effectRecords(store: EventStore, silo: string, permitId: string, deadline: number) {

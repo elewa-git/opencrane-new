@@ -2,21 +2,21 @@ import { expect, it } from 'vitest';
 import { effectDetailResponseSchema, effectListResponseSchema } from '../src/effects.ts';
 
 const effect = {
-      permitId: 'permit-1',
-      reservationId: 'permit-1',
-      reservedAt: '2026-10-05T08:00:00.000Z',
-      reservedCents: 120,
-      settledCents: null,
-      model: 'model-a',
-      priceTableId: 'anthropic-2026.10',
-      sequence: 3,
-      state: 'outcome_unknown',
-      label: 'Outcome unknown',
-      conflict: false,
-      reasons: ['settle_timeout'],
-      observations: [],
-      resolution: null,
-    };
+  permitId: 'permit-1',
+  reservationId: 'permit-1',
+  reservedAt: '2026-10-05T08:00:00.000Z',
+  reservedCents: 120,
+  settledCents: null,
+  model: 'model-a',
+  priceTableId: 'anthropic-2026.10',
+  sequence: 3,
+  state: 'outcome_unknown',
+  label: 'Outcome unknown',
+  conflict: false,
+  reasons: ['settle_timeout'],
+  observations: [],
+  resolution: null,
+};
 
 it('accepts price table ids that contain a version dot', () => {
   const response = effectListResponseSchema.parse({

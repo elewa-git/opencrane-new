@@ -14,7 +14,7 @@ checking status never calls the provider or repeats an external action.
 | Method and route | Response or input |
 | --- | --- |
 | `GET /api/org/effects` | `{ effects: EffectStatus[] }` |
-| `GET /api/org/effects/:permitId` | `EffectStatus` plus a session/permit-bound `csrf` token |
+| `GET /api/org/effects/:permitId` | `EffectStatus`, nullable `resolutionReceipt` and a session/permit-bound `csrf` token |
 | `POST /api/org/effects/:permitId/resolve` | Command below, with matching `Origin` and `X-CSRF-Token` from the detail read |
 
 `EffectStatus` contains `permitId`, `reservationId`, `reservedAt` (reservation event
@@ -24,6 +24,19 @@ time), `reservedCents`, nullable `settledCents`, `model`, pinned `priceTableId`,
 outcome, integer cost and token usage. Resolution exposes outcome, amount and
 safe evidence references. Conversation, requester, thread, computer tokens,
 credentials, provider bodies and raw gateway diagnostics are omitted.
+
+Detail adds `resolutionReceipt` with the original `changeRef`, `eventId`, `position`,
+`time`, `resolvedBy`, `outcome` and safe integer `settledCents`. It uses the same
+record validation as the original change read. No saved resolution means null;
+invalid or ambiguous records make the read unavailable. This receipt confirms only
+the saved resolution. Current money remains in the existing top-level fields,
+and conflicting observations can still retain a hold. Evidence references and
+private call details are excluded from the receipt.
+
+Detail loads history under its own ten-second limit, then checks current access
+once, including after a failed load. Removed or demoted callers receive the same
+403 for existing, missing and foreign ids. Authorised load failures return fixed
+503 `{status: "unavailable"}`. Reads append nothing and apply no settlement or release.
 
 States are `outcome_unknown` (label **Outcome unknown**), `resolution_pending`,
 `settled` and `released`. A resolution command returns 202 after its one append;

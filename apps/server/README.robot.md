@@ -1603,6 +1603,17 @@ resending. GET appends nothing and performs no settlement, release or external c
 replay, safe fields and successful/failed-load access checks using disposable services.
 Audit metadata, settlement progress and fresh-install qualification remain later work.
 
+`GET /api/org/effects/:permitId` preserves its existing fields and adds
+`resolutionReceipt`: null without a saved resolution, otherwise the same seven
+strict fields as the change read above. The receipt identifies the original event,
+date and resolver, separately from current settlement and holds. It does not show
+settlement progress or audit metadata. Invalid or ambiguous resolution records return
+fixed 503 `{status: "unavailable"}` after current access is checked. Removal or
+demotion returns the same 403 for existing, missing and foreign permits, including
+failed loads. History finishes before the one access check; reads use no write deadline.
+The tests above also cover these detail responses, conflicting settlement, slow
+history and unrelated chat activity. No new event or dependency is needed.
+
 Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).
 
 Group list, group detail, group command status, ownership and ownership command

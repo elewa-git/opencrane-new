@@ -155,8 +155,9 @@ minimal confirmation after losing that role, while they remain a member.
 The check saves nothing and makes no AI call.
 
 Owners and admins can also recover an original resolution receipt after a lost reply.
-It names the saved change and resolver without claiming that settlement or an outside
-action succeeded. Losing the owner or admin role removes access to this receipt.
+It names the saved change, date, resolver, outcome and recorded amount. The receipt
+stays separate from current spending and retained holds. It does not claim that settlement
+or an outside action succeeded. Losing the owner or admin role removes access to it.
 A missing result never means that repeating the resolution is safe.
 
 A member can review a child chat from their own group message, then save its first input.

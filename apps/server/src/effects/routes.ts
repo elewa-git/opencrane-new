@@ -77,9 +77,12 @@ async function handleEffectRead(url: string, request: FastifyRequest, reply: Fas
     return reply.send({ effects });
   }
   const permitId = requestPermitId(request);
-  const effect = await readEffect(options.store, options.silo, permitId);
-  // Check current access after the read so a removed admin receives no spending records.
-  await authorise(options, config.issuerUrl, sub, false);
+  const loading = readEffect(options.store, options.silo, permitId);
+  const [loaded] = await Promise.allSettled([loading]);
+  // Check access even after a failed load so errors cannot reveal protected records.
+  await authoriseRead(options, config.issuerUrl, sub);
+  if (loaded.status === 'rejected') return reply.code(503).send({ status: 'unavailable' });
+  const effect = loaded.value;
   const csrf = effectCsrf(request, config, permitId);
   if (!effect) {
     return reply.code(404).send({ status: 'not_found' });
@@ -93,12 +96,16 @@ async function handleEffectChange(request: FastifyRequest, reply: FastifyReply,
   const loading = readEffectChange(options.store, options.silo, params.permitId, params.commandId);
   const [loaded] = await Promise.allSettled([loading]);
   // Check access once after loading, even when history failed or no result was found.
-  const memberId = await options.feed.memberId(options.silo, config.issuerUrl, sub);
-  if (!memberId) throw new MemberAccessRefused();
-  await readActiveMember(options.store, options.binding, memberId, 'admin');
+  await authoriseRead(options, config.issuerUrl, sub);
   if (loaded.status === 'rejected') return reply.code(503).send({ status: 'unavailable' });
   if (!loaded.value) return reply.code(404).send({ status: 'not_found' });
   return reply.send({ status: 'recorded', receipt: loaded.value });
+}
+
+async function authoriseRead(options: EffectOptions, issuer: string, sub: string) {
+  const memberId = await options.feed.memberId(options.silo, issuer, sub);
+  if (!memberId) throw new MemberAccessRefused();
+  await readActiveMember(options.store, options.binding, memberId, 'admin');
 }
 
 function requestPermitId(request: FastifyRequest) {

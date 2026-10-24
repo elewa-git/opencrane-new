@@ -49,7 +49,8 @@ async function listsEffectsWithoutReadingChatHistory() {
     const subjects = reads.mock.calls.map(subjectOfRead);
     expect(subjects).toEqual(['budget-test', `effect-${first}`, `effect-${second}`]);
     reads.mockClear();
-    expect(await readEffect(nats.store, 'test', first)).toEqual(effects[0]);
+    expect(await readEffect(nats.store, 'test', first))
+      .toEqual({ ...effects[0], resolutionReceipt: null });
     expect(reads.mock.calls).toHaveLength(2);
     const command = {
       commandId: 'resolve-chat-history', expectedSequence: effects[0]!.sequence,

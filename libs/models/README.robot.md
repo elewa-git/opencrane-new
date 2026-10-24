@@ -897,6 +897,15 @@ The strict result contains only `changeRef`, `eventId`, `position`, `time`,
 private call details and progress. The caller must check current access after loading,
 including failure. It never reads budget history, appends or applies settlement.
 
+`readEffect` also returns `resolutionReceipt`, using the same record checks as
+`readEffectChange`. It is null when no resolution was saved. Exactly one resolution
+must exist in the permit's effect stream, and its change reference must match only
+that record. Duplicate resolutions, reused change references and invalid records
+refuse the read. Existing detail fields stay unchanged. Receipt cents describe the
+saved resolution; top-level cents and state describe current money. The detail read
+uses its already loaded history and performs no additional stream read or write.
+List results and `resolveEffect` writes are unchanged.
+
 `resolveEffect` reads the reservation and effect events with one ten-second history
 limit before starting its two-second member access check. The HTTP access callback
 starts after history too, and is checked again immediately before the append.
