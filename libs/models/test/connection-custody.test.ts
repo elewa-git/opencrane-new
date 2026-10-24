@@ -481,13 +481,14 @@ beforeAll(startReconciliation, 120_000);
 afterAll(stopReconciliation);
 
 async function candidateFixture(appendUntil = stage.appendUntil,
-  expectedSequence = 0, generation = 1, db = waitingCleanupDatabase(pgDb(storage.queue))) {
+  expectedSequence = 0, generation = 1) {
   const store = await fixture();
   candidateCount += 1;
   const input = { ...stage, siloId: 'test', profileId: `candidate-${candidateCount}`,
     operationId: `operation-${candidateCount}`, appendUntil, expectedSequence, generation };
   const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
   const saved = await store.custody.stage(input, material);
+  const db = waitingCleanupDatabase(pgDb(storage.queue));
   async function reconcile() {
     return reconcileConnectionStage(events.store, db, store.restart(), input);
   }
@@ -731,10 +732,12 @@ it('reads the current reference again after acquiring cleanup coordination', rec
 
 async function excludesConcurrentStage() {
   const database = pgDb(storage.queue);
-  const test = await candidateFixture(stage.appendUntil, 0, 1, database);
+  const test = await candidateFixture();
   await test.invalidate();
   async function stageInProgress() {
-    expect(await test.reconcile()).toEqual({ status: 'retained' });
+    const result = await reconcileConnectionStage(events.store, database,
+      test.store.restart(), test.input);
+    expect(result).toEqual({ status: 'retained' });
     expect(test.store.deletes).toBe(0);
   }
   await withConnectionStage(test.db, test.input, stageInProgress);
@@ -1164,8 +1167,8 @@ async function refusesMismatchedSavedStage() {
 it('requires the saved activation to match the private stage before rebuilding records',
   refusesMismatchedSavedStage);
 
-async function cleanupFixture(db = waitingCleanupDatabase(pgDb(storage.queue))) {
-  const test = await candidateFixture(Date.now() + 60_000, 0, 1, db);
+async function cleanupFixture() {
+  const test = await candidateFixture(Date.now() + 60_000);
   await test.activate();
   const rows = await history(events.store, test.subject, 'test');
   const previous = foldConnection(rows).data!;
@@ -1289,7 +1292,7 @@ it.each(['silo', 'subject', 'id', 'data'])(
 
 async function holdsLockUntilDeletionFinishes() {
   const database = pgDb(storage.queue);
-  const test = await cleanupFixture(database);
+  const test = await cleanupFixture();
   const event = await test.revoke();
   const custody = test.store.restart();
   const entered = Promise.withResolvers<void>();
@@ -1307,7 +1310,7 @@ async function holdsLockUntilDeletionFinishes() {
   const inject = vi.fn();
   try {
     await entered.promise;
-    await expect(withConnectionStage(test.db, test.input, inject))
+    await expect(withConnectionStage(database, test.input, inject))
       .rejects.toThrow('Connection coordination unavailable');
     expect(inject).not.toHaveBeenCalled();
     expect(test.store.deletes).toBe(0);

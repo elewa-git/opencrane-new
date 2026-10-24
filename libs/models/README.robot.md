@@ -3184,8 +3184,9 @@ passes the production database adapter and keeps the 100 ms deadline.
 The scan fixture waits for the page-completion log callback. It has no separate polling
 deadline that can expire while a slow page is still running; the test timeout still applies.
 The shared candidate fixture uses the same waiting database adapter as the retry test.
-The two contention tests explicitly pass the production database adapter and keep its
-100 ms acquisition deadline. Other cleanup tests wait for their real lock so a slow
+The two contention tests use the production database adapter for the competing operation
+and keep its 100 ms acquisition deadline. Their lock holder waits for its real lock.
+Other cleanup tests wait for their real lock so a slow
 connection cannot replace the condition they intend to check with an early refusal.
 The 53-candidate paging test awaits every stage, checks all 53 copies exist before
 scanning, and compares the full
