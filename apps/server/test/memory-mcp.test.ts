@@ -23,6 +23,7 @@ import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import * as memoryPreparation from '../../../libs/models/src/memory-prepare-request.ts';
 import { timeMemoryPath } from './support/memory-path-timing.ts';
 
 declare module 'vitest' {
@@ -3088,3 +3089,68 @@ async function usesPreparedChangeReads(operation: 'correct' | 'forget') {
 }
 it.each(['correct', 'forget'] as const)(
   'uses prepared history and IAM receipts inside the signed %s pass', usesPreparedChangeReads);
+
+async function gatewayLoadedReceipts(operation: 'recall' | 'correct' | 'forget',
+  otherScope: boolean) {
+  let body: Record<string, unknown> = call;
+  let requestHeaders = headers;
+  if (operation === 'recall' && !otherScope) {
+    await loadChangeFacts(1);
+  } else if (operation !== 'recall') {
+    const request = await changeRequest(operation, false);
+    body = request.body;
+    requestHeaders = request.requestHeaders;
+  }
+  const requiredReceipts: string[] = [];
+  if (otherScope) {
+    await seedScopedFacts(setup, false);
+    const notesId = memoryScopeId('test', 'assistant_notes', 'assistant');
+    const notesCall = { ...call, params: { ...call.params,
+      arguments: { scopeId: notesId, query: '' } } };
+    const loaded = await setup.call(headers, notesCall, route);
+    expect(loaded.status, loaded.text).toBe(200);
+    const grants = await history(setup.nats.store, grantStream('memory_read', notesId), 'test');
+    for (const grant of grants) requiredReceipts.push(grant.event.id);
+  }
+  let accessStarted = false;
+  let lateReceipts = 0;
+  const preparedReceipts = new Set<string>();
+  const originalStarted = memoryPreparation.memoryAccessStarted;
+  function startAccess(...args: Parameters<typeof originalStarted>) {
+    accessStarted = true;
+    return originalStarted(...args);
+  }
+  const originalApplied = setup.auth.applied.bind(setup.auth);
+  async function applied(eventId: string) {
+    if (accessStarted) {
+      lateReceipts += 1;
+      await pause(2200);
+    } else {
+      preparedReceipts.add(eventId);
+    }
+    return originalApplied(eventId);
+  }
+  const started = vi.spyOn(memoryPreparation, 'memoryAccessStarted').mockImplementation(startAccess);
+  const receipts = vi.spyOn(setup.auth, 'applied').mockImplementation(applied);
+  try {
+    const response = await setup.call(requestHeaders, body, route);
+    expect(accessStarted).toBe(true);
+    if (operation === 'recall') {
+      expect(response.status, response.text).toBe(200);
+    } else {
+      expect(response.status).toBe(403);
+      expect(JSON.parse(response.text)).toEqual({
+        status: 'refused', reason: 'memory_tool_unavailable' });
+    }
+    expect(lateReceipts).toBe(0);
+    for (const eventId of requiredReceipts) expect(preparedReceipts.has(eventId)).toBe(true);
+  } finally {
+    receipts.mockRestore();
+    started.mockRestore();
+  }
+}
+const loadedReceiptCases = [
+  ['recall', false], ['correct', false], ['forget', false], ['recall', true],
+] as const;
+it.each(loadedReceiptCases)(
+  'prepares loaded receipts before gateway %s access (another scope=%s)', gatewayLoadedReceipts);
