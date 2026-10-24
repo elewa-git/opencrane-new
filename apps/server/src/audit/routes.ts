@@ -3,7 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
-import { auditFilterSchema, auditDetailFilterSchema, type AuditDetailFilter } from '@opencrane/protocol';
+import { auditFilterSchema, auditDetailFilterSchema, type AuditDetailFilter,
+  type AuditRow } from '@opencrane/protocol';
 import { readAudit, readAuditDetail, type Query, type connectMemberFeed } from '@opencrane/projections';
 import { currentMembership } from '@opencrane/models';
 import { readMembershipProgress } from './membership-progress.ts';
@@ -41,6 +42,10 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       const allowed = await access(options, memberId, conversationId);
       if (!allowed) return reply.code(403).send({ status: 'refused' });
       if (loaded.status === 'rejected') throw loaded.reason;
+      if (conversationId) {
+        const rows = loaded.value.rows.map(conversationRow);
+        return reply.send({ ...loaded.value, rows });
+      }
       return reply.send(loaded.value);
     } catch (error) {
       if (error instanceof z.ZodError) return reply.code(400).send({ status: 'invalid_request' });
@@ -78,6 +83,23 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       return reply.code(503).send({ status: 'unavailable' });
     }
   });
+}
+function conversationRow(row: AuditRow): AuditRow {
+  const result = { ...row };
+  delete result.reservedCents;
+  delete result.settledCents;
+  result.records = [];
+  // Keep money choices and resolver details in the organisation's admin history.
+  for (const record of row.records) {
+    if (record.type === 'effect.resolved') {
+      continue;
+    }
+    const visible = { ...record };
+    delete visible.amountCents;
+    delete visible.savedOutcome;
+    result.records.push(visible);
+  }
+  return result;
 }
 async function loadDetail(options: AuditOptions, auditId: string, filter: AuditDetailFilter) {
   const result = await readAuditDetail(options.db, options.silo, auditId, filter);
