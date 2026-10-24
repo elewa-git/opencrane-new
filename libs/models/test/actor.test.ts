@@ -1042,3 +1042,57 @@ async function keepsWriterAfterInvalidEvent() {
 }
 it('keeps the writer usable when invalid event input is refused before publishing',
   keepsWriterAfterInvalidEvent);
+
+async function keepsWriterAfterDuplicateId(afterConflict: boolean) {
+  const commandId = 'colliding-budget-command';
+  const payload = {
+    scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',
+  };
+  async function saveMember(id: string) {
+    const joined = { memberId: id, email: `${id}@example.test`,
+      displayName: 'Unrelated member', role: 'member' };
+    const event = envelope('test', `member-${id}`, 'member.joined', joined, id);
+    const command = { event, expectedSequence: 0 };
+    expect((await nats.store.append(command)).status).toBe('appended');
+  }
+  if (!afterConflict) {
+    await saveMember(commandId);
+  }
+  const before = await nats.store.head('budget-test');
+  let checks = 0;
+  async function checkAccess() {
+    checks += 1;
+    if (afterConflict && checks === 2) {
+      await saveMember('unrelated-before-collision');
+    }
+    if (afterConflict && checks === 4) {
+      await saveMember(commandId);
+    }
+  }
+  checkAccess.deadline = performance.now() + 2000;
+  const refused = actor.configure(payload, commandId, actor.state.sequence, checkAccess);
+  await expect(refused).rejects.toThrow('Budget append rejected: duplicate_id');
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.ceilingCents).toBe(100);
+  await reserve();
+  expect(actor.state.reservations).toHaveLength(1);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+}
+it.each([false, true])(
+  'keeps the writer usable after a duplicate id refusal (after conflict: %s)',
+  keepsWriterAfterDuplicateId);
+
+async function keepsWriterAfterStoreRejection() {
+  const before = await nats.store.head('budget-test');
+  const rejected = { status: 'rejected' as const, reason: 'invalid_event' as const };
+  const writes = vi.spyOn(nats.store, 'append').mockResolvedValueOnce(rejected);
+  onTestFinished(writes.mockRestore.bind(writes));
+  await expect(reserve()).rejects.toThrow('Budget append rejected: invalid_event');
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.reservations).toHaveLength(0);
+  await reserve();
+  expect(actor.state.reservations).toHaveLength(1);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+}
+it('keeps the writer usable after the store rejects an invalid event',
+  keepsWriterAfterStoreRejection);
