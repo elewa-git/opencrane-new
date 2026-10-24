@@ -1,0 +1,12 @@
+Error: Command failed: /usr/bin/node --experimental-strip-types infra/dev-stack/journey.ts
+file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/browser-budgets.ts:190
+    throw new Error('Spending budget editor did not load; inspect private evidence');
+          ^
+
+Error: Spending budget editor did not load; inspect private evidence
+    at loadBudgetEditor (file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/browser-budgets.ts:190:11)
+    at async save (file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/browser-budgets.ts:48:25)
+    at async browserBudgetJourney (file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/browser-budgets.ts:136:5)
+    at async file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/journey.ts:654:7
+
+Node.js v22.23.3

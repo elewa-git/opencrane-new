@@ -1,0 +1,17 @@
+{
+  "source": "174a5436c36d351fdbae7444bc97b3e4b87453bb",
+  "rebasedOnto": "78686e106f160caedd51ca26419846b921d2eead",
+  "rebase": "PASS",
+  "slot": 1,
+  "fresh": true,
+  "paidCalls": 0,
+  "runtimeCodeChangesFromSource": false,
+  "workingChanges": "One test fixture now carries the returned call ID; documentation describes the corrected quote reply.",
+  "prerequisites": {
+    "645": "f13ea5d902c3ee600122abc9b43eeaeaeb0fd9d5",
+    "648": "e3a97a8881e5dfd2d8f0f8701e751215f27a3b74",
+    "655": "8173f6b92",
+    "656": "78686e106"
+  },
+  "recordedAt": "2026-10-24T14:11:59.219246+00:00"
+}

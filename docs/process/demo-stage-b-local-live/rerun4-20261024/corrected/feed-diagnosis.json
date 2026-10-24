@@ -1,0 +1,153 @@
+{
+  "status": 200,
+  "feed": {
+    "generation": 0,
+    "position": 452,
+    "rows": [
+      {
+        "position": 430,
+        "id": "create-4fedd525-7815-4ea2-85a6-9d58db3b5937",
+        "type": "conversation.created",
+        "data": {
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "createdBy": "zitadel-owner",
+          "mode": "agent_session"
+        },
+        "time": "2026-10-24T14:29:25.982Z"
+      },
+      {
+        "position": 431,
+        "id": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+        "type": "message.posted",
+        "data": {
+          "authorId": "zitadel-owner",
+          "contentType": "text",
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937",
+          "text": "STAGE_B_READ: read the synthetic demo quote with the reviewed read_fixture_quote tool."
+        },
+        "time": "2026-10-24T14:29:27.389Z"
+      },
+      {
+        "position": 432,
+        "id": "bridge-0d411e4fe98b817b9efb61e4ccd9210dfc0ba3c13588b9c2ac709f537b713a2f",
+        "type": "agent.turn_started",
+        "data": {
+          "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937"
+        },
+        "time": "2026-10-24T14:29:29.379Z"
+      },
+      {
+        "position": 438,
+        "id": "bridge-5b21a3b2e3f5083b816808988e3c14a9ea3472f44047d5d9bbe4903dbff744f1",
+        "type": "agent.tool_call_started",
+        "data": {
+          "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+          "callId": "exec-36c6d977-60c7-4101-9b40-363ef8c1fedc",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "read_fixture_quote",
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937"
+        },
+        "time": "2026-10-24T14:29:33.645Z"
+      },
+      {
+        "position": 440,
+        "id": "2b90f6ba-d2b5-4818-9b45-d1c14e918900",
+        "type": "decision.recorded",
+        "data": {
+          "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+          "callId": "exec-36c6d977-60c7-4101-9b40-363ef8c1fedc",
+          "outcome": "allow",
+          "requestId": "c25e89b7-c22b-423d-aba4-addd34770a61",
+          "reason": "policy_allow"
+        },
+        "time": "2026-10-24T14:29:34.083Z"
+      },
+      {
+        "position": 444,
+        "id": "c25e89b7-c22b-423d-aba4-addd34770a61:tool-dispatch",
+        "type": "tool.dispatch_recorded",
+        "data": {
+          "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+          "callId": "exec-36c6d977-60c7-4101-9b40-363ef8c1fedc",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "read_fixture_quote",
+          "durationMs": 185,
+          "logicalRequestId": "c8f6d41f955275899bf69d84f8d52532002295cd82bb6bfde67515090cb60ec0",
+          "startedAt": "2026-10-24T14:29:34.489Z",
+          "evidence": "adapter_response_received",
+          "outcome": "responded",
+          "requestId": "c25e89b7-c22b-423d-aba4-addd34770a61",
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937"
+        },
+        "time": "2026-10-24T14:29:34.691Z"
+      },
+      {
+        "position": 445,
+        "id": "bridge-72676d902d879f0acc8545beee42c5362a637a4a8478098b0cbaebdfa7bd42ea",
+        "type": "agent.tool_call_finished",
+        "data": {
+          "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+          "callId": "exec-36c6d977-60c7-4101-9b40-363ef8c1fedc",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "read_fixture_quote",
+          "status": "completed",
+          "durationMs": 1140,
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937"
+        },
+        "time": "2026-10-24T14:29:34.825Z"
+      },
+      {
+        "position": 449,
+        "id": "bridge-d6a02e87c4f3055d573c47dee52321c2778ae2310ed3424ac45745d94dad7d44",
+        "type": "agent.message_delta",
+        "data": {
+          "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+          "messageId": "msg_2ab7f440-5d1c-4cf3-adec-2f8d841bc108",
+          "contentType": "text",
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937",
+          "text": "Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0."
+        },
+        "time": "2026-10-24T14:29:36.014Z"
+      },
+      {
+        "position": 450,
+        "id": "bridge-aa8e3aa6aa4634ebba368856979517bc496a13c2218ce7f244cc06d1f12d2cf2",
+        "type": "agent.message_completed",
+        "data": {
+          "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+          "messageId": "msg_2ab7f440-5d1c-4cf3-adec-2f8d841bc108",
+          "contentType": "text",
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937",
+          "text": "Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0."
+        },
+        "time": "2026-10-24T14:29:36.516Z"
+      },
+      {
+        "position": 452,
+        "id": "bridge-b2bf367579a60baee7c0565d25813bc6df8a11f554aad15d0be6d8e9e5fc8d32",
+        "type": "agent.turn_completed",
+        "data": {
+          "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+          "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937"
+        },
+        "time": "2026-10-24T14:29:36.667Z"
+      }
+    ],
+    "computerState": "ready",
+    "computerRecovered": false
+  },
+  "schemaValid": false,
+  "issues": [
+    {
+      "code": "custom",
+      "path": [
+        "rows",
+        5,
+        "data"
+      ],
+      "message": "Invalid input"
+    }
+  ]
+}

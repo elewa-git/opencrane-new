@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "slot": 1,
+  "launcherStopped": true,
+  "stackDirectoryAbsent": true,
+  "composeContainersAbsent": true,
+  "namespacesAbsent": true,
+  "temporaryModelsImageRemoved": true,
+  "ownerStackTouched": false,
+  "testDatabaseRemovedWithVolume": true
+}

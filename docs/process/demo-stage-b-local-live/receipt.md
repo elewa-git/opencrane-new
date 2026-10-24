@@ -2,6 +2,10 @@
 
 Part of #574. Run date: 24 October 2026. Current result: **PARTIAL**.
 
+The [latest rerun](#rerun-after-the-read-turn-and-catalogue-recovery-fixes-24-october-2026)
+proves publication and read execution. Chat cannot display the successful dispatch;
+approval and write qualification remain NOT RUN. Earlier runs are retained below.
+
 One fresh install used claimed secondary slot 1. Paid calls: **0**.
 The launch kept the complete server and models entrypoints, including publication,
 catalogue watch, dispatch and chat services. No browser response was intercepted.
@@ -376,3 +380,173 @@ branch changelog fragment remains in place; `CHANGELOG.md` is unchanged.
 PASS: slot 1 was released through the dev-stack shutdown command. Its directory,
 Compose containers and Kubernetes namespace are absent. The owned launcher stopped,
 and the temporary models image was removed. The owner stack was untouched.
+
+## Rerun after the read-turn and catalogue recovery fixes, 24 October 2026
+
+Part of #574, draft PR #641. Result: **PARTIAL**. Publication and actual read-tool
+execution pass. The successful dispatch breaks chat display. Approval and write
+qualification remain **NOT RUN**.
+
+`git fetch origin` and the rebase completed onto
+`78686e106f160caedd51ca26419846b921d2eead` (#656), the fetched main at the start
+of this run. It includes #645, #648 and read-turn fix #655 (`8173f6b92`).
+Rebase conflicts retained main's corrected local reply fixture. Neither
+`model-stub.ts` nor `stage-b-model.ts` differs from that base. The original live
+source was `174a5436c36d351fdbae7444bc97b3e4b87453bb`; the corrected launcher
+ran at `c5625cad7445d9ba458b78b41d05cc00c638933a`.
+
+One fresh install used secondary slot 1, claimed through `infra/dev-stack/claim.sh`.
+The complete server and models processes, real Codex and gateway used the LOCAL
+demo tool server and free deterministic model replies. `ZITADEL_KEY_FILE` was
+supplied only as a file path. Paid calls: **0**. The owner stack was untouched.
+[Runtime references](rerun4-20261024/runtime.json) identify the images.
+
+### Results after the merged fixes
+
+| Step | Result | Observed evidence |
+| --- | --- | --- |
+| Stage A step 9 regression checks | PASS | Packaged model and rehearsal checks: 21 tests, including both widths. |
+| Fresh baseline | FAIL | The final repeated headroom save could not find the budget editor. Its page said the budget service was unavailable. The cause remains unresolved. |
+| Guarded local launch | PASS | Complete server and models services became ready. |
+| Separate external owner membership and access | PASS | [Original owner record](rerun4-20261024/ownership.json): distinct from generated Admin; PostgreSQL and OpenFGA agree. |
+| External owner browser sign-in | NOT RUN | No existing credential or session was available. The separate generated Admin signed in through real SSO. |
+| Register and discover | PASS | Both demo tools appeared in the browser. |
+| Exact zero costs; read Allow, write Ask | PASS | Browser review and original saved policy agree. |
+| Person and assistant grants | PASS | Positions 371 and 372 report content and IAM current. Each command was submitted once. |
+| Review, publication and gateway acknowledgement | PASS | Review 373, publication 374 and generation 1 acknowledgement agree. Policy is published. |
+| Bridge acceptance and offered read tool | PASS | Actual Codex execution selected `mcp__oc_817e192ca1__read_fixture_quote`; corrected dispatch reached the demo server. |
+| Read before correcting launch wiring | FAIL | Dispatch used ordinary DNS and could not resolve `mcp.example.test`. This was a branch harness defect, fixed below. |
+| Read execution after correcting launch wiring | PASS | Original dispatch 444 has adapter evidence; the model received quote DEMO-001, amount 12500 cents, morning slot and effect count 0. |
+| Visible read reply and reload | FAIL | Live tool display remains Running. Reload says “Could not load the conversation”. The server returns a chat row that its shared schema rejects. |
+| Write waits with zero effects | NOT RUN | The failed chat display stopped the journey before the write prompt. |
+| Requester Approve, one write effect and same-turn reply | NOT RUN | No approval request, decision, use or write dispatch exists. |
+| Separate demo-server readback | PASS | Before and after the corrected read: morning slot, effect count 0. No direct write was made. |
+| Approval qualification | FAIL | The evidence checker refuses the missing original approval and write records. |
+| Spending and histories | PARTIAL | Model settlements and the successful read dispatch are visible. There is no approval or write to reconcile. |
+| Publication after unchanged catalogue restart | PASS | Publication stays ready at generation 1. This is a narrow recovery check, not full reconnect qualification. |
+
+### Baseline and collection limits
+
+The baseline reached its last repeated paying-group headroom save after the budget
+refusal checks at both widths. `browser-budgets.ts` could not load the editor.
+The [original failure detail](rerun4-20261024/baseline-budget-failure.json) contains
+no captured budget or effect HTTP response. The [original error](rerun4-20261024/baseline-failure.log)
+identifies the failed editor load. Later reads and saves returned 200,
+which does not explain the earlier failure. The baseline is FAIL, not a passing
+fresh journey. Captures of that failure are NOT RUN: the helper did not save them.
+The separate Stage A step 9 checks remain passing.
+
+After publication succeeded, the collector incorrectly waited for the tools form
+on the confirmation page. Its timeout and files named `publication-failed` are
+retained. Those images actually show the confirmed publication. A read-only
+collector recovered the original receipts; no grant, review or publication command
+was repeated. [Publication records](rerun4-20261024/publication.json) retain
+expected review position 370 and returned position **373**, including the two
+intervening grants. The publication command is
+`3df68aac-7a71-4696-ad24-fd46a6c406a7`.
+
+The integration detail page says Installed Ready but still says “Not available yet”
+for connection and access facts. Those labels are not evidence of bridge acceptance.
+The original offered-tool output and actual adapter dispatch provide that evidence.
+
+### Corrected launcher defect
+
+The first read and one diagnostic read were allowed but returned no quote. Their
+generic `response_received` dispatch records do not prove that the demo server ran.
+A temporary diagnostic hook logged the original caught error:
+`getaddrinfo ENOTFOUND mcp.example.test`. It changed no decision or response.
+
+The test launcher supplied `network`, but `McpDispatchOptions` reads
+`remoteNetwork`. Discovery and catalogue checks used the guarded adapter; dispatch
+fell back to ordinary DNS. [Diagnosis](rerun4-20261024/launch-diagnosis.json)
+records the original error. Failing-first commit `75ded173a` checks the generated
+full models entrypoint against the actual dispatch option type. Fix `c5625cad7`
+supplies `remoteNetwork`. The existing result fixture also now supplies its matching
+call ID, as required by #655. The focused launch tests pass after the fix.
+
+The diagnostic hook was removed before the corrected read. Only models restarted;
+the demo server and its state stayed in place. A new chat on the same fresh install
+then reached the real local adapter. No product access check or transport guard was
+changed. The three protected authority and security test files remain unchanged.
+
+### Proved product blocker in chat display
+
+The corrected conversation is `4fedd525-7815-4ea2-85a6-9d58db3b5937`, turn
+`c8ee71f6-af1a-4bc4-9836-7efcf167ece3`. Read request
+`c25e89b7-c22b-423d-aba4-addd34770a61` records a successful adapter response at
+position **444**, generation **1**, review revision **373**. The reply and completed
+turn are saved, but the browser cannot display them.
+
+1. `chatDisplayData` in `apps/server/src/chat/display.ts` selects allowed display
+   fields and strips the dispatch record's `adapter` object.
+2. `validateRowFields` in `libs/protocol/src/chat.ts` validates that shortened row
+   against the complete `toolDispatchRecordedDataSchema`.
+3. `validAdapterEvidence` in `libs/events/src/tool-dispatch.ts` requires `adapter`
+   when the evidence is `adapter_response_received`. The original event is valid;
+   the displayed row is invalid. The original HTTP 200 feed fails at `rows[5].data`.
+
+[Failure analysis](rerun4-20261024/corrected/failure-analysis.json) includes the
+original event and stripped row. [HTTP evidence](rerun4-20261024/corrected/feed-diagnosis.json)
+preserves the returned feed and schema error. A read-only reproduction passed the
+saved event through the actual display function and reproduced the same rejection.
+No row was dropped, no schema was relaxed, and no harness reply replaced it.
+This product defect remains open.
+
+### Accounting and captures
+
+The [corrected original records](rerun4-20261024/corrected/live-probe.json) retain
+policy, grants, ordered events, readbacks, Spending and both histories.
+[Model exchanges](rerun4-20261024/model-exchanges.json) retain the offered tool
+name and returned quote, with the full private requests identified by their hashes. The two
+corrected model calls each reserved **17 euro cents** and settled **1 euro cent**.
+The read tool costs **0 euro cents**. Final Spending shows **17 cents settled** and
+**32 cents reserved**, including earlier baseline activity. The two held baseline
+items each show 16 cents and “Computer lost”; they are not this read's settlements.
+All amounts are local accounting, not paid-provider costs. There are **0 approvals**,
+**0 write dispatches** and **0 effects** across these attempts.
+
+All **40** new captures were inspected by eye. Every email address was masked in
+the browser and redacted from saved text. Earlier failed attempts remain alongside
+the corrected run. [run.json](rerun4-20261024/run.json) lists every capture and hash.
+
+| View | Desktop, 1280 pixels | Mobile, 390 pixels |
+| --- | --- | --- |
+| Discovered tools | [1280](rerun4-20261024/tools-1280.png) | [390](rerun4-20261024/tools-390.png) |
+| Chosen modes | [1280](rerun4-20261024/chosen-modes-1280.png) | [390](rerun4-20261024/chosen-modes-390.png) |
+| Saved audience | [1280](rerun4-20261024/saved-audience-1280.png) | [390](rerun4-20261024/saved-audience-390.png) |
+| Exact cost review | [1280](rerun4-20261024/review-1280.png) | [390](rerun4-20261024/review-390.png) |
+| Publication confirmation, collector timeout | [1280](rerun4-20261024/publication-failed-1280.png) | [390](rerun4-20261024/publication-failed-390.png) |
+| Published integration after restart | [1280](rerun4-20261024/corrected/publication-loaded-1280.png) | [390](rerun4-20261024/corrected/publication-loaded-390.png) |
+| Corrected read, display stuck | [1280](rerun4-20261024/corrected/read-chat-1280.png) | [390](rerun4-20261024/corrected/read-chat-390.png) |
+| Reloaded read, display failed | [1280](rerun4-20261024/corrected/read-chat-reloaded-1280.png) | [390](rerun4-20261024/corrected/read-chat-reloaded-390.png) |
+| Final Spending | [1280](rerun4-20261024/corrected/spending-1280.png) | [390](rerun4-20261024/corrected/spending-390.png) |
+| Final Change history | [1280](rerun4-20261024/corrected/change-history-1280.png) | [390](rerun4-20261024/corrected/change-history-390.png) |
+| Read Action history | [1280](rerun4-20261024/corrected/action-history-1280.png) | [390](rerun4-20261024/corrected/action-history-390.png) |
+
+Native consent 12b stays excluded. Public deployment, twice-fresh runs, approval
+expiry, full reconnect qualification, Pod loss and the full refusal matrix remain
+NOT RUN. This work does not complete #45, #46 or #63.
+
+### Checks and cleanup after the corrected read
+
+PASS: Stage A regression checks, **21 tests**; changed/helper checks twice,
+**41 tests per run**; real read-integration checks twice, **2 tests per run**;
+security rules, **438 tests**. The final launch file passed twice again,
+**6 tests per run**, after the test-only type correction below. The Stage A log
+includes an intentionally failing scenario; all 21 assertions passed.
+
+PASS: lint (zero errors, 26 warnings), event catalogue (**153 types**), knip and
+changelog. Typecheck initially **FAIL**: an old launch test read `arguments` without
+narrowing the two call shapes introduced by #655. All workspace and package checks
+had passed. The test now asserts that it received the expected function-call shape;
+the final `typecheck:dev-stack` rerun **PASS**. Both the original failure and focused
+passing rerun are retained. No product model fixture was changed.
+
+All checks ran under `nice -n 10`. The test database was ready before the suites
+started and was supplied through `PG_TEST_URL`. It was removed with its volume.
+The full root suite is NOT RUN, as required by the build prompt. The branch's
+changelog fragment records the dispatch correction; `CHANGELOG.md` is unchanged.
+
+PASS: the owned launcher stopped and slot 1 was released through `down.sh --id 1`.
+Its stack directory, Compose containers and both Kubernetes namespaces are absent.
+The temporary models image was removed. The owner stack was untouched.

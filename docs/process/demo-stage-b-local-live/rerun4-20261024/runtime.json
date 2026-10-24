@@ -1,0 +1,27 @@
+{
+  "source": "174a5436c36d351fdbae7444bc97b3e4b87453bb",
+  "rebasedOnto": "78686e106f160caedd51ca26419846b921d2eead",
+  "computerImages": [
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    },
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    },
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    },
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    }
+  ],
+  "testModelsImage": "sha256:980e131bb5d2774a1f829aee50b5df2b540e2329fdac64516878a564be0c6469"
+}

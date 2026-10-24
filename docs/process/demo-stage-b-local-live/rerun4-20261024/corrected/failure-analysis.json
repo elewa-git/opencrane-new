@@ -1,0 +1,69 @@
+{
+  "status": "FAIL",
+  "cause": "The saved dispatch contains adapter evidence. chatDisplayData removes adapter, then chatRowSchema validates against an event schema that requires it.",
+  "originalRecord": {
+    "sequence": 444,
+    "event": {
+      "id": "c25e89b7-c22b-423d-aba4-addd34770a61:tool-dispatch",
+      "type": "tool.dispatch_recorded",
+      "commandId": "c25e89b7-c22b-423d-aba4-addd34770a61:tool-dispatch",
+      "source": "models",
+      "time": "2026-10-24T14:29:34.691Z",
+      "subject": "decision-c25e89b7-c22b-423d-aba4-addd34770a61",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937",
+        "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+        "callId": "exec-36c6d977-60c7-4101-9b40-363ef8c1fedc",
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "toolName": "read_fixture_quote",
+        "requestId": "c25e89b7-c22b-423d-aba4-addd34770a61",
+        "logicalRequestId": "c8f6d41f955275899bf69d84f8d52532002295cd82bb6bfde67515090cb60ec0",
+        "startedAt": "2026-10-24T14:29:34.489Z",
+        "durationMs": 185,
+        "outcome": "responded",
+        "evidence": "adapter_response_received",
+        "adapter": {
+          "decisionId": "2b90f6ba-d2b5-4818-9b45-d1c14e918900",
+          "startId": "c25e89b7-c22b-423d-aba4-addd34770a61:tool-dispatch-started",
+          "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "generation": 1,
+          "recordDigest": "c809822633df535758f910b7d497fe0db2dc679db6ab35445eb9de692ac461b2",
+          "reviewRevision": 373
+        }
+      }
+    }
+  },
+  "displayedRow": {
+    "id": "c25e89b7-c22b-423d-aba4-addd34770a61:tool-dispatch",
+    "position": 444,
+    "type": "tool.dispatch_recorded",
+    "time": "2026-10-24T14:29:34.691Z",
+    "data": {
+      "turnId": "c8ee71f6-af1a-4bc4-9836-7efcf167ece3",
+      "callId": "exec-36c6d977-60c7-4101-9b40-363ef8c1fedc",
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "toolName": "read_fixture_quote",
+      "durationMs": 185,
+      "logicalRequestId": "c8f6d41f955275899bf69d84f8d52532002295cd82bb6bfde67515090cb60ec0",
+      "startedAt": "2026-10-24T14:29:34.489Z",
+      "evidence": "adapter_response_received",
+      "outcome": "responded",
+      "requestId": "c25e89b7-c22b-423d-aba4-addd34770a61",
+      "conversationId": "4fedd525-7815-4ea2-85a6-9d58db3b5937"
+    }
+  },
+  "savedEventValid": true,
+  "displayedRowValid": false,
+  "httpStatus": 200,
+  "httpFeedValid": false,
+  "approvalQualification": "FAIL",
+  "approvalReason": "No approval request, requester decision, use or write dispatch exists.",
+  "writeJourney": "NOT RUN",
+  "effectCount": 0
+}

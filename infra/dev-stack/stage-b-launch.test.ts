@@ -54,9 +54,15 @@ async function suppliesDispatchNetwork() {
   const declaration = /const dispatchOptions = (\{[^;]+\});/u.exec(sources.models);
   assert(declaration?.[1], 'The complete models entrypoint must supply dispatch options');
   const stageBNetwork = {};
-  function acknowledged() { return null; }
-  function requireDispatchLeader() { return Promise.resolve(); }
-  function requireCurrent() { return; }
+  function acknowledged() {
+    return null;
+  }
+  function requireDispatchLeader() {
+    return Promise.resolve();
+  }
+  function requireCurrent() {
+    return;
+  }
   const watch = { requireCurrent };
   const context = { stageBNetwork, acknowledged, mcpRoutes: [], requireDispatchLeader, watch };
   const options = runInNewContext(`(${declaration[1]})`, context) as
@@ -108,6 +114,7 @@ async function deterministicCalls() {
     tools: [{ name: 'read_fixture_quote' }, { name: 'change_delivery_slot' }] }];
   const input = [{ type: 'message', role: 'user', content: 'STAGE_B_WRITE' }];
   const call = stageBModelCall({ input, tools });
+  assert(call && 'arguments' in call);
   assert.equal(call?.namespace, 'mcp__demo');
   assert.equal(call?.name, 'change_delivery_slot');
   assert.equal(call?.arguments, '{"quoteId":"DEMO-001","slot":"afternoon"}');

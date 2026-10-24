@@ -1,0 +1,180 @@
+{
+  "privateFileSha256": "34bd94da9cecd99f97e7b7c372940ca82834e9f43b73835c4806d4b019a6c1be",
+  "requests": [
+    {
+      "request": 1,
+      "sha256": "39739a3baab194e2d82c4f04bee41c757c9ca2cbb68105d7ad9c39aa58b75a10",
+      "tools": [],
+      "toolItems": []
+    },
+    {
+      "request": 2,
+      "sha256": "30f98f9ddaa31e9b760d613a9052d71993bc4cfc5793c60fcfeaf7c308e681fd",
+      "tools": [],
+      "toolItems": [
+        {
+          "type": "custom_tool_call",
+          "id": "ct_read_fixture_quote",
+          "call_id": "call_read_fixture_quote",
+          "name": "exec",
+          "namespace": "functions",
+          "input": "\nfunction matches(tool) {\n  return tool.name.startsWith('mcp__') && tool.name.endsWith('__read_fixture_quote');\n}\nconst available = ALL_TOOLS.filter(matches);\nif (available.length !== 1) throw new Error('Expected one published demo tool');\nconst selected = available[0];\ntext({ offeredTool: selected.name });\nconst result = await tools[selected.name]({\"quoteId\":\"DEMO-001\"});\ntext(result);\n"
+        },
+        {
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a16e4b-452e-74b1-874c-32831f0a4fe8",
+          "call_id": "call_read_fixture_quote",
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 1.1 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__read_fixture_quote\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"content\":[{\"type\":\"text\",\"text\":\"OpenCrane refused this tool call. Nothing was sent to the tool.\"}],\"isError\":true}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": 3,
+      "sha256": "803713927d1d0dbccf84347ca696addf017577339f4567579cfcf81298a58d74",
+      "tools": [],
+      "toolItems": [
+        {
+          "type": "custom_tool_call",
+          "id": "ct_read_fixture_quote",
+          "call_id": "call_read_fixture_quote",
+          "name": "exec",
+          "namespace": "functions",
+          "input": "\nfunction matches(tool) {\n  return tool.name.startsWith('mcp__') && tool.name.endsWith('__read_fixture_quote');\n}\nconst available = ALL_TOOLS.filter(matches);\nif (available.length !== 1) throw new Error('Expected one published demo tool');\nconst selected = available[0];\ntext({ offeredTool: selected.name });\nconst result = await tools[selected.name]({\"quoteId\":\"DEMO-001\"});\ntext(result);\n"
+        },
+        {
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a16e4b-452e-74b1-874c-32831f0a4fe8",
+          "call_id": "call_read_fixture_quote",
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 1.1 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__read_fixture_quote\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"content\":[{\"type\":\"text\",\"text\":\"OpenCrane refused this tool call. Nothing was sent to the tool.\"}],\"isError\":true}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": 4,
+      "sha256": "51a1282c2ec79a11b2b147afb12d8a73cb12eb3c506aa3470f1854680c627058",
+      "tools": [],
+      "toolItems": [
+        {
+          "type": "custom_tool_call",
+          "id": "ct_read_fixture_quote",
+          "call_id": "call_read_fixture_quote",
+          "name": "exec",
+          "namespace": "functions",
+          "input": "\nfunction matches(tool) {\n  return tool.name.startsWith('mcp__') && tool.name.endsWith('__read_fixture_quote');\n}\nconst available = ALL_TOOLS.filter(matches);\nif (available.length !== 1) throw new Error('Expected one published demo tool');\nconst selected = available[0];\ntext({ offeredTool: selected.name });\nconst result = await tools[selected.name]({\"quoteId\":\"DEMO-001\"});\ntext(result);\n"
+        },
+        {
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a16e4b-452e-74b1-874c-32831f0a4fe8",
+          "call_id": "call_read_fixture_quote",
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 1.1 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__read_fixture_quote\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"content\":[{\"type\":\"text\",\"text\":\"OpenCrane refused this tool call. Nothing was sent to the tool.\"}],\"isError\":true}"
+            }
+          ]
+        },
+        {
+          "type": "custom_tool_call",
+          "id": "ct_read_fixture_quote",
+          "call_id": "call_read_fixture_quote",
+          "name": "exec",
+          "namespace": "functions",
+          "input": "\nfunction matches(tool) {\n  return tool.name.startsWith('mcp__') && tool.name.endsWith('__read_fixture_quote');\n}\nconst available = ALL_TOOLS.filter(matches);\nif (available.length !== 1) throw new Error('Expected one published demo tool');\nconst selected = available[0];\ntext({ offeredTool: selected.name });\nconst result = await tools[selected.name]({\"quoteId\":\"DEMO-001\"});\ntext(result);\n"
+        },
+        {
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a16e4e-8c85-7cd2-aef7-486bd3c599f2",
+          "call_id": "call_read_fixture_quote",
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 0.5 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__read_fixture_quote\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"content\":[{\"type\":\"text\",\"text\":\"OpenCrane refused this tool call. Nothing was sent to the tool.\"}],\"isError\":true}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": 5,
+      "sha256": "738f8630daa6c0dfd1b7a575e2657fb44de2966a1f7846fea3c0295578f86e23",
+      "tools": [],
+      "toolItems": []
+    },
+    {
+      "request": 6,
+      "sha256": "2d035be172f6a53cffbf6abf1bd39265ee7aefe4941e7cdf0850c0fc1f959771",
+      "tools": [],
+      "toolItems": [
+        {
+          "type": "custom_tool_call",
+          "id": "ct_read_fixture_quote",
+          "call_id": "call_read_fixture_quote",
+          "name": "exec",
+          "namespace": "functions",
+          "input": "\nfunction matches(tool) {\n  return tool.name.startsWith('mcp__') && tool.name.endsWith('__read_fixture_quote');\n}\nconst available = ALL_TOOLS.filter(matches);\nif (available.length !== 1) throw new Error('Expected one published demo tool');\nconst selected = available[0];\ntext({ offeredTool: selected.name });\nconst result = await tools[selected.name]({\"quoteId\":\"DEMO-001\"});\ntext(result);\n"
+        },
+        {
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a16e51-27d9-7532-aebf-9e4d45e01549",
+          "call_id": "call_read_fixture_quote",
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 1.4 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__read_fixture_quote\"}"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"quoteId\\\":\\\"DEMO-001\\\",\\\"amountCents\\\":12500,\\\"slot\\\":\\\"morning\\\",\\\"effectCount\\\":0}\"}],\"structuredContent\":{\"quoteId\":\"DEMO-001\",\"amountCents\":12500,\"slot\":\"morning\",\"effectCount\":0},\"isError\":false}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
