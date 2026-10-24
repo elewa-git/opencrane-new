@@ -50,7 +50,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, spending pages, resolution receipts, live updates, tool status and saved tool choices| server["apps/server<br/>the back end"]
   server -.->|checks access, allocates child allowances within the original time limit and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, owner pauses, takeover approval cancellations, access-checked control refusals, child activations and tool hand-offs| nats["NATS<br/>the event log"]
+  server -->|records changes, checked owner pauses and retirements, takeover approval cancellations, access-checked control refusals, child activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres
@@ -120,7 +120,11 @@ assistant can call. These reads check current admin rights after loading the fac
 
 An internal operation lets a routine's current owner save a pause when no run is active.
 It checks saved ownership and permissions, and recovers the original change after a lost
-reply. This operation has no website route. Routine execution remains disabled.
+reply. A separate internal operation lets the owner retire a routine with no active run.
+Retirement clears its next scheduled time and keeps permitted history. The original
+owner can recover a lost retirement reply while they still have metadata access.
+The server checks that access before reporting a saved change or revision conflict.
+Neither operation has a website route. Routine execution remains disabled.
 
 1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.
    [Members](src/members/README.md) handles the first owner's claim or a later invitation.
