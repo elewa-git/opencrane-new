@@ -390,3 +390,13 @@ prove departure cleanup finished; cleanup state is absent from this contract.
 Queries accept only a limit, optional permit and continuation. Replies contain safe
 saved event fields, integer euro cents, checkpoint, generation and next page.
 Records stay separate from current effect state. Private evidence and usage are excluded.
+
+## Saved resolution history
+
+Audit records accept optional `savedOutcome: settled | released`. The existing
+`amountCents` is the resolution's chosen integer euro-cent amount, including zero.
+The existing actor, event, time, position and command digest identify that saved
+choice. `status: recorded` does not imply an external result or a released hold.
+Budget settlement and gateway observations keep their own records and meanings.
+Older replies without `savedOutcome` remain valid. The strict schema accepts no
+evidence references, usage, private text or credentials.

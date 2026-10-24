@@ -1,0 +1,1 @@
+Change history identifies the person whose spending resolution was saved, with its original date, command reference, settled or released choice and amount. Checked resolution records stay separate from observations, budget settlement and hold release. Existing installations need audit replay after upgrading.

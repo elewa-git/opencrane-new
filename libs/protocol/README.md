@@ -16,6 +16,8 @@ end time. Used approvals retain their earlier use and dispatch evidence.
 
 Effect detail replies keep the saved resolver, date and amount separate from current
 spending. A receipt confirms a saved resolution, not completed settlement.
+Change history also carries the saved settled or released choice and amount.
+The amount may be zero; it does not report a completed payment or hold release.
 
 Saved effect pages keep observations, uncertainty and resolutions separate. Amounts use integer euro cents, and a missing amount differs from zero.
 
@@ -27,7 +29,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>shared reply shapes"]
   server["apps/server<br/>back end"] -.->|saved spending and effect replies| protocol
-  projections["libs/projections<br/>read tables"] -.-> protocol
+  projections["libs/projections<br/>read tables"] -.->|saved resolution history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]
 ```
