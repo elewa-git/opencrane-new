@@ -20,7 +20,7 @@ rebuilt from the log.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> authz["libs/authz<br/>who may use what"]
-  server["apps/server<br/>back end"] -.-> authz
+  server["apps/server<br/>back end"] -.->|checks routine access before reporting history failures| authz
   models["libs/models<br/>AI access and spending"] -.->|checks access, receipts and outages| authz
   ops["apps/ops<br/>background workers"] -.-> authz
   authz -->|checks permissions, including routine ownership| fga["OpenFGA<br/>permissions service"]
@@ -57,6 +57,10 @@ flowchart LR
 3. **A routine is checked.** Saved ownership and membership must agree with permission
    records and their receipts. Admin metadata access gives no private instructions,
    management or execution rights.
+   Failed history still checks read permission. Non-readers receive a refusal;
+   permitted readers receive unavailable. Incomplete history never grants access.
+   The result distinguishes failed history from an unavailable permissions service,
+   so retirement can report broken records only to permitted readers.
    A writer can load history first, then check permissions within its short write limit.
    It must refuse if the saved access records have changed before append.
 4. **A person rejoins a chat.** Their permission to read is restored. In ordinary

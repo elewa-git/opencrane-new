@@ -1,3 +1,4 @@
+import { registerRoutineReads } from './routine-routes.ts';
 import { registerTakeoverRoutes } from './computers/takeover-routes.ts';
 import { registerChildRoutes } from './chat/child-routes.ts';
 import { registerPublicationRoutes } from './chat/publications.ts';
@@ -93,6 +94,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerMemberRoutes(app, authConfig, options.membership);
   registerGroupRoutes(app, authConfig, options.groups);
   registerMemberReads(app, authConfig, options.memberReads);
+  registerRoutineReads(app, authConfig, options.memberReads);
   registerRoleRoutes(app, authConfig, options.memberReads);
   registerInvitationEmail(app, authConfig, options.invitationEmail);
   registerInvitations(app, authConfig, options.invitationEmail);

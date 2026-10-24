@@ -250,3 +250,17 @@ returns no private service errors. It reads no history itself. A writer must com
 the saved small-stream positions and keep its original deadline through append.
 Routine position comparison belongs to that append. Ordinary `routine(...)` readers
 still load facts and check permissions once, without a write deadline.
+
+When routine history fails, `loadRoutineAccess` discards partial state and rows,
+then loads current membership. Its `check` refuses removed members and queries the
+same routine relation as a successful load. A denied permission returns a refusal;
+an allowed permission returns unavailable because the saved facts are incomplete.
+Permission-service outages also return unavailable. No failed load can authorise
+a read or write. Successful loads retain every saved-owner and exact-receipt check.
+The loaded `check` result adds `reason: 'history_unavailable'` only when routine
+history failed and the permission service confirmed access. It never adds that
+reason for refused or unavailable permission checks. Retirement uses it to report
+broken history to permitted readers while still refusing permission-service outages.
+The simpler `routine(...)` result keeps only its existing `allowed` and `status` fields.
+The HTTP regressions in `apps/server/test/routine-reads.test.ts` cover ordinary
+non-readers and former owners before and after partial history arrives.

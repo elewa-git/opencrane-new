@@ -14,6 +14,7 @@ const inputSchema = z.strictObject({
   expectedScheduleRevision: revision, expectedControlRevision: revision,
 });
 type Input = z.infer<typeof inputSchema>;
+type RoutineAccess = Awaited<ReturnType<ReturnType<typeof memberAuthorisation>['loadRoutineAccess']>>;
 class RetirementConflict extends Error {
   constructor() {
     super('Routine retirement conflict');
@@ -79,6 +80,17 @@ function previousRetirement(rows: StoredEvent[], input: Input, memberId: string)
   return undefined;
 }
 
+async function requireMetadataAccess(saved: RoutineAccess) {
+  const permission = await saved.check('read_metadata');
+  if ('reason' in permission && permission.reason === 'history_unavailable') {
+    // Report broken history only after the permission service confirms read access.
+    throw new Error('Routine history unavailable');
+  }
+  if (!permission.allowed) {
+    throw new RetirementRefused();
+  }
+}
+
 /** Save only the owner's retirement; active runs need the later Stop operation. */
 export async function retireRoutine(store: EventStore, binding: Binding,
   memberId: string, raw: unknown) {
@@ -91,9 +103,7 @@ export async function retireRoutine(store: EventStore, binding: Binding,
     const auth = memberAuthorisation(binding, store);
     const saved = await auth.loadRoutineAccess(memberId, input.routineId);
     // Check metadata access before revealing saved changes or revision conflicts.
-    if (!(await saved.check('read_metadata')).allowed) {
-      throw new RetirementRefused();
-    }
+    await requireMetadataAccess(saved);
     const previous = previousRetirement(saved.rows, input, memberId);
     if (previous) {
       return previous;
