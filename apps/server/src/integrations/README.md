@@ -8,6 +8,7 @@ This folder lets admins register tools an assistant can use and review their acc
 - Requires an admin to review exact definitions, declared free use and approval details before enabling tools.
 - Requests publication, meaning delivery of reviewed tool settings to the [AI gateway](../../../../GLOSSARY.md#agentgateway-ai-gateway), the program that forwards AI and tool calls, and reports its saved status.
 - Gives or revokes tool access for people, groups and assistants, with explanations of saved rights.
+- Reads safe saved personal profile metadata without accessing credentials.
 - Reads personal tool-instance status, records stop requests and accepts reports from a registered worker.
 - Serves model prices, spending limits and saved spending-change results.
 - Keeps remote checks fresh and supplies the models process with the information needed to refuse changed tools.
@@ -37,6 +38,8 @@ Published calls require permission for both the person and the assistant. Removi
 
 Members can read explanations for their own accessible servers; owners and admins can read others. Explanations show why the person and assistant have access. Guessed private tools and servers get the same refusal. Missing grants return permission reasons only. Missing account support and unavailable checks have distinct reasons. These reads approve or start no calls.
 
+**Saved personal profiles.** A member can read only their own profile, including a disabled one. The reply says whether it was saved, its revision and generation, and whether an admin block or unavailable server prevents use. It never claims a verified identity or enables calls.
+
 **Hosted images and instances.** An admin can register a hosted image and recover the result by its original request id. It stays Checking until a valid image-check result is saved. All four image checks must pass before admission. Registration does not fetch an image, discover tools or start a process; admission grants no tool access. Startup credential requirements are checked before a connection is offered. Compatible declarations remain reviewable, but startup processes cannot run yet. Existing memory calls keep their own access checks.
 
 Members can read their private instance and request its stop. Owners and admins can stop another member's instance and recover only their own stop confirmations. Reads never start an instance or release credentials; missing results stay unknown. Worker reports name one exact run. Only a fixed-length digest of the worker pass is kept, and it is removed at expiry. Expiry or replacement ends observation retries. Instance startup and wake remain unavailable.
@@ -56,6 +59,7 @@ A lost spending-limit reply can be checked by its original request id. Current o
 | [remote-catalogue-watch.ts](remote-catalogue-watch.ts) | Keeps the models process's remote checks current. |
 | [access-reads.ts](access-reads.ts), [access-changes.ts](access-changes.ts) | List tool grants and suitable recipients, and save access changes. |
 | [access-explanation.ts](access-explanation.ts), [explanation-routes.ts](explanation-routes.ts) | Explain saved tool rights without starting calls. |
+| [profile-routes.ts](profile-routes.ts) | Returns the signed-in person’s own saved profile metadata. |
 | [instance-routes.ts](instance-routes.ts), [instance-worker.ts](instance-worker.ts), [startup-credentials.ts](startup-credentials.ts) | Check instance requests, worker reports and hosted startup requirements. |
 
 ## How it connects
@@ -66,5 +70,5 @@ The [server](../../README.md) registers these requests. [Models](../models/READM
 flowchart LR
   server[Server] --> integrations["integrations<br/>tool settings and receipts"]
   integrations --> models[Tool rules and spending]
-  integrations --> members[Current membership]
+  integrations -->|checks membership after loading profile history| members[Current membership]
 ```

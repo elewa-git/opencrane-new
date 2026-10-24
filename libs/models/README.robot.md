@@ -3433,3 +3433,17 @@ then reports Ready for the new process, before and after catalogue replay.
 
 `mcp-dispatch.test.ts` checks watch replacement, failed capture recovery, refused changed
 tools and PostgreSQL replay with real NATS, PostgreSQL, OpenFGA and agentgateway fixtures.
+
+## Own saved profile metadata
+
+`readOwnConnectionProfile` accepts the authenticated member separately from strict
+server/profile input. It loads exact profile, member/server control and server histories
+under one ten-second history deadline, then calls `readActiveMember` once. Failed and
+missing loads still check membership. No write deadline or conversation stream is used.
+It reuses `foldConnection` and `connectionServer` and selects only safe output fields.
+The saved lifecycle stays `saved_unverified` even under an admin block. Revoked, invalid
+and incomplete legacy records return unavailable with no generation. Server availability
+requires the saved installation and endpoint, a current reviewed catalogue and publication;
+it is not a tool permission or reachability claim. Calls remain unavailable in all cases.
+Any control record blocks use, as in bearer saves and selection. Reads have no custody,
+provider, selection, append, wake or release dependency, and never choose another profile.

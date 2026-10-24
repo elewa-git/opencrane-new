@@ -34,6 +34,7 @@ import { registerMemberRoutes, type MembershipOptions } from './members/routes.t
 import { registerIntegrationRoutes, type IntegrationOptions } from './integrations/routes.ts';
 import { registerMcpInstanceRoutes, type McpInstanceOptions }
   from './integrations/instance-routes.ts';
+import { registerConnectionProfileRead } from './integrations/profile-routes.ts';
 import { registerMcpInstanceWorkerRoutes } from './integrations/instance-worker.ts';
 import { registerComputerRoutes, type ComputerOptions } from './computers/routes.ts';
 
@@ -96,6 +97,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerGroupRoutes(app, authConfig, options.groups);
   registerMemberReads(app, authConfig, options.memberReads);
   registerRoutineReads(app, authConfig, options.memberReads);
+  registerConnectionProfileRead(app, authConfig, options.memberReads);
   registerRoleRoutes(app, authConfig, options.memberReads);
   registerInvitationEmail(app, authConfig, options.invitationEmail);
   registerInvitations(app, authConfig, options.invitationEmail);

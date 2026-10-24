@@ -56,7 +56,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, routine metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, own saved tool profiles, routine metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks access before history errors, allocates child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -90,6 +90,7 @@ for current permissions and memory revisions.
 - Serves assistant desktops to people who may view them.
 - Handles members, groups, ownership, model providers, tool servers and spending settings.
 - Returns permitted change history, saved results and memory facts.
+- Returns a person’s own saved tool profile without reading its credentials.
 - Returns saved routine metadata and small run pages to its owner and silo owners and admins.
 - Runs the separate models process that checks AI calls, records costs and starts the gateway.
 
@@ -102,6 +103,10 @@ retries after a connection failure.
 Owners and admins can read separate saved facts for integration registration,
 account requirements, grants and publication. A saved grant does not prove an
 assistant can call. These reads check current admin rights after loading the facts.
+
+Members can inspect their own saved bearer profile even when an admin has disabled it.
+The reply separates the saved revision, admin block and server availability. Saving
+credentials does not verify an upstream identity or enable calls.
 
 ## Folders
 

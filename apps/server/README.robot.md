@@ -5149,3 +5149,21 @@ Prerequisites: #647 squash `1e4696d3bfe2cce7cc06bd3059c3a1cf5c803b65` and
 fixed #652 squash `a474d9ad5dc931b0c41a3ab291c96da1ca9171f7`. The latter's failed-history
 privacy check remains in place. Lists, attention, private results and execution
 remain later work. Fresh-install qualification: NOT RUN.
+
+## Own saved bearer profile read (Part of #49)
+
+`GET /api/my/tools/:serverId/profiles/:profileId` uses `memberReads` and returns no-store.
+The verified organisation session supplies the member through the existing member lookup.
+No owner parameter, query field or request body is accepted. The response strictly selects
+`serverId`, `profileId`, `profileRevision`, `status`, `generation`, `adminBlocked`,
+`serverAvailable` and `callsAvailable: false`. None matches substring-based RISKY_FIELD_NAME.
+The route returns 401 without a session, 403 for foreign sessions or refused membership,
+400 for extra or invalid input, 404 unknown for absent profiles and 503 for failed history.
+Errors have fixed status values and no saved or upstream details.
+
+`test/connection-profile-read.test.ts` exercises the real route with NATS and OpenFGA.
+It checks owner isolation, disabled reads without grants, removal during loading,
+slow history, unrelated chats, strict output, private canaries and no appended effects.
+Repeated reads rebuild the same exact history. Instance routes and their change-status
+route are unchanged. Lists, admin/status reads, writes, screens and live qualification
+remain later work.

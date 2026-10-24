@@ -55,9 +55,8 @@ function headers(memberId = 'alice', orgId = 'org-test') {
   const session = { sub: memberId, orgId, roles: ['owner'], authTime: now, exp: now + 60 };
   return { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
 }
-async function saved() {
+async function saved(serverId = `server${counter + 1}`) {
   counter += 1;
-  const serverId = `server${counter}`;
   const profileId = `profile${counter}`;
   const subject = `connection-alice-${serverId}-${profileId}`;
   const locator = 'https://example.test/mcp';
@@ -130,7 +129,8 @@ async function refusesOtherPeople() {
     }
     return originalRead(subject, from, deadline);
   }
-  const read = vi.spyOn(nats.store, 'readStream').mockImplementation(unreadableForeign);
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(unreadableForeign);
   try {
     for (const member of ['bob', 'admin']) {
       for (const url of [fixture.url, `${fixture.url}-missing`]) {
@@ -190,7 +190,8 @@ async function removalWins(failed: boolean) {
       }
     }
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(removeDuringLoad);
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(removeDuringLoad);
   try {
     const response = await app.inject({ url: fixture.url, headers: headers() });
     expect(response.statusCode).toBe(403);
@@ -217,7 +218,7 @@ async function slowRead() {
     subjects.push(subject);
     if (subject === fixture.subject) {
       expect(deadline! - performance.now()).toBeGreaterThan(2_000);
-      await new Promise(wait);
+      await new Promise<void>(wait);
       const event = envelope('test', 'conversation-busy', 'conversation.closed',
         { conversationId: 'busy', closedBy: 'alice' });
       await nats.seed([event]);
@@ -227,12 +228,15 @@ async function slowRead() {
   function wait(resolve: () => void) {
     setTimeout(resolve, 2_100);
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(delayed);
   const head = vi.spyOn(nats.store, 'head');
   try {
     const response = await app.inject({ url: fixture.url, headers: headers() });
     expect(response.statusCode).toBe(200);
-    expect(subjects.indexOf('member-alice')).toBeGreaterThan(subjects.indexOf(`mcp-${fixture.serverId}`));
+    const membershipIndex = subjects.indexOf('member-alice');
+    const serverIndex = subjects.indexOf(`mcp-${fixture.serverId}`);
+    expect(membershipIndex).toBeGreaterThan(serverIndex);
     expect(subjects).not.toContain('conversation-busy');
     expect(head).not.toHaveBeenCalled();
   } finally {
@@ -243,7 +247,7 @@ it('loads slow history before its one current-member check despite busy chat act
 
 async function lifecycle(action: string) {
   const fixture = await saved();
-  await saved();
+  await saved(fixture.serverId);
   let event;
   let expectedStatus = 'saved_unverified';
   let generation: number | null = 1;
@@ -295,38 +299,56 @@ async function lifecycle(action: string) {
 it.each(['rotation', 'revocation', 'disable', 'replacement'])(
   'rebuilds exact %s facts from history without selecting another account or releasing', lifecycle);
 
-async function legacyAndFailure() {
+async function legacyAndFailure(kind: string) {
   const fixture = await saved();
   const originalRead = nats.store.readStream.bind(nats.store);
   async function* legacy(subject: string, from?: number, deadline?: number) {
     for await (const row of originalRead(subject, from, deadline)) {
       if (subject === fixture.subject) {
-        const data = { userId: 'alice', serverId: fixture.serverId,
+        let data: unknown = { userId: 'alice', serverId: fixture.serverId,
           profile: fixture.profileId, secretRef: `secret:${privateCanary}` };
+        if (kind === 'invalid') {
+          data = { ...fixture.data, activation: { ...fixture.data.activation, uid: '' } };
+        } else if (kind === 'foreign') {
+          data = { ...fixture.data, userId: 'bob' };
+        }
         yield { ...row, event: { ...row.event, data } };
       } else {
         yield row;
       }
     }
   }
-  const read = vi.spyOn(nats.store, 'readStream').mockImplementation(legacy);
+  const read = vi.spyOn(nats.store, 'readStream');
+  read.mockImplementation(legacy);
   try {
     const response = await app.inject({ url: fixture.url, headers: headers() });
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ serverId: fixture.serverId, profileId: fixture.profileId,
-      profileRevision: fixture.revision, status: 'unavailable', generation: null,
-      adminBlocked: false, serverAvailable: false, callsAvailable: false });
-    function failed(subject: string, from?: number, deadline?: number) {
-      if (subject === fixture.subject) throw new Error(privateCanary);
-      return originalRead(subject, from, deadline);
+    if (kind === 'foreign') {
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ status: 'unknown' });
+    } else {
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ serverId: fixture.serverId, profileId: fixture.profileId,
+        profileRevision: fixture.revision, status: 'unavailable', generation: null,
+        adminBlocked: false, serverAvailable: false, callsAvailable: false });
     }
-    read.mockImplementation(failed);
-    const unavailable = await app.inject({ url: fixture.url, headers: headers() });
-    expect(unavailable.statusCode).toBe(503);
-    expect(unavailable.json()).toEqual({ status: 'unavailable' });
-    expect(unavailable.headers['cache-control']).toBe('no-store');
+    const histories = [fixture.subject, `connection-control-alice-${fixture.serverId}`,
+      `mcp-${fixture.serverId}`];
+    for (const failedSubject of histories) {
+      function failed(subject: string, from?: number, deadline?: number) {
+        if (subject === failedSubject) {
+          throw new Error(privateCanary);
+        }
+        return originalRead(subject, from, deadline);
+      }
+      read.mockImplementation(failed);
+      const unavailable = await app.inject({ url: fixture.url, headers: headers() });
+      expect(unavailable.statusCode).toBe(503);
+      expect(unavailable.json()).toEqual({ status: 'unavailable' });
+      expect(unavailable.headers['cache-control']).toBe('no-store');
+    }
   } finally {
     vi.restoreAllMocks();
   }
 }
-it('keeps incomplete legacy records unavailable and sanitises unreadable history', legacyAndFailure);
+it.each(['legacy', 'invalid', 'foreign'])(
+  'never enables %s records and sanitises failed profile, control and server reads', legacyAndFailure);

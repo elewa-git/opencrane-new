@@ -1,0 +1,1 @@
+- Members can read their own saved bearer profile metadata, including disabled profiles, without exposing credentials or claiming a verified account.
