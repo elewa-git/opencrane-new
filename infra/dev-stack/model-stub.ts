@@ -1,7 +1,7 @@
 // Dev-stack qualification only: this process never contacts an external provider.
 import { appendFileSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { stageBModelCall } from './stage-b-model.ts';
+import type { stageBModelCall } from './stage-b-model.ts';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 const approvalRevision = process.env['MODEL_STUB_MCP_REVISION'];
@@ -99,6 +99,8 @@ const server = createServer((req, res) => {
     emit({ type: 'response.created', response: { id } });
     let demoCall: ReturnType<typeof stageBModelCall>;
     if (prompt.includes('STAGE_B_READ') || prompt.includes('STAGE_B_WRITE')) {
+      // Keep ordinary replies usable in the single-file wake Pod fixture.
+      const { stageBModelCall } = await import('./stage-b-model.ts');
       demoCall = stageBModelCall(body);
     }
     if (demoCall) {
