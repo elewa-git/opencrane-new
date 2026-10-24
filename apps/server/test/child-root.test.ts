@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
-import { childRequestedDataSchema } from '@opencrane/events';
+import { childRequestedDataSchema, childStartFailedEventSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { conversations } from '@opencrane/projections';
 import { BudgetActor, budgets, history, readBudget, rootTotals } from '@opencrane/models';
@@ -8,7 +8,6 @@ import { allocateChildRoot } from '../src/chat/child-root.ts';
 import { activateRequestedChild } from '../src/chat/child-activation.ts';
 import { addChildFirstInput, createRequestedChild, requestChild, retryChildRequest }
   from '../src/chat/child-requests.ts';
-import { recordChildStartFailure } from '../src/chat/child-failure.ts';
 import { summonFixture } from './support/child-summon.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
@@ -43,6 +42,18 @@ async function prepare(allowanceBoundCents = 1000, activate = true) {
   await addChildFirstInput(context.options, 'alice', input);
   if (activate) await activateRequestedChild(context.options, 'alice', input, 1);
   return { input, intent, data };
+}
+async function seedSavedFailure(saved: Awaited<ReturnType<typeof prepare>>) {
+  // Keep testing old conflicting history even though recovery can no longer create it.
+  const data = { conversationId: saved.input.conversationId,
+    requestId: saved.input.requestId, childConversationId: saved.data.childConversationId,
+    intentEventId: saved.intent.event.id, attempt: 1, stage: 'first_input', reason: 'access_refused' };
+  const id = `${saved.intent.event.id}-failure`;
+  const event = childStartFailedEventSchema.parse({ id, commandId: id, silo: 'test',
+    subject: `conversation-${saved.input.conversationId}`, type: 'conversation.child_start_failed',
+    source: 'opencrane-server', time: new Date().toISOString(), data,
+    principal: { kind: 'system', id: 'opencrane-server' } });
+  await context.nats.seed([event]);
 }
 async function allocatesOnce() {
   const saved = await prepare();
@@ -143,8 +154,7 @@ it('refuses changed requester, payer, reviewed allowance and execution choices',
 async function unavailableActivation(kind: string) {
   const saved = await prepare(1000, kind !== 'missing');
   if (kind === 'failed' || kind === 'superseded') {
-    await recordChildStartFailure(context.options, saved.intent.event.id, saved.data,
-      'first_input', 'access_refused');
+    await seedSavedFailure(saved);
     if (kind === 'superseded') {
       const rows = await history(context.nats.store, `conversation-${saved.input.conversationId}`, 'test');
       const retry = { retryId: 'retry', failureEventId: rows.at(-1)!.event.id };
@@ -288,8 +298,7 @@ async function queueChange(kind: string) {
       await context.append(grantStream('model', selected.model), 'grant.revoked',
         { ...grant, revokedBy: 'alice' });
     } else if (kind === 'failure') {
-      await recordChildStartFailure(context.options, saved.intent.event.id, saved.data,
-        'first_input', 'access_refused');
+      await seedSavedFailure(saved);
     } else {
       const conversationId = kind === 'parent' ? saved.input.conversationId : saved.data.childConversationId;
       await context.append(`conversation-${conversationId}`, 'conversation.closed',
