@@ -1,6 +1,146 @@
 # Approval retry during a competing refusal
 
-## Current product correction, 24 October 2026
+## Pre-publish expiry correction, 24 October 2026
+
+The store now distinguishes a refusal before any publish from an uncertain write.
+`unavailable.notPublished: true` means that this invocation never started sending
+an event to NATS. The flag stays absent once any publish starts, including all
+later retries in that invocation. It cannot establish what happened in an earlier
+invocation with the same command id.
+
+The budget actor refuses a proven unpublished append without setting `failed`.
+It handles the first append and every repeated append in the same place. A lost
+reply still stops the writer. No deadline, conditional publish, permission, money
+or memory check was removed or relaxed.
+
+The final fetched base is `950f960080342c3fa3b4320bdd70fb414bfa2bdc`.
+All rebases completed without conflicts, and the fetched base is an ancestor of the branch. The two complete
+selected-suite runs and load batch preceded the last scanner-token rebase. The
+budget and event-store source and selected test files were unchanged by main's
+updates. The final base has its own auth tests and two additional complete runs
+of the changed actor and append files.
+
+The regression test commit is `fcc7984b4`; the behaviour fix follows in `25f03967a`.
+The invalid-input check in `f275e8db9` records existing correct behaviour. Later
+commits tighten the new error assertions and move the unchanged reservation guard
+into the existing budget-refusal module. No check was removed to meet a lint limit.
+
+### Own failing-first evidence and early exits
+
+The real-NATS regression inserts unrelated member events in access callbacks two
+and four. Callback six passes just before the original two-second deadline, then
+the store sees expiry before its next publish. Before the fix, the next reservation
+fails with `Budget writer unavailable`, although no admission was saved.
+The first-publish expiry and store-side access refusal cases fail the same way.
+The initial log is `actor-red.log`; the four-case result is
+`actor-boundaries-red.log`. Four store assertions also fail before the change
+because the result lacks proof that no publish began (`store-red.log`).
+
+The retained lost-reply cases save the third conditional publish but hide its
+reply. The following access check either expires or refuses permission. Both
+cases require exactly one saved admission and a stopped writer. They pass before
+and after the correction. The invalid-input test also passes before the change;
+it confirms that event validation already refuses a bad request without stopping
+later valid reservations. The final tests check the exact refusal messages.
+
+The early-exit inspection covered event validation, both switch-on guards,
+conflict reads, refusal to repeat without an access callback, the callback itself,
+the actor's post-callback deadline check, initial and repeated store results, and
+foreign or changed budget rows. Local refusals already leave the writer usable.
+Foreign rows and another budget writer still set `failed`; unavailable replies
+without non-publication proof still do so. No broader recovery was added.
+
+### Test setup
+
+All test invocations, lint and typecheck use `nice -n 10`. Each Vitest process has
+one worker. The two complete selected-suite passes overlap the 30-run approval
+batch. Each approval iteration runs both saved-start and budget-admission recovery
+cases. A temporary Vitest configuration enables private warning logs and leaves
+all test limits and assertions unchanged.
+
+Focused failing-first runs use the supplied `PG_TEST_URL` on port 55432.
+The complete suites and load batch use the throwaway
+`pgtest-ci-flakes-11-expiry` database on port 34372, after `pg_isready` succeeds.
+NATS, OpenFGA and gateway fixtures start their normal isolated services. The owner
+stack and Docker daemon settings are untouched.
+
+Logs and JSON reports for this correction are in `/tmp/ci-flakes-11-expiry/`.
+Earlier failures below remain recorded. A later passing run does not establish
+the cause of an earlier failure or prove it fixed.
+
+### Complete selected-suite results
+
+Both runs completed all 14 selected files. Each has 506 passed, four failed and
+one optional browser case NOT RUN. Overall qualification is PARTIAL.
+The full-run results are FAIL; passing reruns do not replace them.
+
+| File | First run | Second run |
+| --- | --- | --- |
+| `apps/server/test/approvals.test.ts` | PASS: 74 passed, 1 NOT RUN | FAIL: 73 passed, 1 failed, 1 NOT RUN |
+| `apps/server/test/integration-access-gateway.test.ts` | PASS: 17 passed | PASS: 17 passed |
+| `libs/event-store/test/append.test.ts` | PASS: 24 passed | PASS: 24 passed |
+| `libs/event-store/test/history-checked.test.ts` | PASS: 17 passed | PASS: 17 passed |
+| `libs/event-store/test/read-retry.test.ts` | PASS: 12 passed | PASS: 12 passed |
+| `libs/models/test/actor.test.ts` | PASS: 47 passed | PASS: 47 passed |
+| `libs/models/test/approval-cancellation.test.ts` | PASS: 13 passed | PASS: 13 passed |
+| `libs/models/test/approval-record.test.ts` | PASS: 5 passed | PASS: 5 passed |
+| `libs/models/test/decision-activity.test.ts` | PASS: 12 passed | PASS: 12 passed |
+| `libs/models/test/decision-cost.test.ts` | FAIL: 25 passed, 3 failed | FAIL: 26 passed, 2 failed |
+| `libs/models/test/decision-fence.test.ts` | PASS: 75 passed | FAIL: 74 passed, 1 failed |
+| `libs/models/test/decision-grants.test.ts` | PASS: 3 passed | PASS: 3 passed |
+| `libs/models/test/decision-refusal.test.ts` | PASS: 1 passed | PASS: 1 passed |
+| `libs/models/test/mcp-dispatch.test.ts` | FAIL: 181 passed, 1 failed | PASS: 182 passed |
+
+### Retained failures and focused reruns
+
+- First run: the stopped-Ask case and expired fixture-token warm-up each exceeded
+  30 seconds. Both focused reruns passed. The original timeout causes remain unknown.
+- First run: the team-revocation case failed during fixture membership setup with
+  an OpenFGA one-second timeout. Its focused rerun passed.
+- First run: the 10,000-member case returned 403 instead of 200. Its diagnostic
+  rerun failed again. The fixed diagnostic label was `event_store_unavailable` at
+  `access_and_budget`, after 2,625 ms. This does not identify the underlying cause
+  or establish healthy performance under load.
+- Second run: the approval-expiry case failed with NATS `heartbeats missed`.
+  Its focused rerun passed; the original failure remains recorded.
+- Second run: the harmless MCP activity case failed while creating its fixture
+  OpenFGA store, with a one-second timeout. Its focused rerun passed.
+- Second run: the cold-process case failed with a bounded event-read timeout.
+  Its focused rerun passed.
+- Second run: the large-grant case timed out while seeding NATS events, before
+  the measured decisions. This differs from the first run and diagnostic rerun.
+
+Focused reruns therefore have six passing cases and one failing case. The large-grant
+failure is still unresolved. No assertion, timeout or access check was loosened.
+
+### Load batch and final-base checks
+
+- PASS: all 30 approval-retry iterations, with both recovery cases in each run
+  (60/60 cases). Each iteration overlapped at least one selected-suite process.
+- PASS: after the final rebase, actor and event-store append tests passed 71/71
+  twice. This includes the exact retry-publication boundary and lost-reply cases.
+- PASS: all 195 auth tests after the scanner-token update on main.
+- NOT RUN: the full root suite, fresh-install journeys and optional approval browser case.
+
+The throwaway PostgreSQL container was removed with `docker rm -f -v` after testing.
+The owner stack and Docker daemon settings were untouched.
+
+### Static checks
+
+The first full lint run failed on the actor file's line count and a test callback
+marked async without an await. Both were corrected without changing assertions.
+Final checks on the scanner-token base:
+
+- PASS: full lint, including Knip, dependency rules, docs, links, fixtures and licences.
+  ESLint reports 25 warnings and no errors.
+- PASS: repository-wide typecheck.
+- PASS: `check:events`, with 153 event types matching the catalogue.
+- PASS: `npm run lint:changelog` and the evidence document's Markdown check.
+
+The final lint process has a 6 GiB JavaScript heap limit; test limits are unchanged.
+All commands retain `nice -n 10`. CI is not awaited and the PR remains draft.
+
+## Earlier product correction, 24 October 2026
 
 The branch was fetched and rebased onto `origin/main`. The rebases completed without
 conflicts. The final base is `e3b79fc6b9504c9c136ddd9b1c57e7eed3dd2288`. Main added
@@ -24,7 +164,7 @@ Private warnings record only the saved request id, fixed stage and reason labels
 and elapsed milliseconds. The label `budget_write_refused` does not guess whether
 another writer or an unavailable append caused the refusal.
 
-### Current failing-first checks
+### Earlier failing-first checks
 
 - `34d339cd3` commits the real-NATS, two-conflict actor cases before `fd78b80a2`.
   FAIL before the fix: unchanged access was refused and the original deadline was
@@ -46,7 +186,7 @@ The first focused lint found complexity and an untyped test value. Those were fi
 The first full lint had already read the earlier function and reported its complexity;
 that result remains FAIL. The subsequent lint uses the corrected source.
 
-### Current test setup
+### Earlier test setup
 
 Tests run at `nice -n 10`, with one worker per Vitest invocation and no root suite.
 Initial focused checks use the supplied test database on port 55432. Full checks
@@ -58,7 +198,7 @@ Each stress invocation runs both approval recovery cases. The two focused-suite
 passes run alongside the batch to provide load. The stress-only temporary Vitest
 configuration enables private warning logs and changes no test or deadline.
 
-### Current verification results
+### Earlier verification results
 
 Both complete invocations use the same eleven selected files and one worker.
 The original failures below stay recorded even where a focused rerun passes.
@@ -94,7 +234,7 @@ unchanged. Post-rebase checks passed. Focused ESLint also passed for all changed
 TypeScript files and the final readability changes.
 The final diagnostic label was checked twice separately after its wording change.
 
-### Every current stress invocation
+### Earlier stress invocations
 
 Each row runs both approval cases alongside the selected suites. All calls keep
 the original two-second access deadline. No failed run is replaced by a rerun.
@@ -151,7 +291,7 @@ Static logs are in the same folder. The throwaway PostgreSQL container was remov
 with its volume after the tests. No extra load-only suite was needed: the selected
 suites overlapped every stress invocation. CI is not awaited.
 
-### Current failures and what is known
+### Earlier failures and what is known
 
 - First full pass: the 10,000-member decision-cost case returned 503 with
   `Decision audit unavailable`. Its focused diagnostic rerun passed. The original
