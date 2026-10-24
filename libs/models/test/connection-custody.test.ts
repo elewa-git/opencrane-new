@@ -1535,10 +1535,16 @@ it('startup scan removes an unsaved rotation after revoke and restart',
 async function intervalCleansExhaustedReaction() {
   const test = await cleanupFixture();
   const isolated = await databases();
-  test.db = pgDb(isolated.queue);
+  const database = pgDb(isolated.queue);
+  function waitForCleanupLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    // Wait for this fixture's lock so acquisition delays cannot use up a deletion retry.
+    // Keep the production deadline covered by the separate lock contention tests.
+    return database.lock!(name, work);
+  }
+  test.db = { ...database, lock: waitForCleanupLock };
   const event = await test.revoke();
   test.store.failDeletes(true);
-  const cleanup = test.handler();
+  const cleanup = connectionCleanupHandler(events.store, test.db, test.store.restart(), 'test');
   const attemptDeletes: number[] = [];
   async function handle(...parameters: Parameters<typeof cleanup.handle>) {
     const before = test.store.deleteAttempts;
