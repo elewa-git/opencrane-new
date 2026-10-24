@@ -745,3 +745,67 @@ async function failedWriterCannotProveCurrent() {
 }
 it('refuses proof from a failed writer even when its saved position still matches',
   failedWriterCannotProveCurrent);
+
+async function admitsAfterUnrelatedWrite(change: string) {
+  const reservationId = await reserve(false, 'admission-race');
+  const reservation = actor.state.reservations[0]!;
+  const admission = { callId: 'admission-race', decisionId: 'decision-race',
+    bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
+  const budgetPosition = await nats.store.head('budget-test');
+  const started = performance.now();
+  const decisionClock = vi.spyOn(performance, 'now');
+  decisionClock.mockReturnValue(started);
+  onTestFinished(decisionClock.mockRestore);
+  let checks = 0;
+  async function checkAccess() {
+    checks += 1;
+    if (checks === 2) {
+      // Move the global position during the checked append, after its earlier position read.
+      const joined = { memberId: 'bob', email: 'bob@example.test',
+        displayName: 'Bob', role: 'member' };
+      const event = envelope('test', 'member-bob', 'member.joined', joined);
+      const command = { event, expectedSequence: 0 };
+      expect((await nats.store.append(command)).status).toBe('appended');
+      if (change === 'writer') {
+        const replacement = new BudgetActor(nats.store, 'test', now);
+        await replacement.start();
+      }
+    }
+    if (checks >= 3 && change === 'revoked') {
+      throw new Error('Authority changed');
+    }
+    if (checks >= 3 && change === 'expired') {
+      decisionClock.mockReturnValue(started + 2001);
+    }
+    if (performance.now() >= started + 2000) {
+      throw new Error('Authority snapshot expired');
+    }
+  }
+  const admitted = actor.admitDispatch(admission, checkAccess);
+  if (change === 'unchanged') {
+    await admitted;
+    expect(checks).toBe(4);
+    expect(actor.state.dispatches).toEqual([admission]);
+    expect(await nats.store.head('budget-test')).toBeGreaterThan(budgetPosition);
+  } else {
+    let reason = 'Budget writer lost its fence';
+    if (change === 'revoked') {
+      reason = 'Authority changed';
+    }
+    if (change === 'expired') {
+      reason = 'Authority snapshot expired';
+    }
+    await expect(admitted).rejects.toThrow(reason);
+    expect(actor.state.dispatches).toHaveLength(0);
+    const rows = await history(nats.store, 'budget-test', 'test');
+    function isAdmission(row: typeof rows[number]) {
+      return row.event.type === 'budget.call_dispatch_admitted';
+    }
+    expect(rows.filter(isAdmission)).toHaveLength(0);
+  }
+  expect(actor.state.reservations).toHaveLength(1);
+  expect(actor.state.reservations[0]!.settledCents).toBeUndefined();
+}
+it.each(['unchanged', 'revoked', 'expired', 'writer'])(
+  'rechecks budget admission after an unrelated append with access %s',
+  admitsAfterUnrelatedWrite);
