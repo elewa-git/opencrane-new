@@ -241,7 +241,7 @@ async function refusesFailedRegistration(failure: string) {
 it.each(['registry', 'listener'])(
   'opens no connection when admitted relay registration fails at %s', refusesFailedRegistration);
 
-async function changesDuringDispatchRetry(change: string) {
+async function changesDuringDispatchRetry(change: string, timing: string) {
   const test = await setup();
   const bearer = await test.token();
   const requestId = decodeJwt(bearer).jti!;
@@ -289,11 +289,19 @@ async function changesDuringDispatchRetry(change: string) {
       onTestFinished(clock.mockRestore.bind(clock));
     }
   }
+  async function beforePublishFailure() {
+    if (timing === 'before retry') await changeAuthority();
+  }
   async function retryDispatch(input: Parameters<typeof append>[0]) {
     const event = z.object({ type: z.string() }).parse(input.event);
     if (event.type !== 'budget.call_dispatch_admitted') return append(input);
-    retry.failNextPublish(changeAuthority);
-    return retry.store.append(input);
+    retry.failNextPublish(beforePublishFailure);
+    const result = await retry.store.append(input);
+    if (timing === 'after retry') {
+      expect(result.status).toBe('appended');
+      await changeAuthority();
+    }
+    return result;
   }
   const barrier = vi.spyOn(test.facts.nats.store, 'append').mockImplementation(retryDispatch);
   onTestFinished(barrier.mockRestore.bind(barrier));
@@ -301,10 +309,26 @@ async function changesDuringDispatchRetry(change: string) {
     'x-egress-authority': 'registry.npmjs.org:443' };
   const options = { method: 'POST', headers };
   const response = await fetch(`${test.gateway.decisionUrl}/authorize/egress`, options);
-  expect(retry.publishAttempts()).toBe(2);
-  expect(test.facts.actor.state.dispatches).toHaveLength(1);
+  const refusedBeforeRetry = timing === 'before retry' &&
+    change !== 'none' && change !== 'registration-deadline';
+  const budgetRows = await history(test.facts.nats.store, 'budget-test', 'test');
+  function isDispatch(row: typeof budgetRows[number]) {
+    return row.event.type === 'budget.call_dispatch_admitted';
+  }
+  const savedDispatches = budgetRows.filter(isDispatch);
+  if (refusedBeforeRetry) {
+    // Refuse before publishing again when the first failed attempt invalidated access.
+    expect(retry.publishAttempts()).toBe(1);
+    expect(test.facts.actor.state.dispatches).toHaveLength(0);
+    expect(savedDispatches).toHaveLength(0);
+  } else {
+    expect(retry.publishAttempts()).toBe(2);
+    expect(test.facts.actor.state.dispatches).toHaveLength(1);
+    expect(savedDispatches).toHaveLength(1);
+  }
   expect(test.facts.actor.state.reservations).toHaveLength(0);
   expect(test.gateway.connected()).toBe(0);
+  expect(test.gateway.received()).toHaveLength(0);
   if (change === 'none') {
     expect(response.status).toBe(200);
     expect(registration).toHaveBeenCalledTimes(1);
@@ -316,6 +340,11 @@ async function changesDuringDispatchRetry(change: string) {
   expect.soft(response.headers.get('x-egress-relay')).toBeNull();
   if (change !== 'registration-deadline') expect.soft(registration).not.toHaveBeenCalled();
   const outcomes = await history(test.facts.nats.store, `egress-${requestId}`, 'test');
+  if (refusedBeforeRetry) {
+    // Record a refused dispatch only when permission to send was saved first.
+    expect(outcomes).toHaveLength(0);
+    return;
+  }
   expect(outcomes).toHaveLength(1);
   expect(outcomes[0]!.event.type).toBe('egress.observed');
   expect(outcomes[0]!.event.data).toMatchObject({ requestId, permitId: requestId,
@@ -333,8 +362,18 @@ async function changesDuringDispatchRetry(change: string) {
     expect(receipts.has(id)).toBe(false);
   }
 }
-it.each(['destination', 'turn', 'deadline', 'registration-deadline', 'expiry', 'none'])(
-  'rechecks %s after the real budget dispatch append retries', changesDuringDispatchRetry);
+it.each([
+  ['destination', 'before retry'],
+  ['turn', 'before retry'],
+  ['deadline', 'before retry'],
+  ['expiry', 'before retry'],
+  ['destination', 'after retry'],
+  ['turn', 'after retry'],
+  ['deadline', 'after retry'],
+  ['expiry', 'after retry'],
+  ['registration-deadline', 'after retry'],
+  ['none', 'before retry'],
+])('rechecks %s %s of the real budget dispatch append', changesDuringDispatchRetry);
 
 function expireAuthority() {
   const now = performance.now.bind(performance);

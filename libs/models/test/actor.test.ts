@@ -370,7 +370,8 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   let checks = 0;
   function checkAccess() {
     checks++;
-    if (checks === 2) {
+    // Expire after the first append has refused its old budget position.
+    if (checks === 3) {
       const error = new Error('Access expired');
       return Promise.reject(error);
     }
@@ -381,7 +382,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   };
   const refused = actor.configure(payload, 'configure-switch', expectedSequence, checkAccess);
   await expect(refused).rejects.toThrow('Access expired');
-  expect(checks).toBe(2);
+  expect(checks).toBe(3);
   expect(actor.state.ceilingCents).toBe(100);
   expect(await nats.store.head('budget-test')).toBe(before);
   const projected = await projectedBudgetSummary();
@@ -390,7 +391,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   expect(projected.sequence).toBe(returned.sequence);
   const retry = await actor.configure(payload, 'configure-switch', projected.sequence, checkAccess);
   expect(retry).toMatchObject({ status: 'appended' });
-  expect(checks).toBe(3);
+  expect(checks).toBe(5);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   expect(actor.state.sequence).toBe(before + 1);
   expect(actor.state.ceilingCents).toBe(200);
@@ -398,7 +399,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   expect(after).toEqual(budgetSummary(actor.state, clock));
   const stale = await actor.configure(payload, 'configure-stale', expectedSequence, checkAccess);
   expect(stale).toEqual({ status: 'conflict' });
-  expect(checks).toBe(4);
+  expect(checks).toBe(6);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   let reservedCents = 0;
   if (withHold) {
@@ -538,7 +539,7 @@ async function admitsOnlyCheckedManagedHolds(restart: boolean) {
     return Promise.resolve();
   }
   const reservationId = await actor.reserve(call, 1, confirm);
-  expect(checks).toBe(restart ? 1 : 2);
+  expect(checks).toBe(restart ? 2 : 4);
   await expect(actor.reserve(call, 1)).rejects.toThrow('Provider setup changed');
   const incomplete = { ...call, bindingSequence: undefined };
   await expect(actor.reserve(incomplete, 1, confirm)).rejects.toThrow();

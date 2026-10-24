@@ -2185,9 +2185,19 @@ qualification is NOT RUN.
 
 ## Root spending allowance (P4-8 PR 4, first part; #90 and #93)
 
-`BudgetActor.setRootAllowance(binding, firstCallBoundCents)` saves the reviewed bound
+`BudgetActor.setRootAllowance(binding, firstCallBoundCents, fresh?, deadline?)` saves the reviewed bound
 only when every remaining cap and the first call fit. It derives rootId as SHA-256
 of JSON `[silo, conversationId, turnId]`. Identical retries return the saved record.
+When supplied, `fresh` runs inside the actor queue, before returning a saved root,
+and immediately before the allocation append. Every event-store publish attempt repeats
+the same callback, including transport retries after a switch-on conflict. The append
+also receives the original absolute `performance.now()` deadline; retries never renew it.
+The shared actor append passes its supplied access callback to the event store for other
+checked budget writes too. Recovery and accounting writes without a caller access check
+keep their existing rules.
+`test/root-append-retry.test.ts` fails the first publish without saving it. It checks
+that member removal or expiry prevents a later attempt from saving a root, both directly
+and after a switch-on conflict. Deadline tests move the clock without waiting two seconds.
 `reserve` takes optional rootId as its fifth argument; rooted turns must supply it
 and match every saved identity field. The saved root position replaces admittedAt.
 `rootTotals` uses the existing reservations, BigInt sums and lifetime settlement.
@@ -2760,6 +2770,14 @@ returns the fixed `egress_refused` response without registering a relay. The exi
 fields because no listener was registered. A failed outcome save still refuses access.
 After registration, periodic checks use the same admission rules. The relay also
 keeps its original expiry; it never renews a permit.
+
+The budget actor also repeats the access callback before each publish attempt.
+If destination access, turn activity, the original deadline or expiry changes during
+a failed publish, admission refuses before a second publish. The tests fail the
+first publish without saving it, so those refusals have no saved dispatch or dispatch
+error outcome. A transient failure with valid access still retries and saves one
+dispatch. Tests cover changes both before that retry and after it succeeds, keeping
+the later registration and error-outcome checks.
 
 Tests use real NATS, PostgreSQL, OpenFGA and the pinned gateway with a recording
 upstream. The initial failing test is in commit `98ba6b80`.

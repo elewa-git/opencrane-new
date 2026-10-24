@@ -4305,7 +4305,28 @@ A parent change after the final check can still precede the child append. Later 
 allocation and first start must check authority, attempt and closure again. IAM and storage
 uncertainty throw without saving a failure or claiming activation. No route or recovery
 worker calls this command yet. `childRequestHeld` and production start gates remain intact.
-Root allocation, first-start recovery and fresh-install qualification: NOT RUN / remaining.
+First-start recovery and fresh-install qualification remain unfinished.
+
+### Checked child root allocation
+
+`chat/child-root.ts` provides `allocateChildRoot(options, actor, memberId, input, attempt, selected)`.
+It shares `checkedChildActivation` with activation and requires an existing exact saved record.
+The request, creation, first input and current attempt supply the requester, child,
+first-turn id, assistant, payer and reviewed cents. The internal caller supplies the
+actual selected thread, computer, generation and model. There is no HTTP caller.
+Model grants are checked with the existing authority helper and already loaded child
+history. Only small access streams are watched. The original two-second check reaches
+the actor queue and every publish attempt, with its unchanged absolute deadline;
+incremental parent/child reads also refuse failure, retry and legacy closure while queued.
+The event store checks the global log position across each access check and publish.
+Access changes saved during a failed publish are checked before the next attempt.
+
+The first-call bound uses `reservationCents` with the full supported context and the
+server's 2,000-token output cap. It never reduces the reviewed allowance to fit capacity.
+One budget append records the root; allocation creates no hold, turn, pass or send.
+Retries retain the saved root, including its stop. The hold, recovery worker and start
+gates are unchanged. Tests cover allocation, refusals, queued revocation, lost replies,
+actor restart, projection replay and held delivery after allocation.
 
 ## Bounded call spending
 

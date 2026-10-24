@@ -1,6 +1,8 @@
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { activateRequestedChild } from '../src/chat/child-activation.ts';
+import { allocateChildRoot } from '../src/chat/child-root.ts';
+import { BudgetActor } from '@opencrane/models';
 import { recordChildStartFailure } from '../src/chat/child-failure.ts';
 import { createLogger } from '@opencrane/observability';
 import { watchChildRequests } from '../src/chat/child-recovery.ts';
@@ -206,6 +208,15 @@ async function holdsWork(retry: boolean) {
   if (child.mode !== 'agent_session') throw new Error('Expected child');
   const computer = { computerId: 'computer', assistantId: 'helper', generation: 1, podUid: 'test' };
   const ready = await context.append('computer-helper', 'computer.ready', computer, false);
+  for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'helper']]) {
+    await context.append(authz.grantStream('model', 'gpt-6.1-sol'), 'grant.given',
+      { resourceType: 'model', resourceId: 'gpt-6.1-sol', granteeKind, granteeId,
+        grantedBy: 'alice' });
+  }
+  const actor = new BudgetActor(context.nats.store, 'test');
+  await actor.start(10_000, 10_000, 'payer');
+  const selected = { computerId: 'computer', generation: 1, threadId: 'thread', model: 'gpt-6.1-sol' };
+  await allocateChildRoot(context.options, actor, 'alice', activationInput, attempt, selected);
   const before = await context.nats.store.head();
   const tokens = vi.spyOn(context.tokens, 'turn');
   function connection(): Promise<never> {
@@ -248,13 +259,15 @@ async function holdsWork(retry: boolean) {
     expect(await context.nats.store.head()).toBe(before);
     expect(JSON.stringify(received)).not.toContain('token');
     expect(tokens).not.toHaveBeenCalled();
+    expect(actor.state.reservations).toEqual([]);
+    expect(actor.state.dispatches).toEqual([]);
   } finally {
     bridge.socket.terminate();
     for (const client of server.clients) client.terminate();
     server.close();
   }
 }
-it.each([false, true])('holds delivery, resume, admission and tokens after activation with retry=%s', holdsWork);
+it.each([false, true])('holds delivery, resume, admission and tokens after allocation with retry=%s', holdsWork);
 
 async function retriesPermissionOutage() {
   const input = await context.parent();
