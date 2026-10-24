@@ -1,11 +1,13 @@
 import { publicationEntry, publicationDigest } from './publication.ts';
 import { authorityFence } from './authority.ts';
 import { currentMembership } from './ownership.ts';
+import { readActiveMember } from './member-authority.ts';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema } from '@opencrane/events';
-import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable,
+import { mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema,
+  mcpToolModeSetDataSchema } from '@opencrane/events';
+import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable, isToolReviewCurrent,
   reviewedToolChoices } from '@opencrane/projections';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { envelope, history } from './actor.ts';
@@ -115,8 +117,92 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
   const valid = state.sequence === command.expectedSequence &&
     state.connectionId === command.connectionId && tool?.reviewed === true &&
     tool.revision === command.toolRevision && safeChoice;
-  return saveToolCommand(store, binding, memberId, serverId, 'mcp.tool_mode_set',
+  const result = await saveToolCommand(store, binding, memberId, serverId, 'mcp.tool_mode_set',
     payload, command, rows, valid);
+  if (result.status !== 'appended' || !('sequence' in result)) {
+    return result;
+  }
+  return savedToolModeResult(store, binding.silo, memberId, serverId, command,
+    payload, rows, result.sequence);
+}
+
+async function savedToolModeResult(store: EventStore, silo: string, memberId: string,
+  serverId: string, command: z.infer<typeof input>, payload: Record<string, unknown>,
+  rows: StoredEvent[], sequence: number) {
+  // Read the stored event so broker deduplication cannot confirm a different save.
+  const saved = await store.readEvent(sequence, performance.now() + 10_000);
+  const receipt = toolModeReceipt(saved, silo, serverId, memberId, command.commandId);
+  // Recover the original write position without adding fields to existing events.
+  let originalSequence = 0;
+  for (const row of rows) {
+    if (row.sequence < saved.sequence) {
+      originalSequence = row.sequence;
+    }
+  }
+  if (!receipt || originalSequence !== command.expectedSequence ||
+      publicationDigest(saved.event.data) !== publicationDigest(payload)) {
+    return { status: 'conflict' };
+  }
+  return { status: 'appended', sequence, receipt };
+}
+
+function toolModeReceipt(row: StoredEvent, silo: string, serverId: string,
+  memberId: string, changeRef: string) {
+  const event = row.event;
+  if (event.silo !== silo || event.subject !== `mcp-${serverId}` ||
+      event.id !== changeRef || event.commandId !== changeRef ||
+      event.type !== 'mcp.tool_mode_set' || event.source !== 'opencrane-server' ||
+      event.principal?.kind !== 'human' || event.principal.id !== memberId) {
+    return null;
+  }
+  const parsed = mcpToolModeSetDataSchema.safeParse(event.data);
+  if (!parsed.success || parsed.data.serverId !== serverId || parsed.data.setBy !== memberId ||
+      !parsed.data.connectionId || !parsed.data.toolRevision) {
+    return null;
+  }
+  const data = parsed.data;
+  return { changeRef, eventId: event.id, recordedAt: event.time, sequence: row.sequence,
+    serverId, connectionId: data.connectionId, toolRevision: data.toolRevision,
+    mode: data.mode, setBy: data.setBy };
+}
+
+export async function readToolModeChange(store: EventStore, binding: Binding, memberId: string,
+  serverId: string, changeRef: string) {
+  try {
+    return await loadToolModeChange(store, binding.silo, memberId, serverId, changeRef);
+  } finally {
+    // Check access after successful or failed loading, without a write deadline.
+    await readActiveMember(store, binding, memberId, 'admin');
+  }
+}
+
+async function loadToolModeChange(store: EventStore, silo: string, memberId: string,
+  serverId: string, changeRef: string) {
+  const deadline = performance.now() + 10_000;
+  const rows: StoredEvent[] = [];
+  for await (const row of store.readStream(`mcp-${serverId}`, 1, deadline)) {
+    if (row.event.silo !== silo || row.event.subject !== `mcp-${serverId}`) {
+      return { status: 'unknown' };
+    }
+    rows.push(row);
+  }
+  if (performance.now() > deadline) {
+    throw new Error('Tool change unavailable');
+  }
+  function matchesId(row: StoredEvent) {
+    return row.event.id === changeRef;
+  }
+  const saved = rows.find(matchesId);
+  const receipt = saved && toolModeReceipt(saved, silo, serverId, memberId, changeRef);
+  if (!receipt) {
+    return { status: 'unknown' };
+  }
+  const policy = toolPolicyFromRows(rows);
+  const current = isToolReviewCurrent(policy) && isToolPolicyAvailable(policy);
+  // Keep the saved choice separate from today's availability and requester permissions.
+  const availability = { status: 'unavailable', reason: 'requester_assistant_required',
+    policy: current ? 'current' : 'unavailable', sequence: policy.sequence };
+  return { status: 'appended', receipt, availability };
 }
 
 export async function saveToolCommand(store: EventStore, binding: Binding, memberId: string,

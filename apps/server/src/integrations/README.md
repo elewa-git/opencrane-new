@@ -22,6 +22,10 @@ The models process replaces the gateway file under a PostgreSQL lock shared with
 
 Each configured call is checked again immediately before sending. The tool server must compare the approved tool list and running instance before execution. Published remote calls use their saved destination through the shared checked HTTPS connection. The remote server must promise to refuse calls against a changed tool list. [Memory](../memory/README.md) discovery, recall and remember use these same checks. A reviewed tool's Allow mode also travels with a chat turn, so changing it to Ask prevents an old automatic call.
 
+**Saved tool choices.** An admin can recover their own saved mode by its original
+reference. Later changes keep the original receipt intact. Reading it checks current
+access and reports current availability separately, without repeating the change.
+
 **Saved facts.** Owners and admins can read registration, account requirements,
 saved grants and publication separately. No account required does not mean a
 connection was tested. Personal and company account verification remains unavailable.
@@ -60,7 +64,7 @@ The [server](../../README.md) registers these requests. [Models](../models/READM
 
 ```mermaid
 flowchart LR
-  server[Server] --> integrations[Integration requests and saved facts]
+  server[Server] --> integrations["integrations<br/>tool settings and receipts"]
   integrations --> models[Tool rules and spending]
   integrations --> members[Current membership]
 ```

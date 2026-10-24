@@ -1,3 +1,4 @@
+import { readToolModeChange } from '@opencrane/models';
 import { readIntegrationFacts } from './facts.ts';
 import { budgetChange } from '@opencrane/models';
 import { readPublication, publicationChange } from '@opencrane/projections';
@@ -47,7 +48,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
     '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/discovery',
     '/api/org/integrations/:serverId/admission', '/api/org/integrations/:serverId/checks',
     '/api/org/integrations/discovery', '/api/org/integrations/changes/:commandId',
-    '/api/org/integrations/:serverId/facts',
+    '/api/org/integrations/:serverId/facts', '/api/org/integrations/:serverId/changes/:commandId',
   ];
   for (const path of paths) {
     const readOnly = path.endsWith('/discovery') || path.endsWith('/:commandId') ||
@@ -87,6 +88,18 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
 async function checkedIntegrationRequest(path: string, request: FastifyRequest,
   reply: FastifyReply, config: AuthConfig, options: IntegrationOptions,
   memberId: string, now: Date) {
+  if (path === '/api/org/integrations/:serverId/changes/:commandId') {
+    const id = z.string().regex(/^[\w-]{1,200}$/u);
+    const parameters = z.strictObject({ serverId: id, commandId: id });
+    const { serverId, commandId } = parameters.parse(request.params);
+    z.strictObject({}).parse(request.query);
+    if (!options.store) {
+      return reply.code(503).send({ status: 'unavailable' });
+    }
+    const result = await readToolModeChange(options.store, options.binding, memberId,
+      serverId, commandId);
+    return reply.send(result);
+  }
   if (path.endsWith('/facts')) {
     if (!options.store || !options.modelDb) {
       return reply.code(503).send({ status: 'unavailable' });
@@ -222,7 +235,14 @@ async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthC
         if (request.headers.origin !== new URL(config.redirectUri).origin) return reply.code(403).send({ status: 'refused' });
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
         const result = await setToolPolicy(options.store, options.binding, memberId, serverId, request.body);
-        return reply.code(result.status === 'appended' ? 200 : result.status === 'unavailable' ? 503 : 409).send({ status: result.status, ...(result.status === 'appended' ? { policy: await readToolPolicy(options.store, options.silo, serverId) } : {}) });
+        if (result.status === 'appended' && 'receipt' in result) {
+          const policy = await readToolPolicy(options.store, options.silo, serverId);
+          const response = { status: result.status, receipt: result.receipt, policy };
+          return reply.send(response);
+        }
+        const statusCode = result.status === 'unavailable' ? 503 : 409;
+        const response = { status: result.status };
+        return reply.code(statusCode).send(response);
 }
 
 async function review(request: FastifyRequest, reply: FastifyReply, config: AuthConfig,

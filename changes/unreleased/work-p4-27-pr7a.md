@@ -1,0 +1,1 @@
+- Owners and admins can recover their exact saved tool-mode change after a lost reply. The receipt keeps its original reference and date even after tools or settings change, and reports current availability separately.
