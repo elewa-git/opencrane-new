@@ -257,13 +257,16 @@ it('closes an unfinished backend request before removing its service fixtures',
 async function closesLateBackendRequest() {
   const backend = app;
   const address = backend.server.address();
-  if (!address || typeof address === 'string') throw new Error('Missing backend address');
+  if (!address || typeof address === 'string') {
+    throw new Error('Missing backend address');
+  }
+  const port = address.port;
   const originalClose = backend.close.bind(backend);
   let pending: ReturnType<typeof request> | undefined;
   async function closeWithLateConnection() {
     if (backend.server.listening) {
       const incoming = once(backend.server, 'request');
-      const options = { host: '127.0.0.1', port: address.port, path: route, method: 'POST', agent: false,
+      const options = { host: '127.0.0.1', port, path: route, method: 'POST', agent: false,
         headers: { 'content-type': 'application/json', 'content-length': '16384' } };
       pending = request(options);
       function disconnected() {
@@ -273,9 +276,11 @@ async function closesLateBackendRequest() {
       pending.flushHeaders();
       await incoming;
     }
-    await originalClose();
+    return originalClose();
   }
-  const closingBackend = vi.spyOn(backend, 'close').mockImplementationOnce(closeWithLateConnection);
+  const promiseClose: { close(): Promise<undefined> } = backend;
+  const closingBackend = vi.spyOn(promiseClose, 'close');
+  closingBackend.mockImplementationOnce(closeWithLateConnection);
   const closing = close();
   function closed() {
     return 'closed';
@@ -2125,11 +2130,8 @@ async function grantChangedDuringLineage(restore: boolean) {
       changed = true;
       const fields = { resourceType: 'memory_write', resourceId: scopeId,
         granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
-      const subject = grantStream('memory_write', scopeId);
-      let revoked = envelope('test', subject, 'grant.revoked', fields);
-      if (recorded) {
-        revoked = await setup.append(subject, 'grant.revoked', fields);
-      }
+      const revoked = await setup.append(grantStream('memory_write', scopeId),
+        'grant.revoked', fields);
       await setup.auth.handler.handle(revoked, setup.db);
       if (restore) await grantWrite('assistant');
     }
@@ -2898,8 +2900,12 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
   }
   const timing = timeMemoryPath(setup, step, delay);
   try {
-    if (operation === 'recall') token = await signedRecall(setup);
-    if (change) token = await changeToken(change);
+    if (operation === 'recall') {
+      token = await signedRecall(setup);
+    }
+    if (change) {
+      token = await changeToken(change);
+    }
     const forwardedHeaders = { ...requestHeaders, 'content-type': 'application/json',
       'x-memory-context': token };
     const payload = JSON.stringify(body);
@@ -3018,7 +3024,8 @@ async function revokedDuringCorrectPreparation() {
       await setup.append(grantStream('memory_write', scopeId), 'grant.revoked', fields);
     }
   }
-  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(slowScope);
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(slowScope);
   let signed: string;
   try {
     signed = await changeToken(request);
@@ -3039,9 +3046,15 @@ async function invalidChangePreparation(operation: 'correct' | 'forget',
   const original = await changeToken(request);
   const claims = decodeJwt(original);
   expect(claims['preparationId']).toEqual(expect.any(String));
-  if (change === 'missing') delete claims['preparationId'];
-  if (change === 'mismatched') claims['requestId'] = randomUUID();
-  if (change === 'expired') await pause(30_100);
+  if (change === 'missing') {
+    delete claims['preparationId'];
+  }
+  if (change === 'mismatched') {
+    claims['requestId'] = randomUUID();
+  }
+  if (change === 'expired') {
+    await pause(30_100);
+  }
   claims['dispatch'] = await memoryBinding(setup);
   const signed = await setup.tokens.memoryContext(claims, Date.now() + 2000);
   const response = await sendChange(request, signed);

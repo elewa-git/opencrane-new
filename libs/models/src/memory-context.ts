@@ -74,7 +74,8 @@ export async function memoryRights(store: EventStore, binding: Binding,
   let readAuthority: Awaited<ReturnType<typeof decisionAuthorityFence>> | undefined;
   const rights = await check(deadline);
   async function confirm(checkDeadline = deadline) {
-    if (prepared && readAuthority) {
+    // Keep the full permission check for writes, including changes during validation.
+    if (prepared && readAuthority && writeAuthority === undefined) {
       await confirmDecisionAccess(activity, readAuthority, false);
       return rights;
     }

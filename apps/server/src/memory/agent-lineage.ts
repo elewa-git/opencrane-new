@@ -103,12 +103,16 @@ export async function refuseAgentChange(options: MemoryOptions, context: MemoryC
     evidence.inputGeneration, target);
   const confirm = confirmAgentLineage(options, context, evidence, dependencies,
     confirmRights, deadline, target);
-  if (!preparedRows) throw new MemoryRefused();
+  if (!preparedRows) {
+    throw new MemoryRefused();
+  }
   const rows = [...preparedRows];
   const from = (rows.at(-1)?.sequence ?? 0) + 1;
   // Read only later changes. Initial scope history belongs to preparation.
   for await (const row of options.store.readStream(`scope-${input.scopeId}`, from, deadline)) {
-    if (row.event.silo !== options.silo) throw new MemoryRefused();
+    if (row.event.silo !== options.silo) {
+      throw new MemoryRefused();
+    }
     rows.push(row);
   }
   const references = memoryReferences(rows, options.silo, input.scopeId, 'event-only');

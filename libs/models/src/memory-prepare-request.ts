@@ -17,7 +17,9 @@ async function requestMemoryPreparation(claims: Identity, raw: string,
   sign: ((claims: Record<string, unknown>, expiresAt: number) => Promise<string>) | undefined) {
   const parsed = parseMemoryRequest(raw, headers);
   const input = parsed.input;
-  if (!input || input.operation === 'remember') return undefined;
+  if (!input || input.operation === 'remember') {
+    return undefined;
+  }
   function matches(route: NonNullable<McpDispatchOptions['routes']>[number]) {
     return route.serverId === 'memory' && route.connectionId === 'server';
   }

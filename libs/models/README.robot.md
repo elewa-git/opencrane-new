@@ -3309,4 +3309,6 @@ result. `memoryRights` uses those receipts only for already loaded events and ch
 current OpenFGA permissions and saved grants again. A new access event with no prepared
 receipt refuses the call. Correct and Forget also prepare write-grant receipts.
 Their final access checks retain the original two-second deadline and grant positions.
+Writes also repeat the current IAM permission queries during final validation; only
+reads use the shorter confirmation of saved positions.
 Remember and discovery continue to use their existing paths.

@@ -94,7 +94,9 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       result = { content: [], structuredContent: receipt };
     }
     if (parsed.input?.operation === 'recall') {
-      if (prepared?.operation !== 'recall') throw new Error('Memory preparation missing');
+      if (prepared?.operation !== 'recall') {
+        throw new Error('Memory preparation missing');
+      }
       const { snapshot, facts } = prepared;
       const proof = recallProof(config.cookieSecret, context, facts.facts, evidence.inputGeneration);
       result = { content: [], structuredContent: { ...facts, recallProof: proof } };
