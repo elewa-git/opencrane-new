@@ -15,10 +15,11 @@ settlement; paid tests and other sends still do.
 
 The AI access and spending library for OpenCrane. Its running part is the models process, a separate program whose start file lives in `apps/server` (`src/models-main.ts`). It runs beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also picks the model for each task, keeps the price list and [budgets](../../GLOSSARY.md#budget), holds the [tool rules](../../GLOSSARY.md#tool-rule-allow-ask-block) and the one-time approvals for Ask tools, and records who owns the silo.
 
-A competing call's saved refusal can overlap a budget write. The writer checks that
-its budget has not changed, then checks the original access snapshot before one
-more conditional append. This keeps a valid approval retry usable after IAM recovers.
-Changed access, an expired check or another budget writer still stops the call.
+A competing call's saved refusal can interrupt a budget write. The writer checks
+that nobody has changed the budget, then checks the caller's permissions again
+before trying to save the same event once more. It keeps the original time limit.
+This keeps an approved retry usable after the permissions service recovers.
+Changed permissions, an expired check or another budget writer still stops the call.
 
 A saved takeover ends unused approvals for the same computer generation and turn.
 Reading saves each cancellation once. HTTP decisions defer that save until the server

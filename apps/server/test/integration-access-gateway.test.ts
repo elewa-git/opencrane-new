@@ -433,44 +433,7 @@ async function approveCall(context: Context, approvalId: string, action: 'approv
     true, fresh, current, setup.actor.now());
 }
 
-function overlapApprovalRefusal(setup: Setup) {
-  const append = setup.nats.store.append.bind(setup.nats.store);
-  const checkingDispatch = Promise.withResolvers<void>();
-  const refusalSaved = Promise.withResolvers<void>();
-  async function overlapRefusal(command: AppendCommand) {
-    const event = z.object({ type: z.string(),
-      data: z.object({ outcome: z.string().optional() }) }).parse(command.event);
-    // Save the competing refusal after NATS captures the global position for admission.
-    if (event.type === 'decision.recorded' && event.data.outcome === 'ask') {
-      await checkingDispatch.promise;
-      const result = await append(command);
-      refusalSaved.resolve();
-      return result;
-    }
-    if (event.type === 'budget.call_dispatch_admitted' && command.checkAccess) {
-      const checkAccess = command.checkAccess;
-      async function saveCompetingRefusal() {
-        checkingDispatch.resolve();
-        await refusalSaved.promise;
-        await checkAccess();
-      }
-      const checkedCommand = { ...command, checkAccess: saveCompetingRefusal };
-      const result = await append(checkedCommand);
-      return result;
-    }
-    return append(command);
-  }
-  const writer = vi.spyOn(setup.nats.store, 'append');
-  writer.mockImplementation(overlapRefusal);
-  function restoreWriter() {
-    checkingDispatch.resolve();
-    refusalSaved.resolve();
-    writer.mockRestore();
-  }
-  onTestFinished(restoreWriter);
-}
-
-async function recoversUnsentApproval(overlap = false) {
+async function recoversUnsentApproval() {
   const context = await gatewayFixture('ask');
   const setup = context.setup;
   await context.grant('member');
@@ -492,9 +455,6 @@ async function recoversUnsentApproval(overlap = false) {
   expect((await approveCall(context, approvalId, 'retry')).status).toBe('appended');
   expect((await approveCall(context, approvalId, 'retry')).status).toBe('conflict');
   const before = context.remote.received.length;
-  if (overlap) {
-    overlapApprovalRefusal(setup);
-  }
   const first = context.call(approvalId);
   const second = context.call(approvalId);
   const replies = await Promise.all([first, second]);
@@ -518,9 +478,7 @@ async function recoversUnsentApproval(overlap = false) {
   expect(budget.filter(reserved)).toHaveLength(0);
 }
 it('restores one approval retry after IAM refuses a saved start without sending',
-  recoversUnsentApproval.bind(undefined, false), 60_000);
-it('keeps one approval retry when the competing refusal overlaps budget admission',
-  recoversUnsentApproval.bind(undefined, true), 60_000);
+  recoversUnsentApproval, 60_000);
 
 async function restoresGrant() {
   const context = await gatewayFixture();

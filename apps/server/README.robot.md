@@ -2,15 +2,17 @@
 
 For people, read [README.md](README.md) first.
 
-## Approval retry during a competing refusal
+## Approval retries and budget conflicts
 
-`integration-access-gateway.test.ts` keeps the IAM outage and recovery check, then
-adds a controlled overlap. The competing refusal waits until the budget append
-starts its access check, then saves before that check returns. This moves the global
-event position while leaving the budget position unchanged. Both HTTP replies must
-be `[200, 403]`, with one remote request, two approval uses including the earlier
-unsent start, and no money reserved. No sleep or HTTP retry arranges this ordering.
-The production correction is in `libs/models/src/actor.ts`.
+`integration-access-gateway.test.ts` retains its original IAM outage and recovery
+check. It requires one successful retry and one refusal, with one remote request,
+two approval uses including the earlier unsent start, and no money reserved.
+The correction is in `libs/models/src/actor.ts`.
+
+`libs/models/test/actor.test.ts` forces an unrelated event to save during a checked
+budget append, using real NATS. It retains refusal checks for changed access,
+expired access and another budget writer. The temporary HTTP overlap diagnostic
+and all repeat results are in [the investigation](../../docs/process/evidence/ci-flakes-11.md).
 
 ## Takeover approval cancellation
 

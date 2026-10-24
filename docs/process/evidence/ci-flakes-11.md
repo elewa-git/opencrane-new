@@ -1,0 +1,217 @@
+# Approval retry during a competing refusal
+
+## Cause
+
+The reported failure in [main run 40104402066](https://github.com/elewa-git/opencrane-new/actions/runs/40104402066)
+returned two 403 replies where the approval retry test expected one 200 and one 403.
+The existing configuration-probe fix removed one source of unrelated writes, but a
+competing call's saved refusal can cause the same conflict. The merged production
+diff only filtered configuration probes. It left the approval recovery case unchanged
+and preserved the shared two-second request budget.
+
+A budget append captures the global event position before checking access. If the
+competing refusal saves during that check, the conditional publish returns conflict.
+The budget actor previously treated that result as another budget writer taking over,
+even when its budget stream had not changed. It stopped the writer after the retry
+had already consumed the approval. IAM health and grant receipts do not prevent this
+ordering. The CI logs do not contain the private dispatch cause; the controlled test
+below reproduces this concrete product defect and the exact HTTP failure.
+
+## Failing-first proof
+
+Test commit `0620d7be1c9a91753f90a01f4c8e5dd9af8e15a3` precedes the product change.
+The integration test holds the competing refusal until the budget append starts its
+access check. It then saves that refusal before returning from the check. Real NATS
+returns conflict for `budget.call_dispatch_admitted`, and both HTTP replies are 403.
+The test expects one send and fails. No sleep or HTTP retry arranges the overlap.
+
+The actor tests also use real NATS. Before the fix, unchanged access fails with
+`Budget writer lost its fence`. Revocation and expiry fail with that same premature
+error rather than reaching the original access check again. Another budget writer
+is already refused correctly. Reports: `/tmp/ci-flakes-11/integration-red.json` and
+`/tmp/ci-flakes-11/actor-red.json`.
+
+Ten baseline repetitions of the existing approval test passed alongside a full
+75-test decision-budget run. Vitest reports the repeated case as one aggregate
+result. These passes do not rule out the controlled ordering above. An earlier
+diagnostic held the wrong outcome label and timed out; that harness error is not
+used as product failure evidence.
+
+## Correction
+
+Product source: `869da8a455ee70ebdad791240e9b75b6783950be`, based on main
+`8f3b2e8a8`. After a conflict, the actor reads later budget events. An unchanged
+budget permits one more append only when the caller supplied an access check.
+The same check runs before and inside that append. Its original access deadline,
+event id, expected budget position and global publish condition remain in force.
+Another budget writer or a second conflict still stops the writer. Existing recovery
+for managed-provider switch-on is preserved.
+
+The focused corrected-source check passed all five cases. The integration case sends
+once, refuses the competing call, retains two approval uses including the earlier
+unsent start, and reserves no money. Actor cases retain refusals for revoked access,
+expiry at 2,001 ms and another budget writer.
+
+## Setup and qualification limits
+
+Node 22.23.3; clean `npm ci`; links to the shared pinned NATS and Lychee binaries.
+The disposable PostgreSQL container is `pgtest-ci-flakes-11`, using port 33342 and
+`PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:33342/postgres`.
+Tests create private databases, NATS, OpenFGA and gateway fixtures. Every test and
+static check runs under `nice -n 10`. The 30 full-file invocations each use one worker
+and no file parallelism. A separate process repeatedly runs the unchanged 75-test
+`decision-fence.test.ts` alongside them, also with one worker.
+
+The owner stack, access checks, two-second budgets, authority tests and security rules
+are unchanged. No dependency or event/API field was added. The full root suite and
+fresh-install journeys are NOT RUN. This is source verification, not live qualification.
+
+## Every full-file result
+
+FAIL: 25 of 30 complete invocations passed. The original IAM recovery case passed
+30/30. An extra controlled HTTP case passed 28/30. Every original test was present
+in each invocation. These results are not a clean qualification of the whole file.
+
+The batch used product source `869da8a45` and the extra HTTP diagnostic from the
+failing-first commit. The final branch retains the real-NATS actor regression and
+removes that duplicate HTTP outage scenario. Its original integration test file is
+unchanged. No original assertion or two-second limit was removed.
+
+| Run | Whole file | Original retry | Extra HTTP case | Seconds |
+| --- | --- | --- | --- | --- |
+| 1 | PASS 17/17 | PASS | PASS | 260.38 |
+| 2 | PASS 17/17 | PASS | PASS | 242.68 |
+| 3 | FAIL 14/17 | PASS | PASS | 248.89 |
+| 4 | PASS 17/17 | PASS | PASS | 187.28 |
+| 5 | FAIL 16/17 | PASS | PASS | 175.44 |
+| 6 | PASS 17/17 | PASS | PASS | 157.25 |
+| 7 | PASS 17/17 | PASS | PASS | 201.92 |
+| 8 | PASS 17/17 | PASS | PASS | 217.86 |
+| 9 | PASS 17/17 | PASS | PASS | 182.91 |
+| 10 | PASS 17/17 | PASS | PASS | 175.19 |
+| 11 | PASS 17/17 | PASS | PASS | 194.00 |
+| 12 | FAIL 16/17 | PASS | FAIL | 237.11 |
+| 13 | PASS 17/17 | PASS | PASS | 206.77 |
+| 14 | PASS 17/17 | PASS | PASS | 171.97 |
+| 15 | PASS 17/17 | PASS | PASS | 164.61 |
+| 16 | PASS 17/17 | PASS | PASS | 195.85 |
+| 17 | PASS 17/17 | PASS | PASS | 195.48 |
+| 18 | PASS 17/17 | PASS | PASS | 203.30 |
+| 19 | PASS 17/17 | PASS | PASS | 178.19 |
+| 20 | PASS 17/17 | PASS | PASS | 185.18 |
+| 21 | PASS 17/17 | PASS | PASS | 196.93 |
+| 22 | PASS 17/17 | PASS | PASS | 276.14 |
+| 23 | PASS 17/17 | PASS | PASS | 232.42 |
+| 24 | PASS 17/17 | PASS | PASS | 155.73 |
+| 25 | PASS 17/17 | PASS | PASS | 215.86 |
+| 26 | PASS 17/17 | PASS | PASS | 262.70 |
+| 27 | FAIL 16/17 | PASS | FAIL | 249.68 |
+| 28 | FAIL 16/17 | PASS | PASS | 272.16 |
+| 29 | PASS 17/17 | PASS | PASS | 240.67 |
+| 30 | PASS 17/17 | PASS | PASS | 263.80 |
+
+### Remaining failures
+
+- Run 3: publication returned unavailable during the membership-removal fixture;
+  the unchanged-refresh case missed NATS heartbeats; the IAM outage response took
+  4.10 seconds against its existing two-second assertion. Both retry cases passed.
+- Run 5: the first grant-side case failed fixture publication with
+  `Gateway delivery unavailable`. Both retry cases passed.
+- Run 12: the extra HTTP case took 2.32 seconds against the earlier IAM refusal's
+  two-second assertion. It failed before the controlled budget overlap.
+- Run 27: the extra HTTP case returned `[403, 403]`. Its private refusal cause was
+  not recorded. This repeated symptom remains unexplained and remains FAIL.
+- Run 28: the direct-grant case saved Allow and a tool start, then saved
+  `not_dispatched` with `adapter_dispatch_refused`. Its private cause was not
+  recorded. Both retry cases passed.
+
+The host was paging memory during run 3 while my full typed lint was also running.
+I stopped that lint process to release about 3.6 GB and left the two test processes
+running. That observation does not prove the cause of every failure above. No failed
+run was replaced by a passing rerun. Logs and JSON reports are
+`/tmp/ci-flakes-11/stress-{01..30}.{log,json}`.
+
+## Companion results
+
+Each row is a separate full invocation of the unchanged
+`libs/models/test/decision-fence.test.ts`, alongside the integration batch.
+
+| Run | Result | Seconds |
+| --- | --- | --- |
+| 1 | PASS 75/75 | 333.52 |
+| 2 | PASS 75/75 | 358.34 |
+| 3 | PASS 75/75 | 250.99 |
+| 4 | PASS 75/75 | 222.43 |
+| 5 | PASS 75/75 | 250.16 |
+| 6 | PASS 75/75 | 281.82 |
+| 7 | PASS 75/75 | 227.58 |
+| 8 | PASS 75/75 | 261.60 |
+| 9 | PASS 75/75 | 302.25 |
+| 10 | PASS 75/75 | 266.98 |
+| 11 | PASS 75/75 | 223.32 |
+| 12 | PASS 75/75 | 249.46 |
+| 13 | PASS 75/75 | 267.28 |
+| 14 | PASS 75/75 | 241.52 |
+| 15 | PASS 75/75 | 255.12 |
+| 16 | PASS 75/75 | 296.51 |
+| 17 | PASS 75/75 | 343.90 |
+| 18 | PASS 75/75 | 220.78 |
+| 19 | PASS 75/75 | 301.24 |
+| 20 | PASS 75/75 | 338.68 |
+| 21 | PASS 75/75 | 346.67 |
+| 22 | PASS 75/75 | 340.33 |
+| 23 | PASS 75/75 | 268.95 |
+
+Reports: `/tmp/ci-flakes-11/load-{01..23}.{log,json}`.
+
+## Additional private diagnostics
+
+Thirty focused repetitions of the extra HTTP case passed, alongside two further
+75-test decision-budget runs. Temporary code logged only fixed refusal labels,
+append status and elapsed time. It recorded 30 forced first-append conflicts and
+30 successful second appends. It did not reproduce run 27 or establish its cause.
+The source files were restored byte for byte and the temporary configuration was
+removed before final checks. Reports and logs are
+`/tmp/ci-flakes-11/diagnostic-retry.{log,json}` and
+`/tmp/ci-flakes-11/diagnostic-load-{1,2}.{log,json}`.
+
+The permanent regression stays at `BudgetActor.admitDispatch`, using real NATS.
+It forces the same global-position change without duplicating the existing HTTP
+outage fixture. The failing-first actor check and its access, expiry and other-writer
+refusals remain. The removed diagnostic remains visible in the test commit.
+
+## Final own checks
+
+| Check | Result |
+| --- | --- |
+| Actor tests after cleanup fix, first pass | PASS: 36/36 |
+| Original integration file, first pass | PASS: 16/16 |
+| Event security rules | PASS: 438/438 |
+| Actor tests after cleanup fix, second pass | PASS: 36/36 |
+| Original integration file, second pass | PASS: 16/16 |
+| Typecheck | PASS |
+| Event catalogue | PASS |
+| Knip | PASS |
+| Changelog validation | PASS |
+| Full lint | PASS: 25 warnings, no errors |
+
+The first combined pass passed 490 tests; the second passed 52. They used one worker,
+no file parallelism, the disposable PostgreSQL URL above and `nice -n 10`.
+The temporary tracing and extra HTTP case were absent from both passes. Reports are
+`/tmp/ci-flakes-11/tests-{1,2}.{log,json}`. Static results are
+`/tmp/ci-flakes-11/static-results.jsonl` and the full lint log is
+`/tmp/ci-flakes-11/lint-fixed.log`.
+
+The first completed lint failed on an unbound clock-restore callback. A named cleanup
+function fixed the binding. The full actor file then passed 36/36 twice, in 36.94 and
+31.02 seconds. Reports are `/tmp/ci-flakes-11/actor-final-{1,2}.{log,json}`.
+Full lint then passed in 907.34 seconds. The models workspace typecheck also passed
+after the cleanup change; its log is `/tmp/ci-flakes-11/models-typecheck-final.log`.
+The failed earlier lint is retained as `/tmp/ci-flakes-11/lint-final.log`.
+
+Removed `pgtest-ci-flakes-11` with its volume after the tests. The owner stack was
+untouched. No diagnostic source or configuration remains in the branch.
+
+The interrupted earlier lint is not counted as a pass. The 30-run investigation
+remains FAIL regardless of these later checks. Overall load qualification is PARTIAL.
+The full root suite and fresh-install journeys are NOT RUN. CI will not be awaited.

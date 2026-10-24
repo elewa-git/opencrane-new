@@ -1,3 +1,3 @@
-- Approved tool retries remain usable after IAM recovers when a competing refusal
-  overlaps the budget write. The writer rechecks its saved budget position and
-  original access check before repeating the conditional append once.
+- Approved tool retries remain usable after the permissions service recovers when
+  a competing refusal interrupts the budget write. The writer checks the budget
+  and the original permissions again before saving the same event once more.

@@ -755,7 +755,10 @@ async function admitsAfterUnrelatedWrite(change: string) {
   const started = performance.now();
   const decisionClock = vi.spyOn(performance, 'now');
   decisionClock.mockReturnValue(started);
-  onTestFinished(decisionClock.mockRestore);
+  function restoreDecisionClock() {
+    decisionClock.mockRestore();
+  }
+  onTestFinished(restoreDecisionClock);
   let checks = 0;
   async function checkAccess() {
     checks += 1;

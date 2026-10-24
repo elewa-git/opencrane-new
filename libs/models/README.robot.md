@@ -15,13 +15,15 @@ the same access check before and inside the conditional append. The event id,
 expected budget position, global publish condition and original access deadline
 stay in force. The existing managed-provider switch-on recovery is preserved.
 A second conflict still stops the writer. Another writer's budget event still stops it.
+[Own checks and every full-file run](../../docs/process/evidence/ci-flakes-11.md).
 
 `test/actor.test.ts` uses real NATS to move the global position during the append.
 It checks admission once, revoked access, expiry at 2,001 ms, and another writer.
-`apps/server/test/integration-access-gateway.test.ts` forces the competing refusal
-to save after the global position read. One retry must send and the other must be
-refused. The approval has exactly two uses including the earlier unsent attempt.
-The remote receives one request and no money is reserved.
+The original `apps/server/test/integration-access-gateway.test.ts` recovery case
+is unchanged. One retry must send and the other must be refused. The approval has
+exactly two uses including the earlier unsent attempt. The remote receives one
+request and no money is reserved. The investigation used an additional HTTP overlap
+case temporarily; the permanent controlled regression is at the public budget actor.
 
 ## Custom tool continuations
 

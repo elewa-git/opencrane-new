@@ -411,8 +411,8 @@ These commands need the dev stack's settings. The full system starts with
 
 Ordinary tool calls read conversation history before checking access. Both steps
 share the original two-second request budget. Gateway configuration checks do not
-create call observations. Approval retry tests also save a competing refusal during
-the budget append. The valid retry still sends once, using the original access check.
+create call observations. Approved tool retries keep the original access check
+when a competing refusal interrupts the budget write.
 
 Child-chat retry tests wait until NATS stores a repeated event as a new message.
 Their private test streams use a short duplicate window set before any messages
