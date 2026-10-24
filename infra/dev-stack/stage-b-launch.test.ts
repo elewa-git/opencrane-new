@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
+import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
+import type { startDecision } from '@opencrane/models';
 import { checkStageBApproval } from './stage-b-evidence.ts';
 import { approvalEvidence } from './test/stage-b-evidence.ts';
 
@@ -43,6 +45,26 @@ async function preserveProductionWiring() {
 }
 test('only discovery, watch and dispatch change in the complete entrypoints',
   preserveProductionWiring);
+
+async function suppliesDispatchNetwork() {
+  const { stageBLaunchSources } = await import('./stage-b-launch.ts');
+  const server = await readFile(new URL('apps/server/src/main.ts', root), 'utf8');
+  const models = await readFile(new URL('apps/server/src/models-main.ts', root), 'utf8');
+  const sources = stageBLaunchSources(server, models);
+  const declaration = /const dispatchOptions = (\{[^;]+\});/u.exec(sources.models);
+  assert(declaration?.[1], 'The complete models entrypoint must supply dispatch options');
+  const stageBNetwork = {};
+  function acknowledged() { return null; }
+  function requireDispatchLeader() { return Promise.resolve(); }
+  function requireCurrent() { return; }
+  const watch = { requireCurrent };
+  const context = { stageBNetwork, acknowledged, mcpRoutes: [], requireDispatchLeader, watch };
+  const options = runInNewContext(`(${declaration[1]})`, context) as
+    NonNullable<Parameters<typeof startDecision>[6]>;
+  assert.equal(options.remoteNetwork, stageBNetwork);
+}
+test('the complete models entrypoint supplies the dispatch service transport',
+  suppliesDispatchNetwork);
 
 async function refuseMissingInjection() {
   const { stageBLaunchSources } = await import('./stage-b-launch.ts');
@@ -89,7 +111,8 @@ async function deterministicCalls() {
   assert.equal(call?.namespace, 'mcp__demo');
   assert.equal(call?.name, 'change_delivery_slot');
   assert.equal(call?.arguments, '{"quoteId":"DEMO-001","slot":"afternoon"}');
-  const completed = [...input, { type: 'function_call_output', output: 'recorded' }];
+  const result = { type: 'function_call_output', call_id: call?.call_id, output: 'recorded' };
+  const completed = [...input, result];
   assert.equal(stageBModelCall({ input: completed, tools }), undefined);
   const read = [{ type: 'message', role: 'user', content: 'STAGE_B_READ' }];
   assert.equal(stageBModelCall({ input: read, tools })?.name, 'read_fixture_quote');
