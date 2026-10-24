@@ -32,11 +32,16 @@ function request(argv = npmArgv, input = lockfile, operationId = 'operation-1') 
   store.register(registration, input);
   const params = { processId: 'process', argv, cwd: 'file:///workspace', env: {},
     tty: false, pipeStdin: false, arg0: null, metadata: { threadId: 'thread', toolCallId: 'call' } };
-  const frame = Buffer.from(`${JSON.stringify({ id: 1, method: 'process/start', params })}\n`);
-  function validate() { return workerRequest(frame, store.lookup, context, 1000); }
+  const message = { id: 1, method: 'process/start', params };
+  const frame = Buffer.from(`${JSON.stringify(message)}\n`);
+  function validate() {
+    return workerRequest(frame, store.lookup, context, 1000);
+  }
   return { validate, store, registration };
 }
-function now() { return 1000; }
+function now() {
+  return 1000;
+}
 function cleanup() {
   vi.restoreAllMocks();
   for (const dispose of cleanups.splice(0)) dispose();
@@ -81,12 +86,16 @@ it('gives Git empty work, config and template folders without inherited files', 
 function refusesCopiedPlan() {
   const base = parent();
   const plan = request().validate();
-  function copied() { return prepareWorkerInput({ ...plan }, base); }
+  function copied() {
+    return prepareWorkerInput({ ...plan }, base);
+  }
   expect(copied).toThrow(/^worker_input_refused$/);
   expect(fs.readdirSync(base)).toEqual([]);
   const prepared = prepareWorkerInput(plan, base);
   prepared.cleanup();
-  function reused() { return prepareWorkerInput(plan, base); }
+  function reused() {
+    return prepareWorkerInput(plan, base);
+  }
   expect(reused).toThrow(/^worker_input_refused$/);
   expect(fs.readdirSync(base)).toEqual([]);
 }
@@ -117,7 +126,9 @@ function refusesParent(kind: string) {
     }
     vi.spyOn(fs, 'fstatSync').mockImplementation(foreignOwner);
   }
-  function prepare() { return prepareWorkerInput(request().validate(), selected); }
+  function prepare() {
+    return prepareWorkerInput(request().validate(), selected);
+  }
   const before = fs.readdirSync(base);
   expect(prepare).toThrow(/^worker_input_refused$/);
   expect(fs.readdirSync(base)).toEqual(before);
@@ -133,7 +144,9 @@ function refusesExisting(kind: string) {
   if (kind === 'directory') fs.mkdirSync(operation);
   if (kind === 'symlink') fs.symlinkSync(target, operation);
   if (kind === 'file') fs.writeFileSync(operation, 'private-canary');
-  function prepare() { return prepareWorkerInput(request().validate(), base); }
+  function prepare() {
+    return prepareWorkerInput(request().validate(), base);
+  }
   const before = fs.lstatSync(operation);
   expect(prepare).toThrow(/^worker_input_refused$/);
   expect(fs.lstatSync(operation).ino).toBe(before.ino);
@@ -171,7 +184,9 @@ it('retains owned identities when another operation replaces the root before cle
 
 function refusesInvalidInput(input: string) {
   const base = parent();
-  function prepare() { return prepareWorkerInput(request(npmArgv, input).validate(), base); }
+  function prepare() {
+    return prepareWorkerInput(request(npmArgv, input).validate(), base);
+  }
   expect(prepare).toThrow(/^worker_(request|registration)_refused$/);
   expect(fs.readdirSync(base)).toEqual([]);
 }
@@ -187,7 +202,9 @@ function removesPartialPreparation() {
   }
   vi.spyOn(fs, 'writeFileSync').mockImplementation(failWrite);
   const checked = request();
-  function prepare() { return prepareWorkerInput(checked.validate(), base); }
+  function prepare() {
+    return prepareWorkerInput(checked.validate(), base);
+  }
   expect(prepare).toThrow(/^worker_input_refused$/);
   expect(fs.readdirSync(base)).toEqual([]);
   expect(checked.validate).toThrow(/^worker_request_refused$/);
@@ -214,7 +231,9 @@ function refusesReplacement(kind: string) {
     return descriptor;
   }
   vi.spyOn(fs, 'openSync').mockImplementation(replaceAfterOpen);
-  function prepare() { return prepareWorkerInput(request().validate(), base); }
+  function prepare() {
+    return prepareWorkerInput(request().validate(), base);
+  }
   expect(prepare).toThrow(/^worker_input_refused$/);
   expect(replaced).toBe(true);
   expect(fs.readFileSync(canary, 'utf8')).toBe('private-canary');
@@ -235,9 +254,27 @@ function refusesNewHardlink() {
     }
   }
   vi.spyOn(fs, 'writeFileSync').mockImplementation(addLink);
-  function prepare() { return prepareWorkerInput(request().validate(), base); }
+  function prepare() {
+    return prepareWorkerInput(request().validate(), base);
+  }
   expect(prepare).toThrow(/^worker_input_refused$/);
   expect(fs.existsSync(`${base}/extra`)).toBe(true);
 }
 it('refuses an extra hard link made while writing and leaves unowned entries alone',
   refusesNewHardlink);
+
+function refusesChangedPermissions() {
+  const base = parent();
+  const original = fs.writeFileSync;
+  function makeParentWritable(...args: Parameters<typeof fs.writeFileSync>) {
+    original(...args);
+    fs.chmodSync(base, 0o720);
+  }
+  vi.spyOn(fs, 'writeFileSync').mockImplementation(makeParentWritable);
+  function prepare() {
+    return prepareWorkerInput(request().validate(), base);
+  }
+  expect(prepare).toThrow(/^worker_input_refused$/);
+  expect(fs.readdirSync(base)).toEqual([]);
+}
+it('refuses a parent made writable during preparation', refusesChangedPermissions);
