@@ -1320,9 +1320,10 @@ config, turn runner, signing, routing or event schema changes here.
 `worker-request.ts` validates one newline-terminated `process/start` JSON frame,
 up to 64 KiB, using the pinned Codex 0.159.2 camelCase fields. Metadata is untrusted.
 Only a supervisor-owned lookup can supply the matching live registration and input.
-No production lookup or public registration API exists. Production refuses every
-worker request, including one that could pass validation with a synthetic lookup.
-Tests using that lookup prove local comparisons, not delivery by native Codex.
+`worker-registrations.ts` supplies the private in-memory lookup. No native producer
+or public registration API exists. Production refuses every worker request, including
+one that could pass validation with this store. Tests prove local comparisons and
+single use, not delivery by native Codex.
 
 The supervisor supplies the current connection's binding separately from the frame:
 `executorId`, `siloId`, `personId`, `computerId`, `processId` and `generation`.
@@ -1341,8 +1342,9 @@ consumed in the same step. Its stored state must be shared across all lookups an
 connections. It must not be reset on retry or reconnection. The validator calls it
 only after every check passes and refuses to return a plan unless it returns true.
 A failed validation does not consume the registration. A repeated valid frame, even
-with a different request id, cannot obtain another plan. Tests use a synthetic store;
-the production store and native delivery remain unimplemented and execution stays off.
+with a different request id, cannot obtain another plan. Validator tests retain synthetic
+registrations for comparison failures; store tests run the validator with the real store.
+Native delivery remains unimplemented and execution stays off.
 
 No caller can supply a registration, environment, shell state, proxy, output limit
 or working directory other than `file:///workspace`.
@@ -1380,3 +1382,38 @@ and real Docker executor refusal beside UID 1001 socket denial. Real UID 1004/ch
 confinement, runtime/licence inventory, scan/publication, pinned native registration
 delivery and fresh gVisor install/clone qualification remain **NOT RUN**. CONNECT,
 images, capabilities, event types and access checks are unchanged.
+
+## Private worker registrations — P3-20 PR 3b
+
+This builds on PR #629, squash `6da12a8f525c520178dbb1b18be816de8b491633`.
+`workerRegistrations(owner, now)` creates a store for one silo, computer and generation.
+The supervisor owns its methods and supplies trusted connection identity to lookup.
+No socket, HTTP route, model tool, startup change or native producer exposes registration.
+
+Registration copies and freezes every reviewed binding and call field. Input and the
+saved registration each have a 64 KiB byte limit. Each computer has at most two current
+operations, including consumed records; consuming a plan does not mean work has finished.
+A different operation on the same exact binding replaces the current record only after
+all registration checks pass. Capacity refusals never remove a live record.
+
+Lookup returns frozen handles with shared consumed state. Claiming checks the current
+clock and exact record, then consumes without yielding. Replacement, expiry and
+`disconnect(executorId)` invalidate saved handles. The supervisor must use distinct
+executor ids for distinct connections and call disconnect when a connection closes.
+`dispose()` permanently retires this store and generation. A new store starts empty;
+neither restart nor reconnection restores permission. Lifecycle delivery remains deferred
+with the native producer; tests call these private lifecycle methods directly.
+
+Identical registration is harmless and never restores a removed or consumed operation.
+Conflicting fields or input for the same operation id refuse with a fixed error.
+The store retains at most 1,024 operation ids and SHA-256 fingerprints for its lifetime,
+including expired, replaced and disconnected operations. It refuses further registrations
+when that history fills, instead of forgetting previous claims. Only the two current
+records retain input in the store. Saved handles can still hold input but cannot claim
+removed permission. Disposal clears the store without logging input.
+
+`worker-registrations.test.ts` checks competing handles, stale handles, copied metadata,
+immutable records, retry after failed validation, clock and byte limits, operation and
+history limits, and empty restart. It validates both Git and npm plans through the store.
+`supervisor-identity.test.ts` retains the Docker UID 1001 socket-denial check. These checks
+do not qualify native delivery, worker confinement or a live install/clone journey.
