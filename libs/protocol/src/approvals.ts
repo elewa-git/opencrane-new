@@ -10,6 +10,7 @@ const approvalCardSchema = z.object({
   cancelReason: approvalCancelReasonSchema.optional(),
   uses: z.array(z.strictObject({ permitId: z.string(), usedAt: z.iso.datetime() })).optional(),
   state: z.enum(['requested', 'approved', 'denied', 'expired', 'cancelled', 'outcome_unknown']),
+  toolReplied: z.boolean().optional(),
   missingFields: z.array(text).optional(),
   canRetry: z.boolean().optional(), canApprove: z.boolean().optional(), canDeny: z.boolean().optional(),
   stepUp: z.boolean(), canDecide: z.boolean(), review: approvalReviewSchema,

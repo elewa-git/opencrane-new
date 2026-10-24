@@ -31,6 +31,9 @@ separately from observations and budget settlement. A saved resolution does not 
 Conversation history keeps execution outcomes but omits resolution records and money amounts.
 Removal progress covers permissions and the member list. It does not report departure cleanup.
 
+Approval reads distinguish a tool reply from an uncertain transport result. This does not
+change the saved approval state or allow another use.
+
 Approval decisions check ownership and current write access before saving a cancellation.
 Approval polling saves cancellation when a saved takeover covers an unused approval.
 It notices computer changes even when the chat and approval have not changed.
@@ -56,8 +59,8 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks access before history errors, prepares child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
+  web["apps/web<br/>the website"] -->|requests, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
+  server -.->|checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads own saved profiles; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]

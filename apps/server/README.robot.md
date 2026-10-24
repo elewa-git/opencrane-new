@@ -5163,6 +5163,14 @@ fixed #652 squash `a474d9ad5dc931b0c41a3ab291c96da1ca9171f7`. The latter's faile
 privacy check remains in place. Lists, attention, private results and execution
 remain later work. Fresh-install qualification: NOT RUN.
 
+## Approval reply evidence
+
+The approval GET includes `toolReplied` from the models reader. It is true only when
+the latest consumed permit has matching `adapter_response_received` evidence.
+The saved state remains `outcome_unknown`, and retry permission is unchanged.
+`test/approvals.test.ts` covers adapter replies, both uncertain transports, a transport-only
+reply, missing evidence and mismatched approval or permit ids after reader restart.
+
 ## Own saved bearer profile read (Part of #49)
 
 `GET /api/my/tools/:serverId/profiles/:profileId` uses `memberReads` and returns no-store.

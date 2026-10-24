@@ -3,7 +3,40 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { request, type Page } from 'playwright';
-import { assertPublishedAudit, waitForPublishedEvent } from './browser-audit.ts';
+import { assertAuditMoney, assertPublishedAudit, waitForPublishedEvent } from './browser-audit.ts';
+import type { AuditRow } from '@opencrane/protocol';
+
+async function checksAdminMoney() {
+  const memberRow: AuditRow = { id: 'call', requestId: 'request', permitId: 'permit',
+    requesterId: 'member', conversationId: 'conversation', turnId: 'turn',
+    decision: 'allow', outcome: 'success', records: [] };
+  const adminRow = { ...memberRow, reservedCents: 17, settledCents: 1 };
+  const cases = [
+    { row: adminRow, passes: true },
+    { row: { ...adminRow, reservedCents: 0, settledCents: 0 }, passes: true },
+    { row: memberRow, passes: false },
+    { row: { ...adminRow, settledCents: 0.5 }, passes: false },
+    { row: { ...adminRow, requestId: 'another-request' }, passes: false },
+    { row: { ...adminRow, permitId: 'another-permit' }, passes: false },
+    { row: { ...adminRow, requesterId: 'another-member' }, passes: false },
+  ];
+  for (const example of cases) {
+    async function get(url: string) {
+      assert.equal(url, 'https://audit.test/api/org/history?requestId=request');
+      return {
+        status: () => 200,
+        json: async () => ({ rows: [example.row] }),
+      };
+    }
+    const owner = { request: { get } } as unknown as Page;
+    async function check() {
+      await assertAuditMoney(owner, 'https://audit.test', memberRow);
+    }
+    if (example.passes) await check();
+    else await assert.rejects(check);
+  }
+}
+test('checks the same call’s integer money amounts only in admin Change history', checksAdminMoney);
 
 async function readsOlderPublication() {
   for (const published of [true, false]) {

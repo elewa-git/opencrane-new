@@ -82,6 +82,11 @@ export class ApprovalPresentation {
     return 'Approval needed';
   }
 
+  resultMessage(card: ApprovalCard): string {
+    if (card.toolReplied) return 'Done: the tool replied';
+    return 'Result not confirmed';
+  }
+
   terminalDetail(card: ApprovalCard): string {
     return terminalDetail(card);
   }

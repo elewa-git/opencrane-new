@@ -12,7 +12,8 @@ Detail replies can also say whether read tables and permissions have applied tha
 These receipts do not say whether departure cleanup has finished.
 
 Approval replies can name takeover as their cancellation cause and show the saved
-end time. Used approvals retain their earlier use and dispatch evidence.
+end time. Used approvals retain their earlier use and dispatch evidence. A separate
+reply flag says whether the tool replied; it grants no permission to repeat the action.
 
 Effect detail replies keep the saved resolver, date and amount separate from current
 spending. A receipt confirms a saved resolution, not completed settlement.
@@ -27,7 +28,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.->|chat and other replies| protocol["libs/protocol<br/>shared reply shapes"]
+  web["apps/web<br/>browser app"] -.->|chat, approval evidence and other replies| protocol["libs/protocol<br/>shared reply shapes"]
   server["apps/server<br/>back end"] -.->|saved spending and effect replies| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol

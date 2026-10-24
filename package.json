@@ -44,6 +44,7 @@
     "visual:f3-org-shell": "node scripts/check-f3-org-shell.mjs",
     "visual:f4-settings": "node scripts/check-f4-settings.mjs",
     "visual:f5-workspace": "npm run build -w apps/web && node scripts/check-f5-workspace.mjs",
+    "visual:stage-b-polish": "nice -n 10 npm run build -w apps/web && nice -n 10 node --experimental-strip-types scripts/check-stage-b-polish.mjs",
     "visual:p3-5-approvals": "npm run build -w apps/web && node scripts/check-p3-5-approvals.mjs",
     "visual:p3-15-spending": "node scripts/check-p3-15-spending.mjs",
     "visual:integrations": "npm run build -w apps/web && node scripts/check-integrations-screens.mjs",

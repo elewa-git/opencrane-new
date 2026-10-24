@@ -1756,3 +1756,23 @@ read action. Appointment and step-down now use the same status reader. Their exi
 
 Names starting with `nightly-` retain the daily job’s groups-only checks. They do not
 change providers or owners. A failing-first scope test keeps that distinction.
+
+## Complete waiting approval captures
+
+`captureWaitingApproval(page, output, name)` in `stage-b-capture.ts` replaces the
+plain capture calls for `write-waiting` and `write-waiting-reloaded` in the local
+live collector. It scrolls the whole card into the chat viewport at 1280 and 390 pixels,
+checks both decision buttons and masks email addresses. If a card is taller than
+the chat viewport, it increases capture height while keeping the requested width.
+It restores the original viewport afterwards and refuses a clipped card.
+The retained run-5 script and pictures remain historical evidence.
+
+`browser-audit.ts` checks reserved and settled integer cents through the admin
+Change history endpoint, matching the member call by request, permit, conversation,
+turn and requester. Member action history must omit both money fields.
+
+Own helper checks: `nice -n 10 node --experimental-strip-types --test
+infra/dev-stack/browser-audit.test.ts infra/dev-stack/stage-b-capture.test.ts`.
+`npm run visual:stage-b-polish` checks the built website with browser fixtures at both
+widths and writes eight captures to `/tmp/stage-b-polish-captures`. These fixtures
+check display and collection, not a fresh-install journey.

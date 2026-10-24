@@ -121,7 +121,7 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
 export async function readApproval(store: EventStore, silo: string, approvalId: string,
   options: ApprovalReadOptions = {}):
   Promise<{ request: Request; state: ApprovalCard['state']; sequence: number;
-    requestPosition: number; conversationPosition: number; canRetry: boolean;
+    requestPosition: number; conversationPosition: number; canRetry: boolean; toolReplied: boolean;
     invalidation?: EventEnvelope } &
     ReturnType<typeof approvalRecord>> {
   const now = options.now ?? new Date();
@@ -132,7 +132,9 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   const { state, permitId } = record;
   const sequence = rows.at(-1)!.sequence;
   let conversationPosition = 0;
-  let canRetry = await verifiedRetry(store, silo, approvalId, permitId, deadline, state);
+  const dispatch = await verifiedDispatch(store, silo, approvalId, permitId, deadline, state);
+  const { toolReplied } = dispatch;
+  let canRetry = dispatch.canRetry;
   const needsCurrentChecks = canRetry || ['requested', 'approved'].includes(state);
   if (needsCurrentChecks) {
     const checked = await invalidated(store, silo, request, rows[0]!.sequence,
@@ -152,7 +154,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
       if (options.deferInvalidation) {
         // Let the HTTP command check ownership and current write access before saving.
         return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence,
-          conversationPosition, canRetry, invalidation: event };
+          conversationPosition, canRetry, toolReplied, invalidation: event };
       }
       const result = await store.append({ event, expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
@@ -160,12 +162,14 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
       return readApproval(store, silo, approvalId, readOptions);
     }
   }
-  return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence, conversationPosition, canRetry };
+  return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence,
+    conversationPosition, canRetry, toolReplied };
 }
 
-async function verifiedRetry(store: EventStore, silo: string, approvalId: string,
+async function verifiedDispatch(store: EventStore, silo: string, approvalId: string,
   permitId: string | undefined, deadline: number, state: ApprovalCard['state']) {
   let canRetry = false;
+  let toolReplied = false;
   if (state === 'outcome_unknown' && permitId) {
     const dispatchRows = await history(store, `decision-${permitId}`, silo, deadline);
     const observation = dispatchRows.at(-1)?.event;
@@ -175,9 +179,12 @@ async function verifiedRetry(store: EventStore, silo: string, approvalId: string
         dispatch.evidence === 'adapter_dispatch_refused';
       canRetry = dispatch.approvalId === approvalId && dispatch.requestId === permitId &&
         dispatch.outcome === 'not_dispatched' && provedUnsent;
+      // Describe the adapter's reply without changing permission to retry the action.
+      toolReplied = dispatch.approvalId === approvalId && dispatch.requestId === permitId &&
+        dispatch.outcome === 'responded' && dispatch.evidence === 'adapter_response_received';
     }
   }
-  return canRetry;
+  return { canRetry, toolReplied };
 }
 
 function approvalTerminalState(closed: boolean, expiresAt: string, now: Date) {
@@ -379,13 +386,13 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
 function approvalCard(current: Awaited<ReturnType<typeof readApproval>>, memberId: string,
   text: string): ApprovalCard {
   const { request, state, canRetry, requestedAt, decidedAt, usedAt, endedAt,
-    cancelReason, uses } = current;
+    cancelReason, uses, toolReplied } = current;
   const canDeny = memberId === request.requesterId && state === 'requested';
   const missingFields = request.missingFields ?? [];
   const canApprove = canDeny && missingFields.length === 0;
   const review = approvalReviewSchema.parse(JSON.parse(text));
   const card = { requestedAt, decidedAt, usedAt, endedAt, cancelReason, uses, canApprove,
-    canDeny, canRetry: canRetry && memberId === request.requesterId,
+    canDeny, canRetry: canRetry && memberId === request.requesterId, toolReplied,
     missingFields, approvalId: request.approvalId, conversationId: request.conversationId,
     turnId: request.turnId,
     requesterId: request.requesterId,

@@ -144,6 +144,7 @@ jobs:
           infra/dev-stack/journey-tool-policy.test.ts
           infra/dev-stack/browser-budgets.test.ts
           infra/dev-stack/browser-audit.test.ts
+          infra/dev-stack/stage-b-capture.test.ts
           infra/dev-stack/demo-seed.test.ts infra/dev-stack/demo-up.test.ts
           infra/dev-stack/demo-seed-run.test.ts
           infra/dev-stack/stack-real-mode.test.ts infra/dev-stack/fleet-task.test.ts

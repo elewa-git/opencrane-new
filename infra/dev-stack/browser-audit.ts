@@ -5,7 +5,7 @@ import { copyFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { APIResponse, Page } from 'playwright';
-import { auditResponseSchema, chatFeedSchema } from '@opencrane/protocol';
+import { auditResponseSchema, chatFeedSchema, type AuditRow } from '@opencrane/protocol';
 import { directory, root } from './config.ts';
 import { project } from './identity.ts';
 
@@ -43,7 +43,9 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
         assert.equal(row.requesterId, requesterId);
         assert.equal(row.conversationId, conversation);
         assert(row.contextDigest && row.permitId && row.requestId);
-        assert(Number.isSafeInteger(row.reservedCents) && Number.isSafeInteger(row.settledCents));
+        assert(!('reservedCents' in row) && !('settledCents' in row),
+          'Member action history does not expose money amounts');
+        await assertAuditMoney(owner, origin, row);
         assert(!JSON.stringify(history).includes('canary'));
         break;
       }
@@ -99,6 +101,25 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     await page.goto(url);
     await page.getByRole('textbox', { name: 'Message your agent' }).waitFor();
   }
+}
+
+export async function assertAuditMoney(owner: Page, origin: string, memberRow: AuditRow) {
+  assert(memberRow.requestId && memberRow.permitId);
+  const query = new URLSearchParams({ requestId: memberRow.requestId });
+  const response = await owner.request.get(`${origin}/api/org/history?${query}`);
+  assert.equal(response.status(), 200);
+  const changes = auditResponseSchema.parse(await response.json());
+  function sameCall(row: AuditRow) {
+    return row.requestId === memberRow.requestId && row.permitId === memberRow.permitId;
+  }
+  const row = changes.rows.find(sameCall);
+  assert(row, 'Admin Change history contains the same call as member action history');
+  assert.equal(row.requesterId, memberRow.requesterId);
+  assert.equal(row.conversationId, memberRow.conversationId);
+  assert.equal(row.turnId, memberRow.turnId);
+  assert(Number.isSafeInteger(row.reservedCents) && Number.isSafeInteger(row.settledCents),
+    'Admin Change history keeps integer reserved and settled euro cents');
+  assert(!JSON.stringify(changes).includes('canary'));
 }
 
 export async function assertPublishedAudit(owner: Page, origin: string) {

@@ -409,3 +409,9 @@ choice. `status: recorded` does not imply an external result or a released hold.
 Budget settlement and gateway observations keep their own records and meanings.
 Older replies without `savedOutcome` remain valid. The strict schema accepts no
 evidence references, usage, private text or credentials.
+
+## Approval reply evidence
+
+Approval cards accept optional boolean `toolReplied`. Missing values keep the older
+unconfirmed presentation. The server derives it from matching adapter dispatch evidence;
+it is separate from `state` and `canRetry`. See [approval replies](../../docs/api/approvals.md).

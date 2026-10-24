@@ -3560,6 +3560,14 @@ then reports Ready for the new process, before and after catalogue replay.
 `mcp-dispatch.test.ts` checks watch replacement, failed capture recovery, refused changed
 tools and PostgreSQL replay with real NATS, PostgreSQL, OpenFGA and agentgateway fixtures.
 
+## Approval reply evidence
+
+`readApproval` reads the last dispatch for the last consumed permit using the existing
+read deadline. `toolReplied` is true only for `adapter_response_received` with the
+same approval and request id. It remains false for transport-only, absent or mismatched
+evidence. `outcome_unknown` and the existing `canRetry` checks are unchanged.
+No extra history read or event write is added.
+
 ## Own saved profile metadata
 
 `readOwnConnectionProfile` accepts the authenticated member separately from strict

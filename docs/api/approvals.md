@@ -15,6 +15,13 @@ consumed permit and its own `usedAt`, in event order. Use means `outcome_unknown
 it never proves that a tool succeeded. `endedAt` dates denial, expiry or cancellation.
 Expiry keeps its original `expiresAt` as well as the time expiry was recorded.
 
+Cards also carry `toolReplied`. It is true only when the last consumed permit has
+`adapter_response_received` evidence with the same approval and request id.
+The drawer then says “Done: the tool replied”. Transport-only, uncertain and missing
+evidence keep “Result not confirmed”. This describes a reply, not confirmed business
+success. The saved state stays `outcome_unknown`; the existing retry rules are unchanged.
+Older replies without this optional field keep the unconfirmed wording.
+
 `cancelReason` is an optional fixed code copied from `approval.cancelled`.
 Old cancellations have no reason. New cancellations distinguish stopped or ended
 turns, a new message or turn, conversation closure, unpublication, changed connection,
