@@ -812,3 +812,70 @@ async function admitsAfterUnrelatedWrite(change: string) {
 it.each(['unchanged', 'revoked', 'expired', 'writer'])(
   'rechecks budget admission after an unrelated append with access %s',
   admitsAfterUnrelatedWrite);
+
+async function admitsAfterRepeatedConflicts(change: string) {
+  const reservationId = await reserve(false, 'repeated-admission');
+  const reservation = actor.state.reservations[0]!;
+  const admission = { callId: 'repeated-admission', decisionId: 'repeated-decision',
+    bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
+  const budgetPosition = await nats.store.head('budget-test');
+  const deadline = performance.now() + 2000;
+  const decisionClock = vi.spyOn(performance, 'now');
+  onTestFinished(decisionClock.mockRestore.bind(decisionClock));
+  let checks = 0;
+  async function checkAccess() {
+    checks += 1;
+    if (checks === 2 || checks === 4) {
+      const memberId = `unrelated-${checks}`;
+      const joined = { memberId, email: `${memberId}@example.test`,
+        displayName: 'Unrelated member', role: 'member' };
+      const event = envelope('test', `member-${memberId}`, 'member.joined', joined);
+      const command = { event, expectedSequence: 0 };
+      expect((await nats.store.append(command)).status).toBe('appended');
+      if (checks === 4 && change === 'writer') {
+        const replacement = new BudgetActor(nats.store, 'test', now);
+        await replacement.start();
+      }
+    }
+    if (checks === 5 && change === 'revoked') throw new Error('Authority changed');
+    if (checks === 5 && change === 'expired') decisionClock.mockReturnValue(deadline);
+    if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+  }
+  checkAccess.deadline = deadline;
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const writes = vi.spyOn(nats.store, 'append');
+  onTestFinished(reads.mockRestore.bind(reads));
+  onTestFinished(writes.mockRestore.bind(writes));
+  const admitted = actor.admitDispatch(admission, checkAccess);
+  if (change === 'unchanged') {
+    await admitted;
+    expect(checks).toBe(6);
+    expect(actor.state.dispatches).toEqual([admission]);
+    await expect(actor.admitDispatch(admission, checkAccess)).rejects.toThrow();
+    expect(actor.state.dispatches).toHaveLength(1);
+  } else {
+    let reason = 'Budget writer lost its fence';
+    if (change === 'revoked') reason = 'Authority changed';
+    if (change === 'expired') reason = 'Authority snapshot expired';
+    await expect(admitted).rejects.toThrow(reason);
+    expect(actor.state.dispatches).toHaveLength(0);
+  }
+  for (const [subject, fromSequence, readDeadline] of reads.mock.calls) {
+    if (subject === 'budget-test' && fromSequence === budgetPosition + 1) {
+      expect(readDeadline).toBe(deadline);
+    }
+  }
+  for (const [command] of writes.mock.calls) {
+    if (command.checkAccess) expect(command.deadline).toBe(deadline);
+  }
+  decisionClock.mockRestore();
+  if (change === 'writer') {
+    await expect(reserve()).rejects.toThrow('Budget writer unavailable');
+  } else {
+    await reserve();
+    expect(actor.state.reservations).toHaveLength(2);
+  }
+}
+it.each(['unchanged', 'revoked', 'expired', 'writer'])(
+  'checks every budget conflict and keeps the original deadline: %s',
+  admitsAfterRepeatedConflicts);
