@@ -85,8 +85,10 @@ export function gatewayMemberCurrent(rows: StoredEvent[], member: Configuration[
   const source = toolPolicyFromRows(sourceRows);
   const current = toolPolicyFromRows(rows);
   const entry = publicationEntry(current);
+  // Keep the publication binding when failed checks advance only the approval revision.
   return entry !== null && current.serverId === member.entry.serverId &&
-    source.policyRevision === current.policyRevision &&
+    source.publicationRevision !== undefined &&
+    source.publicationRevision === current.publicationRevision &&
     source.publication?.commandId === member.changeRef &&
     current.publication?.commandId === member.changeRef &&
     current.publication.fragmentDigest === member.fragmentDigest &&

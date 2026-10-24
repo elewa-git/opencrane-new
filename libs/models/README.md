@@ -35,13 +35,13 @@ to handle AI calls.
 flowchart LR
   models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews and approval details, takeover cancellation, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
-  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, child allowances and payer limits; rechecks access on publish retries; records tool starts, remote outcomes and spending; reads spending calls in pages by original UTC month and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
+  models -->|checks spending choices, child allowances and payer limits; rechecks access on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -69,12 +69,16 @@ a shorter timeout while checking the same failure and recovery behaviour.
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
 Remote calls also need the running catalogue watch at admission and just before sending.
 A new hold refuses an already permitted call before it reaches the remote server.
+Losing a watched server records the interruption before forgetting its last check.
+Restoring that server cannot make its earlier approvals usable again.
 A server that withdraws or changes its promise to check tool revisions stays held, even
 when its tools are identical. Healthy tool lists with short lifetimes are refreshed early,
 so a waiting approval can remain valid.
 A change to the tools or their rules ends that approval. Saving a replacement publication
 also ends waiting and unused approvals for that server. Reloading another server keeps
 them valid. A gateway acknowledgement cannot revive an ended approval.
+After a gateway restart, a new live check confirms the unchanged publication for that
+process. Publication status shows that confirmation after the receipt is saved.
 Every model, tool and recall call checks all memory facts already loaded by its turn.
 The server uses the same check before releasing a renewed turn pass. A memory change
 saved after the last memory read is checked at the next renewal or call.
@@ -432,11 +436,13 @@ Registration grants no access and starts no image checks.
 
 The catalogue watch starts with calls paused and reads the tool list again. The models
 process uses its result before issuing a pass and immediately before sending a call.
+An unchanged successful read keeps the reviewed publication and its acknowledgement.
+A failed check pauses calls until fresh evidence arrives; it does not invent a tool change.
 Failed checks and expired evidence end old approvals. Changed definitions keep the server paused,
 even if saving the change fails. Descriptions remain untrusted tool data.
 
-A saved catalogue change holds every tool on that server. New reviews and legacy
-publication cannot restore calls yet. A failed catalogue check ends old approvals,
+A saved catalogue change holds every tool on that server until its reviewed publication
+is acknowledged by the running gateway. A failed catalogue check ends old approvals,
 even if a later check succeeds before the approval is read.
 
 An internal child admission saves a checked parent and model scope. Competing servers

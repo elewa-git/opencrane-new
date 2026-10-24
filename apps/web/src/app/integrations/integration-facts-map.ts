@@ -1,5 +1,6 @@
 import type { IntegrationRow, ToolPolicy } from '@opencrane/protocol';
 import type { PresentationState } from '../shared-state/shared-state';
+import { hasRecordedToolChanges } from './tool-changes';
 
 export type ToolsReadState = 'loading' | 'loaded' | 'failed' | 'list-failed';
 
@@ -23,11 +24,16 @@ export function buildIntegrationFacts(
   facts.push(buildAllowedForFact());
   facts.push(buildAvailabilityFact(policy, toolsReadState));
   if (policy?.driftHeld === true && toolsReadState === 'loaded') {
+    const toolsChanged = hasRecordedToolChanges(policy);
     for (const fact of facts) {
       if (fact.label === 'Installed') {
         fact.kind = 'needs_input';
-        fact.value = 'Paused: tools changed';
-        fact.evidence = 'The integration is installed, but its changed tools need review.';
+        fact.value = 'Paused';
+        fact.evidence = 'The integration is installed, but calls are paused.';
+        if (toolsChanged) {
+          fact.value = 'Paused: tools changed';
+          fact.evidence = 'The integration is installed, but its changed tools need review.';
+        }
       }
       if (fact.label === 'Allowed for') {
         fact.kind = 'needs_input';
@@ -36,7 +42,10 @@ export function buildIntegrationFacts(
       }
       if (fact.label === 'Available to the assistant') {
         fact.value = 'Paused';
-        fact.evidence = 'Every call stays paused while changed tools need review.';
+        fact.evidence = 'Calls stay paused until the current publication is confirmed.';
+        if (toolsChanged) {
+          fact.evidence = 'Every call stays paused while changed tools need review.';
+        }
       }
     }
   }

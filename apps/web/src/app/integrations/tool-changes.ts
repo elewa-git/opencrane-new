@@ -31,6 +31,23 @@ interface Definition {
   _meta?: unknown;
 }
 
+export function toolChangeSummary(comparison: ToolComparison | null): string {
+  if (!comparison) {
+    return 'A complete comparison is unavailable. Review is paused.';
+  }
+  const counts = comparison.counts;
+  return `Found ${counts.added} added, ${counts.removed} removed and ${counts.changed} changed`;
+}
+
+export function hasRecordedToolChanges(policy: ToolPolicy | undefined): boolean {
+  const before = policy?.previousCatalogue;
+  const after = policy?.catalogue;
+  if (!before || !after) {
+    return false;
+  }
+  return before.schemaDigest !== after.schemaDigest;
+}
+
 export function compareToolCatalogues(policy: ToolPolicy, initial?: boolean): ToolComparison | null {
   const before = previousCatalogue(policy, initial);
   const after = policy.catalogue;

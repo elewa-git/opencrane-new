@@ -2151,12 +2151,17 @@ dev-stack switch-on and a journey are NOT RUN.
 ## Catalogue watch and dispatch holds (#48 PR 3b, first split)
 
 `mcpCatalogueWatch` runs beside the active models dispatcher. Startup holds every
-configured server and records a failed check before recapture, invalidating old approval
-revisions. One check per server runs at a time, for at most 32 distinct servers.
+configured server until the first real capture succeeds. Startup alone does not record
+a failed check or invalidate approvals. One check per server runs at a time, for at most
+32 distinct servers.
 `tick` schedules checks 30 seconds before expiry, at least one second apart. Each attempt
 has a 30-second deadline, followed by at most two seconds to save failure. Three
 consecutive failures stop automatic retries; attempts wait five seconds between failures.
 Replacing the process creates a closed watch and recaptures, including the same digest.
+Removing a previously successful watch saves a failed check before dropping its state.
+If that save fails, the watch stays held and recovery retries approval invalidation.
+All removed watches close before any save starts. Unfinished captures and unresolved
+drift holds keep their bounded slots. Fresh startup still records no invented failure.
 Stopping aborts discovery. Late results cannot append success or release its hold.
 Dispatch also checks expiry by time, without depending on a running timer.
 Renewal checks the previous expiry again after the event store replies. If evidence
@@ -2174,8 +2179,9 @@ stream, authority implementation or authority test is changed.
 
 This watch split does not implement in-process route replacement or instance-start
 observation. Acknowledged restoration and saved reload cancellation are described below.
-The current routes reload by restarting the models process; its startup invalidates old
-approvals. Recapture of an independently restarted backend still needs instance lifecycle
+The current routes reload by restarting the models process. A successful recapture of
+unchanged, unexpired definitions keeps the reviewed publication and its acknowledgement.
+Recapture of an independently restarted backend still needs instance lifecycle
 wiring. The gateway delivery helper now provides exact receipts; background delivery
 and live generation admission remain separate work under #45.
 Fresh-install qualification is NOT RUN. The rest of row 3 remains PARTIAL.
@@ -2404,21 +2410,24 @@ admission. Only calls with the requested conversation and turn are returned.
 ## Per-server gateway receipts (P3-4 PR 3b; Part of #45)
 
 After an exact live observation, `observe` saves `mcp.configuration_observed` on each
-member's MCP stream. Its fixed id hashes serverId, changeRef and fragmentDigest. Each
-append requires that stream's read position and the global position from before the checks.
-This also refuses a newer preparation saved during the receipt append. A lost reply is recovered on the next
-probe. Unchanged operations carried into another generation receive no extra receipt.
-A restarted child requires delivery and a new probe, even when these receipts exist.
+member's MCP stream. Its fixed id hashes all receipt fields, including the exact gateway
+observation. Each append requires that stream's read position and the global position
+from before the checks. This also refuses a newer preparation saved during the receipt
+append. A lost reply is recovered on the next probe without another receipt.
+A restarted child requires delivery and a new probe. Its receipt replaces the saved
+acknowledgement for the same reviewed publication. A publication carried into another
+generation also receives a receipt for that generation. Repeated probes add no events.
 
 `gatewayMemberCurrent` compares the current intent and entry digest, and requires the
-same policyRevision as at sourceSequence. Receipts, call admissions and unchanged checks
-keep it current. Withdrawal, changed policy, failed checks and replacement intents do not.
+same publicationRevision as at sourceSequence. Receipts, call admissions and unchanged
+checks keep it current. Failed checks pause calls until a fresh unchanged capture.
+Withdrawal, changed policy and replacement intents invalidate the member.
 The delivery checks the latest preparation again before each receipt and before returning.
-The fold retains only a receipt matching its intent and review; no receipt enables calls.
-A matching receipt can release a reviewed drift hold. Publication status is read by
-`libs/projections` from the catalogue tables. Initial publication and the Ready read
-remain unavailable here. Worker wiring, startup route removal, generation admission
-and fresh-install qualification remain separate work.
+The fold retains the latest receipt matching its intent and review. Fresh evidence can
+enable publication or release a reviewed drift hold. Publication status is read by
+`libs/projections` from the catalogue tables and still requires the exact gateway
+observation. Every call also needs the running watch and live gateway acknowledgement.
+Fresh-install qualification remains separate work.
 
 Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
 rebuilt policy with the live projection; it writes no events or gateway configuration.
@@ -2520,9 +2529,11 @@ before saving `mcp.configuration_observed`; no second acknowledgement path is ad
 The shared fold compares the receipt with the current intent, review revision, fragment
 digest and source position. Evidence must be valid at both observation and event time.
 Only then does it clear `driftHeld` and restore publication. Initial publication activation
-still belongs to #45. A failed check clears publication and holds intent-backed servers, so
-startup recapture or legacy publication cannot reuse an old receipt. A new review and
-publication can restore them again. Failure also advances the approval revision.
+uses this same receipt. A failed check clears freshness and advances the approval revision,
+but retains an acknowledged publication whose definitions have not changed. A successful
+unchanged check restores availability. Gateway membership compares the saved publication
+position and complete reviewed entry, so a freshness failure cannot erase that binding.
+A real tool or policy change still clears the acknowledgement and needs review and publication.
 
 The watch keeps freshness and drift holds separately. A successful capture does not
 invalidate a review merely because drift is held. It clears its local drift hold only
@@ -3407,3 +3418,18 @@ scope, group membership and current authority checks. It still reads current sav
 and checks current OpenFGA permissions. New events without prepared receipts refuse.
 Preparation runs before the original two-second access check. It does not add conversation
 streams to the watched access streams. The same preparation also serves turn renewal.
+
+## Recovery after a catalogue check fails
+
+The watch waits for a real read before recording a startup result. If saved evidence
+has already expired, it records that failure after capture and before reopening calls.
+Failed checks clear `expiresAt` and advance `policyRevision`. They keep publication,
+its acknowledgement and any existing drift hold. An unchanged check renews dates only.
+This restores availability for an unchanged acknowledged publication, while old approvals
+stay cancelled. A genuine change clears the receipt and keeps every tool held for review.
+The live gateway acknowledgement is still required for every published call.
+A gateway restart renews the member receipt after its exact live observation. Status
+then reports Ready for the new process, before and after catalogue replay.
+
+`mcp-dispatch.test.ts` checks watch replacement, failed capture recovery, refused changed
+tools and PostgreSQL replay with real NATS, PostgreSQL, OpenFGA and agentgateway fixtures.

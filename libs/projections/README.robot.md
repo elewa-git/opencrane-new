@@ -756,7 +756,10 @@ generation entry. Rebuilding the catalogue repeats the same fold and starts no p
 
 ## Gateway receipts in tool policy
 
-`configurationObservation` holds the first matching per-operation gateway receipt.
+`configurationObservation` holds the latest matching gateway receipt for the publication.
+A new gateway process or generation refreshes it after an exact live observation.
+Repeated probes recover the same receipt. The status read still matches every receipt
+field to the current gateway observation; it never accepts an old process as current.
 The fold checks its publication change, fragment digest, review and source position.
 Receipt events preserve policyRevision. Changed policy or publication clears the field;
 unchanged checks and dispatch admission keep it. The catalogue stores it in the existing
@@ -778,9 +781,17 @@ policy review. It enables a first publication or restores a held publication onl
 if the evidence is fresh at observation and event time. Old, duplicate and superseded receipts cannot
 restore a later drift. The existing delivery helper checks exact gateway generation
 and digests before writing this receipt. The fold does not probe a gateway during replay.
-A failed check holds intent-backed publication and advances the approval revision.
-Recovery needs another exact review, publication and live receipt.
+A failed check clears expiry and advances the approval revision. It preserves the saved
+publication, acknowledgement and any existing drift hold. An unchanged successful check
+restores freshness without reviving old approvals. The retained receipt keeps the exact
+review current across check failures; other policy changes clear it. Actual tool changes
+still need another exact review, publication and live receipt.
 The live watch starts closed after restart; rebuilt tables alone cannot authorise a send.
+
+Existing installations affected by a failed catalogue check need an MCP catalogue rebuild
+with `npm run replay -- mcp-catalogue --verify`. Replay restores the acknowledged publication
+only when later events left its reviewed definitions unchanged. The models watch must still
+complete a fresh capture, and sends still need a current live gateway acknowledgement.
 
 ## Hosted image admission receipts
 
@@ -829,7 +840,8 @@ Fresh-install live qualification after this correction remains NOT RUN.
 `publicationRevision` records the saved publication position. `isToolReviewCurrent`
 accepts either an unchanged review or that exact publication's approval invalidation.
 Other policy events clear this position or advance `policyRevision` past it. Failed checks
-therefore still require a new review. Receipt and status checks use the same rule.
+keep the review only when the exact publication was already acknowledged. Receipt and
+status checks use the same rule.
 A replacement publication holds a previously callable server until its exact live receipt.
 An intent with a stale source position or review cannot retain the reviewed authority.
 Rebuild repeats these decisions without configuration writes or upstream calls.

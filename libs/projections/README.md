@@ -38,13 +38,19 @@ flowchart LR
   ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves admission, removal, role, ownership and control history; keeps private audits outside feeds; saves routines and receipts| pg
-  store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
+  store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads wrapped chat keys; repairs unfinished correction keys| keys["Server files<br/>private key store and package Secret"]
 ```
 
 ## What it is responsible for
+
+Tool checks keep an acknowledged publication while its definitions stay unchanged.
+Failed checks pause calls until fresh evidence arrives. Changed tools still need review.
+A new gateway receipt confirms an unchanged publication after restart. Status still
+requires the current process and exact configuration to match. Rebuilding the tables
+follows the same rules and cannot restore ended approvals.
 
 Database locks keep related work from overlapping. Callers can limit the wait and
 cancel it. A running callback keeps its lock until its work has stopped.

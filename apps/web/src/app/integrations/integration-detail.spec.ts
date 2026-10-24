@@ -116,6 +116,29 @@ describe('integration detail', () => {
     fixture.destroy();
   });
 
+  async function showsUnavailableCheck(view: 'detail' | 'changes') {
+    const unavailable = { ...driftPolicy(), previousCatalogue: null };
+    const reply = response(unavailable);
+    let fixture: ComponentFixture<IntegrationDetail>;
+    if (view === 'changes') {
+      fixture = createChanges(reply);
+    } else {
+      fixture = create(row('ready', 'Published'), reply);
+    }
+    await vi.waitFor(function loadedPolicy() {
+      expect(root(fixture).textContent).toContain('Calls stay paused');
+    });
+    const text = root(fixture).textContent;
+    expect(text).toContain('Fixture server is paused');
+    expect(text).not.toContain('tools changed');
+    expect(text).not.toContain('changed tools need review');
+    expect(text).not.toContain('Review changes');
+    expect(text).not.toContain('Review and publish');
+    fixture.destroy();
+  }
+  it.each(['detail', 'changes'] as const)(
+    'does not claim changed tools for an unavailable check on %s', showsUnavailableCheck);
+
   it('shows an expired check without a drift banner or review-changes action', async () => {
     const expired = { ...driftPolicy(), driftHeld: false, previousCatalogue: null };
     const fixture = create(row('ready', 'Published'), response(expired));

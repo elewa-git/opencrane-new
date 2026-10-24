@@ -20,7 +20,8 @@ import { IntegrationFacts } from './integration-facts';
 import { buildIntegrationFacts, type ToolsReadState } from './integration-facts-map';
 import { needsReview, publicationMessage, publicationHeading, publicationKind,
   publicationStatusMessage, type PublicationChangeState } from './integration-status';
-import { compareToolCatalogues, initialToolMode } from './tool-changes';
+import { compareToolCatalogues, hasRecordedToolChanges, initialToolMode,
+  toolChangeSummary } from './tool-changes';
 import { reviewCommand, bindInitialToolModes } from './review-command';
 
 type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
@@ -336,11 +337,9 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     return this.policy()?.driftHeld === true;
   }
 
-  protected driftSummary(): string {
-    const counts = this.comparison()?.counts;
-    if (!counts) return 'A complete comparison is unavailable. Review is paused.';
-    return `Found ${counts.added} added, ${counts.removed} removed and ${counts.changed} changed`;
-  }
+  protected readonly toolsChanged = hasRecordedToolChanges;
+
+  protected readonly driftSummary = toolChangeSummary;
 
   protected checkExpired(): boolean {
     const policy = this.policy();

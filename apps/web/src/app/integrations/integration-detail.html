@@ -111,7 +111,7 @@
     } @else {
     <header class="detail-heading">
       <div class="heading-copy">
-        <h1>{{ initialPolicy() ? 'Review before publishing' : 'Review changed tools' }}</h1>
+        <h1>{{ initialPolicy() ? 'Review before publishing' : 'Review tool publication' }}</h1>
         <p>{{ integration.name }} ·
           {{ policy() ? 'Last successful check ' + checkedTime() : 'Tool policy not checked' }}</p>
       </div>
@@ -134,8 +134,10 @@
     }
     @if (driftHeld()) {
       <div class="draft-notice">
-        <h2>{{ integration.name }} is paused: its tools changed</h2>
-        <p>{{ driftSummary() }}</p>
+        <h2>
+          {{ integration.name }} is paused{{ toolsChanged(policy()) ? ': its tools changed' : '' }}
+        </h2>
+        <p>{{ driftSummary(comparison()) }}</p>
         <p>Every tool stays paused. Your saved choices are kept.</p>
       </div>
     }
@@ -213,7 +215,7 @@
         {{ integration.source.detail }}</p>
     </div>
     <div class="actions">
-      @if (driftHeld()) {
+      @if (driftHeld() && toolsChanged(policy())) {
         <a class="button primary" [href]="'/org/integrations/' + integration.serverId + '/changes'">
           Review changes
         </a>
@@ -237,8 +239,10 @@
   </header>
   @if (driftHeld()) {
     <div class="draft-notice">
-      <h2>{{ integration.name }} is paused: its tools changed</h2>
-      <p>{{ driftSummary() }}</p>
+      <h2>
+          {{ integration.name }} is paused{{ toolsChanged(policy()) ? ': its tools changed' : '' }}
+        </h2>
+      <p>{{ driftSummary(comparison()) }}</p>
       <p>Last successful check {{ checkedTime() }}</p>
     </div>
   } @else if (needsReview(integration)) {

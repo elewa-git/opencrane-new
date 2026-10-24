@@ -26,7 +26,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
   }
   let stopped = false;
 
-  function reconcile(serverIds: string[]) {
+  async function reconcile(serverIds: string[]) {
     const wanted = new Set(serverIds.slice(0, 32));
     for (const [serverId, state] of servers) {
       if (wanted.has(serverId)) {
@@ -35,9 +35,12 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       state.monitored = false;
       holdWatch(state);
       state.controller?.abort();
-      // Keep unfinished captures and unsaved drift holds within the same bounded set.
-      if (!state.active && !state.driftHeld) {
-        servers.delete(serverId);
+      state.nextCheck = 0;
+    }
+    // Close every missing watch before saving failures, so no other server can keep sending.
+    for (const [serverId, state] of servers) {
+      if (!state.monitored) {
+        await removeWatch(serverId, state);
       }
     }
     for (const serverId of wanted) {
@@ -48,6 +51,19 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
         servers.set(serverId, newWatch());
       }
     }
+  }
+
+  async function removeWatch(serverId: string, state: ReturnType<typeof newWatch>) {
+    // Keep unfinished captures and unsaved drift holds within the same bounded set.
+    if (state.active || state.driftHeld) {
+      return;
+    }
+    if (state.checkedAt > 0) {
+      // Save the interruption before forgetting a successful capture. Recovery must end old approvals.
+      const signal = AbortSignal.timeout(2000);
+      await untilAborted(saveFailure(serverId, signal), signal);
+    }
+    servers.delete(serverId);
   }
 
   function checkDue(serverId: string) {
@@ -130,7 +146,11 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     const deadline = performance.now() + timeoutMs;
     await options.requireLeader();
     let policy = await readToolPolicy(store, silo, serverId, deadline);
-    let invalidated = state.held;
+    // Keep startup closed until a real capture succeeds, without inventing a failed check.
+    let invalidated = state.held && state.checkedAt > 0;
+    if (state.checkedAt === 0) {
+      state.expiresAt = Date.parse(policy.expiresAt ?? '1970-01-01T00:00:00.000Z');
+    }
     if (invalidated) {
       signal.throwIfAborted();
       await saveFailure(serverId, signal);
@@ -140,15 +160,17 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     signal.throwIfAborted();
     const captured = await options.capture(serverId, signal);
     signal.throwIfAborted();
-    if (Buffer.byteLength(JSON.stringify(captured)) > 900 * 1024) {
-      throw new Error('Catalogue inventory limit');
+    const catalogue = checkedCapture(captured, serverId, policy);
+    // End approvals from expired startup evidence before saving a successful renewal.
+    // Wait for the real capture first, so startup itself is never recorded as a failure.
+    if (state.checkedAt === 0 && state.expiresAt <= Date.now()) {
+      await saveFailure(serverId, signal);
+      policy = await readToolPolicy(store, silo, serverId, deadline);
+      if (!policy.catalogue) {
+        throw new Error('Saved catalogue unavailable');
+      }
+      invalidated = true;
     }
-    const catalogue = mcpServerDiscoveredDataSchema.parse(captured);
-    if (catalogue.serverId !== serverId || catalogue.connectionId !== policy.connectionId ||
-        catalogue.accountMode !== policy.accountMode || !catalogue.checkedAt || !catalogue.expiresAt) {
-      throw new Error('Captured catalogue identity mismatch');
-    }
-    validateMcpCatalogue(catalogue);
     const currentContract = revisionContract(catalogue.discoverResult);
     const savedContract = revisionContract(policy.catalogue.discoverResult);
     // Save withdrawn or changed dispatch promises even when every tool is identical.
@@ -229,6 +251,21 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     }
   }
   return { check, checkDue, nextCheckAt, reconcile, requireCurrent, close };
+}
+
+
+function checkedCapture(captured: Catalogue, serverId: string,
+  policy: Awaited<ReturnType<typeof readToolPolicy>>) {
+  if (Buffer.byteLength(JSON.stringify(captured)) > 900 * 1024) {
+    throw new Error('Catalogue inventory limit');
+  }
+  const catalogue = mcpServerDiscoveredDataSchema.parse(captured);
+  if (catalogue.serverId !== serverId || catalogue.connectionId !== policy.connectionId ||
+      catalogue.accountMode !== policy.accountMode || !catalogue.checkedAt || !catalogue.expiresAt) {
+    throw new Error('Captured catalogue identity mismatch');
+  }
+  validateMcpCatalogue(catalogue);
+  return catalogue;
 }
 
 function refreshWatchState(state: ReturnType<typeof newWatch>,

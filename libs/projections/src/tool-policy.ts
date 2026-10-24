@@ -95,8 +95,8 @@ function applyConfigurationObservation(state: ToolPolicy, event: EventEnvelope,
   const receipt = mcpConfigurationObservationSchema.parse(event.data);
   const intent = state.publication;
   const next = { ...state, sequence };
-  // Keep only the first receipt for the unchanged publication request.
-  if (state.configurationObservation || !intent || receipt.changeRef !== intent.commandId ||
+  // Refresh the receipt after a new live observation of the same reviewed publication.
+  if (!intent || receipt.changeRef !== intent.commandId ||
       receipt.fragmentDigest !== intent.fragmentDigest ||
       receipt.reviewRevision !== intent.reviewRevision ||
       receipt.reviewRevision !== state.reviewRevision ||
@@ -233,10 +233,8 @@ function applyMode(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy
 function applyCheck(state: ToolPolicy, data: Record<string, unknown>, sequence: number) {
   if (data['outcome'] === 'failed') {
     // End old approvals even if a successful check arrives before anyone reads them.
-    return { ...state, sequence, policyRevision: sequence, expiresAt: null,
-      configurationObservation: undefined,
-      driftHeld: state.driftHeld === true || state.publication !== undefined,
-      published: state.publication ? false : state.published };
+    // Keep the reviewed publication: missing freshness pauses calls without changing tools.
+    return { ...state, sequence, policyRevision: sequence, expiresAt: null };
   }
   if (!state.catalogue || data['schemaDigest'] !== state.catalogue.schemaDigest) {
     throw new Error('Catalogue check does not match the saved snapshot');
@@ -381,6 +379,16 @@ export function isToolReviewCurrent(state: ToolPolicy): boolean {
   if (state.reviewRevision === state.policyRevision) {
     return true;
   }
-  return state.publicationRevision === state.policyRevision &&
-    state.publication?.reviewRevision === state.reviewRevision;
+  if (state.publication?.reviewRevision !== state.reviewRevision) {
+    return false;
+  }
+  if (state.publicationRevision === state.policyRevision) {
+    return true;
+  }
+  // Keep the review through failed checks only after its publication was acknowledged.
+  // Every policy change clears this receipt before a later check can renew freshness.
+  const receipt = state.configurationObservation;
+  return receipt !== undefined && receipt.changeRef === state.publication.commandId &&
+    receipt.fragmentDigest === state.publication.fragmentDigest &&
+    receipt.reviewRevision === state.reviewRevision;
 }
