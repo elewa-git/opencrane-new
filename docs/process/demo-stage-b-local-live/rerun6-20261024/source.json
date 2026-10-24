@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "fetch": "completed",
+  "rebase": "completed",
+  "mainIsAncestor": true,
+  "base": "9aa2a7d72bb7f3f15ecd5c92a20af2aa21515f2d",
+  "liveSource": "e9a0215ac58a0db37ef9b15f9b73a119d2fa73b3",
+  "slot": 1,
+  "paidCalls": 0,
+  "launcherMountFix": "retained",
+  "prerequisites": {
+    "645": "f13ea5d90",
+    "648": "e3a97a888",
+    "655": "8173f6b92",
+    "656": "78686e106",
+    "665": "fd1626af6",
+    "672": "9aa2a7d72"
+  }
+}

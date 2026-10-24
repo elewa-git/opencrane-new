@@ -1,0 +1,5 @@
+npm notice run lint:unused
+npm notice run knip
+Configuration hints (2)
+**/.tools/**                 knip.json  Remove from ignore        
+setpriv       apps/computer  knip.json  Remove from ignoreBinaries

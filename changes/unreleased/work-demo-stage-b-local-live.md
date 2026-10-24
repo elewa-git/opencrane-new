@@ -4,3 +4,7 @@
 
 - Keep the local tools rehearsal working with isolated private key folders by sharing
   only its slot claim and demo socket with the models container.
+
+- Record a passing fresh local baseline, complete desktop and phone approval cards,
+  and the drawer showing the tool replied. The receipt keeps the interrupted
+  evidence collection and untested personal owner sign-in explicit.

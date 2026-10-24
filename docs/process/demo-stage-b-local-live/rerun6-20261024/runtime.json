@@ -1,0 +1,36 @@
+{
+  "source": "e9a0215ac58a0db37ef9b15f9b73a119d2fa73b3",
+  "rebasedOnto": "9aa2a7d72bb7f3f15ecd5c92a20af2aa21515f2d",
+  "slot": 1,
+  "computerImages": [
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    },
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    },
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    }
+  ],
+  "versions": {
+    "codex": {
+      "exit": 0,
+      "output": "codex-cli 0.159.2"
+    },
+    "gateway": {
+      "version": "1.5.0",
+      "git_revision": "fe6732474a96a0363dfb9822859af4e9bab360fa",
+      "rust_version": "1.98.0",
+      "build_profile": "release",
+      "build_target": "x86_64-unknown-linux-musl"
+    }
+  },
+  "testModelsImage": "sha256:45ab0673091d533d7ec48e420cf7ba742880ac7834a9dbf67e004abda6a7ce76"
+}

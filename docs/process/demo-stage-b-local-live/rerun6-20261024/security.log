@@ -1,0 +1,11 @@
+npm notice run npx
+npm notice run 'vitest' run libs/events/test/security-rules.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/demo-stage-b-local-live
+
+
+ Test Files  1 passed (1)
+      Tests  438 passed (438)
+   Start at  20:58:00
+   Duration  2.55s (transform 47%, import 29%, tests 23%)
+

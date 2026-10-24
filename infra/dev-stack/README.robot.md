@@ -136,6 +136,11 @@ against the owner or another worktree's claim.
 
 Results and remaining conditions are in
 [the local live receipt](../../docs/process/demo-stage-b-local-live/receipt.md).
+The latest run passes the fresh baseline, including budget checks, and captures
+the complete waiting approval and tool-reply drawer at both widths. Its event
+records show one approved write. The collector was terminated before saving its
+initial readbacks, so the complete evidence check remains failed; the receipt
+records that collection limit and the untested personal owner login.
 Native consent, public deployment and the later repeated or long-wait journeys
 remain excluded from this launch.
 
