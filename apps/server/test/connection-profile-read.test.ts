@@ -120,3 +120,213 @@ function readSubject(call: unknown[]) {
   return call[0];
 }
 it('lets Alice read only safe saved metadata without a tool grant or any effects', readsOwnSavedState);
+
+async function refusesOtherPeople() {
+  const fixture = await saved();
+  const originalRead = nats.store.readStream.bind(nats.store);
+  function unreadableForeign(subject: string, from?: number, deadline?: number) {
+    if (subject === fixture.subject) {
+      throw new Error(privateCanary);
+    }
+    return originalRead(subject, from, deadline);
+  }
+  const read = vi.spyOn(nats.store, 'readStream').mockImplementation(unreadableForeign);
+  try {
+    for (const member of ['bob', 'admin']) {
+      for (const url of [fixture.url, `${fixture.url}-missing`]) {
+        const response = await app.inject({ url, headers: headers(member) });
+        expect(response.statusCode).toBe(404);
+        expect(response.json()).toEqual({ status: 'unknown' });
+        expect(response.headers['cache-control']).toBe('no-store');
+      }
+    }
+    expect(read.mock.calls.map(readSubject)).not.toContain(fixture.subject);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('keeps Alice’s existing, missing and unreadable profiles private from Bob and admins',
+  refusesOtherPeople);
+
+async function refusesExtraInput() {
+  const fixture = await saved();
+  const cases = [
+    { url: fixture.url, headers: {}, code: 401 },
+    { url: fixture.url, headers: headers('alice', 'foreign'), code: 403 },
+    { url: fixture.url, headers: headers('unmapped'), code: 403 },
+  ];
+  for (const key of ['ownerId', 'userId', 'siloId', 'extra']) {
+    cases.push({ url: `${fixture.url}?${key}=alice`, headers: headers('bob'), code: 400 });
+  }
+  for (const request of cases) {
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(request.code);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(response.headers['cache-control']).toBe('no-store');
+  }
+  const response = await app.inject({ method: 'GET', url: fixture.url,
+    headers: { ...headers(), 'content-type': 'application/json' }, payload: { ownerId: 'alice' } });
+  expect(response.statusCode).toBe(400);
+  expect(response.headers['cache-control']).toBe('no-store');
+}
+it('refuses foreign sessions, owner spoofing and extra input', refusesExtraInput);
+
+async function removalWins(failed: boolean) {
+  let removed: ReturnType<typeof envelope> | undefined;
+  const fixture = await saved();
+  const originalRead = nats.store.readStream.bind(nats.store);
+  async function* removeDuringLoad(subject: string, from?: number, deadline?: number) {
+    for await (const row of originalRead(subject, from, deadline)) {
+      yield row;
+    }
+    if (subject === fixture.subject) {
+      const event = envelope('test', 'member-alice', 'member.removed',
+        { memberId: 'alice', removedBy: 'admin' });
+      const expectedSequence = await nats.store.head(event.subject);
+      await nats.store.append({ event, expectedSequence });
+      removed = event;
+      if (failed) {
+        throw new Error(privateCanary);
+      }
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(removeDuringLoad);
+  try {
+    const response = await app.inject({ url: fixture.url, headers: headers() });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(response.headers['cache-control']).toBe('no-store');
+    const missing = await app.inject({ url: `${fixture.url}-missing`, headers: headers() });
+    expect(missing.statusCode).toBe(403);
+    expect(missing.json()).toEqual({ status: 'refused' });
+  } finally {
+    vi.restoreAllMocks();
+    if (removed) {
+      await memberAuthorisation(binding).handler.handle(removed, pgDb(storage.queue));
+    }
+    await join('alice');
+  }
+}
+it.each([false, true])('removal during loading wins over record errors (failed=%s)', removalWins);
+
+async function slowRead() {
+  const fixture = await saved();
+  const originalRead = nats.store.readStream.bind(nats.store);
+  const subjects: string[] = [];
+  async function* delayed(subject: string, from?: number, deadline?: number) {
+    subjects.push(subject);
+    if (subject === fixture.subject) {
+      expect(deadline! - performance.now()).toBeGreaterThan(2_000);
+      await new Promise(wait);
+      const event = envelope('test', 'conversation-busy', 'conversation.closed',
+        { conversationId: 'busy', closedBy: 'alice' });
+      await nats.seed([event]);
+    }
+    yield* originalRead(subject, from, deadline);
+  }
+  function wait(resolve: () => void) {
+    setTimeout(resolve, 2_100);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
+  const head = vi.spyOn(nats.store, 'head');
+  try {
+    const response = await app.inject({ url: fixture.url, headers: headers() });
+    expect(response.statusCode).toBe(200);
+    expect(subjects.indexOf('member-alice')).toBeGreaterThan(subjects.indexOf(`mcp-${fixture.serverId}`));
+    expect(subjects).not.toContain('conversation-busy');
+    expect(head).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('loads slow history before its one current-member check despite busy chat activity', slowRead);
+
+async function lifecycle(action: string) {
+  const fixture = await saved();
+  await saved();
+  let event;
+  let expectedStatus = 'saved_unverified';
+  let generation: number | null = 1;
+  let serverAvailable = true;
+  if (action === 'rotation') {
+    const activation = { ...fixture.data.activation, generation: 2,
+      operationId: `rotate${counter}`, reason: 'bearer_rotation', expectedSequence: fixture.revision };
+    event = envelope('test', fixture.subject, 'connection.refreshed',
+      { ...fixture.data, activation }, activation.operationId);
+    event.principal = { kind: 'human', id: 'alice' };
+    generation = 2;
+  } else if (action === 'revocation') {
+    event = envelope('test', fixture.subject, 'connection.revoked', {
+      userId: 'alice', serverId: fixture.serverId, profile: fixture.profileId,
+      revokedBy: 'alice', reason: 'owner_requested', expectedSequence: fixture.revision,
+    });
+    expectedStatus = 'unavailable';
+    generation = null;
+    serverAvailable = false;
+  } else if (action === 'disable') {
+    event = envelope('test', `connection-control-alice-${fixture.serverId}`, 'connection.disabled', {
+      userId: 'alice', serverId: fixture.serverId, profile: fixture.profileId,
+      disabledBy: 'admin', reason: 'admin_disabled', expectedSequence: 0,
+    });
+  } else {
+    event = envelope('test', `mcp-${fixture.serverId}`, 'mcp.server_registered', {
+      serverId: fixture.serverId, kind: 'remote', locator: 'https://replacement.test/mcp',
+      registeredBy: 'admin',
+    });
+    serverAvailable = false;
+  }
+  await nats.seed([event]);
+  const revision = await nats.store.head(fixture.subject);
+  const append = vi.spyOn(nats.store, 'append');
+  try {
+    for (let repeat = 0; repeat < 2; repeat += 1) {
+      const response = await app.inject({ url: fixture.url, headers: headers() });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ serverId: fixture.serverId, profileId: fixture.profileId,
+        profileRevision: revision, status: expectedStatus, generation,
+        adminBlocked: action === 'disable', serverAvailable, callsAvailable: false });
+      expect(response.body).not.toContain(privateCanary);
+    }
+    expect(append).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['rotation', 'revocation', 'disable', 'replacement'])(
+  'rebuilds exact %s facts from history without selecting another account or releasing', lifecycle);
+
+async function legacyAndFailure() {
+  const fixture = await saved();
+  const originalRead = nats.store.readStream.bind(nats.store);
+  async function* legacy(subject: string, from?: number, deadline?: number) {
+    for await (const row of originalRead(subject, from, deadline)) {
+      if (subject === fixture.subject) {
+        const data = { userId: 'alice', serverId: fixture.serverId,
+          profile: fixture.profileId, secretRef: `secret:${privateCanary}` };
+        yield { ...row, event: { ...row.event, data } };
+      } else {
+        yield row;
+      }
+    }
+  }
+  const read = vi.spyOn(nats.store, 'readStream').mockImplementation(legacy);
+  try {
+    const response = await app.inject({ url: fixture.url, headers: headers() });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ serverId: fixture.serverId, profileId: fixture.profileId,
+      profileRevision: fixture.revision, status: 'unavailable', generation: null,
+      adminBlocked: false, serverAvailable: false, callsAvailable: false });
+    function failed(subject: string, from?: number, deadline?: number) {
+      if (subject === fixture.subject) throw new Error(privateCanary);
+      return originalRead(subject, from, deadline);
+    }
+    read.mockImplementation(failed);
+    const unavailable = await app.inject({ url: fixture.url, headers: headers() });
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.json()).toEqual({ status: 'unavailable' });
+    expect(unavailable.headers['cache-control']).toBe('no-store');
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('keeps incomplete legacy records unavailable and sanitises unreadable history', legacyAndFailure);
