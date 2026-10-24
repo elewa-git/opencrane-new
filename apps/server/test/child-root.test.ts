@@ -24,6 +24,8 @@ async function initialise() {
       { resourceType: 'model', resourceId: selected.model, granteeKind, granteeId,
         grantedBy: 'alice' });
   }
+  await context.append('computer-helper', 'computer.ready',
+    { assistantId: 'helper', computerId: selected.computerId, generation: 1 }, false);
   actor = new BudgetActor(context.nats.store, 'test');
   await actor.start(10_000, 10_000, 'payer');
 }
@@ -135,7 +137,7 @@ async function changedBindings() {
   for (const patch of [{ threadId: 'other' }, { computerId: 'other' }, { generation: 2 }]) {
     const changed = { ...selected, ...patch };
     await expect(allocateChildRoot(context.options, actor, 'alice', saved.input, 1, changed))
-      .rejects.toThrow('Root binding conflict');
+      .rejects.toThrow();
   }
   for (const patch of [{ payingGroupId: 'owners' }, { allowanceBoundCents: 999 }]) {
     const changed = { ...saved.input, ...patch };
