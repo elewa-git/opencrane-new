@@ -274,6 +274,16 @@ function approvalActionRefusal(current: Awaited<ReturnType<typeof readApproval>>
   return undefined;
 }
 
+async function saveApprovalInvalidation(store: EventStore, event: EventEnvelope,
+  expectedSequence: number, fresh: FreshAuthority) {
+  await fresh();
+  const command: AppendCommand = { event, expectedSequence };
+  if (fresh.deadline !== undefined) command.deadline = fresh.deadline;
+  const result = await store.append(command);
+  if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
+  return { status: 'conflict' } as const;
+}
+
 // Reuse checked command facts and read only later conversation changes during the short check.
 export async function decideApproval(store: EventStore, silo: string, approvalId: string,
   memberId: string, decision: 'approved' | 'rejected' | 'retry', recentAuth: boolean,
@@ -283,13 +293,7 @@ export async function decideApproval(store: EventStore, silo: string, approvalId
     throw new Error('Requester only');
   }
   if (current.invalidation) {
-    await fresh();
-    const command: AppendCommand = { event: current.invalidation,
-      expectedSequence: current.sequence };
-    if (fresh.deadline !== undefined) command.deadline = fresh.deadline;
-    const result = await store.append(command);
-    if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
-    return { status: 'conflict' } as const;
+    return saveApprovalInvalidation(store, current.invalidation, current.sequence, fresh);
   }
   const retry = decision === 'retry';
   const refusal = approvalActionRefusal(current, decision, recentAuth);

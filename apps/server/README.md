@@ -30,6 +30,8 @@ Approval polling saves cancellation when a saved takeover covers an unused appro
 It notices computer changes even when the chat and approval have not changed.
 The computer receives its local work gate before an approval reply. Failed saves or
 unavailable gate delivery keep the wait pending. Reconnection reads the same result.
+HTTP decisions check approval ownership and current write access before saving a
+cancellation, so a foreign approval stays unchanged.
 
 ## Where it fits
 

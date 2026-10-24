@@ -1059,6 +1059,36 @@ async function saveTakeover(setup: Awaited<ReturnType<typeof approvalFixture>>) 
   await setup.append('computer-assistant', 'takeover.requested', control);
 }
 
+async function savesAuthorisedHttpCancellation() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const session = setup.headers();
+    const { cards, csrf } = await setup.read(session);
+    const approvalId = cards[0]!.approvalId;
+    const subject = `approval-${approvalId}`;
+    await saveTakeover(setup);
+    const response = await setup.app.inject({ method: 'POST',
+      url: '/api/conversations/conversation/approvals',
+      headers: { ...session, 'x-csrf-token': csrf },
+      payload: { approvalId, decision: 'rejected' } });
+    expect(response.statusCode, response.body).toBe(409);
+    const rows = await history(setup.nats.store, subject, 'test');
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.event.type).toBe('approval.cancelled');
+    expect(rows[1]!.event.data).toEqual({ approvalId, cancelReason: 'takeover' });
+    await setup.restartReader();
+    const restored = await setup.read(session);
+    expect(restored.cards[0]).toMatchObject({ state: 'cancelled', cancelReason: 'takeover',
+      endedAt: rows[1]!.event.time });
+    expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+  } finally {
+    await setup.close();
+  }
+}
+it('saves one takeover cancellation through an authorised HTTP decision',
+  savesAuthorisedHttpCancellation);
+
 async function refusesForeignTakeoverCancellation() {
   const setup = await approvalFixture();
   try {
