@@ -27,7 +27,8 @@ The server checks receipts for the exact saved change before showing its progres
 It still checks access when loading fails, so errors do not reveal protected records.
 Admission history keeps each join separate, including when a person returns.
 Owners and admins can see who saved a spending resolution and the chosen amount,
-separately from observations and budget settlement. A saved resolution does not prove a released hold.
+separately from observations and budget settlement. Detail also shows the current charge and hold,
+with the time they were checked. A saved resolution does not prove a released hold.
 Conversation history keeps execution outcomes but omits resolution records and money amounts.
 Removal progress covers permissions and the member list. It does not report departure cleanup.
 
@@ -64,7 +65,7 @@ flowchart LR
   server -->|reads own saved profiles; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads conversations, spending by month, history, admin spending resolutions and exact membership receipts| postgres
+  server -->|reads conversations, spending by month, history, current accounting and exact membership receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server

@@ -8,7 +8,8 @@ import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
-import { BudgetActor, envelope, history, priceTableId, resolveEffect } from '@opencrane/models';
+import { budgets, initialiseBudgetProjection, rebuildBudgetProjection,
+  BudgetActor, envelope, history, priceTableId, resolveEffect } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditDetailSchema, auditResponseSchema, type AuditRecord } from '@opencrane/protocol';
 import { auditTrail, connectMemberFeed, members, pgDb, ProjectionRunner,
@@ -132,7 +133,9 @@ async function savedRecord(anchorId: string) {
   const detail = auditDetailSchema.parse(response.json());
   const matches = detail.records.filter(isResolution);
   expect(matches).toHaveLength(1);
-  return matches[0]!;
+  const saved = { ...matches[0]! };
+  delete saved.currentAccounting;
+  return saved;
 }
 async function racingOperators() {
   const budget = new BudgetActor(nats.store, 'test');
@@ -373,6 +376,7 @@ async function participantResolution(memberId: 'member' | 'admin') {
     for (const record of result.rows[0]!.records) {
       expect.soft(record.amountCents).toBeUndefined();
       expect.soft(record.savedOutcome).toBeUndefined();
+      expect.soft(record.currentAccounting).toBeUndefined();
     }
     const refused = await app.inject({ url: '/api/org/history', headers: headers(memberId) });
     expect(refused.statusCode).toBe(403);
@@ -491,3 +495,196 @@ async function accessAfterLoading(change: 'demotion' | 'removal' | 'slow') {
 }
 it.each(['demotion', 'removal', 'slow'] as const)(
   'checks access once after successful or failed history loads: %s', accessAfterLoading);
+
+async function accountingRecord(anchorId: string) {
+  const response = await get(`/api/org/history/${anchorId}`);
+  const detail = auditDetailSchema.parse(response.json());
+  return detail.records.find(isResolution)!;
+}
+async function accountingFixture(outcome: 'settled' | 'released' = 'settled', cents = 600) {
+  const budget = new BudgetActor(nats.store, 'test');
+  await budget.start(20000, 20000, 'group');
+  const call = { model: 'gpt-6-astra', priceTableId, computerId: canary,
+    assistantId: canary, requesterId: 'admin', conversationId: 'protected',
+    turnId: canary, threadId: canary, payingGroupId: 'group', contextDigest: '0'.repeat(64) };
+  const permitId = await budget.reserve(call, 1000);
+  const anchor = decision(permitId);
+  await append(anchor);
+  const saved = resolution(permitId, outcome, cents);
+  await append(saved);
+  await runner.run(auditTrail);
+  const logger = createLogger('accounting-audit-test', { level: 'silent' });
+  await initialiseBudgetProjection(db, nats.store, logger);
+  return { budget, permitId, anchor, saved, logger };
+}
+async function pendingAccounting(outcome: 'settled' | 'released', cents: number, stateName: string) {
+  const { budget, permitId, anchor, saved, logger } = await accountingFixture(outcome, cents);
+  const original = await savedRecord(anchor.id);
+  const pending = await accountingRecord(anchor.id);
+  expect(pending.currentAccounting).toMatchObject({ status: 'current', state: 'held',
+    heldCents: 1000, settledCents: null });
+  const position = await nats.store.head();
+  expect(pending.currentAccounting).toMatchObject({ sequence: position, generation: 0 });
+  await budget.settleRecorded(permitId, saved.id);
+  await runner.run(budgets);
+  expect((await accountingRecord(anchor.id)).currentAccounting).toMatchObject({
+    status: 'current', state: stateName, heldCents: 0, settledCents: cents });
+  expect(await savedRecord(anchor.id)).toEqual(original);
+  const state = structuredClone(budget.state);
+  const head = await nats.store.head();
+  const appends = vi.spyOn(nats.store, 'append');
+  await rebuildBudgetProjection(db, nats.store, logger, { verify: true });
+  expect((await accountingRecord(anchor.id)).currentAccounting).toMatchObject({
+    status: 'current', state: stateName, heldCents: 0, settledCents: cents });
+  expect(await savedRecord(anchor.id)).toEqual(original);
+  expect(budget.state).toEqual(state);
+  expect(appends).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(head);
+}
+it.each([['settled', 600, 'settled'], ['settled', 0, 'settled'],
+  ['released', 0, 'not_dispatched']] as const)(
+  'keeps the pending hold for %s %i, then changes only current accounting', pendingAccounting);
+
+async function conflictingAccounting() {
+  const { budget, permitId, anchor, saved, logger } = await accountingFixture();
+  const original = await savedRecord(anchor.id);
+  await budget.settleRecorded(permitId, saved.id);
+  const late = event('effect.observed', `effect-${permitId}`, {
+    permitId, outcome: 'success', costCents: 900, tool: canary, destination: canary,
+  });
+  await append(late);
+  await budget.settleRecorded(permitId, saved.id);
+  await runner.run(budgets);
+  expect((await accountingRecord(anchor.id)).currentAccounting).toMatchObject({
+    state: 'unknown', heldCents: 1000, settledCents: 900 });
+  const equal = event('effect.observed', `effect-${permitId}`, {
+    permitId, outcome: 'success', costCents: 600, tool: canary, destination: canary,
+  });
+  await append(equal);
+  await budget.settleRecorded(permitId, saved.id);
+  await runner.run(budgets);
+  const head = await nats.store.head();
+  const appends = vi.spyOn(nats.store, 'append');
+  for (const replay of [false, true]) {
+    if (replay) {
+      await rebuildAuditProjection(db, nats.store, logger);
+      await rebuildBudgetProjection(db, nats.store, logger, { verify: true });
+    }
+    expect((await accountingRecord(anchor.id)).currentAccounting).toMatchObject({
+      status: 'current', state: 'unknown', heldCents: 1000, settledCents: 900 });
+    expect(await savedRecord(anchor.id)).toEqual(original);
+  }
+  expect(appends).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(head);
+}
+it('keeps both charge and hold after late conflicting and equal evidence, including replay',
+  conflictingAccounting);
+
+async function incompleteAccounting() {
+  const { anchor, saved, permitId, logger } = await accountingFixture();
+  const original = await savedRecord(anchor.id);
+  const cases = [
+    ["UPDATE projection_checkpoints SET sequence = 0 WHERE name = 'model-budgets'", [], 'applying'],
+    ['DELETE FROM model_budget_calls WHERE silo = $1 AND reservation_id = $2',
+      ['test', permitId], 'applying'],
+    ['UPDATE model_budget_calls SET permit_id = $3 WHERE silo = $1 AND reservation_id = $2',
+      ['test', permitId, 'other'], 'unavailable'],
+    ['UPDATE model_budget_calls SET silo = $3 WHERE silo = $1 AND reservation_id = $2',
+      ['test', permitId, 'foreign'], 'applying'],
+    ["UPDATE audit_entries SET metadata = metadata - 'savedOutcome' WHERE event_id = $1",
+      [saved.id], 'absent'],
+    ["UPDATE projection_versions SET version = 1 WHERE name = 'model-budgets'", [], 'unavailable'],
+  ] as const;
+  for (const [sql, parameters, status] of cases) {
+    await db.query(sql, [...parameters]);
+    const record = await accountingRecord(anchor.id);
+    if (status === 'absent') {
+      expect(record.currentAccounting).toBeUndefined();
+    } else {
+      expect(record.currentAccounting).toMatchObject({ status });
+      expect(record.currentAccounting).not.toHaveProperty('heldCents');
+      expect(record.currentAccounting).not.toHaveProperty('settledCents');
+      expect(await savedRecord(anchor.id)).toEqual(original);
+    }
+    await rebuildBudgetProjection(db, nats.store, logger);
+    await rebuildAuditProjection(db, nats.store, logger);
+  }
+  const current = (await accountingRecord(anchor.id)).currentAccounting;
+  expect(current).toMatchObject({ status: 'current', state: 'held', heldCents: 1000,
+    settledCents: null });
+  expect(current?.status).toBe('current');
+  if (current?.status === 'current') {
+    expect(current.generation).toBeGreaterThan(0);
+  }
+  expect(await savedRecord(anchor.id)).toEqual(original);
+}
+it('withholds money for lagging, missing, foreign, malformed and old projection rows',
+  incompleteAccounting);
+
+async function accountingLoadAccess(change: 'demotion' | 'removal' | 'unchanged', fail: boolean) {
+  const { anchor, saved } = await accountingFixture();
+  const query = db.query.bind(db);
+  let changed = false;
+  async function load<Row extends Record<string, unknown>>(...args: Parameters<typeof db.query>) {
+    if (args[0].includes('model_budget_calls') && !changed) {
+      changed = true;
+      if (change !== 'unchanged') {
+        let update = event('member.role_changed', 'member-admin', {
+          memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+        });
+        if (change === 'removal') {
+          update = event('member.removed', 'member-admin', {
+            memberId: 'admin', removedBy: 'owner', reason: 'access_removed',
+          });
+        }
+        await append(update);
+      }
+      if (fail) {
+        throw new Error(canary);
+      }
+    }
+    return query<Row>(...args);
+  }
+  vi.spyOn(db, 'query').mockImplementation(load);
+  const response = await app.inject({ url: `/api/org/history/${anchor.id}`, headers: headers() });
+  expect(changed).toBe(true);
+  if (change === 'unchanged') {
+    expect(response.statusCode).toBe(200);
+    const detail = auditDetailSchema.parse(response.json());
+    const record = detail.records.find(isResolution)!;
+    expect(record.eventId).toBe(saved.id);
+    expect(record.currentAccounting).toMatchObject({ status: fail ? 'unavailable' : 'current' });
+  } else {
+    const missing = await app.inject({ url: '/api/org/history/missing', headers: headers() });
+    expect(response.statusCode).toBe(403);
+    expect(missing.statusCode).toBe(403);
+    expect(response.body).toBe(missing.body);
+    expect(response.body).toBe('{"status":"refused"}');
+  }
+  expect(response.body).not.toContain(canary);
+  expect(logs).not.toContain(canary);
+}
+it.each([['demotion', false], ['demotion', true], ['removal', false], ['removal', true],
+  ['unchanged', false], ['unchanged', true]] as const)(
+  'checks current access after accounting loading: %s, failure %s', accountingLoadAccess);
+
+async function expiredAccounting() {
+  const { anchor } = await accountingFixture();
+  const query = db.query.bind(db);
+  const deadlines: number[] = [];
+  async function load<Row extends Record<string, unknown>>(...args: Parameters<typeof db.query>) {
+    if (args[0].includes('model_budget_calls')) {
+      expect(args[2]?.deadline).toBeGreaterThan(performance.now());
+      deadlines.push(args[2]!.deadline);
+      await delay(2100);
+    }
+    return query<Row>(...args);
+  }
+  vi.spyOn(db, 'query').mockImplementation(load);
+  const record = await accountingRecord(anchor.id);
+  expect(deadlines).toHaveLength(1);
+  expect(record.currentAccounting).toMatchObject({ status: 'unavailable' });
+  expect(record.currentAccounting).not.toHaveProperty('heldCents');
+  expect(record.actor).toEqual({ kind: 'person', id: 'admin' });
+}
+it('expires accounting within its deadline before checking current read access', expiredAccounting);
