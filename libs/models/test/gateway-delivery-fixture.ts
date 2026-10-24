@@ -12,9 +12,10 @@ import type { Db } from '@opencrane/projections';
 import { startGateway } from '../src/gateway.ts';
 
 export async function acquireGatewayTestLock(session: Pick<Db, 'query'>, lockName: string) {
-  const acquired = await session.query<{ held: boolean }>(
-    'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS held', [lockName]);
-  return acquired.rows[0]!.held;
+  // Wait for PostgreSQL to release the old session's lock after its termination signal.
+  await session.query("SET lock_timeout = '2s'");
+  await session.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [lockName]);
+  return true;
 }
 
 export async function gatewayFixture() {

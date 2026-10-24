@@ -1016,6 +1016,7 @@ async function refusesLostGatewayLock() {
   const setup = await fixture();
   const before = await readFile(setup.options.configFile);
   const inode = (await stat(setup.options.configFile)).ino;
+  const position = await setup.nats.store.head();
   const proxy = await delayedDisconnect(setup.storage.queue.options.connectionString!);
   function ignoreError() {}
   const connection = connectProjectionDb(proxy.url, ignoreError);
@@ -1044,6 +1045,7 @@ async function refusesLostGatewayLock() {
     expect((await stat(setup.options.configFile)).ino).toBe(inode);
     expect(await delivery.observe()).toBeNull();
     expect(await memberReceipts(setup)).toHaveLength(0);
+    expect(await setup.nats.store.head()).toBe(position);
   } finally {
     await competitor.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lockName]);
     competitor.release();
@@ -1081,11 +1083,14 @@ async function waitsForGatewayLockRelease() {
     expect(await acquisition).toBe(true);
   } finally {
     await owner.query('SELECT pg_advisory_unlock_all()');
-    await acquisition;
-    await competitor.query('SELECT pg_advisory_unlock_all()');
-    owner.release();
-    competitor.release();
-    await storage.close();
+    try {
+      await acquisition;
+      await competitor.query('SELECT pg_advisory_unlock_all()');
+    } finally {
+      owner.release();
+      competitor.release();
+      await storage.close();
+    }
   }
 }
 it('waits for the old gateway lock to be released before continuing the test',
