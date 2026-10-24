@@ -8,7 +8,7 @@ import { budgetCallDispatchAdmittedDataSchema,
   effectObservedDataSchema, providerDispatchedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { costCents, data, emptyBudget, models, budgetStopId,
-  exceededReasons, observedPayload, checkedManagedReservation,
+  exceededReasons, observedPayload,
   type BudgetState, type ModelCall, type ModelUsage } from './state.ts';
 
 import { history } from './event-history.ts';
@@ -16,7 +16,8 @@ import { hasCallEvidence, retryReservation, type CallRetry, wasAdmitted, checkDi
   checkRootDispatch, checkRootGrant, checkRootReservation, setRootAllowance,
   stopRootAtCeiling, stopRootOnOverrun } from './root-budget.ts';
 import { readRootStopEvidence, saveRootStop, type RootStopReason } from './root-stop-evidence.ts';
-import { checkBudget as checkBudgetRefusal, recordRefusedWork, requireBudget } from './budget-refusal.ts';
+import { checkBudget as checkBudgetRefusal, recordRefusedWork,
+  requireBudget, requireReservationWrites } from './budget-refusal.ts';
 import { envelope, migrateBudgetDefault } from './budget-migration.ts';
 export { BudgetRefused } from './budget-refusal.ts';
 export { envelope, migrateBudgetDefault } from './budget-migration.ts';
@@ -64,7 +65,7 @@ export class BudgetActor {
       deadline = retryDeadline;
     }
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
-    this.requireReservationWrites(event, confirmAccess);
+    requireReservationWrites(event, this.reservationsStopped, confirmAccess);
     // Reuse replayed history; configure checks its caller's command id before this append.
     const command = { event, expectedSequence: this.sequence, historyChecked: true as const,
       ...(confirmAccess ? { checkAccess: confirmAccess } : {}),
@@ -75,7 +76,7 @@ export class BudgetActor {
       if (!canRepeat) {
         throw new Error('Budget append contention');
       }
-      this.requireReservationWrites(event, confirmAccess);
+      requireReservationWrites(event, this.reservationsStopped, confirmAccess);
       // Recheck the original access snapshot before repeating the conditional append.
       await confirmAccess?.();
       if (performance.now() >= retryDeadline) {
@@ -95,13 +96,6 @@ export class BudgetActor {
     }
     this.sequence = result.sequence;
     this.apply(event);
-  }
-  private requireReservationWrites(event: EventEnvelope, confirmAccess?: () => Promise<void>) {
-    if (event.type !== 'budget.reserved' || !this.reservationsStopped) return;
-    // Require validated call facts and the check used again after a switch-on race.
-    if (!confirmAccess || !checkedManagedReservation(event)) {
-      throw new Error('Provider setup changed');
-    }
   }
   private async canRepeatAppend(hasAccessCheck: boolean, deadline: number) {
     const subject = `budget-${this.silo}`;

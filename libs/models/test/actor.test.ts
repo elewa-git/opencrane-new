@@ -938,7 +938,7 @@ async function refusesBeforeFirstPublish(boundary: string) {
   decisionClock.mockReturnValue(started);
   onTestFinished(decisionClock.mockRestore.bind(decisionClock));
   let checks = 0;
-  async function checkAccess() {
+  function checkAccess() {
     checks += 1;
     if (boundary === 'before store' && checks === 1) {
       decisionClock.mockReturnValue(deadline);
@@ -953,6 +953,7 @@ async function refusesBeforeFirstPublish(boundary: string) {
     if (performance.now() >= deadline) {
       throw new Error('Authority snapshot expired');
     }
+    return Promise.resolve();
   }
   checkAccess.deadline = deadline;
   await expect(actor.admitDispatch(admission, checkAccess))

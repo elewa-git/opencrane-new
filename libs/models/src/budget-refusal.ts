@@ -1,9 +1,22 @@
-import { budgetStopId, budgetStopMessage, type BudgetState, type ModelCall } from './state.ts';
+import type { EventEnvelope } from '@opencrane/events';
+import { budgetStopId, budgetStopMessage, checkedManagedReservation,
+  type BudgetState, type ModelCall } from './state.ts';
 import { checkRootGrant } from './root-budget.ts';
 
 export class BudgetRefused extends Error {}
 
 type Append = (type: string, payload: unknown) => Promise<void>;
+
+export function requireReservationWrites(event: EventEnvelope, reservationsStopped: boolean,
+  confirmAccess?: () => Promise<void>) {
+  if (event.type !== 'budget.reserved' || !reservationsStopped) {
+    return;
+  }
+  // Require validated call facts and the check used again after a switch-on race.
+  if (!confirmAccess || !checkedManagedReservation(event)) {
+    throw new Error('Provider setup changed');
+  }
+}
 
 export async function recordRefusedWork(state: BudgetState, call: ModelCall, stopId: string,
   fresh: (() => Promise<void>) | undefined, append: Append) {
