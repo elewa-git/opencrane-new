@@ -4963,6 +4963,37 @@ Focused lint and server typecheck also passed after the final fixture changes.
 No dependency or business event was added. Authority and event-security tests were not edited.
 Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
 
+## Routine metadata reads
+
+`GET /api/routines/:routineId` uses the existing `memberReads` store, member lookup
+and OpenFGA binding. It returns `no-store` for successful and refused requests.
+The strict response contains only `routineId`, `name`, `ownerId`, `assistantId`,
+`payingGroupId`, `status`, `definitionRevision`, `scheduleRevision`,
+`controlRevision`, `next` and `executionAvailable: false`. `next` is the saved
+local date/time, zone, UTC instant and offset, or null. It is not a readiness claim.
+
+`loadRoutineAccess` loads exact routine history with its own ten-second deadline,
+then member and ownership history. Its one `read_metadata` check requires current
+membership, exact IAM receipts and the recorded owner or current Owner/Admin.
+A missing or legacy routine grants no permission. Reassignment defeats stale owner
+tuples. Retirement preserves permitted metadata reads. If loading fails, the read
+still checks current membership before reporting unavailable. There is no write
+check or conversation history read, and no access helper or pause command changes.
+
+Replies are 401 without a session, 403 for refused access or silo mismatch, 400
+for invalid route parameters and 503 for missing configuration or unavailable
+history/IAM. Errors return fixed status values without upstream details.
+The route selects fields explicitly and checks a strict output schema. It never
+returns instructions, encrypted definitions, custody references or private run links.
+It does not call `readApproval`, decrypt, append, start jobs, wake or dispatch.
+
+`test/routine-reads.test.ts` uses disposable NATS/OpenFGA and the real server route.
+It covers permitted readers, stale permissions, transfer, retirement, rebuilt IAM,
+removal while loading (including failed loads), unavailable services, bounded slow
+history, unrelated chat activity, strict output and private-data canaries.
+This is the first detail-read slice of #106. Lists, instruction reads, run reads,
+attention, execution and fresh-install qualification remain later work.
+
 ## Internal owner retirement (P4-24 PR 4c; Part of #106)
 
 `src/routine-retire.ts` exports `retireRoutine(store, binding, memberId, input)`.

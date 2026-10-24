@@ -49,7 +49,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, spending pages, resolution receipts, live updates, tool status and saved tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, routine metadata, spending pages, resolution receipts, live updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks access, allocates child allowances within the original time limit and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|records changes, checked owner pauses and retirements, takeover approval cancellations, access-checked control refusals, checked child recovery, activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -83,6 +83,7 @@ for current permissions and memory revisions.
 - Serves assistant desktops to people who may view them.
 - Handles members, groups, ownership, model providers, tool servers and spending settings.
 - Returns permitted change history, saved results and memory facts.
+- Returns saved routine metadata to its recorded owner and current silo owners and admins.
 - Runs the separate models process that checks AI calls, records costs and starts the gateway.
 
 An internal operation checks a child's saved activation and asks the budget actor
@@ -118,6 +119,11 @@ assistant can call. These reads check current admin rights after loading the fac
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 ## Processes it handles
+
+A person opens a routine. The server loads its saved history, then checks permission.
+It returns the name, owner, assistant, payer, status, revisions and saved next slot.
+Instructions and private run results stay private. Reading a routine starts no work;
+routine execution remains unavailable.
 
 An internal operation lets a routine's current owner save a pause when no run is active.
 It checks saved ownership and permissions, and recovers the original change after a lost
