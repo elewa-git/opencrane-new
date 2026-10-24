@@ -59,7 +59,8 @@ export class BudgetActor {
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
     this.requireReservationWrites(event, confirmAccess);
     // Reuse replayed history; configure checks its caller's command id before this append.
-    const command = { event, expectedSequence: this.sequence, historyChecked: true as const };
+    const command = { event, expectedSequence: this.sequence, historyChecked: true as const,
+      ...(confirmAccess ? { checkAccess: confirmAccess } : {}) };
     let result = await this.store.append(command);
     if (result.status === 'conflict' && await this.advancePastSwitchOn()) {
       this.requireReservationWrites(event, confirmAccess);
