@@ -48,7 +48,8 @@ export function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const segment = z.string().regex(/^[\w-]{1,200}$/u);
   segment.parse(route.serverId); segment.parse(route.connectionId);
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
-  let preparationWait: { http: { requestTimeout: string } } | undefined;
+  // Allow history to load before the separate two-second access check.
+  let preparationWait = { http: { requestTimeout: '12s' } };
   if (route.serverId === 'memory' && route.connectionId === 'server') {
     // Allow time to load recall data before its separate two-second access check.
     preparationWait = { http: { requestTimeout: '15s' } };
@@ -210,6 +211,11 @@ export async function ingestUsage(actor: BudgetActor, file: string,
 }
 
 export function gatewayUsage(line: string) {
+  // Keep configuration probes out of call usage. They send no model or tool request.
+  const configurationCheck = /\broute=default\/configuration(?=\s|$)/u;
+  if (configurationCheck.test(line)) {
+    return undefined;
+  }
   const tool = toolObservation(line);
   if (tool) return tool;
   const status = logNumber(line, 'http\\.status');

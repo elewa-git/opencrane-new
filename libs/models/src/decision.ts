@@ -228,8 +228,9 @@ export async function startDecision(
       await checkNativeCall(actor.store, binding, computer, turnToken,
         checked.sequence, started, decisionDeadline);
       const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
-      // Read managed history before starting the short access check.
-      const historyDeadline = decisionHistoryDeadline(managedRoute || memoryRoute, decisionDeadline);
+      // Finish managed-model and tool history before starting the short access check.
+      const historyFirst = managedRoute || route === 'mcp';
+      const historyDeadline = decisionHistoryDeadline(historyFirst, decisionDeadline);
       stage = 'turn_history';
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
@@ -253,7 +254,7 @@ export async function startDecision(
         memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);
       const { preparation, reads: memoryReads } = preparedMemory;
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = memoryAccessStarted(managedRoute, memory.loaded, started, preparation);
+      const accessStarted = memoryAccessStarted(historyFirst, memory.loaded, started, preparation);
       stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);

@@ -25,6 +25,31 @@ The existing conditional append and readback save one `approval.cancelled` with
 result. Used consent retains dispatch evidence and cannot retry during matching control.
 History loads do not add conversation or computer streams to access watches.
 
+## Tool history and the access deadline
+
+MCP decisions now pass `historyFirst` to the existing decision deadline helpers.
+They await conversation activity within ten seconds, then start the two-second access
+check. The gateway's MCP authorisation timeout is twelve seconds so the history wait
+can finish. Memory keeps its existing fifteen-second gateway allowance.
+Credential checks keep their existing bounds. The final send still checks live IAM
+permission and the same access deadline.
+
+`apps/server/test/integration-access-gateway.test.ts` moves the monotonic clock ahead
+2,100 ms after reading conversation history. It requires 200 and one remote request.
+This was a deterministic 403 on the unchanged decision code. The authority tests and
+volume tests are unchanged.
+
+## Gateway configuration checks and call usage
+
+`gatewayUsage` ignores the exact `default/configuration` route for every HTTP status.
+The route only confirms which configuration the running gateway serves. It sends no
+model or tool request. Previously, its successful probes became random
+`gateway.observation_recorded` events with `observation_missing`. Those writes could
+change the global event position during a conditional budget append and stop the writer.
+Ordinary model, tool and provider refusal observations keep their existing behaviour.
+`test/gateway-start.test.ts` checks 200, 401 and 403 control responses, alongside the
+existing provider JWT refusal test.
+
 ## Private gateway refusal diagnostics
 
 The decision service logs `Gateway request refused` at warn level before recording a

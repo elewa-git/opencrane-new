@@ -12,6 +12,21 @@ The existing independent pause deadline watcher is unchanged. This work adds no 
 of offline waits, reservation release, writer, lease, return or recovery command.
 Takeover remains disabled. Fresh-install qualification is NOT RUN.
 
+## Tool history before access checks
+
+MCP decisions use the same separate history deadline as managed model decisions.
+Conversation history gets ten seconds to finish before the two-second access check
+starts. The gateway allows twelve seconds for that authorisation request. Memory
+keeps its existing fifteen-second gateway allowance. Final sends
+still check the original access deadline and current IAM permissions.
+
+`test/integration-access-gateway.test.ts` advances its monotonic clock by 2,100 ms
+when conversation history finishes. The unchanged code returns 403; the corrected
+ordering allows one tool call. No sleep, request retry or longer access limit is used.
+
+[The flake investigation](../../docs/process/evidence/ci-flakes-8.md) records the
+main-branch baseline and own checks.
+
 ## Provider access during startup
 
 Provider routes return HTTP 425 with `{ status: 'access_applying' }` when the existing

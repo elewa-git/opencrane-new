@@ -507,8 +507,9 @@ async function loadsHistoryBeforeToolAccess() {
   function currentTime() {
     return originalNow() + elapsed;
   }
-  async function* slowHistory(subject: string, from?: number, deadline?: number) {
-    yield* originalRead(subject, from, deadline);
+  async function* slowHistory(...parameters: Parameters<typeof originalRead>) {
+    const subject = parameters[0];
+    yield* originalRead(...parameters);
     if (subject === 'conversation-conversation' && elapsed === 0) {
       elapsed = 2100;
     }
