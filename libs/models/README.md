@@ -15,6 +15,11 @@ settlement; paid tests and other sends still do.
 
 The AI access and spending library for OpenCrane. Its running part is the models process, a separate program whose start file lives in `apps/server` (`src/models-main.ts`). It runs beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also picks the model for each task, keeps the price list and [budgets](../../GLOSSARY.md#budget), holds the [tool rules](../../GLOSSARY.md#tool-rule-allow-ask-block) and the one-time approvals for Ask tools, and records who owns the silo.
 
+A competing call's saved refusal can overlap a budget write. The writer checks that
+its budget has not changed, then checks the original access snapshot before one
+more conditional append. This keeps a valid approval retry usable after IAM recovers.
+Changed access, an expired check or another budget writer still stops the call.
+
 A saved takeover ends unused approvals for the same computer generation and turn.
 Reading saves each cancellation once. HTTP decisions defer that save until the server
 checks ownership and current write access. Used approvals keep their dispatch evidence,
@@ -44,7 +49,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, child allowances and payer limits; rechecks state and access when unrelated activity interrupts startup saves; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
+  models -->|checks spending choices, child allowances and payer limits; rechecks state and access when unrelated activity interrupts startup saves; rechecks access and the saved budget position on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also

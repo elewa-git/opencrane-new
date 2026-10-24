@@ -63,11 +63,12 @@ export class BudgetActor {
       ...(confirmAccess ? { checkAccess: confirmAccess } : {}),
       ...(deadline === undefined ? {} : { deadline }) };
     let result = await this.store.append(command);
-    if (result.status === 'conflict' && await this.advancePastSwitchOn()) {
+    if (result.status === 'conflict' &&
+        await this.canRepeatAppend(confirmAccess !== undefined)) {
       this.requireReservationWrites(event, confirmAccess);
-      // Keep the caller's original access deadline when a spending-limit write retries.
+      // Recheck the original access snapshot before repeating the conditional append.
       await confirmAccess?.();
-      // Retry this saved hold's progress once, using the position after switch-on.
+      // Keep the same event id, time limit and global publish check.
       command.expectedSequence = this.sequence;
       result = await this.store.append(command);
     }
@@ -85,7 +86,7 @@ export class BudgetActor {
       throw new Error('Provider setup changed');
     }
   }
-  private async advancePastSwitchOn() {
+  private async canRepeatAppend(hasAccessCheck: boolean) {
     const subject = `budget-${this.silo}`;
     let position = this.sequence;
     for await (const row of this.store.readStream(subject, this.sequence + 1)) {
@@ -97,7 +98,9 @@ export class BudgetActor {
       position = row.sequence;
     }
     if (position === this.sequence) {
-      return false;
+      // Allow an unrelated write to move the global position without stopping this writer.
+      // Require the caller's original access check again; a changed budget still refuses.
+      return hasAccessCheck;
     }
     this.sequence = position;
     this.reservationsStopped = true;

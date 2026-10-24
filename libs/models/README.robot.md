@@ -2,6 +2,27 @@
 
 For people, read [README.md](README.md) first.
 
+## Budget append conflicts after unrelated events
+
+`BudgetActor.append` uses a global event position when a caller supplies an access
+check. A competing approval refusal can move that position while the budget stream
+stays unchanged. Previously, this conflict stopped the writer and left the approved
+retry consumed without a send. Ignoring configuration probes alone did not cover it.
+
+After a conflict, the actor reads budget events after its saved position. It can
+repeat once if that position is unchanged and an access check is present. It reruns
+the same access check before and inside the conditional append. The event id,
+expected budget position, global publish condition and original access deadline
+stay in force. The existing managed-provider switch-on recovery is preserved.
+A second conflict still stops the writer. Another writer's budget event still stops it.
+
+`test/actor.test.ts` uses real NATS to move the global position during the append.
+It checks admission once, revoked access, expiry at 2,001 ms, and another writer.
+`apps/server/test/integration-access-gateway.test.ts` forces the competing refusal
+to save after the global position read. One retry must send and the other must be
+refused. The approval has exactly two uses including the earlier unsent attempt.
+The remote receives one request and no money is reserved.
+
 ## Custom tool continuations
 
 `model-request.ts` accepts an optional `namespace` of at most 200 characters on

@@ -67,7 +67,7 @@ flowchart LR
   server -->|reads conversations, spending by month, history, current accounting and exact membership receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
-  runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
+  runtime -->|prepares memory calls and loaded access receipts, then checks permission and keeps the original access deadline on budget retries| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -411,7 +411,8 @@ These commands need the dev stack's settings. The full system starts with
 
 Ordinary tool calls read conversation history before checking access. Both steps
 share the original two-second request budget. Gateway configuration checks do not
-create call observations.
+create call observations. Approval retry tests also save a competing refusal during
+the budget append. The valid retry still sends once, using the original access check.
 
 Child-chat retry tests wait until NATS stores a repeated event as a new message.
 Their private test streams use a short duplicate window set before any messages

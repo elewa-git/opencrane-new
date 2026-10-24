@@ -2,6 +2,16 @@
 
 For people, read [README.md](README.md) first.
 
+## Approval retry during a competing refusal
+
+`integration-access-gateway.test.ts` keeps the IAM outage and recovery check, then
+adds a controlled overlap. The competing refusal waits until the budget append
+starts its access check, then saves before that check returns. This moves the global
+event position while leaving the budget position unchanged. Both HTTP replies must
+be `[200, 403]`, with one remote request, two approval uses including the earlier
+unsent start, and no money reserved. No sleep or HTTP retry arranges this ordering.
+The production correction is in `libs/models/src/actor.ts`.
+
 ## Takeover approval cancellation
 
 Bridge approval entries include the computer stream position in their change check.
