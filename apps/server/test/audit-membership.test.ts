@@ -106,6 +106,7 @@ const removal = saved('member.removed', 'removal', {
 const joined = saved('member.joined', 'joined', {
   memberId: 'member', role: 'member', invitationId: 'original-invitation',
   email: `${canary}@example.test`, displayName: canary,
+  identity: { issuer: config.issuerUrl, sub: `${canary}-sso-subject` },
 }, `${canary}-sso-subject`);
 const intent = saved('ownership.transferred', 'intent', {
   memberId: 'member', transferredBy: 'owner', awaitingConfirmation: true,
@@ -654,6 +655,7 @@ async function joinProgress(iamFirst: boolean) {
   expect(first.progress).toMatchObject({ readModel: 'applying', iam: 'applying' });
   const fresh = { ...joined, id: 'fresh-join', commandId: 'fresh-command', data: {
     memberId: 'member', role: 'admin', invitationId: 'fresh-invitation',
+    email: `${canary}@example.test`, displayName: canary,
   } };
   for (const event of [removal, fresh, role]) {
     await append(event);

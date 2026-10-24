@@ -4399,7 +4399,7 @@ identical after audit rebuild, while every detail GET checks progress again.
 
 Progress reports only the members table and OpenFGA. It does not report completion of
 departure cleanup. GET and replay run no removal, invitation or cleanup and append no
-event. Invitation and join progress, overview and screens remain later work.
+event. Invitation progress, overview and screens remain later work.
 
 The prerequisite for this part of #109 is #633, merged as
 `bae5d496c17e76b27ae4f9dc6af56a303b173453`. The removal cases in
@@ -4473,6 +4473,29 @@ requester and participation position, loads turn activity, then starts the short
 write check. `currentAuthority` and the final access confirmation precede the save.
 Foreign ids and removal during history loading leave the approval stream unchanged.
 The save uses the original approval position and the write check's deadline.
+
+## Exact member admission history progress
+
+`member.joined` detail uses the existing strict audit fields: `operation: join`,
+`memberId`, `role` and optional `invitationId`, alongside the event time and hashed
+command reference. Original and fresh admissions keep their own facts and receipts.
+The join command saves an SSO subject as its human principal. That subject is not a
+verified member id, so human attribution remains `unverified`; identity and email
+fields are never copied. Legacy joins without invitations acquire no reference.
+
+Each detail GET checks the exact joined event's members and OpenFGA receipts before
+one final access check, including after failed loading. Missing receipts stay applying.
+Later joins, role changes and removals cannot complete an earlier admission. Refused
+join commands and invitations have no admission progress. Invitation progress and
+departure cleanup receipts remain outside this part of #109.
+
+`test/audit-membership.test.ts` covers both receipt orders, re-admission, replay,
+legacy and forged attribution, more than 50 joins, slow loads with unrelated chat
+activity, reader removal/demotion and safe refusals after load failures. It checks
+fixed error logs without private values. Replay restores metadata, not progress;
+GET and replay never invite, accept, provision or restore grants. Existing audit
+rows need `npm run replay -- audit` after upgrading. Fresh-install qualification
+remains NOT RUN.
 
 ## Disabled agent correction and forget (Part of #97)
 

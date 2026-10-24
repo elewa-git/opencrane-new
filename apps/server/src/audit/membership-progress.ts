@@ -2,7 +2,7 @@ import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { AuditRecord } from '@opencrane/protocol';
 import { readAuditOwnershipConfirmation, type Query } from '@opencrane/projections';
 
-const operations = new Set(['remove', 'role_change', 'transfer_intent', 'appointment',
+const operations = new Set(['join', 'remove', 'role_change', 'transfer_intent', 'appointment',
   'ownership_confirmation', 'step_down']);
 
 /** Load exact owning receipts before the route makes its final access check. */
@@ -10,6 +10,10 @@ export async function readMembershipProgress(db: Query, binding: Binding, record
   const auth = memberAuthorisation(binding);
   for (const record of records) {
     if (!record.operation || !operations.has(record.operation)) {
+      continue;
+    }
+    // Keep refused join commands separate from saved admissions.
+    if (record.operation === 'join' && record.type !== 'member.joined') {
       continue;
     }
     const required = [record.eventId];
