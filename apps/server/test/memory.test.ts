@@ -2,7 +2,7 @@ import { mkdtemp, rm, readFile, writeFile, copyFile, access, rename } from 'node
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -226,14 +226,15 @@ describe('personal HTTP correction', function correctionCases() {
         ...receipt, cleanupStatus: 'completed' });
     });
 
-  it.each(['saved', 'concurrent', 'delayed', 'forgotten'] as const)('recovers a %s correction across restart without resending',
+  const recoveryModes = ['saved', 'concurrent', 'delayed', 'forgotten'] as const;
+  it.each(recoveryModes)('recovers a %s correction across restart without resending',
     async function correctionRecovery(mode) {
       const identity = await correctionTarget(`recovery-${mode}`);
       const commandId = `recovery-${mode}`;
       const saved = mode === 'saved' || mode === 'concurrent';
       const recoveryEntered = Promise.withResolvers<void>();
       const originalLock = memory.db.lock!;
-      let recoveryLock: ReturnType<typeof vi.spyOn> | undefined;
+      let recoveryLock: MockInstance<typeof originalLock> | undefined;
       let recoveryHeld = false;
       const recoveryFinished = Promise.withResolvers<void>();
       const holdRecovery: typeof originalLock = async function holdRecovery(name, work, options) {
@@ -279,7 +280,8 @@ describe('personal HTTP correction', function correctionCases() {
         await writeFile(reservationPath, expiredAttempt);
         await app.close();
         if (mode === 'concurrent') {
-          recoveryLock = vi.spyOn(memory.db, 'lock').mockImplementation(holdRecovery);
+          recoveryLock = vi.spyOn(memory.db, 'lock');
+          recoveryLock.mockImplementation(holdRecovery);
         }
         app = buildServer(config, { memory });
         await app.ready();
