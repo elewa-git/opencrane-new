@@ -251,6 +251,44 @@ async function closesIncompleteBackendRequest() {
 it('closes an unfinished backend request before removing its service fixtures',
   closesIncompleteBackendRequest);
 
+async function closesLateBackendRequest() {
+  const backend = app;
+  const address = backend.server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing backend address');
+  const originalClose = backend.close.bind(backend);
+  let pending: ReturnType<typeof request> | undefined;
+  async function closeWithLateConnection() {
+    if (backend.server.listening) {
+      const incoming = once(backend.server, 'request');
+      const options = { host: '127.0.0.1', port: address.port, path: route, method: 'POST', agent: false,
+        headers: { 'content-type': 'application/json', 'content-length': '16384' } };
+      pending = request(options);
+      function disconnected() {
+        // Expect cleanup to end this incomplete request.
+      }
+      pending.on('error', disconnected);
+      pending.flushHeaders();
+      await incoming;
+    }
+    await originalClose();
+  }
+  const closingBackend = vi.spyOn(backend, 'close').mockImplementationOnce(closeWithLateConnection);
+  const closing = close();
+  function closed() {
+    return 'closed';
+  }
+  const completed = closing.then(closed);
+  const expired = pause(2000, 'still waiting');
+  try {
+    expect(await Promise.race([completed, expired])).toBe('closed');
+  } finally {
+    pending?.destroy();
+    await closing;
+    closingBackend.mockRestore();
+  }
+}
+it('stops accepting backend connections before disconnecting clients', closesLateBackendRequest);
+
 async function closesPausedGateway() {
   const child = setup.gatewayChild();
   if (!child) {
