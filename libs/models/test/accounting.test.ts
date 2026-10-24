@@ -101,6 +101,45 @@ async function pagesMixedCalls() {
 it('pages real payers and assistants across mixed data without duplicates or foreign rows',
   pagesMixedCalls);
 
+async function boundsReservationProjectionQueries() {
+  const permitId = 'early-evidence';
+  await nats.seed([effectEvent(3, permitId)]);
+  await runner.run(budgets);
+  const modelCall = call('support', 'sales-assistant');
+  const payload = { reservationId: permitId, permitId, amountCents: 120,
+    payingGroupId: modelCall.payingGroupId, assistantId: modelCall.assistantId, modelCall };
+  const reservation = envelope('test', 'budget-test', 'budget.reserved', payload,
+    'reservation-with-early-evidence', clock);
+  await nats.seed([reservation]);
+  const position = await nats.store.head();
+  let queries = 0;
+  async function project(tx: Query) {
+    async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+      queries += 1;
+      return tx.query<Row>(sql, values);
+    }
+    await budgets.apply({ query }, reservation, position);
+  }
+  await postgres.db.transaction(project);
+  const current = await postgres.db.query<{ data: unknown }>(
+    'SELECT data FROM model_current_effects WHERE silo = $1 AND permit_id = $2',
+    ['test', permitId]);
+  expect(current.rows[0]?.data).toMatchObject({ permitId, position,
+    payingGroupId: 'support', assistantId: 'sales-assistant', heldCents: 120,
+    settledCents: null, amounts: [3, 3], budgetPosition: position,
+    effectPosition: position - 1, reservedAt: clock.toISOString() });
+  expect(await allPages()).toMatchObject([{ reservationId: permitId,
+    payingGroupId: 'support', assistantId: 'sales-assistant', heldCents: 120 }]);
+  const summary = await postgres.db.query<{ state: unknown }>(
+    'SELECT state FROM model_budgets WHERE silo = $1', ['test']);
+  expect(summary.rows[0]?.state).toMatchObject({ reservations: [{ id: permitId,
+    amountCents: 120, call: modelCall }] });
+  // Keep the new index within the three round trips already needed for a reservation.
+  expect(queries).toBeLessThanOrEqual(3);
+}
+it('projects a reservation in three queries while retaining earlier effect evidence',
+  boundsReservationProjectionQueries);
+
 async function settle(id: string, cents: number) {
   const evidence = [{ kind: 'provider_receipt', reference: 'receipt',
     digest: '0'.repeat(64), amountCents: cents }];
