@@ -1,2 +1,3 @@
 - Developers can launch the full server and models processes against one guarded local demo tool server. The test launch refuses an unowned slot or missing network injection; live qualification results are recorded separately.
 - Keep ordinary local model replies working when the computer startup check packages the stand-in as one file.
+- Send local rehearsal tool calls through the guarded demo transport, using the dispatch service's correct setting.

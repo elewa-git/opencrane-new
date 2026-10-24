@@ -13,6 +13,6 @@ export function stageBLaunchSources(server: string, models: string) {
     'remoteCatalogueWatch(db.db, events.store, silo, requireDispatchLeader, stageBNetwork);');
   const modelsSource = replaceOnce(watchSource,
     'const dispatchOptions = { acknowledged, routes:',
-    'const dispatchOptions = { network: stageBNetwork, acknowledged, routes:');
+    'const dispatchOptions = { remoteNetwork: stageBNetwork, acknowledged, routes:');
   return { server: serverSource, models: modelsSource };
 }

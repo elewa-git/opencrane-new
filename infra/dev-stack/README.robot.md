@@ -99,6 +99,9 @@ A test-only Node load hook changes exactly three arguments: server discovery,
 models catalogue watch and models dispatch. Missing or repeated matching code refuses
 launch. Every other statement stays unchanged. Product entrypoint files are not
 edited and do not import fixtures. No production setting enables this transport.
+Dispatch receives the adapter through `McpDispatchOptions.remoteNetwork`. The launch
+test evaluates the generated options and checks this property, so a misspelt setting
+cannot silently select ordinary DNS.
 
 Each process uses `test/demo-remote.ts` for the synthetic hostname's public DNS pin,
 SNI, certificate checks and fresh TLS connections. Behind TLS, the adapters forward
@@ -109,7 +112,7 @@ another. Those direct calls are test coverage, not approval qualification.
 
 The free model understands `STAGE_B_READ` and `STAGE_B_WRITE` rehearsal messages.
 It calls only the matching tool offered by Codex and refuses a missing tool. It
-returns to its normal reply after receiving a tool result, without repeating the call.
+answers with the returned quote after receiving a tool result, without repeating the call.
 The model loads the tools helper only for those rehearsal messages. Ordinary replies
 still run from the single-file model stub used by the wake Pod check.
 The evidence checker still requires original approval and dispatch records.

@@ -39,7 +39,7 @@ async function preserveProductionWiring() {
   assert.equal(sources.server.replace('discovery: stageBNetwork', 'discovery: {}'), server);
   const restoredWatch = sources.models.replace('requireDispatchLeader, stageBNetwork);',
     'requireDispatchLeader);');
-  const restoredDispatch = restoredWatch.replace('network: stageBNetwork, acknowledged,',
+  const restoredDispatch = restoredWatch.replace('remoteNetwork: stageBNetwork, acknowledged,',
     'acknowledged,');
   assert.equal(restoredDispatch, models);
 }
