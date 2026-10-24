@@ -23,5 +23,5 @@ export async function allocateChildRoot(options: Options, actor: BudgetActor, me
     turnId: saved.firstInputId, assistantId: saved.assistantId, payingGroupId: saved.payingGroupId,
     allowanceCents: saved.allowanceBoundCents, threadId: selected.threadId,
     computerId: selected.computerId, generation: selected.generation };
-  return actor.setRootAllowance(binding, firstCallBoundCents, confirmAccess);
+  return actor.setRootAllowance(binding, firstCallBoundCents, confirmAccess, fresh.deadline);
 }

@@ -2185,12 +2185,19 @@ qualification is NOT RUN.
 
 ## Root spending allowance (P4-8 PR 4, first part; #90 and #93)
 
-`BudgetActor.setRootAllowance(binding, firstCallBoundCents, fresh?)` saves the reviewed bound
+`BudgetActor.setRootAllowance(binding, firstCallBoundCents, fresh?, deadline?)` saves the reviewed bound
 only when every remaining cap and the first call fit. It derives rootId as SHA-256
 of JSON `[silo, conversationId, turnId]`. Identical retries return the saved record.
 When supplied, `fresh` runs inside the actor queue, before returning a saved root,
-and immediately before the allocation append. A switch-on append race repeats the
-same callback. The callback retains the caller's original access deadline.
+and immediately before the allocation append. Every event-store publish attempt repeats
+the same callback, including transport retries after a switch-on conflict. The append
+also receives the original absolute `performance.now()` deadline; retries never renew it.
+The shared actor append passes its supplied access callback to the event store for other
+checked budget writes too. Recovery and accounting writes without a caller access check
+keep their existing rules.
+`test/root-append-retry.test.ts` fails the first publish without saving it. It checks
+that member removal or expiry prevents a later attempt from saving a root, both directly
+and after a switch-on conflict. Deadline tests move the clock without waiting two seconds.
 `reserve` takes optional rootId as its fifth argument; rooted turns must supply it
 and match every saved identity field. The saved root position replaces admittedAt.
 `rootTotals` uses the existing reservations, BigInt sums and lifetime settlement.

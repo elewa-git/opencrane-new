@@ -55,12 +55,13 @@ export class BudgetActor {
     return result;
   }
   private async append(type: string, payload: unknown, id: string = randomUUID(),
-    confirmAccess?: () => Promise<void>) {
+    confirmAccess?: () => Promise<void>, deadline?: number) {
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
     this.requireReservationWrites(event, confirmAccess);
     // Reuse replayed history; configure checks its caller's command id before this append.
     const command = { event, expectedSequence: this.sequence, historyChecked: true as const,
-      ...(confirmAccess ? { checkAccess: confirmAccess } : {}) };
+      ...(confirmAccess ? { checkAccess: confirmAccess } : {}),
+      ...(deadline === undefined ? {} : { deadline }) };
     let result = await this.store.append(command);
     if (result.status === 'conflict' && await this.advancePastSwitchOn()) {
       this.requireReservationWrites(event, confirmAccess);
@@ -119,10 +120,11 @@ export class BudgetActor {
     };
     return this.serial(save);
   }
-  setRootAllowance(raw: unknown, firstCallBoundCents: number, fresh?: () => Promise<void>) {
+  setRootAllowance(raw: unknown, firstCallBoundCents: number, fresh?: () => Promise<void>,
+    deadline?: number) {
     const append = async (type: string, payload: unknown) => {
       await fresh?.();
-      await this.append(type, payload, undefined, fresh);
+      await this.append(type, payload, undefined, fresh, deadline);
     };
     const save = async () => {
       // Keep the original access check through queueing, including saved-root retries.

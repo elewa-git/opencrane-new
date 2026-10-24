@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { jetstream, jetstreamManager, type JetStreamClient } from '@nats-io/jetstream';
-import { TimeoutError } from '@nats-io/transport-node';
+import { JetStreamApiError, jetstream, jetstreamManager,
+  type JetStreamClient } from '@nats-io/jetstream';
 import { EventStore } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { BudgetActor, envelope, history } from '../src/index.ts';
@@ -32,6 +32,11 @@ async function close() {
 beforeEach(setup);
 afterEach(close);
 
+function publishUnavailable() {
+  const response = { code: 503, err_code: 10008, description: 'Publish unavailable' };
+  return new JetStreamApiError(response);
+}
+
 async function saveSwitchOn() {
   const payload = {
     providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0,
@@ -60,7 +65,7 @@ async function refusesRevocationDuringRetry(switchOn: boolean) {
       const event = envelope('test', 'member-alice', 'member.removed', payload);
       const command = { event, expectedSequence: 0 };
       expect((await nats.store.append(command)).status).toBe('appended');
-      throw new TimeoutError();
+      throw publishUnavailable();
     }
     return publish(...args);
   }
@@ -93,7 +98,7 @@ async function refusesRetryPastDeadline(switchOn: boolean) {
     if (!failed) {
       failed = true;
       clock.mockReturnValue(deadline + 1);
-      throw new TimeoutError();
+      throw publishUnavailable();
     }
     return publish(...args);
   }
@@ -110,3 +115,34 @@ async function refusesRetryPastDeadline(switchOn: boolean) {
 it.each([false, true])(
   'refuses a root when a failed publish passes the original deadline (switch-on: %s)',
   refusesRetryPastDeadline);
+
+async function recoversWithinDeadline(switchOn: boolean) {
+  const fresh = await authorityFence(store, performance.now(), ['member-alice']);
+  if (switchOn) await saveSwitchOn();
+  const before = await nats.store.head('budget-test');
+  const publish = client.publish.bind(client);
+  let failed = false;
+  let conflictPending = switchOn;
+  async function failOnce(...args: Parameters<typeof publish>) {
+    if (conflictPending) {
+      conflictPending = false;
+      return publish(...args);
+    }
+    if (!failed) {
+      failed = true;
+      throw publishUnavailable();
+    }
+    return publish(...args);
+  }
+  client.publish = failOnce;
+  const root = await actor.setRootAllowance(binding, 1, fresh, fresh.deadline);
+  expect(failed).toBe(true);
+  expect(root).toMatchObject(binding);
+  expect(actor.state.roots).toEqual([root]);
+  expect(await nats.store.head('budget-test')).toBe(before + 1);
+  const rows = await history(nats.store, 'budget-test', 'test');
+  expect(rows.at(-1)?.event.type).toBe('budget.root_allowance_set');
+}
+it.each([false, true])(
+  'saves one root when transport recovers within valid access (switch-on: %s)',
+  recoversWithinDeadline);

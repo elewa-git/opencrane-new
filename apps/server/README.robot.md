@@ -4316,8 +4316,10 @@ first-turn id, assistant, payer and reviewed cents. The internal caller supplies
 actual selected thread, computer, generation and model. There is no HTTP caller.
 Model grants are checked with the existing authority helper and already loaded child
 history. Only small access streams are watched. The original two-second check reaches
-the actor queue and append; incremental parent/child reads also refuse failure, retry
-and legacy closure while queued. Cross-stream ordering is still admission-time ordering.
+the actor queue and every publish attempt, with its unchanged absolute deadline;
+incremental parent/child reads also refuse failure, retry and legacy closure while queued.
+The event store checks the global log position across each access check and publish.
+Access changes saved during a failed publish are checked before the next attempt.
 
 The first-call bound uses `reservationCents` with the full supported context and the
 server's 2,000-token output cap. It never reduces the reviewed allowance to fit capacity.
