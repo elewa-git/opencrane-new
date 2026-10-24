@@ -18,9 +18,9 @@ Reading saves each cancellation once. HTTP decisions defer that save until the s
 checks ownership and current write access. Used approvals keep their dispatch evidence,
 and saved denial or expiry stays final. Failed saves leave cancellation unconfirmed.
 
-Recall loads chat history and saved memory before the gateway signs its short pass.
-The server keeps that data briefly for one call and checks current access before use.
-Correct and Forget still use their existing checks and remain disabled.
+Recall, Correct and Forget load chat history, saved memory and access receipts before
+the gateway starts its short access check. This includes every scope already loaded
+by the turn. Current permissions are still checked before use. Correct and Forget remain disabled.
 
 ## Where it fits
 
@@ -33,7 +33,7 @@ to handle AI calls.
 flowchart LR
   models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews and approval details, takeover cancellation, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
-  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; prepares recall, Correct and Forget; rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]

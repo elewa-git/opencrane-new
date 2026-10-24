@@ -1,5 +1,5 @@
 import { memberAuthorisation, grantStream, type Binding } from '@opencrane/authz';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { parseMemoryRequest } from './mcp.ts';
 import { history } from './actor.ts';
 import { data } from './state.ts';
@@ -12,15 +12,31 @@ export async function prepareMemoryReads(store: EventStore, binding: Binding,
   claims: Identity, parsed: ReturnType<typeof parseMemoryRequest>) {
   const deadline = performance.now() + 10_000;
   const activity = await prepareMemoryActivity(store, binding, claims, parsed, deadline);
-  const subjects = new Set([`ownership-${claims.silo}`, `member-${claims.requester}`,
-    `assistant-${claims.assistant}`, grantStream('mcp_server', 'memory')]);
+  const readScopes: string[] = [];
+  const writeScopes: string[] = [];
   if (parsed.input) {
-    subjects.add(grantStream('memory_read', parsed.input.scopeId));
+    readScopes.push(parsed.input.scopeId);
     if (parsed.input.operation !== 'recall') {
-      subjects.add(grantStream('memory_write', parsed.input.scopeId));
+      writeScopes.push(parsed.input.scopeId);
     }
   }
-  const rows = [...activity.conversation];
+  const applied = await prepareMemoryReceipts(store, binding, claims, activity.conversation,
+    readScopes, writeScopes, deadline);
+  return { activity, applied };
+}
+
+export async function prepareMemoryReceipts(store: EventStore, binding: Binding,
+  claims: Identity, conversation: StoredEvent[], readScopes: Iterable<string>,
+  writeScopes: Iterable<string>, deadline: number) {
+  const subjects = new Set([`ownership-${claims.silo}`, `member-${claims.requester}`,
+    `assistant-${claims.assistant}`, grantStream('mcp_server', 'memory')]);
+  for (const scopeId of readScopes) {
+    subjects.add(grantStream('memory_read', scopeId));
+  }
+  for (const scopeId of writeScopes) {
+    subjects.add(grantStream('memory_write', scopeId));
+  }
+  const rows = [...conversation];
   for (const subject of subjects) {
     const loaded = await history(store, subject, claims.silo, deadline);
     rows.push(...loaded);
@@ -48,5 +64,5 @@ export async function prepareMemoryReads(store: EventStore, binding: Binding,
     // Keep only receipt facts. Permission checks still run for the signed request.
     return Promise.resolve(receipts.get(eventId) === true);
   }
-  return { activity, applied };
+  return applied;
 }

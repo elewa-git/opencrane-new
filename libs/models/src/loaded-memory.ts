@@ -4,6 +4,7 @@ import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import type { authorityFence } from './authority.ts';
 import { foldMemoryContext, type MemoryContextState } from './memory-context-fold.ts';
 import { loadedMemoryRights, type MemoryContext } from './memory-context.ts';
+import { prepareMemoryReceipts } from './memory-preparation.ts';
 import { memoryReferences } from './memory-lineage.ts';
 
 type Identity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' |
@@ -77,6 +78,12 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding | 
       const scope = scopes.get(saved.scopeId);
       if (scope && scope.position < saved.position) throw new LoadedMemoryRefused();
     }
+    let applied: ((eventId: string) => Promise<boolean>) | undefined;
+    if (references.length > 0) {
+      if (!binding) throw new LoadedMemoryRefused();
+      applied = await prepareMemoryReceipts(store, binding, claims, conversation,
+        scopes.keys(), [], deadline);
+    }
     let rightsChecked = false;
     async function confirm(fresh: Awaited<ReturnType<typeof authorityFence>>) {
       if (references.length === 0) {
@@ -84,10 +91,11 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding | 
         return;
       }
       try {
-        if (!binding) throw new LoadedMemoryRefused();
+        if (!binding || !applied) throw new LoadedMemoryRefused();
         if (!rightsChecked) {
           for (const scope of scopes.values()) {
-            await loadedMemoryRights(store, binding, claims, scope.scopeId, fresh, conversation);
+            await loadedMemoryRights(store, binding, claims, scope.scopeId, fresh,
+              conversation, applied);
           }
           // Keep these grants on the original authority check for every later confirmation.
           rightsChecked = true;

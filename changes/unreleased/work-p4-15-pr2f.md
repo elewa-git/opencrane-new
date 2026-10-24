@@ -4,3 +4,5 @@
 - Prepare recall, Correct and Forget history and IAM receipts before signing their two-second passes.
   Refuse expired, reused or mismatched preparations and recheck current access before delivery.
   Correct and Forget recheck loaded targets and remain disabled.
+- Prepare access receipts for every already loaded memory scope before checking a later call.
+  Slow receipt reads no longer consume that call’s two-second access check.

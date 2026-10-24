@@ -338,13 +338,13 @@ export function prepareMemorySend(payload: Awaited<ReturnType<typeof prepareMemo
 
 export async function loadedMemoryRights(store: EventStore, binding: Binding,
   claims: ThreadIdentity, scopeId: string, fresh: Awaited<ReturnType<typeof authorityFence>>,
-  conversation: StoredEvent[]) {
-  const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh);
+  conversation: StoredEvent[], applied: (eventId: string) => Promise<boolean>) {
+  const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh, applied);
   await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'mcp_server', 'memory', fresh, conversation);
+    claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined, applied);
   await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scopeId,
     fresh, selected.requesterGroup);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'memory_read', scopeId, fresh, conversation);
+    claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined, applied);
 }

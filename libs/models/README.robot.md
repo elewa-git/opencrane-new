@@ -3312,3 +3312,13 @@ Their final access checks retain the original two-second deadline and grant posi
 Writes also repeat the current IAM permission queries during final validation; only
 reads use the shorter confirmation of saved positions.
 Remember and discovery continue to use their existing paths.
+
+### Loaded memory receipt preparation
+
+`prepareLoadedMemory` prepares IAM receipts for every scope already loaded by the turn,
+including scopes absent from the next tool request. It shares the receipt reader with
+`prepareMemoryReads`. `loadedMemoryRights` reuses those receipt facts for the selected
+scope, group membership and current authority checks. It still reads current saved grants
+and checks current OpenFGA permissions. New events without prepared receipts refuse.
+Preparation runs before the original two-second access check. It does not add conversation
+streams to the watched access streams. The same preparation also serves turn renewal.
