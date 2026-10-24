@@ -4856,3 +4856,57 @@ preparations are tested at the preparation route. Final-pass refusal tests obtai
 preparation before revoking access. Invalid HTTP status and malformed success replies
 must stop the helper before signing. Slow loaded-receipt tests exercise the real gateway
 with existing personal references and with another scope already loaded by the turn.
+
+### Loaded receipt and fixture checks — 24 October 2026
+
+Own result: PARTIAL. The requested fixes are implemented, but the six-run repeat gate is FAIL.
+The rebase onto fetched main `243eb0a9c3f49bb4b75a0bd1ebcf87b8cd2d4a08` finished.
+Main advanced during the test runs. Dispatch runs used source
+`a6216df3d0fbf65429cda14129124a0565fa965d`; MCP runs used source
+`41f2ddc1ed0bc8e7f3414840550341621f5ed776`. The later source only changes
+proof creation in the MCP test fixture. Product code is the same in both sources.
+
+Each file ran three times consecutively with `nice -n 10`, one worker and the supplied
+PostgreSQL test connection on port 55432. Starting load is the one-minute load average.
+
+| File | Run | Start (UTC) | Starting load | Own result |
+| --- | --- | --- | --- | --- |
+| `memory-dispatch.test.ts` | 1 | 04:28:56 | 9.08 | PASS: 94/94 |
+| `memory-dispatch.test.ts` | 2 | 04:37:06 | 7.27 | PASS: 94/94 |
+| `memory-dispatch.test.ts` | 3 | 04:49:37 | 18.86 | PASS: 94/94 |
+| `memory-mcp.test.ts` | 1 | 04:47:09 | 17.64 | FAIL: 178/179 |
+| `memory-mcp.test.ts` | 2 | 05:09:28 | 4.65 | PASS: 179/179 |
+| `memory-mcp.test.ts` | 3 | 05:27:09 | 10.56 | PASS: 179/179 |
+
+MCP run 1 timed out in the existing 120-second `prepareFixture` hook for
+`checks memory_read for member (recorded=true) before forget`. Its test body did not run.
+The other 178 tests passed, including all seven new MCP regressions. This setup failure
+is not waived. Logs, complete load averages and machine-readable test results are under
+`/tmp/p4-15-review2-memory-{mcp,dispatch}-{1,2,3}` with `.start.json`, `.log`,
+`.result.json` and `.exit` suffixes.
+
+Earlier diagnostic runs were FAIL: dispatch passed 91/94, and MCP passed 178/179.
+The three dispatch failures expected a new preparation to succeed after conversation
+closure. They now assert refusal at the preparation route and keep all accounting and
+privacy checks. Those three cases then passed. The MCP failure came from using a recall
+request to construct a proof after an event-only correction. The fixture now creates
+only the proof for its seeded loaded references. Executable calls still obtain and check
+real preparations, and the old-proof test retains its valid control and refusal assertions.
+
+A subsequent focused run passed 10/12. Two valid Forget controls returned the generic
+403 response before the negative test mutation. A temporary timing run then passed all
+three selected proof cases. The cause of the two control failures remains unconfirmed;
+they are not labelled as an established flake. Temporary timing changes were removed.
+Logs: `/tmp/p4-15-review2-proof-fixture.log` and `/tmp/p4-15-review2-control-timing.log`.
+
+Failing-first commits `9d64e52c3`, `303ccf87c` and `0e0d3242a` recorded the missing direct
+preparation, late loaded-receipt reads, and accepted refused/malformed preparation replies.
+The slow gateway cases cover Recall, Correct and Forget with loaded references, including
+a scope other than the requested one. Current permission checks and the two-second limit
+are unchanged. Correct and Forget remain disabled.
+
+Own PASS: full lint (zero errors, 26 warnings), Knip, full typecheck, event catalogue
+(153 types), changelog validation, and 558 related memory/context/proof/security tests.
+Focused lint and server typecheck also passed after the final fixture changes.
+No dependency or business event was added. Authority and event-security tests were not edited.
+Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
