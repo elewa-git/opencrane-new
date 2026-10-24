@@ -126,7 +126,7 @@ async function memoryBinding(target: typeof setup) {
   return { permitDigest: bytes.toString('hex'), backendGeneration: 'memory-instance',
     schemaDigest: memoryCatalogue.schemaDigest, policyRevision: policy.policyRevision };
 }
-async function signedRecall(target: typeof setup, overrides = {}, body = call, backend = app) {
+async function prepareRecall(target: typeof setup, body = call, backend = app) {
   const parsed = parseMemoryRequest(JSON.stringify(body), headers);
   const dispatch = await memoryBinding(target);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
@@ -139,6 +139,11 @@ async function signedRecall(target: typeof setup, overrides = {}, body = call, b
   const preparationRequest = { method: 'POST' as const, url: `${route}/prepare`, payload: body,
     headers: { ...headers, 'x-memory-context': preparing } };
   const response = await backend.inject(preparationRequest);
+  return { claims, response };
+}
+
+async function signedRecall(target: typeof setup, overrides = {}, body = call, backend = app) {
+  const { claims, response } = await prepareRecall(target, body, backend);
   expect(response.statusCode, response.body).toBe(200);
   const schema = z.strictObject({ preparationId: z.uuid(), inputGeneration: z.string().min(1) });
   const prepared = schema.parse(response.json());
@@ -624,7 +629,9 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
     await expect.soft(savedContext()).resolves.toMatchObject(expected);
     await expect.soft(readChatFacts(cold, 'test', 'conversation', 'turn'))
       .resolves.toMatchObject(expected);
-    expect((await directRecall('after-close')).json()).toEqual({ status: 'refused' });
+    const afterClose = await prepareRecall(setup, recallCall('after-close'));
+    expect(afterClose.response.statusCode).toBe(403);
+    expect(afterClose.response.json()).toEqual({ status: 'refused' });
     expect(stages).toEqual(expectedStages);
   } finally {
     spy.mockRestore();
