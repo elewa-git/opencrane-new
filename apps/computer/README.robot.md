@@ -1418,7 +1418,6 @@ history limits, and empty restart. It validates both Git and npm plans through t
 `supervisor-identity.test.ts` retains the Docker UID 1001 socket-denial check. These checks
 do not qualify native delivery, worker confinement or a live install/clone journey.
 
-
 ## Private worker input preparation — P3-20 PR 3c
 
 `prepareWorkerInput(plan, parentPath)` prepares files only. Its parent path comes from
