@@ -2125,8 +2125,11 @@ async function grantChangedDuringLineage(restore: boolean) {
       changed = true;
       const fields = { resourceType: 'memory_write', resourceId: scopeId,
         granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
-      const revoked = await setup.append(grantStream('memory_write', scopeId),
-        'grant.revoked', fields);
+      const subject = grantStream('memory_write', scopeId);
+      let revoked = envelope('test', subject, 'grant.revoked', fields);
+      if (recorded) {
+        revoked = await setup.append(subject, 'grant.revoked', fields);
+      }
       await setup.auth.handler.handle(revoked, setup.db);
       if (restore) await grantWrite('assistant');
     }
@@ -2611,7 +2614,8 @@ const changeGrants = [
 ] as const;
 it.each(changeGrants)('checks %s for %s (recorded=%s) before forget', changeGrant);
 
-async function changeGrantDuringLineage(operation: 'correct' | 'forget', restore: boolean) {
+async function changeGrantDuringLineage(operation: 'correct' | 'forget', restore: boolean,
+  recorded = true) {
   const request = await changeRequest(operation);
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const scopeSubject = `scope-${scopeId}`;
@@ -2631,8 +2635,11 @@ async function changeGrantDuringLineage(operation: 'correct' | 'forget', restore
       changed = true;
       const fields = { resourceType: 'memory_write', resourceId: scopeId,
         granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
-      const revoked = await setup.append(grantStream('memory_write', scopeId),
-        'grant.revoked', fields);
+      const subject = grantStream('memory_write', scopeId);
+      let revoked = envelope('test', subject, 'grant.revoked', fields);
+      if (recorded) {
+        revoked = await setup.append(subject, 'grant.revoked', fields);
+      }
       await setup.auth.handler.handle(revoked, setup.db);
       if (restore) {
         await grantWrite('assistant');
@@ -2669,6 +2676,12 @@ const changedLineageGrants = [
 it.each(changedLineageGrants)(
   'refuses %s when its write grant changes during the lineage read (restored=%s)',
   changeGrantDuringLineage);
+
+async function changesIamDuringLineage(operation: 'correct' | 'forget') {
+  await changeGrantDuringLineage(operation, false, false);
+}
+it.each(['correct', 'forget'] as const)(
+  'rechecks current IAM permissions during final %s validation', changesIamDuringLineage);
 
 async function preparesLineageObservation(operation: 'correct' | 'forget') {
   const originalHead = setup.nats.store.head.bind(setup.nats.store);
