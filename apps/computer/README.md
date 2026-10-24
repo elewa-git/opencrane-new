@@ -23,6 +23,7 @@ flowchart LR
   server -.->|tests use helper| computer
   computer -->|progress and results| server
   computer -->|checks command ownership| executor["socket-denied executor"]
+  computer -.-> registrations["private registrations<br/>single-use call records"]
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
 ```
@@ -41,6 +42,9 @@ flowchart LR
 - Checks fixed package and Git requests against the supervisor's record of the tool call.
   Each request must match its executor, silo, person, computer and process.
   Each valid registration can produce only one plan.
+  A private store keeps those records in memory and refuses reuse, including retries.
+  Replacing a record, losing its connection or retiring its computer generation removes
+  permission. Expiry also removes permission, and restarting restores none.
   Network execution stays disabled until the call's identity and isolation are proved.
 - Checks the image's licences before publishing it.
 

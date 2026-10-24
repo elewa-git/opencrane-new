@@ -1,0 +1,1 @@
+Keep worker registrations private, bounded and single-use. Refuse copied ownership, conflicting retries and saved handles after replacement, disconnection, expiry or retirement. Restart restores no permission. Worker execution remains disabled; native delivery and live install/clone qualification remain unproved.

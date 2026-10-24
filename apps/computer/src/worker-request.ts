@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { record } from './http.ts';
 
-type Binding = Readonly<{
+export type Binding = Readonly<{
   executorId: string;
   siloId: string;
   personId: string;
@@ -9,7 +9,7 @@ type Binding = Readonly<{
   processId: string;
   generation: number;
 }>;
-type Registration = Binding & Readonly<{
+export type Registration = Binding & Readonly<{
   threadId: string; toolCallId: string; turnId: string; operationId: string;
   operationDigest: string; host: string; port: number; expiresAt: number;
 }>;
@@ -132,7 +132,7 @@ function startFrame(frame: Buffer) {
     toolCallId: text(metadata['toolCallId']) };
 }
 
-function connectionBinding(context: Binding | undefined): Binding {
+export function connectionBinding(context: Binding | undefined): Binding {
   if (!context || !Number.isSafeInteger(context.generation)) throw new Error();
   const binding = {
     executorId: text(context.executorId),

@@ -5,8 +5,12 @@ import { workerRequest } from '../src/worker-request.ts';
 
 function fixture() {
   let time = 1000;
-  function now() { return time; }
-  function advance() { time = 2000; }
+  function now() {
+    return time;
+  }
+  function advance() {
+    time = 2000;
+  }
   const owner = { siloId: 'silo-1', computerId: 'computer-1', generation: 3 };
   const binding = { ...owner, executorId: 'executor-1', personId: 'person-1',
     processId: 'process-1' };
@@ -20,11 +24,15 @@ function fixture() {
     operationId: 'operation-1', operationDigest: hash.digest('hex'),
     host: 'github.com', port: 443, expiresAt: 2000 };
   const store = workerRegistrations(owner, now);
-  function register() { store.register(registration, ''); }
+  function register() {
+    store.register(registration, '');
+  }
   function frame() {
     return Buffer.from(`${JSON.stringify({ id: 1, method: 'process/start', params })}\n`);
   }
-  function validate() { return workerRequest(frame(), store.lookup, binding, now()); }
+  function validate() {
+    return workerRequest(frame(), store.lookup, binding, now());
+  }
   register();
   return { owner, binding, registration, params, store, register, frame, validate, advance };
 }
@@ -33,8 +41,12 @@ async function racesHandles() {
   const test = fixture();
   const first = test.store.lookup(test.binding)!;
   const second = test.store.lookup(test.binding)!;
-  function lookupFirst() { return first; }
-  function lookupSecond() { return second; }
+  function lookupFirst() {
+    return first;
+  }
+  function lookupSecond() {
+    return second;
+  }
   function claimFirst() {
     return workerRequest(test.frame(), lookupFirst, test.binding, 1000);
   }
@@ -54,9 +66,15 @@ it('allows only one plan when two saved lookup handles race to consume', racesHa
 function invalidatesHandles(reason: string) {
   const test = fixture();
   const saved = test.store.lookup(test.binding)!;
-  if (reason === 'connection loss') test.store.disconnect(test.binding.executorId);
-  if (reason === 'expiry') test.advance();
-  if (reason === 'generation retirement') test.store.dispose();
+  if (reason === 'connection loss') {
+    test.store.disconnect(test.binding.executorId);
+  }
+  if (reason === 'expiry') {
+    test.advance();
+  }
+  if (reason === 'generation retirement') {
+    test.store.dispose();
+  }
   if (reason === 'replacement') {
     const replacement = { ...test.registration, operationId: 'operation-2', toolCallId: 'call-2' };
     test.store.register(replacement, '');
@@ -96,7 +114,9 @@ function refusesCopied(field: typeof bindingFields[number]) {
   const foreign = { ...test.binding };
   Object.assign(foreign, { [field]: field === 'generation' ? 4 : 'foreign' });
   test.params.processId = foreign.processId;
-  function copied() { return workerRequest(test.frame(), test.store.lookup, foreign, 1000); }
+  function copied() {
+    return workerRequest(test.frame(), test.store.lookup, foreign, 1000);
+  }
   expect(test.store.lookup(foreign)).toBeUndefined();
   expect(copied).toThrow('worker_request_refused');
   test.params.processId = test.binding.processId;
@@ -109,12 +129,22 @@ function refusesConflict(field: string) {
   const saved = test.store.lookup(test.binding)!;
   const conflict = { ...test.registration };
   let value: string | number = 'conflict';
-  if (field === 'generation') value = 4;
-  if (field === 'port') value = 444;
-  if (field === 'expiresAt') value = 3000;
-  if (field === 'operationDigest') value = 'a'.repeat(64);
+  if (field === 'generation') {
+    value = 4;
+  }
+  if (field === 'port') {
+    value = 444;
+  }
+  if (field === 'expiresAt') {
+    value = 3000;
+  }
+  if (field === 'operationDigest') {
+    value = 'a'.repeat(64);
+  }
   Object.assign(conflict, { [field]: value });
-  function registerConflict() { test.store.register(conflict, ''); }
+  function registerConflict() {
+    test.store.register(conflict, '');
+  }
   expect(registerConflict).toThrow(/^worker_registration_refused$/);
   expect(saved.consume()).toBe(true);
 }
@@ -139,12 +169,24 @@ function preservesAfterInvalidValidation(reason: string) {
   const test = fixture();
   const frame = test.frame();
   let invalid = frame;
-  if (reason === 'frame') invalid = Buffer.alloc(65_537, 32);
-  if (reason === 'digest') test.params.argv[3] = 'https://github.com/other/repo.git';
-  if (reason === 'destination') test.params.argv[3] = 'https://example.com/other/repo.git';
-  if (reason === 'metadata') test.params.metadata.toolCallId = 'forged';
-  if (reason !== 'frame') invalid = test.frame();
-  function refused() { return workerRequest(invalid, test.store.lookup, test.binding, 1000); }
+  if (reason === 'frame') {
+    invalid = Buffer.alloc(65_537, 32);
+  }
+  if (reason === 'digest') {
+    test.params.argv[3] = 'https://github.com/other/repo.git';
+  }
+  if (reason === 'destination') {
+    test.params.argv[3] = 'https://example.com/other/repo.git';
+  }
+  if (reason === 'metadata') {
+    test.params.metadata.toolCallId = 'forged';
+  }
+  if (reason !== 'frame') {
+    invalid = test.frame();
+  }
+  function refused() {
+    return workerRequest(invalid, test.store.lookup, test.binding, 1000);
+  }
   expect(refused).toThrow(/^worker_request_refused$/);
   expect(workerRequest(frame, test.store.lookup, test.binding, 1000).execution).toBe('disabled');
 }
@@ -154,9 +196,13 @@ it.each(['frame', 'digest', 'destination', 'metadata'])(
 function rechecksClockAtClaim() {
   const test = fixture();
   const saved = test.store.lookup(test.binding)!;
-  function staleLookup() { return saved; }
+  function staleLookup() {
+    return saved;
+  }
   test.advance();
-  function validate() { return workerRequest(test.frame(), staleLookup, test.binding, 1000); }
+  function validate() {
+    return workerRequest(test.frame(), staleLookup, test.binding, 1000);
+  }
   expect(validate).toThrow('worker_request_refused');
   expect(test.store.lookup(test.binding)).toBeUndefined();
   expect(test.register).toThrow(/^worker_registration_refused$/);
@@ -168,9 +214,15 @@ function boundsRegistration(kind: string) {
   const test = fixture();
   const replacement = { ...test.registration, operationId: 'operation-2' };
   let input = '';
-  if (kind === 'input') input = 'é'.repeat(32_769);
-  if (kind === 'record') replacement.threadId = 'é'.repeat(32_769);
-  function oversized() { test.store.register(replacement, input); }
+  if (kind === 'input') {
+    input = 'é'.repeat(32_769);
+  }
+  if (kind === 'record') {
+    replacement.threadId = 'é'.repeat(32_769);
+  }
+  function oversized() {
+    test.store.register(replacement, input);
+  }
   expect(oversized).toThrow(/^worker_registration_refused$/);
   expect(test.validate().execution).toBe('disabled');
 }
@@ -182,7 +234,9 @@ function boundsInputAndConflict() {
   const input = 'é'.repeat(32_768);
   test.store.register(replacement, input);
   expect(test.store.lookup(test.binding)?.input).toBe(input);
-  function conflict() { test.store.register(replacement, 'private-canary'); }
+  function conflict() {
+    test.store.register(replacement, 'private-canary');
+  }
   expect(conflict).toThrow(/^worker_registration_refused$/);
   expect(test.store.lookup(test.binding)?.input).toBe(input);
 }
@@ -194,7 +248,9 @@ function boundsOperations() {
   const third = { ...test.registration, executorId: 'executor-3', operationId: 'operation-3' };
   test.store.register(second, '');
   const saved = test.store.lookup(test.binding)!;
-  function extra() { test.store.register(third, ''); }
+  function extra() {
+    test.store.register(third, '');
+  }
   expect(extra).toThrow(/^worker_registration_refused$/);
   expect(saved.consume()).toBe(true);
   expect(extra).toThrow(/^worker_registration_refused$/);
@@ -223,6 +279,48 @@ function boundsReplayHistory() {
 }
 it('bounds replay history and refuses new work instead of forgetting previous registrations',
   boundsReplayHistory);
+
+function releasesExpiredRecords() {
+  const test = fixture();
+  const second = { ...test.registration, executorId: 'executor-2', operationId: 'operation-2' };
+  test.store.register(second, '');
+  const saved = test.store.lookup(second)!;
+  test.advance();
+  const next = { ...second, operationId: 'operation-3', expiresAt: 3000 };
+  test.store.register(next, '');
+  function revive() {
+    const changedExpiry = { ...second, expiresAt: 3000 };
+    test.store.register(changedExpiry, '');
+  }
+  expect(revive).toThrow(/^worker_registration_refused$/);
+  expect(saved.consume()).toBe(false);
+  expect(test.store.lookup(next)?.consume()).toBe(true);
+}
+it('releases expired slots but refuses renewed expiry for a previous operation', releasesExpiredRecords);
+
+function validatesInstall() {
+  const test = fixture();
+  test.params.argv = ['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund'];
+  const input = JSON.stringify({ lockfileVersion: 3, packages: {
+    '': { dependencies: { demo: '1.2.3' } },
+    'node_modules/demo': { version: '1.2.3',
+      resolved: 'https://registry.npmjs.org/demo/-/demo-1.2.3.tgz',
+      integrity: `sha512-${Buffer.alloc(64, 1).toString('base64')}` },
+  } });
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([test.params.argv, test.params.cwd, input]));
+  const registration = { ...test.registration, operationId: 'operation-2',
+    host: 'registry.npmjs.org', operationDigest: hash.digest('hex') };
+  test.store.register(registration, input);
+  const json = test.frame().toString('utf8').trimEnd();
+  const frame = Buffer.from(`${json.padEnd(65_535, ' ')}\n`);
+  const plan = workerRequest(frame, test.store.lookup, test.binding, 1000);
+  expect(plan.identity).toEqual(registration);
+  expect(plan.argv[0]).toBe('/usr/bin/npm');
+  expect(plan.execution).toBe('disabled');
+  expect(test.validate).toThrow('worker_request_refused');
+}
+it('validates a maximum-size npm frame with the real store and its private input', validatesInstall);
 
 function disposesWithoutLogging() {
   const test = fixture();
