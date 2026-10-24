@@ -3216,6 +3216,105 @@ and 900,000 milliseconds and retry an unknown page after an intervening success.
 Row 3 is complete apart from live qualification. Live Kubernetes, provider and
 fresh-install qualification: NOT RUN. Next for #49 is row 4, company opt-in and selection.
 
+### Cleanup checks under load, 24 October 2026
+
+Source: `0262b63d5eec38dbc95b8a8a6cd0e220d6c739ed`. Run in this branch's worktree after `npm ci`, with
+Node 22.23.3, real NATS fixtures and disposable PostgreSQL 17.6 databases.
+The PostgreSQL container uses a dynamically assigned loopback port and is removed
+with its volume after testing. A fresh application install was not run.
+
+PASS: full lint, typecheck, Knip, changelog checks and the event catalogue (153 types).
+PASS: event security rules (438 tests); their file and event contracts stayed unchanged.
+PASS: seven focused cases covering paging, history failure, slow connections and contention.
+The full-file runs below also cover the requirement to run changed tests twice.
+
+Expected FAIL: the three failing-first commits reproduce two slow lock acquisitions
+(`f4a1d3e42`), one slow acquisition before idle cleanup (`8170e9aac`), and two
+unavailable history reads during paging (`00eca82f1`). The paging failures both show
+25 examined and 23 deleted. The original main case finished in 707 ms.
+It changed deletion counts, not examination counts. Candidate names are unique and sorted.
+All saves finish before scanning. Retention after a dependency refusal changes deletion counts.
+Production retains that behaviour and its deadlines.
+
+Earlier attempts stay recorded below. Waiting for the real lock fixed the idle
+cleanup failure found during the first parallel run. A focused contention check then
+failed before its holder acquired a lock; the final fixture waits for the holder and
+keeps the production deadline on its competitor. The later paging failure at `e112f77ae`
+remained FAIL. Temporary diagnostics did not capture which dependency caused those
+refusals. A separate controlled history failure reproduced the same count mismatch.
+The final paging fixture loads its confirmed history before scanning.
+An initial lint check rejected the async history fixture; the final source fixes it.
+
+| Earlier attempt | Source | Run | Target | Companion |
+| --- | --- | --- | --- | --- |
+| Initial checks | `eb45b4c35` | 01 | PASS 122 passed, 0 failed | PASS 27 passed, 0 failed |
+| Initial checks | `eb45b4c35` | 02 | PASS 122 passed, 0 failed | PASS 27 passed, 0 failed |
+| Initial checks | `eb45b4c35` | 03 | PASS 122 passed, 0 failed | PASS 27 passed, 0 failed |
+| Initial checks | `eb45b4c35` | 04 | PASS 122 passed, 0 failed | PASS 27 passed, 0 failed |
+| Initial checks | `eb45b4c35` | 05 | PASS 122 passed, 0 failed | PASS 27 passed, 0 failed |
+| Initial checks | `eb45b4c35` | 06 | PASS 122 passed, 0 failed | PASS 27 passed, 0 failed |
+| First parallel run | `eb45b4c35` | 01 | PASS 122 passed, 0 failed | FAIL 121 passed, 1 failed |
+| Shared lock wait | `4758bdd0e` | 01 | PASS 123 passed, 0 failed | PASS 123 passed, 0 failed |
+| After waiting for locks | `e112f77ae` | 01 | PASS 123 passed, 0 failed | PASS 123 passed, 0 failed |
+| After waiting for locks | `e112f77ae` | 02 | PASS 123 passed, 0 failed | PASS 123 passed, 0 failed |
+| After waiting for locks | `e112f77ae` | 03 | PASS 123 passed, 0 failed | PASS 123 passed, 0 failed |
+| After waiting for locks | `e112f77ae` | 04 | PASS 123 passed, 0 failed | PASS 123 passed, 0 failed |
+| After waiting for locks | `e112f77ae` | 05 | PASS 123 passed, 0 failed | PASS 123 passed, 0 failed |
+| After waiting for locks | `e112f77ae` | 06 | FAIL 122 passed, 1 failed | PASS 123 passed, 0 failed |
+| Saved history | `266c8f6a4` | 01 | PASS 124 passed, 0 failed | PASS 124 passed, 0 failed |
+
+The initial companion ran `bearer-connections.test.ts`. Every later companion
+ran the full `connection-custody.test.ts` file alongside the target.
+Twelve targeted diagnostic runs passed three paging cases each; both diagnostic
+full-file companions passed 123 tests. Those runs did not replace a failed result.
+
+The final sequence starts a fresh target and companion process together for each row.
+Both run the full file with `nice -n 10`, one Vitest worker and separate service fixtures:
+
+```sh
+nice -n 10 node node_modules/vitest/vitest.mjs run \
+  libs/models/test/connection-custody.test.ts --maxWorkers=1 \
+  --reporter=default --reporter=json --outputFile.json=<per-run-file>
+```
+
+| Run | Target | Companion | Target elapsed seconds |
+| --- | --- | --- | ---: |
+| 01 | PASS 124/124 | PASS 124/124 | 187.01 |
+| 02 | PASS 124/124 | PASS 124/124 | 169.69 |
+| 03 | PASS 124/124 | PASS 124/124 | 190.89 |
+| 04 | PASS 124/124 | PASS 124/124 | 207.55 |
+| 05 | PASS 124/124 | PASS 124/124 | 145.19 |
+| 06 | PASS 124/124 | PASS 124/124 | 115.06 |
+| 07 | PASS 124/124 | PASS 124/124 | 116.92 |
+| 08 | PASS 124/124 | PASS 124/124 | 113.63 |
+| 09 | PASS 124/124 | PASS 124/124 | 163.21 |
+| 10 | PASS 124/124 | PASS 124/124 | 173.48 |
+| 11 | PASS 124/124 | PASS 124/124 | 139.27 |
+| 12 | PASS 124/124 | PASS 124/124 | 143.56 |
+| 13 | PASS 124/124 | PASS 124/124 | 142.23 |
+| 14 | PASS 124/124 | PASS 124/124 | 144.19 |
+| 15 | PASS 124/124 | PASS 124/124 | 194.92 |
+| 16 | PASS 124/124 | PASS 124/124 | 174.01 |
+| 17 | PASS 124/124 | PASS 124/124 | 131.61 |
+| 18 | PASS 124/124 | PASS 124/124 | 126.6 |
+| 19 | PASS 124/124 | PASS 124/124 | 111.01 |
+| 20 | PASS 124/124 | PASS 124/124 | 149.38 |
+| 21 | PASS 124/124 | PASS 124/124 | 167.56 |
+| 22 | PASS 124/124 | PASS 124/124 | 151.94 |
+| 23 | PASS 124/124 | PASS 124/124 | 150.08 |
+| 24 | PASS 124/124 | PASS 124/124 | 127.72 |
+| 25 | PASS 124/124 | PASS 124/124 | 139.19 |
+| 26 | PASS 124/124 | PASS 124/124 | 148.35 |
+| 27 | PASS 124/124 | PASS 124/124 | 174.13 |
+| 28 | PASS 124/124 | PASS 124/124 | 187.47 |
+| 29 | PASS 124/124 | PASS 124/124 | 172.81 |
+| 30 | PASS 124/124 | PASS 124/124 | 146.7 |
+
+Logs, JSON results and CSV rows for every attempt are under `/tmp/ci-flakes-10/`.
+The final 30 pairs are in `final-30/`. Earlier failures remain FAIL for their recorded source.
+NOT RUN: the full root suite and fresh-install journeys, as scoped. CI is left to the
+orchestrator after the draft pull request is opened.
+
 ## Declared tool evidence for mode changes
 
 `setToolPolicy` requires both explicit zero cost and saved approval details for Allow

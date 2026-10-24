@@ -1702,7 +1702,7 @@ async function withSlowConnections(work: () => Promise<void>, count = 2) {
   }
   function acquired() {
     if (slowConnections < count) {
-      // Model two connections arriving after the production acquisition deadline.
+      // Model connections arriving after the production acquisition deadline.
       // Advance the clock instead of sleeping or depending on machine load.
       elapsed += 101;
       slowConnections += 1;
