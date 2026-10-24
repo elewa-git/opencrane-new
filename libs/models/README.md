@@ -39,7 +39,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, child allowances and payer limits; rechecks access on publish retries; records tool starts, remote outcomes and spending; reads spending calls in pages by original UTC month and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, spending call rows and read tables"]
+  models -->|checks spending choices, child allowances and payer limits; rechecks access on publish retries; records tool starts, remote outcomes and spending; reads spending calls in pages by original UTC month and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -141,9 +141,9 @@ remains switched off. Crash recovery and live qualification are still pending.
 Tool mode changes require the server’s declared zero cost and approval details
 for both Allow and Ask. Admin review locks those values before a tool can be enabled.
 
-Background workers copy saved events into spending read tables. Internal readers can
-page through effect records without loading the whole history. Rebuilding these tables
-leaves the original budget decisions intact and makes no outside calls.
+Background workers copy saved events into spending read tables. The server can
+page through effect records for owners and admins without loading the whole history.
+Rebuilding these tables leaves the original budget decisions intact and makes no outside calls.
 
 A call first needs permission and enough budget. The model or tool outcome can then
 settle its held money. A saved resolution stays separate from an observed outcome;

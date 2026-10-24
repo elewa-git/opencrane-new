@@ -49,9 +49,9 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, routine metadata, spending pages, resolution receipts, live updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks access before routine history errors, allocates child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, checked owner pauses and retirements, takeover cancellations, access-checked refusals and child recovery, activations, retries and hand-offs| nats["NATS<br/>the event log"]
+  web["apps/web<br/>the website"] -->|requests, routine metadata, spending and saved effect pages, receipts, live updates and tool choices| server["apps/server<br/>the back end"]
+  server -.->|checks access before history errors, handles child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -->|records changes, checked owner pauses and retirements, child recovery, cancellations, activations, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres
@@ -343,6 +343,10 @@ Owners and admins can read small pages of recorded call spending. The reply keep
 money held separate from money charged, with the original dates and safe references.
 They can select the UTC month when money was first held for each call. Late charges
 stay in that month. Older open holds still reduce current spending capacity.
+
+Owners and admins can also read separate saved effect observations, uncertainty
+and resolutions. These records do not prove an outside action happened or release
+held money.
 The server checks current finance access after loading. A read starts no work.
 
 The server renews computer passes through authenticated Kubernetes access as root.

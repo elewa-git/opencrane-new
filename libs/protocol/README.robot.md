@@ -382,3 +382,11 @@ Removal uses the existing optional `memberId`, fixed `reason` and `progress` fie
 `operation: remove`. No new field name is introduced. Both current receipts prove only
 that this exact removal reached the members table and permission service. They do not
 prove departure cleanup finished; cleanup state is absent from this contract.
+
+## Saved effect spending pages
+
+`spendingEffectsQuerySchema` and `spendingEffectsResponseSchema` define the strict
+[saved effect API](../../apps/server/README.robot.md#bounded-saved-effect-spending).
+Queries accept only a limit, optional permit and continuation. Replies contain safe
+saved event fields, integer euro cents, checkpoint, generation and next page.
+Records stay separate from current effect state. Private evidence and usage are excluded.
