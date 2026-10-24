@@ -29,7 +29,8 @@ function write(line: string) { logs.push(line); }
 function memberId(_silo: string, _issuer: string, sub: string) { return Promise.resolve(sub); }
 function record(id: string, owner = 'alice', type = 'routine.created') {
   const saved = routine(type, owner, `${type}-${id}`);
-  const data = { ...saved.data as object, routineId: id };
+  if (!saved.data || typeof saved.data !== 'object') throw new Error('Missing fixture data');
+  const data = { ...saved.data, routineId: id };
   return { ...saved, subject: `routine-${id}`, data };
 }
 async function save(saved: EventEnvelope, iam = true, project = true) {
@@ -81,6 +82,7 @@ async function page(query = '', actor = 'alice') {
 function identity(row: Record<string, unknown>) { return row['routineId']; }
 async function boundedPages() {
   const expected = ['retired'];
+  await save({ ...record('foreign'), silo: 'foreign' }, false);
   await save(record('retired'));
   await save(record('retired', 'alice', 'routine.retired'));
   for (let index = 0; index < 55; index++) {
@@ -92,6 +94,21 @@ async function boundedPages() {
   const position = await nats.store.head();
   const append = vi.spyOn(nats.store, 'append');
   const approval = vi.spyOn(models, 'readApproval');
+  const originalQuery = db.query.bind(db);
+  async function boundedQuery<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+    options?: { deadline: number }) {
+    const result = await originalQuery<Row>(sql, values, options);
+    if (sql.includes('FROM routines WHERE')) {
+      expect(result.rows.length).toBeLessThanOrEqual(Number(values?.at(-1)));
+      expect(result.rows.length).toBeLessThanOrEqual(51);
+      for (const row of result.rows) {
+        expect(row['ownerId']).toBe('alice');
+        expect(row).not.toHaveProperty('state');
+      }
+    }
+    return result;
+  }
+  vi.spyOn(db, 'query').mockImplementation(boundedQuery);
   const read = nats.store.readStream.bind(nats.store);
   async function* limited(subject: string, from?: number, deadline?: number) {
     expect(subject).not.toMatch(/conversation|\*/u);
@@ -132,7 +149,10 @@ async function filteredPages() {
   expect(last.rows.map(identity)).toEqual(['last']);
   expect(last.next).toBeNull();
   await save(record('denied-end'), false);
-  const end = await page('limit=1&continuation=' + (await page('limit=1')).next);
+  const refreshed = await page('limit=3');
+  const end = await page(`limit=3&continuation=${refreshed.next}`);
+  expect(end.rows).toEqual([]);
+  expect(end.next).toBeNull();
   expect(end.complete).toBe(false);
 }
 it('retains continuation on an empty filtered intermediate page', filteredPages);
@@ -197,14 +217,25 @@ it('bounds a locked candidate query', locked, 15_000);
 async function duringPage(kind: string) {
   await save(record('orders'));
   const original = db.query.bind(db);
+  let progressReads = 0;
   async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
     options?: { deadline: number }) {
     const result = await original<Row>(sql, values, options);
+    if (sql.includes('JOIN projection_generations')) {
+      progressReads += 1;
+      if (progressReads === 2 && kind === 'remove-final') {
+        await save(event('removed', 'member-alice', 'member.removed'), false, false);
+        throw new Error('private-canary');
+      }
+      if (progressReads === 2 && kind === 'reassign-final') {
+        await save(record('orders', 'bob', 'routine.reassigned'), false, false);
+      }
+    }
     if (sql.includes('FROM routines')) {
       expect(values).toEqual(['test', 'alice', 0, 21]);
       expect(result.rows.length).toBeLessThanOrEqual(21);
       if (kind === 'reassign') await save(record('orders', 'bob', 'routine.reassigned'), false, false);
-      if (kind.startsWith('remove')) {
+      if (kind === 'remove' || kind === 'remove-failed') {
         await save(event('removed', 'member-alice', 'member.removed'), false, false);
       }
       if (kind === 'remove-failed') throw new Error('private-canary');
@@ -215,11 +246,11 @@ async function duringPage(kind: string) {
   vi.spyOn(db, 'query').mockImplementation(query);
   const response = await request();
   const expected: Record<string, number> = { reassign: 409, remove: 403,
-    'remove-failed': 403, rebuild: 409 };
+    'remove-failed': 403, rebuild: 409, 'remove-final': 403, 'reassign-final': 409 };
   expect(response.statusCode).toBe(expected[kind]);
   expect(response.body + logs.join('')).not.toMatch(/Daily orders|private-canary/u);
 }
-it.each(['reassign', 'remove', 'remove-failed', 'rebuild'])(
+it.each(['reassign', 'remove', 'remove-failed', 'rebuild', 'remove-final', 'reassign-final'])(
   'suppresses protected rows after %s during loading with stale IAM', duringPage);
 async function slowHistory() {
   await save(record('orders'));
@@ -232,24 +263,46 @@ async function slowHistory() {
     expect(subject).toMatch(/^(routine-orders|member-alice|ownership-test)$/u);
     expect(deadline).toBeGreaterThan(clock());
     yield* read(subject, from, deadline);
-    if (subject === 'routine-orders') elapsed += 3000;
+    if (subject === 'routine-orders') {
+      await save(event('busy-chat', 'conversation-busy'), false, false);
+      elapsed += 3000;
+    }
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
   expect((await page()).rows).toHaveLength(1);
 }
 it('keeps access after slow preparatory history without reading chats', slowHistory);
-async function reassignedAdmin() {
+async function reassignedAdmin(changingDuring: string) {
   await save(record('orders', 'admin'));
+  await save(record('later', 'admin'));
+  expect((await page('', 'admin')).rows.map(identity)).toEqual(['orders', 'later']);
+  expect((await page()).rows).toEqual([]);
   const read = nats.store.readStream.bind(nats.store);
   async function* replace(subject: string, from?: number, deadline?: number) {
-    if (subject === 'routine-orders') {
+    if (subject === `routine-${changingDuring}`) {
       await save(record('orders', 'bob', 'routine.reassigned'), false, false);
     }
     yield* read(subject, from, deadline);
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(replace);
-  const result = await page('', 'admin');
-  expect(result.rows).toEqual([]);
-  expect(result.complete).toBe(false);
+  const response = await request('', 'admin');
+  expect(response.statusCode).toBe(409);
+  expect(response.body).not.toContain('Daily orders');
 }
-it('does not use admin rights to return a routine reassigned during history loading', reassignedAdmin);
+it.each(['orders', 'later'])(
+  'suppresses an admin-owned routine reassigned while loading %s history', reassignedAdmin);
+
+async function failedHistory() {
+  await save(record('orders'));
+  const read = nats.store.readStream.bind(nats.store);
+  async function* fail(subject: string, from?: number, deadline?: number) {
+    if (subject === 'routine-orders') throw new Error('private-canary');
+    yield* read(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(fail);
+  expect((await request()).json()).toEqual({ status: 'unavailable' });
+  await save(event('removed', 'member-alice', 'member.removed'), false, false);
+  expect((await request()).json()).toEqual({ status: 'refused' });
+  expect(logs.join('')).not.toContain('private-canary');
+}
+it('checks current access after routine history fails without exposing the cause', failedHistory);

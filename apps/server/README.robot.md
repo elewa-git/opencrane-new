@@ -5160,7 +5160,7 @@ and remains readable before and after a verified rebuild. Changed run bindings
 still prevent access.
 Prerequisites: #647 squash `1e4696d3bfe2cce7cc06bd3059c3a1cf5c803b65` and
 fixed #652 squash `a474d9ad5dc931b0c41a3ab291c96da1ca9171f7`. The latter's failed-history
-privacy check remains in place. Lists, attention, private results and execution
+privacy check remains in place. Admin lists, attention, private results and execution
 remain later work. Fresh-install qualification: NOT RUN.
 
 ## Approval reply evidence
@@ -5218,3 +5218,42 @@ slow history, unrelated chats, strict output, private canaries and no appended e
 Repeated reads rebuild the same exact history. Instance routes and their change-status
 route are unchanged. Lists, admin/status reads, writes, screens and live qualification
 remain later work.
+
+## Bounded own routine list
+
+`GET /api/routines?view=mine` returns no-store pages from `GroupOptions.db`.
+The session supplies the owner; no owner parameter is accepted, even for admins.
+The strict query accepts `limit` (20 by default, 1–50) and `continuation`.
+Rows use the exact safe metadata schema from the detail reader, including retired
+routines and `executionAvailable: false`. Instructions, results, custody and private
+chat links are excluded from SQL selection and replies.
+
+The response has `rows`, nullable `next`, `complete`, `sequence`, `generation` and
+`executionAvailable: false`. Each request selects at most `limit + 1` owner-indexed
+candidates, then loads at most `limit` routine histories. Denied candidates are omitted.
+`next` advances past the last candidate, including denied candidates. An empty page
+can therefore have a continuation. `complete` is true only when this page exhausts
+the candidates without filtering any. False with null `next` means the final page
+was filtered; it must not be presented as a proven empty inventory.
+
+The signed continuation binds route, silo, member, view, limit, projection generation
+and the latest routine event position. Any routine event conservatively restarts
+paging; chat activity does not. The position lookup reads no stream history.
+Changed or foreign continuations and rebuilds return 409 `{status: 'restart'}`.
+Missing, lagging or locked projections return 503 `{status: 'unavailable'}`.
+The checkpoint must cover the captured routine position, including on an empty page.
+
+Page loading has a ten-second deadline. Routine histories have their existing
+separate ten-second bounds. A final generation and routine-position check has a
+two-second read deadline. These reads use no write authority window. Each candidate's
+`read_metadata` permission is checked once after loading. Current membership is checked
+after successful or failed loading, including empty pages. Access refusal takes
+precedence over page errors. Reassignment during loading restarts the page without
+returning any protected rows. Admin permission never expands the owner filter.
+GET and replay append nothing and do not decrypt, read approvals, schedule or dispatch.
+
+`test/routine-list.test.ts` uses disposable PostgreSQL, NATS and OpenFGA. The preceding
+run reader, including the older-run terminal retry fix, landed in #661 as
+`c350940aac71e8851f9c076d176653737027e3f2`. Detail and run routes keep their access-first
+errors. Admin lists, attention, commands and execution remain later work.
+Fresh-install qualification: NOT RUN.
