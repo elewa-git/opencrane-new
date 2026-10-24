@@ -12,6 +12,42 @@ export const resolutionCommandSchema = z.object({ commandId: id, expectedSequenc
   outcome: z.enum(['settled', 'released']), settledCents: z.int().nonnegative(),
   evidence: effectResolvedDataSchema.shape.evidence }).strict();
 
+const resolutionReceiptSchema = z.object({
+  changeRef: id, eventId: id, position: z.int().positive(), time: z.iso.datetime(),
+  resolvedBy: id, outcome: z.enum(['settled', 'released']), settledCents: z.int().nonnegative(),
+}).strict();
+
+/** Read the saved resolution only; it does not prove settlement or external success. */
+export async function readEffectChange(store: EventStore, silo: string, permitId: string,
+  changeRef: string) {
+  id.parse(permitId);
+  id.parse(changeRef);
+  const deadline = performance.now() + 10_000;
+  const subject = `effect-${permitId}`;
+  const rows = await history(store, subject, silo, deadline);
+  if (performance.now() >= deadline) throw new Error('Effect read expired');
+  function matchesChange(row: StoredEvent) {
+    return row.event.commandId === changeRef;
+  }
+  const matches = rows.filter(matchesChange);
+  if (!matches.length) return undefined;
+  // Refuse ambiguous or untrusted records instead of confirming another caller's result.
+  const saved = matches[0]!;
+  const event = saved.event;
+  if (matches.length !== 1 || event.type !== 'effect.resolved' || event.subject !== subject ||
+      event.source !== 'opencrane-server' || event.principal?.kind !== 'human') {
+    throw new Error('Invalid resolution receipt');
+  }
+  const data = effectResolvedDataSchema.parse(event.data);
+  if (data.permitId !== permitId || data.reservationId !== permitId ||
+      data.resolvedBy !== event.principal.id) {
+    throw new Error('Invalid resolution receipt');
+  }
+  const receipt = { changeRef, eventId: event.id, position: saved.sequence, time: event.time,
+    resolvedBy: data.resolvedBy, outcome: data.outcome, settledCents: data.settledCents };
+  return resolutionReceiptSchema.parse(receipt);
+}
+
 async function reservation(store: EventStore, silo: string, permitId: string, deadline: number) {
   const state = emptyBudget();
   const rows = await history(store, `budget-${silo}`, silo, deadline);

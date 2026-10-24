@@ -34,7 +34,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, spending pages, resumable live updates, tool status and integration facts| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, spending pages, resolution receipts, resumable live updates, tool status and integration facts| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|records changes, checked owner pauses, control refusals, child activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -119,6 +119,11 @@ A lost spending-limit reply can be checked by its original command id. Owners an
 admins see the saved amount and stop status. The original caller can still see a
 minimal confirmation after losing that role, while they remain a member.
 The check saves nothing and makes no AI call.
+
+Owners and admins can also recover an original resolution receipt after a lost reply.
+It names the saved change and resolver without claiming that settlement or an outside
+action succeeded. Losing the owner or admin role removes access to this receipt.
+A missing result never means that repeating the resolution is safe.
 
 A member can review a child chat from their own group message, then save its first input.
 The requester can retry a saved start failure, up to three attempts. A background worker

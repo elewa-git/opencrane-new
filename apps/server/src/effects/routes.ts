@@ -3,12 +3,15 @@ import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
-import { authorityFence, currentMembership, listEffects, readEffect, resolveEffect } from '@opencrane/models';
+import { authorityFence, currentMembership, listEffects, MemberAccessRefused,
+  readActiveMember, readEffect, readEffectChange, resolveEffect } from '@opencrane/models';
 import type { EventStore } from '@opencrane/event-store';
 import type { IntegrationOptions } from '../integrations/routes.ts';
 import { sessionFor } from '../members/routes.ts';
 
 type EffectOptions = IntegrationOptions & { store: EventStore };
+const changeId = z.string().regex(/^[\w-]{1,200}$/u);
+const effectChangeParamsSchema = z.object({ permitId: changeId, commandId: changeId }).strict();
 export function registerEffectRoutes(app: FastifyInstance, config: AuthConfig, options?: IntegrationOptions) {
   void app.register((scope, _options, done) => {
     scope.removeContentTypeParser('application/json');
@@ -18,7 +21,9 @@ export function registerEffectRoutes(app: FastifyInstance, config: AuthConfig, o
   });
 }
 function registerRoutes(app: FastifyInstance, config: AuthConfig, options?: IntegrationOptions) {
-  for (const url of ['/api/org/effects', '/api/org/effects/:permitId', '/api/org/effects/:permitId/resolve']) {
+  const urls = ['/api/org/effects', '/api/org/effects/:permitId',
+    '/api/org/effects/:permitId/resolve', '/api/org/effects/:permitId/changes/:commandId'];
+  for (const url of urls) {
     app.route({ method: url.endsWith('/resolve') ? 'POST' : 'GET', url, bodyLimit: 8192, handler: async (request, reply) => {
       reply.header('cache-control', 'no-store');
       const session = sessionFor(request, config, new Date());
@@ -63,6 +68,9 @@ async function authorise(options: EffectOptions, issuer: string, sub: string, wr
 
 async function handleEffectRead(url: string, request: FastifyRequest, reply: FastifyReply,
   config: AuthConfig, options: EffectOptions, sub: string) {
+  if (url.endsWith('/changes/:commandId')) {
+    return handleEffectChange(request, reply, config, options, sub);
+  }
   if (url === '/api/org/effects') {
     const effects = await listEffects(options.store, options.silo);
     await authorise(options, config.issuerUrl, sub, false);
@@ -77,6 +85,20 @@ async function handleEffectRead(url: string, request: FastifyRequest, reply: Fas
     return reply.code(404).send({ status: 'not_found' });
   }
   return reply.send({ ...effect, csrf });
+}
+
+async function handleEffectChange(request: FastifyRequest, reply: FastifyReply,
+  config: AuthConfig, options: EffectOptions, sub: string) {
+  const params = effectChangeParamsSchema.parse(request.params);
+  const loading = readEffectChange(options.store, options.silo, params.permitId, params.commandId);
+  const [loaded] = await Promise.allSettled([loading]);
+  // Check access once after loading, even when history failed or no result was found.
+  const memberId = await options.feed.memberId(options.silo, config.issuerUrl, sub);
+  if (!memberId) throw new MemberAccessRefused();
+  await readActiveMember(options.store, options.binding, memberId, 'admin');
+  if (loaded.status === 'rejected') return reply.code(503).send({ status: 'unavailable' });
+  if (!loaded.value) return reply.code(404).send({ status: 'not_found' });
+  return reply.send({ status: 'recorded', receipt: loaded.value });
 }
 
 function requestPermitId(request: FastifyRequest) {
@@ -112,6 +134,7 @@ async function handleEffect(request: FastifyRequest, reply: FastifyReply,
   return reply.code(codes[result.status]).send({ status: result.status });
 }
 function routeError(reply: FastifyReply, error: unknown) {
+  if (error instanceof MemberAccessRefused) return reply.code(403).send({ status: 'refused' });
   if (error instanceof Error && error.message === 'Invalid resolution JSON') return reply.code(400).send({ status: 'invalid_request' });
   if (error instanceof z.ZodError) return reply.code(400).send({ status: 'invalid_request' });
   if (error instanceof Error && error.message === 'Access changed') return reply.code(403).send({ status: 'refused' });
