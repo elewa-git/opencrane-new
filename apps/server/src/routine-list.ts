@@ -6,7 +6,7 @@ import { conversationListCursor, ConversationListChanged } from './chat/list-cur
 import { routineMetadataSchema } from './routine-read.ts';
 
 export const routineListQuery = z.strictObject({
-  view: z.literal('mine'),
+  view: z.enum(['mine', 'all']),
   limit: z.coerce.number().int().min(1).max(50).default(20),
   continuation: z.string().max(2000).optional(),
 });
@@ -23,11 +23,19 @@ async function progress(options: GroupOptions, deadline: number) {
     JOIN projection_generations USING (name) WHERE name = $1`, ['routines'], queryOptions);
   return progressSchema.parse(result.rows[0]);
 }
-async function ownerPosition(options: GroupOptions, memberId: string, deadline: number) {
+function listScope(silo: string, memberId: string, view: ListQuery['view']) {
+  if (view === 'mine') {
+    return { clause: "silo = $1 AND state #>> '{definition,definition,ownerId}' = $2",
+      values: [silo, memberId] };
+  }
+  return { clause: 'silo = $1', values: [silo] };
+}
+async function listPosition(options: GroupOptions, scope: ReturnType<typeof listScope>,
+  deadline: number) {
   const queryOptions = { deadline };
   const result = await options.db.query(`SELECT position FROM routines AS owned
-    WHERE silo = $1 AND state #>> '{definition,definition,ownerId}' = $2
-    ORDER BY position DESC LIMIT 1`, [options.silo, memberId], queryOptions);
+    WHERE ${scope.clause}
+    ORDER BY position DESC LIMIT 1`, scope.values, queryOptions);
   if (result.rows.length === 0) return 0;
   return z.coerce.number().int().positive().parse(result.rows[0]?.['position']);
 }
@@ -39,7 +47,8 @@ async function loadPage(options: GroupOptions, memberId: string, query: ListQuer
   const requiredPosition = await options.store.head('routine-*', deadline);
   const before = await progress(options, deadline);
   if (before.sequence < requiredPosition) throw new Error('Routine list unavailable');
-  const position = await ownerPosition(options, memberId, deadline);
+  const scope = listScope(options.silo, memberId, query.view);
+  const position = await listPosition(options, scope, deadline);
   const identity = ['routine-list', options.silo, memberId, query.view, query.limit, position];
   const cursor = conversationListCursor(secret, identity, query.continuation);
   let after = 0;
@@ -58,19 +67,22 @@ async function loadPage(options: GroupOptions, memberId: string, query: ListQuer
     state #> '{definition,scheduleRevision}' AS "scheduleRevision",
     state #> '{definition,controlRevision}' AS "controlRevision",
     state #> '{definition,next}' AS next
-    FROM routines WHERE silo = $1 AND state #>> '{definition,definition,ownerId}' = $2
-      AND position > $3 ORDER BY position LIMIT $4`,
-  [options.silo, memberId, after, query.limit + 1], queryOptions);
-  return { records: result.rows, cursor, position, ...before };
+    FROM routines WHERE ${scope.clause}
+      AND position > $${scope.values.length + 1}
+      ORDER BY position LIMIT $${scope.values.length + 2}`,
+  [...scope.values, after, query.limit + 1], queryOptions);
+  return { records: result.rows, cursor, position, scope, ...before };
 }
 
-async function readableMetadata(memberId: string, candidate: z.infer<typeof candidateSchema>,
+async function readableMetadata(candidate: z.infer<typeof candidateSchema>,
   saved: RoutineAccess, loaded: PromiseSettledResult<number>, checkpoint: number) {
   const permission = await saved.check('read_metadata');
   if (permission.status === 'unavailable') throw new Error('Routine list unavailable');
   const savedOwner = saved.state?.definition?.definition.ownerId;
-  if (savedOwner !== undefined && savedOwner !== memberId) throw new ConversationListChanged();
-  if (!permission.allowed || savedOwner !== memberId) return undefined;
+  if (savedOwner !== undefined && savedOwner !== candidate.ownerId) {
+    throw new ConversationListChanged();
+  }
+  if (!permission.allowed || savedOwner === undefined) return undefined;
   if (loaded.status === 'rejected') throw new Error('Routine list unavailable');
   const latest = saved.rows.at(-1)?.sequence;
   // Compare with loaded history: a duplicate outcome need not update the projected row.
@@ -95,10 +107,10 @@ async function authorisedPage(options: GroupOptions, memberId: string,
     const preparedCandidate = { candidate, saved };
     prepared.push(preparedCandidate);
   }
-  // Finish loading before permission checks. Other owners cannot invalidate this page.
+  // Finish loading before permission checks. Use only the selected owner’s position for mine.
   const deadline = performance.now() + 2000;
   const current = await progress(options, deadline);
-  const latestPosition = await ownerPosition(options, memberId, deadline);
+  const latestPosition = await listPosition(options, page.scope, deadline);
   if (current.generation !== page.generation || latestPosition !== page.position) {
     throw new ConversationListChanged();
   }
@@ -109,7 +121,7 @@ async function authorisedPage(options: GroupOptions, memberId: string,
     positions.push(loaded);
   }
   for (const [index, { candidate, saved }] of prepared.entries()) {
-    const metadata = await readableMetadata(memberId, candidate, saved,
+    const metadata = await readableMetadata(candidate, saved,
       positions[index]!, page.sequence);
     if (metadata) rows.push(metadata);
   }
@@ -127,7 +139,9 @@ export async function readRoutineList(options: GroupOptions, memberId: string,
   const loading = authorisedPage(options, memberId, query, secret);
   const [loaded] = await Promise.allSettled([loading]);
   // Check saved membership after all loading, including failures and empty candidate pages.
-  await readActiveMember(options.store, options.binding, memberId);
+  let requiredRole: 'member' | 'admin' = 'member';
+  if (query.view === 'all') requiredRole = 'admin';
+  await readActiveMember(options.store, options.binding, memberId, requiredRole);
   if (loaded.status === 'rejected') throw loaded.reason;
   return loaded.value;
 }

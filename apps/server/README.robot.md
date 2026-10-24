@@ -5297,7 +5297,7 @@ GET and replay append nothing and do not decrypt, read approvals, schedule or di
 `test/routine-list.test.ts` uses disposable PostgreSQL, NATS and OpenFGA. The preceding
 run reader, including the older-run terminal retry fix, landed in #661 as
 `c350940aac71e8851f9c076d176653737027e3f2`. Detail and run routes keep their access-first
-errors. Admin lists, attention, commands and execution remain later work.
+errors. Admin lists are described below; attention, commands and execution remain later work.
 Fresh-install qualification: NOT RUN.
 
 ## Original publication receipt HTTP contract (P4-27 PR 7c; Part of #109)
@@ -5321,3 +5321,34 @@ tools, another review and publication, restart and projection rebuild. It checks
 original time and position, exact retry after the deduplication window, conflicting
 identities and evidence, private canaries, final access and bounded history reads.
 Fresh-install qualification: NOT RUN.
+
+## Bounded admin routine list
+
+`GET /api/routines?view=all` extends the list contract above. It uses the same
+query limits, metadata schema, no-store replies and fixed errors. It selects up to
+`limit + 1` candidates across owners within the configured silo, using the
+`routines_silo_position` index. Retired routines remain readable. Private
+instructions, results and run links are excluded. Execution remains unavailable.
+
+The continuation binds the same route, silo, member, view, limit and rebuild
+generation. For all, the position is the latest projected routine position in the
+silo. For mine, it remains the latest position among the member's own routines.
+Changing views cannot reuse a continuation, even when both pages contain the same
+rows. Another owner's unreadable changes still leave mine replies unchanged.
+
+Each candidate gets one `read_metadata` decision after loading. Its saved owner
+must match the projected owner before the row is returned. Reassignment during
+loading restarts the page without returning stale rows. Denied candidates reveal
+no name, id or count; empty intermediate pages retain their continuation and have
+`complete: false`. The final access check requires current saved Owner/Admin status
+and applied IAM records before exposing any page or loading error. This includes
+empty pages, failed queries and malformed rows. Demotion or removal refuses access
+even when IAM still holds the old role. Reads use no write authority window and
+never load conversations, decrypt, read approvals, append, schedule or dispatch.
+
+Based on #670 squash `84cbf5641aae5f5c6b75287584ed5608c8919901`, including its
+owner-specific paging correction. Detail/run errors and the #661 terminal retry
+checks remain unchanged. `test/routine-list.test.ts` covers both views, role loss,
+filtering, continuation substitution, reassignment, unavailable projections, slow
+history, ordinary chat activity and replay. Attention, creation, execution and
+screens remain later work. Fresh-install qualification: NOT RUN.
