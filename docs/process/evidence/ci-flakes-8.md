@@ -74,8 +74,39 @@ The existing `decision-fence.test.ts` and all its assertions are unchanged.
 
 ## Corrected-source verification
 
-NOT RUN at the correction commit: the two affected-file passes and static gates.
-The completed results will be recorded after those checks finish.
+Checked source: `2d879b2a3d0e185169039b5993a23be5123a3276`, after failing-first
+commit `fd3de00d8`. The environment used Node 22.23.3 and the same PostgreSQL URL
+and private service fixtures as the comparison. It was not a fresh installation.
+
+- PASS: all 75 unchanged `decision-fence` tests in both corrected-source passes.
+- PASS: all seven changed `gateway-start` tests in both passes.
+- PASS: `models-managed`, `decision-activity`, `gateway-renderer` and `memory-context`
+  in both passes, including all 75 memory-context tests each time.
+- PASS: the first combined pass, 225/225 tests across seven files.
+- FAIL: the second combined pass, 224/225 tests. The first allowed call in
+  `keeps a separate direct grant after team membership removal is applied`
+  returned 403 before the membership removal. Its saved refusal was generic and
+  the private diagnostic logger was silent, so that result does not establish a cause.
+- PASS: ten focused diagnostic repeats of that case, followed by two full
+  `integration-access-gateway` runs, 16/16 each. These final full-file runs cover
+  the changed integration tests twice, including all three controlled-clock cases.
+- PARTIAL: the extra integration refusal was not reproduced. Its cause remains
+  unproven. No access rule, deadline, assertion or fixture was changed for it.
+- PASS: full lint, typecheck, event catalogue, Knip and changelog validation.
+  Lint reported 26 warnings and no errors.
+- NOT RUN: the full root suite and fresh-install journeys, as scoped by the task.
+
+The combined reports are `/tmp/ci-flakes-8-security/fixed-tests-{1,2}.json`.
+The focused repeats are `direct-grant-diagnostic.json`; the JSON reporter gives
+one aggregate result for the case run with `--repeats=9`. The two complete
+integration reports are `integration-diagnostic-{1,2}.json`. Their temporary
+configuration changes only `LOG_LEVEL` to `warn` so a repeat failure would include
+its private refusal reason. The original failed result remains in `fixed-tests-2.json`.
+
+All commands ran under `nice -n 10`. Tests used one worker, no file parallelism,
+and `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Static command results and durations are in
+`/tmp/ci-flakes-8-security/verification-results.json`, with one log per command.
 
 ## Earlier investigation
 
