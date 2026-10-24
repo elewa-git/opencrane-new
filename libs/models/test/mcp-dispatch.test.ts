@@ -3295,7 +3295,7 @@ async function logsPrivateAdmissionRefusal(known: boolean) {
   expect(await response.json()).toEqual({});
   expect(setup.received()).toBe(0);
   expect(lines).toHaveLength(1);
-  const reason = known ? 'budget_writer_replaced' : 'decision_unavailable';
+  const reason = known ? 'budget_write_refused' : 'decision_unavailable';
   const diagnostic: unknown = JSON.parse(lines[0]!);
   expect(diagnostic).toMatchObject({ msg: 'MCP dispatch refused',
     stage: 'budget_admission', reason });
