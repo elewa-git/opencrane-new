@@ -24,7 +24,8 @@ import { gatewayConfigurationCurrent, prepareGatewayConfiguration }
 import { startGateway } from '../src/gateway.ts';
 import { gatewayConfigurationWorker } from '../src/gateway-configuration-worker.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
-import { freePort, gatewayFixture } from './gateway-delivery-fixture.ts';
+import { acquireGatewayTestLock, freePort, gatewayFixture }
+  from './gateway-delivery-fixture.ts';
 
 const appendEventSchema = eventEnvelopeSchema(z.unknown());
 
@@ -1015,6 +1016,7 @@ async function refusesLostGatewayLock() {
   const setup = await fixture();
   const before = await readFile(setup.options.configFile);
   const inode = (await stat(setup.options.configFile)).ino;
+  const position = await setup.nats.store.head();
   const proxy = await delayedDisconnect(setup.storage.queue.options.connectionString!);
   function ignoreError() {}
   const connection = connectProjectionDb(proxy.url, ignoreError);
@@ -1031,9 +1033,7 @@ async function refusesLostGatewayLock() {
     expect(locked.rows).toHaveLength(1);
     proxy.pause();
     await setup.storage.queue.query('SELECT pg_terminate_backend($1)', [locked.rows[0]!.pid]);
-    const acquired = await competitor.query<{ held: boolean }>(
-      'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS held', [lockName]);
-    competingSessionOwnsLock = acquired.rows[0]!.held;
+    competingSessionOwnsLock = await acquireGatewayTestLock(competitor, lockName);
     expect(competingSessionOwnsLock).toBe(true);
   }
   const options = { ...setup.options, db: connection.db, requireLeader };
@@ -1045,6 +1045,7 @@ async function refusesLostGatewayLock() {
     expect((await stat(setup.options.configFile)).ino).toBe(inode);
     expect(await delivery.observe()).toBeNull();
     expect(await memberReceipts(setup)).toHaveLength(0);
+    expect(await setup.nats.store.head()).toBe(position);
   } finally {
     await competitor.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lockName]);
     competitor.release();
@@ -1054,3 +1055,43 @@ async function refusesLostGatewayLock() {
 }
 it('refuses replacement after the gateway lock session dies with delayed disconnect notification',
   refusesLostGatewayLock);
+
+async function waitsForGatewayLockRelease() {
+  const storage = await databases();
+  const owner = await storage.queue.connect();
+  const competitor = await storage.queue.connect();
+  const lockName = 'opencrane:projection:gateway-configuration:test';
+  const acquired = await competitor.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
+  const competitorPid = acquired.rows[0]!.pid;
+  await owner.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [lockName]);
+  let finished = false;
+  function completed(held: boolean) {
+    finished = true;
+    return held;
+  }
+  const acquisition = acquireGatewayTestLock(competitor, lockName).then(completed);
+  async function waitingOrFinished() {
+    const waiting = await storage.queue.query<{ count: number }>(`SELECT count(*)::int AS count
+      FROM pg_locks WHERE pid = $1 AND locktype = 'advisory' AND NOT granted`, [competitorPid]);
+    return finished || waiting.rows[0]!.count === 1;
+  }
+  try {
+    // Keep the old session alive until PostgreSQL confirms the competitor is waiting.
+    await expect.poll(waitingOrFinished, { timeout: 2000 }).toBe(true);
+    expect(finished).toBe(false);
+    await owner.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lockName]);
+    expect(await acquisition).toBe(true);
+  } finally {
+    await owner.query('SELECT pg_advisory_unlock_all()');
+    try {
+      await acquisition;
+      await competitor.query('SELECT pg_advisory_unlock_all()');
+    } finally {
+      owner.release();
+      competitor.release();
+      await storage.close();
+    }
+  }
+}
+it('waits for the old gateway lock to be released before continuing the test',
+  waitsForGatewayLockRelease);

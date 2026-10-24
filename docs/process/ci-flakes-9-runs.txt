@@ -1,0 +1,163 @@
+Gateway lock test runs: 24 October 2026
+Source: 9a860212cd1fcf325937f3300d92a433c90dd6c8
+All commands used nice -n 10, --maxWorkers=1 and the throwaway PG_TEST_URL.
+Each delivery iteration ran all 40 tests. Each companion iteration ran 15 tests.
+Delivery results (wall time includes the command startup):
+delivery-01 PASS 40/40 wall=123s
+delivery-02 PASS 40/40 wall=141s
+delivery-03 FAIL 39/40 wall=167s
+  Failed: rejects invalid control ports and hides file error details
+delivery-04 PASS 40/40 wall=110s
+delivery-05 PASS 40/40 wall=98s
+delivery-06 PASS 40/40 wall=86s
+delivery-07 PASS 40/40 wall=99s
+delivery-08 PASS 40/40 wall=94s
+delivery-09 PASS 40/40 wall=97s
+delivery-10 PASS 40/40 wall=93s
+delivery-11 PASS 40/40 wall=98s
+delivery-12 PASS 40/40 wall=109s
+delivery-13 PASS 40/40 wall=113s
+delivery-14 PASS 40/40 wall=115s
+delivery-15 PASS 40/40 wall=108s
+delivery-16 PASS 40/40 wall=113s
+delivery-17 PASS 40/40 wall=89s
+delivery-18 FAIL 39/40 wall=85s
+  Failed: refuses a receipt with a different recordDigest
+delivery-19 PASS 40/40 wall=93s
+delivery-20 PASS 40/40 wall=94s
+delivery-21 PASS 40/40 wall=110s
+delivery-22 PASS 40/40 wall=113s
+delivery-23 PASS 40/40 wall=116s
+delivery-24 PASS 40/40 wall=99s
+delivery-25 PASS 40/40 wall=111s
+delivery-26 PASS 40/40 wall=96s
+delivery-27 PASS 40/40 wall=84s
+delivery-28 PASS 40/40 wall=96s
+delivery-29 PASS 40/40 wall=94s
+delivery-30 PASS 40/40 wall=101s
+
+Lost-lock test: PASS 30/30.
+Fixture wait regression: PASS 30/30.
+Full delivery file: FAIL (28 passed runs, 2 failed runs). No failed run was retried.
+Run 03: control-port test timed out at 30000ms.
+Run 18: recordDigest fixture rejected delivery at the existing alive() guard.
+
+Companion results: projections/runner.test.ts and models/gateway-generation.test.ts
+companion-01 PASS 15/15
+companion-02 PASS 15/15
+companion-03 PASS 15/15
+companion-04 PASS 15/15
+companion-05 PASS 15/15
+companion-06 PASS 15/15
+companion-07 PASS 15/15
+companion-08 PASS 15/15
+companion-09 PASS 15/15
+companion-10 PASS 15/15
+companion-11 PASS 15/15
+companion-12 PASS 15/15
+companion-13 PASS 15/15
+companion-14 PASS 15/15
+companion-15 PASS 15/15
+companion-16 PASS 15/15
+companion-17 PASS 15/15
+companion-18 PASS 15/15
+companion-19 PASS 15/15
+companion-20 PASS 15/15
+companion-21 PASS 15/15
+companion-22 PASS 15/15
+companion-23 PASS 15/15
+companion-24 PASS 15/15
+companion-25 PASS 15/15
+companion-26 PASS 15/15
+companion-27 PASS 15/15
+companion-28 PASS 15/15
+companion-29 PASS 15/15
+companion-30 PASS 15/15
+companion-31 PASS 15/15
+companion-32 PASS 15/15
+companion-33 PASS 15/15
+companion-34 PASS 15/15
+companion-35 PASS 15/15
+companion-36 PASS 15/15
+companion-37 PASS 15/15
+companion-38 PASS 15/15
+companion-39 PASS 15/15
+companion-40 PASS 15/15
+companion-41 PASS 15/15
+companion-42 PASS 15/15
+companion-43 PASS 15/15
+companion-44 PASS 15/15
+companion-45 PASS 15/15
+companion-46 PASS 15/15
+companion-47 PASS 15/15
+companion-48 PASS 15/15
+companion-49 PASS 15/15
+companion-50 PASS 15/15
+companion-51 PASS 15/15
+companion-52 PASS 15/15
+companion-53 PASS 15/15
+companion-54 PASS 15/15
+companion-55 PASS 15/15
+companion-56 PASS 15/15
+companion-57 PASS 15/15
+companion-58 PASS 15/15
+companion-59 PASS 15/15
+companion-60 PASS 15/15
+companion-61 PASS 15/15
+companion-62 PASS 15/15
+companion-63 PASS 15/15
+companion-64 PASS 15/15
+companion-65 PASS 15/15
+companion-66 PASS 15/15
+companion-67 PASS 15/15
+companion-68 PASS 15/15
+companion-69 PASS 15/15
+companion-70 PASS 15/15
+companion-71 PASS 15/15
+companion-72 PASS 15/15
+companion-73 PASS 15/15
+companion-74 PASS 15/15
+companion-75 PASS 15/15
+companion-76 PASS 15/15
+companion-77 PASS 15/15
+companion-78 PASS 15/15
+companion-79 PASS 15/15
+companion-80 PASS 15/15
+companion-81 PASS 15/15
+companion-82 PASS 15/15
+companion-83 PASS 15/15
+companion-84 PASS 15/15
+companion-85 PASS 15/15
+companion-86 PASS 15/15
+companion-87 PASS 15/15
+companion-88 PASS 15/15
+companion-89 PASS 15/15
+companion-90 PASS 15/15
+companion-91 PASS 15/15
+companion-92 PASS 15/15
+companion-93 PASS 15/15
+companion-94 PASS 15/15
+companion-95 PASS 15/15
+companion-96 PASS 15/15
+companion-97 PASS 15/15
+companion-98 PASS 15/15
+companion-99 PASS 15/15
+companion-100 PASS 15/15
+companion-101 PASS 15/15
+companion-102 PASS 15/15
+companion-103 PASS 15/15
+companion-104 PASS 15/15
+companion-105 PASS 15/15
+companion-106 PASS 15/15
+companion-107 PASS 15/15
+companion-108 PASS 15/15
+companion-109 PASS 15/15
+companion-110 PASS 15/15
+companion-111 PASS 15/15
+companion-112 PASS 15/15
+companion-113 PASS 15/15
+companion-114 PASS 15/15
+companion-115 PASS 15/15
+companion-116 PASS 15/15
+companion-117 PASS 15/15
+companion-118 PASS 15/15

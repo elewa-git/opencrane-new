@@ -2417,6 +2417,14 @@ this key. Delayed leadership queries save a newer generation or reject leadershi
 refused delivery preserves the file and appends no receipt. A TCP fixture delays disconnect
 notification after terminating the acquired lock backend. Another session acquires the
 same lock; delivery must retain both the old bytes and inode and save no receipt.
+`pg_terminate_backend(pid)` confirms that a termination signal was sent, not that the
+session has ended. The fixture therefore waits with `pg_advisory_lock`, bounded by a
+two-second PostgreSQL lock timeout, before resuming delivery. A separate regression
+keeps the old session's lock held, checks `pg_locks` for the waiting competitor, then
+releases it. This proves the fixture waits for ownership rather than taking one
+`pg_try_advisory_lock` sample while the old session may still be shutting down.
+[The lock-test receipt](../../docs/process/ci-flakes-9.md) records the failing-first
+check, the negative control and every repeated run under load.
 Preparation accepts the attempt's signal and deadline. Cancelled reads stop the preparation
 callback before it can append. Append receives those same limits and remains awaited
 before releasing the lock. The handler and attempt tests use real PostgreSQL to check

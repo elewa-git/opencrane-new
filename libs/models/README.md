@@ -5,6 +5,8 @@
 Gateway replacement checks the connection holding its database lock immediately before
 changing the file. A lost connection leaves the old file in place. Expired preparation
 stops before saving a later configuration and releases the lock.
+The lost-connection test waits until another database session holds that lock
+before checking that delivery was refused.
 
 After recorded switch-on, the gateway uses each checked call's provider key.
 It needs no fallback key file, and configuration reloads preserve that choice.

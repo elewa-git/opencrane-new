@@ -8,7 +8,15 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { onTestFinished } from 'vitest';
+import type { Db } from '@opencrane/projections';
 import { startGateway } from '../src/gateway.ts';
+
+export async function acquireGatewayTestLock(session: Pick<Db, 'query'>, lockName: string) {
+  // Wait for PostgreSQL to release the old session's lock after its termination signal.
+  await session.query("SET lock_timeout = '2s'");
+  await session.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [lockName]);
+  return true;
+}
 
 export async function gatewayFixture() {
   const directory = await mkdtemp(`${tmpdir()}/gateway-reload-`);
