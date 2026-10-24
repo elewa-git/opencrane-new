@@ -17,6 +17,10 @@ end time. Used approvals retain their earlier use and dispatch evidence.
 Effect detail replies keep the saved resolver, date and amount separate from current
 spending. A receipt confirms a saved resolution, not completed settlement.
 
+Saved effect pages keep observations, uncertainty and resolutions separate. Amounts use integer euro cents, and a missing amount differs from zero.
+
+
+
 ## Where it fits
 
 This shared library is used by the browser app (`apps/web`), the back end (`apps/server`), the [read-table](../../GLOSSARY.md#read-table-projection) library (`libs/projections`) and the models library (`libs/models`). It depends on Zod, a library for checking data. It does not store [events](../../GLOSSARY.md#event) or decide who may act.

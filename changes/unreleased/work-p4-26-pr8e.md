@@ -1,0 +1,1 @@
+- Let owners and admins page through saved effect observations, uncertainty and resolutions by permit, with safe accounting fields and explicit restart after a read-table rebuild. These records remain separate from current effect state and do not settle money or release holds.

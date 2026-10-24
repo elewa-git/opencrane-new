@@ -207,7 +207,9 @@ async function duringRead(action: string) {
     readOptions?: { deadline: number }) {
     const result = await original<Row>(sql, values, readOptions);
     if (sql.includes('FROM model_budget_effects')) {
-      if (action === 'rebuild') {
+      if (action === 'slow') {
+        await delay(2100);
+      } else if (action === 'rebuild') {
         await original('UPDATE projection_generations SET generation = generation + 1');
       } else if (action === 'chat') {
         await append('conversation-private', 'conversation.created',
@@ -224,7 +226,7 @@ async function duringRead(action: string) {
   database.query = query;
   try {
     const response = await request('', action.startsWith('demote') ? 'admin' : 'owner');
-    const statuses: Record<string, number> = { chat: 200, rebuild: 409,
+    const statuses: Record<string, number> = { chat: 200, slow: 503, rebuild: 409,
       demote: 403, 'demote-failed': 403 };
     expect(response.statusCode).toBe(statuses[action]);
   } finally {
@@ -235,7 +237,7 @@ async function duringRead(action: string) {
     await runner.run(budgets);
   }
 }
-it.each(['chat', 'rebuild', 'demote', 'demote-failed'])(
+it.each(['chat', 'slow', 'rebuild', 'demote', 'demote-failed'])(
   'checks access after loading and ignores unrelated activity: %s', duringRead);
 async function unavailable(kind: string) {
   const database = options.modelDb!;
@@ -329,3 +331,18 @@ async function boundedReadOnly() {
 }
 it('uses one bounded position and deadline; GET and replay leave holds and outside work alone',
   boundedReadOnly);
+
+async function strictReply() {
+  const result = await page();
+  const schema = protocol.spendingEffectsResponseSchema;
+  for (const field of ['costCents', 'settledCents']) {
+    for (const amount of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const rows = [{ ...result.rows[0], [field]: amount }];
+      expect(schema.safeParse({ ...result, rows }).success).toBe(false);
+    }
+  }
+  const rows = [{ ...result.rows[0], evidence: 'private-evidence' }];
+  expect(schema.safeParse({ ...result, rows }).success).toBe(false);
+  expect(schema.safeParse({ ...result, totalCents: 0 }).success).toBe(false);
+}
+it('rejects unsafe cents and private or extra reply fields', strictReply);

@@ -5033,3 +5033,33 @@ publish retries, slow history and both permission and content replay. Run it wit
 `nice -n 10` and `PG_TEST_URL` set to the disposable test database.
 There is no route, admin intervention, reassignment, scheduler or Stop reaction.
 Fresh-install execution qualification: NOT RUN.
+
+## Bounded saved effect spending
+
+`GET /api/org/spending/effects` uses `integrations.modelDb` and `readSpendingEffects`.
+The strict query accepts `limit` (default 20, range 1–50), optional `permitId` and
+`continuation`. It returns `rows`, checkpoint `sequence`, `generation` and nullable
+`next`. Each row selects `eventId`, `permitId`, original `position`, `time`, `type`,
+`outcome`, `costCents`, `settledCents`, `resolvedBy` and `changeRef`. Missing values
+are null; recorded zero cents stays zero. Observations, uncertainty and resolutions
+remain separate saved records. They do not describe current effect state or confirm
+an outside action. Resolutions alone do not settle money or release holds.
+
+One global event position is captured before loading, so the checkpoint must cover
+effect writes as well as budget writes. Later activity is not chased or watched for
+access. All data reads share a two-second deadline and select at most `limit + 1`
+indexed rows, without budget JSON, full histories or per-effect stream scans.
+Current Owner/Admin membership and OpenFGA access are checked once after successful
+or failed loading. Status codes and no-store replies follow the call spending route.
+
+The continuation signature binds this route, silo, permit filter, generation and last
+position. Call-page continuations, changed filters, altered signatures and replaced
+generations return 409 `{status: "restart"}`. Generation is checked again after rows.
+Missing, old, lagging or blocked projections return 503 `{status: "unavailable"}`.
+Private evidence, usage and error details are excluded. Existing `/api/org/effects`
+reads and writes keep their contracts. GET and replay append and dispatch nothing.
+
+`test/spending-effects.test.ts` checks paging, access races, continuation restart,
+read deadlines and replay with real NATS, PostgreSQL and OpenFGA. The prerequisite
+internal reader landed in #653 at `f016778fcf0bfc4ed3dd50e469a9729a072f5912`.
+Impact, list replacement, joins and screens remain later work. Live qualification: NOT RUN.

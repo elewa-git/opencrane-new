@@ -3271,7 +3271,7 @@ remain later work. Fresh-install qualification: NOT RUN.
 
 ### Saved effect accounting records (P4-26 PR 8d; Part of #108)
 
-The internal `readSpendingEffects` in `accounting.ts` reads `model_budget_effects`.
+The exported `readSpendingEffects` in `accounting.ts` reads `model_budget_effects`.
 It returns 20 records by default, at most 50, selecting one extra row to find the next
 page. `after` is the last returned original event position; optional `permitId` narrows
 the silo's records. Both query shapes have ordered indexes. `sequence` and `generation`
@@ -3293,7 +3293,8 @@ event appends. `test/accounting.test.ts` covers mixed paging, duplicate delivery
 resolver identity, late evidence, bounded indexed reads, missing/locked tables,
 old-version upgrades, grants, corruption beyond the first batch and replacement rollback.
 Callers must check current finance access once after loading, including failed loads.
-No public export, HTTP route, settlement logic or new worker is added here.
+The server exposes it through the [saved effect API](../../apps/server/README.robot.md#bounded-saved-effect-spending).
+The reader itself grants no access and changes no settlement or hold.
 
 ## Exact saved tool-mode receipts (P4-27 PR 7a; Part of #109)
 
