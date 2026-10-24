@@ -26,7 +26,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
   }
   let stopped = false;
 
-  function reconcile(serverIds: string[]) {
+  async function reconcile(serverIds: string[]) {
     const wanted = new Set(serverIds.slice(0, 32));
     for (const [serverId, state] of servers) {
       if (wanted.has(serverId)) {
@@ -35,9 +35,12 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       state.monitored = false;
       holdWatch(state);
       state.controller?.abort();
-      // Keep unfinished captures and unsaved drift holds within the same bounded set.
-      if (!state.active && !state.driftHeld) {
-        servers.delete(serverId);
+      state.nextCheck = 0;
+    }
+    // Close every missing watch before saving failures, so no other server can keep sending.
+    for (const [serverId, state] of servers) {
+      if (!state.monitored) {
+        await removeWatch(serverId, state);
       }
     }
     for (const serverId of wanted) {
@@ -48,6 +51,19 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
         servers.set(serverId, newWatch());
       }
     }
+  }
+
+  async function removeWatch(serverId: string, state: ReturnType<typeof newWatch>) {
+    // Keep unfinished captures and unsaved drift holds within the same bounded set.
+    if (state.active || state.driftHeld) {
+      return;
+    }
+    if (state.checkedAt > 0) {
+      // Save the interruption before forgetting a successful capture. Recovery must end old approvals.
+      const signal = AbortSignal.timeout(2000);
+      await untilAborted(saveFailure(serverId, signal), signal);
+    }
+    servers.delete(serverId);
   }
 
   function checkDue(serverId: string) {

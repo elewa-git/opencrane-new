@@ -2129,6 +2129,10 @@ a failed check or invalidate approvals. One check per server runs at a time, for
 has a 30-second deadline, followed by at most two seconds to save failure. Three
 consecutive failures stop automatic retries; attempts wait five seconds between failures.
 Replacing the process creates a closed watch and recaptures, including the same digest.
+Removing a previously successful watch saves a failed check before dropping its state.
+If that save fails, the watch stays held and recovery retries approval invalidation.
+All removed watches close before any save starts. Unfinished captures and unresolved
+drift holds keep their bounded slots. Fresh startup still records no invented failure.
 Stopping aborts discovery. Late results cannot append success or release its hold.
 Dispatch also checks expiry by time, without depending on a running timer.
 Renewal checks the previous expiry again after the event store replies. If evidence

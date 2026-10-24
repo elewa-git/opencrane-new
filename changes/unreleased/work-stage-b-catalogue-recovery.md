@@ -1,1 +1,2 @@
 - Keep reviewed tool publication after a models restart or a failed check when a fresh read confirms unchanged definitions. Renew the acknowledgement for the new gateway process so publication status confirms it, including after replay, without restoring ended approvals. Real tool changes still pause calls for review, and the browser no longer describes an unavailable check as changed tools.
+- End old tool approvals when the catalogue row read fails, even if recovery recreates the watch. Fresh startup records only real checks.

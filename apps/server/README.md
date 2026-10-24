@@ -10,6 +10,8 @@ The server checks who is asking and what they may do, saves each change in the
 assistant's [computer](../../GLOSSARY.md#computer).
 A second program here, the [models process](../../GLOSSARY.md#models-process), checks
 AI calls against spending limits and tool rules.
+If reading the watched tool servers fails, calls pause and earlier tool approvals end
+before recovery can restore calls. Starting the process alone does not record a failed check.
 
 Change history includes saved tool hand-offs and transport observations.
 Control refusals recheck access before saving and appear in the requester’s
@@ -49,9 +51,9 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, routine metadata, spending and saved effect pages, receipts, live updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks access before history errors, handles child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, checked owner pauses and retirements, child recovery, cancellations, activations, retries and hand-offs| nats["NATS<br/>the event log"]
+  web["apps/web<br/>the website"] -->|requests, metadata, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
+  server -.->|checks access before history errors, allocates child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -->|records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres

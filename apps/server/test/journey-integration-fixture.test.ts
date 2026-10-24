@@ -107,7 +107,7 @@ async function originalInterleaving() {
   }
   assert.deepEqual(rows.map(eventType), [
     'mcp.server_registered', 'mcp.server_discovered', 'mcp.server_reviewed',
-    'mcp.server_published', 'mcp.catalogue_checked', 'mcp.catalogue_checked',
+    'mcp.server_published', 'mcp.catalogue_checked',
   ]);
   for (const saved of rows.slice(4)) {
     assert(typeof saved.event.data === 'object' && saved.event.data !== null);

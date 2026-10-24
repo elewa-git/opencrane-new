@@ -41,7 +41,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, child allowances and payer limits; rechecks access on publish retries; records tool starts, remote outcomes and spending; reads spending calls in pages by original UTC month and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
+  models -->|checks spending choices, child allowances and payer limits; rechecks access on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -69,6 +69,8 @@ a shorter timeout while checking the same failure and recovery behaviour.
 Tool calls need a fresh saved tool list whose hashes match its definitions. An unchanged check keeps a waiting approval valid.
 Remote calls also need the running catalogue watch at admission and just before sending.
 A new hold refuses an already permitted call before it reaches the remote server.
+Losing a watched server records the interruption before forgetting its last check.
+Restoring that server cannot make its earlier approvals usable again.
 A server that withdraws or changes its promise to check tool revisions stays held, even
 when its tools are identical. Healthy tool lists with short lifetimes are refreshed early,
 so a waiting approval can remain valid.

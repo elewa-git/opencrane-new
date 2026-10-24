@@ -82,11 +82,11 @@ export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
         }
         serverIds.push(row.server_id);
       }
-      watch.reconcile(serverIds);
     } catch {
-      watch.reconcile([]);
+      await watch.reconcile([]);
       throw new Error('Catalogue rows unavailable');
     }
+    await watch.reconcile(serverIds);
     return serverIds;
   }
   function checkServer(serverId: string) {

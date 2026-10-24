@@ -3283,7 +3283,9 @@ this part. Fresh-install qualification and paid calls are NOT RUN.
 one second before polling again. Short catalogue TTLs bring the next poll forward.
 Registrations without discovery wait for the installer. Missing and overflow rows refuse calls.
 The whole membership read has a one-second deadline. Failed or timed-out reads hold calls,
-and a late result cannot restore membership. Membership polls
+and a late result cannot restore membership. Before removing a previously successful
+watch, reconciliation saves the failure so recovery cannot reuse old approvals. A failed
+save retains the held watch for retry. Membership polls
 continue while captures run; a stalled worker cannot extend saved catalogue expiry.
 
 The same event history supplies the saved locator and credential-free connection.
