@@ -14,8 +14,9 @@ text and the final Stop result from waiting behind hundreds of separate commits.
 Refused control attempts appear in the requester’s conversation history with the
 verified person and a fixed reason. Rebuilding that history does not change computer control or running work.
 
-Role and ownership history keeps the affected person and the change recorded by each event.
+Removal, role and ownership history keeps the affected person and the change recorded by each event.
 It keeps appointment requests separate from confirmations and step-downs.
+Removal records include a safe recorded reason when one exists, without private details.
 
 ## Where it fits
 
@@ -33,7 +34,7 @@ flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
-  projections -->|saves role, ownership and control history; keeps private audits outside feeds; saves routines and receipts| pg
+  projections -->|saves removal, role, ownership and control history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
   server -.->|reads tool readiness, nightly memory inputs and unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]

@@ -20,9 +20,10 @@ does not prove a business change succeeded. Reading history never sends a tool c
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.
 
-Owners and admins can read safe role and ownership change details. The server checks
+Owners and admins can read safe removal, role and ownership change details. The server checks
 receipts for the exact saved change before showing its progress, then checks current access.
 It still checks access when loading fails, so errors do not reveal protected records.
+Removal progress covers permissions and the member list. It does not report departure cleanup.
 
 ## Where it fits
 
@@ -39,7 +40,7 @@ flowchart LR
   server -->|records changes, checked owner pauses, control refusals, child activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads conversations, history and exact role and ownership receipts| postgres
+  server -->|reads conversations, history and exact removal, role and ownership receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|checks permission| server

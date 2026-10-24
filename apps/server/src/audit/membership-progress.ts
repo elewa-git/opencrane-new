@@ -2,7 +2,7 @@ import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { AuditRecord } from '@opencrane/protocol';
 import { readAuditOwnershipConfirmation, type Query } from '@opencrane/projections';
 
-const operations = new Set(['role_change', 'transfer_intent', 'appointment',
+const operations = new Set(['remove', 'role_change', 'transfer_intent', 'appointment',
   'ownership_confirmation', 'step_down']);
 
 /** Load exact owning receipts before the route makes its final access check. */

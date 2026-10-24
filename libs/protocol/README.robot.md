@@ -362,3 +362,8 @@ Audit operations also include `role_change`, `transfer_intent`, `appointment`,
 carry only event-proved facts. The detail-only `progress` object has `readModel` and `iam`
 (current/applying) plus a fresh UTC `checkedAt`. It reports receipt processing, not the
 person's current role, permission to act, or proof that a later change did not supersede it.
+
+Removal uses the existing optional `memberId`, fixed `reason` and `progress` fields with
+`operation: remove`. No new field name is introduced. Both current receipts prove only
+that this exact removal reached the members table and permission service. They do not
+prove departure cleanup finished; cleanup state is absent from this contract.
