@@ -69,6 +69,7 @@ async function fixture() {
   let unavailable = false;
   let preconditions: unknown;
   const listings: string[] = [];
+  const listedNames: string[] = [];
   const removals: { name: string; preconditions: unknown }[] = [];
   let listAction: (() => Promise<void>) | undefined;
   let listFailures = 0;
@@ -105,6 +106,7 @@ async function fixture() {
       for (const name of names) {
         if (name > after && items.length < limit) {
           items.push(secrets.get(name)!);
+          listedNames.push(name);
         }
       }
       pages.push(items.length);
@@ -198,7 +200,7 @@ async function fixture() {
     return connectionCustody(`http://127.0.0.1:${port}`, 'custody', keyring, directory);
   }
   const custody = restart();
-  return { custody, restart, directory, pages, secrets, listings, removals,
+  return { custody, restart, directory, pages, secrets, listings, listedNames, removals,
     get maximumLists() { return maximumLists; }, get deleteAttempts() { return deleteAttempts; },
     onList(action: () => Promise<void>) { listAction = action; },
     failLists(count: number) { listFailures = count; },
@@ -1539,12 +1541,7 @@ async function intervalCleansExhaustedReaction() {
   const test = await cleanupFixture();
   const isolated = await databases();
   const database = pgDb(isolated.queue);
-  function waitForCleanupLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
-    // Wait for this fixture's lock so acquisition delays cannot use up a deletion retry.
-    // Keep the production deadline covered by the separate lock contention tests.
-    return database.lock!(name, work);
-  }
-  test.db = { ...database, lock: waitForCleanupLock };
+  test.db = waitingCleanupDatabase(database);
   const event = await test.revoke();
   test.store.failDeletes(true);
   const cleanup = connectionCleanupHandler(events.store, test.db, test.store.restart(), 'test');
@@ -1600,14 +1597,26 @@ async function intervalCleansExhaustedReaction() {
 it('interval scan removes copies after every reaction retry fails and keeps the failed job',
   intervalCleansExhaustedReaction, 90_000);
 
+function waitingCleanupDatabase(database: Db): Db {
+  function waitForCleanupLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    // Wait for the real lock so acquisition delays cannot skip the cleanup being checked.
+    // Keep the production deadline covered by the separate lock contention tests.
+    return database.lock!(name, work);
+  }
+  return { ...database, lock: waitForCleanupLock };
+}
+
 async function pagedScan(restart: boolean) {
   const test = await candidateFixture();
+  test.db = waitingCleanupDatabase(test.db);
   for (let index = 1; index < 53; index += 1) {
     const candidate = { ...test.input, generation: index + 1, operationId: `scan-${index}` };
-    await test.store.custody.stage(candidate, material);
+    const saved = await test.store.custody.stage(candidate, material);
+    expect(saved.status).toBe('staged');
   }
   await test.invalidate();
   const names = [...test.store.secrets.keys()];
+  expect(names).toHaveLength(53);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   async function pauseSecondPage() {
@@ -1627,10 +1636,7 @@ async function pagedScan(restart: boolean) {
       expect(test.store.listings).toHaveLength(2);
       const resumed = runningScan(test);
       try {
-        function deleted() {
-          return test.store.deletes === 53;
-        }
-        await until(deleted);
+        await resumed.pages();
       } finally {
         await resumed.close();
       }
@@ -1647,6 +1653,10 @@ async function pagedScan(restart: boolean) {
     release.resolve();
     await scan.close();
   }
+  const listedNames = [...test.store.listedNames];
+  listedNames.sort();
+  names.sort();
+  expect(listedNames).toEqual(names);
   expect(test.store.removals).toHaveLength(53);
   for (const name of names) {
     function matches(removal: { name: string }) {

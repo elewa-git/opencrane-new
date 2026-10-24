@@ -546,6 +546,8 @@ The cleanup retry test waits for its database lock and for the queue to record f
 before checking that every attempt sent a delete request.
 Connection command tests also wait for their locks, except when checking lock contention.
 Scan tests wait for the scan to report each completed page.
+The paging test also waits for each database lock and checks that all 53 saved
+credentials are listed and deleted exactly once, including after a restart.
 
 With a disposable test database configured through `PG_TEST_URL`, run the focused
 accounting tests with:

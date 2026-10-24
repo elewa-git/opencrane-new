@@ -3183,6 +3183,16 @@ tests must reach custody before checking the refused save. The explicit contenti
 passes the production database adapter and keeps the 100 ms deadline.
 The scan fixture waits for the page-completion log callback. It has no separate polling
 deadline that can expire while a slow page is still running; the test timeout still applies.
+The 53-candidate paging fixture uses the same waiting database adapter as the retry test.
+It awaits every stage, checks all 53 copies exist before scanning, and compares the full
+list of returned names with the saved names. Each name must also have exactly one deletion
+with the original UID and resourceVersion. Both uninterrupted and restarted scans keep
+these checks. The restart waits for its remaining page to finish before checking deletion.
+A regression advances the monotonic clock by 101 ms on each of the first two real pool
+acquisitions. With the production acquisition deadline, it reproduces main run 40102123525:
+the first page examines 25 candidates but deletes only 23. Those connections arrive too late
+to use their locks, so reconciliation retains the candidates. The fixture waits for the
+real locks without changing production's 100 ms limit. No sleep or retry is added.
 The mixed-page test uses two real NATS stores and retains the other silo's current copy
 without adding anything to the worker's store. Timer tests check the default at 899,999
 and 900,000 milliseconds and retry an unknown page after an intervening success.
