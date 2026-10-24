@@ -1,0 +1,11 @@
+{
+  "status": "PARTIAL",
+  "ownerSignIn": false,
+  "viewer": {
+    "memberId": "zitadel-owner",
+    "role": "admin"
+  },
+  "ownerIds": [
+    "jente-rosseel"
+  ]
+}
