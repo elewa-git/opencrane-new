@@ -34,7 +34,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews and approval details, takeover cancellation, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews and approval details, takeover cancellation, memory, owners, providers, free reachability, spending pages, own saved profile metadata, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
@@ -519,6 +519,10 @@ Configured workers check private token copies at startup and every 15 minutes.
 They remove only copies proven safe to delete, including abandoned saves and copies
 left after failed cleanup jobs. Each pass checks one small page at a time.
 Workers keep copies belonging to other silos without checking or changing them.
+
+A member can read their own saved tool profile without using the private credential store.
+The reader loads exact history before checking current membership. Disabled profiles stay
+readable; incomplete records stay unavailable. A saved bearer is not a verified identity.
 
 ## How to run or test it
 
