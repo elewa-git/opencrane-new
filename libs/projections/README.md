@@ -39,7 +39,8 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
-  server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
+<<<<<<< HEAD
+  server["apps/server<br/>back end"] -->|reads tables, routine run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves admission, removal, role, ownership, control and spending history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads tool readiness, nightly memory inputs and child requests awaiting activation| projections
@@ -201,7 +202,8 @@ its first publication. The tool list and publication status use the same availab
 check as chat. People and assistants still need their own access grants. Rebuilding
 the catalogue restores these saved decisions without sending tool calls.
 
-The routines worker copies saved definitions and runs into read tables. Instructions
+The routines worker copies saved definitions and runs into read tables.
+An index lets the server read small run pages in their original order, even after a run ends. Instructions
 stay encrypted. Each run keeps its original owner, assistant and paying group after
 later edits. Missed dates stay in one compact record. Rebuilding these tables starts
 no work and requires readers and workers to be stopped.

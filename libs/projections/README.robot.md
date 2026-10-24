@@ -919,6 +919,8 @@ releasing the lock, then check that a later request succeeds.
 `routine_occurrences` stores each due with its frozen definition, activation, Stop
 request and first terminal result. It retains the due event id/position and terminal
 reference. Late records must match the original run even after later runs finish.
+`routine_occurrences_position` indexes `(silo, routine_id, position)` for bounded
+run pages. Terminal updates change data only, preserving the original paging position.
 Skipped dates and missed ranges are single rows. A missed range is identified within
 its silo/routine by schedule revision and first/last local dates. It is never expanded.
 Legacy facts remain `legacy-needs-migration` with `executionAvailable: false`.

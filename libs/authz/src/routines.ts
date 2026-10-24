@@ -72,18 +72,43 @@ export async function applyRoutine(client: TupleClient, event: EventEnvelope, re
   await client.write(writes, deletes);
 }
 
+function foldAccessHistory(state: RoutineState | undefined, event: EventEnvelope,
+  completedRuns: Map<string, NonNullable<RoutineState['activeRun']>>) {
+  if (!state || event.type !== 'routine.run_finished') {
+    return foldRoutine(state, event);
+  }
+  const occurrenceId = field(event, 'occurrenceId');
+  if (typeof occurrenceId !== 'string') {
+    throw new Error('Invalid routine occurrence');
+  }
+  const originalRun = completedRuns.get(occurrenceId);
+  if (originalRun) {
+    // Check the original run's binding before ignoring a later outcome, as the projection does.
+    const originalState = { ...state, activeRun: originalRun, lastRun: null,
+      appliedEventIds: [] };
+    foldRoutine(originalState, event);
+    return state;
+  }
+  const next = foldRoutine(state, event);
+  if (state.activeRun && next.lastRun?.occurrenceId === state.activeRun.occurrenceId) {
+    completedRuns.set(state.activeRun.occurrenceId, state.activeRun);
+  }
+  return next;
+}
+
 async function readRoutine(store: History, silo: string, routineId: string,
   throughEventId?: string) {
   let state: RoutineState | undefined;
   let modernCreation = false;
   const receipts: string[] = [];
   const rows: StoredEvent[] = [];
+  const completedRuns = new Map<string, NonNullable<RoutineState['activeRun']>>();
   const deadline = performance.now() + 10_000;
   for await (const row of store.readStream(`routine-${routineId}`, 1, deadline)) {
     if (row.event.silo !== silo) {
       throw new Error('Routine silo mismatch');
     }
-    state = foldRoutine(state, row.event);
+    state = foldAccessHistory(state, row.event, completedRuns);
     rows.push(row);
     const identity = routineRecordIdentitySchema.parse(row.event.data);
     if (row.event.type === 'routine.created' && identity.version === 1) {

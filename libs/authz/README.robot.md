@@ -264,3 +264,12 @@ broken history to permitted readers while still refusing permission-service outa
 The simpler `routine(...)` result keeps only its existing `allowed` and `status` fields.
 The HTTP regressions in `apps/server/test/routine-reads.test.ts` cover ordinary
 non-readers and former owners before and after partial history arrives.
+
+Access history keeps each completed run's original binding while loading the stream.
+A later `routine.run_finished` for that run must pass the existing event, stream and
+run-binding checks before it is ignored. The first outcome and the current routine
+state stay unchanged, even after other runs finish. No permission rule changes.
+`apps/server/test/routine-runs.test.ts` completes two runs, repeats only the older
+run's terminal record with a different outcome, and requires the same two rows before
+and after a verified projection rebuild. Changed run links and revisions remain
+unavailable to a permitted reader and refused to a non-reader.
