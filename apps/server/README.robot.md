@@ -1601,7 +1601,8 @@ records or unavailable IAM 503 `{status: "unavailable"}`. Neither 404 nor 503 al
 resending. GET appends nothing and performs no settlement, release or external call.
 `test/effect-change.test.ts` covers races, lost replies, restart, duplicate expiry,
 replay, safe fields and successful/failed-load access checks using disposable services.
-Audit metadata, settlement progress and fresh-install qualification remain later work.
+Settlement progress and fresh-install qualification remain later work. Audit metadata
+is described in the projection package contract.
 
 `GET /api/org/effects/:permitId` preserves its existing fields and adds
 `resolutionReceipt`: null without a saved resolution, otherwise the same seven
@@ -5063,3 +5064,21 @@ reads and writes keep their contracts. GET and replay append and dispatch nothin
 read deadlines and replay with real NATS, PostgreSQL and OpenFGA. The prerequisite
 internal reader landed in #653 at `f016778fcf0bfc4ed3dd50e469a9729a072f5912`.
 Impact, list replacement, joins and screens remain later work. Live qualification: NOT RUN.
+
+## Saved resolution audit checks
+
+Organisation history returns the checked resolution metadata from the audit projection,
+with `savedOutcome` separate from observed results and budget settlement. Conversation
+history omits `effect.resolved` records, record `amountCents` and `savedOutcome`, and
+row `reservedCents` and `settledCents`. It keeps the decision and execution outcome.
+This response rule also applies to admins reading their own conversation history.
+Current Owner/Admin and private-conversation checks are unchanged. Every list or detail
+load finishes before one access check, including failed loads.
+`test/audit-resolution.test.ts` uses disposable NATS, PostgreSQL and OpenFGA to
+check competing operators, strict attribution, replay, zero, bounded paging,
+private conversation refusal and removal/demotion during successful or failed reads.
+An ordinary requester and a demoted admin retain conversation access before and after
+replay, without seeing resolution records or finance amounts. Admin list and detail
+checks still require the full saved resolution metadata.
+Slow reads with unrelated chat activity remain permitted. GET and replay append
+no resolution or money event and make no upstream request.
