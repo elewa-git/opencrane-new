@@ -38,7 +38,7 @@ async function composeConfiguration(home: string, secondary: boolean): Promise<C
   if (secondary) {
     args.push('-f', 'infra/dev-stack/compose.secondary.yaml');
   }
-  args.push('config', '--format', 'json', '--no-env-resolution');
+  args.push('config', '--format', 'json');
   const options = { env: environment };
   const result = await exec('docker', args, options);
   return JSON.parse(result.stdout) as Compose;
