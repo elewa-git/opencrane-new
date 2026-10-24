@@ -1785,3 +1785,16 @@ async function correctionAfterLoadedAppend() {
 }
 it('withholds recall corrected after its loaded append and refuses renewal and decision',
   correctionAfterLoadedAppend);
+
+async function signedRecallHasPreparation() {
+  const token = await signedRecall(setup);
+  const claims = decodeJwt(token);
+  expect(claims['preparationId']).toEqual(expect.any(String));
+  expect(claims['inputGeneration']).toEqual(expect.any(String));
+  const request = { method: 'POST' as const, url: route, payload: call,
+    headers: { ...headers, 'x-memory-context': token } };
+  const response = await app.inject(request);
+  expect(response.statusCode, response.body).toBe(200);
+}
+it('prepares the direct recall fixture before signing its executable pass',
+  signedRecallHasPreparation);
