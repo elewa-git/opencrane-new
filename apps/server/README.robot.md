@@ -4844,3 +4844,15 @@ Knip and changelog validation. The related memory and event-security suites pass
 all changed tests more than twice. Authority, authority-volume and security-rule tests
 were not edited. No dependencies, business events or preparation response fields were added.
 Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
+
+### Explicit memory preparation in tests
+
+The direct dispatch fixture obtains and checks preparation before signing an executable
+recall pass. Restart tests prepare against the replacement backend because preparations
+belong to one backend instance. Request counts distinguish preparation from execution.
+
+The memory MCP fixture requires HTTP 200 and a complete preparation reply. Refused
+preparations are tested at the preparation route. Final-pass refusal tests obtain valid
+preparation before revoking access. Invalid HTTP status and malformed success replies
+must stop the helper before signing. Slow loaded-receipt tests exercise the real gateway
+with existing personal references and with another scope already loaded by the turn.

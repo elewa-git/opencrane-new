@@ -471,10 +471,10 @@ async function scopedRecall(team: boolean) {
       const requester = scopedRequester(team, scope.scopeKind);
       const revokedFields = { resourceType: 'memory_read', resourceId: selectedId,
         ...requester, revokedBy: 'alice' };
-      const revoked = await target.append(grantStream('memory_read', selectedId),
-        'grant.revoked', revokedFields);
       const scopeClaims = { scopes: [selectedId] };
       const revokedToken = await signedRecall(target, scopeClaims, body);
+      const revoked = await target.append(grantStream('memory_read', selectedId),
+        'grant.revoked', revokedFields);
       const direct = { method: 'POST' as const, url: route,
         headers: { ...headers, 'x-memory-context': revokedToken }, payload: body };
       expect((await backend.inject(direct)).statusCode).toBe(403);
@@ -546,11 +546,12 @@ async function refuseUnboundScopes(target: typeof setup, backend: typeof app) {
 
 async function assertScopedRefused(target: typeof setup, backend: typeof app,
   body: typeof call, selectedId: string) {
-  const scopeClaims = { scopes: [selectedId] };
-  const token = await signedRecall(target, scopeClaims, body);
+  const claims = await recallClaims(target, body);
+  expect(claims.scopes).toEqual([selectedId]);
+  const token = await preparationToken(target, claims);
   const database = vi.spyOn(target.db, 'query');
   try {
-    const direct = { method: 'POST' as const, url: route,
+    const direct = { method: 'POST' as const, url: `${route}/prepare`,
       headers: { ...headers, 'x-memory-context': token }, payload: body };
     expect((await backend.inject(direct)).statusCode).toBe(403);
     expect((await target.call(headers, body, route)).status).toBe(403);
@@ -599,46 +600,74 @@ function isMemoryRoute(candidate: { serverId: string }) {
   return candidate.serverId === 'memory';
 }
 
-async function signedRecall(target: typeof setup, overrides = {}, body = call) {
+async function recallClaims(target: typeof setup, body = call) {
   const parsed = parseMemoryRequest(JSON.stringify(body), headers);
-  const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
+  const dispatch = await memoryBinding(target);
+  return { silo: 'test', requester: 'alice', assistant: 'assistant',
     computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
     thread: 'thread', operation: 'recall', scopes: [parsed.input!.scopeId], contentAccess: 'private',
-    bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
+    bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId, dispatch,
     requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
-  const dispatch = await memoryBinding(target);
-  const boundClaims = { ...claims, dispatch };
-  const fields = await prepareSignedMemory(target, boundClaims, body, headers);
-  const finalClaims = { ...claims, dispatch, ...fields, ...overrides };
+}
+
+async function signedRecall(target: typeof setup, overrides = {}, body = call) {
+  const claims = await recallClaims(target, body);
+  const fields = await prepareSignedMemory(target, claims, body, headers);
+  const finalClaims = { ...claims, ...fields, ...overrides };
   return target.tokens.memoryContext(finalClaims, Date.now() + 2000);
+}
+
+async function preparationToken(target: typeof setup, claims: Record<string, unknown>) {
+  const preparationClaims = { ...claims, preparing: true };
+  return target.tokens.memoryContext(preparationClaims, Date.now() + 2000);
 }
 
 async function prepareSignedMemory(target: typeof setup, claims: Record<string, unknown>,
   body: unknown, requestHeaders: typeof headers) {
-  const preparationClaims = { ...claims, preparing: true };
-  const preparing = await target.tokens.memoryContext(preparationClaims, Date.now() + 2000);
+  const preparing = await preparationToken(target, claims);
   const upstream = target.options.mcpRoutes.find(isMemoryRoute)!.upstream;
   const request = { method: 'POST', headers: { ...requestHeaders,
     'content-type': 'application/json', 'x-memory-context': preparing },
     body: JSON.stringify(body) };
   const preparation = await fetch(`http://${upstream}${route}/prepare`, request);
+  if (preparation.status !== 200) {
+    throw new Error(`Memory preparation refused (${preparation.status})`);
+  }
   const prepared: unknown = await preparation.json();
-  const schema = z.object({ preparationId: z.uuid().optional(),
-    inputGeneration: z.string().optional() });
+  const schema = z.strictObject({ preparationId: z.uuid(), inputGeneration: z.string().min(1) });
   return schema.parse(prepared);
 }
 
-async function assertRecallRefused(target: typeof setup, backend: typeof app) {
-  const token = await signedRecall(target);
-  const database = vi.spyOn(setup.db, 'query');
+async function assertRecallPreparationRefused(target: typeof setup, backend: typeof app) {
+  const claims = await recallClaims(target);
+  const token = await preparationToken(target, claims);
+  const database = vi.spyOn(target.db, 'query');
   try {
     const requestHeaders = { ...headers, 'x-memory-context': token };
-    const request = { method: 'POST' as const, url: route,
+    const request = { method: 'POST' as const, url: `${route}/prepare`,
       headers: requestHeaders, payload: call };
     const response = await backend.inject(request);
     expect(response.statusCode, response.body).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
     expect(database).not.toHaveBeenCalled();
     const gateway = await target.call(headers, call, route);
+    expect(gateway.status, gateway.text).toBe(403);
+    expect(database).not.toHaveBeenCalled();
+  } finally {
+    database.mockRestore();
+  }
+}
+
+async function assertRecallFinalRefused(token: string) {
+  const database = vi.spyOn(setup.db, 'query');
+  try {
+    const request = { method: 'POST' as const, url: route, payload: call,
+      headers: { ...headers, 'x-memory-context': token } };
+    const response = await app.inject(request);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(database).not.toHaveBeenCalled();
+    const gateway = await setup.call(headers, call, route);
     expect(gateway.status, gateway.text).toBe(403);
     expect(database).not.toHaveBeenCalled();
   } finally {
@@ -662,9 +691,9 @@ async function recordedMemoryGrant(granteeKind: string) {
     const otherKind = granteeKind === 'member' ? 'assistant' : 'member';
     const otherId = otherKind === 'member' ? 'alice' : 'assistant';
     await grantMemory(target, otherKind, otherId);
-    await assertRecallRefused(target, backend);
+    await assertRecallPreparationRefused(target, backend);
     await grantMemory(target, otherKind, granteeId);
-    await assertRecallRefused(target, backend);
+    await assertRecallPreparationRefused(target, backend);
     await grantMemory(target, granteeKind, granteeId);
     const allowed = await target.call(headers, call, route);
     expect(allowed.status, allowed.text).toBe(200);
@@ -676,7 +705,7 @@ async function recordedMemoryGrant(granteeKind: string) {
     const identityKind = granteeKind === 'member' ? 'person' : 'assistant';
     expect(await target.auth.use(identityKind, granteeId, 'memory_read', scopeId))
       .toMatchObject({ allowed: true });
-    await assertRecallRefused(target, backend);
+    await assertRecallPreparationRefused(target, backend);
   } finally {
     await closeMemoryServices(target, backend);
   }
@@ -697,7 +726,7 @@ it('requires recorded MCP grants independently of valid memory grants',
       await grantMemory(target, 'member', 'alice');
       await grantMemory(target, 'assistant', 'assistant');
       backend = await isolatedBackend(target);
-      await assertRecallRefused(target, backend);
+      await assertRecallPreparationRefused(target, backend);
       for (const granteeKind of ['member', 'assistant']) {
         const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
         const fields = { resourceType: 'mcp_server', resourceId: 'memory',
@@ -705,7 +734,7 @@ it('requires recorded MCP grants independently of valid memory grants',
         const grant = await target.append(grantStream('mcp_server', 'memory'),
           'grant.given', fields);
         await target.auth.handler.handle(grant, target.db);
-        if (granteeKind === 'member') await assertRecallRefused(target, backend);
+        if (granteeKind === 'member') await assertRecallPreparationRefused(target, backend);
       }
       const allowed = await target.call(headers, call, route);
       expect(allowed.status, allowed.text).toBe(200);
@@ -727,7 +756,7 @@ it.each([undefined, 'memory_free'] as const)(
       await grantMemory(target, 'member', 'alice');
       await grantMemory(target, 'assistant', 'assistant');
       backend = await isolatedBackend(target);
-      await assertRecallRefused(target, backend);
+      await assertRecallPreparationRefused(target, backend);
     } finally {
       await closeMemoryServices(target, backend);
     }
@@ -882,13 +911,14 @@ it('refuses changed MCP policy at both the gateway and backend', async function 
 });
 
 async function refusesMissingPermission(granteeKind: string) {
+  const token = await signedRecall(setup);
   const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
   const fields = { resourceType: 'memory_read', resourceId: scopeId,
     granteeKind, granteeId, revokedBy: 'alice' };
   const revoked = envelope('test', grantStream('memory_read', scopeId), 'grant.revoked', fields);
   await setup.auth.handler.handle(revoked, setup.db);
   try {
-    await assertRecallRefused(setup, app);
+    await assertRecallFinalRefused(token);
   } finally {
     await grantMemory(setup, granteeKind, granteeId, false);
   }
@@ -920,15 +950,16 @@ async function refusesWrongIdentity(overrides: Record<string, unknown>) {
 it.each(wrongIdentities)('refuses a signed backend context with another identity: %j',
   refusesWrongIdentity);
 
-it('refuses a signed body whose thread differs from the recorded start',
+it('refuses preparation whose signed thread differs from the recorded start',
   async function recordedThread() {
     const otherMetadata = { ...metadata, threadId: 'other' };
     const body = { ...call, params: { ...call.params, _meta: otherMetadata } };
-    const token = await signedRecall(setup, { thread: 'other' }, body);
+    const claims = await recallClaims(setup, body);
+    const token = await preparationToken(setup, { ...claims, thread: 'other' });
     const database = vi.spyOn(setup.db, 'query');
     try {
       const requestHeaders = { ...headers, 'x-memory-context': token };
-      const options = { method: 'POST' as const, url: route,
+      const options = { method: 'POST' as const, url: `${route}/prepare`,
         headers: requestHeaders, payload: body };
       const response = await app.inject(options);
       expect(response.statusCode).toBe(403);
@@ -949,12 +980,24 @@ it('refuses a start saved by another process and a computer that is no longer re
     await setup.nats.seed([start]);
     const forgedMetadata = { ...metadata, threadId: 'forged-thread' };
     const forgedBody = { ...call, params: { ...call.params, _meta: forgedMetadata } };
-    await refusesBackendIdentity({ turn: 'forged', thread: 'forged-thread' }, forgedBody);
+    const claims = await recallClaims(setup, forgedBody);
+    const token = await preparationToken(setup, { ...claims,
+      turn: 'forged', thread: 'forged-thread' });
+    const database = vi.spyOn(setup.db, 'query');
+    try {
+      const request = { method: 'POST' as const, url: `${route}/prepare`, payload: forgedBody,
+        headers: { ...headers, 'x-memory-context': token } };
+      const response = await app.inject(request);
+      expect(response.statusCode).toBe(403);
+      expect(database).not.toHaveBeenCalled();
+    } finally {
+      database.mockRestore();
+    }
     await setup.append('computer-assistant', 'computer.claimed',
       { assistantId: 'assistant', computerId: 'computer', generation: 1,
         tokenId: 'token:initial' });
     try {
-      await assertRecallRefused(setup, app);
+      await assertRecallPreparationRefused(setup, app);
     } finally {
       await setup.append('computer-assistant', 'computer.ready',
         { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
@@ -965,11 +1008,12 @@ it('refuses conflicting secondary Codex thread metadata at both admission points
   async function secondaryThread() {
     const otherMetadata = { ...metadata, 'x-codex-turn-metadata': { thread_id: 'other' } };
     const body = { ...call, params: { ...call.params, _meta: otherMetadata } };
-    const token = await signedRecall(setup, {}, body);
+    const claims = await recallClaims(setup, body);
+    const token = await preparationToken(setup, claims);
     const database = vi.spyOn(setup.db, 'query');
     try {
       const requestHeaders = { ...headers, 'x-memory-context': token };
-      const options = { method: 'POST' as const, url: route,
+      const options = { method: 'POST' as const, url: `${route}/prepare`,
         headers: requestHeaders, payload: body };
       expect((await app.inject(options)).statusCode).toBe(403);
       capability = '';
@@ -988,10 +1032,11 @@ const revokedGrants = [
     granteeId: 'assistant' },
 ];
 async function refusesRevokedGrant(grant: (typeof revokedGrants)[number]) {
+  const token = await signedRecall(setup);
   const subject = grantStream(grant.resourceType, grant.resourceId);
   const revoked = await setup.append(subject, 'grant.revoked', { ...grant, revokedBy: 'alice' });
   try {
-    await assertRecallRefused(setup, app);
+    await assertRecallFinalRefused(token);
   } finally {
     await setup.auth.handler.handle(revoked, setup.db);
     const restored = await setup.append(subject, 'grant.given', { ...grant, grantedBy: 'alice' });
@@ -2902,6 +2947,18 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
   const timing = timeMemoryPath(setup, step, delay);
   try {
     if (operation === 'recall') {
+      if (revoke) {
+        const claims = await recallClaims(setup);
+        const preparing = await preparationToken(setup, claims);
+        const request = { method: 'POST' as const, url: `${route}/prepare`, payload: call,
+          headers: { ...headers, 'x-memory-context': preparing } };
+        const response = await app.inject(request);
+        expect(response.statusCode).toBe(403);
+        expect(response.json()).toEqual({ status: 'refused' });
+        timing.report(operation, revoke);
+        expect(timing.delayed()).toBe(true);
+        return;
+      }
       token = await signedRecall(setup);
     }
     if (change) {
@@ -2931,7 +2988,16 @@ async function revokedDuringBackend(operation: 'recall' | 'correct' | 'forget',
   step: 'history' | 'IAM') {
   await delayedBackend(operation, step, true);
 }
-it.each(backendDelays)('refuses %s revoked during a slow backend %s read', revokedDuringBackend);
+const revokedChangeDelays = [
+  ['correct', 'history'], ['correct', 'IAM'], ['forget', 'history'], ['forget', 'IAM'],
+] as const;
+it.each(revokedChangeDelays)(
+  'refuses the final %s pass revoked during a slow backend %s read', revokedDuringBackend);
+async function revokedRecallPreparation(step: 'history' | 'IAM') {
+  await delayedBackend('recall', step, true);
+}
+it.each(['history', 'IAM'] as const)(
+  'refuses recall preparation revoked during a slow backend %s read', revokedRecallPreparation);
 
 async function refusesPreparation(change: 'missing' | 'reused' | 'expired' | 'mismatched') {
   const original = await signedRecall(setup);
@@ -3095,7 +3161,10 @@ async function gatewayLoadedReceipts(operation: 'recall' | 'correct' | 'forget',
   let body: Record<string, unknown> = call;
   let requestHeaders = headers;
   if (operation === 'recall' && !otherScope) {
-    await loadChangeFacts(1);
+    const initial = { ...call, params: { ...call.params,
+      _meta: { ...metadata, callId: 'loaded-person' } } };
+    const loaded = await setup.call(headers, initial, route);
+    expect(loaded.status, loaded.text).toBe(200);
   } else if (operation !== 'recall') {
     const request = await changeRequest(operation, false);
     body = request.body;
@@ -3106,7 +3175,8 @@ async function gatewayLoadedReceipts(operation: 'recall' | 'correct' | 'forget',
     await seedScopedFacts(setup, false);
     const notesId = memoryScopeId('test', 'assistant_notes', 'assistant');
     const notesCall = { ...call, params: { ...call.params,
-      arguments: { scopeId: notesId, query: '' } } };
+      arguments: { scopeId: notesId, query: '' },
+      _meta: { ...metadata, callId: 'loaded-notes' } } };
     const loaded = await setup.call(headers, notesCall, route);
     expect(loaded.status, loaded.text).toBe(200);
     const grants = await history(setup.nats.store, grantStream('memory_read', notesId), 'test');
@@ -3159,7 +3229,15 @@ async function rejectsInvalidPreparationReply(status: number, responseBody: obje
   const originalFetch = globalThis.fetch;
   async function fetchPreparation(input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1]) {
-    if (String(input).endsWith(`${route}/prepare`)) {
+    let url: string;
+    if (typeof input === 'string') {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else {
+      url = input.url;
+    }
+    if (url.endsWith(`${route}/prepare`)) {
       return new Response(JSON.stringify(responseBody), { status });
     }
     return originalFetch(input, init);

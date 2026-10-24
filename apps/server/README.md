@@ -35,6 +35,7 @@ cancellation, so a foreign approval stays unchanged.
 
 Recall, Correct and Forget load their history before the gateway signs the short pass.
 The server keeps that data briefly for one call and checks current access before use.
+Calls and turn renewal prepare access receipts for every memory scope already loaded.
 Correct and Forget validate their targets but remain disabled.
 
 ## Where it fits
@@ -55,7 +56,7 @@ flowchart LR
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
-  runtime -->|prepares memory calls, then checks permission| server
+  runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
