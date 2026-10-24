@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { effectResolvedDataSchema, type EventEnvelope } from '@opencrane/events';
+import { effectResolvedDataSchema, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { BudgetActor, envelope, history, priceTableId, readEffectChange,
   resolveEffect } from '@opencrane/models';
 import { pgDb } from '@opencrane/projections';
@@ -20,6 +20,7 @@ let options: IntegrationOptions;
 let app: ReturnType<typeof buildServer>;
 let actor: BudgetActor;
 let permitId: string;
+let foreignPermit: string;
 let saved: EventEnvelope;
 let position: number;
 const noCalls = vi.fn(noExternalCalls);
@@ -53,6 +54,9 @@ async function initialise() {
     contextDigest: '0'.repeat(64) };
   permitId = await actor.reserve(call, 1000);
   await actor.effect(permitId);
+  const foreignActor = new BudgetActor(nats.store, 'other');
+  await foreignActor.start(20000, 20000, 'group');
+  foreignPermit = await foreignActor.reserve(call, 1000);
   app = buildServer(config, { integrations: options });
 }
 async function close() {
@@ -62,11 +66,12 @@ async function close() {
   await fga?.close();
   await nats?.close();
 }
-function request(changeRef: string, sub = 'owner', permit = permitId,
+function request(changeRef: string | undefined, sub = 'owner', permit = permitId,
   server = app, orgId = 'org-acme') {
   const session = { sub, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  const url = `/api/org/effects/${permit}/changes/${changeRef}`;
+  let url = `/api/org/effects/${permit}`;
+  if (changeRef !== undefined) url += `/changes/${changeRef}`;
   return server.inject({ method: 'GET', url, headers });
 }
 function expectedReceipt() {
@@ -74,8 +79,30 @@ function expectedReceipt() {
     position, time: saved.time, resolvedBy: saved.principal!.id,
     outcome: 'settled', settledCents: 600 } };
 }
+async function detailReceipt(server = app) {
+  const before = await nats.store.head();
+  const state = structuredClone(actor.state);
+  const response = await request(undefined, 'owner', permitId, server);
+  expect(response.statusCode).toBe(200);
+  expect(response.headers['cache-control']).toBe('no-store');
+  const detail = response.json<Record<string, unknown>>();
+  expect(detail['resolutionReceipt']).toEqual(expectedReceipt().receipt);
+  expect(detail['resolution']).toMatchObject({ outcome: 'settled', settledCents: 600 });
+  expect(detail['csrf']).toEqual(expect.any(String));
+  expect(await nats.store.head()).toBe(before);
+  expect(actor.state).toEqual(state);
+  expect(noCalls).not.toHaveBeenCalled();
+  return detail;
+}
 beforeAll(initialise, 120000);
 afterAll(close);
+
+async function doesNotInventReceipt() {
+  const response = await request(undefined);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ resolution: null, resolutionReceipt: null });
+}
+it('shows no receipt before any resolution is saved', doesNotInventReceipt);
 
 async function recoversOnlySavedCommand() {
   const expectedSequence = await nats.store.head(`effect-${permitId}`);
@@ -110,6 +137,7 @@ async function recoversOnlySavedCommand() {
   expect(response.statusCode).toBe(200);
   expect(response.headers['cache-control']).toBe('no-store');
   expect(response.json()).toEqual(expectedReceipt());
+  await detailReceipt();
   const absent = await request(missing);
   expect(absent.statusCode).toBe(404);
   expect(absent.json()).toEqual({ status: 'not_found' });
@@ -127,8 +155,10 @@ async function recoversOnlySavedCommand() {
   await actor.start();
   const restarted = await request(saved.commandId!, 'admin');
   expect(restarted.json()).toEqual(expectedReceipt());
+  await detailReceipt();
   const replay = buildServer(config, { integrations: { ...options, store: nats.reader } });
   try {
+    await detailReceipt(replay);
     expect((await request(saved.commandId!, 'owner', permitId, replay)).json())
       .toEqual(expectedReceipt());
   } finally {
@@ -339,6 +369,156 @@ async function readsRecordedZeroWithoutRelease() {
 }
 it('returns recorded zero cents without claiming or applying a release', readsRecordedZeroWithoutRelease);
 
+async function keepsReceiptBesideConflictingMoney() {
+  const data = { permitId, computerId: 'private-computer', tool: 'private-tool',
+    destination: 'private-destination', outcome: 'success', costCents: 700 };
+  const observation = envelope('test', `effect-${permitId}`, 'effect.observed', data);
+  await nats.seed([observation]);
+  await actor.settleRecorded(permitId, saved.id);
+  const before = await nats.store.head();
+  const detail = await detailReceipt();
+  expect(detail).toMatchObject({ settledCents: 700, reservedCents: 1000,
+    state: 'outcome_unknown', conflict: true });
+  const replay = buildServer(config, { integrations: { ...options, store: nats.reader } });
+  try {
+    expect(await detailReceipt(replay)).toEqual(detail);
+  } finally {
+    await replay.close();
+  }
+  expect(await nats.store.head()).toBe(before);
+}
+it('keeps the saved amount separate from conflicting settlement and retains the hold',
+  keepsReceiptBesideConflictingMoney);
+
+async function refusesInvalidDetail(kind: string) {
+  const read = nats.store.readStream.bind(nats.store);
+  async function* invalid(...args: Parameters<typeof read>) {
+    for await (const row of read(...args)) {
+      if (args[0] !== `effect-${permitId}` || row.event.id !== saved.id) {
+        yield row;
+        continue;
+      }
+      const event = structuredClone(row.event);
+      const data = effectResolvedDataSchema.parse(event.data);
+      event.data = data;
+      if (kind === 'subject') event.subject = 'effect-foreign';
+      if (kind === 'silo') event.silo = 'other';
+      if (kind === 'permit') data.permitId = 'other';
+      if (kind === 'reservation') data.reservationId = 'other';
+      if (kind === 'source') event.source = 'untrusted';
+      if (kind === 'principal') event.principal = { kind: 'system', id: data.resolvedBy };
+      if (kind === 'resolver') data.resolvedBy = 'forged';
+      if (kind === 'cents') data.settledCents = 0.5;
+      if (kind === 'time') event.time = 'not-a-time';
+      if (kind === 'change') delete event.commandId;
+      yield { ...row, event };
+      if (kind === 'duplicate') yield row;
+      if (kind === 'later') yield { ...row, event: { ...event, id: 'later', commandId: 'later' } };
+      if (kind === 'reused-change') {
+        const uncertain = { permitId, computerId: 'private', reason: 'missing_usage' };
+        yield { ...row, event: { ...event, type: 'effect.uncertain', data: uncertain } };
+      }
+    }
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(invalid);
+  try {
+    const before = await nats.store.head();
+    const response = await request(undefined);
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(reads.mock.calls.filter(isMemberRead)).toHaveLength(1);
+    expect(await nats.store.head()).toBe(before);
+  } finally {
+    reads.mockRestore();
+  }
+}
+it.each(['subject', 'silo', 'permit', 'reservation', 'source', 'principal', 'resolver',
+  'cents', 'time', 'change', 'duplicate', 'later', 'reused-change'])(
+  'refuses detail with invalid or ambiguous resolution %s', refusesInvalidDetail);
+
+async function checksDetailAccess(kind: string, failed: boolean) {
+  for (const permit of [permitId, 'missing', foreignPermit]) {
+    const sub = `detail-${kind}-${String(failed)}-${permit}`;
+    await appendMember(sub, 'admin');
+    const read = nats.store.readStream.bind(nats.store);
+    async function* changeDuringLoad(...args: Parameters<typeof read>) {
+      yield* read(...args);
+      if (args[0] !== 'budget-test') return;
+      let change: EventEnvelope;
+      if (kind === 'remove') {
+        change = envelope('test', `member-${sub}`, 'member.removed',
+          { memberId: sub, removedBy: 'owner' });
+      } else {
+        const newRole = kind === 'demote' ? 'member' : 'admin';
+        change = envelope('test', `member-${sub}`, 'member.role_changed',
+          { memberId: sub, previousRole: 'admin', newRole, changedBy: 'owner' });
+      }
+      await nats.seed([change]);
+      if (failed) throw new Error('Private history failure canary');
+    }
+    const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(changeDuringLoad);
+    try {
+      const response = await request(undefined, sub, permit);
+      expect(response.statusCode).toBe(kind === 'unapplied' ? 503 : 403);
+      const status = kind === 'unapplied' ? 'unavailable' : 'refused';
+      expect(response.json()).toEqual({ status });
+      expect(reads.mock.calls.filter(isMemberRead)).toHaveLength(1);
+    } finally {
+      reads.mockRestore();
+    }
+  }
+}
+it.each([['remove', false], ['demote', false], ['unapplied', false],
+  ['remove', true], ['demote', true], ['unapplied', true]] as const)(
+  'checks detail access for existing, missing and foreign ids: %s, failed=%s', checksDetailAccess);
+
+async function permitsSlowDetailWithChatActivity() {
+  const read = nats.store.readStream.bind(nats.store);
+  async function* slow(...args: Parameters<typeof read>) {
+    if (args[0] === `effect-${permitId}`) await delay(2200);
+    yield* read(...args);
+    if (args[0] !== 'member-owner') return;
+    const data = getEventDefinition('agent.message_delta')!.example;
+    const change = envelope('test', 'conversation-private-chat', 'agent.message_delta', data);
+    await nats.seed([change]);
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
+  const append = vi.spyOn(nats.store, 'append');
+  try {
+    const response = await request(undefined);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ resolutionReceipt: expectedReceipt().receipt });
+    expect(reads.mock.calls.map(readSubject)).toEqual([
+      'budget-test', `effect-${permitId}`, 'member-owner', 'ownership-test',
+    ]);
+    expect(append).not.toHaveBeenCalled();
+    expect(noCalls).not.toHaveBeenCalled();
+  } finally {
+    reads.mockRestore();
+    append.mockRestore();
+  }
+}
+it('loads slow detail before one access check and permits unrelated chat activity',
+  permitsSlowDetailWithChatActivity);
+
+async function refusesFailedDetail() {
+  const read = nats.store.readStream.bind(nats.store);
+  async function* failed(...args: Parameters<typeof read>) {
+    if (args[0] === 'budget-test') throw new Error('Private outage canary');
+    yield* read(...args);
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(failed);
+  try {
+    const response = await request(undefined);
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(reads.mock.calls.filter(isMemberRead)).toHaveLength(1);
+  } finally {
+    reads.mockRestore();
+  }
+}
+it('returns a fixed detail outage after checking authorised access once', refusesFailedDetail);
+
 async function recoversAfterServiceRestart() {
   await app.close();
   await nats.stop();
@@ -346,6 +526,7 @@ async function recoversAfterServiceRestart() {
   app = buildServer(config, { integrations: options });
   const before = await nats.store.head();
   expect((await request(saved.commandId!)).json()).toEqual(expectedReceipt());
+  await detailReceipt();
   const missing = saved.commandId === 'first' ? 'second' : 'first';
   expect((await request(missing)).json()).toEqual({ status: 'not_found' });
   expect(await nats.store.head()).toBe(before);
