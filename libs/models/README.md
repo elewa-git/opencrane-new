@@ -45,7 +45,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  models -.->|checks write outcomes; replay tests use the database helper| store
+  models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending pages, own saved profiles and original change receipts, personal account choices, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
@@ -53,7 +53,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, child allowances and payer limits; rechecks state and access when unrelated activity interrupts startup saves; rechecks access and the saved budget position on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
+  models -->|checks write outcomes, spending choices, child allowances and payer limits; rechecks state and access when unrelated activity interrupts startup saves; rechecks access and the saved budget position on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
