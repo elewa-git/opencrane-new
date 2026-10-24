@@ -5237,16 +5237,23 @@ the candidates without filtering any. False with null `next` means the final pag
 was filtered; it must not be presented as a proven empty inventory.
 
 The signed continuation binds route, silo, member, view, limit, projection generation
-and the latest routine event position. Any routine event conservatively restarts
-paging; chat activity does not. The position lookup reads no stream history.
+and the latest projected position among this member's own routines. The existing
+owner/position index supplies that position with a one-row lookup. Other owners'
+routine changes and chat activity do not restart paging or change the returned
+`sequence`. That field reports the own-routine position; the shared projection
+checkpoint stays internal and is used only to detect projection lag.
 Changed or foreign continuations and rebuilds return 409 `{status: 'restart'}`.
 Missing, lagging or locked projections return 503 `{status: 'unavailable'}`.
 The checkpoint must cover the captured routine position, including on an empty page.
 
 Page loading has a ten-second deadline. Routine histories have their existing
-separate ten-second bounds. A final generation and routine-position check has a
-two-second read deadline. These reads use no write authority window. Each candidate's
-`read_metadata` permission is checked once after loading. Current membership is checked
+separate ten-second bounds. Final generation, own-routine position and individual
+candidate position checks share a two-second read deadline. Individual positions
+catch reassignment before the projection has caught up. They compare against loaded
+history, so repeated outcomes that leave the projected row unchanged remain readable.
+Individual position lookup failures are considered only after permission is granted.
+These reads use no write authority window. Each candidate's `read_metadata` permission
+is checked once after loading. Current membership is checked
 after successful or failed loading, including empty pages. Access refusal takes
 precedence over page errors. Reassignment during loading restarts the page without
 returning any protected rows. Admin permission never expands the owner filter.

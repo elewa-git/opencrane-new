@@ -14,6 +14,8 @@ const progressSchema = z.object({ sequence: z.coerce.number().int().nonnegative(
   generation: z.coerce.number().int().nonnegative() });
 const candidateSchema = routineMetadataSchema.extend({ position: z.coerce.number().int().positive() });
 type ListQuery = z.infer<typeof routineListQuery>;
+type RoutineAccess = Awaited<ReturnType<
+  ReturnType<typeof memberAuthorisation>['loadRoutineAccess']>>;
 
 async function progress(options: GroupOptions, deadline: number) {
   const queryOptions = { deadline };
@@ -21,15 +23,25 @@ async function progress(options: GroupOptions, deadline: number) {
     JOIN projection_generations USING (name) WHERE name = $1`, ['routines'], queryOptions);
   return progressSchema.parse(result.rows[0]);
 }
+async function ownerPosition(options: GroupOptions, memberId: string, deadline: number) {
+  const queryOptions = { deadline };
+  const result = await options.db.query(`SELECT position FROM routines AS owned
+    WHERE silo = $1 AND state #>> '{definition,definition,ownerId}' = $2
+    ORDER BY position DESC LIMIT 1`, [options.silo, memberId], queryOptions);
+  if (result.rows.length === 0) return 0;
+  return z.coerce.number().int().positive().parse(result.rows[0]?.['position']);
+}
+
 async function loadPage(options: GroupOptions, memberId: string, query: ListQuery, secret: string) {
   const deadline = performance.now() + 10_000;
   const queryOptions = { deadline };
-  // Read one stream position, not its history. Chat events cannot change this list binding.
-  const position = await options.store.head('routine-*', deadline);
+  // Use the shared position only to check projection progress, never to bind a continuation.
+  const requiredPosition = await options.store.head('routine-*', deadline);
+  const before = await progress(options, deadline);
+  if (before.sequence < requiredPosition) throw new Error('Routine list unavailable');
+  const position = await ownerPosition(options, memberId, deadline);
   const identity = ['routine-list', options.silo, memberId, query.view, query.limit, position];
   const cursor = conversationListCursor(secret, identity, query.continuation);
-  const before = await progress(options, deadline);
-  if (before.sequence < position) throw new Error('Routine list unavailable');
   let after = 0;
   if (query.continuation !== undefined) {
     if (cursor.before[0] !== before.generation) throw new ConversationListChanged();
@@ -52,6 +64,23 @@ async function loadPage(options: GroupOptions, memberId: string, query: ListQuer
   return { records: result.rows, cursor, position, ...before };
 }
 
+async function readableMetadata(memberId: string, candidate: z.infer<typeof candidateSchema>,
+  saved: RoutineAccess, loaded: PromiseSettledResult<number>, checkpoint: number) {
+  const permission = await saved.check('read_metadata');
+  if (permission.status === 'unavailable') throw new Error('Routine list unavailable');
+  const savedOwner = saved.state?.definition?.definition.ownerId;
+  if (savedOwner !== undefined && savedOwner !== memberId) throw new ConversationListChanged();
+  if (!permission.allowed || savedOwner !== memberId) return undefined;
+  if (loaded.status === 'rejected') throw new Error('Routine list unavailable');
+  const latest = saved.rows.at(-1)?.sequence;
+  // Compare with loaded history: a duplicate outcome need not update the projected row.
+  if (latest === undefined || latest > checkpoint || loaded.value !== latest) {
+    throw new ConversationListChanged();
+  }
+  const { position: _position, ...metadata } = candidate;
+  return metadata;
+}
+
 async function authorisedPage(options: GroupOptions, memberId: string,
   query: ListQuery, secret: string) {
   const page = await loadPage(options, memberId, query, secret);
@@ -66,28 +95,30 @@ async function authorisedPage(options: GroupOptions, memberId: string,
     const preparedCandidate = { candidate, saved };
     prepared.push(preparedCandidate);
   }
-  // Finish loading before permission checks. A change to any loaded routine restarts paging.
+  // Finish loading before permission checks. Other owners cannot invalidate this page.
   const deadline = performance.now() + 2000;
   const current = await progress(options, deadline);
-  const latestPosition = await options.store.head('routine-*', deadline);
+  const latestPosition = await ownerPosition(options, memberId, deadline);
   if (current.generation !== page.generation || latestPosition !== page.position) {
     throw new ConversationListChanged();
   }
-  for (const { candidate, saved } of prepared) {
-    const permission = await saved.check('read_metadata');
-    if (permission.status === 'unavailable') throw new Error('Routine list unavailable');
-    if (!permission.allowed || saved.state?.definition?.definition.ownerId !== memberId) continue;
-    const latest = saved.rows.at(-1)?.sequence;
-    if (latest === undefined || latest > page.sequence) throw new ConversationListChanged();
-    const { position: _position, ...metadata } = candidate;
-    rows.push(metadata);
+  const positions = [];
+  for (const { candidate } of prepared) {
+    const loading = options.store.head(`routine-${candidate.routineId}`, deadline);
+    const [loaded] = await Promise.allSettled([loading]);
+    positions.push(loaded);
+  }
+  for (const [index, { candidate, saved }] of prepared.entries()) {
+    const metadata = await readableMetadata(memberId, candidate, saved,
+      positions[index]!, page.sequence);
+    if (metadata) rows.push(metadata);
   }
   let next: string | null = null;
   if (page.records.length > query.limit) {
     next = page.cursor.next([page.generation, prepared.at(-1)!.candidate.position]);
   }
   const complete = next === null && rows.length === candidates.length;
-  return { rows, next, complete, sequence: page.sequence, generation: page.generation,
+  return { rows, next, complete, sequence: page.position, generation: page.generation,
     executionAvailable: false as const };
 }
 

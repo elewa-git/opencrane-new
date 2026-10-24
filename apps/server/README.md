@@ -138,7 +138,8 @@ credentials does not verify an upstream identity or enable calls.
 ## Processes it handles
 
 A person lists their own routines in small pages. Admins using this list also see only
-their own routines. A filtered page can be empty and still have a next page.
+their own routines. Changes to another owner’s routines do not restart these pages.
+A filtered page can be empty and still have a next page.
 
 A person opens a routine. The server loads its saved history, then checks permission.
 It checks permission even if history fails, so non-readers receive the same refusal.
