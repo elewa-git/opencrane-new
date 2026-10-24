@@ -16,7 +16,7 @@ flowchart LR
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
   ci -->|runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image and demo read tests| computer["apps/computer<br/>test image"]
-  actions -->|checks folder guides| readmes["README checker"]
+  actions -->|checks guides and dev-stack test selection| guards["Repository checks"]
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
   actions -->|restores system packages| cache["Actions cache<br/>downloaded packages"]
   cache -->|supplies saved packages| ci
@@ -27,7 +27,8 @@ flowchart LR
 - Run image and browser tests in parallel jobs.
 - Balance four test jobs, called shards, using saved test durations.
 - Skip expensive jobs for documentation changes only when the base commit permits it.
-- Refuse a passing result if a test file is missing or runs twice.
+- Refuse a passing result if a root test file is missing or runs twice.
+- Require every dev-stack test to run in CI or have an exclusion with a reason.
 - Save test reports on main so future changes can use measured times.
 
 ## Processes it handles
@@ -51,6 +52,10 @@ scripts launched by tests. A test that reaches Playwright or the image helpers
 must join a fixture group. Both fixture jobs must pass. Documentation-only pull
 requests run documentation checks and the event security tests. Main pushes
 always run all jobs.
+
+The checks job also compares every dev-stack test file with its Node test commands.
+Any excluded test needs a named reason. It reuses Chromium for the budget editor
+and ownership controls, running those two browser files one at a time.
 
 Documentation checks also require folder guides and reject ticket and phase
 references in those guides. The README check uses Node and Git without extra installs.

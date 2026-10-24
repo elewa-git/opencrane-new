@@ -170,6 +170,10 @@ same recorded states as the baseline, but it does not prove that a connection re
 caused the live failure. The test adds no dev stack or database. It does not run
 member turns, server access checks or projections.
 
+CI runs this browser file in the checks job, after Chromium installation, with
+one test worker. The CI grouping check rejects any dev-stack test file missing
+from the workflow's Node test commands unless it has an exclusion with a reason.
+
 An exploratory run also passed 60 page loads and 120 save attempts, including a
 refusal and correction on every page. The original failure did not recur. Its cause
 remains unproved. Reproducing the exact baseline now needs a live stack; no live stack
