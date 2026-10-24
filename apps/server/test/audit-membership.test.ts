@@ -99,6 +99,9 @@ async function detail(id: string) {
 const role = saved('member.role_changed', 'role', {
   memberId: 'member', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
 });
+const removal = saved('member.removed', 'removal', {
+  memberId: 'member', removedBy: 'owner', reason: 'access_removed',
+});
 const intent = saved('ownership.transferred', 'intent', {
   memberId: 'member', transferredBy: 'owner', awaitingConfirmation: true,
 });
@@ -112,7 +115,7 @@ async function safeMetadata() {
     memberId: 'member', transferredBy: 'owner',
   });
   const stepDown = saved('ownership.stepped_down', 'step-down', { memberId: 'owner' });
-  const events = [role, intent, confirmation, appointment, stepDown];
+  const events = [role, intent, confirmation, appointment, stepDown, removal];
   const expected = [
     { operation: 'role_change', memberId: 'member', previousRole: 'member', newRole: 'admin' },
     { operation: 'transfer_intent', memberId: 'member' },
@@ -120,6 +123,7 @@ async function safeMetadata() {
       appointmentId: 'intent', newRole: 'owner' },
     { operation: 'appointment', memberId: 'member', newRole: 'owner' },
     { operation: 'step_down', memberId: 'owner', previousRole: 'owner', newRole: 'admin' },
+    { operation: 'remove', memberId: 'member', reason: 'Membership has ended' },
   ];
   for (const event of events) await append(event);
   await runner.run(auditTrail);
@@ -220,8 +224,8 @@ async function exactProgress(intentFirst: boolean) {
 it.each([true, false])(
   'checks exact receipts despite later roles and replay, intent IAM first: %s', exactProgress);
 
-async function blockedRead(change: 'demotion' | 'removal' | 'slow') {
-  await append(role);
+async function blockedRead(change: 'demotion' | 'removal' | 'slow', target = role) {
+  await append(target);
   await runner.run(auditTrail);
   const query = db.query.bind(db);
   let blocked = false;
@@ -252,7 +256,7 @@ async function blockedRead(change: 'demotion' | 'removal' | 'slow') {
   vi.spyOn(db, 'query').mockImplementation(holdQuery);
   const reads = vi.spyOn(nats.store, 'readStream');
   const heads = vi.spyOn(nats.store, 'head');
-  const response = await app.inject({ url: '/api/org/history/role', headers: headers() });
+  const response = await app.inject({ url: `/api/org/history/${target.id}`, headers: headers() });
   expect(blocked).toBe(true);
   expect(response.statusCode).toBe(change === 'slow' ? 200 : 403);
   if (change !== 'slow') expect(response.body).not.toContain('member');
@@ -264,6 +268,12 @@ async function blockedRead(change: 'demotion' | 'removal' | 'slow') {
 }
 it.each(['demotion', 'removal', 'slow'] as const)(
   'checks access once after a blocked progress read: %s', blockedRead);
+
+async function blockedRemovalRead(change: 'demotion' | 'removal' | 'slow') {
+  await blockedRead(change, removal);
+}
+it.each(['demotion', 'removal', 'slow'] as const)(
+  'checks access once after a blocked removal progress read: %s', blockedRemovalRead);
 
 async function privateReads() {
   await append(role);
@@ -317,8 +327,12 @@ function streamSubject(call: Parameters<typeof nats.store.readStream>) {
 async function unavailableProgress(caller: RefusedCaller) {
   await append(role);
   await append(intent);
+  await append(removal);
   const foreign = { ...role, id: 'foreign-role', silo: 'foreign', subject: 'member-foreign' };
   await append(foreign);
+  const foreignRemoval = { ...removal, id: 'foreign-removal', silo: 'foreign',
+    subject: 'member-foreign' };
+  await append(foreignRemoval);
   await runner.run(auditTrail);
   const memberId = await refusedMember(caller);
   await app.close();
@@ -328,7 +342,7 @@ async function unavailableProgress(caller: RefusedCaller) {
   const reads = vi.spyOn(nats.store, 'readStream');
   const heads = vi.spyOn(nats.store, 'head');
   const appends = vi.spyOn(nats.store, 'append');
-  for (const id of ['unknown', 'foreign-role', 'role', 'intent']) {
+  for (const id of ['unknown', 'foreign-role', 'role', 'intent', 'removal', 'foreign-removal']) {
     reads.mockClear();
     const request = { url: `/api/org/history/${id}`, headers: headers(memberId) };
     const response = await app.inject(request);
@@ -345,6 +359,23 @@ it.each(['ordinary', 'demoted', 'removed'] as const)(
   'hides existing, missing and foreign history during an IAM outage from %s callers',
   unavailableProgress);
 
+async function authorisedRemovalOutage() {
+  await append(removal);
+  await runner.run(auditTrail);
+  await app.close();
+  const binding = { ...auth.binding, apiUrl: 'http://127.0.0.1:1' };
+  const audit = { silo: 'test', store: nats.store, db, feed, binding };
+  app = buildServer(config, { audit });
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const response = await app.inject({ url: '/api/org/history/removal', headers: headers() });
+  expect(response.statusCode).toBe(503);
+  expect(response.body).toBe('{"status":"unavailable"}');
+  expect(response.headers['cache-control']).toBe('no-store');
+  const subjects = reads.mock.calls.map(streamSubject);
+  expect(subjects).toEqual(['member-admin', 'ownership-test']);
+}
+it('keeps authorised removal reads unavailable during an IAM outage', authorisedRemovalOutage);
+
 async function failedHistoryReads(caller: RefusedCaller) {
   // Apply demotion so conversation access reaches its permission check, rather than missing IAM.
   const memberId = await refusedMember(caller, true);
@@ -356,7 +387,8 @@ async function failedHistoryReads(caller: RefusedCaller) {
     return Promise.reject(new Error(canary));
   }
   const queries = vi.spyOn(db, 'query').mockImplementation(failQuery);
-  const paths = ['/api/org/history', '/api/org/history/role', '/api/org/history/unknown',
+  const paths = ['/api/org/history', '/api/org/history/role', '/api/org/history/removal',
+    '/api/org/history/foreign-removal', '/api/org/history/unknown',
     '/api/org/history/foreign-role', '/api/conversations/protected/history'];
   for (const url of paths) {
     reads.mockClear();
@@ -378,6 +410,7 @@ it.each(['ordinary', 'demoted', 'removed'] as const)(
 
 async function authorisedLoadFailure(stage: 'history' | 'progress') {
   await append(role);
+  await append(removal);
   await runner.run(auditTrail);
   const reads = vi.spyOn(nats.store, 'readStream');
   const query = db.query.bind(db);
@@ -391,7 +424,7 @@ async function authorisedLoadFailure(stage: 'history' | 'progress') {
     return query<Row>(...args);
   }
   vi.spyOn(db, 'query').mockImplementation(failLoad);
-  const paths = ['/api/org/history/role'];
+  const paths = ['/api/org/history/role', '/api/org/history/removal'];
   if (stage === 'history') {
     paths.push('/api/org/history');
   }
@@ -409,3 +442,131 @@ async function authorisedLoadFailure(stage: 'history' | 'progress') {
 it.each(['history', 'progress'] as const)(
   'returns a fixed loading error only after checking authorised access: %s',
   authorisedLoadFailure);
+
+async function removalMetadata() {
+  const privateData = { memberId: 'member', removedBy: 'owner', reason: canary,
+    email: `${canary}@example.test`, displayName: canary, invitationId: canary,
+    inventory: [canary], privateCount: 12345, instructions: canary };
+  const untrusted = { ...removal, id: 'untrusted-removal', data: privateData };
+  const forged = { ...removal, id: 'forged-removal', data: {
+    memberId: 'member', removedBy: 'mallory', actor: 'owner',
+  } };
+  const otherPrincipal = saved('member.removed', 'different-principal', {
+    memberId: 'member', removedBy: 'owner',
+  }, 'mallory');
+  const agent = { ...removal, id: 'agent-removal',
+    principal: { kind: 'agent' as const, id: 'owner' } };
+  const events = [untrusted, forged, otherPrincipal, agent];
+  let position = 100;
+  for (const event of events) {
+    await auditTrail.apply(db, event, position++);
+  }
+  const record = await detail(untrusted.id);
+  const hash = createHash('sha256');
+  hash.update(untrusted.commandId!);
+  expect(record).toEqual({ eventId: untrusted.id, type: 'member.removed', position: 100,
+    operation: 'remove', memberId: 'member', reason: 'Recorded reason withheld',
+    actor: { kind: 'person', id: 'owner' }, recordedAt: untrusted.time,
+    commandRef: hash.digest('hex'), source: 'authoritative', status: 'recorded',
+    progress: { readModel: 'applying', iam: 'applying', checkedAt: expect.any(String) } });
+  expect((await detail(forged.id)).actor).toEqual({ kind: 'unverified' });
+  expect((await detail(otherPrincipal.id)).actor).toEqual({ kind: 'unverified' });
+  expect((await detail(agent.id)).actor).toEqual({ kind: 'agent', id: 'owner' });
+  expect((await detail(forged.id)).reason).toBeUndefined();
+}
+it('keeps removal metadata safe and rejects forged removers and different principals',
+  removalMetadata);
+
+async function removalProgress(iamFirst: boolean) {
+  await append(removal);
+  await runner.run(auditTrail);
+  const first = await detail(removal.id);
+  expect(first.progress).toMatchObject({ readModel: 'applying', iam: 'applying' });
+  const rejoined = saved('member.joined', 'rejoined', {
+    memberId: 'member', role: 'member', email: `${canary}@example.test`, displayName: canary,
+  }, 'member');
+  const removedAgain = { ...removal, id: 'removed-again' };
+  for (const event of [rejoined, role, removedAgain]) {
+    await append(event);
+    await auth.handler.handle(event, db);
+    expect((await detail(removal.id)).progress).toMatchObject({
+      readModel: 'applying', iam: 'applying',
+    });
+  }
+  await runner.run(auditTrail);
+  await runner.run(members);
+  // Simulate the original receipt being absent while every later receipt exists.
+  await db.query('DELETE FROM projection_events WHERE projection = $1 AND event_id = $2',
+    ['members', removal.id]);
+  expect((await detail(removal.id)).progress).toMatchObject({
+    readModel: 'applying', iam: 'applying',
+  });
+  if (iamFirst) {
+    await auth.handler.handle(removal, db);
+    expect((await detail(removal.id)).progress).toMatchObject({
+      readModel: 'applying', iam: 'current',
+    });
+  }
+  await runner.rebuild(members);
+  const expectedIam = iamFirst ? 'current' : 'applying';
+  expect((await detail(removal.id)).progress).toMatchObject({
+    readModel: 'current', iam: expectedIam,
+  });
+  const before = await readAudit(db, 'test');
+  expect(JSON.stringify(before)).not.toContain('checkedAt');
+  expect(JSON.stringify(before)).not.toContain(canary);
+  const appends = vi.spyOn(nats.store, 'append');
+  const permissionWrites = vi.spyOn(auth.handler, 'handle');
+  await rebuildAuditProjection(db, nats.store, logger, { verify: true });
+  expect(await readAudit(db, 'test')).toEqual(before);
+  expect((await detail(removal.id)).progress).toMatchObject({
+    readModel: 'current', iam: expectedIam,
+  });
+  expect(permissionWrites).not.toHaveBeenCalled();
+  await auth.handler.handle(removal, db);
+  const last = await detail(removal.id);
+  expect(last.progress).toEqual({
+    readModel: 'current', iam: 'current', checkedAt: expect.any(String),
+  });
+  expect(last.progress?.checkedAt).not.toBe(first.progress?.checkedAt);
+  expect(await readAudit(db, 'test')).toEqual(before);
+  expect(last).not.toHaveProperty('cleanup');
+  expect(appends).not.toHaveBeenCalled();
+}
+it.each([true, false])(
+  'requires exact removal receipts despite rejoin, role change, removal and replay: IAM first %s',
+  removalProgress);
+
+async function removalPaging() {
+  for (let index = 0; index < 52; index++) {
+    const event = { ...removal, id: `removal-${index}`,
+      correlation: { conversation: 'conversation', turn: 'departures' } };
+    await append(event);
+  }
+  await runner.run(auditTrail);
+  const appends = vi.spyOn(nats.store, 'append');
+  const firstResponse = await app.inject({
+    url: '/api/org/history/removal-0?limit=50', headers: headers(),
+  });
+  expect(firstResponse.statusCode).toBe(200);
+  const first = auditDetailSchema.parse(firstResponse.json());
+  expect(first.records).toHaveLength(50);
+  expect(first.nextBefore).toBeDefined();
+  const nextResponse = await app.inject({
+    url: `/api/org/history/removal-0?limit=50&before=${String(first.nextBefore)}`,
+    headers: headers(),
+  });
+  expect(nextResponse.statusCode).toBe(200);
+  const next = auditDetailSchema.parse(nextResponse.json());
+  expect(next.records).toHaveLength(2);
+  expect(next.nextBefore).toBeUndefined();
+  const ids = new Set<string>();
+  for (const record of [...first.records, ...next.records]) {
+    ids.add(record.eventId);
+    expect(record.operation).toBe('remove');
+    expect(record.progress).toMatchObject({ readModel: 'applying', iam: 'applying' });
+  }
+  expect(ids.size).toBe(52);
+  expect(appends).not.toHaveBeenCalled();
+}
+it('keeps removal detail pages bounded without repeating or skipping records', removalPaging);
