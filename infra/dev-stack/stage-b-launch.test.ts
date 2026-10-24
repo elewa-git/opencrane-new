@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
@@ -71,6 +74,57 @@ async function suppliesDispatchNetwork() {
 }
 test('the complete models entrypoint supplies the dispatch service transport',
   suppliesDispatchNetwork);
+
+async function mountsOnlyRehearsalFiles() {
+  const launch = await import('./stage-b-launch.ts');
+  assert('stageBComposeOverride' in launch, 'The launcher must supply its rehearsal mounts');
+  const home = await mkdtemp(`${tmpdir()}/stage-b-mounts-`);
+  const directory = `${home}/.config/opencrane/dev-stack-1`;
+  const worktree = root.pathname.slice(0, -1);
+  function respond(_request: unknown, response: import('node:http').ServerResponse) {
+    response.end('local demo reached');
+  }
+  const server = createServer(respond);
+  try {
+    await mkdir(`${directory}/personal-keys`, { recursive: true });
+    await writeFile(`${directory}/stack-owner`, `worktree=${worktree}\n`);
+    await writeFile(`${directory}/personal-keys/private`, 'must stay outside models');
+    server.listen(`${directory}/stage-b-demo.sock`);
+    await once(server, 'listening');
+    const prepare = launch.stageBComposeOverride as
+      (root: string, directory: string, id: string) =>
+        { services: { models: { volumes: string[] } } };
+    const override = prepare(worktree, directory, '1');
+    const args = ['run', '--rm', '--network', 'none', '-e', `HOME=${home}`,
+      '-v', `${worktree}:${worktree}:ro`];
+    for (const mount of override.services.models.volumes) args.push('-v', mount);
+    const script = `
+      import assert from 'node:assert/strict';
+      import { access, appendFile } from 'node:fs/promises';
+      import { get } from 'node:http';
+      import { requireStageBStack } from '${worktree}/infra/dev-stack/stage-b-guard.ts';
+      const directory = await requireStageBStack('1', '1', process.env.HOME, '${worktree}');
+      await assert.rejects(access(directory + '/personal-keys/private'));
+      await assert.rejects(appendFile(directory + '/stack-owner', 'changed'));
+      const reply = await new Promise(function exchange(resolve, reject) {
+        get({ socketPath: directory + '/stage-b-demo.sock', path: '/' }, function received(response) {
+          let body = '';
+          response.on('data', function chunk(value) { body += value; });
+          response.on('end', function finished() { resolve(body); });
+        }).on('error', reject);
+      });
+      assert.equal(reply, 'local demo reached');
+    `;
+    args.push('node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3',
+      'node', '--experimental-strip-types', '--input-type=module', '-e', script);
+    await execute('docker', args);
+  } finally {
+    server.close();
+    await rm(home, { recursive: true, force: true });
+  }
+}
+test('models reads its claim and reaches the demo without mounting private keys',
+  mountsOnlyRehearsalFiles);
 
 async function refuseMissingInjection() {
   const { stageBLaunchSources } = await import('./stage-b-launch.ts');
