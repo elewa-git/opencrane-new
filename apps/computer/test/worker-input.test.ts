@@ -211,6 +211,67 @@ function removesPartialPreparation() {
 }
 it('removes partial owned files and never restores consumed permission', removesPartialPreparation);
 
+function removesDirectoryAfterOpenFailure(name: string) {
+  const base = parent();
+  const original = fs.openSync;
+  let failed = false;
+  function failDirectoryOpen(...args: Parameters<typeof fs.openSync>) {
+    const path = String(args[0]);
+    if (path.endsWith(`/${name}`)) {
+      expect(fs.lstatSync(path).isDirectory()).toBe(true);
+      failed = true;
+      const error = new Error('EMFILE: private-canary');
+      Object.assign(error, { code: 'EMFILE' });
+      throw error;
+    }
+    return original(...args);
+  }
+  vi.spyOn(fs, 'openSync').mockImplementation(failDirectoryOpen);
+  const checked = request();
+  function prepare() {
+    return prepareWorkerInput(checked.validate(), base);
+  }
+  expect(prepare).toThrow(/^worker_input_refused$/);
+  expect(failed).toBe(true);
+  expect(fs.readdirSync(base)).toEqual([]);
+  expect(checked.validate).toThrow(/^worker_request_refused$/);
+}
+it.each(['operation-1', 'tmp'])(
+  'removes created directories when opening %s fails', removesDirectoryAfterOpenFailure);
+
+function preservesReplacementAfterOpenFailure() {
+  const base = parent();
+  const original = fs.openSync;
+  const replacement = `${base}/replacement`;
+  fs.mkdirSync(replacement, { mode: 0o700 });
+  const replacementIdentity = fs.statSync(replacement);
+  let replaced = false;
+  function replaceBeforeFailedOpen(...args: Parameters<typeof fs.openSync>) {
+    const path = String(args[0]);
+    if (path.endsWith('/operation-1')) {
+      fs.renameSync(path, `${base}/saved`);
+      fs.renameSync(replacement, path);
+      replaced = true;
+      const error = new Error('EMFILE: private-canary');
+      Object.assign(error, { code: 'EMFILE' });
+      throw error;
+    }
+    return original(...args);
+  }
+  vi.spyOn(fs, 'openSync').mockImplementation(replaceBeforeFailedOpen);
+  function prepare() {
+    return prepareWorkerInput(request().validate(), base);
+  }
+  expect(prepare).toThrow(/^worker_input_refused$/);
+  expect(replaced).toBe(true);
+  const current = fs.statSync(`${base}/operation-1`);
+  expect(current.dev).toBe(replacementIdentity.dev);
+  expect(current.ino).toBe(replacementIdentity.ino);
+  expect(fs.readdirSync(`${base}/operation-1`)).toEqual([]);
+}
+it('preserves a replacement directory when opening the created root fails',
+  preservesReplacementAfterOpenFailure);
+
 function refusesReplacement(kind: string) {
   const base = parent();
   const target = parent();
