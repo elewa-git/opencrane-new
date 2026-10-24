@@ -1027,3 +1027,16 @@ async function refusesAfterLostRepeatedPublishReply(change: string) {
 it.each(['expired', 'revoked'])(
   'stops the writer when a repeated publish loses its reply before access is %s',
   refusesAfterLostRepeatedPublishReply);
+
+async function keepsWriterAfterInvalidEvent() {
+  await reserve();
+  const call = { ...actor.state.reservations[0]!.call, computerId: '' };
+  const before = await nats.store.head('budget-test');
+  await expect(actor.reserve(call, 1)).rejects.toThrow();
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.reservations).toHaveLength(1);
+  await reserve();
+  expect(actor.state.reservations).toHaveLength(2);
+}
+it('keeps the writer usable when the store rejects an invalid event before publishing',
+  keepsWriterAfterInvalidEvent);
