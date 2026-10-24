@@ -1314,3 +1314,69 @@ Early local ancestry is observed. A child overtaking its spawn-completion notifi
 and a trusted identity for each model call remain unproven. Bridge authentication,
 production admission and fresh-install qualification are NOT RUN. No production
 config, turn runner, signing, routing or event schema changes here.
+
+## Fixed worker request validation — P3-20 PR 3a
+
+`worker-request.ts` validates one newline-terminated `process/start` JSON frame,
+up to 64 KiB, using the pinned Codex 0.159.2 camelCase fields. Metadata is untrusted.
+Only a supervisor-owned lookup can supply the matching live registration and input.
+No production lookup or public registration API exists. Production refuses every
+worker request, including one that could pass validation with a synthetic lookup.
+Tests using that lookup prove local comparisons, not delivery by native Codex.
+
+The supervisor supplies the current connection's binding separately from the frame:
+`executorId`, `siloId`, `personId`, `computerId`, `processId` and `generation`.
+It must establish these values independently of request metadata. `executorId`
+identifies that executor connection; `processId` identifies its registered process start.
+The validator checks the frame's `processId` before lookup. It looks up the registration
+using only a frozen copy of those binding fields, never the supplied thread or call ids.
+It compares every binding field with the saved registration, then checks thread, call,
+expiry, destination and SHA-256 of `JSON.stringify([argv, cwd, input])`.
+The returned identity includes all six binding fields and the existing call fields.
+It is a frozen copy containing only reviewed fields.
+
+The lookup also supplies `consume()`, an atomic claim for that exact registration.
+It returns true only if the registration is still current and unused, and marks it
+consumed in the same step. Its stored state must be shared across all lookups and
+connections. It must not be reset on retry or reconnection. The validator calls it
+only after every check passes and refuses to return a plan unless it returns true.
+A failed validation does not consume the registration. A repeated valid frame, even
+with a different request id, cannot obtain another plan. Tests use a synthetic store;
+the production store and native delivery remain unimplemented and execution stays off.
+
+No caller can supply a registration, environment, shell state, proxy, output limit
+or working directory other than `file:///workspace`.
+
+Accepted standalone forms are `npm ci --ignore-scripts --no-audit --no-fund` and
+`git clone --no-checkout https://host/owner/repository.git`. The npm operation installs
+from a version-3 lock input supplied by the trusted lookup, bounded to 64 KiB.
+Its deliberately small subset has only `lockfileVersion` and `packages`, a root
+`dependencies` map, and flat package entries with `version`, `resolved`, `integrity`
+and optional `dependencies`. Every dependency must resolve to an exact three-part
+version in that map. Every archive must have a SHA-512 pin and the exact npm registry
+archive path for that package and version. Other fields, links, scripts, ranges,
+nested installations and other lockfile formats are refused. Parsing JSON alone
+never approves archive destinations. Input copying and archive verification remain
+unimplemented; these checks do not claim a package is safe to publish.
+
+Prepared arguments fix npm registry and user/global config paths. Git uses HTTPS
+only, no credentials, helpers, checkout, submodules or redirects, and empty template
+and hook paths. The plan uses a new environment with no inherited settings and a
+future `/operation` directory. That directory must contain only checked inputs;
+creating and confining it is deferred. No prepared plan is executed.
+Plans fix 300 seconds wall time, 30 seconds network idle time, 64 KiB retained output,
+a 2,000-token excerpt and 64 KiB worker frames. Runtime enforcement awaits the launcher.
+
+`worker-executor.ts` inspects exec-server input at the root connector. Direct npm
+install/ci and Git clone attempts receive only `worker_execution_disabled`. Other
+requests pass byte-for-byte to the existing socket-denied executor. Shell strings
+never delegate to a worker. The ordinary transport permits 1 MiB frames so existing
+64 KiB base64 upload chunks fit; partial EOF and larger frames close the connection.
+Refusal replies may queue at most 64 KiB before the connection closes.
+The native code-mode host keeps its existing pipe and protocol.
+
+Local tests cover fixed plans, identity substitution, unsafe input, bounded frames
+and real Docker executor refusal beside UID 1001 socket denial. Real UID 1004/chroot
+confinement, runtime/licence inventory, scan/publication, pinned native registration
+delivery and fresh gVisor install/clone qualification remain **NOT RUN**. CONNECT,
+images, capabilities, event types and access checks are unchanged.

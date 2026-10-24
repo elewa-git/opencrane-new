@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { privateConfig, privateEnvironments } from './codex-config.ts';
 import { privateCodexLaunch } from './private-codex.ts';
 import { supervisorStop } from './supervisor-stop.ts';
+import { workerExecutor } from './worker-executor.ts';
 import { createServer, connect, type Socket } from 'node:net';
 // Resolve each child through an open parent; mutate only the checked descriptor.
 function directory(parent: number, name: string, uid: number, mode: number, gid = uid) {
@@ -189,7 +190,26 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
     if (!supervisor.admit(socket)) return;
     const child = watch(spawn('/usr/local/bin/tool-user', args, { stdio: ['pipe', 'pipe', 'inherit'] }), false);
     if (!child.stdin || !child.stdout) throw new Error('Missing executor pipes');
-    socket.pipe(child.stdin); child.stdout.pipe(socket);
+    if (args.length === 0) {
+      function reply(value: unknown) {
+        const frame = `${JSON.stringify(value)}\n`;
+        if (socket.writableLength + Buffer.byteLength(frame) > 65_536) {
+          socket.destroy();
+          return;
+        }
+        socket.write(frame);
+      }
+      function refuseFrame() { socket.destroy(); }
+      const input = workerExecutor(reply);
+      input.on('error', refuseFrame);
+      function closeInput() { input.destroy(); }
+      socket.on('close', closeInput);
+      socket.pipe(input);
+      input.pipe(child.stdin);
+    } else {
+      socket.pipe(child.stdin);
+    }
+    child.stdout.pipe(socket);
     child.stdin.on('error', () => socket.destroy());
     // EOF shuts down the executor without signalling across UIDs (CAP_KILL is dropped).
     socket.on('error', () => child.stdin?.destroy()); socket.on('close', () => child.stdin?.destroy());

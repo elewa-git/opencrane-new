@@ -1,0 +1,1 @@
+Check fixed package and HTTPS Git worker requests against their executor, silo, person, computer, process, registered call and pinned input. Refuse copied requests and reused registrations. Network execution stays disabled; ordinary commands remain socket-denied. Native registration delivery, worker confinement and live install/clone qualification are not yet proved.

@@ -22,6 +22,7 @@ flowchart LR
   server -->|messages and files| computer
   server -.->|tests use helper| computer
   computer -->|progress and results| server
+  computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
 ```
@@ -37,6 +38,10 @@ flowchart LR
   calls through agentgateway. Shell and file tools run locally inside the computer.
 - Runs a [private turn](../../GLOSSARY.md#private-turn) on a shared computer in a fresh,
   short-lived Codex process with no tools. Memory stays disabled until isolation is proven live.
+- Checks fixed package and Git requests against the supervisor's record of the tool call.
+  Each request must match its executor, silo, person, computer and process.
+  Each valid registration can produce only one plan.
+  Network execution stays disabled until the call's identity and isolation are proved.
 - Checks the image's licences before publishing it.
 
 ## Processes it handles
@@ -52,6 +57,8 @@ flowchart LR
 5. **The server asks work to stop.** The computer can stop everything the assistant
    is running and check that the work has stopped. Taking control of the desktop
    remains unavailable.
+6. **A command asks for a package or repository.** The executor refuses network
+   execution. Ordinary commands still run as a separate user that cannot open sockets.
 
 ## How to run or test it
 
