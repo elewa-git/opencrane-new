@@ -23,6 +23,7 @@ type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assi
 type FreshAuthority = (() => Promise<void>) & { deadline?: number };
 interface ApprovalReadOptions {
   requesterOnly?: boolean;
+  deferInvalidation?: boolean;
   fromSequence?: number;
   approvalRows?: StoredEvent[];
   now?: Date;
@@ -120,7 +121,8 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
 export async function readApproval(store: EventStore, silo: string, approvalId: string,
   options: ApprovalReadOptions = {}):
   Promise<{ request: Request; state: ApprovalCard['state']; sequence: number;
-    requestPosition: number; conversationPosition: number; canRetry: boolean } &
+    requestPosition: number; conversationPosition: number; canRetry: boolean;
+    invalidation?: EventEnvelope } &
     ReturnType<typeof approvalRecord>> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
@@ -147,6 +149,11 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
       const cancellation = { ...data, cancelReason: checked.cancelReason };
       const payload = terminal === 'cancelled' ? cancellation : data;
       const event = envelope(silo, `approval-${approvalId}`, `approval.${terminal}`, payload);
+      if (options.deferInvalidation) {
+        // Let the HTTP command check ownership and current write access before saving.
+        return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence,
+          conversationPosition, canRetry, invalidation: event };
+      }
       const result = await store.append({ event, expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
       const readOptions = { now, deadline, conversationRows: options.conversationRows };
@@ -274,6 +281,15 @@ export async function decideApproval(store: EventStore, silo: string, approvalId
   const beganAt = performance.now();
   if (current.request.approvalId !== approvalId || current.request.requesterId !== memberId) {
     throw new Error('Requester only');
+  }
+  if (current.invalidation) {
+    await fresh();
+    const command: AppendCommand = { event: current.invalidation,
+      expectedSequence: current.sequence };
+    if (fresh.deadline !== undefined) command.deadline = fresh.deadline;
+    const result = await store.append(command);
+    if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
+    return { status: 'conflict' } as const;
   }
   const retry = decision === 'retry';
   const refusal = approvalActionRefusal(current, decision, recentAuth);

@@ -169,7 +169,7 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
 }
 
 async function readDecisionApproval(options: ChatOptions, approvalId: string) {
-  const readOptions = { deadline: performance.now() + 10_000 };
+  const readOptions = { deadline: performance.now() + 10_000, deferInvalidation: true };
   try {
     const subject = `approval-${approvalId}`;
     for await (const { event } of options.store.readStream(subject, 1, readOptions.deadline)) {

@@ -25,6 +25,7 @@ receipts for the exact saved change before showing its progress, then checks cur
 It still checks access when loading fails, so errors do not reveal protected records.
 Removal progress covers permissions and the member list. It does not report departure cleanup.
 
+Approval decisions check ownership and current write access before saving a cancellation.
 Approval polling saves cancellation when a saved takeover covers an unused approval.
 It notices computer changes even when the chat and approval have not changed.
 The computer receives its local work gate before an approval reply. Failed saves or

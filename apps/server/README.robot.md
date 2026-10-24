@@ -4437,3 +4437,18 @@ slow history and replay with execution services forbidden. Run it under `nice -n
 with `PG_TEST_URL` pointing to a disposable test database.
 Routes, admin intervention, retire/reassign/resume, active-root Stop, scheduling and
 execution remain later work. Fresh-install execution qualification: NOT RUN.
+
+Bridge approval entries include the computer stream position in their change check.
+Before settlement, the connected bridge sends its local work gate. If it cannot send
+the gate, the entry stays pending. A changed computer position retries the read.
+Append outages send no successful cancellation; reconnect reads the original approval.
+The existing independent pause deadline watcher is unchanged. This work adds no scan
+of offline waits, reservation release, writer, lease, return or recovery command.
+Takeover remains disabled. Fresh-install qualification is NOT RUN.
+
+HTTP approval decisions load history with `deferInvalidation: true`. The read prepares
+an invalidation without saving it. The route checks the request's conversation,
+requester and participation position, loads turn activity, then starts the short
+write check. `currentAuthority` and the final access confirmation precede the save.
+Foreign ids and removal during history loading leave the approval stream unchanged.
+The save uses the original approval position and the write check's deadline.
