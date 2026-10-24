@@ -127,6 +127,9 @@ function digest(value: unknown) {
   hash.update(JSON.stringify(value));
   return hash.digest('hex');
 }
+export function connectionOperationId(silo: string, subject: string, changeRef: string) {
+  return digest([silo, subject, changeRef]);
+}
 function receipt(row: StoredEvent) {
   const data = savedSchema.parse(row.event.data);
   return { status: 'saved_unverified' as const, sequence: row.sequence,
@@ -199,7 +202,7 @@ async function saveLocked(store: EventStore, binding: Binding, memberId: string,
   const subject = `connection-${memberId}-${input.serverId}-${input.profileId}`;
   const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
   const state = foldConnection(rows);
-  const operationId = digest([binding.silo, subject, input.changeRef]);
+  const operationId = connectionOperationId(binding.silo, subject, input.changeRef);
   function originalOperation(row: StoredEvent) {
     return row.event.id === operationId;
   }
@@ -316,7 +319,7 @@ export async function changePersonalConnection(store: EventStore, binding: Bindi
   if (!isRevoke) {
     rows = await history(store, subject, binding.silo, performance.now() + 10_000);
   }
-  const operationId = digest([binding.silo, subject, input.changeRef]);
+  const operationId = connectionOperationId(binding.silo, subject, input.changeRef);
   function originalOperation(row: StoredEvent) {
     return row.event.id === operationId;
   }

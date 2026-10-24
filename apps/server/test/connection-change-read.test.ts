@@ -1,29 +1,32 @@
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { jetstreamManager } from '@nats-io/jetstream';
 import { createEventStore, type StoredEvent } from '@opencrane/event-store';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { envelope, saveBearerConnection, history } from '@opencrane/models';
 import { changePersonalConnection } from '../../../libs/models/src/bearer-connections.ts';
-import { pgDb } from '@opencrane/projections';
+import { pgDb, type Db } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
 const privateCanary = 'private-custody-canary';
-let nats: Awaited<ReturnType<typeof natsFixture>>;
+const material = 'synthetic-bearer-value';
+let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let storage: Awaited<ReturnType<typeof databases>>;
 let app: ReturnType<typeof buildServer>;
 let binding: Awaited<ReturnType<typeof createStore>>;
 let counter = 0;
 const logs: string[] = [];
-function write(line: string) { logs.push(line); }
+function write(line: string) {
+  logs.push(line);
+}
 const logDestination = { write };
 function startApp(store = nats.store) {
   function memberId(_silo: string, _issuer: string, subject: string) {
@@ -43,7 +46,7 @@ async function join(memberId: string) {
   await memberAuthorisation(binding).handler.handle(event, pgDb(storage.queue));
 }
 async function initialise() {
-  nats = await natsFixture();
+  nats = await shortDuplicateWindowFixture();
   fga = await openfga();
   storage = await databases();
   binding = await createStore(fga.apiUrl, 'test');
@@ -67,7 +70,7 @@ function headers(memberId = 'alice', orgId = 'org-test') {
   const session = { sub: memberId, orgId, roles: ['owner'], authTime: now, exp: now + 60 };
   return { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
 }
-async function saved(serverId = `server${counter + 1}`) {
+async function saved(serverId = `server${counter + 1}`, changeRef = `save${counter + 1}`) {
   counter += 1;
   const profileId = `profile${counter}`;
   const subject = `connection-alice-${serverId}-${profileId}`;
@@ -81,7 +84,6 @@ async function saved(serverId = `server${counter + 1}`) {
       operationId: `save${counter}`, changedBy: 'alice', expectedSequence: 0,
       appendUntil: Date.now() + 60_000, reason: 'bearer_create',
     } };
-  const changeRef = `save${counter}`;
   const operationHash = createHash('sha256');
   operationHash.update(JSON.stringify(['test', subject, changeRef]));
   data.activation.operationId = operationHash.digest('hex');
@@ -118,7 +120,9 @@ async function get(url: string, member = 'alice') {
   const response = await app.inject({ url, headers: headers(member) });
   expect(response.headers['cache-control']).toBe('no-store');
   expect(response.body).not.toContain(privateCanary);
+  expect(response.body).not.toContain(material);
   expect(logs.join('\n')).not.toContain(privateCanary);
+  expect(logs.join('\n')).not.toContain(material);
   return response;
 }
 function expectedReceipt(row: StoredEvent, action = 'create', generation: number | null = 1) {
@@ -137,12 +141,17 @@ async function recoverOriginal(later: string) {
   }
   const custody = { stage: vi.fn(stage) };
   const database = pgDb(storage.queue);
+  function waitForLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    // Wait for the fixture lock so a busy host cannot replace the lost-reply check.
+    return database.lock!(name, work);
+  }
+  const coordination = { lock: waitForLock };
   async function save() {
     return saveBearerConnection(nats.store, binding, 'alice', custody, input,
-      privateCanary, database);
+      material, coordination);
   }
   const append = nats.store.append.bind(nats.store);
-  async function loseReply(command: Parameters<typeof append>[0]) {
+  async function loseReply(command: Parameters<typeof append>[0]): Promise<never> {
     await append(command);
     throw new Error('Lost reply');
   }
@@ -150,6 +159,7 @@ async function recoverOriginal(later: string) {
   await expect(save()).rejects.toThrow('Lost reply');
   vi.restoreAllMocks();
   const rows = await history(nats.store, fixture.subject, 'test');
+  expect(JSON.stringify(rows)).not.toContain(material);
   const original = rows[1]!;
   if (later === 'rotate') {
     input.changeRef = 'later';
@@ -161,9 +171,7 @@ async function recoverOriginal(later: string) {
       profileId: fixture.profileId, changeRef: 'later', expectedSequence: original.sequence };
     await changePersonalConnection(nats.store, binding, 'alice', revoke);
   }
-  const manager = await jetstreamManager(nats.connection);
-  await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
-  await delay(150);
+  await waitForDuplicateWindow(nats);
   await app.close();
   const connection = await nats.client('command');
   const store = await createEventStore(connection);
@@ -184,7 +192,9 @@ async function recoverOriginal(later: string) {
     expect(noAppend).not.toHaveBeenCalled();
     expect(noHead).not.toHaveBeenCalled();
     expect(custody.stage).not.toHaveBeenCalled();
-    function subject(call: unknown[]) { return call[0]; }
+    function subject(call: unknown[]) {
+      return call[0];
+    }
     expect(reads.mock.calls.map(subject)).toEqual([
       fixture.subject, 'member-alice', 'ownership-test',
       fixture.subject, 'member-alice', 'ownership-test',
@@ -203,6 +213,8 @@ async function isolation() {
   const response = await get(receiptUrl(fixture));
   const rows = await history(nats.store, fixture.subject, 'test');
   expect(response.json()).toEqual(expectedReceipt(rows[0]!));
+  await saved(fixture.serverId, fixture.changeRef);
+  await saved('another-server', fixture.changeRef);
   for (const member of ['bob', 'admin']) {
     expect((await get(receiptUrl(fixture), member)).json()).toEqual({ status: 'unknown' });
   }
@@ -227,26 +239,70 @@ async function corrupted(kind: string) {
   const read = nats.store.readStream.bind(nats.store);
   async function* changed(subject: string, from?: number, deadline?: number) {
     for await (const row of read(subject, from, deadline)) {
-      if (subject !== fixture.subject) { yield row; continue; }
+      if (subject !== fixture.subject) {
+        yield row;
+        continue;
+      }
       const event = structuredClone(row.event);
       const data = structuredClone(fixture.data);
-      if (kind === 'source') event.source = 'other';
+      if (kind === 'source') {
+        event.source = 'other';
+      }
       if (kind === 'principal') event.principal = { kind: 'human', id: 'bob' };
-      if (kind === 'type') event.type = 'connection.refreshed';
-      if (kind === 'hash') event.id = 'wrong';
-      if (kind === 'reference') event.commandId = 'wrong';
-      if (kind === 'subject') event.subject = 'connection-alice-other-profile';
-      if (kind === 'owner') data.userId = 'bob';
-      if (kind === 'server') data.serverId = 'other';
-      if (kind === 'profile') data.profile = 'other';
-      if (kind === 'activation') data.activation.operationId = 'wrong';
-      if (kind === 'malformed') data.activation.uid = '';
+      if (kind === 'type') {
+        event.type = 'connection.refreshed';
+      }
+      if (kind === 'hash') {
+        event.id = 'wrong';
+      }
+      if (kind === 'reference') {
+        event.commandId = 'wrong';
+      }
+      if (kind === 'subject') {
+        event.subject = 'connection-alice-other-profile';
+      }
+      if (kind === 'owner') {
+        data.userId = 'bob';
+      }
+      if (kind === 'server') {
+        data.serverId = 'other';
+      }
+      if (kind === 'profile') {
+        data.profile = 'other';
+      }
+      if (kind === 'activation') {
+        data.activation.operationId = 'wrong';
+      }
+      if (kind === 'malformed') {
+        data.activation.uid = '';
+      }
+      if (kind === 'changedBy') {
+        data.activation.changedBy = 'bob';
+      }
+      if (kind === 'expectedSequence') {
+        data.activation.expectedSequence = 123;
+      }
+      if (kind === 'generation') {
+        data.activation.generation = 2;
+      }
+      if (kind === 'time') {
+        event.time = privateCanary;
+      }
+      if (kind === 'position') {
+        row.sequence = 0;
+      }
+      if (kind === 'principalKind') event.principal = { kind: 'system', id: 'alice' };
       event.data = data;
-      if (kind === 'closed') {
+      if (kind === 'closed' || kind === 'closureConflict') {
         event.type = 'connection.operation_closed';
         event.data = { userId: 'alice', serverId: fixture.serverId, profile: fixture.profileId,
           operationId: event.id, generation: 1, expectedSequence: 0,
           appendUntil: 1, reason: 'append_deadline_passed' };
+      }
+      if (kind === 'closureConflict' || kind === 'activationConflict') {
+        yield row;
+        event.id = 'other';
+        event.commandId = 'other';
       }
       yield { ...row, event };
       if (kind === 'conflicting') {
@@ -259,16 +315,21 @@ async function corrupted(kind: string) {
     const response = await get(receiptUrl(fixture));
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ status: 'unknown' });
-  } finally { vi.restoreAllMocks(); }
+  } finally {
+    vi.restoreAllMocks();
+  }
 }
 it.each(['source', 'principal', 'type', 'hash', 'reference', 'subject', 'owner', 'server',
-  'profile', 'activation', 'malformed', 'closed', 'conflicting'])(
+  'profile', 'activation', 'malformed', 'closed', 'conflicting', 'changedBy',
+  'expectedSequence', 'generation', 'time', 'position', 'principalKind',
+  'closureConflict', 'activationConflict'])(
   'never confirms %s records or offers permission to resend', corrupted);
 
 async function loading(outcome: string) {
   const fixture = await saved();
   const read = nats.store.readStream.bind(nats.store);
   const subjects: string[] = [];
+  let removed: ReturnType<typeof envelope> | undefined;
   async function* duringLoad(subject: string, from?: number, deadline?: number) {
     subjects.push(subject);
     if (subject === fixture.subject) {
@@ -279,11 +340,16 @@ async function loading(outcome: string) {
         await nats.seed([envelope('test', 'conversation-busy', 'conversation.closed',
           { conversationId: 'busy', closedBy: 'alice' })]);
       } else if (outcome !== 'failure') {
-        await nats.seed([envelope('test', 'member-alice', 'member.removed',
-          { memberId: 'alice', removedBy: 'admin' })]);
+        removed = envelope('test', 'member-alice', 'member.removed',
+          { memberId: 'alice', removedBy: 'admin' });
+        await nats.seed([removed]);
       }
-      if (outcome === 'failed' || outcome === 'failure') throw new Error(privateCanary);
-      if (outcome === 'missing') return;
+      if (outcome === 'failed' || outcome === 'failure') {
+        throw new Error(privateCanary);
+      }
+      if (outcome === 'missing') {
+        return;
+      }
     }
     yield* read(subject, from, deadline);
   }
@@ -291,14 +357,49 @@ async function loading(outcome: string) {
   try {
     const response = await get(receiptUrl(fixture));
     let expected = 403;
-    if (outcome === 'slow') expected = 200;
-    if (outcome === 'failure') expected = 503;
+    if (outcome === 'slow') {
+      expected = 200;
+    }
+    if (outcome === 'failure') {
+      expected = 503;
+    }
     expect(response.statusCode).toBe(expected);
     expect(subjects).toEqual([fixture.subject, 'member-alice', 'ownership-test']);
   } finally {
     vi.restoreAllMocks();
+    if (removed) {
+      await memberAuthorisation(binding).handler.handle(removed, pgDb(storage.queue));
+    }
     await join('alice');
   }
 }
 it.each(['successful', 'missing', 'failed', 'failure', 'slow'])(
   'checks membership once after %s history; removal wins and busy chats do not interfere', loading);
+
+async function invalidRevoke(field: string) {
+  const fixture = await saved();
+  const input = { action: 'revoke', userId: 'alice', serverId: fixture.serverId,
+    profileId: fixture.profileId, changeRef: 'revoked', expectedSequence: fixture.revision };
+  await changePersonalConnection(nats.store, binding, 'alice', input);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* altered(subject: string, from?: number, deadline?: number) {
+    for await (const row of read(subject, from, deadline)) {
+      if (subject === fixture.subject && row.event.commandId === 'revoked') {
+        const data = { userId: 'alice', serverId: fixture.serverId, profile: fixture.profileId,
+          revokedBy: 'alice', reason: 'owner_requested', expectedSequence: fixture.revision,
+          [field]: 'wrong' };
+        yield { ...row, event: { ...row.event, data } };
+      } else {
+        yield row;
+      }
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(altered);
+  try {
+    expect((await get(receiptUrl(fixture, 'revoked'))).json()).toEqual({ status: 'unknown' });
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['revokedBy', 'reason', 'expectedSequence'])(
+  'refuses owner revocation with invalid %s', invalidRevoke);

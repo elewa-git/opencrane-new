@@ -1,18 +1,29 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { MemberAccessRefused, readOwnConnectionProfile } from '@opencrane/models';
+import { MemberAccessRefused, readOwnConnectionProfile, readOwnConnectionChange }
+  from '@opencrane/models';
 import { z } from 'zod';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const parameters = z.strictObject({ serverId: id, profileId: id });
+const changeParameters = parameters.extend({ changeRef: id });
 const emptyQuery = z.strictObject({});
 
 export function registerConnectionProfileRead(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
   app.get('/api/my/tools/:serverId/profiles/:profileId', handler);
+  app.get('/api/my/tools/:serverId/profiles/:profileId/changes/:changeRef', changeHandler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
+    return read(request, reply, parameters, readOwnConnectionProfile);
+  }
+  async function changeHandler(request: FastifyRequest, reply: FastifyReply) {
+    return read(request, reply, changeParameters, readOwnConnectionChange);
+  }
+  async function read(request: FastifyRequest, reply: FastifyReply,
+    schema: typeof parameters | typeof changeParameters,
+    reader: typeof readOwnConnectionProfile | typeof readOwnConnectionChange) {
     reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, new Date());
     if (!session) {
@@ -28,7 +39,7 @@ export function registerConnectionProfileRead(app: FastifyInstance, config: Auth
       return reply.code(403).send({ status: 'refused' });
     }
     try {
-      const reference = parameters.parse(request.params);
+      const reference = schema.parse(request.params);
       emptyQuery.parse(request.query);
       // Reject body framing too: Fastify does not parse bodies on GET requests.
       const length = request.headers['content-length'];
@@ -40,7 +51,7 @@ export function registerConnectionProfileRead(app: FastifyInstance, config: Auth
       if (!memberId) {
         throw new MemberAccessRefused('Active membership required');
       }
-      const metadata = await readOwnConnectionProfile(options.store, options.binding,
+      const metadata = await reader(options.store, options.binding,
         memberId, reference);
       if (!metadata) {
         return reply.code(404).send({ status: 'unknown' });

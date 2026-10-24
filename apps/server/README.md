@@ -61,7 +61,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, own routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads own saved profiles; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads own saved profiles and original change receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, spending by month, history, current accounting and exact membership receipts| postgres
@@ -111,6 +111,10 @@ assistant can call. These reads check current admin rights after loading the fac
 Members can inspect their own saved bearer profile even when an admin has disabled it.
 The reply separates the saved revision, admin block and server availability. Saving
 credentials does not verify an upstream identity or enable calls.
+
+Members can recover the original receipt for a personal account save, rotation or revocation.
+Later changes do not replace that receipt. It confirms a local change; whether the profile
+can be used now is checked separately. Missing evidence never means it is safe to resend.
 
 ## Folders
 
