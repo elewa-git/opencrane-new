@@ -850,9 +850,14 @@ async function reconcilesLatestOnly() {
   const expectedObservation = { generation: 2, recordDigest: next.recordDigest };
   expect(worker.acknowledged()).toMatchObject(expectedObservation);
   const file = await stat(setup.options.configFile);
+  const receipts = await memberReceipts(setup);
+  expect(receipts).toHaveLength(2);
+  expect(receipts[0]!.event.data).toMatchObject({ generation: 1,
+    processRef: previousObservation.processRef });
+  expect(receipts[1]!.event.data).toMatchObject(expectedObservation);
   await worker.check();
   expect((await stat(setup.options.configFile)).ino).toBe(file.ino);
-  expect(await memberReceipts(setup)).toHaveLength(1);
+  expect(await memberReceipts(setup)).toEqual(receipts);
   leader = false;
   await expect(worker.check()).rejects.toThrow();
   expect((await stat(setup.options.configFile)).ino).toBe(file.ino);

@@ -8,7 +8,7 @@ import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { applyToolPolicy, mcpCatalogue, readPublication,
   rebuildMcpCatalogueProjection } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { mcpConfigurationObservationSchema } from '@opencrane/events';
+import { gatewayObservationSchema, mcpConfigurationObservationSchema } from '@opencrane/events';
 import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
@@ -1645,7 +1645,15 @@ async function acceptsCurrentAndCarriedGeneration() {
   function isReceipt(row: typeof rows[number]) {
     return row.event.type === 'mcp.configuration_observed';
   }
-  expect(rows.filter(isReceipt)).toHaveLength(1);
+  const receipts = rows.filter(isReceipt);
+  expect(receipts).toHaveLength(2);
+  expect(receipts[0]!.event.data).toMatchObject({ generation: context.record.generation,
+    recordDigest: context.record.recordDigest });
+  expect(receipts[1]!.event.data).toMatchObject({ generation: next.generation,
+    recordDigest: next.recordDigest, changeRef: context.record.members[0]!.changeRef });
+  const position = await setup.nats.store.head();
+  expect(await delivery.observe()).not.toBeNull();
+  expect(await setup.nats.store.head()).toBe(position);
 }
 it('accepts only the current acknowledged generation, including a carried member',
   acceptsCurrentAndCarriedGeneration);
@@ -2402,8 +2410,18 @@ async function preservesApprovalForOtherReload(serverId: string) {
       expect(await delivery.observe()).not.toBeNull();
     }
     await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
-    await delivery.observe();
-    expect(await readToolPolicy(setup.nats.store, 'test', 'fixture')).toEqual(before);
+    const observation = await delivery.observe();
+    const { outcome: _outcome, ...observed } =
+      gatewayObservationSchema.parse(observation!.event.data);
+    const expectedReceipt = { ...before.configurationObservation!, ...observed };
+    const rows = await history(setup.nats.store, 'mcp-fixture', 'test');
+    const receipt = rows.at(-1)!;
+    expect(receipt.event.type).toBe('mcp.configuration_observed');
+    expect(receipt.event.data).toEqual(expectedReceipt);
+    expect(receipt.sequence).toBeGreaterThan(before.sequence);
+    const expectedPolicy = { ...before, sequence: receipt.sequence,
+      configurationObservation: expectedReceipt };
+    expect(await readToolPolicy(setup.nats.store, 'test', 'fixture')).toEqual(expectedPolicy);
     expect(await readApproval(setup.nats.store, 'test', approvalId)).toEqual(approved);
     Object.assign(headers, generationHeaders(record));
     const response = await approvalPermit(setup, headers, approvalId);
