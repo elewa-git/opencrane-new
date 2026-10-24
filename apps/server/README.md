@@ -36,7 +36,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, spending pages, resumable live updates, tool status and integration facts| server["apps/server<br/>the back end"]
   server -.->|checks access and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, access-checked control refusals, checked child activations, child retries and saved tool hand-offs| nats["NATS<br/>the event log"]
+  server -->|records changes, checked owner pauses, control refusals, child activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, history and exact role and ownership receipts| postgres
@@ -88,6 +88,10 @@ assistant can call. These reads check current admin rights after loading the fac
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 ## Processes it handles
+
+An internal operation lets a routine's current owner save a pause when no run is active.
+It checks saved ownership and permissions, and recovers the original change after a lost
+reply. This operation has no website route. Routine execution remains disabled.
 
 1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.
    [Members](src/members/README.md) handles the first owner's claim or a later invitation.

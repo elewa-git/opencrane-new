@@ -4335,3 +4335,34 @@ It also checks failed progress, list and detail reads for ordinary, demoted and 
 callers, and fixed loading errors for authorised readers. All loading, successful or
 failed, finishes before the single access check. No write authority fence is used.
 Live qualification remains NOT RUN.
+
+## Internal owner pause (P4-24 PR 4b; Part of #106)
+
+Prerequisite #631 landed as `3f4e231e55582a31c2f6e738004f86ab4e462666`.
+`src/routine-pause.ts` exports `pauseRoutine(store, binding, memberId, input)`.
+The caller supplies the authenticated member separately. Strict input accepts only
+`routineId`, `changeId`, `expectedPosition`, `expectedDefinitionRevision`,
+`expectedScheduleRevision` and `expectedControlRevision`. The change reference has
+form `<routineId>:<unique-id>`; both parts accept 1–200 letters, digits, underscores
+or hyphens. Changing the target while keeping the reference conflicts permanently.
+
+The operation loads routine and member history before its two-second write check.
+It uses the exact routine IAM receipts from `libs/authz`. Only the recorded current
+owner with active membership may save. Legacy, retired and active-run records refuse.
+A pause derives owner, revisions, next slot and fixed `owner_requested` reason from
+saved history. It increments only the control revision. One conditional append writes
+`routine.paused`; the append rechecks the original small access records and deadline.
+The routine position protects against reassignment or another routine change.
+
+A matching retry checks current management permission once and returns the original
+`{ status: 'confirmed', changeId, eventId, position }`, without a write deadline or
+append. Original history binds its actor, target, revisions and preceding position.
+This recovery survives expired transport deduplication and restart. Conflict, refused
+and unavailable errors contain fixed descriptions only. No definition is returned.
+
+`test/routine-pause.test.ts` uses private NATS/OpenFGA and a disposable PostgreSQL
+database. It checks recovery, conflicts, refusals, queued access changes, expiry,
+slow history and replay with execution services forbidden. Run it under `nice -n 10`
+with `PG_TEST_URL` pointing to a disposable test database.
+Routes, admin intervention, retire/reassign/resume, active-root Stop, scheduling and
+execution remain later work. Fresh-install execution qualification: NOT RUN.

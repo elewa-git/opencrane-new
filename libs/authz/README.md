@@ -24,7 +24,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.->|checks access, receipts and outages| authz
   ops["apps/ops<br/>background workers"] -.-> authz
   authz -->|checks permissions, including routine ownership| fga["OpenFGA<br/>permissions service"]
-  authz -.->|reads saved ownership| store["libs/event-store<br/>saved changes"]
+  authz -.->|reads saved ownership and membership| store["libs/event-store<br/>saved changes"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
@@ -57,6 +57,8 @@ flowchart LR
 3. **A routine is checked.** Saved ownership and membership must agree with permission
    records and their receipts. Admin metadata access gives no private instructions,
    management or execution rights.
+   A writer can load history first, then check permissions within its short write limit.
+   It must refuse if the saved access records have changed before append.
 4. **A person rejoins a chat.** Their permission to read is restored. In ordinary
    chats, rejoining restores messages from the new join. In shared child chats,
    an explicit invitation releases the whole shared history.

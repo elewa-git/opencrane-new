@@ -86,7 +86,8 @@ export { takeoverRefusedDataSchema, takeoverRequestedDataSchema, takeoverPausing
   takeoverPausedDataSchema, takeoverFailedDataSchema } from './takeover.ts';
 export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema }
   from './survey.ts';
-export { routineDefinitionSchema, routineRecordIdentitySchema, routineMissedSchema }
+export { routineDefinitionSchema, routineRecordIdentitySchema, routineMissedSchema,
+  routineControlSchema }
   from './routines.ts';
 export { foldRoutine, type RoutineState } from './routine-fold.ts';
 export { memoryForgottenDataSchema, memoryForgottenEventSchema } from './memory.ts';

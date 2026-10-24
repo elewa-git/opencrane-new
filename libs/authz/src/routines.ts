@@ -1,4 +1,4 @@
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { foldRoutine, handlerSubscriptions, legacyMemberRole, routineDefinitionSchema,
   routineRecordIdentitySchema, type EventEnvelope, type RoutineState } from '@opencrane/events';
 import { objectId, TupleClient, type Binding, type Tuple } from './client.ts';
@@ -77,12 +77,14 @@ async function readRoutine(store: History, silo: string, routineId: string,
   let state: RoutineState | undefined;
   let modernCreation = false;
   const receipts: string[] = [];
+  const rows: StoredEvent[] = [];
   const deadline = performance.now() + 10_000;
   for await (const row of store.readStream(`routine-${routineId}`, 1, deadline)) {
     if (row.event.silo !== silo) {
       throw new Error('Routine silo mismatch');
     }
     state = foldRoutine(state, row.event);
+    rows.push(row);
     const identity = routineRecordIdentitySchema.parse(row.event.data);
     if (row.event.type === 'routine.created' && identity.version === 1) {
       modernCreation = true;
@@ -91,23 +93,26 @@ async function readRoutine(store: History, silo: string, routineId: string,
       receipts.push(row.event.id);
     }
     if (row.event.id === throughEventId) {
-      return { state, modernCreation, receipts };
+      return { state, modernCreation, receipts, rows };
     }
   }
   if (throughEventId !== undefined) {
     throw new Error('Routine retirement was not found in saved history');
   }
-  return { state, modernCreation, receipts };
+  return { state, modernCreation, receipts, rows };
 }
 
 async function accessReceipts(store: History, silo: string, memberId: string) {
   const receipts: string[] = [];
   const subjects = [`member-${memberId}`, `ownership-${silo}`];
+  const positions = new Map<string, number>();
   const supported: readonly string[] = handlerSubscriptions['update-openfga'];
   const deadline = performance.now() + 10_000;
   let role = '';
   for (const subject of subjects) {
+    positions.set(subject, 0);
     for await (const row of store.readStream(subject, 1, deadline)) {
+      positions.set(subject, row.sequence);
       const event = row.event;
       if (event.silo !== silo || event.subject !== subject) {
         throw new Error('Routine access history mismatch');
@@ -125,54 +130,73 @@ async function accessReceipts(store: History, silo: string, memberId: string) {
       receipts.push(event.id);
     }
   }
-  return { active: role !== '', receipts };
+  return { active: role !== '', receipts, positions };
+}
+
+/** Load saved facts before a caller starts its short write check. */
+export async function loadRoutineAccess(binding: Binding, client: TupleClient,
+  store: History | undefined, memberId: string, routineId: string) {
+  if (!store) {
+    throw new Error('Routine history unavailable');
+  }
+  const saved = await readRoutine(store, binding.silo, routineId);
+  const member = await accessReceipts(store, binding.silo, memberId);
+  async function check(relation: RoutineRelation) {
+    try {
+      return await checkSavedRoutine(binding, client, memberId, routineId, relation, saved, member);
+    } catch {
+      return { allowed: false, status: 'unavailable' as const };
+    }
+  }
+  return { state: saved.state, rows: saved.rows, positions: member.positions, check };
 }
 
 /** Check saved facts before permissions; this result never authorises execution. */
 export async function checkRoutine(binding: Binding, client: TupleClient,
   store: History | undefined, memberId: string, routineId: string, relation: RoutineRelation) {
-  const refused = { allowed: false, status: 'ok' as const };
+  if (!store) {
+    return { allowed: false, status: 'ok' as const };
+  }
   try {
-    if (!store) {
-      return refused;
-    }
-    // Load routine history before checking the small streams that decide access.
-    const saved = await readRoutine(store, binding.silo, routineId);
-    const state = saved.state;
-    if (!saved.modernCreation || !state?.definition) {
-      return refused;
-    }
-    const ownerId = state.definition.definition.ownerId;
-    if (relation === 'manage' && (state.status === 'retired' || memberId !== ownerId)) {
-      return refused;
-    }
-    const member = await accessReceipts(store, binding.silo, memberId);
-    if (!member.active) {
-      return refused;
-    }
-    const receipts = [...saved.receipts, ...member.receipts];
-    const silo = objectId('silo', binding.silo);
-    for (const eventId of receipts) {
-      const receipt = { user: silo, relation: 'applied',
-        object: objectId('projection_event', binding.silo, eventId) };
-      const result = await client.check(receipt);
-      if (!result.allowed) {
-        return { allowed: false, status: result.status };
-      }
-    }
-    const user = objectId('person', binding.silo, memberId);
-    // Require the recorded owner or a current admin even if an old owner tuple survives.
-    if (relation === 'read_metadata' && memberId !== ownerId) {
-      const adminTuple = { user, object: silo, relation: 'admin' };
-      const admin = await client.check(adminTuple);
-      if (!admin.allowed) {
-        return { allowed: false, status: admin.status };
-      }
-    }
-    const tuple = { user, object: objectId('routine', binding.silo, routineId), relation };
-    const result = await client.check(tuple);
-    return { allowed: result.allowed, status: result.status };
+    const saved = await loadRoutineAccess(binding, client, store, memberId, routineId);
+    return await saved.check(relation);
   } catch {
     return { allowed: false, status: 'unavailable' as const };
   }
+}
+
+async function checkSavedRoutine(binding: Binding, client: TupleClient, memberId: string,
+  routineId: string, relation: RoutineRelation, saved: Awaited<ReturnType<typeof readRoutine>>,
+  member: Awaited<ReturnType<typeof accessReceipts>>) {
+  const refused = { allowed: false, status: 'ok' as const };
+  const state = saved.state;
+  if (!saved.modernCreation || !state?.definition || !member.active) {
+    return refused;
+  }
+  const ownerId = state.definition.definition.ownerId;
+  if (relation === 'manage' && (state.status === 'retired' || memberId !== ownerId)) {
+    return refused;
+  }
+  const receipts = [...saved.receipts, ...member.receipts];
+  const silo = objectId('silo', binding.silo);
+  for (const eventId of receipts) {
+    const receipt = { user: silo, relation: 'applied',
+      object: objectId('projection_event', binding.silo, eventId) };
+    const result = await client.check(receipt);
+    if (!result.allowed) {
+      return { allowed: false, status: result.status };
+    }
+  }
+  const user = objectId('person', binding.silo, memberId);
+  // Require the recorded owner or a current admin even if an old owner tuple survives.
+  if (relation === 'read_metadata' && memberId !== ownerId) {
+    const adminTuple = { user, object: silo, relation: 'admin' };
+    const admin = await client.check(adminTuple);
+    if (!admin.allowed) {
+      return { allowed: false, status: admin.status };
+    }
+  }
+  const tuple = { user, object: objectId('routine', binding.silo, routineId), relation };
+  const result = await client.check(tuple);
+  return { allowed: result.allowed, status: result.status };
 }

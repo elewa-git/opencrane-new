@@ -241,3 +241,12 @@ with replay. `test/routine-guards.test.ts` isolates history deadlines, history i
 required receipts, saved membership, legacy definitions and safe error replies.
 `test/routine-model.test.ts` checks membership and owner requirements directly in OpenFGA.
 Fresh-install execution qualification remains NOT RUN.
+
+`memberAuthorisation(...).loadRoutineAccess(memberId, routineId)` separates history
+loading from permission checks for the internal owner pause. It returns folded state,
+ordered routine rows, member/ownership positions and a `check(relation)` operation.
+The check uses the same exact receipts and permission rules as `routine(...)`, and
+returns no private service errors. It reads no history itself. A writer must compare
+the saved small-stream positions and keep its original deadline through append.
+Routine position comparison belongs to that append. Ordinary `routine(...)` readers
+still load facts and check permissions once, without a write deadline.
