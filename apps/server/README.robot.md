@@ -4802,3 +4802,45 @@ Cleanup stops the HTTP listener before disconnecting unfinished requests and wai
 for Fastify to close. Disconnecting first left time for a new connection to arrive
 and keep disposal waiting. The regression opens a fresh incomplete request in that
 gap and requires disposal to finish within the existing two-second cleanup check.
+
+### Preparation follow-up checks — 24 October 2026
+
+Own result: PARTIAL. The preparation regressions pass, but the three-run repeat gate is FAIL.
+The branch was rebased onto the fetched main revision
+`c4c2662f865e3b72876a06e969ba1c7c2df08527`; the rebase finished cleanly.
+Main advanced during testing. All three final runs used source
+`d2e4befebd0113ba5000c801691682edabc6f9f6`, one worker and `nice -n 10`.
+`PG_TEST_URL` pointed to a throwaway PostgreSQL container, separate from the owner stack.
+Starting load below is the one-minute load average from `/proc/loadavg`.
+
+| Run | Start (UTC) | Starting load | Own result |
+| --- | --- | --- | --- |
+| 1 | 00:56:14 | 5.53 | FAIL: 168/172 passed; 4 failed |
+| 2 | 01:26:16 | 5.95 | FAIL: 171/172 passed; 1 failed |
+| 3 | 01:55:17 | 6.59 | PASS: 172/172 passed |
+
+Run 1 failed on a thread-proxy upstream timeout, a valid recall before an append
+revocation check, an access check before signing the Correct lineage control, and a
+Correct policy-control event-store timeout. Those four cases passed in runs 2 and 3.
+Run 2 failed while starting a fixture gateway: its address was already in use.
+That case passed in runs 1 and 3. These failures remain FAIL; later passes do not erase them.
+Logs and starting loads use `/tmp/p4-15-fix7-qualified-{1,2,3}` with `.log` and `.start`.
+
+All four slow Correct/Forget cases, slow Correct revocation and reused Forget preparation
+passed in every final run. Missing, expired and mismatched preparation checks, final IAM
+revocations and assertions against cold reads inside the signed pass also passed each time.
+Both unfinished-request cleanup regressions passed in all three runs, without a cleanup timeout.
+
+Failing-first evidence: commit `14f6c83b6` failed all six requested cases before the fix.
+Commit `69bbe3f36` reproduced a late connection holding cleanup open; stopping the listener
+first fixed it. Commit `2174d8270` failed both final IAM-revocation cases before preserving
+full write permission checks. Focused cleanup and team-fixture checks passed twice.
+Earlier diagnostic full runs were PASS 169/169 (load 13.22), FAIL 166/169 (load 7.72)
+and FAIL 166/169 (load 12.71). The latter runs exposed fixture setup and cleanup problems.
+
+Own PASS: full lint (zero errors, 26 warnings), full typecheck, event catalogue (153 types),
+Knip and changelog validation. The related memory and event-security suites passed twice
+(558 tests per run, including 438 security-rule tests). The final three memory runs cover
+all changed tests more than twice. Authority, authority-volume and security-rule tests
+were not edited. No dependencies, business events or preparation response fields were added.
+Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
