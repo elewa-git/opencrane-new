@@ -2,8 +2,10 @@
 
 ## Current product correction, 24 October 2026
 
-The branch was fetched and rebased onto `origin/main`. The rebase completed without
-conflicts. The earlier investigation below is retained as history; its unexplained
+The branch was fetched and rebased onto `origin/main`. Both rebases completed without
+conflicts. The final base is `cecab99b68d47fc0f7d857261592fa79ff422965`; its additional
+change only affects the unrelated custody fixture and documentation. The product
+files in this correction are unchanged by that rebase. The earlier investigation below is retained as history; its unexplained
 refusals are not reclassified as timing failures.
 
 Two unrelated member writes can interrupt consecutive conditional budget publishes.
@@ -23,19 +25,19 @@ another writer or an unavailable append caused the refusal.
 
 ### Current failing-first checks
 
-- `e08f4435f` commits the real-NATS, two-conflict actor cases before `db137609e`.
+- `28e62c685` commits the real-NATS, two-conflict actor cases before `32dc0d2d8`.
   FAIL before the fix: unchanged access was refused and the original deadline was
   missing from conflict operations. PASS after the fix: eight conflict cases,
   including expiry, revocation, changed budget and continued writer use.
-- `4fac15301` commits the pre-admission HTTP recovery case before `654109a15`.
+- `84fbc2a52` commits the pre-admission HTTP recovery case before `298d99fa4`.
   FAIL before the fix: consumed approval had `canRetry: false` after a refusal
   with no remote connection. PASS after the fix: both recovery cases send once,
   refuse the competing retry, keep two approval uses and reserve no money.
-- `a7bac44dc` commits the private diagnostic cases before `d372a5309`.
+- `5483576cf` commits the private diagnostic cases before `5c54fe47e`.
   FAIL before the fix: dispatch refusals had no diagnostic. PASS after the fix:
   fixed labels and elapsed time are present; private canaries, permits and stacks
-  are absent. `6a0b313ef` first requires an accurate budget-refusal label, followed
-  by `65677b6f6`. Both diagnostic cases then pass twice.
+  are absent. `3e1610d99` first requires an accurate budget-refusal label, followed
+  by `b24ec8cb6`. Both diagnostic cases then pass twice.
 
 Initial logs are `/tmp/ci-flakes-11-{actor,approval,diagnostics}-{red,green}.log`.
 Later logs and JSON reports are in `/tmp/ci-flakes-11-followup/`.
@@ -54,6 +56,124 @@ OpenFGA, gateway and HTTPS services. No owner stack or Docker daemon settings ch
 Each stress invocation runs both approval recovery cases. The two focused-suite
 passes run alongside the batch to provide load. The stress-only temporary Vitest
 configuration enables private warning logs and changes no test or deadline.
+
+### Current verification results
+
+Both complete invocations use the same eleven selected files and one worker.
+The original failures below stay recorded even where a focused rerun passes.
+
+| File | First pass | Second pass |
+| --- | --- | --- |
+| `apps/server/test/approvals.test.ts` | PASS: 67 passed, 1 NOT RUN | PASS: 67 passed, 1 NOT RUN |
+| `apps/server/test/integration-access-gateway.test.ts` | PASS: 17 passed | FAIL: 16 passed, 1 failed |
+| `libs/models/test/actor.test.ts` | PASS: 40 passed | PASS: 40 passed |
+| `libs/models/test/approval-cancellation.test.ts` | PASS: 13 passed | PASS: 13 passed |
+| `libs/models/test/approval-record.test.ts` | PASS: 5 passed | PASS: 5 passed |
+| `libs/models/test/decision-activity.test.ts` | PASS: 12 passed | PASS: 12 passed |
+| `libs/models/test/decision-cost.test.ts` | FAIL: 27 passed, 1 failed | PASS: 28 passed |
+| `libs/models/test/decision-fence.test.ts` | PASS: 75 passed | PASS: 75 passed |
+| `libs/models/test/decision-grants.test.ts` | PASS: 3 passed | PASS: 3 passed |
+| `libs/models/test/decision-refusal.test.ts` | FAIL: 0 passed, 1 failed | PASS: 1 passed |
+| `libs/models/test/mcp-dispatch.test.ts` | PASS: 182 passed | FAIL: 181 passed, 1 failed |
+
+The optional `APPROVAL_BROWSER=1` case is NOT RUN in both passes.
+The full root suite and fresh-install journeys are NOT RUN.
+
+| Own static check | Result |
+| --- | --- |
+| Full lint, including Knip, dependency rules, docs, links and licences | PASS; 25 ESLint warnings, no errors |
+| Repository-wide typecheck after the final rebase | PASS |
+| Event catalogue after the final rebase | PASS; 153 types |
+| Changelog validation after the final rebase | PASS |
+| Markdown after the final rebase | PASS |
+
+The second rebase adds only the custody fixture and its documentation from main.
+It leaves the product files and all selected test files unchanged.
+The final diagnostic label was checked twice separately after its wording change.
+
+### Every current stress invocation
+
+Each row runs both approval cases alongside the selected suites. All calls keep
+the original two-second access deadline. No failed run is replaced by a rerun.
+The first batch changes its injection point after run 28. Every final-batch run
+uses the corrected fixture, which pauses IAM at the public admission method and
+then calls the real method. All assertions remain unchanged.
+
+| Run | First batch | Seconds | Final batch | Seconds |
+| --- | --- | --- | --- | --- |
+| 1 | PASS | 60 | FAIL | 60 |
+| 2 | PASS | 62 | PASS | 48 |
+| 3 | PASS | 63 | PASS | 44 |
+| 4 | PASS | 57 | PASS | 49 |
+| 5 | PASS | 58 | PASS | 46 |
+| 6 | PASS | 55 | PASS | 37 |
+| 7 | PASS | 48 | PASS | 40 |
+| 8 | PASS | 39 | PASS | 41 |
+| 9 | PASS | 40 | PASS | 35 |
+| 10 | PASS | 36 | PASS | 33 |
+| 11 | PASS | 33 | PASS | 40 |
+| 12 | PASS | 33 | PASS | 40 |
+| 13 | PASS | 32 | PASS | 50 |
+| 14 | PASS | 39 | PASS | 49 |
+| 15 | PASS | 37 | PASS | 41 |
+| 16 | PASS | 35 | PASS | 41 |
+| 17 | PASS | 40 | PASS | 45 |
+| 18 | PASS | 37 | PASS | 49 |
+| 19 | PASS | 42 | PASS | 48 |
+| 20 | PASS | 45 | PASS | 50 |
+| 21 | PASS | 47 | PASS | 45 |
+| 22 | PASS | 47 | PASS | 39 |
+| 23 | PASS | 58 | PASS | 34 |
+| 24 | PASS | 59 | PASS | 33 |
+| 25 | PASS | 60 | PASS | 34 |
+| 26 | FAIL | 66 | PASS | 34 |
+| 27 | FAIL | 74 | PASS | 39 |
+| 28 | PASS | 71 | PASS | 34 |
+| 29 | PASS | 70 | PASS | 33 |
+| 30 | PASS | 52 | PASS | 33 |
+
+The first batch is FAIL: 28/30 complete runs, with 58/60 individual cases passing.
+The final batch is FAIL: 29/30 complete runs, with 59/60 individual cases passing.
+The new pre-admission recovery case passes 30/30 in the final batch. The original
+saved-start case passes 29/30. These results make overall qualification PARTIAL.
+
+The focused generation diagnostic passes both cases. The separate diagnostic
+rerun of the large-grant and resumed-token cases also passes both cases. These
+reruns do not erase the original failures or establish every original cause.
+
+Logs and JSON reports are `/tmp/ci-flakes-11-followup/pass{1,2}.{log,json}`,
+`stress-{1..30}.{log,json}`, `final-stress-{1..30}.{log,json}`,
+`generation-diagnostic.{log,json}` and `decision-diagnostic.{log,json}`.
+Static logs are in the same folder. The throwaway PostgreSQL container was removed
+with its volume after the tests. No extra load-only suite was needed: the selected
+suites overlapped every stress invocation. CI is not awaited.
+
+
+### Current failures and what is known
+
+- First full pass: the 10,000-member decision-cost case returned 503 with
+  `Decision audit unavailable`. Its focused diagnostic rerun passed. The original
+  audit failure's underlying cause remains unresolved.
+- First full pass: the resumed-token case returned gateway 401 with
+  `InvalidSignature` before the model decision. Its focused rerun and second full
+  pass passed. The original signature failure's underlying cause remains unresolved.
+- Second full pass: the changed-generation case failed while its publication fixture
+  waited for a witness: 404 instead of 200. It had not reached the changed-generation
+  refusal. Both generation cases passed in the focused diagnostic rerun.
+- Second full pass: the zero-delay tool-history case exceeded the existing 30-second
+  cleanup hook limit in `setup.close`. Its focused rerun passed. No hook limit or
+  assertion was increased.
+- First stress batch, run 26: the new fixture paused IAM during the earlier decision.
+  That decision returned 503 before the intended budget admission. Its private log
+  records `event_store_unavailable` in `access_and_budget` after 2,436 ms. The fixture
+  now pauses at the public `admitDispatch` method, then invokes the real method.
+- First stress batch, run 27: the original saved-start case took 2,510.65 ms against
+  its unchanged 2,000 ms response assertion. The private refusal records
+  `access_deadline_expired` in `budget_admission` after 2,473 ms.
+- Final stress batch, run 1: the original case returned `[403, 403]`. The permitted
+  retry's private refusal records `access_deadline_expired` in `final_access`,
+  675 ms after dispatch began. The original shared deadline was not extended.
+  This identifies this run's refusal; it does not explain earlier historical runs.
 
 ## Earlier investigation
 
