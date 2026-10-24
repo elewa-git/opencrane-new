@@ -56,8 +56,8 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, routine metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks access before history errors, allocates child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
+  web["apps/web<br/>the website"] -->|requests, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
+  server -.->|checks access before history errors, prepares child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads own saved profiles; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -95,10 +95,11 @@ for current permissions and memory revisions.
 - Runs the separate models process that checks AI calls, records costs and starts the gateway.
 
 An internal operation checks a child's saved activation and asks the budget actor
-to record its reviewed spending allowance. It refuses if that allowance or the
-first call cannot fit. The first turn remains held; allocation starts no work.
-Each save attempt checks access again within the original time limit, including
-retries after a connection failure.
+to record its reviewed spending allowance. It prices the first call using the saved
+provider and model, and checks the exact ready computer. It refuses if that allowance
+or the first call cannot fit. The first turn remains held; allocation starts no work.
+Each save attempt checks access and the prepared choices again within the original
+time limit, including retries after a connection failure.
 
 Owners and admins can read separate saved facts for integration registration,
 account requirements, grants and publication. A saved grant does not prove an

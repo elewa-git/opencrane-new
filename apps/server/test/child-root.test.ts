@@ -14,16 +14,18 @@ import { shortDuplicateWindowFixture, waitForDuplicateWindow }
 
 let context: Awaited<ReturnType<typeof summonFixture>>;
 let actor: BudgetActor;
-const selected = { threadId: 'selected-thread', computerId: 'selected-computer',
-  generation: 1, model: 'gpt-6.1-sol' };
+const model = 'gpt-6.1-sol';
+const selected = { threadId: 'selected-thread', computerId: 'selected-computer', generation: 1 };
 async function initialise() {
   const nats = await shortDuplicateWindowFixture();
   context = await summonFixture(nats);
   for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'helper']]) {
-    await context.append(grantStream('model', selected.model), 'grant.given',
-      { resourceType: 'model', resourceId: selected.model, granteeKind, granteeId,
+    await context.append(grantStream('model', model), 'grant.given',
+      { resourceType: 'model', resourceId: model, granteeKind, granteeId,
         grantedBy: 'alice' });
   }
+  await context.append('computer-helper', 'computer.ready',
+    { assistantId: 'helper', computerId: selected.computerId, generation: 1 }, false);
   actor = new BudgetActor(context.nats.store, 'test');
   await actor.start(10_000, 10_000, 'payer');
 }
@@ -134,8 +136,9 @@ async function changedBindings() {
   const before = await context.nats.store.head();
   for (const patch of [{ threadId: 'other' }, { computerId: 'other' }, { generation: 2 }]) {
     const changed = { ...selected, ...patch };
+    const reason = 'threadId' in patch ? 'Root binding conflict' : 'Child computer changed';
     await expect(allocateChildRoot(context.options, actor, 'alice', saved.input, 1, changed))
-      .rejects.toThrow('Root binding conflict');
+      .rejects.toThrow(reason);
   }
   for (const patch of [{ payingGroupId: 'owners' }, { allowanceBoundCents: 999 }]) {
     const changed = { ...saved.input, ...patch };
@@ -286,7 +289,7 @@ async function queueChange(kind: string) {
   const pending = allocateChildRoot(context.options, actor, 'alice', saved.input, 1, selected);
   const refused = expect(pending).rejects.toThrow();
   await queued.promise;
-  const grant = { resourceType: 'model', resourceId: selected.model,
+  const grant = { resourceType: 'model', resourceId: model,
     granteeKind: 'member', granteeId: 'alice' };
   try {
     if (kind === 'deadline') {
@@ -295,7 +298,7 @@ async function queueChange(kind: string) {
       await context.append('team-payer', 'team.member_removed',
         { teamId: 'payer', memberId: 'alice', removedBy: 'bob' });
     } else if (kind === 'grant' || kind === 'saved grant') {
-      await context.append(grantStream('model', selected.model), 'grant.revoked',
+      await context.append(grantStream('model', model), 'grant.revoked',
         { ...grant, revokedBy: 'alice' });
     } else if (kind === 'failure') {
       await seedSavedFailure(saved);
@@ -317,7 +320,7 @@ async function queueChange(kind: string) {
         { teamId: 'payer', memberId: 'alice', addedBy: 'alice' });
     }
     if (kind === 'grant' || kind === 'saved grant') {
-      await context.append(grantStream('model', selected.model), 'grant.given',
+      await context.append(grantStream('model', model), 'grant.given',
         { ...grant, grantedBy: 'alice' });
     }
   }

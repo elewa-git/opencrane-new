@@ -4368,7 +4368,15 @@ Conflicts and uncertain writes remain queued for another recovery pass.
 It shares `checkedChildActivation` with activation and requires an existing exact saved record.
 The request, creation, first input and current attempt supply the requester, child,
 first-turn id, assistant, payer and reviewed cents. The internal caller supplies the
-actual selected thread, computer, generation and model. There is no HTTP caller.
+restricted thread, computer and generation from trusted preparation. There is no HTTP
+caller and the selection input has no model field. The computer summary must confirm
+the exact ready computer and generation, with no pending control or thread belonging
+to another turn. `providerTurnAdmission` supplies the saved provider/model choice.
+Only disabled managed calls use the ordinary `modelForTask` fallback; draining mode
+and paused or missing enabled choices refuse. Provider and computer history loads
+before `checkedChildActivation` starts the access check, including when preparation
+fails. Every allocation attempt confirms the provider mode and binding revision, and
+the computer stream position, within the original deadline.
 Model grants are checked with the existing authority helper and already loaded child
 history. Only small access streams are watched. The original two-second check reaches
 the actor queue and every publish attempt, with its unchanged absolute deadline;
@@ -4383,6 +4391,11 @@ Retries retain the saved root, including its stop. The hold and start gates are 
 recovery calls activation but never allocation. Tests cover allocation, refusals, queued
 revocation, lost replies,
 actor restart, projection replay and held delivery after allocation.
+`test/child-root-preparation.test.ts` covers two saved model prices, ignored caller
+model overrides, invalid computers and threads, paused or missing choices, preparation
+changes while queued and during real transport retries, and slow history loading.
+This is the server preparation part of #90, P4-8 PR 7h. First-start hand-off, native
+wiring and fresh-install qualification remain unfinished.
 
 ## Bounded call spending
 
