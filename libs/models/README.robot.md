@@ -2771,6 +2771,14 @@ fields because no listener was registered. A failed outcome save still refuses a
 After registration, periodic checks use the same admission rules. The relay also
 keeps its original expiry; it never renews a permit.
 
+The budget actor also repeats the access callback before each publish attempt.
+If destination access, turn activity, the original deadline or expiry changes during
+a failed publish, admission refuses before a second publish. The tests fail the
+first publish without saving it, so those refusals have no saved dispatch or dispatch
+error outcome. A transient failure with valid access still retries and saves one
+dispatch. Tests cover changes both before that retry and after it succeeds, keeping
+the later registration and error-outcome checks.
+
 Tests use real NATS, PostgreSQL, OpenFGA and the pinned gateway with a recording
 upstream. The initial failing test is in commit `98ba6b80`.
 Authorised receipt reads, crash recovery and live qualification remain deferred. CONNECT and command-worker networking stay off.
