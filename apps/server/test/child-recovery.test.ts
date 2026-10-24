@@ -780,3 +780,48 @@ async function refusesActivationPublishRetry(change: string) {
 }
 it.each(['payer removal', 'parent closure', 'legacy parent closure', 'new attempt'])(
   'refuses activation transport retry after %s', refusesActivationPublishRetry);
+
+async function staleFailureLosesToActivation(pause: string) {
+  const { input, intent } = await savedRequest('message.posted');
+  const row = await reference(input.conversationId);
+  await context.append('team-payer', 'team.member_removed',
+    { teamId: 'payer', memberId: 'alice', removedBy: 'bob' });
+  const connection = await context.nats.client('command');
+  const retry = await failingPublishStore(connection);
+  const firstWorker = { ...context.options, store: retry.store };
+  const append = retry.store.append.bind(retry.store);
+  let failuresAttempted = 0;
+  async function activateWithSecondWorker() {
+    await restoreTeamAccess('payer');
+    await recoverChildRequest(context.options, row);
+    const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+    expect(child).toHaveLength(3);
+    expect(child[2]!.event.type).toBe('conversation.child_activated');
+  }
+  async function pausedFailure(command: Parameters<typeof append>[0]) {
+    const event = eventSchema.parse(command.event);
+    expect(event.type).toBe('conversation.child_start_failed');
+    expect(event.data).toMatchObject({ stage: 'activation', reason: 'access_refused' });
+    failuresAttempted++;
+    if (pause === 'before append') {
+      await activateWithSecondWorker();
+    } else {
+      retry.failNextPublish(activateWithSecondWorker);
+    }
+    return append(command);
+  }
+  vi.spyOn(retry.store, 'append').mockImplementation(pausedFailure);
+  await expect(recoverChildRequest(firstWorker, row)).rejects.toThrow();
+  expect(failuresAttempted).toBe(1);
+  const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
+  expect(parent.filter(isFailure)).toEqual([]);
+  const status = await context.request(input.conversationId, `children/${input.requestId}`);
+  expect(status.statusCode).toBe(200);
+  expect(status.json()).toMatchObject({ state: 'queued' });
+  await context.runner.run(childRequests);
+  expect(await reference(input.conversationId)).toBeUndefined();
+  await context.runner.rebuild(childRequests);
+  expect(await reference(input.conversationId)).toBeUndefined();
+}
+it.each(['before append', 'during publish retry'])(
+  'refuses a stale failure when another worker activates %s', staleFailureLosesToActivation);
