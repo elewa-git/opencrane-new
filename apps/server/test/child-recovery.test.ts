@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as authz from '@opencrane/authz';
 import { createEventStore } from '@opencrane/event-store';
+import { failingPublishStore } from '@opencrane/event-store/testing';
 import { eventEnvelopeSchema, conversationCreatedDataSchema } from '@opencrane/events';
 import { childRequests, conversations, members } from '@opencrane/projections';
 import type { Db } from '@opencrane/projections';
@@ -12,6 +13,7 @@ import { createLogger } from '@opencrane/observability';
 import { chatHistory } from '../src/chat/commands.ts';
 import { recoverChildRequest, watchChildRequests } from '../src/chat/child-recovery.ts';
 import { recordChildStartFailure } from '../src/chat/child-failure.ts';
+import { retryChildRequest } from '../src/chat/child-requests.ts';
 import { startServer, parseJsonLines } from './support/process.ts';
 import { summonFixture } from './support/child-summon.ts';
 
@@ -743,3 +745,38 @@ async function uncertainSavedActivation() {
   expect(await context.nats.store.head()).toBe(before);
 }
 it('does not save a refusal over an activation when its index is behind', uncertainSavedActivation);
+
+async function refusesActivationPublishRetry(change: string) {
+  const { input, intent } = await savedRequest('message.posted');
+  const row = await reference(input.conversationId);
+  const connection = await context.nats.client('command');
+  const retry = await failingPublishStore(connection);
+  const options = { ...context.options, store: retry.store };
+  async function changeBeforeRetry() {
+    if (change === 'payer removal') {
+      await context.append('team-payer', 'team.member_removed',
+        { teamId: 'payer', memberId: 'alice', removedBy: 'bob' });
+    } else if (change === 'new attempt') {
+      await recordChildStartFailure(context.options, String(row['intent_id']), intent,
+        'activation', 'access_refused');
+      const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
+      const request = { retryId: 'publish-retry', failureEventId: parent.at(-1)!.event.id };
+      await retryChildRequest(context.options, 'alice', input.conversationId,
+        input.requestId, request);
+    } else {
+      const category = change === 'legacy parent closure' ? 'conversation' : 'participation';
+      await context.append(`${category}-${input.conversationId}`, 'conversation.closed',
+        { conversationId: input.conversationId, closedBy: 'alice' }, false);
+    }
+  }
+  retry.failNextPublish(changeBeforeRetry);
+  await expect(recoverChildRequest(options, row)).rejects.toThrow();
+  const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+  expect(child).toHaveLength(2);
+  expect(retry.publishAttempts()).toBe(1);
+  const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
+  const failures = parent.filter(isFailure);
+  expect(failures).toHaveLength(change === 'new attempt' ? 1 : 0);
+}
+it.each(['payer removal', 'parent closure', 'legacy parent closure', 'new attempt'])(
+  'refuses activation transport retry after %s', refusesActivationPublishRetry);
