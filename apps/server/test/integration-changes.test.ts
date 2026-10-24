@@ -232,7 +232,8 @@ async function recoversOriginalReview() {
   const catalogue = { rows: unexpected, tools: unexpected };
   const integrations = { silo: 'acme', store: nats.store, binding: auth.binding,
     feed: { memberId }, catalogue };
-  app = buildServer(config, { integrations, logDestination });
+  const options = { integrations, logDestination };
+  app = buildServer(config, options);
   await runner.rebuild(mcpCatalogue);
   const before = await nats.store.head();
   const recovered = await get(input.commandId);
@@ -264,7 +265,7 @@ async function rejectsForgedReviews() {
     return row.event.id === 'review-original';
   }
   const saved = rows.find(isReview)!;
-  const originalData = saved.event.data as Record<string, unknown>;
+  const originalData = z.record(z.string(), z.unknown()).parse(saved.event.data);
   const patches = [{ subject: 'mcp-other' }, { silo: 'other' }, { id: 'different' },
     { commandId: 'different' }, { type: 'mcp.server_published' }, { source: 'untrusted' },
     { principal: { kind: 'system' as const, id: 'admin' } },

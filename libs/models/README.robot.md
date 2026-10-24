@@ -3581,3 +3581,23 @@ requires the saved installation and endpoint, a current reviewed catalogue and p
 it is not a tool permission or reachability claim. Calls remain unavailable in all cases.
 Any control record blocks use, as in bearer saves and selection. Reads have no custody,
 provider, selection, append, wake or release dependency, and never choose another profile.
+
+## Original saved tool reviews (P4-27 PR 7b; Part of #109)
+
+`readToolModeChange` also recognises exactly `mcp.server_reviewed`. It keeps the
+same ten-second history deadline and final current Owner/Admin check, including
+when loading fails. The original human principal, server source, silo, stream,
+event id, command id and `reviewedBy` must all match. Another admin gets Unknown.
+
+The review receipt explicitly selects `changeRef`, `eventId`, `recordedAt`,
+`sequence`, `serverId`, `connectionId`, `catalogueDigest`, `policyRevision`,
+`reviewRevision` and `reviewedBy`. `reviewRevision` is the saved event's real
+sequence, which need not follow the previous server event by one. It copies no
+tool list, definition or review description. No event fields were added.
+
+`reviewToolPolicy` rereads the actual saved event after append or exact retry.
+It checks the operation, full payload and original expected stream position before
+returning the same receipt. Later reviews and broker deduplication expiry do not
+replace the first save. Current availability stays separate; the receipt does not
+confirm catalogue validity, publication or gateway acknowledgement. Publication
+and lifecycle receipt recovery remain outside this change.

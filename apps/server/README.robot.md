@@ -5219,6 +5219,24 @@ Repeated reads rebuild the same exact history. Instance routes and their change-
 route are unchanged. Lists, admin/status reads, writes, screens and live qualification
 remain later work.
 
+## Original review receipt HTTP contract (P4-27 PR 7b; Part of #109)
+
+GET `/api/org/integrations/:serverId/changes/:commandId` also recovers the original
+saved review. The [models contract](../../libs/models/README.robot.md#original-saved-tool-reviews-p4-27-pr-7b-part-of-109)
+lists its safe receipt fields and exact actor checks. The existing mode receipt
+and separate availability object keep their shape. Unknown never permits a resend.
+
+Successful review POSTs retain `status: appended` and the actual top-level
+`sequence`, and add `receipt`. Stage B can still use that sequence for publication.
+The publication POST and registration and instance recovery contracts are unchanged.
+No GET discovers tools, reads credentials, sends configuration or starts outside work.
+
+`test/integration-changes.test.ts` covers a lost review reply, interleaved grants,
+a later catalogue and review, server restart, projection replay, exact retry after
+deduplication expiry, changed actor/payload/position, forged records and privacy.
+It checks removal and demotion after both successful and failed loading, a finite
+history deadline and one final access check without a write fence.
+
 ## Bounded own routine list
 
 `GET /api/routines?view=mine` returns no-store pages from `GroupOptions.db`.
