@@ -24,6 +24,8 @@ const execute = promisify(execFile);
 const composeFile = `${directory}/stage-b-compose.json`;
 const entry = 'infra/dev-stack/stage-b-entry.ts';
 const override = { services: { models: {
+  image: 'opencrane-stage-b-local:tls',
+  build: { context: root, dockerfile: 'infra/dev-stack/Dockerfile.stage-b' },
   command: ['node', '--experimental-strip-types', entry, 'models'],
   environment: { STAGE_B_CLAIMED_ID: id },
 } } };
@@ -31,6 +33,12 @@ await writeFile(composeFile, JSON.stringify(override), { mode: 0o600 });
 const composeArgs = ['compose', '--project-name', `opencrane-dev-${id}`,
   '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml',
   '-f', 'infra/dev-stack/compose.secondary.yaml', '-f', composeFile];
+try {
+  await execute('docker', [...composeArgs, 'build', 'models'], { cwd: root });
+} catch {
+  await demo.close();
+  throw new Error('Local TLS image build failed');
+}
 const [pidText, started] = (await readFile(`${directory}/server.pid`, 'utf8')).split(' ');
 const pid = Number(pidText);
 async function fingerprint(processId: number) {
