@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi, type TestContext } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
 import * as crypto from 'node:crypto';
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
@@ -24,6 +24,12 @@ import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import { timeMemoryPath } from './support/memory-path-timing.ts';
+
+declare module 'vitest' {
+  interface TaskMeta {
+    teamAssistant?: boolean;
+  }
+}
 
 async function cryptoModule() {
   const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
@@ -205,10 +211,12 @@ async function renewGatewayCredentials() {
   // Keep catalogue expiry from hiding the memory check each test intends to exercise.
   await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
 }
-async function preparePersonal() {
-  await prepare();
+// Finish the chosen fixture before the test starts. Avoid a second startup outliving a timeout.
+async function prepareFixture(context: TestContext) {
+  await prepare(context.task.meta.teamAssistant === true);
 }
-beforeEach(preparePersonal, 120_000);
+const teamFixture = { meta: { teamAssistant: true } };
+beforeEach(prepareFixture, 120_000);
 beforeEach(renewGatewayCredentials);
 afterEach(close);
 
@@ -2207,12 +2215,7 @@ async function firstProofGeneration() {
 }
 it('binds the first proof to its prepared input generation', firstProofGeneration);
 
-async function changedLoadedContext(change: string, team = false) {
-  if (team) {
-    await close();
-    await prepare(true);
-    await renewGatewayCredentials();
-  }
+async function changedLoadedContext(change: string) {
   const body = await loadedWrite();
   const prepared = await contextRecord();
   if (change === 'superset') {
@@ -2236,11 +2239,8 @@ async function changedPersonalContext(change: string) {
 }
 it.each(['superset', 'invalidated', 'ended', 'group', 'assistant_notes'])(
   'refuses complete person lineage when the loaded context has %s', changedPersonalContext);
-async function mixedTeamContext(change: string) {
-  await changedLoadedContext(change, true);
-}
 it.each(['group', 'assistant_notes'])(
-  'refuses a team assistant write after loaded %s references', mixedTeamContext);
+  'refuses a team assistant write after loaded %s references', teamFixture, changedLoadedContext);
 
 async function racesLoadedContext(change: string) {
   const body = await loadedWrite();
@@ -2697,9 +2697,6 @@ it.each(['ask', 'block'] as const)('checks correct policy independently of recal
 async function changeScope(kind: 'group' | 'assistant_notes', loaded: boolean) {
   const assistant = await history(setup.nats.store, 'assistant-assistant', 'test');
   expect(assistant[0]?.event.data).toMatchObject({ kind: 'team' });
-  await close();
-  await prepare(true);
-  await renewGatewayCredentials();
   const request = await changeRequest('forget');
   const owner = kind === 'group' ? 'sales' : 'assistant';
   const otherScope = memoryScopeId('test', kind, owner);
@@ -2718,7 +2715,7 @@ async function changeScope(kind: 'group' | 'assistant_notes', loaded: boolean) {
 }
 it.each([['group', false], ['assistant_notes', false], ['group', true]] as const)(
   'refuses %s scope (already loaded=%s) for forget',
-  { meta: { teamAssistant: true } }, changeScope);
+  teamFixture, changeScope);
 
 async function changedTargetProof(change: string) {
   const currentRevision = change === 'old' ? 2 : 1;

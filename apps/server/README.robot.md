@@ -4787,3 +4787,12 @@ validating the target and every loaded reference. It rechecks the original acces
 streams after reading the conversation tail. Correct and Forget remain disabled;
 valid controls return `memory_tool_unavailable` and create no business event or file.
 Remember and discovery still use their existing paths. Fresh-install qualification: NOT RUN.
+
+
+### Team memory test setup
+
+Team-scope and team loaded-reference cases choose their assistant in `beforeEach`.
+They no longer close a personal fixture and start a second fixture inside the test.
+This keeps a timed-out test body from leaving another setup running against the
+shared test variables. The existing 120-second setup hook, 30-second test limit and
+two-second product pass are unchanged.
