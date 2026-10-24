@@ -1538,7 +1538,17 @@ async function intervalCleansExhaustedReaction() {
   test.db = pgDb(isolated.queue);
   const event = await test.revoke();
   test.store.failDeletes(true);
-  const handler = test.handler();
+  const cleanup = test.handler();
+  const attemptDeletes: number[] = [];
+  async function handle(...parameters: Parameters<typeof cleanup.handle>) {
+    const before = test.store.deleteAttempts;
+    try {
+      await cleanup.handle(...parameters);
+    } finally {
+      attemptDeletes.push(test.store.deleteAttempts - before);
+    }
+  }
+  const handler = { ...cleanup, handle };
   const logger = createLogger('scan-exhaustion-test');
   const runtime = new HandlerRuntime({ db: test.db, logger, silo: 'test',
     handlers: [handler], retryDelay: 0 });
@@ -1554,8 +1564,10 @@ async function intervalCleansExhaustedReaction() {
     await test.db.transaction(enqueue);
     await runtime.work(2);
     await until(exhausted, 80_000);
+    expect(attemptDeletes).toEqual([1, 1, 1, 1, 1, 1]);
     expect(test.store.deleteAttempts).toBe(6);
     const failed = await runtime.deadLetters(handler.name);
+    expect(failed).toMatchObject([{ state: 'failed', retryCount: 5 }]);
     expect(JSON.stringify(failed)).not.toContain(material);
     scan = runningScan(test, 100);
     await scan.pages();
