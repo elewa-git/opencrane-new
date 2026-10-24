@@ -131,6 +131,17 @@ async function invalidPreparation(kind: string) {
 it.each(['computer', 'generation', 'paused', 'suspended', 'used thread', 'foreign thread owner'])(
   'refuses a prepared selection with invalid %s', invalidPreparation);
 
+async function usesSavedComputerId() {
+  await choose();
+  const saved = await prepare();
+  const computerId = 'computer.fixture';
+  await ready(computerId);
+  const selection = { ...selected, computerId };
+  const root = await allocateChildRoot(context.options, actor, 'alice', saved.input, 1, selection);
+  expect(root.computerId).toBe(computerId);
+}
+it('accepts an exact saved computer id outside the chat id format', usesSavedComputerId);
+
 async function changesWhileQueued(kind: string) {
   await choose();
   const saved = await prepare();
