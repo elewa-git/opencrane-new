@@ -433,7 +433,7 @@ async function approveCall(context: Context, approvalId: string, action: 'approv
     true, fresh, current, setup.actor.now());
 }
 
-async function recoversUnsentApproval() {
+async function recoversUnsentApproval(beforeAdmission: boolean) {
   const context = await gatewayFixture('ask');
   const setup = context.setup;
   await context.grant('member');
@@ -445,7 +445,11 @@ async function recoversUnsentApproval() {
   expect((await approveCall(context, approvalId, 'approved')).status).toBe('appended');
   try {
     const pauseIam = fga.pause.bind(fga);
-    await heldCall(context, pauseIam, 403, approvalId);
+    if (beforeAdmission) {
+      await refusedBeforeAdmission(context, approvalId);
+    } else {
+      await heldCall(context, pauseIam, 403, approvalId);
+    }
   } finally {
     await fga.resume();
   }
@@ -477,8 +481,46 @@ async function recoversUnsentApproval() {
   }
   expect(budget.filter(reserved)).toHaveLength(0);
 }
+async function recoversAfterSavedStart() {
+  await recoversUnsentApproval(false);
+}
 it('restores one approval retry after IAM refuses a saved start without sending',
-  recoversUnsentApproval, 60_000);
+  recoversAfterSavedStart, 60_000);
+
+async function refusedBeforeAdmission(context: Context, approvalId: string) {
+  const append = context.setup.nats.store.append.bind(context.setup.nats.store);
+  let paused = false;
+  async function pauseAfterDecision(command: AppendCommand) {
+    const result = await append(command);
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'decision.recorded') {
+      paused = true;
+      await fga.pause();
+    }
+    return result;
+  }
+  const writer = vi.spyOn(context.setup.nats.store, 'append');
+  writer.mockImplementation(pauseAfterDecision);
+  const before = context.remote.received.length;
+  const connections = context.remote.connections();
+  try {
+    const result = await context.call(approvalId);
+    expect(paused).toBe(true);
+    expect(result.status).toBe(403);
+    expect(result.evidence[0]!.event.data).toMatchObject({ outcome: 'allow' });
+    expect(context.setup.actor.state.dispatches).toHaveLength(0);
+    expect(context.remote.received).toHaveLength(before);
+    expect(context.remote.connections()).toBe(connections);
+  } finally {
+    writer.mockRestore();
+  }
+}
+
+async function recoversBeforeAdmission() {
+  await recoversUnsentApproval(true);
+}
+it('restores one approval retry after IAM refuses budget admission without sending',
+  recoversBeforeAdmission, 60_000);
 
 async function restoresGrant() {
   const context = await gatewayFixture();
