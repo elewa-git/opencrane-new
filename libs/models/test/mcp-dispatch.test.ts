@@ -3182,7 +3182,7 @@ it.each([false, true])(
   holdsChangedToolsAfterWatchRestart, 60_000);
 
 
-async function endsAcknowledgedApprovalAfterCheckFailure() {
+async function endsAcknowledgedApprovalAfterCheckFailure(failure: 'capture' | 'membership') {
   const context = await publishedWatchFixture('ask');
   const { setup, headers, restarted } = context;
   await restarted.check('fixture');
@@ -3194,9 +3194,15 @@ async function endsAcknowledgedApprovalAfterCheckFailure() {
   const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
     'alice', 'approved', true, fresh, current, setup.actor.now());
   expect(result.status).toBe('appended');
-  context.setUnavailable(true);
-  await expect(restarted.check('fixture')).rejects.toThrow('Catalogue unavailable');
-  context.setUnavailable(false);
+  if (failure === 'membership') {
+    await restarted.reconcile([]);
+    expect(context.requireCurrent).toThrow('watch unavailable');
+    await restarted.reconcile(['fixture']);
+  } else {
+    context.setUnavailable(true);
+    await expect(restarted.check('fixture')).rejects.toThrow('Catalogue unavailable');
+    context.setUnavailable(false);
+  }
   await restarted.check('fixture');
   const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
   expect(recovered.published).toBe(true);
@@ -3206,7 +3212,8 @@ async function endsAcknowledgedApprovalAfterCheckFailure() {
   expect(refused.headers.get('x-opencrane-mcp-permit')).toBeNull();
   expect(setup.received()).toBe(0);
 }
-it('keeps old approvals ended when acknowledged publication recovers',
+it.each(['capture', 'membership'] as const)(
+  'keeps old approvals ended when acknowledged publication recovers after %s failure',
   endsAcknowledgedApprovalAfterCheckFailure, 60_000);
 
 async function recordsExpiredEvidenceBeforeRestartRenewal() {
