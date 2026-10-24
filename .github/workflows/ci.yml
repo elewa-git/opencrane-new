@@ -148,6 +148,7 @@ jobs:
           infra/dev-stack/demo-seed-run.test.ts
           infra/dev-stack/stack-real-mode.test.ts infra/dev-stack/fleet-task.test.ts
           infra/dev-stack/stack-start.test.ts infra/dev-stack/journey-refusal.test.ts
+          infra/dev-stack/private-settings.test.ts infra/dev-stack/compose.secondary.test.ts
           infra/dev-stack/demo-prepare.test.ts infra/dev-stack/demo-smoke.test.ts
           infra/dev-stack/demo-recovery.test.ts infra/dev-stack/demo-spending.test.ts
           infra/dev-stack/demo-rehearsal.test.ts infra/dev-stack/demo-rehearsal-repeat.test.ts

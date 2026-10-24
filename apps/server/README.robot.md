@@ -859,12 +859,20 @@ An unchanged scope stays unknown and keeps its key. Older unknown records withou
 expected position also keep their keys, even if the scope advances. Prepared records
 can be removed because no append was issued. Failed commands keep only the destroyed-key
 marker and cannot append again. An unseen command stays unknown.
-Startup launches recovery in the background. Recovery reads directory entries gradually,
+Startup launches recovery in the background. Calls for the same key directory within
+one process share an active scan and wait for it to finish. This keeps overlapping scans
+from timing out on each other's command locks and returning before cleanup. The scan is
+released after success or failure so later calls can check again. Separate processes
+still use the existing database locks. Recovery reads directory entries gradually,
 yields after every 16 records and limits each scope read to one second. It reads history
 before taking a database connection, then checks that the record has not changed under
 the command lock. A damaged record, busy lock or event-store outage leaves the record
 for a later check and never stops startup.
 Keep all servers for a silo on the same database and key directory.
+The correction restart test holds a real recovery lock beyond the competing scan's
+100 ms acquisition limit. Both pending records must disappear, the saved correction
+must remain readable and the append count must stay at one. The original saved,
+delayed and forgotten cases retain their assertions.
 Fresh-install memory journeys and native turns remain NOT RUN.
 
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP

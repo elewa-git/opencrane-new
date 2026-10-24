@@ -12,7 +12,11 @@ async function cliFixture() {
   await writeFile(`${directory}/package.json`, '{"type":"module"}');
   await symlink(resolve('node_modules'), `${directory}/node_modules`);
   await symlink(resolve('libs'), `${directory}/libs`);
-  for (const file of ['demo-seed-run.ts', 'demo-seed.ts', 'config.ts', 'identity.ts', 'owner-run.ts']) {
+  const files = [
+    'demo-seed-run.ts', 'demo-seed.ts', 'config.ts', 'identity.ts', 'owner-run.ts',
+    'private-directories.ts',
+  ];
+  for (const file of files) {
     await copyFile(`infra/dev-stack/${file}`, `${scripts}/${file}`);
   }
   const identities = { extraIdentities: [{ subject: 'synthetic-owner' }] };

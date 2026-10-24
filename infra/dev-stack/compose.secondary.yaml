@@ -33,7 +33,15 @@ services:
       # Give the gateway only the CA bundle it needs to verify public providers.
       - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
       - ${DEV_STACK_ROOT}:${DEV_STACK_ROOT}:ro
-      - ${DEV_STACK_DIR}:${DEV_STACK_DIR}
+      - ${DEV_STACK_DIR}/ca.crt:${DEV_STACK_DIR}/ca.crt:ro
+      - ${DEV_STACK_DIR}/command.crt:${DEV_STACK_DIR}/command.crt:ro
+      - ${DEV_STACK_DIR}/command.key:${DEV_STACK_DIR}/command.key:ro
+      - ${DEV_STACK_DIR}/command.seed:${DEV_STACK_DIR}/command.seed:ro
+      - ${DEV_STACK_DIR}/agentgateway:${DEV_STACK_DIR}/agentgateway:ro
+      - ${DEV_STACK_DIR}/model-jwks.json:${DEV_STACK_DIR}/model-jwks.json:ro
+      - ${DEV_STACK_DIR}/model-stub-key:${DEV_STACK_DIR}/model-stub-key:ro
+      - ${DEV_STACK_DIR}/models:${DEV_STACK_DIR}/models
+      - ${DEV_STACK_DIR}/conversation-keys:${DEV_STACK_DIR}/conversation-keys
       - ${DEV_STACK_DIR}/provider-secrets:${DEV_STACK_DIR}/provider-secrets:ro
     cpus: 1
     mem_limit: 768m

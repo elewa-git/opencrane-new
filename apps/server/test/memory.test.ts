@@ -1,7 +1,8 @@
 import { mkdtemp, rm, readFile, writeFile, copyFile, access, rename } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -225,15 +226,42 @@ describe('personal HTTP correction', function correctionCases() {
         ...receipt, cleanupStatus: 'completed' });
     });
 
-  it.each(['saved', 'delayed', 'forgotten'] as const)('recovers a %s correction across restart without resending',
+  const recoveryModes = ['saved', 'concurrent', 'delayed', 'forgotten'] as const;
+  it.each(recoveryModes)('recovers a %s correction across restart without resending',
     async function correctionRecovery(mode) {
       const identity = await correctionTarget(`recovery-${mode}`);
       const commandId = `recovery-${mode}`;
+      const saved = mode === 'saved' || mode === 'concurrent';
+      const recoveryEntered = Promise.withResolvers<void>();
+      const originalLock = memory.db.lock!;
+      let recoveryLock: MockInstance<typeof originalLock> | undefined;
+      let recoveryHeld = false;
+      const recoveryFinished = Promise.withResolvers<void>();
+      const holdRecovery: typeof originalLock = async function holdRecovery(name, work, options) {
+        if (recoveryHeld || !name.startsWith('memory-command:')) {
+          return originalLock(name, work, options);
+        }
+        recoveryHeld = true;
+        async function heldWork(db: Parameters<typeof work>[0]) {
+          recoveryEntered.resolve();
+          try {
+            // Keep the real lock longer than a competing scan's 100 ms acquisition limit.
+            await delay(1000);
+            return await work(db);
+          } finally {
+            recoveryFinished.resolve();
+          }
+        }
+        return originalLock(name, heldWork, options);
+      };
       const original = nats.store.append.bind(nats.store);
       let attempted: Parameters<typeof original>[0] | undefined;
       async function lose(command: Parameters<typeof original>[0]) {
         attempted = command;
-        if (mode === 'saved') await original(command);
+        if (saved) {
+          const savedResult = await original(command);
+          expect(savedResult.status).toBe('appended');
+        }
         return { status: 'unavailable' as const, cause: new Error('Lost reply') };
       }
       const spy = vi.spyOn(nats.store, 'append').mockImplementation(lose);
@@ -251,11 +279,16 @@ describe('personal HTTP correction', function correctionCases() {
         await writeFile(journalPath, expiredAttempt);
         await writeFile(reservationPath, expiredAttempt);
         await app.close();
+        if (mode === 'concurrent') {
+          recoveryLock = vi.spyOn(memory.db, 'lock');
+          recoveryLock.mockImplementation(holdRecovery);
+        }
         app = buildServer(config, { memory });
         await app.ready();
+        if (mode === 'concurrent') await recoveryEntered.promise;
         await reconcileCommands(memory);
         const statusUrl = `${path('bob')}/changes/${commandId}`;
-        if (mode === 'saved') {
+        if (saved) {
           await expect(access(journalPath)).rejects.toMatchObject({ code: 'ENOENT' });
           await expect(access(reservationPath)).rejects.toMatchObject({ code: 'ENOENT' });
         } else {
@@ -299,7 +332,11 @@ describe('personal HTTP correction', function correctionCases() {
         expect((await forget(identity.memoryId, commandId, 4)).statusCode).toBe(409);
         expect((await remember('bob', 'person', commandId)).statusCode).toBe(409);
         expect(spy).toHaveBeenCalledTimes(1);
-      } finally { spy.mockRestore(); }
+      } finally {
+        if (recoveryHeld) await recoveryFinished.promise;
+        recoveryLock?.mockRestore();
+        spy.mockRestore();
+      }
       keys.delete({ ...identity, revision: 4 });
       expect((await get(`${path('bob')}/changes/${commandId}`)).json()).toMatchObject({
         revision: 4, contentStatus: 'unavailable' });

@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts in Docker| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|starts apps and demo tools; checks chats, tool replies and ownership| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|starts apps with private keys; checks chats, tools and ownership| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster| devbox
 ```
@@ -66,7 +66,9 @@ configuration changes. Its background jobs keep their own database.
    and organisation settings; the approval journey remains skipped.
 3. **A developer runs a separate stack.** A
    [claim](../../GLOSSARY.md#slot-spare-dev-stack) reserves one of two spare copies.
-   Each has its own ports and data; cleanup removes only that claimed copy.
+   Each has its own ports, data and separate private key directories for surveys and
+   memory. Restart keeps those keys. Models and computers cannot read those directories;
+   cleanup removes only that claimed copy.
 4. **The daily check runs.** A timer updates a separate checkout of the main branch,
    starts a fresh spare stack with the free model and runs the browser journeys.
    It saves the result and private failure logs outside the repository, then removes
@@ -88,8 +90,9 @@ infra/dev-stack/status.sh
 infra/dev-stack/down.sh
 ```
 
-A fresh start replaces that stack's local data and credentials. Memory reads also
-need an existing private key directory configured at startup. Detailed prerequisites,
+A fresh start replaces that stack's local data and credentials. A new spare stack
+prepares its survey and memory directories automatically. Existing installations need
+a stopped-services upgrade when their reaction subscriptions change. Detailed prerequisites,
 real-provider choices and daily timer settings are in the operator notes.
 
 ## Folders

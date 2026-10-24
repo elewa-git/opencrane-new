@@ -424,11 +424,29 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
   await options.db.lock!(`memory-command:${expected}`, lockRecovery, { timeoutMs: 100 });
 }
 
+const activeRecoveries = new Map<string, Promise<void>>();
+
 export async function reconcileCommands(options: MemoryOptions) {
   if (!options.keyDirectory || !options.db.lock) {
     return;
   }
-  const directory = await opendir(options.keyDirectory);
+  const keyDirectory = options.keyDirectory;
+  const active = activeRecoveries.get(keyDirectory);
+  if (active) {
+    await active;
+    return;
+  }
+  function finished() {
+    activeRecoveries.delete(keyDirectory);
+  }
+  // Share the scan so startup and another caller cannot time out on each other's locks.
+  const recovery = reconcileDirectory(options, keyDirectory).finally(finished);
+  activeRecoveries.set(keyDirectory, recovery);
+  await recovery;
+}
+
+async function reconcileDirectory(options: MemoryOptions, keyDirectory: string) {
+  const directory = await opendir(keyDirectory);
   let processed = 0;
   for await (const file of directory) {
     const match = /^command-((?:fact-)?[a-f0-9]{64})\.json(?:-pending)?$/u.exec(file.name);

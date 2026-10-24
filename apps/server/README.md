@@ -40,6 +40,8 @@ Recall, Correct and Forget load their history before the gateway signs the short
 The server keeps that data briefly for one call and checks current access before use.
 Calls and turn renewal prepare access receipts for every memory scope already loaded.
 Correct and Forget validate their targets but remain disabled.
+After a restart, memory recovery uses the existing private keys and saved command records.
+Overlapping recovery calls wait for the same scan to finish before reporting completion.
 
 ## Where it fits
 

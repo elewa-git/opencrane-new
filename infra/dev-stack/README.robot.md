@@ -456,14 +456,39 @@ outside this stack: `npm run worker -w apps/ops -- members|mcp-catalogue|compute
 It uses the same settings as replay; dispatcher also requires the silo and OpenFGA
 binding. Shutdown aborts readers, stops jobs and closes connections.
 
-## Memory reads
+## Private memory and survey directories
 
-Startup launches the `memory` ops worker with the projection reader settings. Set
-`MEMORY_KEY_DIRECTORY` before startup to pass the existing private directory to both
-worker and server. The stack never creates this directory or its revision keys.
-Without it, the worker logs one message and exits; it is then excluded from the list
-of required running processes, and memory HTTP routes return `503 memory_unavailable`.
-With it, startup requires the memory process to stay running like the other workers.
+Fresh secondary settings create separate mode-0700 `personal-keys` and `memory-keys`
+inside the claimed slot. `PERSONAL_KEY_DIRECTORY` is saved in `server.env` and
+`dispatcher.env`. `MEMORY_KEY_DIRECTORY` is saved in both and `projection.env`.
+The memory worker is required on secondary slots. HTTP, projection and cleanup
+therefore use the same revision keys and permanent deletion markers.
+
+Caller-supplied paths must match these fixed locations and already exist. Startup
+checks ownership, permissions, access and real paths without changing existing
+permissions or contents. Restart refuses lost directories or changed settings.
+It preserves encrypted survey values, revision keys and destroyed-key refusal.
+Models receives only its listed files, conversation keys, provider credentials
+and working directory; it cannot mount either private directory through their parent.
+The secondary stub's match-count credential lives in `models/model-managed-stub`.
+Computers receive neither private directory. Native memory remains disabled.
+
+Before bootstrap or join, startup registers the fresh handler manifest using the
+same subscription list as dispatcher. A changed manifest refuses startup without
+resetting its checkpoint, jobs or receipts. Existing slots need stopped-services
+configuration and the [handler upgrade/backfill](../../apps/ops/README.robot.md#handler-subscription-upgrade):
+prepare the two owned directories, update the three environment files, then run
+that procedure with the same dispatcher settings. Existing stub slots also move their
+`model-managed-stub` file into `models/` while services are stopped. Do not use a reset
+as an upgrade.
+
+The owner's optional memory wiring remains unchanged: `MEMORY_KEY_DIRECTORY`
+enables its memory worker and HTTP reads; without it reads remain unavailable.
+
+Part of #94; survey custody also supports #101. Filesystem/configuration and service
+fixtures cover refusal, membership delivery, human HTTP, restart, deletion and safe
+logs/receipts. Fresh live qualification is NOT RUN. Chart volumes/mounts and its
+memory worker remain the next split under #15, NOT RUN. Neither feature is complete.
 
 ## Daily fresh run
 
@@ -1134,7 +1159,7 @@ Token-bootstrap qualification (`DEV_OWNER_BOOTSTRAP=0`) skips this setup and the
 
 The server and models share `PROVIDER_SECRETS_DIR`. Startup creates it as the host
 user with mode 0700 before either process starts. Secondary models mounts it read-only. Startup copies the pinned gateway binary into
-the mounted stack directory, so a host tool symlink can point outside the worktree.
+the stack directory and mounts that file alone, so a host tool symlink can point outside the worktree.
 The stub reads a separate mode-0600 file and exposes only credential-match counts at
 `/provider-counts`: `managed` and `other`. `/journey-counts` keeps its existing response.
 The stub supports model-list and non-streaming verification as well as streamed chat.
@@ -1549,7 +1574,7 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 
 - Start and stop the local services and OpenCrane processes.
   Wait for the website to answer before starting browser checks.
-  Memory reads need an existing private key directory configured at startup.
+  Secondary memory and survey keys use separate directories owned by that slot.
 - Create private local credentials for the services.
 - Set up four sign-in test users for each spare stack. Check that the sign-in apps
   include email claims in their signed tokens.

@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models';
+import { secondary } from './identity.ts';
 import { authEnv, directory, root } from './config.ts';
 
 type SetupOptions = {
@@ -165,7 +166,8 @@ export async function setupDevProvider(settings: Record<string, string>, credent
       }
     } else {
       value = randomBytes(32).toString('hex');
-      await writeFile(`${directory}/model-managed-stub`, value, { mode: 0o600, flag: 'wx' });
+      const stubDirectory = secondary ? `${directory}/models` : directory;
+      await writeFile(`${stubDirectory}/model-managed-stub`, value, { mode: 0o600, flag: 'wx' });
     }
     const config = loadAuthConfig(await authEnv());
     const contents = await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8');
