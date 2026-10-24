@@ -82,3 +82,22 @@ async function limitsCertificateMount() {
 }
 
 test('only secondary models mounts the single host CA bundle read-only', limitsCertificateMount);
+
+async function keepsPrivateKeysOffModels() {
+  const home = await mkdtemp(`${tmpdir()}/private-compose-`);
+  try {
+    const configuration = await composeConfiguration(home, true);
+    const mounts = configuration.services['models']!.volumes ?? [];
+    for (const suffix of ['personal-keys', 'memory-keys']) {
+      const privatePath = `${home}/${suffix}`;
+      for (const mount of mounts) {
+        assert.notEqual(mount.source, privatePath);
+        assert(!privatePath.startsWith(`${mount.source}/`), 'Never mount a private key ancestor');
+      }
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+test('secondary models cannot mount personal or memory keys through a parent directory',
+  keepsPrivateKeysOffModels);
