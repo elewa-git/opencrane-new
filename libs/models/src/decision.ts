@@ -168,7 +168,7 @@ export async function startDecision(
   dispatchOptions?: McpDispatchOptions, egress?: EgressRelayRegistry,
   logger: Pick<Logger, 'warn'> = createLogger('gateway-decision'),
 ) {
-  const mcpSender = mcpDispatch(actor, dispatchOptions);
+  const mcpSender = mcpDispatch(actor, dispatchOptions, logger);
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     if (req.url === '/authorize/egress') {

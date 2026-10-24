@@ -3,6 +3,12 @@ import { ZodError } from 'zod';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
 
 const refusalReasons = new Map([
+  ['Budget writer lost its fence', 'budget_writer_replaced'],
+  ['Budget writer unavailable', 'budget_writer_unavailable'],
+  ['Budget append contention', 'budget_append_contention'],
+  ['MCP dispatch expired', 'dispatch_expired'],
+  ['MCP policy changed', 'tool_policy_changed'],
+  ['Catalogue watch unavailable', 'catalogue_watch_unavailable'],
   ['Missing credentials', 'credentials_missing'],
   ['Credential binding mismatch', 'credential_binding_mismatch'],
   ['Computer control is pending', 'computer_control_pending'],

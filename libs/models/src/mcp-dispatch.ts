@@ -1,3 +1,5 @@
+import { createLogger, type Logger } from '@opencrane/observability';
+import { privateDecisionReason } from './decision-refusal.ts';
 import { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
@@ -68,7 +70,8 @@ function digest(body: string) {
   return hash.digest('hex');
 }
 
-export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
+export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions,
+  logger: Pick<Logger, 'warn'> = createLogger('mcp-dispatch')) {
   const { store, silo } = actor;
   const signingKey = randomBytes(32);
   const pending = new Map<string, Permit>();
@@ -184,68 +187,84 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   async function handle(req: IncomingMessage, res: ServerResponse, body: string) {
     const startedAt = performance.now();
     const permit = consume(req, body);
-    const expectedPath = `/dispatch/mcp/${permit.route.serverId}/${permit.route.connectionId}`;
-    if (req.url !== expectedPath) throw new Error('MCP dispatch route refused');
-    const route = requireCurrentRoute(permit);
-    const remaining = Math.max(0, permit.expiresAt - Date.now());
-    const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
-    let target: Awaited<ReturnType<typeof prepareRemote>> | undefined;
-    if (route.locator) {
-      const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
-      const signal = AbortSignal.timeout(duration);
-      target = await prepareRemote(route.locator, options?.remoteNetwork ?? {}, signal);
-    }
-    await requireGatewayPosition(store, silo, permit.gatewayBinding,
-      acknowledged, deadline);
-    const position = await store.head(`mcp-${route.serverId}`, deadline);
-    await requireOnlyAdmissions(store, silo, `mcp-${route.serverId}`,
-      permit.catalogueSequence, position, deadline);
-    let memoryContext: string | undefined;
-    if (permit.memory) {
-      memoryContext = await permit.memory.sign(permit.memoryBinding, permit.expiresAt);
-    }
-    await options!.requireLeader();
-    const dispatch = { callId: permit.requestId, decisionId: permit.budget.decisionId,
-      bodyDigest: permit.bodyDigest, modelCall: permit.budget.modelCall,
-      ...(permit.budget.rootId === undefined ? {} : { rootId: permit.budget.rootId }) };
-    async function confirmSend() {
-      await permit.confirmAccess();
+    let stage = 'route';
+    try {
+      const expectedPath = `/dispatch/mcp/${permit.route.serverId}/${permit.route.connectionId}`;
+      if (req.url !== expectedPath) throw new Error('MCP dispatch route refused');
+      const route = requireCurrentRoute(permit);
+      const remaining = Math.max(0, permit.expiresAt - Date.now());
+      const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
+      let target: Awaited<ReturnType<typeof prepareRemote>> | undefined;
+      if (route.locator) {
+        const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
+        const signal = AbortSignal.timeout(duration);
+        target = await prepareRemote(route.locator, options?.remoteNetwork ?? {}, signal);
+      }
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
         acknowledged, deadline);
-      requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit);
-    }
-    confirmSend.deadline = deadline;
-    let observe: RemoteObserver | undefined;
-    try {
-      // Save the HTTPS attempt before admission so a refusal can prove nothing was sent.
-      if (route.locator) observe = await recordStarted(permit, deadline);
-      await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
-      const admittedPosition = await admit(req, res, permit, route, position, deadline);
-      if (permit.gatewayBinding) {
-        await requirePublishedPositions(permit, admittedPosition, deadline);
+      stage = 'catalogue';
+      const position = await store.head(`mcp-${route.serverId}`, deadline);
+      await requireOnlyAdmissions(store, silo, `mcp-${route.serverId}`,
+        permit.catalogueSequence, position, deadline);
+      let memoryContext: string | undefined;
+      if (permit.memory) {
+        memoryContext = await permit.memory.sign(permit.memoryBinding, permit.expiresAt);
+      }
+      stage = 'leadership';
+      await options!.requireLeader();
+      const dispatch = { callId: permit.requestId, decisionId: permit.budget.decisionId,
+        bodyDigest: permit.bodyDigest, modelCall: permit.budget.modelCall,
+        ...(permit.budget.rootId === undefined ? {} : { rootId: permit.budget.rootId }) };
+      async function confirmSend() {
+        await permit.confirmAccess();
+        await requireGatewayPosition(store, silo, permit.gatewayBinding,
+          acknowledged, deadline);
         requireCurrentRoute(permit);
         requireFreshDispatch(req, res, permit);
       }
-      if (!route.locator) observe = await recordStarted(permit, deadline);
-      if (permit.gatewayBinding) {
-        await permit.confirmAccess();
+      confirmSend.deadline = deadline;
+      let observe: RemoteObserver | undefined;
+      try {
+        // Save the HTTPS attempt before admission so a refusal can prove nothing was sent.
+        stage = 'dispatch_start';
+        if (route.locator) observe = await recordStarted(permit, deadline);
+        stage = 'budget_admission';
+        await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
+        stage = 'tool_admission';
+        const admittedPosition = await admit(req, res, permit, route, position, deadline);
+        if (permit.gatewayBinding) {
+          await requirePublishedPositions(permit, admittedPosition, deadline);
+          requireCurrentRoute(permit);
+          requireFreshDispatch(req, res, permit);
+        }
+        stage = 'dispatch_start';
+        if (!route.locator) observe = await recordStarted(permit, deadline);
+        stage = 'final_access';
+        if (permit.gatewayBinding) {
+          await permit.confirmAccess();
+        }
+        await requirePublishedPositions(permit, admittedPosition, deadline);
+        // Allow this acknowledged generation if a replacement was saved after the last
+        // gateway-position read: that replacement is not live yet. Refuse changes visible
+        // at that read, then check local state and send without another read or a lock.
+        requireCurrentRoute(permit);
+        requireFreshDispatch(req, res, permit);
+      } catch (error) {
+        await recordRefusedStart(permit, observe, startedAt);
+        throw error;
       }
-      await requirePublishedPositions(permit, admittedPosition, deadline);
-      // Allow this acknowledged generation if a replacement was saved after the last
-      // gateway-position read: that replacement is not live yet. Refuse changes visible
-      // at that read, then check local state and send without another read or a lock.
-      requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit);
+      if (target) {
+        await forwardRemote(target, permit, body, res, options?.remoteNetwork ?? {}, observe!);
+        return;
+      }
+      forward(route, permit, body, res, memoryContext);
     } catch (error) {
-      await recordRefusedStart(permit, observe, startedAt);
+      const reason = privateDecisionReason(error);
+      const elapsedMs = Math.ceil(performance.now() - startedAt);
+      const diagnostic = { requestId: permit.requestId, stage, reason, elapsedMs };
+      logger.warn(diagnostic, 'MCP dispatch refused');
       throw error;
     }
-    if (target) {
-      await forwardRemote(target, permit, body, res, options?.remoteNetwork ?? {}, observe!);
-      return;
-    }
-    forward(route, permit, body, res, memoryContext);
   }
 
   async function recordRefusedStart(permit: Permit, observe: RemoteObserver | undefined,
