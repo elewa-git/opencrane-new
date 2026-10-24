@@ -1623,7 +1623,8 @@ async function pagedScan(restart: boolean) {
   expect(savedRows[0]!.event.type).toBe('connection.revoked');
   async function* savedHistory(subject: string, fromSequence = 1) {
     expect(subject).toBe(test.subject);
-    for (const row of savedRows) {
+    const rows = await Promise.resolve(savedRows);
+    for (const row of rows) {
       if (row.sequence >= fromSequence) {
         yield structuredClone(row);
       }
