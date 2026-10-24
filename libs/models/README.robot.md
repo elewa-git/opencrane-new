@@ -25,19 +25,23 @@ The existing conditional append and readback save one `approval.cancelled` with
 result. Used consent retains dispatch evidence and cannot retry during matching control.
 History loads do not add conversation or computer streams to access watches.
 
-## Tool history and the access deadline
+## Tool history and the shared request deadline
 
-MCP decisions now pass `historyFirst` to the existing decision deadline helpers.
-They await conversation activity within ten seconds, then start the two-second access
-check. The gateway's MCP authorisation timeout is twelve seconds so the history wait
-can finish. Memory keeps its existing fifteen-second gateway allowance.
-Credential checks keep their existing bounds. The final send still checks live IAM
-permission and the same access deadline.
+Ordinary MCP decisions keep the original two-second deadline from request start.
+They read full conversation history before taking the access snapshot, then check
+only later activity and the small access streams. They do not restart the clock
+after history. The gateway keeps its original two-second authorisation timeout.
+Managed-model and memory preparation retain main's separate deadlines, including
+the fifteen-second memory gateway wait.
 
-`apps/server/test/integration-access-gateway.test.ts` moves the monotonic clock ahead
-2,100 ms after reading conversation history. It requires 200 and one remote request.
-This was a deterministic 403 on the unchanged decision code. The authority tests and
-volume tests are unchanged.
+`test/decision-fence.test.ts` keeps its refusal and money assertions unchanged.
+It checks history plus access exceeding two seconds, and a late decision after the
+gateway has timed out. The latter must record a refusal and leave no reservation or
+uncertain hold. `apps/server/test/integration-access-gateway.test.ts` also advances
+the monotonic clock by 2,100 ms after history, or by 1,900 ms after history and
+200 ms during access. Both must return 403 with no remote call. Its ordinary call
+still requires 200, one remote call and the same request bytes. All cases require
+full history to load before access reads.
 
 ## Gateway configuration checks and call usage
 

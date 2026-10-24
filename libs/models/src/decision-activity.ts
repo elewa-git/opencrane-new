@@ -137,15 +137,15 @@ function changesDecisionActivity(event: EventEnvelope, turnId: string, needsAppr
   return !olderTurnEnded;
 }
 
-export function decisionHistoryDeadline(historyFirst: boolean, decisionDeadline: number) {
-  if (historyFirst) {
+export function decisionHistoryDeadline(managedRoute: boolean, decisionDeadline: number) {
+  if (managedRoute) {
     return performance.now() + 10_000;
   }
   return decisionDeadline;
 }
 
-export function decisionAccessStarted(historyFirst: boolean, loadedMemory: boolean, started: number) {
-  if (historyFirst || loadedMemory) {
+export function decisionAccessStarted(managedRoute: boolean, loadedMemory: boolean, started: number) {
+  if (managedRoute || loadedMemory) {
     return performance.now();
   }
   return started;

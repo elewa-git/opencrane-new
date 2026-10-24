@@ -376,8 +376,9 @@ These commands need the dev stack's settings. The full system starts with
 [dev stack guide](../../infra/dev-stack/README.md).
 [README.robot.md](README.robot.md) lists required settings and exact test commands.
 
-Tool calls finish loading conversation history before their two-second access check
-starts. Gateway configuration checks do not create call observations.
+Ordinary tool calls read conversation history before checking access. Both steps
+share the original two-second request budget. Gateway configuration checks do not
+create call observations.
 
 Child-chat retry tests wait until NATS stores a repeated event as a new message.
 Their private test streams use a short duplicate window set before any messages

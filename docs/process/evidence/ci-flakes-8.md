@@ -1,5 +1,87 @@
 # Server flake investigation
 
+## Security correction on 24 October 2026
+
+The tool timing change was a regression, not an existing flake. This section
+supersedes the earlier claim that restarting the tool access clock fixed approval
+retries. The earlier passing checks below do not qualify the corrected source.
+
+[CI run 40084170182](https://github.com/elewa-git/opencrane-new/actions/runs/40084170182)
+failed on `d0da07b9a`. After fetching and completing the rebase, the comparison used
+main `2b032bc0142f1f89d4fd564bad13bfd0d93ff504` and the unchanged executable code
+on rebased branch `9e2d2b574c9be254078ee8c6fee24bcd3118e9dd`.
+
+## Security repeat comparison
+
+Each row is a separate full invocation of `libs/models/test/decision-fence.test.ts`.
+Every main run passed all 75 tests. Every branch run failed exactly these two tests:
+
+- `mcp refuses when history and access exceed the shared two-second budget`:
+  received 200 `policy_allow` instead of 403.
+- `mcp gateway timeout leaves no reservation or uncertain hold`:
+  received a completed tool response with HTTP 200 instead of 503.
+
+| Run | Main | Uncorrected branch |
+| --- | --- | --- |
+| 1 | PASS: 75/75 | FAIL: 73/75 |
+| 2 | PASS: 75/75 | FAIL: 73/75 |
+| 3 | PASS: 75/75 | FAIL: 73/75 |
+| 4 | PASS: 75/75 | FAIL: 73/75 |
+| 5 | PASS: 75/75 | FAIL: 73/75 |
+| 6 | PASS: 75/75 | FAIL: 73/75 |
+| 7 | PASS: 75/75 | FAIL: 73/75 |
+| 8 | PASS: 75/75 | FAIL: 73/75 |
+| 9 | PASS: 75/75 | FAIL: 73/75 |
+| 10 | PASS: 75/75 | FAIL: 73/75 |
+
+All twenty runs used `nice -n 10 npm test -- libs/models/test/decision-fence.test.ts
+--maxWorkers=1 --no-file-parallelism`, with JSON reporting to separate files.
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` supplied the requested
+test database service. Fixtures created private databases, NATS, OpenFGA and gateway
+processes. No failed run was retried. The owner stack was untouched.
+Reports and logs are `/tmp/ci-flakes-8-security/main-{1..10}.{json,log}` and
+`/tmp/ci-flakes-8-security/branch-{1..10}.{json,log}`.
+
+## Cause and correction
+
+Passing every MCP route as `historyFirst` gave ordinary tools ten seconds for
+history, then restarted the two-second access clock. Changing the gateway wait to
+twelve seconds also let these late calls reach the tool. These were real changes
+to the request budget, not just a different order of reads.
+
+The correction restores main's deadline selection and the ordinary gateway's
+two-second timeout. Full conversation history still loads before the access
+snapshot; it is never added to the small access streams being watched. Managed-model
+and memory preparation keep their existing deadlines and checks. Memory keeps its
+fifteen-second gateway wait. The configuration-probe observation filter remains.
+The only production difference from the compared main is that filter.
+
+## Security failing-first proof
+
+Test commit `fd3de00d8` replaces the incorrect expectation that a tool call should
+succeed after 2,100 ms of history. It keeps a normal successful call, including the
+exact request bytes and one remote call. It adds two refused cases: 2,100 ms of
+history, and 1,900 ms of history plus 200 ms of access. Both require 403, a saved
+refusal, no remote connection and no reservation. All three check that full history
+loads before access reads. Real service timers keep running; the test controls the
+monotonic decision clock.
+
+Expected FAIL before the production correction: the normal case passed and both
+over-budget cases returned 200 instead of 403. The report is
+`/tmp/ci-flakes-8-security/red-final.json`. Earlier clock-test attempts are retained
+as `red.json` and `red-controlled.json`; each exposed only the history-only case.
+The existing `decision-fence.test.ts` and all its assertions are unchanged.
+
+## Corrected-source verification
+
+NOT RUN at the correction commit: the two affected-file passes and static gates.
+The completed results will be recorded after those checks finish.
+
+## Earlier investigation
+
+The following records describe the earlier proposal and its checks. Its separate
+tool-history budget and its approval-retry conclusion are superseded above.
+
 ## Source and setup
 
 Baseline: `e3a97a8881e5dfd2d8f0f8701e751215f27a3b74`, the fetched `origin/main`
@@ -7,7 +89,7 @@ when this worktree was created. All three tests ran ten times on that unchanged
 source. Each invocation used `nice -n 10`, one worker and its own Vitest process.
 No failed run was retried.
 
-Final source is based on main `f016778fcf0bfc4ed3dd50e469a9729a072f5912` after rebasing.
+Earlier checked source was based on main `f016778fcf0bfc4ed3dd50e469a9729a072f5912` after rebasing.
 The worktree used Node 22.23.3, `npm ci` and links to the shared pinned NATS and
 Lychee binaries. Fixtures used private NATS, OpenFGA and gateways, plus disposable
 databases in `pgtest-ci-flakes-8`. PostgreSQL used port 59861 before rebasing and
@@ -85,7 +167,7 @@ wait and twelve-second gateway allowance.
 The two regressions were rerun against the rebased code before the fixes: all four
 cases failed as expected. `/tmp/ci-flakes-8-rebased-red.json` records those results.
 
-## Own final checks
+## Own earlier checks
 
 - PASS: six affected files twice, with 148 tests in each pass: `models-managed`,
   `integration-access-gateway`, `gateway-start`, `decision-activity`,

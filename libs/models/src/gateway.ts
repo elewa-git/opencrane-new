@@ -48,8 +48,7 @@ export function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const segment = z.string().regex(/^[\w-]{1,200}$/u);
   segment.parse(route.serverId); segment.parse(route.connectionId);
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
-  // Allow history to load before the separate two-second access check.
-  let preparationWait = { http: { requestTimeout: '12s' } };
+  let preparationWait: { http: { requestTimeout: string } } | undefined;
   if (route.serverId === 'memory' && route.connectionId === 'server') {
     // Allow time to load recall data before its separate two-second access check.
     preparationWait = { http: { requestTimeout: '15s' } };
