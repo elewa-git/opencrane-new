@@ -1671,7 +1671,7 @@ async function pagedScan(restart: boolean) {
 }
 it.each([false, true])('scan examines all 53 candidates, with mid-page restart: %s', pagedScan);
 
-async function pagedScanWithSlowConnections() {
+async function withSlowConnections(work: () => Promise<void>, count = 2) {
   const realNow = performance.now.bind(performance);
   let elapsed = 0;
   let slowConnections = 0;
@@ -1679,7 +1679,7 @@ async function pagedScanWithSlowConnections() {
     return realNow() + elapsed;
   }
   function acquired() {
-    if (slowConnections < 2) {
+    if (slowConnections < count) {
       // Model two connections arriving after the production acquisition deadline.
       // Advance the clock instead of sleeping or depending on machine load.
       elapsed += 101;
@@ -1690,15 +1690,26 @@ async function pagedScanWithSlowConnections() {
   clock.mockImplementation(now);
   storage.queue.on('acquire', acquired);
   try {
-    await pagedScan(false);
-    expect(slowConnections).toBe(2);
+    await work();
+    expect(slowConnections).toBe(count);
   } finally {
     storage.queue.off('acquire', acquired);
     clock.mockRestore();
   }
 }
+async function pagedScanWithSlowConnections() {
+  async function scan() {
+    await pagedScan(false);
+  }
+  await withSlowConnections(scan);
+}
 it('scan examines all 53 candidates once after two slow database connections',
   pagedScanWithSlowConnections);
+
+async function closesWithSlowConnection() {
+  await withSlowConnections(closesUnknownAppend, 1);
+}
+it('closes an expired idle stage after a slow database connection', closesWithSlowConnection);
 
 async function slowAndUnknownPages() {
   const test = await candidateFixture();
