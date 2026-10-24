@@ -107,7 +107,8 @@ async function settle(id: string, cents: number) {
   const payload = { reservationId: id, permitId: id, settledCents: cents,
     outcome: 'settled', resolvedBy: 'owner', evidence };
   const original = envelope('test', `effect-${id}`, 'effect.resolved', payload);
-  const saved = { ...original, principal: { kind: 'human' as const, id: 'owner' } };
+  const saved = { ...original, source: 'opencrane-server',
+    principal: { kind: 'human' as const, id: 'owner' } };
   await nats.seed([saved]);
   await actor.settleRecorded(id, saved.id);
   return saved.id;
@@ -329,7 +330,7 @@ async function effectPages(permitId?: string) {
     after = page.next;
   }
 }
-async function pagesSavedEffects() {
+async function pagesSavedEffects(mode: 'verify' | 'replace') {
   const expectedIds: string[] = [];
   const permitIds: string[] = [];
   for (let index = 0; index < 213; index += 1) {
@@ -361,10 +362,11 @@ async function pagesSavedEffects() {
   expect(JSON.stringify(all)).not.toContain('private-');
   await expect(readSpendingEffects(postgres.db, 'test', { limit: 51 })).rejects.toThrow();
   await expect(readSpendingEffects(postgres.db, 'test', { after: -1 })).rejects.toThrow();
-  await verifiesEffectReplay(all);
+  await verifiesEffectReplay(all, mode);
 }
-it('pages mixed saved effect records by original position and permit without private or foreign data',
-  pagesSavedEffects);
+it.each(['verify', 'replace'] as const)(
+  'pages mixed saved effect records without private or foreign data and can %s them',
+  pagesSavedEffects, 60_000);
 
 async function accountingStorage() {
   const result = await postgres.db.query(`SELECT
@@ -375,36 +377,43 @@ async function accountingStorage() {
       WHERE projection = 'model-budgets') AS receipts,
     (SELECT sequence FROM projection_checkpoints WHERE name = 'model-budgets') AS checkpoint,
     (SELECT jsonb_agg(ROW(oid, relname, relacl) ORDER BY relname) FROM pg_class
-      WHERE relname IN ('model_budgets', 'model_budget_calls', 'model_budget_effects')) AS grants`);
+      WHERE relname IN ('model_budgets', 'model_budget_calls', 'model_budget_effects',
+        'model_current_effects')) AS grants`);
   return result.rows;
 }
-async function verifiesEffectReplay(all: Awaited<ReturnType<typeof effectPages>>) {
+async function verifiesEffectReplay(all: Awaited<ReturnType<typeof effectPages>>,
+  mode: 'verify' | 'replace') {
   await postgres.db.query(`GRANT SELECT ON model_budgets, model_budget_calls,
     model_budget_effects TO PUBLIC`);
   const before = await accountingStorage();
   const actorBefore = structuredClone(actor.state);
   const head = await nats.store.head();
   const page = await readSpendingEffects(postgres.db, 'test');
-  await rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true });
-  expect(await effectPages()).toEqual(all);
-  expect(await accountingStorage()).toEqual(before);
+  if (mode === 'verify') {
+    await rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true });
+    expect(await effectPages()).toEqual(all);
+    expect(await accountingStorage()).toEqual(before);
+  }
   // Corrupt a test-silo record after the 213 foreign-silo records in verification order.
   await postgres.db.query('UPDATE model_budget_effects SET cost_cents = 999 WHERE event_id = $1',
     [all.at(-1)!.eventId]);
-  await expect(rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true }))
-    .rejects.toThrow('differs');
-  expect(await accountingStorage()).toEqual(before);
-  await rebuildBudgetProjection(postgres.db, nats.reader, logger);
-  expect(await effectPages()).toEqual(all);
-  const repaired = await readSpendingEffects(postgres.db, 'test');
-  expect(repaired.generation).toBe(page.generation + 1);
-  await postgres.db.query('TRUNCATE model_budget_effects');
-  await postgres.db.query('UPDATE projection_versions SET version = 4 WHERE name = $1',
-    [budgets.name]);
-  await expect(readSpendingEffects(postgres.db, 'test')).rejects.toThrow('unavailable');
-  await initialiseBudgetProjection(postgres.db, nats.reader, logger);
-  expect(await effectPages()).toEqual(all);
-  expect(await accountingStorage()).toEqual(before);
+  if (mode === 'verify') {
+    await expect(rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true }))
+      .rejects.toThrow('differs');
+    expect(await accountingStorage()).toEqual(before);
+  } else {
+    await rebuildBudgetProjection(postgres.db, nats.reader, logger);
+    expect(await effectPages()).toEqual(all);
+    const repaired = await readSpendingEffects(postgres.db, 'test');
+    expect(repaired.generation).toBe(page.generation + 1);
+    await postgres.db.query('TRUNCATE model_budget_effects');
+    await postgres.db.query('UPDATE projection_versions SET version = 4 WHERE name = $1',
+      [budgets.name]);
+    await expect(readSpendingEffects(postgres.db, 'test')).rejects.toThrow('unavailable');
+    await initialiseBudgetProjection(postgres.db, nats.reader, logger);
+    expect(await effectPages()).toEqual(all);
+    expect(await accountingStorage()).toEqual(before);
+  }
   expect(await nats.store.head()).toBe(head);
   expect(actor.state).toEqual(actorBefore);
 }
@@ -499,7 +508,13 @@ async function boundedEffectReads() {
 it('reads effects through bounded ordered indexes without budget JSON, calls or stream scans',
   boundedEffectReads);
 
-async function refusesUnavailableEffects() {
+async function refusesUnavailableEffects(table: string) {
+  let read: (db: Query, silo: string, input?: object, deadline?: number) => Promise<unknown>
+    = readSpendingEffects;
+  function readCurrent(db: Query, silo: string, _input?: object, deadline?: number) {
+    return readCurrentEffects(db, silo, 0, {}, deadline);
+  }
+  if (table === 'model_current_effects') read = readCurrent;
   let release = () => {};
   let acquired = () => {};
   function holdLock(resolve: () => void) { release = resolve; }
@@ -507,15 +522,15 @@ async function refusesUnavailableEffects() {
   const held = new Promise<void>(holdLock);
   const ready = new Promise<void>(markAcquired);
   async function lock(tx: Query) {
-    await tx.query('LOCK TABLE model_budget_effects IN ACCESS EXCLUSIVE MODE');
+    await tx.query(`LOCK TABLE ${table} IN ACCESS EXCLUSIVE MODE`);
     acquired();
     await held;
   }
   const locked = postgres.db.transaction(lock);
   await ready;
   try {
-    const read = readSpendingEffects(postgres.db, 'test', {}, performance.now() + 150);
-    await expect(Promise.race([read, delay(3000, 'read did not expire')]))
+    const pending = read(postgres.db, 'test', {}, performance.now() + 150);
+    await expect(Promise.race([pending, delay(3000, 'read did not expire')]))
       .rejects.toThrow('Database read expired');
   } finally {
     release();
@@ -523,14 +538,15 @@ async function refusesUnavailableEffects() {
   }
   expect(await effectPages()).toEqual([]);
   await postgres.db.query('DELETE FROM projection_checkpoints WHERE name = $1', [budgets.name]);
-  await expect(readSpendingEffects(postgres.db, 'test')).rejects.toThrow('unavailable');
+  await expect(read(postgres.db, 'test')).rejects.toThrow('unavailable');
   await runner.initialise(budgets);
-  await postgres.db.query('DROP TABLE model_budget_effects');
-  await expect(readSpendingEffects(postgres.db, 'test')).rejects.toThrow();
-  await expect(readSpendingEffects(postgres.db, 'test', {}, performance.now() - 1))
+  await postgres.db.query(`DROP TABLE ${table}`);
+  await expect(read(postgres.db, 'test')).rejects.toThrow();
+  await expect(read(postgres.db, 'test', {}, performance.now() - 1))
     .rejects.toThrow('Database read expired');
 }
-it('refuses missing or locked effect projections within the read deadline', refusesUnavailableEffects);
+it.each(['model_budget_effects', 'model_current_effects'])(
+  'refuses missing or locked %s within the read deadline', refusesUnavailableEffects);
 
 async function rollsBackFailedReplacement() {
   await actor.reserve(call(), 120);
@@ -573,14 +589,20 @@ async function matchesCurrentEffectRules() {
   clock = new Date('2026-11-01T00:01:00.000Z');
   const original = effectEvent(2, released);
   const resolution = { ...original, data: { ...data(original), outcome: 'released',
-    evidence: [{ kind: 'dispatch_record', reference: 'private-unsent', digest: '0'.repeat(64) }] } };
+    evidence: [{ kind: 'dispatch_record', reference: 'private-unsent',
+      digest: '0'.repeat(64), notDispatched: true }] } };
   await nats.seed([resolution, effectEvent(1, oldHold)]);
   await runner.run(budgets);
-  expect((await currentPage()).rows[1]).toMatchObject({ state: 'resolution_pending',
-    heldCents: 100, settledCents: null });
+  const pending = (await currentPage()).rows[1];
+  const detail = await models.readEffect(nats.store, 'test', released);
+  expect(pending).toMatchObject({ state: detail!.state, effectPosition: detail!.sequence });
+  expect(pending).toMatchObject({ state: 'resolution_pending', heldCents: 100, settledCents: null });
   await actor.settleRecorded(released, resolution.id);
   await settle(late, 70);
-  await nats.seed([effectEvent(0, disputed), effectEvent(3, disputed)]);
+  const first = effectEvent(0, disputed);
+  const conflicting = effectEvent(3, disputed);
+  await nats.seed([first, conflicting]);
+  await settle(disputed, 3);
   await runner.run(budgets);
   const result = await currentPage();
   expect(result.rows).toMatchObject([
@@ -589,7 +611,8 @@ async function matchesCurrentEffectRules() {
     { permitId: released, payingGroupId: 'support', assistantId: 'support-assistant',
       state: 'released', heldCents: 0, settledCents: 0 },
     { permitId: late, state: 'settled', heldCents: 0, settledCents: 70 },
-    { permitId: disputed, state: 'outcome_unknown', conflict: true, heldCents: 120 },
+    { permitId: disputed, state: 'outcome_unknown', conflict: true,
+      heldCents: 120, settledCents: 3 },
   ]);
   for (let index = 0; index < result.rows.length; index += 1) {
     const row = result.rows[index]!;
@@ -601,6 +624,154 @@ async function matchesCurrentEffectRules() {
     expect(row.budgetPosition).toBeGreaterThanOrEqual(row.position);
   }
   expect(JSON.stringify(result)).not.toContain('private-');
+  const stream = jetstream(nats.connection);
+  await stream.publish(wireSubject(first.subject), JSON.stringify(first));
+  await runner.run(budgets);
+  expect((await currentPage()).rows).toEqual(result.rows);
+  await nats.seed([effectEvent(1, late)]);
+  await runner.run(budgets);
+  const updated = await currentPage();
+  expect(updated.rows[0]).toEqual(result.rows[0]);
+  expect(updated.rows[1]).toEqual(result.rows[1]);
+  expect(updated.rows[3]).toEqual(result.rows[3]);
+  expect(updated.rows[2]).toMatchObject({ ...result.rows[2],
+    effectPosition: await nats.store.head() });
 }
 it('matches current effect rules while keeping original attribution and exact held cents',
   matchesCurrentEffectRules);
+
+async function currentPages() {
+  const rows = [];
+  const sequence = await nats.store.head();
+  let after = 0;
+  while (true) {
+    const page = await readCurrentEffects(postgres.db, 'test', sequence, { after, limit: 50 });
+    expect(page.rows.length).toBeLessThanOrEqual(50);
+    rows.push(...page.rows);
+    if (page.next === null) return rows;
+    expect(page.next).toBeGreaterThan(after);
+    after = page.next;
+  }
+}
+async function pagesAndRebuildsCurrentEffects() {
+  const expected: string[] = [];
+  for (let index = 0; index < 205; index += 1) {
+    const permitId = `permit-${String(index).padStart(3, '0')}`;
+    expected.push(permitId);
+    const payload = { reservationId: permitId, permitId, amountCents: 120,
+      payingGroupId: 'sales', assistantId: 'sales-assistant', modelCall: call() };
+    await seed('budget-test', 'budget.reserved', payload);
+    if (index < 2) await seed('budget-foreign', 'budget.reserved', payload, 'foreign');
+  }
+  await runner.run(budgets);
+  const rows = await currentPages();
+  function permitId(row: { permitId: string }) { return row.permitId; }
+  expect(rows.map(permitId)).toEqual(expected);
+  for (const row of rows) expect(row.silo).toBe('test');
+  const first = await currentPage();
+  expect(first.rows).toHaveLength(20);
+  expect(first.next).toBe(rows[19]!.position);
+  expect(first.sequence).toBe(await nats.store.head());
+  await postgres.db.query('GRANT SELECT ON model_current_effects TO PUBLIC');
+  const before = await accountingStorage();
+  const head = await nats.store.head();
+  const actorBefore = structuredClone(actor.state);
+  await rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true });
+  expect(await currentPages()).toEqual(rows);
+  expect(await accountingStorage()).toEqual(before);
+  await postgres.db.query(`UPDATE model_current_effects
+    SET data = jsonb_set(data, '{heldCents}', '999') WHERE silo = 'test' AND permit_id = $1`,
+  [expected.at(-1)]);
+  await expect(rebuildBudgetProjection(postgres.db, nats.reader, logger, { verify: true }))
+    .rejects.toThrow('differs');
+  await rebuildBudgetProjection(postgres.db, nats.reader, logger);
+  expect(await currentPages()).toEqual(rows);
+  expect((await currentPage()).generation).toBe(first.generation + 1);
+  expect(await accountingStorage()).toEqual(before);
+  await postgres.db.query('DROP TABLE model_current_effects');
+  await postgres.db.query('UPDATE projection_versions SET version = 5 WHERE name = $1',
+    [budgets.name]);
+  await expect(currentPage()).rejects.toThrow('unavailable');
+  await initialiseBudgetProjection(postgres.db, nats.reader, logger);
+  expect(await currentPages()).toEqual(rows);
+  expect(await nats.store.head()).toBe(head);
+  expect(actor.state).toEqual(actorBefore);
+}
+it('pages current effects and repairs corruption after 200 rows, then upgrades installed data',
+  pagesAndRebuildsCurrentEffects, 60_000);
+
+async function boundsCurrentReads() {
+  await actor.reserve(call(), 120);
+  await runner.run(budgets);
+  const sequence = await nats.store.head();
+  await postgres.db.query('ALTER TABLE model_budgets RENAME TO inaccessible_budgets');
+  await postgres.db.query('ALTER TABLE model_budget_effects RENAME TO inaccessible_effects');
+  await postgres.db.query('ALTER TABLE model_budget_calls RENAME TO inaccessible_calls');
+  async function checkIndex(tx: Query) {
+    await tx.query('SET LOCAL enable_seqscan = off');
+    const deadline = performance.now() + 2000;
+    async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+      options?: { deadline: number }) {
+      expect(options?.deadline).toBe(deadline);
+      if (sql.includes('FROM model_current_effects')) {
+        expect(sql).not.toContain('SELECT *');
+        expect(values?.at(-1)).toBe(51);
+        const plan = await tx.query(`EXPLAIN ${sql}`, values);
+        expect(JSON.stringify(plan.rows)).toContain('Index Cond');
+        expect(JSON.stringify(plan.rows)).not.toMatch(/Filter:|Sort/);
+      }
+      return tx.query<Row>(sql, values, options);
+    }
+    const page = await readCurrentEffects({ query }, 'test', sequence, { limit: 50 }, deadline);
+    expect(page.rows).toHaveLength(1);
+  }
+  await postgres.db.transaction(checkIndex);
+  await expect(readCurrentEffects(postgres.db, 'test', sequence + 1)).rejects.toThrow('unavailable');
+  for (const limit of [0, 51, 1.5]) {
+    await expect(readCurrentEffects(postgres.db, 'test', sequence, { limit })).rejects.toThrow();
+  }
+  for (const table of ['projection_checkpoints', 'projection_generations', 'projection_versions']) {
+    await postgres.db.query(`ALTER TABLE ${table} RENAME TO hidden_metadata`);
+    await expect(currentPage()).rejects.toThrow();
+    await postgres.db.query(`ALTER TABLE hidden_metadata RENAME TO ${table}`);
+  }
+  let changed = false;
+  async function replacingQuery<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+    options?: { deadline: number }) {
+    const result = await postgres.db.query<Row>(sql, values, options);
+    if (!changed && sql.includes('FROM model_current_effects')) {
+      changed = true;
+      await postgres.db.query('UPDATE projection_generations SET generation = generation + 1');
+    }
+    return result;
+  }
+  await expect(readCurrentEffects({ query: replacingQuery }, 'test', sequence))
+    .rejects.toThrow('unavailable');
+}
+it('bounds current pages without history and refuses lagging or replaced indexes', boundsCurrentReads);
+
+async function currentReplayRollback() {
+  const permitId = await actor.reserve(call(), 120);
+  await nats.seed([effectEvent(1, permitId)]);
+  await runner.run(budgets);
+  const before = await accountingStorage();
+  const page = await currentPage();
+  const saved = await effectPages();
+  await actor.reserve(call(), 70);
+  await nats.seed([effectEvent(0, permitId)]);
+  const actorBefore = structuredClone(actor.state);
+  await postgres.db.query(`ALTER TABLE model_current_effects
+    ADD CONSTRAINT refuse_new_hold CHECK ((data->>'heldCents')::integer = 120)`);
+  const head = await nats.store.head();
+  await expect(rebuildBudgetProjection(postgres.db, nats.reader, logger)).rejects.toThrow();
+  expect(await accountingStorage()).toEqual(before);
+  expect(await readCurrentEffects(postgres.db, 'test', page.sequence)).toEqual(page);
+  expect(await effectPages()).toEqual(saved);
+  expect(actor.state).toEqual(actorBefore);
+  await postgres.db.query('ALTER TABLE model_current_effects DROP CONSTRAINT refuse_new_hold');
+  await rebuildBudgetProjection(postgres.db, nats.reader, logger);
+  expect((await currentPage()).rows).toHaveLength(2);
+  expect(await nats.store.head()).toBe(head);
+}
+it('rolls back every accounting table and its receipts if current-effect replacement fails',
+  currentReplayRollback);

@@ -1,0 +1,1 @@
+- Keep current effect states, original payers and exact held or settled cents in a rebuildable internal index. Small pages refuse unavailable data; reading and replay never release holds or repeat outside actions. Existing spending routes are unchanged.

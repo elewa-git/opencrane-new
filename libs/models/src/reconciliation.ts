@@ -1,3 +1,4 @@
+import { currentEffectState } from './current-effects.ts';
 import { currentMembership } from './ownership.ts';
 import { z } from 'zod';
 import { effectResolvedDataSchema, effectObservedDataSchema, effectUncertainDataSchema } from '@opencrane/events';
@@ -117,10 +118,8 @@ function effectStatus(r: BudgetState['reservations'][number], rows: StoredEvent[
   const resolutions = rows.filter(row => row.event.type === 'effect.resolved').map(row => effectResolvedDataSchema.parse(row.event.data));
   const resolution = resolutions.at(-1);
   const amounts = observed.map(o => o.costCents);
-  const conflict = r.outcomeUnknown === true || new Set(amounts).size > 1 ||
-    (resolution !== undefined && amounts.some(amount => amount !== resolution.settledCents));
-  const state = conflict || (!resolution && r.settledCents === undefined) ? 'outcome_unknown' :
-    r.settledCents === undefined ? 'resolution_pending' : resolution?.outcome === 'released' ? 'released' : 'settled';
+  const { state, conflict } = currentEffectState(r.outcomeUnknown === true,
+    r.settledCents ?? null, amounts, resolution);
   return { permitId, reservationId: r.id, reservedAt: r.time, reservedCents: r.amountCents,
     settledCents: r.settledCents ?? null, model: r.call.model, priceTableId: r.call.priceTableId,
     sequence: rows.at(-1)?.sequence ?? 0, state, label: { outcome_unknown: 'Outcome unknown', resolution_pending: 'Resolution pending', released: 'Released', settled: 'Settled' }[state],

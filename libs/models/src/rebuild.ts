@@ -19,7 +19,7 @@ async function indexedRows(db: Query, table: string, key: string, after: [string
       ORDER BY silo, ${key} LIMIT 200`, after);
   return result.rows;
 }
-async function sameRows(db: Query, table: string, key: 'reservation_id' | 'event_id') {
+async function sameRows(db: Query, table: string, key: 'reservation_id' | 'event_id' | 'permit_id') {
   let after: [string, string] = ['', ''];
   while (true) {
     const live = await indexedRows(db, table, key, after);
@@ -42,7 +42,8 @@ async function rebuildLocked(db: Db, source: EventSource, logger: Logger, verify
     const budgetsUnchanged = JSON.stringify(await rows(db, 'model_budgets')) === JSON.stringify(await rows(db, 'model_budgets_replay'));
     const callsUnchanged = await sameRows(db, 'model_budget_calls', 'reservation_id');
     const effectsUnchanged = await sameRows(db, 'model_budget_effects', 'event_id');
-    const unchanged = budgetsUnchanged && callsUnchanged && effectsUnchanged;
+    const currentUnchanged = await sameRows(db, 'model_current_effects', 'permit_id');
+    const unchanged = budgetsUnchanged && callsUnchanged && effectsUnchanged && currentUnchanged;
     if (verify && !unchanged) throw new Error('Rebuilt budgets state differs from the live projection');
     const sequence = await source.head();
     await runner.run(replayBudgets, { toSequence: sequence });
@@ -50,7 +51,8 @@ async function rebuildLocked(db: Db, source: EventSource, logger: Logger, verify
       await tx.query("SET LOCAL lock_timeout = '250ms'");
       await tx.query(`LOCK TABLE model_budgets, model_budgets_replay,
         model_budget_calls, model_budget_calls_replay,
-        model_budget_effects, model_budget_effects_replay IN ACCESS EXCLUSIVE MODE`);
+        model_budget_effects, model_budget_effects_replay,
+        model_current_effects, model_current_effects_replay IN ACCESS EXCLUSIVE MODE`);
       // Retain the live table object and its reader grants.
       await tx.query('TRUNCATE model_budgets');
       await tx.query('INSERT INTO model_budgets SELECT * FROM model_budgets_replay');
@@ -58,6 +60,8 @@ async function rebuildLocked(db: Db, source: EventSource, logger: Logger, verify
       await tx.query('INSERT INTO model_budget_calls SELECT * FROM model_budget_calls_replay');
       await tx.query('TRUNCATE model_budget_effects');
       await tx.query('INSERT INTO model_budget_effects SELECT * FROM model_budget_effects_replay');
+      await tx.query('TRUNCATE model_current_effects');
+      await tx.query('INSERT INTO model_current_effects SELECT * FROM model_current_effects_replay');
       await replayBudgets.drop(tx);
       await tx.query('DELETE FROM projection_events WHERE projection = $1', [budgets.name]);
       await tx.query('UPDATE projection_events SET projection = $1 WHERE projection = $2', [budgets.name, replayBudgets.name]);
