@@ -3,7 +3,7 @@ import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 import { applyBudget, data, emptyBudget, stateSchema, totals, type BudgetState } from './state.ts';
 import { createCurrentEffects, currentEffectFields, currentEffectSchema,
-  updateCurrentEffectBudget, updateCurrentEffectEvidence } from './current-effects.ts';
+  currentEffectBudget, updateCurrentEffectEvidence } from './current-effects.ts';
 
 export const budgetProjectionVersion = 6;
 type Reservation = BudgetState['reservations'][number];
@@ -187,6 +187,23 @@ export async function readSpendingCalls(db: Query, silo: string,
   return { rows, next, sequence: Number(saved.sequence), generation: Number(saved.generation) };
 }
 
+async function saveBudgetState(db: Query, table: string, currentTable: string,
+  silo: string, state: BudgetState, current: ReturnType<typeof currentEffectBudget> | undefined) {
+  const savedState = JSON.stringify(state);
+  if (!current) {
+    await db.query(`INSERT INTO ${table} VALUES ($1, $2)
+      ON CONFLICT (silo) DO UPDATE SET state = $2`, [silo, savedState]);
+    return;
+  }
+  // Save both validated records in one round trip; keep all money rules in TypeScript.
+  await db.query(`WITH saved_budget AS (
+    INSERT INTO ${table} VALUES ($1, $2)
+    ON CONFLICT (silo) DO UPDATE SET state = $2
+  ) INSERT INTO ${currentTable} VALUES ($1, $3, $4, $5)
+    ON CONFLICT (silo, permit_id) DO UPDATE SET position = $4, data = $5`,
+  [silo, savedState, current.permitId, current.position, JSON.stringify(current)]);
+}
+
 // Keep call reads separate while retaining the existing budget summary fold.
 function budgetProjection(name: string, table: string): Projection {
   const callsTable = table.replace('model_budgets', 'model_budget_calls');
@@ -212,12 +229,20 @@ function budgetProjection(name: string, table: string): Projection {
     }
     if (!event.type.startsWith('budget.')) return;
     if (!parseEventByType(event).success) throw new Error('Invalid budget event');
-    const rows = await db.query<{ state: unknown }>(
-      `SELECT state FROM ${table} WHERE silo = $1`, [event.silo]);
-    const state = rows.rows[0] ? stateSchema.parse(rows.rows[0].state) : emptyBudget();
+    const payload = data(event);
+    const rows = await db.query<{ state: unknown; current: unknown;
+      budgetSilo: string | null; effectPermitId: string | null }>(
+      `SELECT budget.state, budget.silo AS "budgetSilo", effect.data AS current,
+        effect.permit_id AS "effectPermitId" FROM (SELECT $1::text AS silo) requested
+        LEFT JOIN ${table} budget ON budget.silo = requested.silo
+        LEFT JOIN ${currentTable} effect
+          ON effect.silo = requested.silo AND effect.permit_id = $2`,
+    [event.silo, payload['reservationId'] ?? null]);
+    const saved = rows.rows[0]!;
+    const state = saved.budgetSilo === null ? emptyBudget() : stateSchema.parse(saved.state);
     applyBudget(state, event, position);
+    let current: ReturnType<typeof currentEffectBudget> | undefined;
     if (event.type === 'budget.reserved' || event.type === 'budget.settled') {
-      const payload = data(event);
       function matches(reservation: BudgetState['reservations'][number]) {
         return reservation.id === payload['reservationId'];
       }
@@ -226,10 +251,10 @@ function budgetProjection(name: string, table: string): Projection {
       const heldCents = totals(singleCall).reservedCents;
       const permitId = z.string().parse(payload['permitId']);
       await saveBudgetCall(db, callsTable, event.silo, position, permitId, reservation, heldCents);
-      await updateCurrentEffectBudget(db, currentTable, event.silo, position, reservation, heldCents);
+      const previous = saved.effectPermitId === null ? undefined : saved.current;
+      current = currentEffectBudget(previous, event.silo, position, reservation, heldCents);
     }
-    await db.query(`INSERT INTO ${table} VALUES ($1, $2)
-      ON CONFLICT (silo) DO UPDATE SET state = $2`, [event.silo, JSON.stringify(state)]);
+    await saveBudgetState(db, table, currentTable, event.silo, state, current);
   }
   return { name, create, drop, apply };
 }

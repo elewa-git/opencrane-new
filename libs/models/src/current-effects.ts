@@ -53,8 +53,11 @@ export async function createCurrentEffects(db: Query, table: string) {
 async function loadCurrentEffect(db: Query, table: string, silo: string, permitId: string) {
   const result = await db.query<{ data: unknown }>(
     `SELECT data FROM ${table} WHERE silo = $1 AND permit_id = $2`, [silo, permitId]);
-  if (result.rows[0]) {
-    return storedSchema.parse(result.rows[0].data);
+  return currentEffect(result.rows[0]?.data, silo, permitId);
+}
+function currentEffect(saved: unknown, silo: string, permitId: string) {
+  if (saved !== undefined) {
+    return storedSchema.parse(saved);
   }
   // Keep early evidence until its reservation arrives; position zero is never listed.
   const initial = { silo, permitId, position: 0, payingGroupId: null,
@@ -63,20 +66,23 @@ async function loadCurrentEffect(db: Query, table: string, silo: string, permitI
     amounts: [], outcomeUnknown: false };
   return storedSchema.parse(initial);
 }
-async function saveCurrentEffect(db: Query, table: string, row: CurrentEffect) {
+function checkedCurrentEffect(row: CurrentEffect) {
   const status = currentEffectState(row.outcomeUnknown, row.settledCents,
     row.amounts, row.resolution);
   const updated = { ...row, ...status };
-  const saved = storedSchema.parse(updated);
+  return storedSchema.parse(updated);
+}
+async function saveCurrentEffect(db: Query, table: string, row: CurrentEffect) {
+  const saved = checkedCurrentEffect(row);
   await db.query(`INSERT INTO ${table} VALUES ($1, $2, $3, $4)
     ON CONFLICT (silo, permit_id) DO UPDATE SET position = $3, data = $4`,
   [row.silo, row.permitId, row.position, JSON.stringify(saved)]);
 }
-export async function updateCurrentEffectBudget(db: Query, table: string, silo: string,
+export function currentEffectBudget(saved: unknown, silo: string,
   position: number, reservation: BudgetState['reservations'][number], heldCents: number) {
-  const row = await loadCurrentEffect(db, table, silo, reservation.id);
+  const row = currentEffect(saved, silo, reservation.id);
   if (position <= row.budgetPosition) {
-    return;
+    return undefined;
   }
   if (row.position === 0) {
     row.position = position;
@@ -88,7 +94,7 @@ export async function updateCurrentEffectBudget(db: Query, table: string, silo: 
   row.settledCents = reservation.settledCents ?? null;
   row.outcomeUnknown = reservation.outcomeUnknown === true;
   row.budgetPosition = position;
-  await saveCurrentEffect(db, table, row);
+  return checkedCurrentEffect(row);
 }
 export async function updateCurrentEffectEvidence(db: Query, table: string,
   event: EventEnvelope, position: number) {

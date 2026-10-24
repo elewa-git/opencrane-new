@@ -3588,6 +3588,16 @@ Uncertainty records do not by themselves undo a recorded settlement. These state
 never prove an outside action succeeded. Checkpoint and generation describe progress,
 not an immutable snapshot across pages; later evidence can update the same row.
 
+The budget projection's apply function uses three database queries per reservation
+or settlement. The runner still records receipts and checkpoints separately. One
+indexed join reads the budget and the permit's earlier evidence. A second query saves the call.
+The third saves the budget and current effect together, inside the runner's existing
+transaction. TypeScript still validates the records and calculates all money and state.
+Missing joined rows are distinguished from malformed saved JSON, which still refuses.
+The query-count regression retains early evidence and checks both the call and budget.
+It failed with five queries before this change. The 213-call paging/replay test keeps
+all its assertions, two-row pages and its original 30-second limit.
+
 Upgrade and shadow replay compare every 200-row batch and replace all four tables,
 receipts and checkpoint together, retaining table objects and reader grants. Failed
 replacement rolls back. Tests compare detail reads, two payers/assistants, old-month
