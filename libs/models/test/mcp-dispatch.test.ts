@@ -3261,3 +3261,49 @@ async function verifyCatalogueRecoveryReplay(setup: Fixture, received = 1) {
   expect(await setup.nats.store.head()).toBe(position);
   expect(setup.received()).toBe(received);
 }
+
+async function logsPrivateAdmissionRefusal(known: boolean) {
+  const setup = await fixture();
+  onTestFinished(setup.close.bind(setup));
+  const headers = await prepare(setup);
+  const lines: string[] = [];
+  function write(line: string) {
+    lines.push(line);
+  }
+  const destination = { write };
+  const logger = createLogger('dispatch-test', { level: 'warn', destination });
+  await setup.decisionDown();
+  const port = Number(new URL(setup.options.decisionUrl).port);
+  const decision = await startDecision(setup.actor, setup.identity, setup.binding,
+    port, setup.keys, undefined, setup.dispatchOptions, undefined, logger);
+  onTestFinished(decision.close);
+  const value = await permit(setup, headers);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const canary = 'PRIVATE_ADMISSION_CANARY';
+  async function refuseAdmission(command: AppendCommand) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'budget.call_dispatch_admitted') {
+      if (known) throw new Error('Budget writer lost its fence');
+      throw new Error(canary);
+    }
+    return append(command);
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append').mockImplementation(refuseAdmission);
+  onTestFinished(writer.mockRestore.bind(writer));
+  const response = await send(setup, value);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({});
+  expect(setup.received()).toBe(0);
+  expect(lines).toHaveLength(1);
+  const reason = known ? 'budget_writer_replaced' : 'decision_unavailable';
+  const diagnostic = JSON.parse(lines[0]!);
+  expect(diagnostic).toMatchObject({ msg: 'MCP dispatch refused',
+    stage: 'budget_admission', reason });
+  expect(diagnostic).toHaveProperty('requestId');
+  expect(diagnostic.elapsedMs).toBeGreaterThanOrEqual(0);
+  expect(lines[0]).not.toContain(canary);
+  expect(lines[0]).not.toContain(value);
+  expect(lines[0]).not.toContain('stack');
+}
+it.each([false, true])('logs only fixed private dispatch refusal details, known: %s',
+  logsPrivateAdmissionRefusal);
