@@ -948,3 +948,18 @@ and command digest remain unchanged. A person is attributed only when `removedBy
 matches the human principal. No email, display name, invitation, review inventory or
 cleanup state is copied. Existing installations need audit replay to add these fields
 to previously saved removals. Replay runs no removal or cleanup reaction.
+
+## Member admission history
+
+`member.joined` adds `operation: join`, the affected `memberId`, the saved `role`
+and optional `invitationId` to audit metadata. Each admission retains its own event
+time and command digest. Older joins without invitation references invent none.
+No email, sign-in identity, credential or private inventory is copied. The join
+command's human principal is an SSO subject, not a verified member id. Its audit
+actor therefore remains `unverified`, even if those strings happen to match.
+System and agent actors remain separate from people.
+
+Run `npm run replay -- audit` after upgrading to fill older audit rows, followed
+by `npm run replay -- audit --verify`. Rebuild restores facts only. The server
+checks current receipt progress separately; replay runs no admission, invitation,
+provisioning or grant reaction.

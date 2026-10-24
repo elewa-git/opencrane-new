@@ -1,0 +1,1 @@
+Owners and admins can see each member admission with its saved role, optional invitation reference and exact member-list and permission progress. Re-admission keeps separate receipts, and history withholds sign-in identities and private details.

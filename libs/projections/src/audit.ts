@@ -140,6 +140,9 @@ function membershipMetadata(event: EventEnvelope, data: Record<string, unknown>)
   const memberId = safeId(data['memberId']);
   const role = z.enum(['owner', 'admin', 'member']);
   switch (event.type) {
+    case 'member.joined':
+      return { operation: 'join', memberId, role: role.safeParse(data['role']).data,
+        invitationId: safeId(data['invitationId']) };
     case 'member.removed':
       return { operation: 'remove', memberId };
     case 'member.role_changed':

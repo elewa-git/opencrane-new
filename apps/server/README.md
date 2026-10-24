@@ -20,9 +20,10 @@ does not prove a business change succeeded. Reading history never sends a tool c
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.
 
-Owners and admins can read safe removal, role and ownership change details. The server checks
-receipts for the exact saved change before showing its progress, then checks current access.
+Owners and admins can read safe admission, removal, role and ownership change details.
+The server checks receipts for the exact saved change before showing its progress, then checks current access.
 It still checks access when loading fails, so errors do not reveal protected records.
+Admission history keeps each join separate, including when a person returns.
 Removal progress covers permissions and the member list. It does not report departure cleanup.
 
 Approval decisions check ownership and current write access before saving a cancellation.
