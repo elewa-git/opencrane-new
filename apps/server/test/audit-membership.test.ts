@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
+import { Writable } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -239,6 +240,14 @@ async function blockedRead(change: 'demotion' | 'removal' | 'slow', target = rol
     if (!blocked && String(args[0]).includes('projection_events')) {
       blocked = true;
       if (change === 'slow') {
+        const message = saved('message.posted', 'unrelated-message', {
+          conversationId: 'unrelated', authorId: 'admin', authorKind: 'human',
+          ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:unrelated', contentType: 'text',
+        });
+        message.subject = 'conversation-unrelated';
+        await append(message);
+        reads.mockClear();
+        heads.mockClear();
         await delay(2100);
       } else {
         let event = saved('member.removed', 'removed-admin', {
@@ -281,6 +290,12 @@ async function blockedRemovalRead(change: 'demotion' | 'removal' | 'slow') {
 }
 it.each(['demotion', 'removal', 'slow'] as const)(
   'checks access once after a blocked removal progress read: %s', blockedRemovalRead);
+
+async function blockedJoinRead(change: 'demotion' | 'removal' | 'slow') {
+  await blockedRead(change, joined);
+}
+it.each(['demotion', 'removal', 'slow'] as const)(
+  'checks access once after a blocked join progress read: %s', blockedJoinRead);
 
 async function privateReads() {
   await append(role);
@@ -335,6 +350,10 @@ async function unavailableProgress(caller: RefusedCaller) {
   await append(role);
   await append(intent);
   await append(removal);
+  await append(joined);
+  const foreignJoin = { ...joined, id: 'foreign-join', silo: 'foreign',
+    subject: 'member-foreign' };
+  await append(foreignJoin);
   const foreign = { ...role, id: 'foreign-role', silo: 'foreign', subject: 'member-foreign' };
   await append(foreign);
   const foreignRemoval = { ...removal, id: 'foreign-removal', silo: 'foreign',
@@ -349,7 +368,9 @@ async function unavailableProgress(caller: RefusedCaller) {
   const reads = vi.spyOn(nats.store, 'readStream');
   const heads = vi.spyOn(nats.store, 'head');
   const appends = vi.spyOn(nats.store, 'append');
-  for (const id of ['unknown', 'foreign-role', 'role', 'intent', 'removal', 'foreign-removal']) {
+  const ids = ['unknown', 'foreign-role', 'role', 'intent', 'removal', 'foreign-removal',
+    'joined', 'foreign-join'];
+  for (const id of ids) {
     reads.mockClear();
     const request = { url: `/api/org/history/${id}`, headers: headers(memberId) };
     const response = await app.inject(request);
@@ -395,6 +416,7 @@ async function failedHistoryReads(caller: RefusedCaller) {
   }
   const queries = vi.spyOn(db, 'query').mockImplementation(failQuery);
   const paths = ['/api/org/history', '/api/org/history/role', '/api/org/history/removal',
+    '/api/org/history/joined', '/api/org/history/foreign-join',
     '/api/org/history/foreign-removal', '/api/org/history/unknown',
     '/api/org/history/foreign-role', '/api/conversations/protected/history'];
   for (const url of paths) {
@@ -418,7 +440,19 @@ it.each(['ordinary', 'demoted', 'removed'] as const)(
 async function authorisedLoadFailure(stage: 'history' | 'progress') {
   await append(role);
   await append(removal);
+  await append(joined);
   await runner.run(auditTrail);
+  let logs = '';
+  function write(chunk: Buffer, _encoding: BufferEncoding, callback: () => void) {
+    logs += chunk.toString();
+    callback();
+  }
+  const sink = new Writable({ write });
+  vi.stubEnv('LOG_LEVEL', 'info');
+  await app.close();
+  const audit = { silo: 'test', store: nats.store, db, feed, binding: auth.binding };
+  app = buildServer(config, { audit, logDestination: sink });
+  vi.unstubAllEnvs();
   const reads = vi.spyOn(nats.store, 'readStream');
   const query = db.query.bind(db);
   async function failLoad<Row extends Record<string, unknown>>(
@@ -431,7 +465,7 @@ async function authorisedLoadFailure(stage: 'history' | 'progress') {
     return query<Row>(...args);
   }
   vi.spyOn(db, 'query').mockImplementation(failLoad);
-  const paths = ['/api/org/history/role', '/api/org/history/removal'];
+  const paths = ['/api/org/history/role', '/api/org/history/removal', '/api/org/history/joined'];
   if (stage === 'history') {
     paths.push('/api/org/history');
   }
@@ -445,6 +479,8 @@ async function authorisedLoadFailure(stage: 'history' | 'progress') {
     const subjects = reads.mock.calls.map(streamSubject);
     expect.soft(subjects, url).toEqual(['member-admin', 'ownership-test']);
   }
+  expect(logs).toContain('Audit detail unavailable');
+  expect(logs).not.toContain(canary);
 }
 it.each(['history', 'progress'] as const)(
   'returns a fixed loading error only after checking authorised access: %s',
@@ -544,23 +580,24 @@ it.each([true, false])(
   'requires exact removal receipts despite rejoin, role change, removal and replay: IAM first %s',
   removalProgress);
 
-async function removalPaging() {
+async function membershipPaging(target: EventEnvelope, operation: 'remove' | 'join') {
   for (let index = 0; index < 52; index++) {
-    const event = { ...removal, id: `removal-${index}`, commandId: `remove-${index}`,
+    const event = { ...target, id: `${target.id}-${index}`, commandId: `command-${index}`,
+      time: '2026-10-05T00:00:00Z',
       correlation: { conversation: 'conversation', turn: 'departures' } };
     await append(event);
   }
   await runner.run(auditTrail);
   const appends = vi.spyOn(nats.store, 'append');
   const firstResponse = await app.inject({
-    url: '/api/org/history/removal-0?limit=50', headers: headers(),
+    url: `/api/org/history/${target.id}-0?limit=50`, headers: headers(),
   });
   expect(firstResponse.statusCode).toBe(200);
   const first = auditDetailSchema.parse(firstResponse.json());
   expect(first.records).toHaveLength(50);
   expect(first.nextBefore).toBeDefined();
   const nextResponse = await app.inject({
-    url: `/api/org/history/removal-0?limit=50&before=${String(first.nextBefore)}`,
+    url: `/api/org/history/${target.id}-0?limit=50&before=${String(first.nextBefore)}`,
     headers: headers(),
   });
   expect(nextResponse.statusCode).toBe(200);
@@ -570,11 +607,14 @@ async function removalPaging() {
   const ids = new Set<string>();
   for (const record of [...first.records, ...next.records]) {
     ids.add(record.eventId);
-    expect(record.operation).toBe('remove');
+    expect(record.operation).toBe(operation);
     expect(record.progress).toMatchObject({ readModel: 'applying', iam: 'applying' });
   }
   expect(ids.size).toBe(52);
   expect(appends).not.toHaveBeenCalled();
+}
+async function removalPaging() {
+  await membershipPaging(removal, 'remove');
 }
 it('keeps removal detail pages bounded without repeating or skipping records', removalPaging);
 
@@ -606,3 +646,123 @@ async function joinMetadata() {
   expect(appends).not.toHaveBeenCalled();
 }
 it('retains each original and fresh join with its own safe metadata through replay', joinMetadata);
+
+async function joinProgress(iamFirst: boolean) {
+  await append(joined);
+  await runner.run(auditTrail);
+  const first = await detail(joined.id);
+  expect(first.progress).toMatchObject({ readModel: 'applying', iam: 'applying' });
+  const fresh = { ...joined, id: 'fresh-join', commandId: 'fresh-command', data: {
+    memberId: 'member', role: 'admin', invitationId: 'fresh-invitation',
+  } };
+  for (const event of [removal, fresh, role]) {
+    await append(event);
+    await auth.handler.handle(event, db);
+  }
+  await runner.run(auditTrail);
+  await runner.run(members);
+  // Remove just the original receipt to represent a missing acknowledgement.
+  await db.query('DELETE FROM projection_events WHERE projection = $1 AND event_id = $2',
+    ['members', joined.id]);
+  expect((await detail(fresh.id)).progress).toMatchObject({
+    readModel: 'current', iam: 'current',
+  });
+  expect((await detail(joined.id)).progress).toMatchObject({
+    readModel: 'applying', iam: 'applying',
+  });
+  if (iamFirst) {
+    await auth.handler.handle(joined, db);
+    expect((await detail(joined.id)).progress).toMatchObject({
+      readModel: 'applying', iam: 'current',
+    });
+  }
+  await runner.rebuild(members);
+  const expectedIam = iamFirst ? 'current' : 'applying';
+  expect((await detail(joined.id)).progress).toMatchObject({
+    readModel: 'current', iam: expectedIam,
+  });
+  const before = await readAudit(db, 'test');
+  expect(JSON.stringify(before)).not.toContain('checkedAt');
+  const appends = vi.spyOn(nats.store, 'append');
+  await rebuildAuditProjection(db, nats.store, logger, { verify: true });
+  expect((await detail(joined.id)).progress).toMatchObject({
+    readModel: 'current', iam: expectedIam,
+  });
+  await auth.handler.handle(joined, db);
+  const last = await detail(joined.id);
+  expect(last.progress).toEqual({
+    readModel: 'current', iam: 'current', checkedAt: last.progress?.checkedAt,
+  });
+  expect(last.progress?.checkedAt).not.toBe(first.progress?.checkedAt);
+  expect(await readAudit(db, 'test')).toEqual(before);
+  expect(appends).not.toHaveBeenCalled();
+}
+it.each([true, false])(
+  'requires exact join receipts despite fresh admission, role change and replay: IAM first %s',
+  joinProgress);
+
+async function joinAttribution() {
+  const data = { memberId: 'member', role: 'member', actor: 'member', joinedBy: 'member',
+    identity: { issuer: `https://${canary}.test`, sub: canary },
+    email: `${canary}@example.test`, displayName: canary, credential: canary,
+    inventory: [canary], privateCount: 12345 };
+  const legacy = { ...joined, id: 'legacy-join', data };
+  const forged = { ...legacy, id: 'forged-join',
+    principal: { kind: 'human' as const, id: 'member' } };
+  const agent = { ...legacy, id: 'agent-join',
+    principal: { kind: 'agent' as const, id: 'member' } };
+  const system = { ...legacy, id: 'system-join',
+    principal: { kind: 'system' as const, id: 'member' } };
+  let position = 100;
+  for (const [event, actor] of [
+    [legacy, { kind: 'unverified' }], [forged, { kind: 'unverified' }],
+    [agent, { kind: 'agent', id: 'member' }], [system, { kind: 'system', id: 'member' }],
+  ] as const) {
+    await auditTrail.apply(db, event, position++);
+    const record = await detail(event.id);
+    expect(record).toMatchObject({ operation: 'join', memberId: 'member',
+      role: 'member', actor });
+    expect(record.invitationId).toBeUndefined();
+  }
+}
+it('keeps legacy joins without invitations and never promotes untrusted join actors to people',
+  joinAttribution);
+
+async function invitationProgressStaysAbsent() {
+  const refused = saved('member.command_refused', 'refused-join', {
+    memberId: 'member', operation: 'join', reason: 'wrong_identity',
+    originalCommandDigest: 'a'.repeat(64), inputDigest: 'b'.repeat(64),
+  });
+  await auditTrail.apply(db, refused, 100);
+  await runner.run(auditTrail);
+  expect((await detail(refused.id)).progress).toBeUndefined();
+  expect((await detail('invite-member')).progress).toBeUndefined();
+}
+it('does not treat a refused join or invitation as an applied admission',
+  invitationProgressStaysAbsent);
+
+async function joinPaging() {
+  await membershipPaging(joined, 'join');
+  const ids = new Set<string>();
+  let before: number | undefined;
+  for (const expectedCount of [50, 2]) {
+    let url = '/api/org/history?limit=50&from=2026-10-05T00:00:00Z&type=member';
+    if (before !== undefined) {
+      url += `&before=${before}`;
+    }
+    const response = await app.inject({ url, headers: headers() });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toContain(canary);
+    const page = auditResponseSchema.parse(response.json());
+    expect(page.rows).toHaveLength(expectedCount);
+    for (const row of page.rows) {
+      ids.add(row.id);
+      expect(row.records[0]?.operation).toBe('join');
+      expect(row.records[0]?.progress).toBeUndefined();
+    }
+    before = page.nextBefore;
+  }
+  expect(before).toBeUndefined();
+  expect(ids.size).toBe(52);
+}
+it('pages more than fifty joins in list and detail without duplicates or gaps', joinPaging);
