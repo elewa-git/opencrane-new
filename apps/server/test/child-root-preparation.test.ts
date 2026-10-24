@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { failingPublishStore } from '@opencrane/event-store/testing';
-import { childRequestedDataSchema, childStartFailedEventSchema } from '@opencrane/events';
+import { budgetRootAllowanceSetDataSchema, childRequestedDataSchema,
+  childStartFailedEventSchema } from '@opencrane/events';
 import { BudgetActor, history, reservationCents } from '@opencrane/models';
 import { allocateChildRoot } from '../src/chat/child-root.ts';
 import { activateRequestedChild } from '../src/chat/child-activation.ts';
@@ -103,22 +104,31 @@ async function invalidPreparation(kind: string) {
   await choose();
   const saved = await prepare();
   let selection = selected;
-  if (kind === 'computer') selection = { ...selected, computerId: 'other' };
-  if (kind === 'generation') selection = { ...selected, generation: 2 };
-  if (kind === 'paused') await choose(expensive, 'paused');
+  if (kind === 'computer') {
+    selection = { ...selected, computerId: 'other' };
+  }
+  if (kind === 'generation') {
+    selection = { ...selected, generation: 2 };
+  }
+  if (kind === 'paused') {
+    await choose(expensive, 'paused');
+  }
   if (kind === 'suspended') {
     await context.append('computer-helper', 'computer.suspended',
       { assistantId: 'helper', computerId: 'computer' }, false);
   }
-  if (kind === 'used thread') {
+  if (kind === 'used thread' || kind === 'foreign thread owner') {
+    const turnId = kind === 'used thread' ? 'another-turn' : saved.data.firstInputId;
+    const requesterId = kind === 'foreign thread owner' ? 'bob' : 'alice';
     await context.append('computer-helper', 'computer.turn_started',
-      { assistantId: 'helper', computerId: 'computer', conversationId: 'another-child',
-        turnId: 'another-turn', threadId: selected.threadId, requesterId: 'alice',
+      { assistantId: 'helper', computerId: 'computer',
+        conversationId: saved.data.childConversationId, turnId,
+        threadId: selected.threadId, requesterId,
         task: 'chat_turn', executionMode: 'restricted' }, false);
   }
   await rejects(saved.input, selection);
 }
-it.each(['computer', 'generation', 'paused', 'suspended', 'used thread'])(
+it.each(['computer', 'generation', 'paused', 'suspended', 'used thread', 'foreign thread owner'])(
   'refuses a prepared selection with invalid %s', invalidPreparation);
 
 async function changesWhileQueued(kind: string) {
@@ -135,12 +145,20 @@ async function changesWhileQueued(kind: string) {
   vi.spyOn(actor, 'setRootAllowance').mockImplementationOnce(pause);
   const pending = allocateChildRoot(context.options, actor, 'alice', saved.input, 1, selected);
   const refused = expect(pending).rejects.toThrow();
-  await entered.promise;
+  await Promise.race([entered.promise, pending]);
   try {
-    if (kind === 'model') await choose(cheap);
-    if (kind === 'same model revision') await choose();
-    if (kind === 'paused') await choose(expensive, 'paused');
-    if (kind === 'computer') await ready('replacement', 2);
+    if (kind === 'model') {
+      await choose(cheap);
+    }
+    if (kind === 'same model revision') {
+      await choose();
+    }
+    if (kind === 'paused') {
+      await choose(expensive, 'paused');
+    }
+    if (kind === 'computer') {
+      await ready('replacement', 2);
+    }
     const before = await context.nats.store.head();
     release.resolve();
     await refused;
@@ -162,8 +180,12 @@ async function failedPublishChange(kind: string) {
   await restarted.start();
   const before = await context.nats.store.head('budget-test');
   async function change() {
-    if (kind === 'model') await choose(cheap);
-    if (kind === 'computer') await ready('replacement', 2);
+    if (kind === 'model') {
+      await choose(cheap);
+    }
+    if (kind === 'computer') {
+      await ready('replacement', 2);
+    }
     if (kind === 'deadline') {
       vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 2001);
     }
@@ -206,13 +228,72 @@ async function failedPublishChange(kind: string) {
 it.each(['model', 'computer', 'deadline', 'removal', 'closure', 'new attempt', 'unchanged'])(
   'checks preparation and access on real transport retry: %s', failedPublishChange);
 
+async function recoversSavedAllocation() {
+  await choose();
+  const saved = await prepare(777);
+  const append = context.nats.store.append.bind(context.nats.store);
+  async function loseReply(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    expect(result.status).toBe('appended');
+    return { status: 'unavailable' as const, cause: new Error('Lost reply') };
+  }
+  vi.spyOn(context.nats.store, 'append').mockImplementationOnce(loseReply);
+  await expect(allocateChildRoot(context.options, actor, 'alice', saved.input, 1, selected))
+    .rejects.toThrow();
+  vi.restoreAllMocks();
+  const rows = await history(context.nats.store, 'budget-test', 'test');
+  const recorded = rows.at(-1)!;
+  expect(recorded.event.type).toBe('budget.root_allowance_set');
+  actor = new BudgetActor(context.nats.store, 'test');
+  await actor.start();
+  const before = await context.nats.store.head();
+  const root = await allocateChildRoot(context.options, actor, 'alice', saved.input, 1, selected);
+  const recordedBinding = budgetRootAllowanceSetDataSchema.parse(recorded.event.data);
+  expect(root).toMatchObject(recordedBinding);
+  expect(root.allowanceCents).toBe(777);
+  await ready('replacement', 2);
+  const changed = { ...selected, computerId: 'replacement', generation: 2 };
+  await expect(allocateChildRoot(context.options, actor, 'alice', saved.input, 1, changed))
+    .rejects.toThrow('Root binding conflict');
+  expect(await context.nats.store.head()).toBe(before + 1);
+}
+it('recovers saved choices and cents after a lost reply and restart; changed bindings conflict',
+  recoversSavedAllocation);
+
+async function failedPreparationChecksAccess(removed: boolean) {
+  await choose();
+  const saved = await prepare();
+  if (removed) {
+    await context.append(`participation-${saved.input.conversationId}`, 'participant.removed',
+      { conversationId: saved.input.conversationId, participantId: 'alice', removedBy: 'bob' });
+  }
+  const read = context.nats.store.readStream.bind(context.nats.store);
+  async function* unavailable(subject: string, from?: number, deadline?: number) {
+    if (subject === 'provider-*') {
+      throw new Error('Provider failure canary');
+    }
+    yield* read(subject, from, deadline);
+  }
+  vi.spyOn(context.nats.store, 'readStream').mockImplementation(unavailable);
+  const before = await context.nats.store.head();
+  const reason = removed ? 'Conversation refused' : 'Child preparation unavailable';
+  await expect(allocateChildRoot(context.options, actor, 'alice', saved.input, 1, selected))
+    .rejects.toThrow(reason);
+  expect(await context.nats.store.head()).toBe(before);
+}
+it.each([false, true])('checks access after failed preparation, requester removed=%s',
+  failedPreparationChecksAccess);
+
 async function slowPreparation() {
   await choose();
   const saved = await prepare();
+  const computerPosition = await context.nats.store.head('computer-helper');
   const read = context.nats.store.readStream.bind(context.nats.store);
   let elapsed = 0;
   const now = performance.now.bind(performance);
-  function clock() { return now() + elapsed; }
+  function clock() {
+    return now() + elapsed;
+  }
   vi.spyOn(performance, 'now').mockImplementation(clock);
   const delayed = new Set<string>();
   async function* slow(subject: string, from?: number, deadline?: number) {
@@ -226,9 +307,6 @@ async function slowPreparation() {
   vi.spyOn(context.nats.store, 'readStream').mockImplementation(slow);
   const root = await allocateChildRoot(context.options, actor, 'alice', saved.input, 1, selected);
   expect(root.allowanceCents).toBe(1000);
-  const rows = await history(context.nats.store, 'computer-helper', 'test');
-  function started(row: typeof rows[number]) { return row.event.type === 'computer.turn_started'; }
-  // Only the deliberately seeded foreign turn exists; allocation starts no work.
-  expect(rows.filter(started)).toHaveLength(1);
+  expect(await context.nats.store.head('computer-helper')).toBe(computerPosition);
 }
 it('loads slow provider, computer and conversation history before the access window', slowPreparation);
