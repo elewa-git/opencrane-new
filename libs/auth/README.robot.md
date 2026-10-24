@@ -264,3 +264,50 @@ expiry. Desktop signing requires a lease expiry. `verifyEgressCapability` checks
 the requested channel; the shared verifier also enforces the lifetime and audience.
 No route delivers these passes to computers. Desktop admission remains closed until
 saved lease and control bindings can be checked.
+
+## Scanner service passes
+
+P5-6a PR 1 implements only identity from the accepted
+[shared scanner contract](../../docs/specs/phase-5/spec.md#shared-scanner-contract).
+`tokenIssuer` accepts optional `scannerIdentity: { service, silo }` at construction.
+These values must come from trusted deployment settings. The constructor copies
+and validates them. `service` is exactly `server` or `image-worker`; `silo` is
+1–200 letters, digits, underscores or hyphens. No identity means issuance refuses.
+
+`scanner({ purpose, requestId })` accepts exactly those two fields. The server
+can request only `upload`; the image worker can request only `image`. The trusted
+caller generates a fresh UUID for every scan attempt, including retries. This
+library checks UUID syntax; it does not keep a replay store. It reuses the existing
+ES256 signer, key file and secret custody. No public minting endpoint is added.
+The signed claims are `typ: scanner`, `aud: scanner`, `iss`, `jti`, `iat`, `exp`,
+`service`, `silo`, `purpose` and `requestId`. Lifetime is exactly 120 seconds.
+
+`tokenVerifier(jwks, issuer, now, scannerServices)` takes public keys, one trusted
+issuer, a clock in seconds and a service-to-silo map, for example
+`{ server: 'silo-one', 'image-worker': 'silo-one' }`. Omitted services are denied.
+Use one configured verifier per trusted issuer and its keys; request claims must
+never choose the issuer, keys or mapping. The verifier copies the mapping.
+`verifyScanner(value, { purpose, requestId })` checks the signature, issuer,
+exact audience/type, dates, lifetime, allowed service/purpose, mapped silo and
+exact pending request. Missing dates, future issue times, expired passes, extra
+claims or input fields and lifetimes above 120 seconds refuse. Public-key
+replacement rejects old signers.
+The general `verify` method refuses scanner passes so it cannot bypass these checks.
+Computer and turn passes cannot scan; scanner passes cannot authorise those audiences.
+
+Scanner request refusals return only `Scanner pass refused`, without the token,
+claims or underlying error. Passes stay in process memory; callers must never put
+them in logs, events, errors or API responses. Signing and checking make no network
+request and append no event. No event or public HTTP API field is added; the signed
+claim names were checked against the exact `RISKY_FIELD_NAME` expression in the
+event security tests and none match it.
+
+`test/scanner-tokens.test.ts` uses real ES256 keys and an injected clock. It checks
+both valid identities, independent altered claims, signature and trust failures,
+replacement keys, exact requests, forbidden overrides, expiry and fixed errors.
+Run it with `nice -n 10 npm test -- libs/auth/test/scanner-tokens.test.ts --maxWorkers=2`.
+
+Trusted process wiring, HTTPS wrapper/TLS, loaded-database freshness, consumer
+integration and real clean/EICAR qualification are **NOT RUN** and remain later
+P5-6a/P5-6b parts. Upload/image admission, Stage B, memory and access checks are
+unchanged. This slice alone does not qualify the shared scanner on a fresh install.

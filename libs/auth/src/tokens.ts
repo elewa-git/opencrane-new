@@ -11,6 +11,34 @@ const turnClaimsSchema = optionalProviderTurnBindingSchema.safeExtend({
 const algorithm = 'ES256';
 export const computerTokenAudience = 'agentgateway';
 export const turnTokenAudience = 'decision-service';
+export const scannerTokenAudience = 'scanner';
+
+const scannerIdentitySchema = z.strictObject({
+  service: z.enum(['server', 'image-worker']),
+  silo: z.string().regex(/^[\w-]{1,200}$/u),
+});
+const scannerRequestSchema = z.strictObject({
+  purpose: z.enum(['upload', 'image']),
+  requestId: z.uuid(),
+});
+const scannerClaimsSchema = scannerIdentitySchema.extend({
+  ...scannerRequestSchema.shape,
+  typ: z.literal('scanner'),
+  aud: z.literal(scannerTokenAudience),
+  iss: z.string(),
+  jti: z.string().min(1),
+  iat: z.int(),
+  exp: z.int(),
+});
+type ScannerIdentity = z.infer<typeof scannerIdentitySchema>;
+type ScannerServices = Partial<Record<ScannerIdentity['service'], string>>;
+
+function scannerPurpose(service: ScannerIdentity['service']) {
+  if (service === 'server') {
+    return 'upload';
+  }
+  return 'image';
+}
 
 const egressId = z.string().regex(/^[\w-]{1,200}$/u);
 const egressInput = egressDestinationSchema.extend({
@@ -36,6 +64,7 @@ function egressExpiry(input: z.infer<typeof egressInput>) {
     input.leaseExpiresAt ?? Infinity) / 1000);
 }
 function lifetime(audience: string) {
+  if (audience === scannerTokenAudience) return 120;
   if (audience === 'computer-egress') return 60;
   if (audience === turnTokenAudience) return 120;
   return 600;
@@ -53,33 +82,96 @@ interface TokenOptions {
   computerTtlSeconds?: number;
   turnTtlSeconds?: number;
   now?: () => number;
+  scannerIdentity?: ScannerIdentity;
 }
 
 /** Public-key verification shared by the issuer and gateway decision process. */
-export function tokenVerifier(jwks: JSONWebKeySet, issuer: string, now = () => Math.floor(Date.now() / 1000)) {
+export function tokenVerifier(jwks: JSONWebKeySet, issuer: string,
+  now = () => Math.floor(Date.now() / 1000), scannerServices: ScannerServices = {}) {
   const keys = createLocalJWKSet(jwks);
+  const trustedServices = { ...scannerServices };
+
+  async function verifySigned(value: string, audience: string) {
+    const verification = {
+      issuer, audience, algorithms: [algorithm], requiredClaims: ['exp', 'iat', 'jti'],
+      maxTokenAge: lifetime(audience), currentDate: new Date(now() * 1000),
+    };
+    const result = await jwtVerify(value, keys, verification);
+    const { iat, exp } = result.payload;
+    if (!Number.isSafeInteger(iat) || !Number.isSafeInteger(exp) || exp! <= iat! ||
+        exp! - iat! > lifetime(audience)) {
+      throw new Error('Invalid token lifetime');
+    }
+    return result.payload;
+  }
+
+  async function verifyScanner(value: string, expected: unknown) {
+    try {
+      const request = scannerRequestSchema.parse(expected);
+      const payload = await verifySigned(value, scannerTokenAudience);
+      const claims = scannerClaimsSchema.parse(payload);
+      if (trustedServices[claims.service] !== claims.silo ||
+          claims.purpose !== scannerPurpose(claims.service) ||
+          claims.purpose !== request.purpose || claims.requestId !== request.requestId) {
+        throw new Error('Scanner pass refused');
+      }
+      return claims;
+    } catch {
+      // Hide tokens, untrusted claims and key errors from callers.
+      throw new Error('Scanner pass refused');
+    }
+  }
+
   return {
+    verifyScanner,
     async verify(value: string, audience: string, activeId?: string) {
-      const result = await jwtVerify(value, keys, { issuer, audience, algorithms: [algorithm],
-        requiredClaims: ['exp', 'iat', 'jti'], maxTokenAge: lifetime(audience),
-        currentDate: new Date(now() * 1000) });
-      const { iat, exp } = result.payload;
-      if (!Number.isSafeInteger(iat) || !Number.isSafeInteger(exp) || exp! <= iat! ||
-          exp! - iat! > lifetime(audience)) throw new Error('Invalid token lifetime');
-      if (activeId !== undefined && result.payload.jti !== activeId) throw new Error('Token has been rotated');
+      const payload = await verifySigned(value, audience);
+      // Require the scanner's trusted mapping and exact pending request check.
+      if (audience === scannerTokenAudience || payload['typ'] === 'scanner') {
+        throw new Error('Scanner pass refused');
+      }
+      if (activeId !== undefined && payload.jti !== activeId) {
+        throw new Error('Token has been rotated');
+      }
       if (audience === 'computer-egress') {
-        const claims = egressClaims.parse(result.payload);
+        const claims = egressClaims.parse(payload);
         if (claims.exp > egressExpiry(claims)) throw new Error('Egress capability refused');
-      } else if (result.payload['typ'] === 'computer-egress') {
+      } else if (payload['typ'] === 'computer-egress') {
         throw new Error('Egress capability refused');
       }
-      return result.payload;
+      return payload;
     },
+  };
+}
+
+function scannerSigner(identity: unknown,
+  issue: (payload: JWTPayload, audience: string, ttl: number) => Promise<IssuedToken>) {
+  let scannerIdentity: ScannerIdentity | undefined;
+  try {
+    if (identity !== undefined) {
+      scannerIdentity = scannerIdentitySchema.parse(identity);
+    }
+  } catch {
+    throw new Error('Scanner pass refused');
+  }
+
+  return async function scanner(input: unknown) {
+    try {
+      const request = scannerRequestSchema.parse(input);
+      if (!scannerIdentity || request.purpose !== scannerPurpose(scannerIdentity.service)) {
+        throw new Error('Scanner pass refused');
+      }
+      const payload = { ...scannerIdentity, ...request, typ: 'scanner' };
+      return await issue(payload, scannerTokenAudience, 120);
+    } catch {
+      throw new Error('Scanner pass refused');
+    }
   };
 }
 
 /** Signed short-lived credentials. Callers keep only the returned id in events. */
 export async function tokenIssuer(options: TokenOptions) {
+  const scanner = scannerSigner(options.scannerIdentity, issue);
   const pem = await readFile(options.privateKeyPath, 'utf8');
   const key = await importPKCS8(pem, algorithm);
   const publicPem = createPublicKey(pem).export({ type: 'spki', format: 'pem' }).toString();
@@ -101,6 +193,7 @@ export async function tokenIssuer(options: TokenOptions) {
 
   return {
     jwks,
+    scanner,
     ...tokenVerifier(jwks, options.issuer, now),
     async egress(input: z.infer<typeof egressInput>) {
       const checked = egressInput.parse(input);

@@ -25,6 +25,7 @@ export {
   tokenIssuer,
   computerTokenAudience,
   turnTokenAudience,
+  scannerTokenAudience,
   type IssuedToken,
 } from './tokens.ts';
 

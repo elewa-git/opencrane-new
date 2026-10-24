@@ -5,12 +5,13 @@ import { join } from 'node:path';
 import { Socket } from 'node:net';
 import { EventStore } from '@opencrane/event-store';
 import { decodeJwt, importPKCS8, SignJWT, type JWTPayload } from 'jose';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi, type MockInstance } from 'vitest';
 import { scannerTokenAudience, tokenIssuer, tokenVerifier } from '../src/index.ts';
 
 const issuerName = 'https://scanner-issuer.invalid/';
 const request = { purpose: 'upload', requestId: '6be4d239-cb0e-4db2-b5aa-9fa70ff9a681' };
 const directories: string[] = [];
+const effects: MockInstance[] = [];
 let now = 1_800_000_000;
 
 function clock() {
@@ -28,13 +29,15 @@ function guardEffects() {
   append.mockImplementation(forbiddenEffect);
   connect.mockImplementation(forbiddenEffect);
   fetch.mockImplementation(forbiddenEffect);
+  effects.push(append, connect, fetch);
 }
 beforeEach(guardEffects);
 
 async function cleanup() {
-  expect(EventStore.prototype.append).not.toHaveBeenCalled();
-  expect(Socket.prototype.connect).not.toHaveBeenCalled();
-  expect(globalThis.fetch).not.toHaveBeenCalled();
+  for (const effect of effects) {
+    expect(effect).not.toHaveBeenCalled();
+  }
+  effects.length = 0;
   vi.restoreAllMocks();
   for (const directory of directories) {
     await rm(directory, { recursive: true, force: true });
