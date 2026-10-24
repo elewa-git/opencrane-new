@@ -150,9 +150,20 @@ async function completeRun(occurrenceId: string) {
   await save(finished);
   return finished;
 }
+async function ownRoutineList() {
+  const session = { sub: 'alice', orgId: 'org-test', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const response = await app.inject({ method: 'GET', url: '/api/routines?view=mine', headers });
+  expect(response.statusCode).toBe(200);
+  const result = response.json<Page>();
+  expect(result.rows).toHaveLength(1);
+  return result.rows;
+}
 async function lateTerminalRecord() {
   const firstFinished = await completeRun('run-a');
   const secondFinished = await completeRun('run-b');
+  const listBefore = await ownRoutineList();
   const before = await page();
   expect(before.rows).toHaveLength(2);
   expect(before.rows[0]).toMatchObject({ occurrenceId: 'run-a', outcome: 'cancelled',
@@ -164,10 +175,12 @@ async function lateTerminalRecord() {
   await save(late);
   const after = await page();
   expect(after.rows).toEqual(before.rows);
+  expect(await ownRoutineList()).toEqual(listBefore);
   expect((await request('', 'bob')).statusCode).toBe(403);
   await rebuildRoutineProjection(db, nats.reader, logger, { verify: true });
   const rebuilt = await page();
   expect(rebuilt.rows).toEqual(before.rows);
+  expect(await ownRoutineList()).toEqual(listBefore);
   expect((await request('', 'bob')).statusCode).toBe(403);
 }
 it('keeps both first outcomes readable after an older run finishes again and after rebuild',

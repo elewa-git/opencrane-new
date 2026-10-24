@@ -272,7 +272,11 @@ async function duringPage(kind: string) {
         await save(record('orders', 'bob', 'routine.reassigned'), false, false);
       }
     }
-    if (sql.includes('FROM routines')) {
+    if (sql.includes('FROM routines AS owned')) {
+      expect(values).toEqual(['test', 'alice']);
+      expect(result.rows.length).toBeLessThanOrEqual(1);
+    }
+    if (sql.includes('FROM routines WHERE')) {
       expect(values).toEqual(['test', 'alice', 0, 21]);
       expect(result.rows.length).toBeLessThanOrEqual(21);
       if (kind === 'reassign') await save(record('orders', 'bob', 'routine.reassigned'), false, false);
