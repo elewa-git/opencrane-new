@@ -69,6 +69,7 @@ async function fixture() {
   let unavailable = false;
   let preconditions: unknown;
   const listings: string[] = [];
+  const listedNames: string[] = [];
   const removals: { name: string; preconditions: unknown }[] = [];
   let listAction: (() => Promise<void>) | undefined;
   let listFailures = 0;
@@ -105,6 +106,7 @@ async function fixture() {
       for (const name of names) {
         if (name > after && items.length < limit) {
           items.push(secrets.get(name)!);
+          listedNames.push(name);
         }
       }
       pages.push(items.length);
@@ -198,7 +200,7 @@ async function fixture() {
     return connectionCustody(`http://127.0.0.1:${port}`, 'custody', keyring, directory);
   }
   const custody = restart();
-  return { custody, restart, directory, pages, secrets, listings, removals,
+  return { custody, restart, directory, pages, secrets, listings, listedNames, removals,
     get maximumLists() { return maximumLists; }, get deleteAttempts() { return deleteAttempts; },
     onList(action: () => Promise<void>) { listAction = action; },
     failLists(count: number) { listFailures = count; },
@@ -486,7 +488,7 @@ async function candidateFixture(appendUntil = stage.appendUntil,
     operationId: `operation-${candidateCount}`, appendUntil, expectedSequence, generation };
   const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
   const saved = await store.custody.stage(input, material);
-  const db = pgDb(storage.queue);
+  const db = waitingCleanupDatabase(pgDb(storage.queue));
   async function reconcile() {
     return reconcileConnectionStage(events.store, db, store.restart(), input);
   }
@@ -729,10 +731,13 @@ async function rechecksUnderCoordination() {
 it('reads the current reference again after acquiring cleanup coordination', rechecksUnderCoordination);
 
 async function excludesConcurrentStage() {
+  const database = pgDb(storage.queue);
   const test = await candidateFixture();
   await test.invalidate();
   async function stageInProgress() {
-    expect(await test.reconcile()).toEqual({ status: 'retained' });
+    const result = await reconcileConnectionStage(events.store, database,
+      test.store.restart(), test.input);
+    expect(result).toEqual({ status: 'retained' });
     expect(test.store.deletes).toBe(0);
   }
   await withConnectionStage(test.db, test.input, stageInProgress);
@@ -1286,6 +1291,7 @@ it.each(['silo', 'subject', 'id', 'data'])(
   'requires the exact saved trigger, including %s', ignoresUnsavedTrigger);
 
 async function holdsLockUntilDeletionFinishes() {
+  const database = pgDb(storage.queue);
   const test = await cleanupFixture();
   const event = await test.revoke();
   const custody = test.store.restart();
@@ -1304,7 +1310,7 @@ async function holdsLockUntilDeletionFinishes() {
   const inject = vi.fn();
   try {
     await entered.promise;
-    await expect(withConnectionStage(test.db, test.input, inject))
+    await expect(withConnectionStage(database, test.input, inject))
       .rejects.toThrow('Connection coordination unavailable');
     expect(inject).not.toHaveBeenCalled();
     expect(test.store.deletes).toBe(0);
@@ -1539,12 +1545,7 @@ async function intervalCleansExhaustedReaction() {
   const test = await cleanupFixture();
   const isolated = await databases();
   const database = pgDb(isolated.queue);
-  function waitForCleanupLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
-    // Wait for this fixture's lock so acquisition delays cannot use up a deletion retry.
-    // Keep the production deadline covered by the separate lock contention tests.
-    return database.lock!(name, work);
-  }
-  test.db = { ...database, lock: waitForCleanupLock };
+  test.db = waitingCleanupDatabase(database);
   const event = await test.revoke();
   test.store.failDeletes(true);
   const cleanup = connectionCleanupHandler(events.store, test.db, test.store.restart(), 'test');
@@ -1600,14 +1601,37 @@ async function intervalCleansExhaustedReaction() {
 it('interval scan removes copies after every reaction retry fails and keeps the failed job',
   intervalCleansExhaustedReaction, 90_000);
 
+function waitingCleanupDatabase(database: Db): Db {
+  function waitForCleanupLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    // Wait for the real lock so acquisition delays cannot skip the cleanup being checked.
+    // Keep the production deadline covered by the separate lock contention tests.
+    return database.lock!(name, work);
+  }
+  return { ...database, lock: waitForCleanupLock };
+}
+
 async function pagedScan(restart: boolean) {
   const test = await candidateFixture();
   for (let index = 1; index < 53; index += 1) {
     const candidate = { ...test.input, generation: index + 1, operationId: `scan-${index}` };
-    await test.store.custody.stage(candidate, material);
+    const saved = await test.store.custody.stage(candidate, material);
+    expect(saved.status).toBe('staged');
   }
   await test.invalidate();
+  const savedRows = await history(events.store, test.subject, 'test');
+  expect(savedRows).toHaveLength(1);
+  expect(savedRows[0]!.event.type).toBe('connection.revoked');
+  async function* savedHistory(subject: string, fromSequence = 1) {
+    expect(subject).toBe(test.subject);
+    const rows = await Promise.resolve(savedRows);
+    for (const row of rows) {
+      if (row.sequence >= fromSequence) {
+        yield structuredClone(row);
+      }
+    }
+  }
   const names = [...test.store.secrets.keys()];
+  expect(names).toHaveLength(53);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   async function pauseSecondPage() {
@@ -1617,6 +1641,9 @@ async function pagedScan(restart: boolean) {
     }
   }
   test.store.onList(pauseSecondPage);
+  // Keep history fixed so this test checks paging rather than live read deadlines.
+  const reading = vi.spyOn(events.store, 'readStream');
+  reading.mockImplementation(savedHistory);
   const scan = runningScan(test);
   try {
     if (restart) {
@@ -1627,10 +1654,7 @@ async function pagedScan(restart: boolean) {
       expect(test.store.listings).toHaveLength(2);
       const resumed = runningScan(test);
       try {
-        function deleted() {
-          return test.store.deletes === 53;
-        }
-        await until(deleted);
+        await resumed.pages();
       } finally {
         await resumed.close();
       }
@@ -1645,8 +1669,16 @@ async function pagedScan(restart: boolean) {
     }
   } finally {
     release.resolve();
-    await scan.close();
+    try {
+      await scan.close();
+    } finally {
+      reading.mockRestore();
+    }
   }
+  const listedNames = [...test.store.listedNames];
+  listedNames.sort();
+  names.sort();
+  expect(listedNames).toEqual(names);
   expect(test.store.removals).toHaveLength(53);
   for (const name of names) {
     function matches(removal: { name: string }) {
@@ -1660,6 +1692,68 @@ async function pagedScan(restart: boolean) {
   expect(rows[0]!.event.type).toBe('connection.revoked');
 }
 it.each([false, true])('scan examines all 53 candidates, with mid-page restart: %s', pagedScan);
+
+async function withSlowConnections(work: () => Promise<void>, count = 2) {
+  const realNow = performance.now.bind(performance);
+  let elapsed = 0;
+  let slowConnections = 0;
+  function now() {
+    return realNow() + elapsed;
+  }
+  function acquired() {
+    if (slowConnections < count) {
+      // Model connections arriving after the production acquisition deadline.
+      // Advance the clock instead of sleeping or depending on machine load.
+      elapsed += 101;
+      slowConnections += 1;
+    }
+  }
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockImplementation(now);
+  storage.queue.on('acquire', acquired);
+  try {
+    await work();
+    expect(slowConnections).toBe(count);
+  } finally {
+    storage.queue.off('acquire', acquired);
+    clock.mockRestore();
+  }
+}
+async function pagedScanWithSlowConnections() {
+  async function scan() {
+    await pagedScan(false);
+  }
+  await withSlowConnections(scan);
+}
+it('scan examines all 53 candidates once after two slow database connections',
+  pagedScanWithSlowConnections);
+
+async function closesWithSlowConnection() {
+  await withSlowConnections(closesUnknownAppend, 1);
+}
+it('closes an expired idle stage after a slow database connection', closesWithSlowConnection);
+
+async function pagedScanWithUnavailableReads() {
+  const readStream = events.store.readStream.bind(events.store);
+  let reads = 0;
+  async function* interrupted(...parameters: Parameters<typeof readStream>) {
+    reads += 1;
+    if (reads === 2 || reads === 3) {
+      throw new Error('Synthetic event history unavailable');
+    }
+    yield* readStream(...parameters);
+  }
+  const reading = vi.spyOn(events.store, 'readStream');
+  reading.mockImplementation(interrupted);
+  try {
+    await pagedScan(false);
+    expect(reads).toBe(1);
+  } finally {
+    reading.mockRestore();
+  }
+}
+it('loads saved history before checking paging through every candidate',
+  pagedScanWithUnavailableReads);
 
 async function slowAndUnknownPages() {
   const test = await candidateFixture();
