@@ -4995,7 +4995,7 @@ removal while loading (including failed loads), unavailable services, bounded sl
 history, unrelated chat activity, strict output and private-data canaries. Ordinary
 non-readers and former routine owners receive equal refusals for missing ids and
 failed histories, both before any events arrive and after partial history arrives.
-This is the first detail-read slice of #106. Lists, instruction reads, run reads,
+This is the first detail-read slice of #106. Lists, instruction reads,
 attention, execution and fresh-install qualification remain later work.
 
 ## Internal owner retirement (P4-24 PR 4c; Part of #106)
@@ -5063,3 +5063,41 @@ reads and writes keep their contracts. GET and replay append and dispatch nothin
 read deadlines and replay with real NATS, PostgreSQL and OpenFGA. The prerequisite
 internal reader landed in #653 at `f016778fcf0bfc4ed3dd50e469a9729a072f5912`.
 Impact, list replacement, joins and screens remain later work. Live qualification: NOT RUN.
+
+## Bounded routine occurrence metadata
+
+`GET /api/routines/:routineId/runs` uses `GroupOptions.db` and returns no-store pages.
+The strict query accepts `limit` (20 by default, 1–50) and `continuation`.
+The response contains `rows`, `next`, `sequence`, `generation` and
+`executionAvailable: false`. Rows retain `occurrenceId`, `kind`, original `eventId`,
+`position` and `recordedAt`. Runs add `slot`, `firedAt`, `startBy`, `activatedAt`,
+`stopRequestedAt`, `finishedAt` and `outcome`. Missing lifecycle facts are null.
+Lifecycle dates are saved event times; `activatedAt` records activation admission.
+Skipped rows have `localDate`, `localTime`, `zone` and `reason`. Missed ranges have
+`firstLocalDate`, `lastLocalDate`, `count` and `reason`; even a large range is one row.
+
+The reader selects safe JSON fields explicitly and reads at most `limit + 1` indexed
+rows. It reuses the signed cursor helper with a route, silo and routine binding;
+the signed values carry the generation and last original position. Changed or foreign
+continuations and rebuilt generations return 409 `{status: 'restart'}`.
+Missing, lagging or locked projections return 503 `{status: 'unavailable'}`, never
+an empty success. The checkpoint must cover the captured routine history position.
+Routine-row and generation presence are checked, including for empty pages.
+
+Page queries share a ten-second deadline. Routine history has its own ten-second
+bound and supplies the saved event dates without changing projection data.
+A final projection check has a two-second read deadline and runs before the existing
+helper loads membership and ownership. A routine tail read within the original
+history deadline includes reassignment saved during that database check. The helper
+checks `read_metadata` once,
+including after failed loading. Access refusal takes precedence over page errors.
+No conversation enters this check. Ordinary chat activity cannot deny this read.
+Definitions, custody, instructions, private links, results and money are excluded.
+GET and replay do not read approvals, decrypt, append, schedule, wake or dispatch.
+
+`test/routine-runs.test.ts` uses disposable PostgreSQL, NATS and OpenFGA for paging,
+compact ranges, first outcomes, replay, access changes, outages and private canaries.
+Prerequisites: #647 squash `1e4696d3bfe2cce7cc06bd3059c3a1cf5c803b65` and
+fixed #652 squash `a474d9ad5dc931b0c41a3ab291c96da1ca9171f7`. The latter's failed-history
+privacy check remains in place. Lists, attention, private results and execution
+remain later work. Fresh-install qualification: NOT RUN.

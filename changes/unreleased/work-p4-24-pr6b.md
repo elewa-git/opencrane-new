@@ -1,0 +1,1 @@
+- Routine owners and silo owners and admins can read small pages of saved occurrences and dated outcomes. Missed ranges stay compact, private details stay excluded, and unavailable projections cannot appear empty. Routine execution remains disabled.
