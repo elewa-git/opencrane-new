@@ -42,7 +42,7 @@ export const auditRecordSchema = z.object({
   affectedTurnCount: z.int().nonnegative().optional(),
   requesterEventId: id.optional(),
   memberId: id.optional(), invitationId: id.optional(),
-  operation: z.enum(['invite', 'join', 'role_change', 'transfer_intent',
+  operation: z.enum(['invite', 'join', 'remove', 'role_change', 'transfer_intent',
     'appointment', 'ownership_confirmation', 'step_down']).optional(),
   previousRole: z.enum(['owner', 'admin', 'member']).optional(),
   newRole: z.enum(['owner', 'admin', 'member']).optional(),

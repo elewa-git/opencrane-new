@@ -4353,6 +4353,23 @@ callers, and fixed loading errors for authorised readers. All loading, successfu
 failed, finishes before the single access check. No write authority fence is used.
 Live qualification remains NOT RUN.
 
+## Exact member removal history progress
+
+Member removals use the same detail-only progress checks as roles and ownership.
+Each receipt must name the original removal event. A later join, role change or removal
+cannot confirm it. A missing members or OpenFGA receipt remains `applying`; an unavailable
+check returns `unavailable` only after the final access check. Saved metadata remains
+identical after audit rebuild, while every detail GET checks progress again.
+
+Progress reports only the members table and OpenFGA. It does not report completion of
+departure cleanup. GET and replay run no removal, invitation or cleanup and append no
+event. Invitation and join progress, overview and screens remain later work.
+
+The prerequisite for this part of #109 is #633, merged as
+`bae5d496c17e76b27ae4f9dc6af56a303b173453`. The removal cases in
+`test/audit-membership.test.ts` cover safe metadata, forged actors, exact receipts,
+replay, bounded pages and failed loading for authorised and refused readers.
+
 ## Exact tool-mode change reads (P4-27 PR 7a; Part of #109)
 
 GET `/api/org/integrations/:serverId/changes/:commandId` accepts no query fields.

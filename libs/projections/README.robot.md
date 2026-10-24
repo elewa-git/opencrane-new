@@ -938,3 +938,13 @@ still needs a matching human principal. Confirmation reactions remain system act
 records. It also matches the affected member and requires a later position. Missing or
 conflicting confirmations cannot prove progress. Run `npm run replay -- audit` after this
 upgrade, then `npm run replay -- audit --verify`. Replay never stores live progress.
+
+## Member removal history
+
+`member.removed` adds `operation: remove` and the affected `memberId` to audit metadata.
+The existing reason allowlist supplies safe wording; unknown reasons become
+`Recorded reason withheld`, and an absent reason stays absent. The original event time
+and command digest remain unchanged. A person is attributed only when `removedBy`
+matches the human principal. No email, display name, invitation, review inventory or
+cleanup state is copied. Existing installations need audit replay to add these fields
+to previously saved removals. Replay runs no removal or cleanup reaction.

@@ -7,8 +7,9 @@ Shared message shapes for the OpenCrane browser app and back end. Both sides use
 Control refusal history explains when someone was not the requester or their attempt
 conflicted with saved control. It contains no private computer or turn details.
 
-Role and ownership history replies identify the affected person and saved operation.
+Removal, role and ownership history replies identify the affected person and saved operation.
 Detail replies can also say whether read tables and permissions have applied that change.
+These receipts do not say whether departure cleanup has finished.
 
 ## Where it fits
 
@@ -18,7 +19,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 flowchart LR
   web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>messages, spending pages and choices, integration facts, history and tool holds"]
   server["apps/server<br/>back end"] -.->|image admission and attempt numbers, member roles and access replies, child requests and retries, origin replies, published answers, integration facts, publication facts, spending replies, live stop notices and approvals| protocol
-  projections["libs/projections<br/>read tables"] -.->|directory, spending choices, role and ownership facts, and control refusal reasons| protocol
+  projections["libs/projections<br/>read tables"] -.->|directory, spending choices, removal, role and ownership facts, and control refusal reasons| protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
   protocol -.-> events["libs/events<br/>saved tool lists, publications and not-sent outcomes"]
 ```
