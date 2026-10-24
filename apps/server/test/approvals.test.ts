@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { readFile, mkdir } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { z } from 'zod';
-import { parseEventByType } from '@opencrane/events';
+import { parseEventByType, toolDispatchRecordedDataSchema } from '@opencrane/events';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { approvalCardsSchema, chatFeedSchema } from '@opencrane/protocol';
@@ -834,6 +834,60 @@ async function retriesOnlyVerifiedNonDispatch() {
 }
 it('permits one unchanged retry only after the gateway proves no dispatch',
   retriesOnlyVerifiedNonDispatch, 40_000);
+
+const replyEvidence = [
+  'adapter_response_received', 'response_received', 'adapter_transport_uncertain',
+  'transport_uncertain', 'missing', 'wrong_approval', 'wrong_permit',
+] as const;
+
+async function reportsToolReply(evidence: typeof replyEvidence[number]) {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    expect((await setup.decide()).statusCode).toBe(200);
+    const approved = (await setup.read()).cards[0]!;
+    const permitId = '11111111-1111-4111-8111-111111111111';
+    await setup.append(`approval-${approved.approvalId}`, 'approval.used', {
+      approvalId: approved.approvalId, permitId,
+    });
+    if (evidence !== 'missing') {
+      let savedEvidence = evidence;
+      if (evidence === 'wrong_approval' || evidence === 'wrong_permit') {
+        savedEvidence = 'adapter_response_received';
+      }
+      const requestId = evidence === 'wrong_permit'
+        ? '22222222-2222-4222-8222-222222222222' : permitId;
+      const adapter = {
+        decisionId: permitId, startId: `${requestId}:tool-dispatch-started`,
+        connectionId: 'installed', generation: 1, recordDigest: 'a'.repeat(64),
+        reviewRevision: 1,
+      };
+      const uncertain = savedEvidence.endsWith('uncertain');
+      const data = toolDispatchRecordedDataSchema.parse({
+        conversationId: 'conversation', turnId: 'turn', callId: 'approval-call',
+        serverId: 'fixture', toolName: 'write', requestId, logicalRequestId: 'b'.repeat(64),
+        approvalId: evidence === 'wrong_approval' ? 'another-approval' : approved.approvalId,
+        startedAt: new Date().toISOString(), durationMs: 1,
+        outcome: uncertain ? 'outcome_unknown' : 'responded', evidence: savedEvidence,
+        ...(savedEvidence.startsWith('adapter_') ? { adapter } : {}),
+      });
+      await setup.append(`decision-${permitId}`, 'tool.dispatch_recorded', data);
+    }
+    await setup.restartReader();
+    const saved = (await setup.read()).cards[0]!;
+    expect(saved).toMatchObject({
+      state: 'outcome_unknown', canRetry: false, canDecide: false,
+      toolReplied: evidence === 'adapter_response_received',
+    });
+    expect(saved.uses).toHaveLength(1);
+    expect((await setup.decide('retry')).statusCode).toBe(409);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(replyEvidence)('reports tool reply evidence without allowing reuse: %s',
+  reportsToolReply, 40_000);
 
 async function refusesRetryWithoutProof(status: number) {
   const setup = await approvalFixture();

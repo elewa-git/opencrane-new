@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts in Docker| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|starts apps with private keys; checks chats, tools and ownership| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|starts apps; checks chats, tool evidence, complete approval captures and ownership| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster| devbox
 ```
@@ -42,6 +42,8 @@ configuration changes. Its background jobs keep their own database.
   [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
 - Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
 - Runs browser checks for chat, files, people, groups, shared assistants and spending.
+  Checks money in admin Change history and keeps it out of member action history.
+  Scrolls waiting approvals into view before saving desktop and phone pictures.
 - Checks ownership handover and refuses a last owner’s departure in manual named journeys.
 - Waits for each new rehearsal reply to finish, checks its facts and checks the saved
   text after a reload. Uses separate messages and invitations for each screen width and

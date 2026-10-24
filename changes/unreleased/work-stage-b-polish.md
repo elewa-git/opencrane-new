@@ -1,0 +1,1 @@
+Approval details now say “Done: the tool replied” when the saved adapter record confirms a reply. Transport-only and unknown results keep “Result not confirmed”; retry rules are unchanged. The local browser audit checks money in admin Change history, and waiting approval captures include the whole card and its buttons at desktop and phone widths.

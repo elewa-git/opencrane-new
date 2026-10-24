@@ -88,7 +88,7 @@ grant reply has no sources, profile or policy details. A failed refresh keeps da
 rows dimmed. Any 401 or 403 clears them and cancels other reads. Name lookups are
 left for a later part; the page uses generic person and assistant names.
 Finished chat approvals show saved decision, use, expiry and end times. A used
-approval stays one collapsed line; its uncertain result and Check status action
+approval stays one collapsed line; its reply or uncertain result and Check status action
 are in the drawer. The drawer lists requested, decided, each used, and ended
 times when the server has them. An approved retry keeps the saved uses visible while
 its replacement permit waits to be used. Closing a session removes approval cards
@@ -611,7 +611,8 @@ continue. A separately recorded approval outcome stays visible as its own result
 Enter cannot send a decision. Every participant sees the reviewed fields and
 consequence. Only the requester sees Approve and Deny. Other participants see
 that the requester must decide. Folded cards show only what the server proves.
-A used approval says that its result is unknown in its drawer. A lost decision reply leads to
+A used approval says “Done: the tool replied” when `toolReplied` is true.
+Otherwise its drawer says “Result not confirmed”. A lost decision reply leads to
 one status read. The browser never repeats the POST by itself. A 503 can also
 mean the server refused before recording the choice. If a
 409 is followed by a still-open approval, the card says the choice was not recorded
@@ -1271,3 +1272,11 @@ It clears the picture when permission expires or the session closes.
 Approval cards map `cancelReason: takeover` to “Cancelled: desktop takeover” with
 the existing dash glyph and saved end time. The approval component tests include
 this cause. This adds no desktop control screen or action.
+
+## Tool reply wording
+
+Approval details and status announcements use “Done: the tool replied” only when
+`toolReplied` is true. Unknown and transport-only results keep “Result not confirmed”.
+The drawer retains the saved use times and cannot reuse a consumed approval.
+`npm run visual:stage-b-polish` checks both drawer states and complete waiting-card
+captures at 1280 and 390 pixels against the built app with ordinary browser fixtures.

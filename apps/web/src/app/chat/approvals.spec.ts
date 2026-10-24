@@ -175,6 +175,26 @@ function openTerminalDetails(fixture: ComponentFixture<ApprovalCards>): HTMLElem
   return requiredElement<HTMLElement>(root, 'oc-hinge-drawer dialog');
 }
 
+async function showsDispatchResult(toolReplied: boolean) {
+  const saved = { ...usedCard(), toolReplied, canRetry: false };
+  function readSavedApproval(): Promise<Response> {
+    return Promise.resolve(response([saved]));
+  }
+  const fixture = await mount(readSavedApproval);
+  const drawer = openTerminalDetails(fixture);
+  const expected = toolReplied ? 'Done: the tool replied' : 'Result not confirmed';
+  const absent = toolReplied ? 'Result not confirmed' : 'Done: the tool replied';
+  expect(drawer.textContent).toContain(expected);
+  expect(drawer.textContent).not.toContain(absent);
+  expect(drawer.textContent).toContain('can’t be reused');
+  expect(drawer.textContent).not.toContain('Try again');
+  await fixture.componentInstance['checkStatus'](saved);
+  fixture.detectChanges();
+  expect(rootOf(fixture).querySelector('.approval-announcement')?.textContent).toBe(expected);
+  fixture.destroy();
+}
+it.each([true, false])('shows the saved tool reply evidence in details: %s', showsDispatchResult);
+
 it('keeps a used approval on one line after another poll and moves its status check into details',
   async () => {
     const saved = usedCard();

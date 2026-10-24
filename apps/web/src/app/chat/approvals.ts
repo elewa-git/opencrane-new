@@ -268,7 +268,9 @@ export class ApprovalCards implements OnDestroy {
         this.conversationVersion)) return;
       const updatedCard = this.findCard(card.approvalId);
       const updatedState = this.localStateById(card.approvalId);
-      if (updatedCard?.state === 'outcome_unknown') this.announced.set('Result not confirmed');
+      if (updatedCard?.state === 'outcome_unknown') {
+        this.announced.set(this.presentation.resultMessage(updatedCard));
+      }
       if (updatedCard?.state === 'approved') this.announced.set('Approved');
       if (updatedCard?.state === 'denied') this.announced.set('Denied');
       if (updatedState?.kind === 'still_open') {

@@ -117,10 +117,16 @@
           <p class="gap-note">The saved record does not say why.</p>
         }
         @if (card.state === 'outcome_unknown') {
-          <oc-shared-state kind="unknown" message="Result not confirmed"
-            detail="This approval was used and has no confirmed result. Confirmation from the tool server is not available yet."
-            [showAction]="!readFailed()" [actionBusy]="checkBusy(card)"
-            (action)="checkDecisionStatus(card)" />
+          @if (card.toolReplied) {
+            <oc-shared-state kind="confirmed" [message]="presentation.resultMessage(card)"
+              detail="The tool ran and sent a reply. This approval cannot be used again."
+              [showAction]="false" />
+          } @else {
+            <oc-shared-state kind="unknown" [message]="presentation.resultMessage(card)"
+              detail="This approval was used and has no confirmed result. Confirmation from the tool server is not available yet."
+              [showAction]="!readFailed()" [actionBusy]="checkBusy(card)"
+              (action)="checkDecisionStatus(card)" />
+          }
         }
       }
       <div class="reference-row"><span>Reference</span><code>{{ presentation.reference(card) }}</code></div>

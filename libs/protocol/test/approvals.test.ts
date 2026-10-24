@@ -14,6 +14,16 @@ const invalidDates = [
   '2026-02-30T10:01:00Z', 'not a date', '', 42, null,
 ];
 
+function checksToolReplyEvidence() {
+  for (const toolReplied of [true, false]) {
+    const saved = { ...card, state: 'outcome_unknown', toolReplied };
+    expect(approvalCardsSchema.parse([saved])).toEqual([saved]);
+  }
+  const invalid = { ...card, toolReplied: 'true' };
+  expect(approvalCardsSchema.safeParse([invalid]).success).toBe(false);
+}
+it('accepts only a boolean for the saved tool reply evidence', checksToolReplyEvidence);
+
 function checksSavedDate(field: typeof dateFields[number]) {
   const valid = { ...card, [field]: '2026-10-12T10:01:00.000Z' };
   expect(approvalCardsSchema.safeParse([valid]).success).toBe(true);
