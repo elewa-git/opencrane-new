@@ -555,6 +555,11 @@ with separate jobs/content databases and a read-only content role. It checks ref
 missed and no_changes results, duplicates, restart, unavailable checkpoints and retained
 trigger recovery. Live dreaming and fresh-install qualification remain NOT RUN.
 
+The recovery test holds failed-job deletion until its first queue read. This makes
+the saved result visible while the original failed job still exists. It then waits
+for that exact job to disappear and checks there is one missed result for the
+original night. Seeing the event alone does not mean queue cleanup has finished.
+
 ## Departure cleanup
 
 `cleanup-departure` subscribes to `member.removed`. The saved removal must carry

@@ -136,6 +136,10 @@ async function unavailableCheckpoint(missing: boolean) {
     inspected.resolve();
     return remaining.rows;
   }
+  async function triggerRemoved() {
+    const remaining = await remainingTrigger();
+    return remaining.length === 0;
+  }
   try {
     await boss.send('dream-nightly', payload);
     async function recovered() {
@@ -143,6 +147,7 @@ async function unavailableCheckpoint(missing: boolean) {
       return (await setup.records()).length === 1;
     }
     await until(recovered);
+    await until(triggerRemoved);
     expect(await setup.records()).toMatchObject([{ action: 'missed', date: '2026-10-12' }]);
     expect(await remainingTrigger()).toEqual([]);
   } finally {
