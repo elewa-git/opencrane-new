@@ -495,3 +495,35 @@ async function restoresGrant() {
 }
 it('restores a revoked grant only after its original content and IAM receipts are current',
   restoresGrant, 60_000);
+
+async function loadsHistoryBeforeToolAccess() {
+  const context = await gatewayFixture();
+  await context.grant('member');
+  await context.grant('assistant');
+  const store = context.setup.nats.store;
+  const originalRead = store.readStream.bind(store);
+  const originalNow = performance.now.bind(performance);
+  let elapsed = 0;
+  function currentTime() {
+    return originalNow() + elapsed;
+  }
+  async function* slowHistory(subject: string, from?: number, deadline?: number) {
+    yield* originalRead(subject, from, deadline);
+    if (subject === 'conversation-conversation' && elapsed === 0) {
+      elapsed = 2100;
+    }
+  }
+  const clock = vi.spyOn(performance, 'now');
+  const read = vi.spyOn(store, 'readStream');
+  clock.mockImplementation(currentTime);
+  read.mockImplementation(slowHistory);
+  try {
+    await allowed(context);
+    expect(elapsed).toBe(2100);
+  } finally {
+    read.mockRestore();
+    clock.mockRestore();
+  }
+}
+it('finishes conversation history before starting the tool access deadline',
+  loadsHistoryBeforeToolAccess, 60_000);
