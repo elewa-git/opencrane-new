@@ -1,0 +1,76 @@
+{
+  "at": "2026-10-24T07:34:38.554Z",
+  "policyAvailableAtOriginalTurn": true,
+  "basis": "Rebuilt tool selection from the original saved policy; current unchanged IAM grants",
+  "rows": [
+    {
+      "serverId": "journey-1d9294ac-cd53-4a71-a803-b60a5974babf",
+      "name": "Journey MCP",
+      "source": {
+        "kind": "catalogue",
+        "label": "Catalogue",
+        "detail": "catalogue:dev"
+      },
+      "version": "1.0.0",
+      "accountModel": "Not provided",
+      "toolsAllowed": 1,
+      "toolsTotal": 2,
+      "status": {
+        "kind": "disabled",
+        "label": "Unavailable",
+        "detail": "No fresh tool catalogue check"
+      }
+    },
+    {
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "name": "OpenCrane demo",
+      "source": {
+        "kind": "remote_url",
+        "label": "Remote URL",
+        "detail": "mcp.example.test"
+      },
+      "version": "0.1.0",
+      "accountModel": "Not provided",
+      "toolsAllowed": 2,
+      "toolsTotal": 2,
+      "status": {
+        "kind": "needs_input",
+        "label": "Needs input",
+        "detail": "Pending review"
+      }
+    }
+  ],
+  "permissions": [
+    {
+      "kind": "person",
+      "id": "zitadel-owner",
+      "allowed": true,
+      "status": "ok"
+    },
+    {
+      "kind": "assistant",
+      "id": "personal-c42ec7d216021c21e399398cb63017af",
+      "allowed": true,
+      "status": "ok"
+    }
+  ],
+  "tools": [
+    {
+      "key": "oc_817e192ca1",
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "definitions": [
+        "{\"_meta\":{\"io.opencrane/costCents\":0,\"io.opencrane/review\":{\"action\":\"Read demo quote\",\"consequence\":\"Read the synthetic quote without changing it.\",\"fields\":[\"quoteId\"],\"stepUp\":false,\"targetArgument\":\"quoteId\"}},\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Read a synthetic demo quote. No supplier is contacted.\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"}},\"required\":[\"quoteId\"],\"type\":\"object\"},\"name\":\"read_fixture_quote\",\"outputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"amountCents\":{\"const\":12500,\"type\":\"number\"},\"effectCount\":{\"maximum\":9007199254740991,\"minimum\":0,\"type\":\"integer\"},\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\",\"amountCents\",\"effectCount\"],\"type\":\"object\"}}",
+        "{\"_meta\":{\"io.opencrane/costCents\":0,\"io.opencrane/review\":{\"action\":\"Change demo delivery slot\",\"consequence\":\"Replace the slot in this demo process. No real delivery changes.\",\"fields\":[\"quoteId\",\"slot\"],\"stepUp\":false,\"targetArgument\":\"quoteId\"}},\"annotations\":{\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":false},\"description\":\"Change only the synthetic demo delivery slot.\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\"],\"type\":\"object\"},\"name\":\"change_delivery_slot\",\"outputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"amountCents\":{\"const\":12500,\"type\":\"number\"},\"effectCount\":{\"maximum\":9007199254740991,\"minimum\":0,\"type\":\"integer\"},\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\",\"amountCents\",\"effectCount\"],\"type\":\"object\"}}"
+      ],
+      "modes": {
+        "read_fixture_quote": "allow",
+        "change_delivery_slot": "ask"
+      },
+      "serverInfo": {
+        "name": "OpenCrane demo",
+        "version": "0.1.0"
+      }
+    }
+  ]
+}
