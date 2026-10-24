@@ -37,7 +37,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending pages, own saved profiles, personal account choices, saved tool choices, reviews and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending pages, own saved profiles and original change receipts, personal account choices, saved tool choices, reviews and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
@@ -527,6 +527,10 @@ Workers keep copies belonging to other silos without checking or changing them.
 A member can read their own saved tool profile without using the private credential store.
 The reader loads exact history before checking current membership. Disabled profiles stay
 readable; incomplete records stay unavailable. A saved bearer is not a verified identity.
+
+Members can recover the original receipt for a personal account save, rotation or revocation.
+Later changes do not replace that receipt. It confirms a local change; whether the profile
+can be used now is checked separately. Missing evidence never means it is safe to resend.
 
 ## How to run or test it
 

@@ -1,0 +1,1 @@
+Members can read the original receipt for a personal bearer profile save, rotation or revocation after a lost reply. Later changes do not replace it, private storage details stay hidden, and unknown results never permit resending.

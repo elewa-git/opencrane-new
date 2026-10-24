@@ -5237,6 +5237,23 @@ deduplication expiry, changed actor/payload/position, forged records and privacy
 It checks removal and demotion after both successful and failed loading, a finite
 history deadline and one final access check without a write fence.
 
+## Original personal connection receipt API (Part of #49)
+
+`GET /api/my/tools/:serverId/profiles/:profileId/changes/:changeRef` uses the same
+session, strict input and no-store rules as the profile read. Confirmed output contains only
+`status`, `changeRef`, `eventId`, `eventType`, `recordedAt`, `sequence`, `action`,
+`generation` and `identityStatus: unverified`. All names pass substring-based RISKY_FIELD_NAME.
+Generation is null for owner revocation. The time and position belong to the original event.
+Unknown returns 404 with only `status: unknown`; history failure returns 503 unavailable.
+Neither proves non-application or permits resending. Current usability stays on the profile GET.
+The separate instance change route keeps its existing contract.
+
+`test/connection-change-read.test.ts` covers lost save replies, later rotation/revocation,
+reader restart after deduplication expiry, exact ownership, conflicting records, private
+canaries in responses and captured logs, and membership removal during history loading.
+Slow history uses its own deadline and unrelated chat activity does not refuse reads.
+Admin and selection receipts, writes, broker, screens and live qualification remain later work.
+
 ## Bounded own routine list
 
 `GET /api/routines?view=mine` returns no-store pages from `GroupOptions.db`.

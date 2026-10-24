@@ -3601,3 +3601,16 @@ returning the same receipt. Later reviews and broker deduplication expiry do not
 replace the first save. Current availability stays separate; the receipt does not
 confirm catalogue validity, publication or gateway acknowledgement. Publication
 and lifecycle receipt recovery remain outside this change.
+
+## Original personal connection receipts
+
+`readOwnConnectionChange` takes the authenticated member separately from strict
+server/profile/change input. It reads one exact profile stream with a ten-second deadline,
+then checks current membership once, including after missing or failed history.
+The original create, rotation or owner revocation must match the derived operation id,
+command reference, silo, stream, source, human principal and validated payload identity.
+The existing event schemas and profile fold check the original position and generation.
+Later changes do not replace the original receipt. Conflicting references, closures and
+malformed records return unknown; missing evidence never permits a resend.
+Receipts describe local changes only. Current metadata has its own reader, and upstream
+identity remains unverified. No custody, provider, append, selection or release is involved.
