@@ -55,6 +55,15 @@ export const effectListResponseSchema = z.object({
 
 export const effectDetailResponseSchema = effectStatusSchema.extend({
   csrf: z.string().min(1),
+  resolutionReceipt: z.object({
+    changeRef: id,
+    eventId: id,
+    position: z.int().positive(),
+    time: z.iso.datetime(),
+    resolvedBy: id,
+    outcome: z.enum(['settled', 'released']),
+    settledCents: cents,
+  }).strict().nullable().optional(),
 }).strict();
 
 export type EffectStatus = z.infer<typeof effectStatusSchema>;

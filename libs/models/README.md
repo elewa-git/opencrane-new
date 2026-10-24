@@ -46,8 +46,9 @@ apps/ops confirms owner appointments for this package. Its nightly memory scan a
 uses this library to check saved dependencies at the intended nightly time.
 
 A lost resolution reply can be checked against the original saved event. The receipt
-names the resolver and recorded amount. It proves only that the resolution was saved;
-reading it never charges money, releases a hold or repeats an outside action.
+names the original event, date, resolver, outcome and recorded amount. It stays separate
+from current spending and any retained hold. It proves only that the resolution was
+saved; reading it never charges money, releases a hold or repeats an outside action.
 
 The budget actor keeps a child's original access check while allocation waits in
 its queue. Each attempt to save the allowance checks access again and keeps the

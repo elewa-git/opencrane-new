@@ -1,0 +1,1 @@
+Owners and admins can see the original resolver, event date and saved amount on effect details, separately from current spending and retained holds. Invalid resolution records stay unavailable, and failed detail loads still check current access.

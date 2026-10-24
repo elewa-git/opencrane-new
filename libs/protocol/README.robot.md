@@ -93,6 +93,12 @@ strict member-removal request. `addMemberCommandSchema` checks an addition with
 the same three fields.
 Spending reads use `effectListResponseSchema` and
 `effectDetailResponseSchema`. Price table names can include version punctuation.
+Detail accepts optional nullable `resolutionReceipt` with only `changeRef`, `eventId`,
+`position`, `time`, `resolvedBy`, `outcome` and non-negative safe integer `settledCents`.
+The field is optional for older replies; the current server always sends it, using null
+when no resolution was saved. Unknown receipt fields are rejected. It confirms only
+the saved resolution, separately from current money. The existing detail schema and
+export are reused, so strict browser reads continue to accept the server's response.
 The browser sends one checked evidence entry when it settles or releases a hold;
 the server contract still accepts one to ten entries.
 
