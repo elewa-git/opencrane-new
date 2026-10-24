@@ -121,6 +121,7 @@ assistant can call. These reads check current admin rights after loading the fac
 ## Processes it handles
 
 A person opens a routine. The server loads its saved history, then checks permission.
+It checks permission even if history fails, so non-readers receive the same refusal.
 It returns the name, owner, assistant, payer, status, revisions and saved next slot.
 Instructions and private run results stay private. Reading a routine starts no work;
 routine execution remains unavailable.

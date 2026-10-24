@@ -139,16 +139,34 @@ export async function loadRoutineAccess(binding: Binding, client: TupleClient,
   if (!store) {
     throw new Error('Routine history unavailable');
   }
-  const saved = await readRoutine(store, binding.silo, routineId);
+  let saved: Awaited<ReturnType<typeof readRoutine>> | undefined;
+  try {
+    saved = await readRoutine(store, binding.silo, routineId);
+  } catch {
+    // Defer history failures until permission is checked, so non-readers learn nothing.
+    saved = undefined;
+  }
   const member = await accessReceipts(store, binding.silo, memberId);
   async function check(relation: RoutineRelation) {
     try {
+      if (!saved) {
+        if (!member.active) {
+          return { allowed: false, status: 'ok' as const };
+        }
+        const permission = await checkRoutinePermission(binding, client, memberId,
+          routineId, relation);
+        if (!permission.allowed) {
+          return permission;
+        }
+        // Never authorise a read or write from incomplete history.
+        return { allowed: false, status: 'unavailable' as const };
+      }
       return await checkSavedRoutine(binding, client, memberId, routineId, relation, saved, member);
     } catch {
       return { allowed: false, status: 'unavailable' as const };
     }
   }
-  return { state: saved.state, rows: saved.rows, positions: member.positions, check };
+  return { state: saved?.state, rows: saved?.rows ?? [], positions: member.positions, check };
 }
 
 /** Check saved facts before permissions; this result never authorises execution. */
@@ -196,6 +214,12 @@ async function checkSavedRoutine(binding: Binding, client: TupleClient, memberId
       return { allowed: false, status: admin.status };
     }
   }
+  return checkRoutinePermission(binding, client, memberId, routineId, relation);
+}
+
+async function checkRoutinePermission(binding: Binding, client: TupleClient,
+  memberId: string, routineId: string, relation: RoutineRelation) {
+  const user = objectId('person', binding.silo, memberId);
   const tuple = { user, object: objectId('routine', binding.silo, routineId), relation };
   const result = await client.check(tuple);
   return { allowed: result.allowed, status: result.status };

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { routineControlSchema } from '@opencrane/events';
-import { MemberAccessRefused, readActiveMember } from '@opencrane/models';
+import { MemberAccessRefused } from '@opencrane/models';
 
 const id = z.string().min(1).max(300);
 const revision = z.int().positive();
@@ -16,14 +16,7 @@ export const routineMetadataSchema = z.object({
 export async function readRoutineMetadata(store: EventStore, binding: Binding,
   memberId: string, routineId: string) {
   const auth = memberAuthorisation(binding, store);
-  let saved: Awaited<ReturnType<typeof auth.loadRoutineAccess>>;
-  try {
-    saved = await auth.loadRoutineAccess(memberId, routineId);
-  } catch {
-    // Check current membership even when loading fails, so removal still refuses the read.
-    await readActiveMember(store, binding, memberId);
-    throw new Error('Routine metadata unavailable');
-  }
+  const saved = await auth.loadRoutineAccess(memberId, routineId);
   const permission = await saved.check('read_metadata');
   if (permission.status === 'unavailable') {
     throw new Error('Routine metadata unavailable');
