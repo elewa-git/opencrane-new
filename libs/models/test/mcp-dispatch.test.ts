@@ -5,7 +5,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
-import { applyToolPolicy, mcpCatalogue } from '@opencrane/projections';
+import { applyToolPolicy, mcpCatalogue, readPublication,
+  rebuildMcpCatalogueProjection } from '@opencrane/projections';
+import { createLogger } from '@opencrane/observability';
 import { mcpConfigurationObservationSchema } from '@opencrane/events';
 import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
@@ -1292,7 +1294,8 @@ async function invalidateRestoration(context: RestorationFixture, change: Restor
 }
 
 async function observeRestoration(context: RestorationFixture, change: RestorationCase,
-  delivery: Awaited<ReturnType<typeof restorationDelivery>>) {
+  delivery: Awaited<ReturnType<typeof restorationDelivery>>,
+  record: Awaited<ReturnType<typeof publishRestoration>>) {
   const { setup, watch } = context;
   async function acknowledged() {
     expect(await delivery.observe()).not.toBeNull();
@@ -1320,16 +1323,13 @@ async function observeRestoration(context: RestorationFixture, change: Restorati
   expect(repeated).toEqual(checked);
   if (change === 'restart after' || change === 'restart recovery') {
     await restartRestoration(context);
-    await setup.append('mcp-fixture', 'mcp.server_published',
-      { serverId: 'fixture', publishedBy: 'alice' });
-    const held = await readToolPolicy(setup.nats.store, 'test', 'fixture');
-    expect(held).toMatchObject({ driftHeld: true, published: false });
+    const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    expect(recovered).toMatchObject({ driftHeld: false, published: true,
+      configurationObservation: restored.configurationObservation });
     if (change === 'restart recovery') {
       delivery = await restorationDelivery(setup);
-      await reviewRestoration(setup, 'review-restart');
-      const replacement = await publishRestoration(setup, 'publish-restart');
-      await delivery.deliver(replacement);
-      await delivery.waitForWitness(replacement);
+      await delivery.deliver(record);
+      await delivery.waitForWitness(record);
       await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
       await context.watch.check('fixture');
     }
@@ -1400,7 +1400,7 @@ async function restoresReviewedDrift(change: RestorationCase) {
     if (change !== 'restart before') {
       await delivery.waitForWitness(liveRecord);
     }
-    await observeRestoration(context, change, delivery);
+    await observeRestoration(context, change, delivery, record);
   }
   const observation = setup.dispatchOptions.acknowledged?.();
   if (observation) Object.assign(headers, generationHeaders(observation));
@@ -1416,7 +1416,11 @@ async function restoresReviewedDrift(change: RestorationCase) {
     let expectedState = 'cancelled';
     if (change === 'expired approval') expectedState = 'expired';
     expect(oldApproval.state).toBe(expectedState);
-    await verifyRestorationReplay(setup);
+    if (change === 'restart recovery') {
+      await verifyCatalogueRecoveryReplay(setup);
+    } else {
+      await verifyRestorationReplay(setup);
+    }
   } else {
     expect(response.status, await response.text()).toBe(403);
     expect(setup.received()).toBe(0);
@@ -3003,3 +3007,215 @@ async function keepsGenericEvidence(serverId: string, refused: boolean) {
 }
 it.each([['fixture', false], ['fixture', true], ['memory', false], ['memory', true]] as const)(
   'keeps generic gateway evidence for %s (refused %s)', keepsGenericEvidence);
+
+async function publishedWatchFixture(mode = 'allow') {
+  const setup = await fixture();
+  async function closeSetup() {
+    await setup.close();
+  }
+  onTestFinished(closeSetup);
+  const headers = await prepare(setup);
+  const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  let captured = initial.catalogue!;
+  let unavailable = false;
+  function captureCatalogue() {
+    if (unavailable) {
+      return Promise.reject(new Error('Catalogue unavailable'));
+    }
+    return Promise.resolve(captured);
+  }
+  function setCapture(catalogue: typeof captured) {
+    captured = catalogue;
+  }
+  function setUnavailable(value: boolean) {
+    unavailable = value;
+  }
+  const options = { serverIds: ['fixture'], capture: captureCatalogue,
+    requireLeader: setup.dispatchOptions.requireLeader.bind(setup.dispatchOptions) };
+  const firstWatch = mcpCatalogueWatch(setup.nats.store, 'test', options);
+  onTestFinished(firstWatch.close);
+  await firstWatch.check('fixture');
+  await reviewRestoration(setup, 'review-watch-restart', mode);
+  const record = await publishRestoration(setup, 'publish-watch-restart');
+  const delivery = await restorationDelivery(setup);
+  await acknowledgeReload(delivery, record);
+  Object.assign(headers, generationHeaders(record));
+  const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(before.published).toBe(true);
+  expect(before.previousCatalogue).toBeNull();
+  firstWatch.close();
+
+  const restarted = mcpCatalogueWatch(setup.nats.store, 'test', options);
+  onTestFinished(restarted.close);
+  setup.dispatchOptions.requireCatalogue = restarted.requireCurrent;
+  function requireCurrent() {
+    restarted.requireCurrent('fixture');
+  }
+  expect(requireCurrent).toThrow('watch unavailable');
+  return { setup, headers, before, restarted, requireCurrent, setCapture, setUnavailable };
+}
+
+async function keepsPublicationAfterWatchRestart() {
+  const { setup, headers, before, restarted, requireCurrent } = await publishedWatchFixture();
+  await restarted.check('fixture');
+  const after = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(after).toMatchObject({ published: true, driftHeld: false,
+    policyRevision: before.policyRevision,
+    configurationObservation: before.configurationObservation });
+  const saved = await history(setup.nats.store, 'mcp-fixture', 'test');
+  function afterPublication(row: StoredEvent) {
+    return row.sequence > before.sequence;
+  }
+  const later = saved.filter(afterPublication);
+  expect(later).toHaveLength(1);
+  expect(later[0]!.event).toMatchObject({ type: 'mcp.catalogue_checked',
+    data: { outcome: 'unchanged' } });
+  expect(requireCurrent).not.toThrow();
+  const value = await permit(setup, headers);
+  expect((await send(setup, value)).status).toBe(200);
+  await verifyCatalogueRecoveryReplay(setup);
+  const status = await readPublication(setup.db, 'test', 'fixture');
+  expect(status).toMatchObject({ status: 'ready', changeRef: 'publish-watch-restart' });
+}
+it('keeps acknowledged publication after an unchanged watch restart',
+  keepsPublicationAfterWatchRestart, 60_000);
+
+async function recoversPublicationAfterFailedCheck() {
+  const context = await publishedWatchFixture();
+  const { setup, headers, before, restarted, requireCurrent } = context;
+  context.setUnavailable(true);
+  await expect(restarted.check('fixture')).rejects.toThrow('Catalogue unavailable');
+  expect(requireCurrent).toThrow('watch unavailable');
+  const held = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(held.expiresAt).toBeNull();
+  expect(held.policyRevision).toBeGreaterThan(before.policyRevision);
+  const request = { method: 'POST', headers, body };
+  const refused = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
+  expect(refused.status).toBe(403);
+  expect(setup.received()).toBe(0);
+  await setup.runner.initialise(mcpCatalogue);
+  await setup.runner.run(mcpCatalogue);
+  const unavailable = await readPublication(setup.db, 'test', 'fixture');
+  expect(unavailable).toMatchObject({ status: 'disabled' });
+  context.setUnavailable(false);
+  await restarted.check('fixture');
+  const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(recovered).toMatchObject({ published: true, driftHeld: false,
+    configurationObservation: before.configurationObservation });
+  expect(recovered.policyRevision).toBeGreaterThan(before.policyRevision);
+  expect(requireCurrent).not.toThrow();
+  const value = await permit(setup, headers);
+  expect((await send(setup, value)).status).toBe(200);
+  await verifyCatalogueRecoveryReplay(setup);
+  const status = await readPublication(setup.db, 'test', 'fixture');
+  expect(status).toMatchObject({ status: 'ready', changeRef: 'publish-watch-restart' });
+}
+it('recovers acknowledged publication after a failed restart check without changing tools',
+  recoversPublicationAfterFailedCheck, 60_000);
+
+async function holdsChangedToolsAfterWatchRestart(revert: boolean) {
+  const context = await publishedWatchFixture();
+  const { setup, headers, before, restarted, requireCurrent } = context;
+  const added = toolEvidence({ name: 'unreviewed', reviewed: false, costCents: 0 });
+  const changed = { ...before.catalogue!, ...catalogueEvidence([tool, added]) };
+  context.setCapture(changed);
+  await restarted.check('fixture');
+  const held = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(held).toMatchObject({ published: false, driftHeld: true,
+    previousCatalogue: before.catalogue, catalogue: changed });
+  expect(held.configurationObservation).toBeUndefined();
+  expect(held.tools).toContainEqual({ name: 'unreviewed', revision: added.revision,
+    reviewed: false, costCents: 0, mode: 'block', readOnly: false, suggestion: 'ask' });
+  context.setUnavailable(true);
+  await expect(restarted.check('fixture')).rejects.toThrow('Catalogue unavailable');
+  context.setUnavailable(false);
+  if (revert) {
+    context.setCapture(before.catalogue!);
+  }
+  await restarted.check('fixture');
+  expect(requireCurrent).toThrow('watch unavailable');
+  const stillHeld = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(stillHeld).toMatchObject({ published: false, driftHeld: true });
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
+  expect(response.status).toBe(403);
+  expect(setup.received()).toBe(0);
+  await verifyCatalogueRecoveryReplay(setup, 0);
+}
+it.each([false, true])(
+  'holds changed unreviewed tools after restart and later recovery (reverted %s)',
+  holdsChangedToolsAfterWatchRestart, 60_000);
+
+
+async function endsAcknowledgedApprovalAfterCheckFailure() {
+  const context = await publishedWatchFixture('ask');
+  const { setup, headers, restarted } = context;
+  await restarted.check('fixture');
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
+  const answer = z.object({ approvalId: z.string() }).parse(await response.json());
+  const current = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  async function fresh() {}
+  const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
+    'alice', 'approved', true, fresh, current, setup.actor.now());
+  expect(result.status).toBe('appended');
+  context.setUnavailable(true);
+  await expect(restarted.check('fixture')).rejects.toThrow('Catalogue unavailable');
+  context.setUnavailable(false);
+  await restarted.check('fixture');
+  const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(recovered.published).toBe(true);
+  const ended = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  expect(ended).toMatchObject({ state: 'cancelled', canRetry: false });
+  const refused = await approvalPermit(setup, headers, answer.approvalId);
+  expect(refused.headers.get('x-opencrane-mcp-permit')).toBeNull();
+  expect(setup.received()).toBe(0);
+}
+it('keeps old approvals ended when acknowledged publication recovers',
+  endsAcknowledgedApprovalAfterCheckFailure, 60_000);
+
+async function recordsExpiredEvidenceBeforeRestartRenewal() {
+  const context = await publishedWatchFixture();
+  const { setup, before, restarted, requireCurrent } = context;
+  const checkedAt = new Date(Date.now() - 2000).toISOString();
+  const expiresAt = new Date(Date.now() - 1000).toISOString();
+  const expired = { serverId: 'fixture', outcome: 'unchanged',
+    schemaDigest: before.catalogue!.schemaDigest, checkedAt, expiresAt };
+  await setup.append('mcp-fixture', 'mcp.catalogue_checked', expired);
+  const position = await setup.nats.store.head('mcp-fixture');
+  await restarted.check('fixture');
+  const saved = await history(setup.nats.store, 'mcp-fixture', 'test');
+  function afterExpiry(row: StoredEvent) {
+    return row.sequence > position;
+  }
+  const renewal = saved.filter(afterExpiry);
+  expect(renewal).toHaveLength(2);
+  expect(renewal[0]!.event).toMatchObject({ type: 'mcp.catalogue_checked',
+    data: { outcome: 'failed' } });
+  expect(renewal[1]!.event).toMatchObject({ type: 'mcp.catalogue_checked',
+    data: { outcome: 'unchanged' } });
+  const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(recovered.published).toBe(true);
+  expect(recovered.policyRevision).toBeGreaterThan(before.policyRevision);
+  expect(requireCurrent).not.toThrow();
+}
+it('records expired evidence before saving successful restart renewal',
+  recordsExpiredEvidenceBeforeRestartRenewal, 60_000);
+
+
+async function verifyCatalogueRecoveryReplay(setup: Fixture, received = 1) {
+  await setup.stopDispatch();
+  await setup.runtime.stop();
+  await setup.decisionDown();
+  await setup.runner.initialise(mcpCatalogue);
+  await setup.runner.run(mcpCatalogue);
+  const before = await readPublication(setup.db, 'test', 'fixture');
+  const position = await setup.nats.store.head();
+  const logger = createLogger('catalogue-recovery', { level: 'silent' });
+  const options = { verify: true };
+  await rebuildMcpCatalogueProjection(setup.db, setup.nats.reader, logger, options);
+  const after = await readPublication(setup.db, 'test', 'fixture');
+  expect(after).toEqual(before);
+  expect(await setup.nats.store.head()).toBe(position);
+  expect(setup.received()).toBe(received);
+}

@@ -35,7 +35,7 @@ to handle AI calls.
 flowchart LR
   models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews and approval details, takeover cancellation, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
-  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
+  models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -432,11 +432,13 @@ Registration grants no access and starts no image checks.
 
 The catalogue watch starts with calls paused and reads the tool list again. The models
 process uses its result before issuing a pass and immediately before sending a call.
+An unchanged successful read keeps the reviewed publication and its acknowledgement.
+A failed check pauses calls until fresh evidence arrives; it does not invent a tool change.
 Failed checks and expired evidence end old approvals. Changed definitions keep the server paused,
 even if saving the change fails. Descriptions remain untrusted tool data.
 
-A saved catalogue change holds every tool on that server. New reviews and legacy
-publication cannot restore calls yet. A failed catalogue check ends old approvals,
+A saved catalogue change holds every tool on that server until its reviewed publication
+is acknowledged by the running gateway. A failed catalogue check ends old approvals,
 even if a later check succeeds before the approval is read.
 
 An internal child admission saves a checked parent and model scope. Competing servers

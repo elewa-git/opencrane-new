@@ -1,0 +1,1 @@
+- Keep reviewed tool publication after a models restart or a failed check when a fresh read confirms unchanged definitions. Preserve the gateway acknowledgement without restoring ended approvals. Real tool changes still pause calls for review, and the browser no longer describes an unavailable check as changed tools.

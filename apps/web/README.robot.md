@@ -166,7 +166,9 @@ clears the register and detail page before showing the shared access-lost messag
 `/org/integrations/<id>/changes` uses the detail page's two reads and refresh handling.
 It accepts ids matching `[\w-]{1,200}`. The policy's saved catalogue snapshots supply
 added, removed, schema-changed and details-changed rows. Missing or equal snapshots show
-no counts and block review because the page cannot show a complete comparison. A missing
+no counts and block review because the page cannot show a complete comparison. A hold
+alone does not mean tools changed: the banner and facts say so only when the saved
+snapshots have different catalogue digests. An unavailable check stays labelled as paused. A missing
 or invalid saved definition also blocks review. Each available full definition is shown
 in an expandable, escaped view beside the short comparison. Descriptions
 are limited to 300 characters; changed input fields show their types and limits, with at

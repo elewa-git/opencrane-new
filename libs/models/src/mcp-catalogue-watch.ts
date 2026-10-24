@@ -130,7 +130,11 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     const deadline = performance.now() + timeoutMs;
     await options.requireLeader();
     let policy = await readToolPolicy(store, silo, serverId, deadline);
-    let invalidated = state.held;
+    // Keep startup closed until a real capture succeeds, without inventing a failed check.
+    let invalidated = state.held && state.checkedAt > 0;
+    if (state.checkedAt === 0) {
+      state.expiresAt = Date.parse(policy.expiresAt ?? '1970-01-01T00:00:00.000Z');
+    }
     if (invalidated) {
       signal.throwIfAborted();
       await saveFailure(serverId, signal);
@@ -140,15 +144,17 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     signal.throwIfAborted();
     const captured = await options.capture(serverId, signal);
     signal.throwIfAborted();
-    if (Buffer.byteLength(JSON.stringify(captured)) > 900 * 1024) {
-      throw new Error('Catalogue inventory limit');
+    const catalogue = checkedCapture(captured, serverId, policy);
+    // End approvals from expired startup evidence before saving a successful renewal.
+    // Wait for the real capture first, so startup itself is never recorded as a failure.
+    if (state.checkedAt === 0 && state.expiresAt <= Date.now()) {
+      await saveFailure(serverId, signal);
+      policy = await readToolPolicy(store, silo, serverId, deadline);
+      if (!policy.catalogue) {
+        throw new Error('Saved catalogue unavailable');
+      }
+      invalidated = true;
     }
-    const catalogue = mcpServerDiscoveredDataSchema.parse(captured);
-    if (catalogue.serverId !== serverId || catalogue.connectionId !== policy.connectionId ||
-        catalogue.accountMode !== policy.accountMode || !catalogue.checkedAt || !catalogue.expiresAt) {
-      throw new Error('Captured catalogue identity mismatch');
-    }
-    validateMcpCatalogue(catalogue);
     const currentContract = revisionContract(catalogue.discoverResult);
     const savedContract = revisionContract(policy.catalogue.discoverResult);
     // Save withdrawn or changed dispatch promises even when every tool is identical.
@@ -229,6 +235,21 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     }
   }
   return { check, checkDue, nextCheckAt, reconcile, requireCurrent, close };
+}
+
+
+function checkedCapture(captured: Catalogue, serverId: string,
+  policy: Awaited<ReturnType<typeof readToolPolicy>>) {
+  if (Buffer.byteLength(JSON.stringify(captured)) > 900 * 1024) {
+    throw new Error('Catalogue inventory limit');
+  }
+  const catalogue = mcpServerDiscoveredDataSchema.parse(captured);
+  if (catalogue.serverId !== serverId || catalogue.connectionId !== policy.connectionId ||
+      catalogue.accountMode !== policy.accountMode || !catalogue.checkedAt || !catalogue.expiresAt) {
+    throw new Error('Captured catalogue identity mismatch');
+  }
+  validateMcpCatalogue(catalogue);
+  return catalogue;
 }
 
 function refreshWatchState(state: ReturnType<typeof newWatch>,
