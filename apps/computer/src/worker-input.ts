@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import { takeWorkerInput, type workerRequest } from './worker-request.ts';
 
-type Entry = { path: string; descriptor: number; identity: fs.Stats };
+type OwnedEntry = { path: string; descriptor?: number; identity: fs.Stats };
+type Entry = OwnedEntry & { descriptor: number };
 const directoryFlags = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
 
 function sameIdentity(first: fs.Stats, second: fs.Stats | undefined) {
@@ -28,8 +29,11 @@ function checkParent(entry: Entry, privateParent: boolean) {
   }
 }
 
-function checkEntries(entries: Entry[]) {
+function checkEntries(entries: OwnedEntry[]) {
   for (const entry of entries) {
+    if (entry.descriptor === undefined) {
+      throw new Error();
+    }
     const current = fs.lstatSync(entry.path, { throwIfNoEntry: false });
     const opened = fs.fstatSync(entry.descriptor);
     if (opened.uid !== entry.identity.uid || opened.gid !== entry.identity.gid ||
@@ -70,18 +74,25 @@ function unsafePart(part: string) {
   return part === '' || part === '.' || part === '..';
 }
 
-function createDirectory(parent: Entry, name: string, owned: Entry[]) {
+function createDirectory(parent: Entry, name: string, owned: OwnedEntry[]) {
   const path = `/proc/self/fd/${parent.descriptor}/${name}`;
   fs.mkdirSync(path, { mode: 0o700 });
   const before = fs.lstatSync(path);
+  // Record the created identity before opening, so an open failure can still remove it.
+  const created: OwnedEntry = { path, identity: before };
+  owned.push(created);
   const descriptor = fs.openSync(path, directoryFlags);
-  const entry = checkedEntry(path, descriptor, before);
-  owned.push(entry);
+  created.descriptor = descriptor;
+  const identity = fs.fstatSync(descriptor);
+  if (!sameIdentity(before, identity)) {
+    throw new Error();
+  }
+  const entry = { path, descriptor, identity };
   checkParent(entry, true);
   return entry;
 }
 
-function createFile(parent: Entry, name: string, bytes: string, owned: Entry[]) {
+function createFile(parent: Entry, name: string, bytes: string, owned: OwnedEntry[]) {
   const path = `/proc/self/fd/${parent.descriptor}/${name}`;
   const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT |
     fs.constants.O_EXCL | fs.constants.O_NOFOLLOW;
@@ -97,13 +108,15 @@ function createFile(parent: Entry, name: string, bytes: string, owned: Entry[]) 
   checkEntries(owned);
 }
 
-function closeEntries(entries: Entry[]) {
+function closeEntries(entries: OwnedEntry[]) {
   for (const entry of entries.reverse()) {
-    fs.closeSync(entry.descriptor);
+    if (entry.descriptor !== undefined) {
+      fs.closeSync(entry.descriptor);
+    }
   }
 }
 
-function removeOwned(owned: Entry[]) {
+function removeOwned(owned: OwnedEntry[]) {
   let failed = false;
   // Keep descriptors open until all removals finish, so inode numbers cannot be reused.
   // Never recurse into a directory or follow a replacement link during cleanup.
@@ -131,7 +144,7 @@ function removeOwned(owned: Entry[]) {
 // Prepare files only. A future launcher must still isolate its runtime and enforce limits.
 export function prepareWorkerInput(plan: ReturnType<typeof workerRequest>, parentPath: string) {
   const parents: Entry[] = [];
-  const owned: Entry[] = [];
+  const owned: OwnedEntry[] = [];
   let closed = false;
   function cleanup() {
     if (closed) {

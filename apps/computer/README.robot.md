@@ -1444,7 +1444,9 @@ These paths describe a future isolated root; no command runs against them yet.
 
 Each child is opened through its checked parent's descriptor. Identity checks compare
 device and inode numbers and reject replaced links or changed ownership and permissions. Files must have one hard link.
-Descriptors stay open until cleanup finishes, preventing inode reuse. Cleanup visits
+New directories are recorded before opening them, so an open failure still removes
+the created directory if its identity matches. Acquired descriptors stay open until
+cleanup finishes, preventing inode reuse. Cleanup visits
 only recorded entries, never recursively follows a tree, and skips replaced names.
 It can empty an owned directory that was renamed but cannot remove its new name.
 Unowned additions remain; a directory that cannot be removed reports a fixed cleanup
@@ -1454,7 +1456,9 @@ The caller must call the returned `cleanup()` when finished; repeated cleanup is
 `worker-input.test.ts` covers checked npm bytes, empty Git locations, copied/reused plans,
 unsafe parents, traversal, existing roots, replacement links, partial writes and two
 operations with replaced directories. Filesystem observers force races on real temporary
-files. They do not prove protection against a hostile process with the supervisor's UID.
+files. Injected `EMFILE` failures cover opening the operation root and `tmp` after
+creation, and preserve a replacement directory when opening fails. They do not prove
+protection against a hostile process with the supervisor's UID.
 The existing executor refusal and UID 1001 socket-denial regression remains unchanged.
 Native delivery, worker runtime installation, chroot, quotas, scanning, publication,
 CONNECT and fresh gVisor qualification remain unbuilt or NOT RUN in this slice.

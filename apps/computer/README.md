@@ -47,6 +47,7 @@ flowchart LR
   permission. Expiry also removes permission, and restarting restores none.
   Prepares checked package files or empty Git folders in a private directory.
   Each plan can prepare files only once, and cleanup removes only its own files.
+  Cleanup also removes newly created folders if opening them fails.
   Network execution stays disabled until the call's identity and isolation are proved.
 - Checks the image's licences before publishing it.
 
