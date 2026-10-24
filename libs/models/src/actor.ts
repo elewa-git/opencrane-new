@@ -86,11 +86,16 @@ export class BudgetActor {
       command.expectedSequence = this.sequence;
       result = await this.store.append(command);
     }
-    if (result.status === 'unavailable' && result.notPublished) {
-      // Refuse this request without stopping an unchanged writer when no publish began.
-      throw new Error('Budget append unavailable', { cause: result.cause });
+    if (result.status === 'rejected') {
+      // Refuse only this command. Exact duplicates already return their saved append result.
+      throw new Error(`Budget append rejected: ${result.reason}`);
     }
-    if (result.status !== 'appended') {
+    if (result.status === 'unavailable') {
+      if (result.notPublished) {
+        // Refuse this request without stopping an unchanged writer when no publish began.
+        throw new Error('Budget append unavailable', { cause: result.cause });
+      }
+      // Stop when a lost reply leaves the saved budget position uncertain.
       this.failed = true;
       throw new Error('Budget writer lost its fence');
     }

@@ -22,7 +22,9 @@ This keeps an approved retry usable after the permissions service recovers.
 Changed permissions, an expired check or another budget writer still stops the call.
 If the event store confirms that it never began sending the write, only that call
 fails. The budget writer remains available. A lost reply still stops the writer
-because the budget may have changed.
+because the budget may have changed. Repeating the same saved command returns its
+earlier result. An id used by a different command refuses only the new command,
+so later valid budget writes can continue.
 
 A saved takeover ends unused approvals for the same computer generation and turn.
 Reading saves each cancellation once. HTTP decisions defer that save until the server
@@ -53,7 +55,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks write outcomes, spending choices, child allowances and payer limits; rechecks state and access when unrelated activity interrupts startup saves; rechecks access and the saved budget position on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
+  models -->|checks write outcomes and repeated commands, spending choices, child allowances and payer limits; rechecks state and access when unrelated activity interrupts startup saves; rechecks access and the saved budget position on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also

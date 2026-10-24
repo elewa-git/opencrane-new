@@ -24,6 +24,15 @@ input, conflict-read failure, contention, switch-on refusal and access expiry ou
 the store already throw without setting `failed`. Another budget event, a foreign
 row or an uncertain append result still stops the writer.
 
+A definite `rejected` result refuses only that command, for both `invalid_event`
+and `duplicate_id`, after either the first append or a conflict retry. Exact
+duplicates return the earlier saved result. The store returns `duplicate_id` only
+when the id belongs to a different command; it never applies that command as a
+budget change. Tests cover collisions with member events before the first append
+and during a repeated append, followed by a successful reservation. They also
+cover store validation refusal, conflict-read errors, thrown append errors and
+contention without an access callback. None permanently stops the writer.
+
 The HTTPS tool dispatcher saves its attempt before budget admission. If admission
 refuses, it closes that confirmed attempt with `adapter_dispatch_refused` before
 replying. No connection has opened. Approval recovery accepts that durable proof,

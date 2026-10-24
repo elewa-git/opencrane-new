@@ -1096,3 +1096,50 @@ async function keepsWriterAfterStoreRejection() {
 }
 it('keeps the writer usable after the store rejects an invalid event',
   keepsWriterAfterStoreRejection);
+
+async function keepsWriterAfterAppendException(boundary: string) {
+  const before = await nats.store.head('budget-test');
+  const writes = vi.spyOn(nats.store, 'append');
+  const reads = vi.spyOn(nats.store, 'readStream');
+  onTestFinished(writes.mockRestore.bind(writes));
+  onTestFinished(reads.mockRestore.bind(reads));
+  let message = 'Budget append contention';
+  if (boundary === 'publish error') {
+    message = 'Event append failed';
+    writes.mockRejectedValueOnce(new Error(message));
+  } else {
+    writes.mockResolvedValueOnce({ status: 'conflict' });
+    if (boundary === 'read error') {
+      message = 'Budget history unavailable';
+      function failedRead(): ReturnType<typeof nats.store.readStream> {
+        throw new Error(message);
+      }
+      reads.mockImplementationOnce(failedRead);
+    }
+  }
+  await expect(reserve()).rejects.toThrow(message);
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.reservations).toHaveLength(0);
+  await reserve();
+  expect(actor.state.reservations).toHaveLength(1);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+}
+it.each(['publish error', 'read error', 'unchecked contention'])(
+  'keeps the writer usable after a request ends with %s', keepsWriterAfterAppendException);
+
+async function keepsWriterAfterExactDuplicate() {
+  const payload = {
+    scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',
+  };
+  const original = await actor.configure(payload, 'same-budget-command');
+  expect(original).toMatchObject({ status: 'appended' });
+  const before = await nats.store.head('budget-test');
+  expect(await actor.configure(payload, 'same-budget-command')).toEqual(original);
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.ceilingCents).toBe(200);
+  await reserve();
+  expect(actor.state.reservations).toHaveLength(1);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+}
+it('returns the earlier result for an exact duplicate and keeps the writer usable',
+  keepsWriterAfterExactDuplicate);
