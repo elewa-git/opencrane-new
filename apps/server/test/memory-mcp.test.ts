@@ -3154,3 +3154,32 @@ const loadedReceiptCases = [
 ] as const;
 it.each(loadedReceiptCases)(
   'prepares loaded receipts before gateway %s access (another scope=%s)', gatewayLoadedReceipts);
+
+async function rejectsInvalidPreparationReply(status: number, responseBody: object) {
+  const originalFetch = globalThis.fetch;
+  async function fetchPreparation(input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1]) {
+    if (String(input).endsWith(`${route}/prepare`)) {
+      return new Response(JSON.stringify(responseBody), { status });
+    }
+    return originalFetch(input, init);
+  }
+  const requests = vi.spyOn(globalThis, 'fetch').mockImplementation(fetchPreparation);
+  try {
+    await expect(signedRecall(setup)).rejects.toThrow();
+  } finally {
+    requests.mockRestore();
+  }
+}
+const invalidPreparationReplies = [
+  [403, { preparationId: '11111111-1111-4111-8111-111111111111', inputGeneration: 'input' }],
+  [200, { status: 'refused' }],
+] as const;
+it.each(invalidPreparationReplies)(
+  'rejects an invalid preparation reply with HTTP %s before signing', rejectsInvalidPreparationReply);
+
+async function reportsPreparationRefusal() {
+  await mode(setup, 'block');
+  await expect(signedRecall(setup)).rejects.toThrow('Memory preparation refused (403)');
+}
+it('reports a refused preparation before signing a recall pass', reportsPreparationRefusal);
