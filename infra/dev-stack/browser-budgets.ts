@@ -160,7 +160,8 @@ async function readEditorState(owner: Page) {
     accessChanged: accessChangedVisible, spendingLoaded };
 }
 
-async function loadBudgetEditor(owner: Page, origin: string): Promise<Locator> {
+export async function loadBudgetEditor(owner: Page, origin: string,
+  captureDirectory = directory): Promise<Locator> {
   const budgetReadStatuses: number[] = [];
   const effectReadStatuses: number[] = [];
   function recordResponse(response: Response) {
@@ -181,16 +182,23 @@ async function loadBudgetEditor(owner: Page, origin: string): Promise<Locator> {
     return budgetScope;
   } catch {
     // Keep the failed page's replies, rather than making new reads after the failure.
-    // Record fixed states only; page pictures and text can contain personal data.
     const editorState = await readEditorState(owner);
     const evidence = JSON.stringify({ budgetReadStatuses, effectReadStatuses, editorState });
-    const record = writeFile(`${directory}/budget-editor-failure.log`, evidence, { mode: 0o600 });
-    await Promise.allSettled([record]);
+    const record = writeFile(`${captureDirectory}/budget-editor-failure.log`, evidence,
+      { mode: 0o600 });
+    const capture = captureBudgetEditorFailure(owner, captureDirectory);
+    await Promise.allSettled([record, capture]);
     // Exclude browser errors because they can contain request or page contents.
     throw new Error('Spending budget editor did not load; inspect private evidence');
   } finally {
     owner.off('response', recordResponse);
   }
+}
+
+async function captureBudgetEditorFailure(owner: Page, captureDirectory: string): Promise<void> {
+  // Keep page contents private, alongside the stack's other failure pictures.
+  const picture = await owner.screenshot({ fullPage: true });
+  await writeFile(`${captureDirectory}/budget-editor-failure.png`, picture, { mode: 0o600 });
 }
 
 async function restoreBudgetCeiling(owner: Page, origin: string, store: EventStore,

@@ -27,6 +27,18 @@ The JSON report includes files whose existing tests are skipped. This check prov
 file selection, not execution of opt-in journeys. Angular tests and infrastructure
 checks keep their separate steps in the checks job.
 
+`dev-stack-tests.test.mjs` discovers every `.test.ts`, `.test.mjs` and `.test.js`
+file under `infra/dev-stack/`, including subfolders. It checks literal file paths
+in the workflow's Node test commands. Missing files fail with their paths.
+Its `excludedTests` object holds any exclusions and their reasons; it is empty.
+The check rejects empty reasons, removed files and exclusions that also run in CI.
+Computed paths and shell globs are not counted as explicit test selection.
+
+The checks job reuses its installed Chromium for `browser-budget-editor.test.ts`
+and `browser-ownership.test.ts`, with `--test-concurrency=1`. The budget editor
+test builds the website once for both of its tests. Other infrastructure tests
+keep their existing concurrency. No extra job or browser installation is added.
+
 Each job writes `.tools/ci/report.json` and `.tools/ci/files-<group>.json`.
 Only the file lists are uploaded on pull requests. Main pushes also retain full
 reports for seven days. The refresh command below rebuilds timing estimates from these reports.

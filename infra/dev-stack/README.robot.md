@@ -137,9 +137,11 @@ It also records whether the Budget scope control, budget-service warning, access
 warning and Spending loaded notice are visible. Each value is `true` or `false`, or
 `null` if the browser cannot inspect that part of the page.
 
-The record contains fixed keys, status codes and these visibility values. It excludes
-screenshots, URLs, response contents, page text, input values and driver errors, which
-could contain secrets or personal data. It uses owner-only file permissions. The
+The log contains fixed keys, status codes and these visibility values. It excludes
+URLs, response contents, page text, input values and driver errors, which could contain
+secrets or personal data. A separate `budget-editor-failure.png` now keeps a picture
+of the failed page. Both files use owner-only permissions. The picture stays with the
+stack’s other private failure pictures; it must be checked before sharing. The
 nightly launcher's existing log retention keeps it before removing the stack.
 The browser adds no HTTP reads, refreshes, write retries or longer waits. Reading
 visibility does not wait for the page to recover. The journey still fails before Save.
@@ -148,9 +150,38 @@ The original failing-first tests proved missing failure evidence, **not the orig
 fresh-start defect**. The tests copy the real journey into a temporary fixture directory
 so they cannot touch a running stack's files. They check an unavailable read, an access
 refusal and a successful HTTP read followed by a missing editor. They also check that
-unreadable page states do not lose the status codes, that no screenshot is taken, that
-non-GET and unrelated URL responses are excluded, and that effects responses are kept
-separately in arrival order. Money, company limits and access checks are unchanged.
+unreadable page states do not lose the status codes, that private pictures are saved,
+that non-GET and unrelated URL responses are excluded, and that effects responses are
+kept separately in arrival order. A failed picture cannot replace the original load
+failure or prevent its log from being saved. Money, company limits and access checks
+are unchanged.
+
+### Stack-free checks, 24 October 2026
+
+Part of #574. The fourth baseline failure on `work/demo-stage-b-local-live` had no
+captured budget or effects HTTP response. Its page showed Budget service unavailable.
+Later reads and saves returned 200. Those later responses do not explain the failure.
+
+`browser-budget-editor.test.ts` builds the real website and intercepts its APIs in
+Chromium. It checks correction after a refused save, repeated scoped saves at 1280px
+and 390px, and the final paying-group, assistant and global saves. A forced connection
+reset checks that the real failure picture is a private PNG. That reset produces the
+same recorded states as the baseline, but it does not prove that a connection reset
+caused the live failure. The test adds no dev stack or database. It does not run
+member turns, server access checks or projections.
+
+CI runs this browser file in the checks job, after Chromium installation, with
+one test worker. The CI grouping check rejects any dev-stack test file missing
+from the workflow's Node test commands unless it has an exclusion with a reason.
+
+An exploratory run also passed 60 page loads and 120 save attempts, including a
+refusal and correction on every page. The original failure did not recur. Its cause
+remains unproved. Reproducing the exact baseline now needs a live stack; no live stack
+was started for this investigation. These checks do not qualify a fresh installation.
+
+```sh
+nice -n 10 node --experimental-strip-types --test infra/dev-stack/browser-budgets.test.ts infra/dev-stack/browser-budget-editor.test.ts
+```
 
 ### Qualification and local checks
 
