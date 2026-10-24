@@ -26,8 +26,9 @@ Owners and admins can read safe admission, removal, role and ownership change de
 The server checks receipts for the exact saved change before showing its progress, then checks current access.
 It still checks access when loading fails, so errors do not reveal protected records.
 Admission history keeps each join separate, including when a person returns.
-Spending history identifies the person whose resolution was saved and the chosen
-amount, separately from observations and budget settlement. A saved resolution does not prove a released hold.
+Owners and admins can see who saved a spending resolution and the chosen amount,
+separately from observations and budget settlement. A saved resolution does not prove a released hold.
+Conversation history keeps execution outcomes but omits resolution records and money amounts.
 Removal progress covers permissions and the member list. It does not report departure cleanup.
 
 Approval decisions check ownership and current write access before saving a cancellation.
@@ -60,7 +61,7 @@ flowchart LR
   server -->|records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads conversations, spending by month, history, saved spending resolutions and exact membership receipts| postgres
+  server -->|reads conversations, spending by month, history, admin spending resolutions and exact membership receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
