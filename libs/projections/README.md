@@ -35,7 +35,7 @@ flowchart LR
   server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves role, ownership and control history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
-  server -.->|selects nightly memory inputs and reads unfinished child requests| projections
+  server -.->|reads tool readiness, nightly memory inputs and unfinished child requests| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads wrapped chat keys; repairs unfinished correction keys| keys["Server files<br/>private key store and package Secret"]
 ```
@@ -182,6 +182,11 @@ Closing a chat keeps that message position. Later reports and repeated closes ca
 these details. The reports remain in the feed so their saved evidence is available.
 
 ## Processes it handles
+
+A matching gateway confirmation makes a reviewed tool policy available, including
+its first publication. The tool list and publication status use the same availability
+check as chat. People and assistants still need their own access grants. Rebuilding
+the catalogue restores these saved decisions without sending tool calls.
 
 The routines worker copies saved definitions and runs into read tables. Instructions
 stay encrypted. Each run keeps its original owner, assistant and paying group after

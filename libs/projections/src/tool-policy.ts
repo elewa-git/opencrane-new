@@ -106,10 +106,9 @@ function applyConfigurationObservation(state: ToolPolicy, event: EventEnvelope,
   }
   const observed = { ...next, configurationObservation: receipt };
   const candidate = { ...observed, driftHeld: false, published: true };
-  // Restore only while this exact post-drift review still has fresh evidence.
-  // Limit this transition to restoring a saved hold.
-  if (state.driftHeld === true &&
-      isToolPolicyAvailable(candidate, Date.parse(event.time)) &&
+  // Enable the first publication and later replacements from the same checked receipt.
+  // Require fresh evidence both when the gateway observed it and when it was saved.
+  if (isToolPolicyAvailable(candidate, Date.parse(event.time)) &&
       isToolPolicyAvailable(candidate, Date.parse(receipt.observedAt))) {
     return candidate;
   }

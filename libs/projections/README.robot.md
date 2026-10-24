@@ -774,8 +774,8 @@ child creation still rebuilds its recorded participants and OpenFGA receipts.
 ### Acknowledged restoration (#48 PR 3c)
 
 A receipt must name the current publication intent's review as well as the current
-policy review. While drift is held, it restores publication only if the evidence is
-fresh at observation and event time. Old, duplicate and superseded receipts cannot
+policy review. It enables a first publication or restores a held publication only
+if the evidence is fresh at observation and event time. Old, duplicate and superseded receipts cannot
 restore a later drift. The existing delivery helper checks exact gateway generation
 and digests before writing this receipt. The fold does not probe a gateway during replay.
 A failed check holds intent-backed publication and advances the approval revision.
@@ -800,7 +800,8 @@ Catalogue rebuild and verification include the table and replace it atomically.
 Existing installations need a catalogue rebuild before status reads are available.
 
 `readPublication` uses one PostgreSQL snapshot for the policy and latest records.
-Ready requires the current generation, reviewed record and fragment digests, source
+Ready requires `isToolPolicyAvailable`, the same check used by the chat bridge,
+as well as the current generation, reviewed record and fragment digests, source
 position, process reference, configuration digest and observedAt to match. A later
 withdrawal is Disabled. Missing preparation or observation stays Applying. After
 30 seconds from the saved gateway request, missing observation or receipt is Unknown;
@@ -810,6 +811,18 @@ A rejected file has no saved rejection event: it remains at `observation/not_obs
 never a fabricated rejection diagnosis. GET never repairs or probes it.
 Replies contain only status, stage/reason, generation, changeRef, digests and safe dates.
 These are saved observations, not a new process health check or permission to call tools.
+The catalogue row also derives Ready from `isToolPolicyAvailable`; an earlier lifecycle
+label cannot hide a newly acknowledged policy. Both the person and assistant still need
+current grants when tools are offered or called.
+
+Existing installations affected by the first-publication defect need an MCP catalogue
+rebuild. Replaying the original matching receipt repairs the saved policy without
+creating a new publication or changing grants. The bridge continues to read current
+events and refuses an unpublished, withdrawn or changed policy even while the catalogue
+projection is behind. `apps/server/test/integration-publication.test.ts` covers the
+fresh order, replay, withdrawal, stale generations, expired evidence and both grant sides
+with real NATS, PostgreSQL, OpenFGA, gateway and WebSocket fixtures.
+Fresh-install live qualification after this correction remains NOT RUN.
 
 ## Reload approval revisions
 

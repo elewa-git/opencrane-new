@@ -216,9 +216,15 @@ function catalogueStatus(row: McpCatalogueRow, policy: ToolPolicy | null): Integ
   if (policy?.startupReviewRequired === true) {
     return catalogueRowStatus(row);
   }
+  // Derive readiness from the same saved policy the bridge reads.
+  // Receipt events need not rewrite the earlier registration and discovery facts.
+  const available = policy !== null && isToolPolicyAvailable(policy);
+  if (available) {
+    return status('published', row.changed_at);
+  }
   const missingDates = row.tool_count !== null && !policy?.checkedAt;
-  const stalePublication = row.lifecycle === 'published' &&
-    (!policy || !isToolPolicyAvailable(policy));
+  const wasPublished = row.lifecycle === 'published' || policy?.published === true;
+  const stalePublication = wasPublished && !available;
   if (missingDates || stalePublication) {
     return { kind: 'disabled', label: 'Unavailable', detail: 'No fresh tool catalogue check' };
   }
