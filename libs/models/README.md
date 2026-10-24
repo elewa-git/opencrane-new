@@ -501,6 +501,7 @@ Tests here also check conversation and delegation read tables against model even
 The cleanup retry test waits for its database lock and for the queue to record failure
 before checking that every attempt sent a delete request.
 Connection command tests also wait for their locks, except when checking lock contention.
+Scan tests wait for the scan to report each completed page.
 
 ```sh
 npm test -- libs/models

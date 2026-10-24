@@ -3095,6 +3095,8 @@ same failed original remains saved.
 The bearer connection fixture also waits for its real database lock. Its custody-error
 tests must reach custody before checking the refused save. The explicit contention test
 passes the production database adapter and keeps the 100 ms deadline.
+The scan fixture waits for the page-completion log callback. It has no separate polling
+deadline that can expire while a slow page is still running; the test timeout still applies.
 The mixed-page test uses two real NATS stores and retains the other silo's current copy
 without adding anything to the worker's store. Timer tests check the default at 899,999
 and 900,000 milliseconds and retry an unknown page after an intervening success.

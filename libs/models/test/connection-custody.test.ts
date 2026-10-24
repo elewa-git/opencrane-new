@@ -1480,8 +1480,11 @@ it('retains material when a saved revoke did not target the current revision',
 function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, intervalMs?: number) {
   const stop = new AbortController();
   const records: { counts: unknown; message: unknown }[] = [];
+  let pageCompleted = Promise.withResolvers<void>();
   function info(counts: unknown, message?: unknown) {
     records.push({ counts, message });
+    pageCompleted.resolve();
+    pageCompleted = Promise.withResolvers<void>();
   }
   const logger = { info };
   const done = scanConnections(events.store, test.db, test.store.restart(), logger,
@@ -1491,10 +1494,10 @@ function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, interva
     expect(await done).toBeUndefined();
   }
   async function pages(count = 1) {
-    function ready() {
-      return records.length >= count;
+    // Wait for completed pages rather than a separate polling deadline under load.
+    while (records.length < count) {
+      await pageCompleted.promise;
     }
-    await until(ready);
   }
   return { stop, done, records, close, pages };
 }
