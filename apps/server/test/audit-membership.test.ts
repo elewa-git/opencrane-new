@@ -102,6 +102,10 @@ const role = saved('member.role_changed', 'role', {
 const removal = saved('member.removed', 'removal', {
   memberId: 'member', removedBy: 'owner', reason: 'access_removed',
 });
+const joined = saved('member.joined', 'joined', {
+  memberId: 'member', role: 'member', invitationId: 'original-invitation',
+  email: `${canary}@example.test`, displayName: canary,
+}, `${canary}-sso-subject`);
 const intent = saved('ownership.transferred', 'intent', {
   memberId: 'member', transferredBy: 'owner', awaitingConfirmation: true,
 });
@@ -573,3 +577,32 @@ async function removalPaging() {
   expect(appends).not.toHaveBeenCalled();
 }
 it('keeps removal detail pages bounded without repeating or skipping records', removalPaging);
+
+async function joinMetadata() {
+  const fresh = saved('member.joined', 'fresh-join', {
+    memberId: 'member', role: 'admin', invitationId: 'fresh-invitation',
+    email: `${canary}@example.test`, displayName: canary,
+  }, `${canary}-sso-subject`);
+  fresh.time = '2026-10-04T02:03:04Z';
+  await append(joined);
+  await append(removal);
+  await append(fresh);
+  await runner.run(auditTrail);
+  for (const [event, invitationId, role] of [
+    [joined, 'original-invitation', 'member'], [fresh, 'fresh-invitation', 'admin'],
+  ] as const) {
+    const record = await detail(event.id);
+    const hash = createHash('sha256');
+    hash.update(event.commandId!);
+    expect(record).toMatchObject({ eventId: event.id, type: 'member.joined',
+      operation: 'join', memberId: 'member', role, invitationId,
+      recordedAt: event.time, commandRef: hash.digest('hex'),
+      actor: { kind: 'unverified' }, source: 'authoritative', status: 'recorded' });
+  }
+  const before = await readAudit(db, 'test');
+  const appends = vi.spyOn(nats.store, 'append');
+  await rebuildAuditProjection(db, nats.store, logger, { verify: true });
+  expect(await readAudit(db, 'test')).toEqual(before);
+  expect(appends).not.toHaveBeenCalled();
+}
+it('retains each original and fresh join with its own safe metadata through replay', joinMetadata);
