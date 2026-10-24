@@ -184,6 +184,13 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions,
     return permit;
   }
 
+  async function prepareTarget(route: Route, deadline: number) {
+    if (!route.locator) return;
+    const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
+    const signal = AbortSignal.timeout(duration);
+    return prepareRemote(route.locator, options?.remoteNetwork ?? {}, signal);
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse, body: string) {
     const startedAt = performance.now();
     const permit = consume(req, body);
@@ -194,12 +201,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions,
       const route = requireCurrentRoute(permit);
       const remaining = Math.max(0, permit.expiresAt - Date.now());
       const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
-      let target: Awaited<ReturnType<typeof prepareRemote>> | undefined;
-      if (route.locator) {
-        const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
-        const signal = AbortSignal.timeout(duration);
-        target = await prepareRemote(route.locator, options?.remoteNetwork ?? {}, signal);
-      }
+      const target = await prepareTarget(route, deadline);
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
         acknowledged, deadline);
       stage = 'catalogue';

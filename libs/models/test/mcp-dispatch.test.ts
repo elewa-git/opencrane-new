@@ -3296,11 +3296,12 @@ async function logsPrivateAdmissionRefusal(known: boolean) {
   expect(setup.received()).toBe(0);
   expect(lines).toHaveLength(1);
   const reason = known ? 'budget_writer_replaced' : 'decision_unavailable';
-  const diagnostic = JSON.parse(lines[0]!);
+  const diagnostic: unknown = JSON.parse(lines[0]!);
   expect(diagnostic).toMatchObject({ msg: 'MCP dispatch refused',
     stage: 'budget_admission', reason });
   expect(diagnostic).toHaveProperty('requestId');
-  expect(diagnostic.elapsedMs).toBeGreaterThanOrEqual(0);
+  const timing = z.object({ elapsedMs: z.number() }).parse(diagnostic);
+  expect(timing.elapsedMs).toBeGreaterThanOrEqual(0);
   expect(lines[0]).not.toContain(canary);
   expect(lines[0]).not.toContain(value);
   expect(lines[0]).not.toContain('stack');

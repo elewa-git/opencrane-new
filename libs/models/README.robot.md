@@ -5,25 +5,33 @@ For people, read [README.md](README.md) first.
 ## Budget append conflicts after unrelated events
 
 `BudgetActor.append` uses a global event position when a caller supplies an access
-check. A competing approval refusal can move that position while the budget stream
-stays unchanged. Previously, this conflict stopped the writer and left the approved
-retry consumed without a send. Ignoring configuration probes alone did not cover it.
+check. Any unrelated event can move that position while the budget stays unchanged.
+After every conflict, the actor reads budget events after its saved position. It
+repeats only after finding no budget change and checking the original access again.
+The event id, expected budget position and global publish condition stay the same.
+Conflict reads and checked publishes use the caller's original deadline. Repeated
+conflicts cannot extend that deadline or permanently stop an unchanged writer.
+A real budget change still stops the old writer. Managed-provider switch-on keeps
+its existing special handling.
 
-After a conflict, the actor reads budget events after its saved position. It can
-repeat once if that position is unchanged and an access check is present. It reruns
-the same access check before and inside the conditional append. The event id,
-expected budget position, global publish condition and original access deadline
-stay in force. The existing managed-provider switch-on recovery is preserved.
-A second conflict still stops the writer. Another writer's budget event still stops it.
-[Own checks and every full-file run](../../docs/process/evidence/ci-flakes-11.md).
+The HTTPS tool dispatcher saves its attempt before budget admission. If admission
+refuses, it closes that confirmed attempt with `adapter_dispatch_refused` before
+replying. No connection has opened. Approval recovery accepts that durable proof,
+then rechecks permission and allows one replacement use. A lost start reply remains
+uncertain. A generic HTTP 403 never proves that a call was unsent.
 
-`test/actor.test.ts` uses real NATS to move the global position during the append.
-It checks admission once, revoked access, expiry at 2,001 ms, and another writer.
-The original `apps/server/test/integration-access-gateway.test.ts` recovery case
-is unchanged. One retry must send and the other must be refused. The approval has
-exactly two uses including the earlier unsent attempt. The remote receives one
-request and no money is reserved. The investigation used an additional HTTP overlap
-case temporarily; the permanent controlled regression is at the public budget actor.
+Private dispatch warnings contain the saved request id, a fixed check-stage label,
+a fixed refusal reason and elapsed milliseconds. Raw exceptions, request bytes,
+permits and credentials are excluded. Public replies remain unchanged.
+
+`test/actor.test.ts` uses real NATS and the public `admitDispatch` method. Two unrelated
+member events interrupt consecutive publishes. The test requires one admission,
+continued writer use and the same two-second deadline on conflict reads and writes.
+It also checks revocation, expiry and another budget writer during the second conflict.
+`apps/server/test/integration-access-gateway.test.ts` checks approval recovery after
+refusal at budget admission and after a saved start. Competing retries must yield
+one send, one refusal and exactly two approval uses including the unsent attempt.
+[Own checks and retained earlier results](../../docs/process/evidence/ci-flakes-11.md).
 
 ## Custom tool continuations
 

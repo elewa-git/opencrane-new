@@ -4,15 +4,16 @@ For people, read [README.md](README.md) first.
 
 ## Approval retries and budget conflicts
 
-`integration-access-gateway.test.ts` retains its original IAM outage and recovery
-check. It requires one successful retry and one refusal, with one remote request,
-two approval uses including the earlier unsent start, and no money reserved.
-The correction is in `libs/models/src/actor.ts`.
+`integration-access-gateway.test.ts` checks IAM failure before budget admission as
+well as after a confirmed tool start. Both cases require one successful retry and
+one refusal, with one remote request, two approval uses including the unsent attempt,
+and no money reserved. It uses real NATS, PostgreSQL, OpenFGA, gateway and HTTPS fixtures.
 
-`libs/models/test/actor.test.ts` forces an unrelated event to save during a checked
-budget append, using real NATS. It retains refusal checks for changed access,
-expired access and another budget writer. The temporary HTTP overlap diagnostic
-and all repeat results are in [the investigation](../../docs/process/evidence/ci-flakes-11.md).
+`libs/models/test/actor.test.ts` forces two unrelated member events to interrupt
+consecutive checked budget publishes. It checks continued writer use, the unchanged
+two-second deadline, revoked access, expiry and a real budget change. The fixes live
+in `libs/models/src/actor.ts` and `libs/models/src/mcp-dispatch.ts`.
+[Own checks and retained earlier results](../../docs/process/evidence/ci-flakes-11.md).
 
 ## Takeover approval cancellation
 

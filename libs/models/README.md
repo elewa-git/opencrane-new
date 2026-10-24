@@ -17,7 +17,7 @@ The AI access and spending library for OpenCrane. Its running part is the models
 
 A competing call's saved refusal can interrupt a budget write. The writer checks
 that nobody has changed the budget, then checks the caller's permissions again
-before trying to save the same event once more. It keeps the original time limit.
+before each attempt to save the same event. It keeps the original time limit.
 This keeps an approved retry usable after the permissions service recovers.
 Changed permissions, an expired check or another budget writer still stops the call.
 
@@ -108,8 +108,10 @@ list and running instance before executing a call. The models process checks a o
 pass before sending the original request. Servers without this contract are refused.
 Before sending, it obtains one budget permission without holding money for a free tool.
 It then saves one admission record on the server's tool-rule stream.
-Block saved first refuses admission. For a publication with a saved configuration request,
-it checks the saved gateway configuration and tool rules before saving one start record.
+Block saved first refuses admission. For HTTPS tools, it saves the attempt before
+budget admission so a refused admission can also leave proof that nothing was sent.
+Other published tools save their start after checking the saved gateway configuration
+and tool rules.
 After saving, it queries IAM, the permissions service, again and rechecks access,
 the gateway acknowledgement and both saved positions. An IAM outage refuses the
 call before any remote bytes leave. After a confirmed saved start, a refusal records
