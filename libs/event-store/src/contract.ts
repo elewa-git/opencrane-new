@@ -35,7 +35,7 @@ export interface AppendCommand {
 export type AppendResult =
   | { status: "appended"; sequence: number }
   | { status: "conflict" }
-  | { status: "unavailable"; cause: unknown }
+  | { status: "unavailable"; cause: unknown; notPublished?: true }
   | { status: "rejected"; reason: "invalid_event" | "duplicate_id" };
 
 /** Events use names like member-alice; NATS changes that to ev.member.alice. */

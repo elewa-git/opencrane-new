@@ -20,6 +20,9 @@ that nobody has changed the budget, then checks the caller's permissions again
 before each attempt to save the same event. It keeps the original time limit.
 This keeps an approved retry usable after the permissions service recovers.
 Changed permissions, an expired check or another budget writer still stops the call.
+If the event store confirms that it never began sending the write, only that call
+fails. The budget writer remains available. A lost reply still stops the writer
+because the budget may have changed.
 
 A saved takeover ends unused approvals for the same computer generation and turn.
 Reading saves each cancellation once. HTTP decisions defer that save until the server
@@ -42,7 +45,7 @@ to handle AI calls.
 
 ```mermaid
 flowchart LR
-  models -.->|replay tests use the database helper| store
+  models -.->|checks write outcomes; replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending pages, own saved profiles and original change receipts, personal account choices, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models

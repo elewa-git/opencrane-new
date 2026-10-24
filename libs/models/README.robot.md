@@ -14,6 +14,16 @@ conflicts cannot extend that deadline or permanently stop an unchanged writer.
 A real budget change still stops the old writer. Managed-provider switch-on keeps
 its existing special handling.
 
+If the store reports `unavailable` with `notPublished: true`, the actor refuses that
+append without stopping the writer. The store sets this flag only if no publish
+started in that invocation. This also covers expiry before the first attempt and
+access refusal inside the store. An unavailable result without the flag still stops
+the actor, because a lost reply may hide a saved budget change.
+The actor checks this result after both initial and repeated appends. Invalid event
+input, conflict-read failure, contention, switch-on refusal and access expiry outside
+the store already throw without setting `failed`. Another budget event, a foreign
+row or an uncertain append result still stops the writer.
+
 The HTTPS tool dispatcher saves its attempt before budget admission. If admission
 refuses, it closes that confirmed attempt with `adapter_dispatch_refused` before
 replying. No connection has opened. Approval recovery accepts that durable proof,
@@ -28,6 +38,11 @@ permits and credentials are excluded. Public replies remain unchanged.
 member events interrupt consecutive publishes. The test requires one admission,
 continued writer use and the same two-second deadline on conflict reads and writes.
 It also checks revocation, expiry and another budget writer during the second conflict.
+The late-expiry case saves unrelated member events in access callbacks two and four.
+Callback six passes just before the original deadline; the store then sees expiry
+before publishing. No admission is saved and a later reservation succeeds.
+Lost-reply cases save that third publish but hide its reply, then expire or revoke
+access on the store's retry. They require one saved admission and a stopped writer.
 `apps/server/test/integration-access-gateway.test.ts` checks approval recovery after
 refusal at budget admission and after a saved start. Competing retries must yield
 one send, one refusal and exactly two approval uses including the unsent attempt.

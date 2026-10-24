@@ -85,6 +85,10 @@ export class BudgetActor {
       command.expectedSequence = this.sequence;
       result = await this.store.append(command);
     }
+    if (result.status === 'unavailable' && result.notPublished) {
+      // Refuse this request without stopping an unchanged writer when no publish began.
+      throw new Error('Budget append unavailable', { cause: result.cause });
+    }
     if (result.status !== 'appended') {
       this.failed = true;
       throw new Error('Budget writer lost its fence');

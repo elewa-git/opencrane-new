@@ -45,6 +45,14 @@ const streamName = "EVENTS";
 const requestMs = 250;
 const readMs = 1_000;
 const appendMs = 10_000;
+
+function unavailableAppend(cause: unknown, publishAttempted: boolean): AppendResult {
+  if (publishAttempted) {
+    return { status: 'unavailable', cause };
+  }
+  return { status: 'unavailable', cause, notPublished: true };
+}
+
 // StreamInfo leaves out some default settings. Treat a missing setting as its default.
 const defaults = {
   sealed: false,
@@ -241,18 +249,21 @@ export class EventStore {
       return { status: "rejected", reason: "invalid_event" };
     }
     const deadline = Math.min(performance.now() + appendMs, command.deadline ?? Infinity);
+    // Keep uncertainty across retries once any publish could have reached NATS.
+    const publication = { attempted: false };
     let cause: unknown;
     let backoff = 25;
     while (performance.now() < deadline) {
       if (command.signal?.aborted) {
-        return { status: "unavailable", cause: command.signal.reason };
+        return unavailableAppend(command.signal.reason, publication.attempted);
       }
       try {
-        return await this.attempt(event, command.expectedSequence, deadline, command.expectedSubject,
+        return await this.attempt(event, command.expectedSequence, deadline, publication,
+          command.expectedSubject,
           command.expectedGlobalSequence, command.historyChecked, command.signal, command.checkAccess);
       } catch (error) {
         if (command.signal?.aborted) {
-          return { status: "unavailable", cause: command.signal.reason };
+          return unavailableAppend(command.signal.reason, publication.attempted);
         }
         if (!isEventStoreUnavailable(error)) {
           throw new Error("Event append failed", { cause: error });
@@ -271,12 +282,12 @@ export class EventStore {
           if (!command.signal?.aborted) {
             throw error;
           }
-          return { status: "unavailable", cause: command.signal.reason };
+          return unavailableAppend(command.signal.reason, publication.attempted);
         }
         backoff = Math.min(backoff * 2, 500);
       }
     }
-    return { status: "unavailable", cause };
+    return unavailableAppend(cause, publication.attempted);
   }
 
   private async previous(
@@ -296,6 +307,7 @@ export class EventStore {
     event: EventEnvelope,
     expectedSequence: number,
     deadline: number,
+    publication: { attempted: boolean },
     expectedSubject?: string,
     expectedGlobalSequence?: number,
     historyChecked?: true,
@@ -329,7 +341,7 @@ export class EventStore {
         await checkAccess();
       } catch (cause) {
         // Keep an earlier publish with a lost reply uncertain until the caller reconciles it.
-        return { status: 'unavailable', cause };
+        return unavailableAppend(cause, publication.attempted);
       }
     }
     // Recheck after awaited reads, immediately before starting a new publish.
@@ -337,6 +349,7 @@ export class EventStore {
     if (performance.now() >= deadline) {
       throw new TimeoutError();
     }
+    publication.attempted = true;
     return this.publishConditional(event, expectedSequence, deadline, expectedSubject,
       expectedGlobalSequence, historyChecked);
   }

@@ -66,6 +66,12 @@ conflict. Unexpected configuration/permission/corruption errors throw with
 the original cause. The `unavailable.cause` is internal diagnostic data;
 HTTP callers must expose only the status. An unavailable result can be
 ambiguous: retry with the same command key.
+An unavailable result includes `notPublished: true` only when this invocation never
+started a NATS publish. The flag covers expiry, cancellation and access failures
+before publication. Once any publish starts, the flag stays absent through all
+internal retries, even if a later access check fails. It says nothing about earlier
+invocations using the same command key. Callers must not infer non-publication
+from elapsed time or the error cause.
 
 An optional `checkAccess` runs the caller's existing access check inside each append
 attempt. The store samples the global log position before this check and uses the
@@ -73,9 +79,9 @@ existing conditional publish headers to require that position and the expected s
 position together. A supplied `expectedGlobalSequence` stays stricter and is not replaced.
 An event saved between this check and publication produces a conflict. The caller must
 reload and revalidate; this conflict is not retried internally. A failed access check
-returns `unavailable` with its cause. It cannot prove whether an earlier publish with a
-lost reply was saved, so callers must retain their recovery records. An expired deadline
-also keeps the existing unavailable result.
+returns `unavailable` with its cause and the publication information above. If an earlier
+publish lost its reply, callers must retain their recovery records. An expired deadline
+also returns unavailable.
 The original deadline is checked again after the callback. Callers supply only the small
 access-stream check, with history already read. No callback or access data enters the event.
 `test/append.test.ts` covers a change between checking and publication and expiry during
