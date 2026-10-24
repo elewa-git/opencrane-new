@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts in Docker| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|starts apps and demo tools; checks chats, replies and ownership| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|starts apps and demo tools; checks chats, replies and ownership| apps["Server, models, workers and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster| devbox
 ```
@@ -51,7 +51,8 @@ configuration changes. Its background jobs keep their own database.
   jobs that try to run the owner's commands.
 - Checks the demo tool server through local TLS. Requires saved tool definitions and
   linked approval and dispatch records in event-log order.
-  The separate browser and chat rehearsal is still to be connected to these checks.
+  A guarded test launch keeps the full server and models processes and connects both
+  to one local demo server. The saved receipt states which browser steps were checked.
 
 ## Processes it handles
 

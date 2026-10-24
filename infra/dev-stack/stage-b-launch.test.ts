@@ -8,22 +8,24 @@ import { approvalEvidence } from './test/stage-b-evidence.ts';
 
 const execute = promisify(execFile);
 const root = new URL('../../', import.meta.url);
-const launch = new URL('./stage-b-entry.ts', import.meta.url);
 
 async function refuseWrongSlot() {
   const options = { cwd: root, env: { PATH: process.env['PATH'],
     HOME: '/missing-stage-b-home', DEV_STACK_ID: 'owner', STAGE_B_CLAIMED_ID: 'owner' } };
-  async function start() {
-    await execute(process.execPath, ['--experimental-strip-types', launch.pathname, 'server'],
-      options);
-  }
   function refused(error: unknown) {
     const failure = error as { stderr: string };
     assert.match(failure.stderr, /Secondary slot mismatch/u);
     assert.doesNotMatch(failure.stderr, /OIDC|DATABASE_URL|NATS_URL/u);
     return true;
   }
-  await assert.rejects(start, refused);
+  for (const name of ['stage-b-entry.ts', 'stage-b-live.ts']) {
+    const launch = new URL(name, import.meta.url);
+    async function start() {
+      await execute(process.execPath, ['--experimental-strip-types', launch.pathname, 'server'],
+        options);
+    }
+    await assert.rejects(start, refused);
+  }
 }
 test('the launch entry refuses the owner before loading settings or services', refuseWrongSlot);
 
@@ -77,3 +79,24 @@ function refuseUnprovedWrite() {
 }
 test('one fixture effect without approval records or before approval never qualifies',
   refuseUnprovedWrite);
+
+async function deterministicCalls() {
+  const { stageBModelCall } = await import('./stage-b-model.ts');
+  const tools = [{ type: 'namespace', name: 'mcp__demo',
+    tools: [{ name: 'read_fixture_quote' }, { name: 'change_delivery_slot' }] }];
+  const input = [{ type: 'message', role: 'user', content: 'STAGE_B_WRITE' }];
+  const call = stageBModelCall({ input, tools });
+  assert.equal(call?.namespace, 'mcp__demo');
+  assert.equal(call?.name, 'change_delivery_slot');
+  assert.equal(call?.arguments, '{"quoteId":"DEMO-001","slot":"afternoon"}');
+  const completed = [...input, { type: 'function_call_output', output: 'recorded' }];
+  assert.equal(stageBModelCall({ input: completed, tools }), undefined);
+  const read = [{ type: 'message', role: 'user', content: 'STAGE_B_READ' }];
+  assert.equal(stageBModelCall({ input: read, tools })?.name, 'read_fixture_quote');
+  function missingTool() {
+    stageBModelCall({ input, tools: [] });
+  }
+  assert.throws(missingTool, /Reviewed demo tool was not offered/u);
+}
+test('the free model calls only an offered demo tool and never repeats after its result',
+  deterministicCalls);

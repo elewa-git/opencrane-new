@@ -1,0 +1,1 @@
+- Developers can launch the full server and models processes against one guarded local demo tool server. The test launch refuses an unowned slot or missing network injection; live qualification results are recorded separately.
