@@ -188,6 +188,41 @@ async function duringHistory(fails: boolean) {
 }
 it.each([false, true])('refuses removal during history even when loading fails: %s', duringHistory);
 
+const failedHistoryReaders = [
+  { actor: 'bob', formerOwner: false, partialHistory: false },
+  { actor: 'bob', formerOwner: false, partialHistory: true },
+  { actor: 'alice', formerOwner: true, partialHistory: false },
+  { actor: 'alice', formerOwner: true, partialHistory: true },
+];
+async function refusedFailedHistory(testCase: typeof failedHistoryReaders[number]) {
+  if (testCase.formerOwner) {
+    await save(routine('routine.reassigned', 'bob'));
+  }
+  const missing = await request(testCase.actor, 'missing');
+  expect(missing.statusCode).toBe(403);
+  expect(missing.json()).toEqual({ status: 'refused' });
+  const read = nats.store.readStream.bind(nats.store);
+  async function* fail(subject: string, from?: number, deadline?: number) {
+    if (subject === 'routine-orders') {
+      if (testCase.partialHistory) {
+        yield* read(subject, from, deadline);
+      }
+      throw new Error('History deadline exceeded with private-result-canary');
+    }
+    yield* read(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(fail);
+  const response = await request(testCase.actor);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(response.body).toBe(missing.body);
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(logs.join('') + response.body).not.toContain('private-result-canary');
+}
+it.each(failedHistoryReaders)(
+  'refuses $actor after history fails like a missing id, former owner: $formerOwner, partial: $partialHistory',
+  refusedFailedHistory);
+
 async function unavailable(source: string) {
   if (source === 'IAM') {
     await fga.pause();
