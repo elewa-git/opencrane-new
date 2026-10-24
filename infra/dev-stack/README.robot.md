@@ -82,6 +82,48 @@ It must run the one fresh browser/chat journey before reporting live qualificati
 Native shell and file-edit consent remains NOT RUN under the 23 October decision.
 See [the receipt and remaining work](../../docs/process/demo-stage-b-local/receipt.md).
 
+## Guarded local launch
+
+Part of #574, PR 14b. `stage-b-live.ts` runs after one fresh secondary start.
+It checks the requested id, claimed id and worktree marker before reading settings.
+It refuses real-provider mode. It keeps the existing server environment and the
+models Compose service, including its separate network and gateway process.
+The PID and start time must still match before the server is stopped.
+
+`stage-b-entry.ts` checks both production entrypoint sources before loading services.
+A test-only Node load hook changes exactly three arguments: server discovery,
+models catalogue watch and models dispatch. Missing or repeated matching code refuses
+launch. Every other statement stays unchanged. Product entrypoint files are not
+edited and do not import fixtures. No production setting enables this transport.
+
+Each process uses `test/demo-remote.ts` for the synthetic hostname's public DNS pin,
+SNI, certificate checks and fresh TLS connections. Behind TLS, the adapters forward
+to one Unix socket in the owned stack directory. `apps/demo-mcp` owns that socket
+and the shared fixture state. A missing socket refuses before services start.
+The transport test writes through one adapter and reads the actual effect through
+another. Those direct calls are test coverage, not approval qualification.
+
+The free model understands `STAGE_B_READ` and `STAGE_B_WRITE` rehearsal messages.
+It calls only the matching tool offered by Codex and refuses a missing tool. It
+returns to its normal reply after receiving a tool result, without repeating the call.
+The evidence checker still requires original approval and dispatch records.
+
+```sh
+DEV_STACK_ID=1 STAGE_B_CLAIMED_ID=1 nice -n 10 node --experimental-strip-types \
+  infra/dev-stack/stage-b-live.ts
+```
+
+The ids above must be the slot returned by this worktree's `claim.sh`.
+The launcher stays running during the browser check. Stop it before running
+`infra/dev-stack/down.sh --id` for that same slot. The normal down command removes
+the owned Compose service and its generated override file. Never use this launch
+against the owner or another worktree's claim.
+
+Results and remaining conditions are in
+[the local live receipt](../../docs/process/demo-stage-b-local-live/receipt.md).
+Native consent, public deployment and the later repeated or long-wait journeys
+remain excluded from this launch.
+
 ## TypeScript checks
 
 `npm run typecheck:dev-stack` runs `tsc --noEmit` with this folder's existing

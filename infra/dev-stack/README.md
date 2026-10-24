@@ -56,7 +56,8 @@ configuration changes. Its background jobs keep their own database.
   linked approval and dispatch records in event-log order.
   A disposable computer also checks that the free model can call a published read
   tool and answer with its result in the same chat turn.
-  The separate browser and chat rehearsal is still to be connected to these checks.
+  A guarded test launch keeps the full server and models processes and connects both
+  to one local demo server. The saved receipt states which browser steps were checked.
 
 ## Processes it handles
 
