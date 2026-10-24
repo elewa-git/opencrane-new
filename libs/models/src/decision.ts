@@ -1,3 +1,5 @@
+import { createLogger, type Logger } from '@opencrane/observability';
+import { privateDecisionReason } from './decision-refusal.ts';
 import { requestSchema } from './model-request.ts';
 import { authoriseEgress } from './egress-admission.ts';
 import type { EgressRelayRegistry } from './egress-relay.ts';
@@ -163,6 +165,7 @@ export async function startDecision(
     memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
   dispatchOptions?: McpDispatchOptions, egress?: EgressRelayRegistry,
+  logger: Pick<Logger, 'warn'> = createLogger('gateway-decision'),
 ) {
   const mcpSender = mcpDispatch(actor, dispatchOptions);
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
@@ -176,6 +179,7 @@ export async function startDecision(
       return;
     }
     const started = performance.now();
+    let stage = 'credentials';
     let auditedContext: { requesterId: string; assistantId: string } | undefined;
     // This records that a write was started; it does not mean the audit succeeded.
     let auditAttempted = false;
@@ -218,27 +222,33 @@ export async function startDecision(
       const checked = await credentials.check(req.headers, undefined, decisionDeadline);
       const computer = computerSchema.parse(checked.computer);
       const turnToken = parseTurnToken(checked.turn);
+      stage = 'turn_claims';
       await checkNativeCall(actor.store, binding, computer, turnToken,
         checked.sequence, started, decisionDeadline);
       const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
       // Read managed history before starting the short access check.
       const historyDeadline = decisionHistoryDeadline(managedRoute, decisionDeadline);
+      stage = 'turn_history';
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
+      stage = 'active_turn';
       requireManagedTurnClaims(checked.turn, activity.managedCallsEnabled);
       const conversation = activity.conversation;
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);
       const admittedAt = queuedPosition(conversation, turn);
       const root = turnRootBinding(actor.state, turnToken.conversation, turnToken.turn);
+      stage = 'grants';
       const grants = await modelGrantHistory(actor, turnToken.model, route, historyDeadline);
       const memoryClaims = { silo: actor.silo, requester: turnToken.requester,
         assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
         conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
+      stage = 'memory';
       const memory = await prepareLoadedMemory(actor.store, binding, memoryClaims,
         conversation, performance.now() + 10_000);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
       const accessStarted = decisionAccessStarted(managedRoute, memory.loaded, started);
+      stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
       let needsApproval = false;
@@ -253,6 +263,7 @@ export async function startDecision(
       auditedContext = { requesterId: turnToken.requester, assistantId: computer.assistant };
       correlation = { conversationId: turnToken.conversation, turnId: turnToken.turn };
       contextDigest = digestContext([computer, turnToken]);
+      stage = 'request';
       const raw = await readBody(req);
       async function memoryDecision() {
         requireSharedTurnTools(turnToken.sharingClass);
@@ -280,6 +291,7 @@ export async function startDecision(
         res.setHeader('x-request-id', requestId);
         res.end('{}');
       }
+      stage = 'access_and_budget';
       if (req.url === '/authorize/mcp/memory/server') {
         await memoryDecision();
         return;
@@ -356,6 +368,10 @@ export async function startDecision(
     })().catch(async (error: unknown) => {
       if (refuseCallRetry(error, res, auditAttempted)) return;
       const capped = error instanceof BudgetRefused;
+      const reason = capped ? 'budget_exhausted' : privateDecisionReason(error);
+      const elapsedMs = Math.round(performance.now() - started);
+      const diagnostic = { requestId, route, stage, reason, elapsedMs };
+      logger.warn(diagnostic, 'Gateway request refused');
       try {
         if (!auditAttempted) await audit('deny', capped ? 'budget_exhausted' : 'request_refused');
         else if (!(error instanceof LoadedMemoryRefused)) {

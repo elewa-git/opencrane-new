@@ -140,6 +140,10 @@ rollover or replay. Reading these records never permits spending.
 
 ## What it is responsible for
 
+When an AI request is refused, the models process writes a short reason to its
+private log. The request id links that line to the saved decision. The log leaves
+out credentials, request contents and raw errors.
+
 A private decision handler checks a pass for one outside connection. The silo,
 person and assistant must each allow the same host and port. It saves the decision
 and checks spending stops before registering a single-use relay. Ordinary startup

@@ -17,7 +17,7 @@ shared rules for checking messages before the website shows them.
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and actions"] --> web
-  web -->|requests and resumable live updates| server["apps/server<br/>the back end"]
+  web -->|requests, saved publication positions and resumable live updates| server["apps/server<br/>the back end"]
   server -.->|recovery tests use the transcript helper| web
   web["apps/web<br/>sign-in, chat, calls, saved spending status and admin pages"] -->|requests, saved call status and live updates| server["apps/server<br/>the back end"]
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
@@ -49,7 +49,8 @@ For owners and admins, it:
 - Manages people, groups, invitations, shared assistants and ownership.
 - Connects model providers and changes who may use their models.
 - Shows spending, edits budgets and reviews money held for unfinished calls.
-- Registers tool servers, reviews tools and publishes their settings.
+- Registers tool servers, reviews tools and publishes their settings, even when other
+  changes are saved between review and publication.
 - Shows organisation change history.
 
 A shared assistant belongs to a group; members can start private sessions with it.
@@ -113,6 +114,7 @@ see the status and reference without amounts.
 4. **Organisation changes.** An admin reviews a person, budget, provider or tool server,
    sends a change and follows its recorded result. The server checks permissions,
    records changes and applies them; the website shows the confirmed outcome.
+   Tool publication uses the saved positions returned by the server.
 
 ## How to run or test it
 

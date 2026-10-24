@@ -1,0 +1,2 @@
+- Tool publication now accepts saved review and publication positions when grants or other unrelated events come between them. Concurrent policy changes still require a fresh review.
+- Gateway refusals now leave a fixed reason and request id in the private models log without credentials or request contents. The live refusal after resuming an install remains unresolved; an offline resume and restart test accepts current credentials.

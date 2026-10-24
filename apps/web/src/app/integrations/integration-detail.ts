@@ -132,7 +132,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const receipt: unknown = await response.json();
       if (this.shouldIgnoreResult()) return;
       const sequence = savedSequence(receipt);
-      if (sequence !== policy.sequence + 1) {
+      if (sequence === null || sequence <= policy.sequence) {
         this.changeState.set('unknown-review');
         return;
       }
@@ -163,7 +163,8 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       }
       const receipt: unknown = await response.json();
       if (this.shouldIgnoreResult()) return;
-      if (savedSequence(receipt) !== reviewRevision + 1) {
+      const sequence = savedSequence(receipt);
+      if (sequence === null || sequence <= reviewRevision) {
         this.changeState.set('unknown-publication');
         return;
       }
