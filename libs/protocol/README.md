@@ -27,7 +27,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>shared reply shapes"]
+  web["apps/web<br/>browser app"] -.->|chat and other replies| protocol["libs/protocol<br/>shared reply shapes"]
   server["apps/server<br/>back end"] -.->|saved spending and effect replies| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
@@ -43,6 +43,7 @@ flowchart LR
 ## Processes it handles
 
 The server returns a reply and the browser checks it against the same shape.
+Chat tool results use a separate display shape that excludes private adapter details.
 An effect detail can include an original resolution receipt, with integer euro cents.
 Older replies without that field still work. Parsing a receipt grants no access.
 

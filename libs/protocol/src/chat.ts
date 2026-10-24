@@ -14,6 +14,22 @@ function validateCreationRow(row: { type: string; data: unknown }, context: z.Re
 }
 const toolRowDataSchema = z.object({ status: z.enum(['completed', 'failed']).optional() });
 const decisionRowDataSchema = z.object({ outcome: z.enum(['allow', 'ask', 'deny']).optional() });
+const dispatchFields = toolDispatchRecordedDataSchema.shape;
+// Check only display fields here. Keep adapter evidence checks on the full stored event.
+const toolDispatchDisplayDataSchema = z.strictObject({
+  conversationId: dispatchFields.conversationId,
+  turnId: dispatchFields.turnId,
+  callId: dispatchFields.callId,
+  serverId: dispatchFields.serverId,
+  toolName: dispatchFields.toolName,
+  requestId: dispatchFields.requestId,
+  logicalRequestId: dispatchFields.logicalRequestId,
+  approvalId: dispatchFields.approvalId,
+  startedAt: dispatchFields.startedAt,
+  durationMs: dispatchFields.durationMs,
+  outcome: dispatchFields.outcome,
+  evidence: dispatchFields.evidence,
+});
 
 function validateRowFields(row: { type: string; data: unknown }, context: z.RefinementCtx) {
   validateCreationRow(row, context);
@@ -21,7 +37,7 @@ function validateRowFields(row: { type: string; data: unknown }, context: z.Refi
   if (row.type === 'agent.native_consent_refused') {
     fieldsSchema = agentNativeConsentRefusedDataSchema;
   } else if (row.type === 'tool.dispatch_recorded') {
-    fieldsSchema = toolDispatchRecordedDataSchema;
+    fieldsSchema = toolDispatchDisplayDataSchema;
   } else if (row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished') {
     fieldsSchema = toolRowDataSchema;
   } else if (row.type === 'decision.recorded') {
