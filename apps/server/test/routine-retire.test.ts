@@ -120,9 +120,9 @@ it('recovers a lost committed reply after deduplication expires and NATS restart
 
 async function conflicts() {
   await retire();
-  for (const member of ['bob', 'admin']) {
-    await expect(retire(member)).rejects.toThrow('Routine retirement conflict');
-  }
+  await applyRetirement();
+  await expect(retire('bob')).rejects.toThrow(new Error('Routine retirement refused'));
+  await expect(retire('admin')).rejects.toThrow(new Error('Routine retirement conflict'));
   const changes = [ { routineId: 'other' }, { expectedDefinitionRevision: 2 },
     { expectedScheduleRevision: 2 }, { expectedControlRevision: 2 },
     { expectedPosition: 0 } ];
@@ -136,6 +136,53 @@ async function conflicts() {
   expect(await rows()).toHaveLength(2);
 }
 it('binds the original id to actor, target, revisions and position', conflicts);
+
+const unreadableCases = [
+  ['bob', 'active'],
+  ['bob', 'retired'],
+  ['removed owner', 'active'],
+  ['removed owner', 'retired'],
+];
+
+async function hidesUnreadableHistory(caller: string, status: string) {
+  if (status === 'retired') {
+    await retire();
+    await applyRetirement();
+  }
+  let memberId = caller;
+  if (caller === 'removed owner') {
+    memberId = 'alice';
+    const removed = event('removed-alice', 'member-alice', 'member.removed');
+    await nats.seed([removed]);
+  }
+  const auth = memberAuthorisation(binding, nats.store);
+  const access = await auth.routine(memberId, input.routineId, 'read_metadata');
+  expect(access.allowed).toBe(false);
+  const before = await nats.store.head();
+  const savedBefore = await rows();
+  const append = vi.spyOn(nats.store, 'append');
+  const revisions = [
+    {},
+    { expectedDefinitionRevision: 2 },
+    { expectedScheduleRevision: 2 },
+    { expectedControlRevision: 2 },
+    { expectedPosition: 0 },
+  ];
+  const changeIds = [input.changeId, 'orders:unknown-change'];
+  for (const changeId of changeIds) {
+    for (const revision of revisions) {
+      const request = { ...input, ...revision, changeId };
+      await expect.soft(retire(memberId, request))
+        .rejects.toThrow(new Error('Routine retirement refused'));
+    }
+  }
+  expect(append).not.toHaveBeenCalled();
+  expect(await rows()).toEqual(savedBefore);
+  expect(await nats.store.head()).toBe(before);
+}
+it.each(unreadableCases)(
+  'gives %s the same refusal and no receipt for an unreadable %s routine',
+  hidesUnreadableHistory);
 
 async function rejectsReplacement() {
   for (const extra of [{ actorId: 'bob' }, { definition: {} }, { reason: 'other' }]) {
