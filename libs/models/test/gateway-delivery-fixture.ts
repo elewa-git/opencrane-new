@@ -8,7 +8,14 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { onTestFinished } from 'vitest';
+import type { Db } from '@opencrane/projections';
 import { startGateway } from '../src/gateway.ts';
+
+export async function acquireGatewayTestLock(session: Pick<Db, 'query'>, lockName: string) {
+  const acquired = await session.query<{ held: boolean }>(
+    'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS held', [lockName]);
+  return acquired.rows[0]!.held;
+}
 
 export async function gatewayFixture() {
   const directory = await mkdtemp(`${tmpdir()}/gateway-reload-`);
