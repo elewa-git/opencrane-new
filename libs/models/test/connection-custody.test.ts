@@ -1661,6 +1661,35 @@ async function pagedScan(restart: boolean) {
 }
 it.each([false, true])('scan examines all 53 candidates, with mid-page restart: %s', pagedScan);
 
+async function pagedScanWithSlowConnections() {
+  const realNow = performance.now.bind(performance);
+  let elapsed = 0;
+  let slowConnections = 0;
+  function now() {
+    return realNow() + elapsed;
+  }
+  function acquired() {
+    if (slowConnections < 2) {
+      // Model two connections arriving after the production acquisition deadline.
+      // Advance the clock instead of sleeping or depending on machine load.
+      elapsed += 101;
+      slowConnections += 1;
+    }
+  }
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockImplementation(now);
+  storage.queue.on('acquire', acquired);
+  try {
+    await pagedScan(false);
+    expect(slowConnections).toBe(2);
+  } finally {
+    storage.queue.off('acquire', acquired);
+    clock.mockRestore();
+  }
+}
+it('scan examines all 53 candidates once after two slow database connections',
+  pagedScanWithSlowConnections);
+
 async function slowAndUnknownPages() {
   const test = await candidateFixture();
   for (let index = 1; index < 26; index += 1) {
