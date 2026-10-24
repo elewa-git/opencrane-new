@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { requireStageBStack } from './stage-b-guard.ts';
-import { stageBLaunchSources } from './stage-b-launch.ts';
+import { stageBComposeOverride, stageBLaunchSources } from './stage-b-launch.ts';
 
 const root = new URL('../../', import.meta.url).pathname.slice(0, -1);
 const id = process.env['DEV_STACK_ID'];
@@ -23,12 +23,7 @@ await demo.listen({ path: `${directory}/stage-b-demo.sock` });
 const execute = promisify(execFile);
 const composeFile = `${directory}/stage-b-compose.json`;
 const entry = 'infra/dev-stack/stage-b-entry.ts';
-const override = { services: { models: {
-  image: 'opencrane-stage-b-local:tls',
-  build: { context: root, dockerfile: 'infra/dev-stack/Dockerfile.stage-b' },
-  command: ['node', '--experimental-strip-types', entry, 'models'],
-  environment: { STAGE_B_CLAIMED_ID: id },
-} } };
+const override = stageBComposeOverride(root, directory, id!);
 await writeFile(composeFile, JSON.stringify(override), { mode: 0o600 });
 const composeArgs = ['compose', '--project-name', `opencrane-dev-${id}`,
   '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml',

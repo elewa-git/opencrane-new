@@ -103,6 +103,12 @@ Dispatch receives the adapter through `McpDispatchOptions.remoteNetwork`. The la
 test evaluates the generated options and checks this property, so a misspelt setting
 cannot silently select ordinary DNS.
 
+The rehearsal Compose override mounts `stack-owner` and `stage-b-demo.sock` read-only.
+The ordinary secondary configuration supplies the remaining models files. It does not
+mount the whole stack directory. A disposable container test checks the slot guard,
+the demo socket, the read-only claim and the absence of personal keys. This keeps the
+local launch compatible with the private-directory isolation introduced by #646.
+
 Each process uses `test/demo-remote.ts` for the synthetic hostname's public DNS pin,
 SNI, certificate checks and fresh TLS connections. Behind TLS, the adapters forward
 to one Unix socket in the owned stack directory. `apps/demo-mcp` owns that socket

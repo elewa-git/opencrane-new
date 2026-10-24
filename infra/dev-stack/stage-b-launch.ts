@@ -16,3 +16,19 @@ export function stageBLaunchSources(server: string, models: string) {
     'const dispatchOptions = { remoteNetwork: stageBNetwork, acknowledged, routes:');
   return { server: serverSource, models: modelsSource };
 }
+
+export function stageBComposeOverride(root: string, directory: string, id: string) {
+  // Share only the claim and demo socket; keep the stack's private key folders outside models.
+  const volumes = [
+    `${directory}/stack-owner:${directory}/stack-owner:ro`,
+    `${directory}/stage-b-demo.sock:${directory}/stage-b-demo.sock:ro`,
+  ];
+  const models = {
+    image: 'opencrane-stage-b-local:tls',
+    build: { context: root, dockerfile: 'infra/dev-stack/Dockerfile.stage-b' },
+    command: ['node', '--experimental-strip-types', 'infra/dev-stack/stage-b-entry.ts', 'models'],
+    environment: { STAGE_B_CLAIMED_ID: id },
+    volumes,
+  };
+  return { services: { models } };
+}
