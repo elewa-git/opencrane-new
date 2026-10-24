@@ -174,6 +174,47 @@ async function continuations() {
 }
 it('binds continuations to member, silo, query and routine changes but ignores chat activity',
   continuations);
+async function unreadableRoutineChanges(duringLoading: boolean) {
+  await save(record('first'));
+  await save(record('middle'));
+  await save(record('last'));
+  await save(record('private', 'bob'));
+  const session = { sub: 'alice', orgId: 'org-test', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const denied = await app.inject({ method: 'GET', url: '/api/routines/private', headers });
+  expect(denied.statusCode).toBe(403);
+  const first = await page('limit=1');
+  const query = `limit=1&continuation=${first.next}`;
+  const before = await page(query);
+  expect(before.rows.map(identity)).toEqual(['middle']);
+  expect(before.next).not.toBeNull();
+  if (duringLoading) {
+    const original = db.query.bind(db);
+    let progressReads = 0;
+    async function retireDuringLoading<Row extends Record<string, unknown>>(
+      sql: string, values?: unknown[], options?: { deadline: number }) {
+      const result = await original<Row>(sql, values, options);
+      if (sql.includes('JOIN projection_generations')) {
+        progressReads += 1;
+        if (progressReads === 2) {
+          await save(record('private', 'bob', 'routine.retired'));
+        }
+      }
+      return result;
+    }
+    vi.spyOn(db, 'query').mockImplementation(retireDuringLoading);
+  } else {
+    await save(record('private', 'bob', 'routine.retired'));
+  }
+  const after = await page(query);
+  expect(after).toEqual(before);
+  expect((await page('limit=1')).next).toBe(first.next);
+}
+it.each([false, true])(
+  'keeps the exact HTTP page when an unreadable routine changes (during loading: %s)',
+  unreadableRoutineChanges);
+
 async function transport() {
   expect((await app.inject('/api/routines?view=mine')).statusCode).toBe(401);
   expect((await request('', 'alice', 'foreign')).statusCode).toBe(403);
