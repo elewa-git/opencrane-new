@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "checker": "checkStageBApproval",
+  "dispatches": 2,
+  "readDispatches": 1,
+  "writeDispatches": 1,
+  "effectCount": 1,
+  "modelChargedCents": 4,
+  "toolChargedCents": 0,
+  "reservedCentsBefore": 32,
+  "reservedCentsAfter": 32
+}

@@ -91,10 +91,7 @@ async function mountsOnlyRehearsalFiles() {
     await writeFile(`${directory}/personal-keys/private`, 'must stay outside models');
     server.listen(`${directory}/stage-b-demo.sock`);
     await once(server, 'listening');
-    const prepare = launch.stageBComposeOverride as
-      (root: string, directory: string, id: string) =>
-        { services: { models: { volumes: string[] } } };
-    const override = prepare(worktree, directory, '1');
+    const override = launch.stageBComposeOverride(worktree, directory, '1');
     const args = ['run', '--rm', '--network', 'none', '-e', `HOME=${home}`,
       '-v', `${worktree}:${worktree}:ro`];
     for (const mount of override.services.models.volumes) args.push('-v', mount);
@@ -106,13 +103,23 @@ async function mountsOnlyRehearsalFiles() {
       const directory = await requireStageBStack('1', '1', process.env.HOME, '${worktree}');
       await assert.rejects(access(directory + '/personal-keys/private'));
       await assert.rejects(appendFile(directory + '/stack-owner', 'changed'));
-      const reply = await new Promise(function exchange(resolve, reject) {
-        get({ socketPath: directory + '/stage-b-demo.sock', path: '/' }, function received(response) {
+      function exchange(resolve, reject) {
+        const options = { socketPath: directory + '/stage-b-demo.sock', path: '/' };
+        function received(response) {
           let body = '';
-          response.on('data', function chunk(value) { body += value; });
-          response.on('end', function finished() { resolve(body); });
-        }).on('error', reject);
-      });
+          function chunk(value) {
+            body += value;
+          }
+          function finished() {
+            resolve(body);
+          }
+          response.on('data', chunk);
+          response.on('end', finished);
+        }
+        const outgoing = get(options, received);
+        outgoing.on('error', reject);
+      }
+      const reply = await new Promise(exchange);
       assert.equal(reply, 'local demo reached');
     `;
     args.push('node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3',

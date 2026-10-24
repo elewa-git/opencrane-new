@@ -2,14 +2,11 @@
 
 Part of #574. Run date: 24 October 2026. Current result: **PARTIAL**.
 
-The [latest rerun](#rerun-after-the-read-turn-and-catalogue-recovery-fixes-24-october-2026)
-proves publication and read execution. Chat cannot display the successful dispatch;
-approval and write qualification remain NOT RUN. Earlier runs are retained below.
-
-One fresh install used claimed secondary slot 1. Paid calls: **0**.
-The launch kept the complete server and models entrypoints, including publication,
-catalogue watch, dispatch and chat services. No browser response was intercepted.
-The owner stack was unchanged. This is not a successful approval qualification.
+The [latest rerun](#rerun-after-the-chat-display-fix-24-october-2026) passes the
+core local tools journey: published tools, read reply, requester approval, one write
+effect, reload, spending and history. The full fresh-install qualification remains
+PARTIAL because its baseline audit check failed and external owner sign-in is untested.
+Earlier attempts are retained below. Paid calls: **0**; the owner stack was untouched.
 
 ## Source
 
@@ -550,3 +547,185 @@ changelog fragment records the dispatch correction; `CHANGELOG.md` is unchanged.
 PASS: the owned launcher stopped and slot 1 was released through `down.sh --id 1`.
 Its stack directory, Compose containers and both Kubernetes namespaces are absent.
 The temporary models image was removed. The owner stack was untouched.
+
+## Rerun after the chat display fix, 24 October 2026
+
+Part of #574, draft PR #641. The core local tools journey is **PASS**: publication,
+bridge acceptance, read, requester approval, one write effect, reply, reload and
+accounting all passed. The complete fresh-install qualification remains **PARTIAL**.
+Its baseline audit check failed, and the separate external owner's browser sign-in
+remains **NOT RUN**. Earlier attempts above remain unchanged.
+
+`git fetch origin` and the rebase completed onto
+`fd1626af64013c20f60272c3d6700e5254f6c6be` (chat display fix #665).
+The base includes #645, #648, #655 and #656. No rebase directory remained, and
+`origin/main` was an ancestor of the branch. The initial source was `90a166b42`;
+the corrected local launcher ran at `edca5278d381ed1d50abfb9454cfe67dfe372c09`.
+The earlier `remoteNetwork` correction is retained. The product model fixture and
+all three protected authority/security test files are unchanged.
+
+One fresh install used slot 1, claimed through `infra/dev-stack/claim.sh`.
+The full server and models processes used the LOCAL demo server, real Codex 0.159.2
+and agentgateway 1.5.0, revision `fe6732474a96a0363dfb9822859af4e9bab360fa`.
+[Runtime references](rerun5-20261024/runtime.json) record the images and source.
+`ZITADEL_KEY_FILE` was supplied only as a path. Paid calls: **0**.
+The owner stack on port 44200 was untouched.
+
+### Results of the fifth run
+
+| Step | Result | Observed evidence |
+| --- | --- | --- |
+| Stage A regression checks | PASS | All 21 packaged model and rehearsal tests passed. |
+| Fresh baseline | FAIL | Its audit assertion still requires money fields that #659 deliberately removed from conversation history. |
+| Separate owner membership and access | PASS | The external owner remains distinct from generated Admin; PostgreSQL and OpenFGA agree. |
+| External owner browser sign-in | NOT RUN | No existing credential or browser session was available. The generated Admin signed in through real SSO. |
+| First local launch | FAIL | After #646 narrowed container mounts, models could not read the slot ownership marker. |
+| Corrected local launch | PASS | Only the rehearsal claim and demo socket were added as read-only mounts. Both full services became ready. |
+| Register and discover | PASS | Both real demo tool definitions appeared in the browser. |
+| Exact zero costs; read Allow, write Ask | PASS | The reviewed definitions and saved policy agree. |
+| Person and assistant grants | PASS | Original receipts at positions 321 and 322 show content and IAM current. Each command was submitted once. |
+| Publication and gateway acknowledgement | PASS | Review 323, publication 324, gateway request 325, acknowledgement 326 and MCP observation 327 agree on generation 1. |
+| Bridge acceptance and real read | PASS | Codex selected the offered tool; read dispatch 342 records `adapter_response_received`. |
+| Visible read reply and reload | PASS | Both widths show DEMO-001, 12500 cents, morning delivery and zero effects after reload. |
+| Write waits for the requester | PASS | The approval card appeared and survived reload. A separate read while waiting still returned morning delivery and zero effects. |
+| Requester Approve | PASS | One browser approval produced decision 365 by the original requester. |
+| One write and same-turn reply | PASS | Use 366 preceded allowed decision 367 and dispatch 371. The same turn replied with afternoon delivery and one effect. |
+| Separate final readback | PASS | The demo server returned afternoon delivery and effect count 1. No direct fixture write was used. |
+| Original approval evidence checker | PASS | `checkStageBApproval` accepted the original ordered request, decision, use, gateway decision and dispatch records. |
+| Spending and Change history | PASS | Model spending rose by four cents, tool spending stayed zero, and both histories show the approval and dispatch. |
+| Complete pending-card captures | PARTIAL | The waiting captures show the card heading, but its lower details and buttons were below the chat scroll position. |
+| Approval drawer result confirmation | PARTIAL | It shows used once and its timestamps, but still says “Result not confirmed”. The independent demo readback proves the effect. |
+
+[Original live records](rerun5-20261024/live-probe.json) retain policy, grants,
+approval responses, ordered events, readbacks, Spending and both histories.
+[Publication records](rerun5-20261024/publication.json) retain the original commands
+and receipts. [Approval proof](rerun5-20261024/approval-proof.json) is the exact input
+to the checker; [its result](rerun5-20261024/evidence-check.json) also checks two
+successful dispatches in total: one read and one write.
+
+The conversation is `82160bf9-524c-49a3-838f-0b8cec127521`. Its write turn is
+`c7f30632-8b14-479d-ba8c-0e6f8fd6bafe`; the write request is
+`42965118-05dd-4d5e-a724-18922daf42e9`. The original approval order is:
+
+| Record | Position | UTC time |
+| --- | --- | --- |
+| Approval requested | 361 | 17:38:14.682 |
+| Requester approved | 365 | 17:38:19.243 |
+| Approval used | 366 | 17:38:20.632 |
+| Gateway decision allowed | 367 | 17:38:20.641 |
+| Write dispatch recorded | 371 | 17:38:21.292 |
+
+The earlier Ask request was refused before dispatch, as expected. Its gateway error
+row remains visible in the unfiltered history; it does not represent a second write.
+The successful write has its own allowed request and adapter evidence.
+[Model exchanges](rerun5-20261024/model-exchanges.json) retain the offered tool names
+and returned demo quotes, with hashes of the original private requests.
+
+### Causes and collection limits
+
+The [baseline error](rerun5-20261024/baseline-failure.log) is at
+`infra/dev-stack/browser-audit.ts:46`. It requires integer `reservedCents` and
+`settledCents` on a conversation-history row. `conversationRow` in
+`apps/server/src/audit/routes.ts` deliberately deletes those fields following #659
+(`8f3b2e8a8`) and keeps money details in admin history. The live tool's Action history
+likewise omits them, while Change history retains the model amounts. The baseline
+expectation is stale. It was neither weakened nor bypassed in that journey.
+Its later budget checks are NOT RUN, so the fourth run's budget-page failure is not
+qualified as fixed. Both baseline live-view widths passed before this failure.
+
+The [launch error](rerun5-20261024/launch-failure.log) names the missing `stack-owner`.
+Commit #646 replaced the models container's whole-stack mount with individual files.
+The local launcher had relied on that old mount for its ownership check and demo
+socket. Failing-first commit `eb225ef55` added a real container check. Fix `edca5278d`
+adds only `stack-owner` and `stage-b-demo.sock`, both read-only. The test proves the
+claim is readable but cannot be changed, the demo socket works, and personal keys
+remain outside the container. Removing these mounts makes the test fail again.
+The ordinary full server was restored before relaunching on the same install.
+No tool had run before that relaunch, and no business state was reset.
+
+Publication succeeded before the collector timed out waiting for a tools control.
+The product had redirected to the ready page. The files named `publication-failed`
+show that confirmation; their [original attempt](rerun5-20261024/publication-attempt.json)
+is retained. A read-only collector recovered the original receipts. No grant,
+review or publication command was repeated.
+
+After the successful chat and final history captures, the response observer waited
+for live approval response bodies to end. Closing only its owned browser released
+those pending reads and allowed the original in-memory records to be saved. No chat
+or approval was repeated. Additional views only read the completed chat and histories.
+
+The approval drawer's `outcome_unknown` state comes from `approvalRecord` in
+`libs/models/src/approval-record.ts`: consuming a permit sets that state.
+The reader uses dispatch evidence to decide whether a retry is safe; it does not
+turn a transport response into confirmed business success. The drawer therefore
+still says “Result not confirmed”. This run proves the one synthetic effect through
+separate demo readbacks, not through that label. The integration's connection/access
+fact labels also remain unavailable; actual bridge dispatch proves tool availability.
+
+### Accounting and fifth-run captures
+
+The four model calls reserved **69 euro cents** in total and settled **4 euro cents**.
+Their holds were released on settlement. The tools reserved and charged **0 euro cents**.
+Spending moved from **11** to **15 cents settled**, with **32 cents reserved** before
+and after. Those two 16-cent holds came from baseline computer-loss checks. These
+are local accounting amounts, not paid-provider spending.
+
+All **38** new captures were inspected by eye. Email addresses were masked in the
+browser and removed from saved text. The waiting-card pictures are incomplete below
+the scroll position; the later completed-card and detail pictures show the saved
+approval clearly. No pending state was recreated after approval.
+
+| View | Desktop, 1280 pixels | Mobile, 390 pixels |
+| --- | --- | --- |
+| Discovered tools | [1280](rerun5-20261024/tools-1280.png) | [390](rerun5-20261024/tools-390.png) |
+| Chosen modes | [1280](rerun5-20261024/chosen-modes-1280.png) | [390](rerun5-20261024/chosen-modes-390.png) |
+| Saved audience | [1280](rerun5-20261024/saved-audience-1280.png) | [390](rerun5-20261024/saved-audience-390.png) |
+| Exact cost review | [1280](rerun5-20261024/review-1280.png) | [390](rerun5-20261024/review-390.png) |
+| Publication confirmation | [1280](rerun5-20261024/publication-failed-1280.png) | [390](rerun5-20261024/publication-failed-390.png) |
+| Published integration | [1280](rerun5-20261024/publication-loaded-1280.png) | [390](rerun5-20261024/publication-loaded-390.png) |
+| Read reply | [1280](rerun5-20261024/read-chat-1280.png) | [390](rerun5-20261024/read-chat-390.png) |
+| Reloaded read | [1280](rerun5-20261024/read-chat-reloaded-1280.png) | [390](rerun5-20261024/read-chat-reloaded-390.png) |
+| Waiting approval, partial view | [1280](rerun5-20261024/write-waiting-1280.png) | [390](rerun5-20261024/write-waiting-390.png) |
+| Waiting after reload, partial view | [1280](rerun5-20261024/write-waiting-reloaded-1280.png) | [390](rerun5-20261024/write-waiting-reloaded-390.png) |
+| Approved write reply | [1280](rerun5-20261024/write-approved-1280.png) | [390](rerun5-20261024/write-approved-390.png) |
+| Approved write after reload | [1280](rerun5-20261024/write-approved-reloaded-1280.png) | [390](rerun5-20261024/write-approved-reloaded-390.png) |
+| Completed approval, scrolled into view | [1280](rerun5-20261024/approved-scrolled-1280.png) | [390](rerun5-20261024/approved-scrolled-390.png) |
+| Saved approval details | [1280](rerun5-20261024/approval-details-1280.png) | [390](rerun5-20261024/approval-details-390.png) |
+| Spending | [1280](rerun5-20261024/spending-1280.png) | [390](rerun5-20261024/spending-390.png) |
+| Change history | [1280](rerun5-20261024/change-history-1280.png) | [390](rerun5-20261024/change-history-390.png) |
+| Change history for the write | [1280](rerun5-20261024/change-history-write-1280.png) | [390](rerun5-20261024/change-history-write-390.png) |
+| Action history | [1280](rerun5-20261024/action-history-1280.png) | [390](rerun5-20261024/action-history-390.png) |
+| Action history for the write | [1280](rerun5-20261024/action-history-write-1280.png) | [390](rerun5-20261024/action-history-write-390.png) |
+
+Native consent 12b stays excluded. Public deployment, twice-fresh runs, long approval
+waits, expiry, approval reconnect/Pod-loss qualification and the full refusal matrix
+remain NOT RUN. This local success does not complete #45, #46 or #63.
+
+### Final checks and cleanup for the fifth run
+
+The [run record](rerun5-20261024/run.json) lists the results and file hashes.
+All checks ran under `nice -n 10`.
+
+| Check | Result |
+| --- | --- |
+| Lint, including documentation, links and licences | PASS |
+| Typecheck | PASS: workspace and package checks completed, then the final dev-stack check passed |
+| Event catalogue | PASS |
+| Knip | PASS; two configuration hints, no unused-code errors |
+| Changelog | PASS |
+| Changed helper tests | PASS twice, 42 tests per run |
+| Final launcher test file after readability edits | PASS twice, 7 tests per run |
+| Real read integration | PASS twice, 2 tests per run |
+| Security rules | PASS, 438 tests |
+| Earlier tool helper coverage | PASS, 21 tests |
+| Full root suite | NOT RUN, excluded by the build prompt |
+
+The first typecheck ended with SIGTERM (exit 143) without a compiler diagnostic.
+Workspace and package checks had already finished successfully. The remaining
+dev-stack check passed on the final test code. The source of that signal is unknown.
+
+Cleanup PASS. The owned launcher stopped, slot 1 was released, its containers and
+both Kubernetes namespaces were removed, and its temporary models image was deleted.
+The throwaway test database was removed with `docker rm -f -v`. The owner stack was
+untouched. The protected authority and security tests and `CHANGELOG.md` are unchanged.
+Paid calls: **0**. CI is NOT RUN by this builder after the push.

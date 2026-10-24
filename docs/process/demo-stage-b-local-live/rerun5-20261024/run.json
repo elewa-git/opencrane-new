@@ -1,0 +1,393 @@
+{
+  "status": "PARTIAL",
+  "coreToolJourney": "PASS",
+  "freshBaseline": "FAIL",
+  "baselineReason": "The baseline requires money fields that conversation history deliberately omits after #659.",
+  "base": "fd1626af64013c20f60272c3d6700e5254f6c6be",
+  "liveSource": "edca5278d381ed1d50abfb9454cfe67dfe372c09",
+  "rebase": "PASS",
+  "slot": 1,
+  "freshInstalls": 1,
+  "paidCalls": 0,
+  "publication": "PASS",
+  "bridgeAcceptance": "PASS",
+  "readExecution": "PASS",
+  "chatDisplayAndReload": "PASS",
+  "waitingApproval": "PASS",
+  "requesterApproval": "PASS",
+  "singleWrite": "PASS",
+  "sameTurnReply": "PASS",
+  "approvalEvidenceChecker": "PASS",
+  "spending": "PASS",
+  "changeHistory": "PASS",
+  "externalOwnerBrowserSignIn": "NOT RUN",
+  "pendingCardCaptures": "PARTIAL",
+  "approvalDrawerResultConfirmation": "PARTIAL",
+  "effects": 1,
+  "capturesInspectedByEye": 38,
+  "cleanup": {
+    "status": "PASS",
+    "launcherStopped": true,
+    "slotDirectoryAbsent": true,
+    "composeContainersAbsent": true,
+    "namespacesAbsent": true,
+    "temporaryModelsImageRemoved": true,
+    "ownerStackTouched": false,
+    "testDatabaseRemovedWithVolume": true
+  },
+  "checks": {
+    "stageA": {
+      "status": "PASS",
+      "tests": 21
+    },
+    "changedHelpers": {
+      "status": "PASS",
+      "testsPerRun": 42,
+      "runs": 2
+    },
+    "realReadIntegration": {
+      "status": "PASS",
+      "testsPerRun": 2,
+      "runs": 2
+    },
+    "security": {
+      "status": "PASS",
+      "tests": 438
+    },
+    "finalLaunchFile": {
+      "status": "PASS",
+      "testsPerRun": 7,
+      "runs": 2
+    },
+    "initialTypecheck": {
+      "status": "PARTIAL",
+      "exitCode": 143,
+      "reason": "Interrupted by SIGTERM without compiler diagnostic; signal source unknown."
+    },
+    "fullRootSuite": {
+      "status": "NOT RUN",
+      "reason": "Excluded by the build prompt"
+    },
+    "priority": "nice -n 10",
+    "lint": {
+      "status": "PASS"
+    },
+    "eventCatalogue": {
+      "status": "PASS"
+    },
+    "knip": {
+      "status": "PASS"
+    },
+    "changelog": {
+      "status": "PASS"
+    },
+    "typecheck": {
+      "status": "PASS",
+      "detail": "Workspace and package checks completed before SIGTERM; final dev-stack check passed."
+    }
+  },
+  "artifacts": [
+    {
+      "path": "action-history-1280.png",
+      "sha256": "5caafa01a05e812fdb48088377941c817e2cda5ac4378c9448aeaa6541ed97de",
+      "inspectedByEye": true
+    },
+    {
+      "path": "action-history-390.png",
+      "sha256": "6fea2a0e910c2f29f6ea9c7bef861817a536d4d9598c39ae901b4d5e92f6bd59",
+      "inspectedByEye": true
+    },
+    {
+      "path": "action-history-write-1280.png",
+      "sha256": "6c048146cecb33c76f670b78b9784d38e22ae704f2cfb06cf560f85b13cf285d",
+      "inspectedByEye": true
+    },
+    {
+      "path": "action-history-write-390.png",
+      "sha256": "0cc61c2a7222d733945b266884118166b4436f1ea775c44d9c088a3cf054f784",
+      "inspectedByEye": true
+    },
+    {
+      "path": "approval-details-1280.png",
+      "sha256": "b9e68a1c65849273372d53fcbfe0ad98679d1b115b5cfb62f97b96f1d1c4c75e",
+      "inspectedByEye": true
+    },
+    {
+      "path": "approval-details-390.png",
+      "sha256": "6ea91d32a190a4850a01762a3a3d0dbf655e5fd588e84dcb2845c0ec28d5d1cc",
+      "inspectedByEye": true
+    },
+    {
+      "path": "approval-proof.json",
+      "sha256": "196a39cd0e85bb3d17e4725842705ea383e8df5568989f70339eab89ba769c68"
+    },
+    {
+      "path": "approved-scrolled-1280.png",
+      "sha256": "9783ba76b2dd74cf397efdea5553674a096224320e180224fc90947abb6bd4db",
+      "inspectedByEye": true
+    },
+    {
+      "path": "approved-scrolled-390.png",
+      "sha256": "282d3e702460f71384da3262592a2414f13676aa98cee6d623e386b2f4f58988",
+      "inspectedByEye": true
+    },
+    {
+      "path": "baseline-failure.log",
+      "sha256": "f02fc6313be67ee14c0e5e2eb79e7697262c263cbe175b5de1b9c2e85c1f993b"
+    },
+    {
+      "path": "browser-first.json",
+      "sha256": "751bd079694716805bf40f47457e35943286ed0620e515781bfc1805115d09ca"
+    },
+    {
+      "path": "change-history-1280.png",
+      "sha256": "cfb924fb04f58b6e94218b9227c80fa71e65369cf725196012c151d6ef4b0d62",
+      "inspectedByEye": true
+    },
+    {
+      "path": "change-history-390.png",
+      "sha256": "df35569b0f3112f418a0fdb23fcd446552180f786c5ee5e6fe6d3ad02fb0adb1",
+      "inspectedByEye": true
+    },
+    {
+      "path": "change-history-write-1280.png",
+      "sha256": "0ecd90f79087f407799f65ea077e8b3ed8cc3f09c0537fdfa94ddd17e7395c00",
+      "inspectedByEye": true
+    },
+    {
+      "path": "change-history-write-390.png",
+      "sha256": "78ab61b1cd01814ab474cc892b72b33161673dd2f9b744f6df300877a331d319",
+      "inspectedByEye": true
+    },
+    {
+      "path": "changelog.log",
+      "sha256": "37cf7e6e60bcf0c312bb626a56b11276abd03c70d9dc70334b4b5b2d681e02c8"
+    },
+    {
+      "path": "check-exits.txt",
+      "sha256": "c045c4f3a2b198e0ac3fdd438dd54ea9fb86a7dc75a941ee32de444d20081bb5"
+    },
+    {
+      "path": "chosen-modes-1280.png",
+      "sha256": "b7a8918ab43ebdf87c776fcd0078464fd74ec4cd8eaab54e59d05ecc9709b1a9",
+      "inspectedByEye": true
+    },
+    {
+      "path": "chosen-modes-390.png",
+      "sha256": "ce6e5e09aa51cd9500064c238f3e12e35368af251c5bb18dd83a8aa3b293d29e",
+      "inspectedByEye": true
+    },
+    {
+      "path": "events.log",
+      "sha256": "7cac846dfd58b0a730a4b7ac796e83f046febdc939260e6b6b04e870c20884ea"
+    },
+    {
+      "path": "evidence-check.json",
+      "sha256": "9a7717895201bba6e1130001cfc90c1b8b5862a5712fb782aba85340bd07ba53"
+    },
+    {
+      "path": "knip.log",
+      "sha256": "0b24692a4cd87fa2f9d206709a0bcb7bd7ee68011a0b2bbe9de031e8d57ff3b8"
+    },
+    {
+      "path": "launch-failure.log",
+      "sha256": "b478b3039aa6479c3f22c600a4f97ce5022d85fa473428d1ddad44931bb5a0d9"
+    },
+    {
+      "path": "launch-final-1.log",
+      "sha256": "cf925126da4fccf08d167b7fa3f31df19d1b68bfbcdb8add5a2b38d3778bdffe"
+    },
+    {
+      "path": "launch-final-2.log",
+      "sha256": "73780820738db33753614e755bd0cd83f05150e851604e55ef67335b0ec78ef7"
+    },
+    {
+      "path": "lint.log",
+      "sha256": "e74b93463dacf240a4b4384a3cbf93dc8d3b239ed6d7745d5f8487769a43f588"
+    },
+    {
+      "path": "live-probe.json",
+      "sha256": "94033a256a3887fefb8c7283e7f3b9ce90f2bb883fcf99aa1fef1f9451d3b40f"
+    },
+    {
+      "path": "model-exchanges.json",
+      "sha256": "bc32e3d7c87bdb8a082bee6b73f94703db8de18e565e649ccacc7a8a39ba6f6b"
+    },
+    {
+      "path": "ownership.json",
+      "sha256": "be4668323203272e4585fde2a6d858a4995c6b21eb7a7884b312fbb8b7e9a426"
+    },
+    {
+      "path": "publication-attempt.json",
+      "sha256": "68f711efae213bdf2623845b7aac0bb28ceb5b07df05f4ac87d1b04acbd7547b"
+    },
+    {
+      "path": "publication-failed-1280.png",
+      "sha256": "bad39c72c404c605c45d0b0495e31922d7fb8e94121e708f692a3f39bc8ead1a",
+      "inspectedByEye": true
+    },
+    {
+      "path": "publication-failed-390.png",
+      "sha256": "baa77f053b3c7236706716e054abb4cdf6117753b16e4d7370f215490b352dcc",
+      "inspectedByEye": true
+    },
+    {
+      "path": "publication-loaded-1280.png",
+      "sha256": "a410164dfe27722c0fd3dc34a44abaa3c3f8cb597ed76ecf7507788661566205",
+      "inspectedByEye": true
+    },
+    {
+      "path": "publication-loaded-390.png",
+      "sha256": "5222634820883095ac8f22b90f0cb969fb785b29f7873adb1c34bca051505430",
+      "inspectedByEye": true
+    },
+    {
+      "path": "publication-status.json",
+      "sha256": "646fa852a5448d0e0285fb8ebaf0186d0d2d0b72fbd2cd29cf93cc19f9d2ff7a"
+    },
+    {
+      "path": "publication.json",
+      "sha256": "0f3728bf509dab70ed2b9366aac85d7546c08c106d73ded7a476c94cec7761a9"
+    },
+    {
+      "path": "read-chat-1280.png",
+      "sha256": "d72d97e91ce87240d770e1ca503ae7a9224a763b89eab09c227f097608ac6c80",
+      "inspectedByEye": true
+    },
+    {
+      "path": "read-chat-390.png",
+      "sha256": "31575e995402192561a2e28d86948b286951a8b43865e8bae4b37e87ec175a16",
+      "inspectedByEye": true
+    },
+    {
+      "path": "read-chat-reloaded-1280.png",
+      "sha256": "7ac6c3a849ec4fccd621ea616cc810abdbe24293635375695844cc36259aad13",
+      "inspectedByEye": true
+    },
+    {
+      "path": "read-chat-reloaded-390.png",
+      "sha256": "a4070f232027232fa3f5888844a70f793056f2f02dc2f4d9446fe0bad06b03a1",
+      "inspectedByEye": true
+    },
+    {
+      "path": "read-integration-1.log",
+      "sha256": "34a49900a6e947b6ff093149d010067a9f89c034f24b9302d946a515bda1d6d0"
+    },
+    {
+      "path": "read-integration-2.log",
+      "sha256": "c105c605d19e69824862ab4f2d16608f48c7742f6a89e1c7d75fae868eefd56a"
+    },
+    {
+      "path": "review-1280.png",
+      "sha256": "d2554622521f846b1bf4d1182d4c90eba9a43601c0e18f571c6124cc27160355",
+      "inspectedByEye": true
+    },
+    {
+      "path": "review-390.png",
+      "sha256": "bbc357e7c52434d2f1389e4ce9152e489a24561ee3697801850b6aeaa56beb68",
+      "inspectedByEye": true
+    },
+    {
+      "path": "runtime.json",
+      "sha256": "141ab04f326ea3b0e3767b96f7ad084fb9032c1930779f90ae4886d00fac41eb"
+    },
+    {
+      "path": "saved-audience-1280.png",
+      "sha256": "27475bd0f18bdb53d155ee9918103cac656c8fb322ee11fb5dff4548f16b68b0",
+      "inspectedByEye": true
+    },
+    {
+      "path": "saved-audience-390.png",
+      "sha256": "15a57ec8073cc10aaa4517f7effb166037afbfed41b947440c239deebbc45532",
+      "inspectedByEye": true
+    },
+    {
+      "path": "security.log",
+      "sha256": "0dc06dbdb4c9ed509fbae43fc030b50984448c8c4d415c4a3fe096dcf8717ca9"
+    },
+    {
+      "path": "sign-in.json",
+      "sha256": "bd1731200970839365123660083153f00d10af175028e65314c0fe9bdedcdbc0"
+    },
+    {
+      "path": "spending-1280.png",
+      "sha256": "7c9d044194bc22be253ac34cabbc9d17eafa700d8f57a35eb06ff1a0f7e21776",
+      "inspectedByEye": true
+    },
+    {
+      "path": "spending-390.png",
+      "sha256": "ee4a0af5757fbd1c71f70bc0eec43075d46732b9fc1d17c15006161a081082b3",
+      "inspectedByEye": true
+    },
+    {
+      "path": "stage-a.log",
+      "sha256": "77e0972c745ee4a329c6035edcbe2a2c612ddbe83245c24d076cc5049ab04ad8"
+    },
+    {
+      "path": "tests-1.log",
+      "sha256": "6e85d9b98a23ffeb34830480f66193e0ad881ee1bfda0e28d0bce5bc5ab906b4"
+    },
+    {
+      "path": "tests-2.log",
+      "sha256": "39d65d6288077ced83cfe5d924aaaf9aa996db8d6bb74cb4e8df4692874f07ca"
+    },
+    {
+      "path": "tools-1280.png",
+      "sha256": "b7a8918ab43ebdf87c776fcd0078464fd74ec4cd8eaab54e59d05ecc9709b1a9",
+      "inspectedByEye": true
+    },
+    {
+      "path": "tools-390.png",
+      "sha256": "ce6e5e09aa51cd9500064c238f3e12e35368af251c5bb18dd83a8aa3b293d29e",
+      "inspectedByEye": true
+    },
+    {
+      "path": "typecheck-final.log",
+      "sha256": "45f96d18bc7a398ac60bfb63c131ae0486317e5d24abbdf3307afefbebaffc21"
+    },
+    {
+      "path": "typecheck.log",
+      "sha256": "b87edc4166374a407e6071e0682559bfff7bd7d41c4dbf267c290686ae4fa75a"
+    },
+    {
+      "path": "write-approved-1280.png",
+      "sha256": "11b7a131bb9ec73213f5f02e7e916d172ada79d259f355bcfaf0361ae84fe5f7",
+      "inspectedByEye": true
+    },
+    {
+      "path": "write-approved-390.png",
+      "sha256": "b5a837e9d891e167e98bf288d612d651235f509e81f4bde16d317661aac76a2d",
+      "inspectedByEye": true
+    },
+    {
+      "path": "write-approved-reloaded-1280.png",
+      "sha256": "339151cffeab7e614350aa8d3d12188b65864f37d1e14d9f4ba69cc9d8b9ecdf",
+      "inspectedByEye": true
+    },
+    {
+      "path": "write-approved-reloaded-390.png",
+      "sha256": "b5a837e9d891e167e98bf288d612d651235f509e81f4bde16d317661aac76a2d",
+      "inspectedByEye": true
+    },
+    {
+      "path": "write-waiting-1280.png",
+      "sha256": "4ebc63aabb62fc7cd3ce67c59f407e1400f767f131a6189ef45e05892ba7a3d2",
+      "inspectedByEye": true
+    },
+    {
+      "path": "write-waiting-390.png",
+      "sha256": "dbe078c4873ee23df248eb95a6bbc6290df4b1fb8ec33908589c282af816e2ff",
+      "inspectedByEye": true
+    },
+    {
+      "path": "write-waiting-reloaded-1280.png",
+      "sha256": "6980b68c931b3596a9cee88bd45f95ec4de081d8ae7374b1e8abb034c45eb5c3",
+      "inspectedByEye": true
+    },
+    {
+      "path": "write-waiting-reloaded-390.png",
+      "sha256": "089c63a4f4f43adcf9bab0963a8af76fe5a56aae30049f857102444efc1ed449",
+      "inspectedByEye": true
+    }
+  ]
+}
