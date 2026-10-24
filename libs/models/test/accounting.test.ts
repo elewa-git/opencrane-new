@@ -6,7 +6,7 @@ import { ProjectionRunner, type Query } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { BudgetActor, envelope } from '../src/actor.ts';
 import { priceTableId, totals } from '../src/state.ts';
-import { budgets } from '../src/accounting.ts';
+import { budgets, readSpendingEffects } from '../src/accounting.ts';
 import { initialiseBudgetProjection, rebuildBudgetProjection } from '../src/rebuild.ts';
 import * as models from '../src/index.ts';
 
@@ -295,3 +295,70 @@ async function indexedMonthReads() {
 }
 it('selects each month and scope combination through an ordered index without scanning other rows',
   indexedMonthReads);
+
+function effectEvent(index: number, permitId = 'permit', silo = 'test') {
+  const observed = { permitId, computerId: 'private-computer', tool: 'private-tool',
+    destination: 'private-destination', costCents: index, outcome: 'success',
+    usage: { inputTokens: 100, outputTokens: 10, priceTableId: 'private-tariff' } };
+  let type = 'effect.observed';
+  let payload: unknown = observed;
+  if (index % 3 === 1) {
+    type = 'effect.uncertain';
+    payload = { permitId, computerId: 'private-computer', reason: 'missing_usage' };
+  } else if (index % 3 === 2) {
+    type = 'effect.resolved';
+    payload = { permitId, reservationId: permitId, resolvedBy: 'owner',
+      outcome: 'settled', settledCents: 0, evidence: [{ kind: 'provider_receipt',
+        reference: 'private-receipt', digest: '0'.repeat(64), amountCents: 0 }] };
+  }
+  const saved = envelope(silo, `effect-${permitId}`, type, payload);
+  return { ...saved, source: 'opencrane-server',
+    principal: { kind: 'human' as const, id: 'owner' } };
+}
+async function effectPages(permitId?: string) {
+  const rows = [];
+  let after = 0;
+  while (true) {
+    const page = await readSpendingEffects(postgres.db, 'test', { permitId, after, limit: 50 });
+    expect(page.rows.length).toBeLessThanOrEqual(50);
+    rows.push(...page.rows);
+    if (page.next === null) return rows;
+    expect(page.next).toBeGreaterThan(after);
+    after = page.next;
+  }
+}
+async function pagesSavedEffects() {
+  const expectedIds: string[] = [];
+  const permitIds: string[] = [];
+  for (let index = 0; index < 213; index += 1) {
+    const permitId = index % 2 === 0 ? 'permit' : 'other-permit';
+    const saved = effectEvent(index, permitId);
+    await nats.seed([saved, effectEvent(index, permitId, 'foreign')]);
+    expectedIds.push(saved.id);
+    if (permitId === 'permit') permitIds.push(saved.id);
+  }
+  await runner.run(budgets);
+  const all = await effectPages();
+  function eventId(row: { eventId: string }) { return row.eventId; }
+  expect(all.map(eventId)).toEqual(expectedIds);
+  const filtered = await effectPages('permit');
+  expect(filtered.map(eventId)).toEqual(permitIds);
+  expect(await effectPages('absent')).toEqual([]);
+  const first = await readSpendingEffects(postgres.db, 'test');
+  expect(first.rows).toHaveLength(20);
+  expect(first.next).toBe(all[19]?.position);
+  expect(first.sequence).toBe(await nats.store.head());
+  expect(first.generation).toBeGreaterThanOrEqual(0);
+  expect(all.slice(0, 3)).toMatchObject([
+    { type: 'effect.observed', outcome: 'success', costCents: 0,
+      settledCents: null, resolvedBy: null, changeRef: null },
+    { type: 'effect.uncertain', outcome: null, costCents: null, settledCents: null },
+    { type: 'effect.resolved', outcome: 'settled', costCents: null,
+      settledCents: 0, resolvedBy: 'owner' },
+  ]);
+  expect(JSON.stringify(all)).not.toContain('private-');
+  await expect(readSpendingEffects(postgres.db, 'test', { limit: 51 })).rejects.toThrow();
+  await expect(readSpendingEffects(postgres.db, 'test', { after: -1 })).rejects.toThrow();
+}
+it('pages mixed saved effect records by original position and permit without private or foreign data',
+  pagesSavedEffects);
