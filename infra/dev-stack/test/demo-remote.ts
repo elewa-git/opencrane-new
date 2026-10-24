@@ -1,4 +1,4 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse, RequestListener } from 'node:http';
 import type { LookupAddress } from 'node:dns';
 import type { RemoteNetwork } from '@opencrane/models';
 import { remoteFixture } from '@opencrane/models/testing/remote-mcp';
@@ -6,16 +6,23 @@ import { createDemoServer } from '../../../apps/demo-mcp/src/server.ts';
 
 export const demoLocator = 'https://mcp.example.test/';
 
-export async function demoRemoteFixture(options: { wrongHostname?: boolean; redirect?: boolean } = {}) {
-  const demo = createDemoServer();
-  await demo.ready();
+type DemoRemoteOptions = {
+  wrongHostname?: boolean;
+  redirect?: boolean;
+  handler?: RequestListener;
+};
+
+export async function demoRemoteFixture(options: DemoRemoteOptions = {}) {
+  const demo = options.handler ? undefined : createDemoServer();
+  await demo?.ready();
   function handle(request: IncomingMessage, response: ServerResponse) {
     if (options.redirect) {
       response.writeHead(302, { location: 'https://private.example.test/' });
       response.end();
       return;
     }
-    demo.routing(request, response);
+    if (options.handler) options.handler(request, response);
+    else demo!.routing(request, response);
   }
   const fixture = await remoteFixture(options.wrongHostname, handle);
   async function resolve(hostname: string) {
@@ -49,7 +56,7 @@ export async function demoRemoteFixture(options: { wrongHostname?: boolean; redi
     try {
       await fixture.close();
     } finally {
-      await demo.close();
+      await demo?.close();
     }
   }
   const network: RemoteNetwork = { resolve, request };

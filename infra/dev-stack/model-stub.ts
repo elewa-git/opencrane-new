@@ -1,6 +1,7 @@
 // Dev-stack qualification only: this process never contacts an external provider.
 import { appendFileSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import type { stageBModelCall } from './stage-b-model.ts';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 const approvalRevision = process.env['MODEL_STUB_MCP_REVISION'];
@@ -96,7 +97,15 @@ const server = createServer((req, res) => {
     const id = `resp_${randomUUID()}`, message = `msg_${randomUUID()}`;
     const emit = (event: { type: string; [name: string]: unknown }) => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     emit({ type: 'response.created', response: { id } });
-    if (pdf && !code && path && !output && !customOutput) {
+    let demoCall: ReturnType<typeof stageBModelCall>;
+    if (prompt.includes('STAGE_B_READ') || prompt.includes('STAGE_B_WRITE')) {
+      // Keep ordinary replies usable in the single-file wake Pod fixture.
+      const { stageBModelCall } = await import('./stage-b-model.ts');
+      demoCall = stageBModelCall(body);
+    }
+    if (demoCall) {
+      emit({ type: 'response.output_item.done', item: demoCall });
+    } else if (pdf && !code && path && !output && !customOutput) {
       // Read the file when inline text is empty, unavailable or missing the requested fact.
       // Match the real Sol call. A disabled host must fail, with no invented shell fallback.
       emit({ type: 'response.output_item.done', item: { type: 'custom_tool_call', id: `ct_${randomUUID()}`, status: 'completed', name: 'exec', call_id: `call_${randomUUID()}`, input: `text(await tools.exec_command({cmd: "cat ${path}", max_output_tokens: 1000}))` } });

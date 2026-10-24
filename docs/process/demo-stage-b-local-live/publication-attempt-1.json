@@ -1,0 +1,27 @@
+{
+  "status": "FAIL",
+  "step": "audience",
+  "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+  "grants": [],
+  "posts": [
+    {
+      "path": "/api/org/integrations/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/access/changes",
+      "status": 200,
+      "command": {
+        "commandId": "994eda0d-12e8-4a43-ab91-8ad9218e95cc",
+        "expectedSequence": 0,
+        "action": "grant",
+        "granteeKind": "member",
+        "granteeId": "zitadel-owner"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "994eda0d-12e8-4a43-ab91-8ad9218e95cc",
+        "operation": "grant.given",
+        "sequence": 374,
+        "changeId": "836585e3-bae7-415a-b912-6b5e109dc1dd",
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    }
+  ]
+}

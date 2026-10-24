@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-24T07:33:44.877Z",
+  "policyAvailable": false,
+  "rows": [
+    {
+      "serverId": "journey-1d9294ac-cd53-4a71-a803-b60a5974babf",
+      "name": "Journey MCP",
+      "source": {
+        "kind": "catalogue",
+        "label": "Catalogue",
+        "detail": "catalogue:dev"
+      },
+      "version": "1.0.0",
+      "accountModel": "Not provided",
+      "toolsAllowed": 1,
+      "toolsTotal": 2,
+      "status": {
+        "kind": "disabled",
+        "label": "Unavailable",
+        "detail": "No fresh tool catalogue check"
+      }
+    },
+    {
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "name": "OpenCrane demo",
+      "source": {
+        "kind": "remote_url",
+        "label": "Remote URL",
+        "detail": "mcp.example.test"
+      },
+      "version": "0.1.0",
+      "accountModel": "Not provided",
+      "toolsAllowed": 2,
+      "toolsTotal": 2,
+      "status": {
+        "kind": "needs_input",
+        "label": "Needs input",
+        "detail": "Pending review"
+      }
+    }
+  ],
+  "permissions": [],
+  "tools": []
+}
