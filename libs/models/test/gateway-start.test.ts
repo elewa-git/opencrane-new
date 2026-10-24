@@ -15,7 +15,7 @@ function keepsProviderJwtFailure() {
 it('keeps provider-route JWT refusals in the gateway audit', keepsProviderJwtFailure);
 
 function ignoresConfigurationChecks(status: number) {
-  const line = `route=control/configuration http.status=${status}`;
+  const line = `route=default/configuration http.status=${status}`;
   expect(gatewayUsage(line)).toBeUndefined();
 }
 it.each([200, 401, 403])('keeps configuration checks out of call usage (%s)',
