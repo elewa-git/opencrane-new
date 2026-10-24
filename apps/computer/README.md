@@ -23,7 +23,7 @@ flowchart LR
   server -.->|tests use helper| computer
   computer -->|progress and results| server
   computer -->|checks command ownership| executor["socket-denied executor"]
-  computer -.-> registrations["private registrations<br/>single-use call records"]
+  computer -.-> registrations["private worker inputs<br/>checked copies and call records"]
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
 ```
@@ -45,6 +45,9 @@ flowchart LR
   A private store keeps those records in memory and refuses reuse, including retries.
   Replacing a record, losing its connection or retiring its computer generation removes
   permission. Expiry also removes permission, and restarting restores none.
+  Prepares checked package files or empty Git folders in a private directory.
+  Each plan can prepare files only once, and cleanup removes only its own files.
+  Cleanup also removes newly created folders if opening them fails.
   Network execution stays disabled until the call's identity and isolation are proved.
 - Checks the image's licences before publishing it.
 

@@ -1358,14 +1358,14 @@ and optional `dependencies`. Every dependency must resolve to an exact three-par
 version in that map. Every archive must have a SHA-512 pin and the exact npm registry
 archive path for that package and version. Other fields, links, scripts, ranges,
 nested installations and other lockfile formats are refused. Parsing JSON alone
-never approves archive destinations. Input copying and archive verification remain
-unimplemented; these checks do not claim a package is safe to publish.
+never approves archive destinations. Private input copying is described below.
+Archive verification remains unimplemented; these checks do not claim a package is safe to publish.
 
 Prepared arguments fix npm registry and user/global config paths. Git uses HTTPS
 only, no credentials, helpers, checkout, submodules or redirects, and empty template
 and hook paths. The plan uses a new environment with no inherited settings and a
 future `/operation` directory. That directory must contain only checked inputs;
-creating and confining it is deferred. No prepared plan is executed.
+preparing it is described below, and confinement is deferred. No prepared plan is executed.
 Plans fix 300 seconds wall time, 30 seconds network idle time, 64 KiB retained output,
 a 2,000-token excerpt and 64 KiB worker frames. Runtime enforcement awaits the launcher.
 
@@ -1417,3 +1417,48 @@ immutable records, retry after failed validation, clock and byte limits, operati
 history limits, and empty restart. It validates both Git and npm plans through the store.
 `supervisor-identity.test.ts` retains the Docker UID 1001 socket-denial check. These checks
 do not qualify native delivery, worker confinement or a live install/clone journey.
+
+## Private worker input preparation — P3-20 PR 3c
+
+`prepareWorkerInput(plan, parentPath)` prepares files only. Its parent path comes from
+supervisor configuration, never from the command. There is no production caller,
+registration socket, HTTP route, model tool or startup change.
+
+Validation retains the exact checked input string and generated package manifest in a
+private WeakMap, indexed by the frozen plan object. Preparation takes that input once.
+Copied plans and repeat attempts refuse. Filesystem failure does not restore the consumed
+registration or permit another preparation. The plan itself contains no input bytes.
+
+The parent must be an absolute Linux path without traversal or symlink components.
+Every ancestor must belong to root or the effective user and forbid group/other writes.
+The final parent must belong to the effective user and forbid all group/other access.
+The future root supervisor therefore requires a root-owned private parent. Tests use
+the test process's user and a temporary directory under its home.
+
+Each operation id is one component of at most 128 ASCII letters, digits, underscores
+or hyphens. Preparation refuses pre-existing roots. It creates mode-0700 directories:
+`operation`, `tmp`, `cache`, `config` and `var/empty`. npm receives only a generated
+`package.json` and the exact pinned `package-lock.json`, both mode 0600, in `operation`.
+Git receives empty locations. No shared tree, environment or caller file is copied.
+These paths describe a future isolated root; no command runs against them yet.
+
+Each child is opened through its checked parent's descriptor. Identity checks compare
+device and inode numbers and reject replaced links or changed ownership and permissions. Files must have one hard link.
+New directories are recorded before opening them, so an open failure still removes
+the created directory if its identity matches. Acquired descriptors stay open until
+cleanup finishes, preventing inode reuse. Cleanup visits
+only recorded entries, never recursively follows a tree, and skips replaced names.
+It can empty an owned directory that was renamed but cannot remove its new name.
+Unowned additions remain; a directory that cannot be removed reports a fixed cleanup
+error. All preparation errors use fixed text and retain no filesystem error details.
+The caller must call the returned `cleanup()` when finished; repeated cleanup is harmless.
+
+`worker-input.test.ts` covers checked npm bytes, empty Git locations, copied/reused plans,
+unsafe parents, traversal, existing roots, replacement links, partial writes and two
+operations with replaced directories. Filesystem observers force races on real temporary
+files. Injected `EMFILE` failures cover opening the operation root and `tmp` after
+creation, and preserve a replacement directory when opening fails. They do not prove
+protection against a hostile process with the supervisor's UID.
+The existing executor refusal and UID 1001 socket-denial regression remains unchanged.
+Native delivery, worker runtime installation, chroot, quotas, scanning, publication,
+CONNECT and fresh gVisor qualification remain unbuilt or NOT RUN in this slice.

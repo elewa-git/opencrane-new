@@ -21,6 +21,19 @@ type Lookup = (binding: Binding) => {
   consume: () => boolean;
 } | undefined;
 
+type PrivateInput = { lockfile: string; manifest: string | undefined };
+const inputs = new WeakMap<object, PrivateInput>();
+
+// Hand the checked bytes to preparation once; copied plans carry no permission.
+export function takeWorkerInput(plan: object) {
+  const input = inputs.get(plan);
+  if (!input) {
+    throw new Error('worker_input_refused');
+  }
+  inputs.delete(plan);
+  return input;
+}
+
 const limits = Object.freeze({ wallMs: 300_000, idleMs: 30_000,
   outputBytes: 65_536, excerptLimit: 2000, frameBytes: 65_536 });
 const npmForm = ['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund'];
@@ -83,13 +96,15 @@ function checkLockfile(input: string) {
     if (!/^sha512-[A-Za-z0-9+/]{86}==$/u.test(integrity)) throw new Error();
     pinnedDependencies(entry['dependencies'], packages);
   }
+  const manifest = { private: true, dependencies: root['dependencies'] ?? {} };
+  return JSON.stringify(manifest);
 }
 function operation(argv: string[], input: string) {
   if (JSON.stringify(argv) === JSON.stringify(npmForm)) {
-    checkLockfile(input);
+    const manifest = checkLockfile(input);
     const fixed = ['/usr/bin/npm', ...npmForm.slice(1), '--registry=https://registry.npmjs.org',
       '--userconfig=/dev/null', '--globalconfig=/dev/null'];
-    return { argv: fixed, host: 'registry.npmjs.org', port: 443,
+    return { manifest, argv: fixed, host: 'registry.npmjs.org', port: 443,
       env: { HOME: '/operation', PATH: '/usr/bin:/bin' } };
   }
   if (argv.length !== 4 || argv[0] !== 'git' || argv[1] !== 'clone' ||
@@ -107,7 +122,7 @@ function operation(argv: string[], input: string) {
   const env = { HOME: '/operation', PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_COUNT: '0' };
-  return { argv: fixed, ...destination, env };
+  return { manifest: undefined, argv: fixed, ...destination, env };
 }
 function startFrame(frame: Buffer) {
   if (frame.length > limits.frameBytes || frame.at(-1) !== 10 ||
@@ -165,13 +180,19 @@ export function workerRequest(frame: Buffer, lookup: Lookup,
     const binding = connectionBinding(context);
     if (request.processId !== binding.processId) throw new Error();
     const live = lookup(binding);
-    if (!live || Buffer.byteLength(live.input) > limits.frameBytes) throw new Error();
+    if (!live) {
+      throw new Error();
+    }
+    const input = live.input;
+    if (Buffer.byteLength(input) > limits.frameBytes) {
+      throw new Error();
+    }
     const saved = live.registration;
     checkRegistration(saved, binding, request, now);
-    const prepared = operation(request.argv, live.input);
+    const prepared = operation(request.argv, input);
     if (prepared.host !== saved.host || prepared.port !== saved.port) throw new Error();
     const hash = createHash('sha256');
-    hash.update(JSON.stringify([request.argv, request.cwd, live.input]));
+    hash.update(JSON.stringify([request.argv, request.cwd, input]));
     if (hash.digest('hex') !== saved.operationDigest) throw new Error();
     // Copy only reviewed identity fields; never copy credentials from trusted state either.
     const identity = {
@@ -195,6 +216,8 @@ export function workerRequest(frame: Buffer, lookup: Lookup,
     };
     // Consume only after all checks pass, and before returning a plan to any caller.
     if (live.consume() !== true) throw new Error();
+    const privateInput = { lockfile: input, manifest: prepared.manifest };
+    inputs.set(plan, privateInput);
     return Object.freeze(plan);
   } catch {
     throw new Error('worker_request_refused');
