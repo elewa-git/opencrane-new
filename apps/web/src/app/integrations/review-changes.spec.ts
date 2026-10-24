@@ -301,7 +301,7 @@ describe('reviewed changed tools', () => {
       .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
       .mockResolvedValueOnce(reply(policy()))
       .mockResolvedValueOnce(reply({ status: 'disabled' }))
-      .mockResolvedValueOnce(reply({ status: 'appended', sequence: 9 }))
+      .mockResolvedValueOnce(reply({ status: 'appended', sequence: 248 }))
       .mockResolvedValueOnce(reply({ status: 'conflict' }, 409));
     const fixture = page();
     await vi.waitFor(() => expect(content(fixture).textContent).toContain('Review and publish'));
@@ -328,7 +328,7 @@ describe('reviewed changed tools', () => {
     fixture.destroy();
   });
 
-  it('reviews the exact read before publishing the returned revision', async () => {
+  async function publishesReturnedPositions(reviewPosition: number, publicationPosition: number) {
     function currentStatus(): Promise<Response> {
       const body = postedCommand(fetchMock, 4);
       return Promise.resolve(reply({ status: 'applying', changeRef: body.commandId }));
@@ -337,14 +337,15 @@ describe('reviewed changed tools', () => {
       .mockResolvedValueOnce(reply({ rows: [integration], loadedAt: new Date().toISOString() }))
       .mockResolvedValueOnce(reply(policy()))
       .mockResolvedValueOnce(reply({ status: 'disabled' }))
-      .mockResolvedValueOnce(reply({ status: 'appended', sequence: 9 }))
-      .mockResolvedValueOnce(reply({ status: 'appended', sequence: 10 }))
+      .mockResolvedValueOnce(reply({ status: 'appended', sequence: reviewPosition }))
+      .mockResolvedValueOnce(reply({ status: 'appended', sequence: publicationPosition }))
       .mockImplementationOnce(currentStatus);
     const fixture = page();
     await vi.waitFor(() => expect(content(fixture).textContent).toContain('maxLength: 2000'));
     click(fixture, 'Review and publish');
     await vi.waitFor(() => expect(content(fixture).textContent)
       .toContain('Publishing the reviewed tool list'));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
     const review = postedCommand(fetchMock, 3);
     const publication = postedCommand(fetchMock, 4);
     expect(review).toMatchObject({ expectedSequence: 8, policyRevision: 7,
@@ -354,10 +355,14 @@ describe('reviewed changed tools', () => {
         reviewDigest: 'cbb22f0f6ee74151de8abc96912dcca08942e943cdb2740e13d7ae8b20af7ca2' }),
       expect.objectContaining({ name: 'confirm_order', mode: 'block' }),
     ]));
-    expect(publication).toMatchObject({ expectedSequence: 9, reviewRevision: 9 });
+    expect(publication).toMatchObject({ expectedSequence: reviewPosition,
+      reviewRevision: reviewPosition });
     expect(content(fixture).textContent).not.toContain('Ready');
     fixture.destroy();
-  });
+  }
+  const publicationPositions = [[9, 10], [248, 252]] as const;
+  it.each(publicationPositions)(
+    'publishes review position %s and checks publication position %s', publishesReturnedPositions);
 
   it('requires a fresh read after a stale review', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')

@@ -177,7 +177,12 @@ An expired catalogue says that calls stay paused. The changes page posts the exa
 catalogue digest, policy revision, connection, account mode and every tool choice to
 `POST /api/org/integrations/:id/review`. A new tool is Block. The next POST to
 `/:id/publication` uses the review receipt's sequence for both `expectedSequence` and
-`reviewRevision`. An unknown drift review needs a fresh detail read; there is no review
+`reviewRevision`. Review and publication receipts use global event positions. They must
+advance, but unrelated grants and other events can leave gaps. The browser never adds
+one to a policy or review position. Both commands retain the server's expected-position
+check, so another policy change still returns 409. `review-changes.spec.ts` covers
+non-adjacent receipts; the server integration tests cover gaps and conflicting writes.
+An unknown drift review needs a fresh detail read; there is no review
 status endpoint. An unknown initial review keeps its original id and stays uncertain
 until its status can be proved. An unknown publication checks only
 `GET /api/org/integrations/changes/:commandId` for its original command. The command id

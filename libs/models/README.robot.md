@@ -13,6 +13,23 @@ The existing conditional append and readback save one `approval.cancelled` with
 result. Used consent retains dispatch evidence and cannot retry during matching control.
 History loads do not add conversation or computer streams to access watches.
 
+## Private gateway refusal diagnostics
+
+The decision service logs `Gateway request refused` at warn level before recording a
+caught refusal. Each line contains its generated `requestId`, route, check stage,
+elapsed milliseconds and a fixed reason label. The request id joins the private log
+to `decision.recorded`. Unverified turn ids are never copied from request headers.
+Only explicitly listed exception messages and known error classes select a label.
+Unknown errors use `decision_unavailable`; raw errors, stacks, headers, credentials
+and request bodies are never included. The public response and event contract stay
+unchanged. Operators find these lines in the models process log, beside the gateway.
+
+`test/decision-refusal.test.ts` resumes a computer, restarts the decision service and
+calls the real gateway with current and stale credentials. It also checks malformed
+credentials and an unavailable event read with a secret canary in its exception.
+The authorised resumed call succeeds offline. The live rerun's 403 has not been
+reproduced; its cause remains unresolved until a live run captures the diagnostic.
+
 ## Local demo TLS fixture
 
 `@opencrane/models/testing/remote-mcp` accepts an optional HTTP request handler after

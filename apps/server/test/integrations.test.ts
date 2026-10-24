@@ -1517,6 +1517,57 @@ async function publicationRequest() {
     payload: { commandId: 'publish-odoo', expectedSequence: reviewRevision, reviewRevision } };
 }
 
+async function publishesAcrossUnrelatedEvents() {
+  const payload = await exactReviewCommand();
+  await member('review-neighbour', 'member');
+  const reviewRequest = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
+    headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin }, payload };
+  const review = await app.inject(reviewRequest);
+  expect(review.statusCode, review.body).toBe(200);
+  const reviewReceipt = review.json<{ status: string; sequence: number }>();
+  expect(reviewReceipt.status).toBe('appended');
+  expect(reviewReceipt.sequence).toBeGreaterThan(payload.expectedSequence + 1);
+  await runner.run(mcpCatalogue);
+  const reviewed = await catalogue.tools('test', 'odoo');
+  expect(reviewed.sequence).toBe(reviewReceipt.sequence);
+  expect(reviewed.reviewRevision).toBe(reviewReceipt.sequence);
+
+  await member('publication-neighbour', 'member');
+  const publicationRequest = { ...reviewRequest, url: '/api/org/integrations/odoo/publication',
+    payload: { commandId: 'publish-after-neighbours', expectedSequence: reviewed.sequence,
+      reviewRevision: reviewReceipt.sequence } };
+  const publication = await app.inject(publicationRequest);
+  expect(publication.statusCode, publication.body).toBe(200);
+  const publicationReceipt = publication.json<{ status: string; sequence: number }>();
+  expect(publicationReceipt.status).toBe('appended');
+  expect(publicationReceipt.sequence).toBeGreaterThan(reviewReceipt.sequence + 1);
+  await runner.run(mcpCatalogue);
+  const saved = await catalogue.tools('test', 'odoo');
+  expect(saved.sequence).toBe(publicationReceipt.sequence);
+  expect(saved.publication).toMatchObject(publicationRequest.payload);
+}
+it('returns global review and publication positions across unrelated events',
+  publishesAcrossUnrelatedEvents);
+
+async function refusesConcurrentPolicyChange(stage: string) {
+  let request;
+  if (stage === 'review') {
+    const payload = await exactReviewCommand();
+    request = { method: 'POST' as const, url: '/api/org/integrations/odoo/review',
+      headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin }, payload };
+  } else {
+    request = await publicationRequest();
+  }
+  const change = fixture('mcp.server_unpublished', 'mcp-odoo', { serverId: 'odoo' });
+  await nats.seed([change]);
+  const before = await nats.store.head();
+  const response = await app.inject(request);
+  expect(response.statusCode, response.body).toBe(409);
+  expect(await nats.store.head()).toBe(before);
+}
+it.each(['review', 'publication'])('refuses a concurrent policy change before %s',
+  refusesConcurrentPolicyChange);
+
 async function savesPublicationIntent() {
   const request = await publicationRequest();
   const before = await nats.store.head();
