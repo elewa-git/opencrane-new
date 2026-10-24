@@ -162,14 +162,15 @@ function savedIntent(options: Options, memberId: string, loaded: Loaded) {
 export async function save(options: Options, memberId: string, id: string, subject: string,
   type: string, data: unknown, sequence: number,
   fresh: Awaited<ReturnType<typeof authorityFence>> | undefined,
-  verify: typeof verifySaved = verifySaved) {
+  verify: typeof verifySaved = verifySaved,
+  checkAccess?: () => Promise<unknown>) {
   if (!fresh) throw new Error('Child write check unavailable');
   const event = { id, commandId: id, subject, type, data, silo: options.silo,
     source: 'opencrane-server', time: new Date().toISOString(),
     principal: { kind: 'human' as const, id: memberId }, correlation: {} };
   await fresh();
   const command = { event, expectedSequence: sequence, historyChecked: true as const,
-    deadline: fresh.deadline };
+    deadline: fresh.deadline, checkAccess: checkAccess ?? fresh };
   const result = await options.store.append(command);
   if (result.status === 'conflict') throw new ChildRequestRace('Child request changed');
   if (result.status !== 'appended') throw new Error('Child request outcome unavailable');
