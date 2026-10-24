@@ -4788,7 +4788,6 @@ streams after reading the conversation tail. Correct and Forget remain disabled;
 valid controls return `memory_tool_unavailable` and create no business event or file.
 Remember and discovery still use their existing paths. Fresh-install qualification: NOT RUN.
 
-
 ### Team memory test setup
 
 Team-scope and team loaded-reference cases choose their assistant in `beforeEach`.
@@ -4796,3 +4795,10 @@ They no longer close a personal fixture and start a second fixture inside the te
 This keeps a timed-out test body from leaving another setup running against the
 shared test variables. The existing 120-second setup hook, 30-second test limit and
 two-second product pass are unchanged.
+
+### Memory backend test disposal
+
+Cleanup stops the HTTP listener before disconnecting unfinished requests and waiting
+for Fastify to close. Disconnecting first left time for a new connection to arrive
+and keep disposal waiting. The regression opens a fresh incomplete request in that
+gap and requires disposal to finish within the existing two-second cleanup check.

@@ -187,7 +187,10 @@ async function closeMemoryServices(target: typeof setup | undefined,
   // Finish every call and assertion before disposal. Do not wait for gateway drain here.
   const child = target?.gatewayChild();
   child?.kill('SIGKILL');
-  // Disconnect unfinished test requests before waiting for the backend to close.
+  // Stop accepting connections before disconnecting clients, including incomplete requests.
+  if (backend?.server.listening) {
+    backend.server.close();
+  }
   backend?.server.closeAllConnections();
   await backend?.close();
   await target?.close();
