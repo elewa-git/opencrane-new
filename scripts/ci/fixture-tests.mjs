@@ -9,6 +9,7 @@ const fixtureGroups = {
     'apps/server/test/bridge-credentials.test.ts',
     'apps/server/test/screenshot-browser.test.ts',
     'apps/server/test/upload.test.ts',
+    'scripts/stage-b-read.test.mjs',
   ],
   'fixtures-browser': [
     'apps/server/test/approvals.test.ts',

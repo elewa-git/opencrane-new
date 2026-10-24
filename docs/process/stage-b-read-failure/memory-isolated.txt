@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/memory-dispatch.test.ts -t consumes the memory pass and captured backend context once --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/stage-b-read-failure
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 91 skipped (92)
+   Start at  08:48:51
+   Duration  30.74s (transform 47%, tests 39%, import 14%)
+
+  Transform  transforming modules took 14.17s · 47% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

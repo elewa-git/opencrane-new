@@ -15,7 +15,7 @@ flowchart LR
   actions["GitHub Actions<br/>repository checks"] -->|chooses jobs and tests| ci["scripts/ci<br/>test jobs"]
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
   ci -->|runs files| vitest["Vitest<br/>root tests"]
-  actions -->|builds for image tests| computer["apps/computer<br/>test image"]
+  actions -->|builds for image and demo read tests| computer["apps/computer<br/>test image"]
   actions -->|checks folder guides| readmes["README checker"]
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
   actions -->|restores system packages| cache["Actions cache<br/>downloaded packages"]
@@ -37,7 +37,8 @@ fixture files use Vitest's usual worker count, based on the runner's CPUs. Brows
 files run one at a time because concurrent Angular servers miss their startup
 deadlines. A development build prepares Angular before tests start their own servers.
 
-The image job also installs Chromium because the screenshot test needs both.
+The image job runs the offline demo read through a real computer and local services.
+It also installs Chromium because the screenshot test needs both.
 Chromium setup checks installed system packages first. When they are present,
 it installs only the browser and avoids an apt update or package download.
 The browser job also runs the hosted integration-row journey regression.

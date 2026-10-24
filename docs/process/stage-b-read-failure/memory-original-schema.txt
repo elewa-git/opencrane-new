@@ -1,0 +1,28 @@
+RUN  v5.0.3 /home/jente/dev/wt/stage-b-read-failure
+
+ ❯ apps/server/test/memory-dispatch.test.ts (92 tests | 1 failed | 91 skipped) 14351ms
+   × serialises evidence for concurrent memory calls on the same tool 12682ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/memory-dispatch.test.ts > serialises evidence for concurrent memory calls on the same tool
+AssertionError: expected [ 403, 403 ] to include 200
+ ❯ allowsConcurrentMemory apps/server/test/memory-dispatch.test.ts:343:22
+    341|       statuses.push(reply.status);
+    342|     }
+    343|     expect(statuses).toContain(200);
+       |                      ^
+    344|     expect(statuses.every(allowedOrConflict)).toBe(true);
+    345|     expect(admissions).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 91 skipped (92)
+   Start at  08:55:50
+   Duration  36.37s (transform 46%, tests 40%, import 14%)
+
+  Transform  transforming modules took 16.35s · 46% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

@@ -1,0 +1,102 @@
+{
+  "status": "PASS",
+  "version": "codex-cli 0.159.2",
+  "executorHomePresent": true,
+  "modelRequests": 2,
+  "requestsSha256": "2196777ef27ea21215b9a9e4164f404a363cc5135edaad5ed6557b35baccb41a",
+  "firstModelTools": [
+    {
+      "namespace": "functions",
+      "tools": [
+        "exec",
+        "wait",
+        "request_user_input",
+        "request_user_input_async"
+      ]
+    },
+    {
+      "namespace": "clock",
+      "tools": [
+        "sleep"
+      ]
+    },
+    {
+      "namespace": "collaboration",
+      "tools": [
+        "followup_task",
+        "interrupt_agent",
+        "list_agents",
+        "send_message",
+        "spawn_agent",
+        "wait_agent"
+      ]
+    }
+  ],
+  "toolResults": [
+    {
+      "type": "custom_tool_call_output",
+      "id": "ctco_01a16d07-5f47-74d1-a92b-e355726d8e25",
+      "call_id": "call_read_fixture_quote",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "Script completed\nWall time 1.8 seconds\nOutput:\n"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"offeredTool\":\"mcp__oc_f16d05ec6b__read_fixture_quote\"}"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"quoteId\\\":\\\"DEMO-001\\\",\\\"amountCents\\\":12500,\\\"slot\\\":\\\"morning\\\",\\\"effectCount\\\":0}\"}],\"structuredContent\":{\"quoteId\":\"DEMO-001\",\"amountCents\":12500,\"slot\":\"morning\",\"effectCount\":0},\"isError\":false}"
+        }
+      ]
+    }
+  ],
+  "streamedReplies": [
+    "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_b32d4c86-4baa-403a-b472-f2f61fc7f831\"}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"custom_tool_call\",\"id\":\"ct_read_fixture_quote\",\"call_id\":\"call_read_fixture_quote\",\"name\":\"exec\",\"namespace\":\"functions\",\"input\":\"\\nfunction matches(tool) {\\n  return tool.name.startsWith('mcp__') && tool.name.endsWith('__read_fixture_quote');\\n}\\nconst available = ALL_TOOLS.filter(matches);\\nif (available.length !== 1) throw new Error('Expected one published demo tool');\\nconst selected = available[0];\\ntext({ offeredTool: selected.name });\\nconst result = await tools[selected.name]({\\\"quoteId\\\":\\\"DEMO-001\\\"});\\ntext(result);\\n\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_b32d4c86-4baa-403a-b472-f2f61fc7f831\",\"status\":\"completed\",\"model\":\"gpt-6-luna\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":120,\"total_tokens\":1120}}}\n\n",
+    "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_55682e9c-8f4b-4855-9d98-2967d163c157\"}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_177297f9-e4fe-46a4-9cca-f68f7dcc359b\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0.\"}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_177297f9-e4fe-46a4-9cca-f68f7dcc359b\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0.\"}]}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_55682e9c-8f4b-4855-9d98-2967d163c157\",\"status\":\"completed\",\"model\":\"gpt-6-luna\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":120,\"total_tokens\":1120}}}\n\n"
+  ],
+  "dispatches": [
+    {
+      "name": "read_fixture_quote",
+      "requestId": "ab41e23b-e48e-471f-8f79-82cc8ba613b4"
+    }
+  ],
+  "answer": [
+    {
+      "item": {
+        "type": "agentMessage",
+        "id": "msg_177297f9-e4fe-46a4-9cca-f68f7dcc359b",
+        "text": "Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0.",
+        "phase": null,
+        "memoryCitation": null,
+        "delivery": null,
+        "questions": null
+      },
+      "threadId": "01a16d07-414b-71d3-a1ba-9bcf896d83ed",
+      "turnId": "01a16d07-49d7-72a3-924e-d9b8a8e0bd13",
+      "completedAtMs": 1792830563459
+    }
+  ],
+  "completedTurn": {
+    "id": "01a16d07-49d7-72a3-924e-d9b8a8e0bd13",
+    "items": [
+      {
+        "type": "agentMessage",
+        "id": "msg_177297f9-e4fe-46a4-9cca-f68f7dcc359b",
+        "text": "Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0.",
+        "phase": null,
+        "memoryCitation": null,
+        "delivery": null,
+        "questions": null
+      }
+    ],
+    "itemsView": "summary",
+    "status": "completed",
+    "error": null,
+    "startedAt": 1792830556,
+    "completedAt": 1792830563,
+    "durationMs": 6855
+  }
+}

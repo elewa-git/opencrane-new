@@ -1,0 +1,2 @@
+- Demo read rehearsals use Codex's offered code tool to find published MCP tools and answer with the returned quote, instead of disconnecting the model stream.
+- Model calls after a custom tool finishes retain its namespace, so the assistant can answer in the same turn.

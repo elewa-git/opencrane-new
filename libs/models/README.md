@@ -37,7 +37,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks spending choices, child allowances and payer limits; rechecks access on publish retries; records tool starts, remote outcomes and spending; reads spending calls in pages by original UTC month and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, spending call rows and read tables"]
 ```
@@ -375,6 +375,10 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+After a custom tool finishes, Codex sends its result back to the model. The gateway
+checks that request too, including the namespace that identifies the tool group,
+so the assistant can answer in the same turn.
 
 An admin can recover their saved tool-mode choice by its original reference.
 The receipt keeps the original date and revision even after the tools change.

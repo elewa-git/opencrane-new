@@ -2,6 +2,39 @@
 
 For people, read [README.md](README.md) first.
 
+## First demo read turn
+
+The local reply fixture understands both direct MCP namespaces and Codex's
+`functions.exec` interface. Codex may leave deferred MCP definitions out of the
+first model request. The fixture searches `ALL_TOOLS` inside the offered code tool,
+requires one matching published tool and calls that exact name once. Its next
+response quotes the tool's returned data. Missing or ambiguous tools cannot cause
+a guessed call; failed results cannot become invented quotes.
+
+`scripts/stage-b-read.test.mjs` runs the real demo server, gateway, NATS, PostgreSQL,
+OpenFGA and packaged Codex with the product's thread loader and forwarding proxy.
+It uses the ordinary saved-policy fixture and operator gateway route. Browser
+publication and generated gateway configuration remain live-rehearsal work.
+The computer container has `--network none`; a Unix socket reaches only the local
+fixture services. There are no paid calls. The test runs with an existing executor
+home and with that directory absent. It saves one dispatch record, checks two model
+requests and requires a completed same-turn answer containing the returned quote.
+
+Set `PG_TEST_URL` to a disposable database. The default image is
+`ocn-upload-computer:test`, already built by the CI image fixture job.
+`CODEX_CAPTURE_IMAGE` can select the rehearsal computer image instead.
+`STAGE_B_READ_EVIDENCE` optionally retains private request bodies, streamed replies,
+dispatches and Codex notifications outside the repository, under one folder per case.
+
+```sh
+nice -n 10 npx vitest run scripts/stage-b-read.test.mjs --maxWorkers=2
+nice -n 10 node --experimental-strip-types --test infra/dev-stack/stage-b-model.test.ts
+```
+
+The [offline diagnosis](../../docs/process/stage-b-read-failure/receipt.md) records
+the failing-first results and the remaining live checks. The live rehearsal branch
+must retain its launcher and use this corrected shared fixture when rebasing.
+
 ## Local tools rehearsal checks
 
 The first split of P3-4/P3-5 PR 14a supplies test helpers, not a live journey.
