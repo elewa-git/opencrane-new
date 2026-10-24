@@ -1,2 +1,3 @@
-- Keep the connection cleanup retry test reliable under load by waiting for its database
-  lock before each delete attempt. Continue checking all retries and the saved failed job.
+- Keep connection cleanup and command tests reliable under load by waiting for their
+  database locks. Continue checking every cleanup retry, the saved failed job and the
+  production deadline when a lock is already held.

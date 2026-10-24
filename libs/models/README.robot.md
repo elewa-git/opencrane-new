@@ -3092,6 +3092,9 @@ directly to the cleanup handler and records the number of DELETE requests in eac
 It waits for `deadLetters` to report the failed original before asserting six attempts,
 one DELETE per attempt and five retries. It then checks interval cleanup and that the
 same failed original remains saved.
+The bearer connection fixture also waits for its real database lock. Its custody-error
+tests must reach custody before checking the refused save. The explicit contention test
+passes the production database adapter and keeps the 100 ms deadline.
 The mixed-page test uses two real NATS stores and retains the other silo's current copy
 without adding anything to the worker's store. Timer tests check the default at 899,999
 and 900,000 milliseconds and retry an unknown page after an intervening success.
