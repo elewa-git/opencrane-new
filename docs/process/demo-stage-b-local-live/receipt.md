@@ -234,3 +234,145 @@ The owner stack was not touched.
 
 [run.json](rerun-20261024/run.json) records the tested source, runtime images,
 results, original change references and hashes of every public capture and record.
+
+## Rerun after both publication fixes, 24 October 2026
+
+Part of #574, draft PR #641. Result: **PARTIAL**. Publication passes; the read
+turn fails. Approval and write qualification remain **NOT RUN**.
+
+`git fetch origin` and the rebase completed without conflicts. The new base is
+`e3a97a8881e5dfd2d8f0f8701e751215f27a3b74`: review-position fix #648.
+It includes publication fix #645, `f13ea5d902c3ee600122abc9b43eeaeaeb0fd9d5`.
+The live source is `a294ebd1d0789c9639a0caaa4cfa84934044e16f`.
+This rerun changes evidence only. Product code, the local reply fixture and the
+three protected test files are unchanged.
+
+One fresh install used slot 1, claimed through `infra/dev-stack/claim.sh`.
+The full server and models processes used the guarded local demo transport for
+discovery, catalogue checks and dispatch. Paid calls: **0**. The owner stack was
+unchanged. [Runtime references](rerun3-20261024/runtime.json) identify the images.
+
+### Fresh-run results
+
+| Step | Result | Observed evidence |
+| --- | --- | --- |
+| Stage A regression checks | PASS | Packaged stub and both rehearsal files: 21 tests, including step 9 at both widths. |
+| Fresh baseline | PASS | [Original baseline output](rerun3-20261024/baseline.log): chat, uploads, live view and budget checks at both widths. The earlier gateway 403 did not recur. |
+| Guarded local launch | PASS | Complete server and models services became ready. |
+| Separate owner membership and access | PASS | [Owner record](rerun3-20261024/ownership.json): the external owner remains separate from the generated Admin; PostgreSQL and OpenFGA agree. |
+| External owner browser sign-in | NOT RUN | No existing credential or browser session was available. Real SSO signed in the generated Admin. |
+| Register and discover the local demo server | PASS | Both real demo tool definitions appeared in the browser. |
+| Exact zero costs; read Allow, write Ask | PASS | Browser review showed both declarations at 0 euro cents and the selected modes. |
+| Person and assistant grants | PASS | Original receipts at positions 373 and 374 report content and IAM current. Each grant was submitted once. |
+| Review, publication and gateway acknowledgement | PASS | Review 375, publication 376 and observation 380 agree on generation 1; saved policy has `published: true`. |
+| Bridge acceptance through to model tool availability | PARTIAL | Original Codex thread had the demo MCP server configured. Its first model request's tool list was not captured. |
+| Read tool in a real chat | FAIL | The model request was allowed, then the stream disconnected and the turn failed with `model_error`. No tool dispatch was recorded. |
+| Write waits with zero effects; requester Approve; one effect and same-turn reply | NOT RUN | The failed read stopped the qualification sequence. |
+| Separate demo-server readbacks | PASS | Before and after the failed read: morning slot, effect count 0. Final diagnostic readback also reports 0. No direct write was made. |
+| Approval evidence checker | FAIL | It refused the missing original approval and dispatch records. |
+| Spending and Change history | PARTIAL | Both were captured; no successful tool charge, approval or dispatch exists. |
+
+[Publication records](rerun3-20261024/publication.json) retain the original browser
+commands, grant receipts, policy and gateway events. The review expected position
+372 and returned **375**; the browser accepted the intervening grants and published
+using 375. The publication command is `54b8b7e0-1a01-4a95-a3e3-825a8bf9a440`.
+The gateway process is `499bcc6a-d4e5-4819-ba50-85dd2e1f9fd3`.
+
+[The original chat records](rerun3-20261024/live-probe.json) identify conversation
+`e03a1978-1b98-4864-875a-77fbf6a20fd9`, turn
+`64e6cdd9-2500-4f60-8187-ac70214648b0` and model request
+`0f7437e2-6fd7-4603-b6ec-2ab17c887a3a`. The saved policy was available before
+this turn. The model reserved **17 euro cents**; no settlement was observed.
+The initial Spending capture shows 11 cents settled and 49 cents reserved,
+including baseline activity. The tool declarations remain **0 euro cents**.
+These are local accounting amounts, not paid-provider costs.
+
+### Diagnosis and its limits
+
+The original Codex record says the response stream disconnected while decoding its
+body. Its MCP runtime later closed the configured demo server `oc_817e192ca1`.
+This confirms that the server reached Codex, but does not prove which tools reached
+the first model request. [Failure details](rerun3-20261024/failure-analysis.json)
+retain these original records. The exact cause of that first stream failure remains
+**unresolved**; it is not being reported as a proved product or fixture defect.
+
+One diagnostic models restart enabled the local stub's existing private request
+capture. It did not change product code or the fixture's reply logic. A subsequent
+read failed too. Its captured request had no demo tools; replaying those bytes
+through `stageBModelCall` throws `Reviewed demo tool was not offered to the model`.
+However, the restart had already held publication, so this does not prove the cause
+of the first failure. The diagnostic also records a missing tool-executor Codex
+home warning. Its role in the first failure is unproved.
+
+The restart exposed a separate, concrete product recovery defect:
+
+1. `newWatch` in `libs/models/src/mcp-catalogue-watch.ts` starts held. Its first
+   refresh saves a failed catalogue check before reading the unchanged catalogue.
+   Original positions **1105** and **1106** show this sequence.
+2. `applyCheck` in `libs/projections/src/tool-policy.ts` clears the publication
+   acknowledgement, sets `driftHeld: true` and makes the policy unpublished.
+   A successful unchanged check refreshes the dates but leaves that hold in place.
+3. The policy has no previous catalogue. `compareToolCatalogues` in
+   `apps/web/src/app/integrations/tool-changes.ts` therefore returns no comparison.
+   `canReviewChanges` requires a reviewable comparison, so the browser offers no
+   “Review and publish” action. The initial “Review access” action is also absent
+   because a publication request already exists.
+
+The final [diagnostic records](rerun3-20261024/diagnostic-probe.json) show fresh
+catalogue dates, `published: false`, `driftHeld: true`, no acknowledgement and
+publication `applying / preparation / not_current`. The browser says the tools
+changed even though the recorded check says unchanged. The diagnostic review
+attempts sent no new review or publication command. No saved flag, direct API
+publication or access-check bypass was used to get past this defect.
+
+The diagnostic read reserved another **16 euro cents**, with no observed settlement.
+Final Spending shows 11 cents settled and 65 cents reserved, including baseline
+activity. Across both read attempts there are **0 tool dispatches**, **0 approval
+requests** and **0 effects**. Successful model/tool spending reconciliation remains
+NOT RUN. This diagnostic restart is not a passing reconnect qualification.
+
+### Captures from this rerun
+
+All 34 new captures were inspected by eye. Email addresses were masked in the
+browser; saved JSON redacts addresses. The first publication captures caught loading
+states, so they are retained as incomplete captures alongside the loaded views.
+The diagnostic files named `saved-audience` show the unavailable audience screen;
+they are not evidence of another successful grant. The full capture inventory and
+hashes are in [run.json](rerun3-20261024/run.json).
+
+| View | Desktop, 1280 pixels | Mobile, 390 pixels |
+| --- | --- | --- |
+| Discovered tools | [1280](rerun3-20261024/tools-1280.png) | [390](rerun3-20261024/tools-390.png) |
+| Chosen modes | [1280](rerun3-20261024/chosen-modes-1280.png) | [390](rerun3-20261024/chosen-modes-390.png) |
+| Saved audience | [1280](rerun3-20261024/saved-audience-1280.png) | [390](rerun3-20261024/saved-audience-390.png) |
+| Exact cost review | [1280](rerun3-20261024/review-1280.png) | [390](rerun3-20261024/review-390.png) |
+| Published integration, loaded | [1280](rerun3-20261024/publication-loaded-1280.png) | [390](rerun3-20261024/publication-loaded-390.png) |
+| Failed read | [1280](rerun3-20261024/read-chat-1280.png) | [390](rerun3-20261024/read-chat-390.png) |
+| Reloaded read | [1280](rerun3-20261024/read-chat-reloaded-1280.png) | [390](rerun3-20261024/read-chat-reloaded-390.png) |
+| Spending after the first read | [1280](rerun3-20261024/spending-1280.png) | [390](rerun3-20261024/spending-390.png) |
+| Change history after the first read | [1280](rerun3-20261024/change-history-1280.png) | [390](rerun3-20261024/change-history-390.png) |
+| Publication recovery blocked | [1280](rerun3-20261024/renewal-blocked-1280.png) | [390](rerun3-20261024/renewal-blocked-390.png) |
+| Final diagnostic Spending | [1280](rerun3-20261024/diagnostic-spending-1280.png) | [390](rerun3-20261024/diagnostic-spending-390.png) |
+| Final diagnostic Change history | [1280](rerun3-20261024/diagnostic-history-1280.png) | [390](rerun3-20261024/diagnostic-history-390.png) |
+
+Native consent 12b stays excluded. Public deployment, twice-fresh runs, approval
+expiry, reconnect qualification, Pod loss and the full refusal matrix remain
+NOT RUN. This work does not complete #45, #46 or #63.
+
+### Source checks and cleanup for this rerun
+
+PASS: Stage A regression checks, **21 tests**; changed/helper tests twice,
+**35 tests per run**; security rules, **438 tests**. The Stage A test output includes
+an intentional failing company-limit scenario; all 21 test assertions passed.
+The test database was ready before the suites started and was supplied through
+`PG_TEST_URL`. It was removed afterwards with its volume.
+
+PASS: lint, typecheck, event catalogue (**153 types**), knip, Markdown and changelog.
+Lint reported 25 existing warnings and no errors. All checks and tests ran under
+`nice -n 10`.
+The full root suite is NOT RUN, as required by the build prompt. The existing
+branch changelog fragment remains in place; `CHANGELOG.md` is unchanged.
+
+PASS: slot 1 was released through the dev-stack shutdown command. Its directory,
+Compose containers and Kubernetes namespace are absent. The owned launcher stopped,
+and the temporary models image was removed. The owner stack was untouched.

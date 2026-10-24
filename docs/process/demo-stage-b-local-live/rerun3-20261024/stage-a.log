@@ -1,0 +1,196 @@
+TAP version 13
+# PASS 1280px 1 streamedReply
+# PASS 1280px 2 scannedPdf
+# PASS 1280px 3 actionHistory
+# PASS 1280px 4 stoppedReply
+# PASS 1280px 5 liveMessage
+# PASS 1280px 6 sharedReply
+# PASS 1280px 7 groupAndInvite
+# PASS 1280px 8 providerAnswer
+# PASS 1280px 9 companyLimit
+# PASS 1280px 10 changeHistory
+# PASS 390px 1 streamedReply
+# PASS 390px 2 scannedPdf
+# PASS 390px 3 actionHistory
+# PASS 390px 4 stoppedReply
+# PASS 390px 5 liveMessage
+# PASS 390px 6 sharedReply
+# PASS 390px 7 groupAndInvite
+# PASS 390px 8 providerAnswer
+# PASS 390px 9 companyLimit
+# PASS 390px 10 changeHistory
+# PASS 1280px 1 streamedReply
+# PASS 1280px 2 scannedPdf
+# PASS 1280px 3 actionHistory
+# PASS 1280px 4 stoppedReply
+# PASS 1280px 5 liveMessage
+# PASS 1280px 6 sharedReply
+# PASS 1280px 7 groupAndInvite
+# PASS 1280px 8 providerAnswer
+# PASS 1280px 9 companyLimit
+# PASS 1280px 10 changeHistory
+# PASS 390px 1 streamedReply
+# PASS 390px 2 scannedPdf
+# PASS 390px 3 actionHistory
+# PASS 390px 4 stoppedReply
+# PASS 390px 5 liveMessage
+# PASS 390px 6 sharedReply
+# PASS 390px 7 groupAndInvite
+# PASS 390px 8 providerAnswer
+# PASS 390px 9 companyLimit
+# PASS 390px 10 changeHistory
+# Subtest: both widths run twice in one fixture with unique creations and pictures for every PASS
+ok 1 - both widths run twice in one fixture with unique creations and pictures for every PASS
+  ---
+  duration_ms: 288.030022
+  type: 'test'
+  ...
+# Subtest: history pictures show both matching rows at both widths and missing rows still fail
+ok 2 - history pictures show both matching rows at both widths and missing rows still fail
+  ---
+  duration_ms: 4961.726691
+  type: 'test'
+  ...
+# Subtest: every smoke PASS saves both browser pictures and a missing picture fails
+ok 3 - every smoke PASS saves both browser pictures and a missing picture fails
+  ---
+  duration_ms: 68.411706
+  type: 'test'
+  ...
+# Subtest: Models check accepts an answered provider inside the organisation shell
+ok 4 - Models check accepts an answered provider inside the organisation shell
+  ---
+  duration_ms: 1162.950887
+  type: 'test'
+  ...
+# Subtest: Models check requires its own answer and refuses keys or password inputs anywhere
+ok 5 - Models check requires its own answer and refuses keys or password inputs anywhere
+  ---
+  duration_ms: 945.448701
+  type: 'test'
+  ...
+# Subtest: each of the ten steps retains its error message with private values removed
+ok 6 - each of the ten steps retains its error message with private values removed
+  ---
+  duration_ms: 20.107962
+  type: 'test'
+  ...
+# Subtest: picture failures retain the checker error and cannot pass a step
+ok 7 - picture failures retain the checker error and cannot pass a step
+  ---
+  duration_ms: 1.345583
+  type: 'test'
+  ...
+# Subtest: a failed sanitiser withholds error details
+ok 8 - a failed sanitiser withholds error details
+  ---
+  duration_ms: 0.456934
+  type: 'test'
+  ...
+# Subtest: rehearsal refuses missing, owner and invalid slots before reading settings
+ok 9 - rehearsal refuses missing, owner and invalid slots before reading settings
+  ---
+  duration_ms: 7110.714731
+  type: 'test'
+  ...
+# PASS 1280px 1 streamedReply
+# PASS 1280px 2 scannedPdf
+# PASS 1280px 3 actionHistory
+# PASS 1280px 4 stoppedReply
+# PASS 1280px 5 liveMessage
+# PASS 1280px 6 sharedReply
+# PASS 1280px 7 groupAndInvite
+# PASS 1280px 8 providerAnswer
+# FAIL 1280px 9 companyLimit
+# NOT RUN 1280px 10 changeHistory
+# NOT RUN 390px 1 streamedReply
+# NOT RUN 390px 2 scannedPdf
+# NOT RUN 390px 3 actionHistory
+# NOT RUN 390px 4 stoppedReply
+# NOT RUN 390px 5 liveMessage
+# NOT RUN 390px 6 sharedReply
+# NOT RUN 390px 7 groupAndInvite
+# NOT RUN 390px 8 providerAnswer
+# NOT RUN 390px 9 companyLimit
+# NOT RUN 390px 10 changeHistory
+# Subtest: the receipt keeps the checker error first when restoring company limits also fails
+ok 10 - the receipt keeps the checker error first when restoring company limits also fails
+  ---
+  duration_ms: 118.178806
+  type: 'test'
+  ...
+# Subtest: combined checker, restoration and picture errors each remove private values
+ok 11 - combined checker, restoration and picture errors each remove private values
+  ---
+  duration_ms: 7.032523
+  type: 'test'
+  ...
+# Subtest: a successful check cannot report PASS without a saved picture
+ok 12 - a successful check cannot report PASS without a saved picture
+  ---
+  duration_ms: 2.516422
+  type: 'test'
+  ...
+# Subtest: Models selects the demo provider when two providers have answered
+ok 13 - Models selects the demo provider when two providers have answered
+  ---
+  duration_ms: 1939.89703
+  type: 'test'
+  ...
+# Subtest: colleague selection distinguishes name prefixes and refuses duplicate exact names
+ok 14 - colleague selection distinguishes name prefixes and refuses duplicate exact names
+  ---
+  duration_ms: 1094.975593
+  type: 'test'
+  ...
+# Subtest: the approval stub checks revision and generation before recording any effect
+ok 15 - the approval stub checks revision and generation before recording any effect
+  ---
+  duration_ms: 377.53414
+  type: 'test'
+  ...
+# Subtest: the approval stub refuses startup without its instance generation
+ok 16 - the approval stub refuses startup without its instance generation
+  ---
+  duration_ms: 268.399242
+  type: 'test'
+  ...
+# Subtest: the approval stub refuses startup without its catalogue revision
+ok 17 - the approval stub refuses startup without its catalogue revision
+  ---
+  duration_ms: 232.878441
+  type: 'test'
+  ...
+# Subtest: the wake Pod fixture starts the stub with only its packaged files
+ok 18 - the wake Pod fixture starts the stub with only its packaged files
+  ---
+  duration_ms: 1728.128331
+  type: 'test'
+  ...
+# Subtest: the stub verifies managed calls, counts credentials and keeps streaming
+ok 19 - the stub verifies managed calls, counts credentials and keeps streaming
+  ---
+  duration_ms: 1790.963595
+  type: 'test'
+  ...
+# Subtest: missing and empty credential files never match or disclose a bearer or file location
+ok 20 - missing and empty credential files never match or disclose a bearer or file location
+  ---
+  duration_ms: 391.531187
+  type: 'test'
+  ...
+# Subtest: the PDF stand-in reads the converted file when inline text is unavailable or empty
+ok 21 - the PDF stand-in reads the converted file when inline text is unavailable or empty
+  ---
+  duration_ms: 2438.621558
+  type: 'test'
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 31641.809187
