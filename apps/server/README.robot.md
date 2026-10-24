@@ -4965,6 +4965,13 @@ Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
 
 ## Routine metadata reads
 
+`GET /api/routines/:routineId` uses the existing `memberReads` store, member lookup
+and OpenFGA binding. It returns `no-store` for successful and refused requests.
+The strict response contains only `routineId`, `name`, `ownerId`, `assistantId`,
+`payingGroupId`, `status`, `definitionRevision`, `scheduleRevision`,
+`controlRevision`, `next` and `executionAvailable: false`. `next` is the saved
+local date/time, zone, UTC instant and offset, or null. It is not a readiness claim.
+
 `loadRoutineAccess` loads exact routine history with its own ten-second deadline,
 then member and ownership history. Its one `read_metadata` check requires current
 membership, exact IAM receipts and the recorded owner or current Owner/Admin.
@@ -5012,6 +5019,13 @@ without returning a receipt. Recovery checks access once, including retirement's
 It does not require the management permission retirement removed or start a write window.
 Missing receipts, removed owners and IAM outages refuse. Replies and errors contain no
 instructions, credentials or service details.
+
+If routine history cannot be read or contains an invalid record, the permission helper
+still checks metadata access. It marks `history_unavailable` only after read permission
+is confirmed. Retirement reports unavailable for that result. Non-readers receive the
+same refusal as for a missing routine, including when a saved principal differs from
+the record's actor. Permission-service outages still refuse, even with corrupt history.
+Neither failure appends an event or returns a saved receipt.
 
 `test/routine-retire.test.ts` covers active and paused records, concurrent requests,
 lost replies past deduplication expiry and NATS restart, refusal cases, queued changes,

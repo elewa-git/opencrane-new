@@ -50,8 +50,8 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, routine metadata, spending pages, resolution receipts, live updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks access, allocates child allowances within the original time limit and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, checked owner pauses and retirements, takeover approval cancellations, access-checked control refusals, checked child recovery, activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
+  server -.->|checks access before routine history errors, allocates child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -->|records changes, checked owner pauses and retirements, takeover cancellations, access-checked refusals and child recovery, activations, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres

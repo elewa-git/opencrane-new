@@ -159,7 +159,8 @@ export async function loadRoutineAccess(binding: Binding, client: TupleClient,
           return permission;
         }
         // Never authorise a read or write from incomplete history.
-        return { allowed: false, status: 'unavailable' as const };
+        return { allowed: false, status: 'unavailable' as const,
+          reason: 'history_unavailable' as const };
       }
       return await checkSavedRoutine(binding, client, memberId, routineId, relation, saved, member);
     } catch {
@@ -177,7 +178,8 @@ export async function checkRoutine(binding: Binding, client: TupleClient,
   }
   try {
     const saved = await loadRoutineAccess(binding, client, store, memberId, routineId);
-    return await saved.check(relation);
+    const permission = await saved.check(relation);
+    return { allowed: permission.allowed, status: permission.status };
   } catch {
     return { allowed: false, status: 'unavailable' as const };
   }

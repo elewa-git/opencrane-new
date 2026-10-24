@@ -257,5 +257,10 @@ same routine relation as a successful load. A denied permission returns a refusa
 an allowed permission returns unavailable because the saved facts are incomplete.
 Permission-service outages also return unavailable. No failed load can authorise
 a read or write. Successful loads retain every saved-owner and exact-receipt check.
+The loaded `check` result adds `reason: 'history_unavailable'` only when routine
+history failed and the permission service confirmed access. It never adds that
+reason for refused or unavailable permission checks. Retirement uses it to report
+broken history to permitted readers while still refusing permission-service outages.
+The simpler `routine(...)` result keeps only its existing `allowed` and `status` fields.
 The HTTP regressions in `apps/server/test/routine-reads.test.ts` cover ordinary
 non-readers and former owners before and after partial history arrives.
