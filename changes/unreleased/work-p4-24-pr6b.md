@@ -1,1 +1,2 @@
 - Routine owners and silo owners and admins can read small pages of saved occurrences and dated outcomes. Missed ranges stay compact, private details stay excluded, and unavailable projections cannot appear empty. Routine execution remains disabled.
+- Run history stays readable when a completed run receives another correctly bound completion record after a later run finishes. The first outcomes stay unchanged, including after rebuilding the read tables.

@@ -5142,6 +5142,9 @@ GET and replay do not read approvals, decrypt, append, schedule, wake or dispatc
 
 `test/routine-runs.test.ts` uses disposable PostgreSQL, NATS and OpenFGA for paging,
 compact ranges, first outcomes, replay, access changes, outages and private canaries.
+A late terminal record for an older completed run preserves both first outcomes
+and remains readable before and after a verified rebuild. Changed run bindings
+still prevent access.
 Prerequisites: #647 squash `1e4696d3bfe2cce7cc06bd3059c3a1cf5c803b65` and
 fixed #652 squash `a474d9ad5dc931b0c41a3ab291c96da1ca9171f7`. The latter's failed-history
 privacy check remains in place. Lists, attention, private results and execution
