@@ -467,6 +467,8 @@ from confirmed saved identities. It keeps uncertain stages and changed storage i
 Damaged credentials stay in storage while the scan checks healthy neighbours and later pages.
 Older credentials without discovery details stay in storage for individual checks.
 Configured workers clean old copies after a saved revoke or replacement.
+The periodic scan can finish this cleanup after the reaction has used all its retries.
+The failed job stays available for inspection after the scan removes the old copy.
 The event store checks profile changes and admin blocks together when it saves a profile.
 If the block is saved first, the profile save is refused, even if its access check has finished.
 A simultaneous change to another connection can also refuse the save; the caller can retry.
@@ -496,6 +498,10 @@ They check that a cold refusal holds no money and that the measured call adds on
 Separate timeout checks require unsent holds to settle at zero euro cents.
 The measured call must still finish within two seconds.
 Tests here also check conversation and delegation read tables against model events.
+The cleanup retry test waits for its database lock and for the queue to record failure
+before checking that every attempt sent a delete request.
+Connection command tests also wait for their locks, except when checking lock contention.
+Scan tests wait for the scan to report each completed page.
 
 ```sh
 npm test -- libs/models

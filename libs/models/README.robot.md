@@ -3083,6 +3083,20 @@ The worker shares custody with the cleanup reaction and starts scanning only aft
 subscription checks. Replay never starts the loop. No new setting or event is needed.
 Tests use real NATS/PostgreSQL and HTTP custody, including exhausted retries, restart,
 late activation, pagination, slow/unknown pages and dispatch during a hanging list.
+The exhausted-retry test waits for the real PostgreSQL lock without an acquisition
+deadline in its fixture. Production keeps the 100 ms acquisition deadline, covered by
+the separate contention tests. That deadline includes opening a database connection;
+expiry can consume a queue attempt before it sends DELETE. A failed job alone therefore
+does not prove six DELETE requests were sent. The fixture passes its isolated database
+directly to the cleanup handler and records the number of DELETE requests in each attempt.
+It waits for `deadLetters` to report the failed original before asserting six attempts,
+one DELETE per attempt and five retries. It then checks interval cleanup and that the
+same failed original remains saved.
+The bearer connection fixture also waits for its real database lock. Its custody-error
+tests must reach custody before checking the refused save. The explicit contention test
+passes the production database adapter and keeps the 100 ms deadline.
+The scan fixture waits for the page-completion log callback. It has no separate polling
+deadline that can expire while a slow page is still running; the test timeout still applies.
 The mixed-page test uses two real NATS stores and retains the other silo's current copy
 without adding anything to the worker's store. Timer tests check the default at 899,999
 and 900,000 milliseconds and retry an unknown page after an intervening success.

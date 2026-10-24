@@ -1480,8 +1480,11 @@ it('retains material when a saved revoke did not target the current revision',
 function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, intervalMs?: number) {
   const stop = new AbortController();
   const records: { counts: unknown; message: unknown }[] = [];
+  let pageCompleted = Promise.withResolvers<void>();
   function info(counts: unknown, message?: unknown) {
     records.push({ counts, message });
+    pageCompleted.resolve();
+    pageCompleted = Promise.withResolvers<void>();
   }
   const logger = { info };
   const done = scanConnections(events.store, test.db, test.store.restart(), logger,
@@ -1491,10 +1494,10 @@ function runningScan(test: Awaited<ReturnType<typeof candidateFixture>>, interva
     expect(await done).toBeUndefined();
   }
   async function pages(count = 1) {
-    function ready() {
-      return records.length >= count;
+    // Wait for completed pages rather than a separate polling deadline under load.
+    while (records.length < count) {
+      await pageCompleted.promise;
     }
-    await until(ready);
   }
   return { stop, done, records, close, pages };
 }
@@ -1535,10 +1538,26 @@ it('startup scan removes an unsaved rotation after revoke and restart',
 async function intervalCleansExhaustedReaction() {
   const test = await cleanupFixture();
   const isolated = await databases();
-  test.db = pgDb(isolated.queue);
+  const database = pgDb(isolated.queue);
+  function waitForCleanupLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    // Wait for this fixture's lock so acquisition delays cannot use up a deletion retry.
+    // Keep the production deadline covered by the separate lock contention tests.
+    return database.lock!(name, work);
+  }
+  test.db = { ...database, lock: waitForCleanupLock };
   const event = await test.revoke();
   test.store.failDeletes(true);
-  const handler = test.handler();
+  const cleanup = connectionCleanupHandler(events.store, test.db, test.store.restart(), 'test');
+  const attemptDeletes: number[] = [];
+  async function handle(...parameters: Parameters<typeof cleanup.handle>) {
+    const before = test.store.deleteAttempts;
+    try {
+      await cleanup.handle(...parameters);
+    } finally {
+      attemptDeletes.push(test.store.deleteAttempts - before);
+    }
+  }
+  const handler = { ...cleanup, handle };
   const logger = createLogger('scan-exhaustion-test');
   const runtime = new HandlerRuntime({ db: test.db, logger, silo: 'test',
     handlers: [handler], retryDelay: 0 });
@@ -1554,8 +1573,11 @@ async function intervalCleansExhaustedReaction() {
     await test.db.transaction(enqueue);
     await runtime.work(2);
     await until(exhausted, 80_000);
+    expect(attemptDeletes).toEqual([1, 1, 1, 1, 1, 1]);
     expect(test.store.deleteAttempts).toBe(6);
     const failed = await runtime.deadLetters(handler.name);
+    const expectedFailedJobs = [{ state: 'failed', retryCount: 5 }];
+    expect(failed).toMatchObject(expectedFailedJobs);
     expect(JSON.stringify(failed)).not.toContain(material);
     scan = runningScan(test, 100);
     await scan.pages();

@@ -5,7 +5,7 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
-import { pgDb } from '@opencrane/projections';
+import { type Db, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { saveBearerConnection, foldConnection, changePersonalConnection }
   from '../src/bearer-connections.ts';
@@ -66,7 +66,15 @@ async function close() {
 }
 beforeAll(initialise, 120_000);
 afterAll(close);
-function fixture(memberId = 'alice') {
+function waitingConnectionDatabase(): Db {
+  const database = pgDb(storage.queue);
+  function waitForConnectionLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    // Wait for the fixture's lock so each test reaches the condition it checks.
+    return database.lock!(name, work);
+  }
+  return { ...database, lock: waitForConnectionLock };
+}
+function fixture(memberId = 'alice', database = waitingConnectionDatabase()) {
   counter += 1;
   const input = { action: 'create' as const, serverId: 'server', connectionId: 'installed',
     profileId: `profile${counter}`, changeRef: `change${counter}`, expectedSequence: 0,
@@ -87,8 +95,7 @@ function fixture(memberId = 'alice') {
   }
   const custody: Pick<ReturnType<typeof connectionCustody>, 'stage'> = { stage };
   async function save(command: unknown = input, supplied = material) {
-    const db = pgDb(storage.queue);
-    return saveBearerConnection(nats.store, binding, memberId, custody, command, supplied, db);
+    return saveBearerConnection(nats.store, binding, memberId, custody, command, supplied, database);
   }
   return { input, subject, custody, save };
 }
@@ -692,7 +699,7 @@ function assertInvalidClosuresUnavailable(rows: StoredEvent[]) {
 
 async function saveUsesCleanupLock() {
   await joinMember('save-lock');
-  const test = fixture('save-lock');
+  const test = fixture('save-lock', pgDb(storage.queue));
   const profile = { siloId: 'test', userId: 'save-lock', serverId: 'server',
     profileId: test.input.profileId };
   const staged = vi.spyOn(test.custody, 'stage');
