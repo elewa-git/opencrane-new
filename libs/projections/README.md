@@ -39,7 +39,7 @@ flowchart LR
   server["apps/server<br/>back end"] -->|reads tables and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves admission, removal, role, ownership and control history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds and private instance stops and reports| projections
-  server -.->|reads tool readiness, nightly memory inputs and unfinished child requests| projections
+  server -.->|reads tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads wrapped chat keys; repairs unfinished correction keys| keys["Server files<br/>private key store and package Secret"]
 ```
@@ -200,7 +200,8 @@ no work and requires readers and workers to be stopped.
 Child activation records stay out of message feeds, including after replay.
 
 The conversations worker builds an index of child requests from saved events. It keeps
-event references, ids and failed attempt numbers. Recovery skips failed requests until the requester saves a retry.
+event references, ids and failed attempt numbers until matching activation is saved.
+Saved first inputs remain on the list. Recovery skips failed requests until the requester saves a retry.
 Rebuilding this index creates no child and copies no message.
 
 Memory replay reads saved corrections before opening any text. It rebuilds only

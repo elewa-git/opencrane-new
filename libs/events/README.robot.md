@@ -721,6 +721,7 @@ This adds no event type or payload field. Replay starts no cleanup.
 
 `conversation.child_start_failed` requires an opencrane-server system writer,
 matching parent subject and command id, no report, strict fields and attempt 1–3.
+Its stage is `create`, `first_input` or `activation`; the fixed refusal reasons are unchanged.
 `conversation.child_retry_requested` requires a human server writer, matching parent
 subject and command id, no report and attempt 2–3. It carries only conversationId,
 requestId, retryId, failureEventId and attempt. The command checks the original requester.

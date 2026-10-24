@@ -73,7 +73,7 @@ async function resumesMissingInput(created: boolean) {
   expect(response.statusCode).toBe(202);
   await context.runner.run(childRequests);
   const indexed = await context.db.query(
-    'SELECT failed_attempt FROM child_requests_v3 WHERE parent_id = $1',
+    'SELECT failed_attempt FROM child_requests_v4 WHERE parent_id = $1',
     [request.input.conversationId]);
   expect(indexed.rows).toEqual([{ failed_attempt: null }]);
   const savedReference = reference(request);
@@ -85,13 +85,18 @@ async function resumesMissingInput(created: boolean) {
   await recoverChildRequest(context.options, savedReference);
   await recoverChildRequest(context.options, savedReference);
   const rows = await chatHistory(context.nats.store, 'test', request.intent.childConversationId);
-  expect(rows).toHaveLength(2);
+  expect(rows).toHaveLength(3);
   expect(rows[1]!.event.id).toBe(request.intent.firstInputId);
+  expect(rows[2]!.event).toMatchObject({ type: 'conversation.child_activated',
+    data: { attempt: 2, payingGroupId: request.intent.payingGroupId,
+      assistantId: request.intent.assistantId, requestedBy: request.intent.createdBy } });
+  expect(rows[0]!.event.data).toMatchObject({ initialJoins: request.intent.initialJoins });
+  expect(await context.intent(request.input.conversationId)).toEqual(request.intent);
   expect(await childRequestHeld(context.options, rows[0]!.event.data)).toBe(true);
   await context.runner.run(childRequests);
-  const live = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');
+  const live = await context.db.query('SELECT * FROM child_requests_v4 ORDER BY intent_position');
   await context.runner.rebuild(childRequests);
-  expect((await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position')).rows)
+  expect((await context.db.query('SELECT * FROM child_requests_v4 ORDER BY intent_position')).rows)
     .toEqual(live.rows);
   await context.runner.run(conversations);
   const feed = await context.request(request.input.conversationId, 'messages');

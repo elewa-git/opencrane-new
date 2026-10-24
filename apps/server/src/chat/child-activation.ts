@@ -61,7 +61,8 @@ export async function checkedChildActivation(options: Options, memberId: string,
 export async function activateRequestedChild(options: Options, memberId: string,
   value: unknown, attempt: number) {
   const checked = await checkedChildActivation(options, memberId, value, attempt);
-  const { activated, id, subject, data, sequence, fresh } = checked;
+  const { activated, id, subject, data, sequence, fresh, confirmAccess } = checked;
   if (activated) return activated;
-  return save(options, memberId, id, subject, 'conversation.child_activated', data, sequence, fresh);
+  return save(options, memberId, id, subject, 'conversation.child_activated', data, sequence,
+    fresh, verifySaved, confirmAccess);
 }
