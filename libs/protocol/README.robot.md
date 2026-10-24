@@ -119,6 +119,15 @@ and live delivery messages.
 The browser receives these fields through the existing feed and live messages.
 Tool outcomes accept `evidence: dispatch_refused` for a refusal after a saved start and
 before sending. These rows retain `outcome: not_dispatched`.
+`tool.dispatch_recorded` rows use a strict display schema, not the stored event schema.
+It reuses the event's field validators for `conversationId`, `turnId`, `callId`,
+`serverId`, `toolName`, `requestId`, `logicalRequestId`, optional `approvalId`,
+`startedAt`, `durationMs`, `outcome` and `evidence`. These are exactly the dispatch
+fields retained by `chatDisplayData`. It refuses `adapter` and all other extra fields.
+The stored event still requires full adapter evidence for adapter outcomes.
+`apps/server/test/chat-display.test.ts` reproduces the fourth local live run for #574
+with made-up identifiers. It checks the saved event, display selection, HTTP
+feed, socket message and completed transcript, plus extra-field and invalid-value refusals.
 Running tool lines and attempt lists are not rendered yet. Tests are in
 `test/chat-mode.test.ts`.
 
