@@ -409,14 +409,56 @@ async function changesDuringPublishRetry(condition: string) {
 it.each(['reassignment', 'removal', 'expiry'])(
   'refuses %s during publish retry', changesDuringPublishRetry);
 
-async function refusesMalformedPrincipal() {
+async function saveMalformedPrincipal() {
   const saved = routine('routine.retired');
   const data = { version: 1, routineId: 'orders', definitionRevision: 1,
     scheduleRevision: 1, controlRevision: 2, actorId: 'alice', source: 'owner',
     reason: 'owner_requested', affectedRun: null, next: null };
   const mismatched = { ...saved, commandId: input.changeId, data };
   await nats.seed([mismatched]);
-  await expect(retire('admin')).rejects.toThrow('Routine retirement unavailable');
 }
-it('refuses a saved record whose principal differs from its actor',
+
+async function refusesMalformedPrincipal(memberId: string) {
+  const auth = memberAuthorisation(binding, nats.store);
+  expect((await auth.routine(memberId, 'orders', 'read_metadata')).allowed).toBe(true);
+  await saveMalformedPrincipal();
+  const before = await nats.store.head();
+  const append = vi.spyOn(nats.store, 'append');
+  await expect(retire(memberId)).rejects.toThrow(new Error('Routine retirement unavailable'));
+  expect(append).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(before);
+}
+it.each(['alice', 'admin'])(
+  'reports a saved principal mismatch as unavailable to permitted reader %s',
   refusesMalformedPrincipal);
+
+async function hidesMalformedPrincipal(condition: string) {
+  let memberId = condition;
+  if (condition === 'removed owner') {
+    memberId = 'alice';
+    const removed = event('removed-alice', 'member-alice', 'member.removed');
+    await nats.seed([removed]);
+  }
+  if (condition === 'IAM outage') {
+    memberId = 'admin';
+    await fga.pause();
+  }
+  await saveMalformedPrincipal();
+  const before = await nats.store.head();
+  const append = vi.spyOn(nats.store, 'append');
+  const missing = { ...input, routineId: 'missing', changeId: 'missing:retire' };
+  try {
+    await expect(retire(memberId, missing))
+      .rejects.toThrow(new Error('Routine retirement refused'));
+    await expect(retire(memberId)).rejects.toThrow(new Error('Routine retirement refused'));
+    expect(append).not.toHaveBeenCalled();
+    expect(await nats.store.head()).toBe(before);
+  } finally {
+    if (condition === 'IAM outage') {
+      await fga.resume();
+    }
+  }
+}
+it.each(['bob', 'outsider', 'removed owner', 'IAM outage'])(
+  'hides a saved principal mismatch with the missing-routine refusal for %s',
+  hidesMalformedPrincipal);
