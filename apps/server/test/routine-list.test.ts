@@ -61,15 +61,15 @@ async function cleanup() {
 }
 beforeEach(setup, 30_000);
 afterEach(cleanup);
-function request(query = '', actor = 'alice', orgId = 'org-test') {
+function request(query = '', actor = 'alice', orgId = 'org-test', view = 'mine') {
   const session = { sub: actor, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  return app.inject({ method: 'GET', url: `/api/routines?view=mine&${query}`, headers });
+  return app.inject({ method: 'GET', url: `/api/routines?view=${view}&${query}`, headers });
 }
 type Page = { rows: Record<string, unknown>[]; next: string | null;
   complete: boolean; executionAvailable: false };
-async function page(query = '', actor = 'alice') {
-  const response = await request(query, actor);
+async function page(query = '', actor = 'alice', view = 'mine') {
+  const response = await request(query, actor, 'org-test', view);
   expect(response.statusCode).toBe(200);
   expect(response.headers['cache-control']).toBe('no-store');
   expect(response.body + logs.join('')).not.toMatch(
@@ -351,3 +351,53 @@ async function failedHistory() {
   expect(logs.join('')).not.toContain('private-canary');
 }
 it('checks current access after routine history fails without exposing the cause', failedHistory);
+
+async function adminPages() {
+  await save({ ...record('foreign'), silo: 'foreign' }, false);
+  await save(record('retired', 'bob'));
+  await save(record('retired', 'bob', 'routine.retired'));
+  await save(record('admin-own', 'admin'));
+  const expected = ['retired', 'admin-own'];
+  for (let index = 0; index < 25; index++) {
+    for (const owner of ['alice', 'bob']) {
+      const id = `${owner}-${index}`;
+      await save(record(id, owner));
+      expected.push(id);
+    }
+  }
+  const position = await nats.store.head();
+  const append = vi.spyOn(nats.store, 'append');
+  const approval = vi.spyOn(models, 'readApproval');
+  const originalQuery = db.query.bind(db);
+  async function boundedQuery<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+    options?: { deadline: number }) {
+    const result = await originalQuery<Row>(sql, values, options);
+    if (sql.includes('FROM routines WHERE')) {
+      expect(values).toEqual(['test', expect.any(Number), expect.any(Number)]);
+      expect(result.rows.length).toBeLessThanOrEqual(Number(values?.at(-1)));
+      expect(result.rows.length).toBeLessThanOrEqual(51);
+      for (const row of result.rows) expect(row).not.toHaveProperty('state');
+    }
+    return result;
+  }
+  const querySpy = vi.spyOn(db, 'query').mockImplementation(boundedQuery);
+  const first = await page('limit=50', 'admin', 'all');
+  expect(first.rows).toHaveLength(50);
+  expect(first.complete).toBe(false);
+  const last = await page(`limit=50&continuation=${first.next}`, 'admin', 'all');
+  const rows = [...first.rows, ...last.rows];
+  expect(rows.map(identity)).toEqual(expected);
+  expect(rows[0]).toMatchObject({ status: 'retired', ownerId: 'bob' });
+  expect(last).toMatchObject({ next: null, complete: true });
+  expect((await page('', 'admin', 'all')).rows).toHaveLength(20);
+  querySpy.mockRestore();
+  expect((await page('', 'admin')).rows.map(identity)).toEqual(['admin-own']);
+  await rebuildRoutineProjection(db, nats.reader, logger, { verify: true });
+  expect((await page('limit=50', 'admin', 'all')).rows).toEqual(first.rows);
+  const stale = await request(`limit=50&continuation=${first.next}`, 'admin', 'org-test', 'all');
+  expect(stale.statusCode).toBe(409);
+  expect(append).not.toHaveBeenCalled();
+  expect(approval).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(position);
+}
+it('pages admin metadata across owners and retired routines without effects', adminPages, 60_000);
