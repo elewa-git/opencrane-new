@@ -1,0 +1,1 @@
+Organisation history detail shows the current charge and hold beside a saved spending resolution, with its check time and projection position. Saved choices stay unchanged; unavailable accounting and participant history reveal no money.

@@ -36,7 +36,22 @@ const actor = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('system'), id: id.optional() }).strict(),
   z.object({ kind: z.literal('unverified') }).strict(),
 ]);
+const accountingPosition = z.int().nonnegative();
+const currentAccounting = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('current'), checkedAt: utc,
+    sequence: accountingPosition, generation: accountingPosition,
+    state: z.enum(['held', 'settled', 'unknown', 'not_dispatched']),
+    heldCents: z.int().nonnegative(), settledCents: z.int().nonnegative().nullable(),
+  }).strict(),
+  z.object({
+    status: z.literal('applying'), checkedAt: utc,
+    sequence: accountingPosition.optional(), generation: accountingPosition.optional(),
+  }).strict(),
+  z.object({ status: z.literal('unavailable'), checkedAt: utc }).strict(),
+]);
 export const auditRecordSchema = z.object({
+  currentAccounting: currentAccounting.optional(),
   computerId: id.optional(), generation: z.int().positive().optional(),
   takeoverId: id.optional(), leaseId: id.optional(),
   affectedTurnCount: z.int().nonnegative().optional(),

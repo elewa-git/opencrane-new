@@ -7,6 +7,7 @@ import { auditFilterSchema, auditDetailFilterSchema, type AuditDetailFilter,
   type AuditRow } from '@opencrane/protocol';
 import { readAudit, readAuditDetail, type Query, type connectMemberFeed } from '@opencrane/projections';
 import { currentMembership } from '@opencrane/models';
+import { readAccountingProgress } from './accounting-progress.ts';
 import { readMembershipProgress } from './membership-progress.ts';
 import { sessionFor } from '../members/routes.ts';
 
@@ -95,6 +96,7 @@ function conversationRow(row: AuditRow): AuditRow {
       continue;
     }
     const visible = { ...record };
+    delete visible.currentAccounting;
     delete visible.amountCents;
     delete visible.savedOutcome;
     result.records.push(visible);
@@ -105,6 +107,7 @@ async function loadDetail(options: AuditOptions, auditId: string, filter: AuditD
   const result = await readAuditDetail(options.db, options.silo, auditId, filter);
   if (result) {
     await readMembershipProgress(options.db, options.binding, result.records);
+    await readAccountingProgress(options.db, options.silo, result.records);
   }
   return result;
 }

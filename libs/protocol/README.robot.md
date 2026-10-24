@@ -415,3 +415,14 @@ evidence references, usage, private text or credentials.
 Approval cards accept optional boolean `toolReplied`. Missing values keep the older
 unconfirmed presentation. The server derives it from matching adapter dispatch evidence;
 it is separate from `state` and `canRetry`. See [approval replies](../../docs/api/approvals.md).
+
+## Current accounting beside saved resolution history
+
+Audit detail records also accept optional strict `currentAccounting`. A `current`
+result includes UTC `checkedAt`, non-negative safe integer `sequence` and `generation`,
+`state: held | settled | unknown | not_dispatched`, integer euro `heldCents` and
+nullable `settledCents`. Null means no recorded settlement, never zero.
+An `applying` result includes the check time and optional position/generation, without
+money. An `unavailable` result includes only status and check time. No result claims
+that the saved resolution caused current accounting or that execution finished.
+The saved resolution fields remain separate. Older replies can omit this field.

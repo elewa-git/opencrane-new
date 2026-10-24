@@ -15,8 +15,10 @@ Approval replies can name takeover as their cancellation cause and show the save
 end time. Used approvals retain their earlier use and dispatch evidence. A separate
 reply flag says whether the tool replied; it grants no permission to repeat the action.
 
-Effect detail replies keep the saved resolver, date and amount separate from current
-spending. A receipt confirms a saved resolution, not completed settlement.
+ Effect and history detail replies keep the saved resolver, date and amount separate
+ from current spending. History detail can include the current charge and hold, with
+ the time they were checked. A receipt confirms a saved resolution, not completed
+ settlement.
 Change history also carries the saved settled or released choice and amount.
 The amount may be zero; it does not report a completed payment or hold release.
 
@@ -28,8 +30,8 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.->|chat, approval evidence and other replies| protocol["libs/protocol<br/>shared reply shapes"]
-  server["apps/server<br/>back end"] -.->|saved spending and effect replies| protocol
+  web["apps/web<br/>browser app"] -.->|chat, approval and other replies| protocol["libs/protocol<br/>shared reply shapes"]
+  server["apps/server<br/>back end"] -.->|saved spending, effects and current accounting replies| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]

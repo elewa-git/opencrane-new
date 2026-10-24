@@ -5169,7 +5169,37 @@ The approval GET includes `toolReplied` from the models reader. It is true only 
 the latest consumed permit has matching `adapter_response_received` evidence.
 The saved state remains `outcome_unknown`, and retry permission is unchanged.
 `test/approvals.test.ts` covers adapter replies, both uncertain transports, a transport-only
-reply, missing evidence and mismatched approval or permit ids after reader restart.
+ reply, missing evidence and mismatched approval or permit ids after reader restart.
+
+## Current accounting beside saved resolution history
+
+Part of #109, after #659 squash `8f3b2e8a88a2660297c7f88b5a3bf3ad12673cd5`.
+Only organisation history detail adds optional `currentAccounting` to checked
+`effect.resolved` records. List and participant history have no accounting progress.
+The saved choice, actor, date, event position and command digest remain unchanged.
+
+`audit/accounting-progress.ts` reads the audit event by silo/event primary key and
+joins the call by the exact silo/reservation primary key. The checked resolution
+binding requires reservation id to equal permit id. Call permit and silo must match.
+Version 5 or later of the model-budget projection is required. The call, checkpoint
+and rebuild generation come from one SQL statement; all records in the page share
+one two-second accounting deadline. Loading finishes before the existing single
+access check, including failed loads. No write authority check is used.
+
+`status: current` means this call row was read at `checkedAt`, with `sequence` and
+`generation`; it never means this resolution caused settlement. `state: held` means
+settlement is still pending. `unknown` may retain both the charge and full hold.
+`settled` and `not_dispatched` describe accounting only, never execution or outside
+success. Matching amounts or checkpoints cannot attribute a charge to a resolution.
+Missing calls or a checkpoint behind the resolution give `applying`, without money.
+Old, malformed or failed accounting reads give `unavailable`, without money.
+There is no event-history or effect-list fallback. GET and replay never settle,
+release, read an upstream service or dispatch work.
+
+`test/audit-resolution.test.ts` checks pending settlement, zero release, late and
+conflicting evidence, exact joins, rebuilds, access changes during accounting reads,
+and participant privacy. Overview, screens and fresh-install qualification remain
+ outside this change; fresh-install qualification is NOT RUN.
 
 ## Own saved bearer profile read (Part of #49)
 
