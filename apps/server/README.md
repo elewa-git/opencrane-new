@@ -49,7 +49,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, routine metadata, spending and saved effect pages, receipts, live updates and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, routine metadata and run pages, spending and saved effect pages, receipts, live updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks access before history errors, handles child allowances and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|records changes, checked owner pauses and retirements, child recovery, cancellations, activations, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -83,7 +83,7 @@ for current permissions and memory revisions.
 - Serves assistant desktops to people who may view them.
 - Handles members, groups, ownership, model providers, tool servers and spending settings.
 - Returns permitted change history, saved results and memory facts.
-- Returns saved routine metadata to its recorded owner and current silo owners and admins.
+- Returns saved routine metadata and small run pages to its owner and silo owners and admins.
 - Runs the separate models process that checks AI calls, records costs and starts the gateway.
 
 An internal operation checks a child's saved activation and asks the budget actor
@@ -123,6 +123,8 @@ assistant can call. These reads check current admin rights after loading the fac
 A person opens a routine. The server loads its saved history, then checks permission.
 It checks permission even if history fails, so non-readers receive the same refusal.
 It returns the name, owner, assistant, payer, status, revisions and saved next slot.
+Run pages show dated occurrences and outcomes. Missed date ranges stay together;
+private chats, results and instructions stay outside these pages.
 Instructions and private run results stay private. Reading a routine starts no work;
 routine execution remains unavailable.
 
