@@ -1,5 +1,6 @@
 import { createLogger, type Logger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
+import { prepareMemoryDecision, memoryAccessStarted } from './memory-prepare-request.ts';
 import { requestSchema } from './model-request.ts';
 import { authoriseEgress } from './egress-admission.ts';
 import type { EgressRelayRegistry } from './egress-relay.ts';
@@ -20,14 +21,14 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
-  decisionAccessStarted, requireActiveConversationTurn }
+  requireActiveConversationTurn }
   from './decision-activity.ts';
 import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools }
   from './turn-binding-check.ts';
 import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims }
   from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
-import { MemoryPersonScopeOnly, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
+import { MemoryToolRefused, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
@@ -41,7 +42,7 @@ import { requestReservationCents, ModelRequestRefused as RequestRefused, data, m
 
 function decisionError(error: unknown) {
   if (error instanceof BudgetRefused || error instanceof RequestRefused ||
-      error instanceof LoadedMemoryRefused || error instanceof MemoryPersonScopeOnly ||
+      error instanceof LoadedMemoryRefused || error instanceof MemoryToolRefused ||
       error instanceof PayingGroupRefused ||
       error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled) {
     return error.message;
@@ -212,6 +213,7 @@ export async function startDecision(
     void (async () => {
       res.setHeader('content-type', 'application/json');
       if (await internalRoutes(req, res, actor, identity, binding, providers)) return;
+      const memoryRoute = req.url === '/authorize/mcp/memory/server';
       const managedRoute = req.url === '/authorize/models/managed';
       if (!knownDecisionRoute(req.url) || req.method !== 'POST') {
         res.writeHead(404);
@@ -227,7 +229,7 @@ export async function startDecision(
         checked.sequence, started, decisionDeadline);
       const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
       // Read managed history before starting the short access check.
-      const historyDeadline = decisionHistoryDeadline(managedRoute, decisionDeadline);
+      const historyDeadline = decisionHistoryDeadline(managedRoute || memoryRoute, decisionDeadline);
       stage = 'turn_history';
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
@@ -246,8 +248,12 @@ export async function startDecision(
       stage = 'memory';
       const memory = await prepareLoadedMemory(actor.store, binding, memoryClaims,
         conversation, performance.now() + 10_000);
+      const raw = await readBody(req);
+      const preparedMemory = await prepareMemoryDecision(memoryRoute, actor.store, binding,
+        memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);
+      const { preparation, reads: memoryReads } = preparedMemory;
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = decisionAccessStarted(managedRoute, memory.loaded, started);
+      const accessStarted = memoryAccessStarted(managedRoute, memory.loaded, started, preparation);
       stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
@@ -264,7 +270,6 @@ export async function startDecision(
       correlation = { conversationId: turnToken.conversation, turnId: turnToken.turn };
       contextDigest = digestContext([computer, turnToken]);
       stage = 'request';
-      const raw = await readBody(req);
       async function memoryDecision() {
         requireSharedTurnTools(turnToken.sharingClass);
         if (!identity.memory) throw new Error('Memory signing unavailable');
@@ -272,7 +277,7 @@ export async function startDecision(
           assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
           conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
         const memory = await prepareMemoryContext(actor.store, binding, claims, raw,
-          req.headers, fresh.deadline, requestId, fresh.include);
+          req.headers, fresh.deadline, requestId, fresh.include, memoryReads);
         const policy = mcpSender.bindPolicy(memory.policy);
         contextDigest = memory.contextDigest;
         callId = memory.callId;
@@ -285,7 +290,8 @@ export async function startDecision(
         const decisionId = await audit('allow', 'memory_read_allowed');
         const budget = { modelCall, decisionId, admittedAt, ...root };
         await fresh();
-        const memorySend = prepareMemorySend(memory.payload, identity.memory.memoryContext);
+        const preparedPayload = { ...memory.payload, ...preparation };
+        const memorySend = prepareMemorySend(preparedPayload, identity.memory.memoryContext);
         mcpSender.setPermit(res, 'allow', policy, raw, requestId, fresh,
           fresh.deadline, budget, memorySend);
         res.setHeader('x-request-id', requestId);
@@ -384,7 +390,10 @@ export async function startDecision(
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-opencrane-decision', 'refused');
       res.writeHead(capped ? 402 : 403);
-      const refusal = { requestId, error: decisionError(error) };
+      const refusal = error instanceof MemoryToolRefused &&
+        error.message === 'memory_tool_configuration'
+        ? { status: 'refused', reason: error.message }
+        : { requestId, error: decisionError(error) };
       res.end(JSON.stringify(refusal));
     });
   });

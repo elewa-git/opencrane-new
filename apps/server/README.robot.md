@@ -4473,3 +4473,440 @@ requester and participation position, loads turn activity, then starts the short
 write check. `currentAuthority` and the final access confirmation precede the save.
 Foreign ids and removal during history loading leave the approval stream unchanged.
 The save uses the original approval position and the write check's deadline.
+
+## Disabled agent correction and forget (Part of #97)
+
+### Memory MCP test preparation and cleanup
+
+`test/memory-mcp.test.ts` checks active membership, tool server grants and personal
+memory grants before signing recall or change controls. It checks the OpenFGA receipts
+that confirm the member joined, the assistant and conversation were created, and the
+grants were applied. It also checks both identities' resource permissions, permission
+to act for the assistant, and permission to post in the conversation.
+
+Each fresh fixture completes read-only preparation before starting its memory backend.
+It checks the selected scope's read grant as well as MCP access, then reads the initial
+chat summary and fact page. It requires the existing gateway discovery call to return
+HTTP 200. Discovery alone checks MCP access without reading the selected memory scope.
+Write grants are added only by tests that need a valid write control.
+
+A separate startup regression delays the first memory-read grant lookup by advancing
+both clocks. It recreates the fixture and requires HTTP 200 from its first gateway
+recall. Without shared preparation, that first read runs inside the short pass and
+the gateway refuses it.
+
+The fixture reads the initial chat summary before signing, using its own history
+deadline. It also reads the requested page of up to two facts through the normal memory reader.
+That read checks the projection's saved position and generation, then finishes the
+first search before the signed pass begins. The actual HTTP recall still reads the
+page and records its own proof and loaded references.
+
+A discovery request alone cannot prove that this preparation finished: its result
+may be a refusal while clients start. Five recall regressions advance both clocks by 2.2 seconds
+during the first membership, assistant, tool server grant, chat summary or projected
+fact search. Each keeps the original HTTP 200 recall assertion. The summary case delays
+only reads that include older conversation closes, so a raw receipt-history lookup
+cannot hide a missing summary read. Removing only that preparation makes the case fail.
+A first lookup can take longer than the signed pass's two-second lifetime. Both
+change operations have regressions that delay the first event or IAM receipt read
+by 2.2 seconds and still require the exact `memory_tool_unavailable` control reply.
+The backend checks access again on the real request with its original deadline.
+No refused call is retried.
+
+Cleanup disconnects unfinished backend HTTP requests before awaiting server closure
+and removing service fixtures. Its regression sends headers with an incomplete body
+and requires cleanup to finish within two seconds. Without the disconnect, cleanup
+waits for the client socket and the regression fails.
+
+Gateway replacement and disposal use `SIGKILL` for these disposable memory fixtures.
+Memory tool calls finish before disposal. Normal replacement happens during setup,
+with no tool call in progress. Both steps still await the child's exit and close its output pipes.
+Separate regressions pause the gateway process with `SIGSTOP` and require the old
+process to exit, or complete cleanup to finish, within two seconds. Replacement then
+awaits the new process's normal readiness check. A delayed-startup regression keeps
+that wait separate from shutdown. Waiting for graceful shutdown makes both fail.
+The shared models fixture and its normal graceful shutdown remain unchanged.
+
+`test/memory-recall-proof.test.ts` includes both old and current revisions in its
+dependency list, so the returned-reference check accepts either. A proof for the old
+revision must still refuse the current target. Removing only the target revision
+comparison makes both correct and forget cases fail.
+
+Own checks, 23 October 2026, rebased on `55fae525d`, with Node 22.23.3 and
+a throwaway PostgreSQL 17.6 database supplied through `PG_TEST_URL`.
+The gateway lifecycle source is `90bdc25bc`:
+
+- Expected FAIL: test-first commit `5276f81c7` reproduced cleanup waiting for the
+  incomplete request. The same test passed after `03db23f8f` disconnected it.
+- Expected FAIL: test-first commit `2072589a7` reproduced the missing configuration
+  refusal reason for both cold-grant controls. Both passed after `d63730250`.
+- Expected FAIL: test-first commit `4365520d1` reproduced the same missing reason
+  after delaying the first IAM receipt read. Preparation now checks those receipts
+  and permissions too, including before recall controls. The first focused run of
+  this change passed 5/7; the forget cold-IAM control and input-proof control still
+  failed under overlapping test load. Those failures are retained.
+- Expected FAIL: removing only the target revision comparison made both new proof
+  cases fail. The production file was restored before normal checks.
+- Expected FAIL: test-first commit `e2ff3097f` reproduced the paused gateway blocking
+  replacement and cleanup. Both passed after `90bdc25bc`. The focused run also
+  passed the unfinished-request regression, 3/3 in total.
+- PASS: the four-case focused run covered both cold-grant controls and both cases
+  named in the fix request.
+- FAIL: the diagnostic baseline, with the original fixture code, passed 111/120.
+  One setup exceeded 120 seconds and then reported `ECONNRESET`. Eight initial
+  recall or change controls failed before their intended refusal checks. This run
+  overlapped lint and typecheck. Both cases named in the fix request passed.
+- FAIL: the first three-file run, before the gateway lifecycle fix, passed 228/229.
+  The member-permission case exceeded its 120-second setup hook. All other cases
+  passed. The gateway lifecycle fix followed this run.
+- FAIL: before IAM preparation was added, the next full run passed 230/231. Forget's
+  valid control exceeded its 120-second setup hook. The second run passed 225/231
+  with temporary setup markers; six initial controls failed before the intended
+  checks. Neither run proved repeat stability. The markers were removed afterwards.
+
+Logs use `/tmp/p4-15-pr2f-fix-`: `red-close.log`, `green-close.log`,
+`red-control.log`, `green-control.log`, `mutation-target.log` and `baseline.log`.
+The gateway regressions use `red-gateway-close.log`, `red-gateway-restart.log`
+and `green-gateway.log`.
+The full runs before IAM preparation use `repeat1.log`, `final1.log` and
+`final2-traced.log`. IAM probes use `red-iam-control.log` and `green-iam-control.log`.
+
+The first complete run on `2ab46a0a2` passed 232/233. Both named fix cases and all
+new cold-read, lifecycle and target-revision regressions passed. The empty loaded
+evidence case failed its initial recall control with 403 instead of 200, before
+its intended refusal check. This run is FAIL; repeat stability is not established.
+Its log is `qualified1.log` under the same prefix.
+The second complete run on the same fixture source passed 233/233. It used no
+diagnostic markers and overlapped no other local check. Both named fix cases and
+all new regressions passed in both complete runs. The first failure is not erased
+by the second pass: repeat stability remains PARTIAL. Its log is `qualified2.log`.
+
+PASS: full lint, full typecheck, the event catalogue (149 types), Knip and changelog
+validation. The final test edits also passed targeted ESLint, server typecheck and
+Knip again. Full lint reported zero errors and 24 existing length warnings.
+PASS: the changed dispatch case, `withholds recall corrected after its loaded
+append and refuses renewal and decision`, passed in two separate one-worker runs.
+Their logs are `dispatch1.log` and `dispatch2.log` under the same prefix. The other
+92 cases in that file were not selected in this round.
+The throwaway PostgreSQL container and its volume were removed after the tests.
+The baseline's private timing and error logs use `close.log` and `errors.log`.
+Every test, lint and typecheck command used `nice -n 10`. The full root suite and
+fresh-install qualification are NOT RUN.
+
+### Target checks
+
+The backend checks the signed target against the turn identity and saved input generation,
+the loaded references and current scope rows. Correct requires all loaded references except
+its target as dependencies; no revision of that target may be a dependency. Forget also
+refuses mixed-scope input. Proofs and errors contain no fact text. After all checks,
+HTTP 403 returns only `status: refused` and `reason: memory_tool_unavailable`.
+No fact append, key or journal file is created. Tools/list still advertises recall alone.
+P4-13 row 6 (#95) owns activation. Next for #97 is row 3: output and process invalidation.
+The remaining #497 guards belong to #302. Fresh-install qualification: NOT RUN.
+
+### Follow-up timing audit, 23 October 2026
+
+The 44 local commits included 12 commits already on main and 32 memory commits.
+Three memory commits changed application code: `215e6a515` added disabled target
+validation, `5e81b2195` split that validation into named functions, and `76c350874`
+returned the fixed configuration refusal through the gateway. Their rebased ids
+are `8778f582f`, `86129a0f8` and `80e906262`. The later preparation and cleanup
+commits changed tests and their notes only. No commit was squashed.
+
+The target checks retain saved and current requester and assistant grants, current
+IAM permissions, the selected tool's reviewed zero-cost Allow, the exact signed
+identity, loaded references, input generation and current revision. Write checks
+reuse their original authority and expiry. Conversation history is loaded before
+the small access checks; the final validation reads only later conversation rows.
+Neither authority test file, the event security rules nor the two-second limit changed.
+No dependency or event type was added by the memory commits.
+
+The earlier 20-run attempt completed four failing runs: 122, 72, 80 and 127 of
+133 tests passed. The fifth run was still running in an orphaned harness when
+this follow-up began. That harness and its children were stopped before the new gate.
+
+The failures have different causes:
+
+- Gateway replacement counted new-process startup against a shutdown timer. The
+  test now checks the old process's exit within two seconds, then awaits readiness.
+  A delayed-startup regression failed before this test-only fix.
+- Team recall calls the real gateway after seeding, server startup and replacement
+  finish. No test read separates that call's signing and delivery. The backend can
+  spend the original pass on cold scope, history, projection and IAM reads. This
+  remains a product timing limit; no deadline was raised or refusal retried.
+- Cold-IAM Correct and Forget controls complete their delayed receipt lookup in
+  `prepareMemoryAccess` before `changeToken` signs. Their remaining failures occur
+  inside the real backend checks after signing, rather than in unfinished test setup.
+- The valid Correct control and Forget controls for grant, scope and parser tests
+  likewise sign only after preparation. A missing `memory_tool_unavailable` reason
+  is a failed control, not proof that the later attack check ran.
+- The Correct and Forget revocation tests did read their observation values after
+  signing. Those reads now finish first. Two clock-based regressions failed before
+  the change. Their real requests still use the original pass and access checks.
+
+Own focused checks: Expected FAIL, three new timing regressions; PASS, those three
+plus the original replacement and four revocation cases, 8/8 after the fixes.
+The rebase onto `e2b562359` retained both sides of three documentation conflicts.
+This follow-up adds only test and documentation changes. The full root suite and
+fresh-install qualification remain NOT RUN.
+
+### Three consecutive runs, 23 October 2026
+
+The replacement load gate sampled 4.34 at 17:31:31 UTC, so no minute-long wait
+was needed. All three runs used the same test source, `e2b9a50e5`, one worker,
+`nice -n 10` and a throwaway PostgreSQL 17.6 database through `PG_TEST_URL`.
+The later commits only record these results.
+
+| Run | One-minute load at start | Own result | Failed controls |
+| --- | --- | --- | --- |
+| 1 | 4.34 | FAIL: 134/136 | Personal recall before the two team-assistant loaded-reference checks. |
+| 2 | 7.15 | FAIL: 126/136 | Ten initial Correct or Forget controls before grant, policy, scope, target-proof and operation checks. |
+| 3 | 17.37 | FAIL: 135/136 | Team-scoped assistant-notes recall. |
+
+The runs were consecutive. Load rose during run 2; a separate sample was 18.69.
+The initial below-eight sample does not mean the machine stayed below eight.
+Both cases named in the fix request, all cold-read preparation regressions and all
+three new timing regressions passed in each run. The remaining failures still
+make the three-run gate FAIL.
+
+Every failure happened in a valid control after signing. `recalledRemember` and
+`changeRequest` finish their preparation before signing; `scopedRecall` uses the
+real gateway's signed request. Code inspection places the remaining cold backend
+history, scope and IAM reads inside the original pass. The public generic refusal
+does not identify the exact slow check. These results establish failed controls,
+not successful attack checks or unauthorised access. No request was retried and
+no product deadline or access check was changed.
+
+PASS: full lint, full typecheck after correcting one test claim access, the event
+catalogue with 152 types, Knip and changelog validation. Full lint reported zero
+errors and 25 existing length warnings. The corrected test also passed targeted lint.
+The first typecheck failed on the new helper's property access; its full rerun passed.
+PASS: memory proof and context suites, 106/106 twice. PASS: unchanged event security
+rules, 438/438 once. Logs and JSON reports use `/tmp/p4-15-pr2f-finish-`.
+PASS: the changed memory-dispatch case, 1/1 in each of two runs; the other 92
+cases were not selected. The throwaway database container and its volume were removed.
+The full root suite and fresh-install qualification remain NOT RUN. The PR stays draft.
+
+## Measured backend expiry, 23 October 2026 (Part of #97)
+
+Rebased the retained branch commits onto `369730231af315fb4067b84efa01e85e227b572b`.
+The rebase completed. The only conflict was in this file; both additions were kept.
+
+The failing-first commit adds a test-only helper, `test/support/memory-path-timing.ts`.
+It records elapsed milliseconds for history, scope streams, IAM receipts and permission
+reads, grant streams and loaded-reference validation. It records no arguments, returned
+values, errors, credentials or fact text. Six cases delay history or IAM by 2.2 seconds
+inside the backend. Six more save a read-grant revocation during that delay.
+
+The first targeted run used disposable PostgreSQL 17.6, NATS, OpenFGA and gateway fixtures.
+Own result: FAIL, six valid controls refused and six revocation cases refused. The latter
+are not proof of the revocation check: expiry refused them before that check was reached.
+The existing 136 cases were not selected in this targeted run.
+
+| Operation | Delayed step | Measured step | Whole request |
+| --- | --- | --- | --- |
+| Recall | History | 2,210 ms | 2,304 ms |
+| Recall | IAM receipt | 2,210 ms | 2,343 ms |
+| Correct | History | 2,214 ms | 2,224 ms |
+| Correct | IAM receipt | 2,216 ms | 2,444 ms |
+| Forget | History | 2,208 ms | 2,216 ms |
+| Forget | IAM receipt | 2,206 ms | 2,292 ms |
+
+All six refused before scope and loaded-reference validation. The signed pass was
+already running when the measured step began. Logs: `/tmp/p4-15-rootfix-red.log`.
+The product fix is still outstanding. No deadline or product access check changed.
+
+The gateway signs in `libs/models/src/mcp-dispatch.ts` before forwarding to the backend.
+The backend checks that same expiry at receipt, write confirmation and recall delivery.
+Moving reads inside the backend cannot make a 2.2-second read fit that signed lifetime.
+Preparation before signing needs a gateway/backend protocol change. Treating the incoming
+pass as admission only and starting a separate backend check would change the existing
+expiry contract. Preparation before signing remains outstanding in this follow-up.
+
+A preparation protocol must run before gateway authority checks and permit creation.
+It must bind the same requester, assistant, conversation, turn, exact request and backend
+instance. Final checks must compare small access streams and fact revisions with what
+preparation read, while keeping the original two-second expiry. A prepared request must
+be usable once only and must never supply an access decision to another request.
+This follow-up supplies the failing proof; it does not implement that protocol.
+
+The focused reproduction uses a disposable database supplied through `PG_TEST_URL`:
+
+```sh
+nice -n 10 npx vitest run apps/server/test/memory-mcp.test.ts --maxWorkers=1 -t 'slow backend'
+```
+
+### Consecutive repeat checks
+
+All three runs use one worker, `nice -n 10` and the test behaviour committed in
+`2ce9415c77ef839d5fcf47d81e291ca75de38ecc`. Later test edits only expand the layout
+and give the same request data named constants. Logs use `/tmp/p4-15-rootfix-run-`.
+
+| Run | Starting load | Own result |
+| --- | --- | --- |
+| 1 | 9.56 | FAIL: 137/148. Six controlled slow-read failures and five other valid recall refusals. |
+| 2 | 7.20 | FAIL: 141/148. Six controlled slow-read failures and one 30-second teardown timeout. |
+| 3 | 9.63 | FAIL: 142/148. Only the six controlled slow-read cases failed. |
+
+Run 1's other refusals affected renewal, the valid call before forged-call checks,
+harmless file activity, prepared gateway recall and assistant-notes recall. Their
+individual slow steps were not measured. Run 2's other failure was `afterEach(close)`
+for the assistant-notes loaded-reference case; it was not an access assertion failure.
+
+Own PASS: full lint, full typecheck, event catalogue (153 types), Knip, changelog,
+and the unchanged event security rules (438/438). Full lint had zero errors and
+25 existing warnings. The final test layout also passed targeted lint and server
+typecheck. The changed cases ran in the targeted reproduction and every full repeat;
+the six delayed valid controls remain red. The product fix is not source ready.
+Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
+
+The throwaway PostgreSQL container and its volume were removed after the third run.
+
+## Memory preparation before signing
+
+`POST /mcp/memory/server/prepare` accepts a signed memory credential with
+`preparing: true`. This credential can load data but cannot execute a tool.
+The route returns only `preparationId` and `inputGeneration`. It loads chat history,
+IAM receipt facts, scope history and the bounded fact page within ten seconds.
+At most 128 preparations live in this server process. Each has a random id,
+expires after 30 seconds and is removed before any attempt to use it.
+
+The final signed recall, Correct or Forget binds the id and input generation to the silo, requester,
+assistant, computer generation, conversation, turn, thread, operation, scope,
+request digest, call id and request id. Missing, expired, reused and mismatched
+preparations return the existing generic refusal. There is no cold-read fallback.
+Preparation checks access before reading private facts and discards that result.
+Prepared data contains no permission result. The two-second call checks current
+permissions and small access streams, turn changes and the current memory revision.
+Chat refresh reads only later events; losing its prepared summary refuses the call.
+No preparation or fact text is saved in an event or returned by the preparation route.
+Correct and Forget use the same preparation store and load read/write grant receipts.
+Their prepared data contains scope events, with no decrypted fact text or permission result.
+The signed pass checks current permissions and reads only later scope events before
+validating the target and every loaded reference. It rechecks the original access
+streams after reading the conversation tail. Correct and Forget remain disabled;
+valid controls return `memory_tool_unavailable` and create no business event or file.
+Remember and discovery still use their existing paths. Fresh-install qualification: NOT RUN.
+
+### Team memory test setup
+
+Team-scope and team loaded-reference cases choose their assistant in `beforeEach`.
+They no longer close a personal fixture and start a second fixture inside the test.
+This keeps a timed-out test body from leaving another setup running against the
+shared test variables. The existing 120-second setup hook, 30-second test limit and
+two-second product pass are unchanged.
+
+### Memory backend test disposal
+
+Cleanup stops the HTTP listener before disconnecting unfinished requests and waiting
+for Fastify to close. Disconnecting first left time for a new connection to arrive
+and keep disposal waiting. The regression opens a fresh incomplete request in that
+gap and requires disposal to finish within the existing two-second cleanup check.
+
+### Preparation follow-up checks — 24 October 2026
+
+Own result: PARTIAL. The preparation regressions pass, but the three-run repeat gate is FAIL.
+The branch was rebased onto the fetched main revision
+`c4c2662f865e3b72876a06e969ba1c7c2df08527`; the rebase finished cleanly.
+Main advanced during testing. All three final runs used source
+`d2e4befebd0113ba5000c801691682edabc6f9f6`, one worker and `nice -n 10`.
+`PG_TEST_URL` pointed to a throwaway PostgreSQL container, separate from the owner stack.
+Starting load below is the one-minute load average from `/proc/loadavg`.
+
+| Run | Start (UTC) | Starting load | Own result |
+| --- | --- | --- | --- |
+| 1 | 00:56:14 | 5.53 | FAIL: 168/172 passed; 4 failed |
+| 2 | 01:26:16 | 5.95 | FAIL: 171/172 passed; 1 failed |
+| 3 | 01:55:17 | 6.59 | PASS: 172/172 passed |
+
+Run 1 failed on a thread-proxy upstream timeout, a valid recall before an append
+revocation check, an access check before signing the Correct lineage control, and a
+Correct policy-control event-store timeout. Those four cases passed in runs 2 and 3.
+Run 2 failed while starting a fixture gateway: its address was already in use.
+That case passed in runs 1 and 3. These failures remain FAIL; later passes do not erase them.
+Logs and starting loads use `/tmp/p4-15-fix7-qualified-{1,2,3}` with `.log` and `.start`.
+
+All four slow Correct/Forget cases, slow Correct revocation and reused Forget preparation
+passed in every final run. Missing, expired and mismatched preparation checks, final IAM
+revocations and assertions against cold reads inside the signed pass also passed each time.
+Both unfinished-request cleanup regressions passed in all three runs, without a cleanup timeout.
+
+Failing-first evidence: commit `14f6c83b6` failed all six requested cases before the fix.
+Commit `69bbe3f36` reproduced a late connection holding cleanup open; stopping the listener
+first fixed it. Commit `2174d8270` failed both final IAM-revocation cases before preserving
+full write permission checks. Focused cleanup and team-fixture checks passed twice.
+Earlier diagnostic full runs were PASS 169/169 (load 13.22), FAIL 166/169 (load 7.72)
+and FAIL 166/169 (load 12.71). The latter runs exposed fixture setup and cleanup problems.
+
+Own PASS: full lint (zero errors, 26 warnings), full typecheck, event catalogue (153 types),
+Knip and changelog validation. The related memory and event-security suites passed twice
+(558 tests per run, including 438 security-rule tests). The final three memory runs cover
+all changed tests more than twice. Authority, authority-volume and security-rule tests
+were not edited. No dependencies, business events or preparation response fields were added.
+Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
+
+### Explicit memory preparation in tests
+
+The direct dispatch fixture obtains and checks preparation before signing an executable
+recall pass. Restart tests prepare against the replacement backend because preparations
+belong to one backend instance. Request counts distinguish preparation from execution.
+
+The memory MCP fixture requires HTTP 200 and a complete preparation reply. Refused
+preparations are tested at the preparation route. Final-pass refusal tests obtain valid
+preparation before revoking access. Invalid HTTP status and malformed success replies
+must stop the helper before signing. Slow loaded-receipt tests exercise the real gateway
+with existing personal references and with another scope already loaded by the turn.
+
+### Loaded receipt and fixture checks — 24 October 2026
+
+Own result: PARTIAL. The requested fixes are implemented, but the six-run repeat gate is FAIL.
+The rebase onto fetched main `243eb0a9c3f49bb4b75a0bd1ebcf87b8cd2d4a08` finished.
+Main advanced during the test runs. Dispatch runs used source
+`a6216df3d0fbf65429cda14129124a0565fa965d`; MCP runs used source
+`41f2ddc1ed0bc8e7f3414840550341621f5ed776`. The later source only changes
+proof creation in the MCP test fixture. Product code is the same in both sources.
+
+Each file ran three times consecutively with `nice -n 10`, one worker and the supplied
+PostgreSQL test connection on port 55432. Starting load is the one-minute load average.
+
+| File | Run | Start (UTC) | Starting load | Own result |
+| --- | --- | --- | --- | --- |
+| `memory-dispatch.test.ts` | 1 | 04:28:56 | 9.08 | PASS: 94/94 |
+| `memory-dispatch.test.ts` | 2 | 04:37:06 | 7.27 | PASS: 94/94 |
+| `memory-dispatch.test.ts` | 3 | 04:49:37 | 18.86 | PASS: 94/94 |
+| `memory-mcp.test.ts` | 1 | 04:47:09 | 17.64 | FAIL: 178/179 |
+| `memory-mcp.test.ts` | 2 | 05:09:28 | 4.65 | PASS: 179/179 |
+| `memory-mcp.test.ts` | 3 | 05:27:09 | 10.56 | PASS: 179/179 |
+
+MCP run 1 timed out in the existing 120-second `prepareFixture` hook for
+`checks memory_read for member (recorded=true) before forget`. Its test body did not run.
+The other 178 tests passed, including all seven new MCP regressions. This setup failure
+is not waived. Logs, complete load averages and machine-readable test results are under
+`/tmp/p4-15-review2-memory-{mcp,dispatch}-{1,2,3}` with `.start.json`, `.log`,
+`.result.json` and `.exit` suffixes.
+
+Earlier diagnostic runs were FAIL: dispatch passed 91/94, and MCP passed 178/179.
+The three dispatch failures expected a new preparation to succeed after conversation
+closure. They now assert refusal at the preparation route and keep all accounting and
+privacy checks. Those three cases then passed. The MCP failure came from using a recall
+request to construct a proof after an event-only correction. The fixture now creates
+only the proof for its seeded loaded references. Executable calls still obtain and check
+real preparations, and the old-proof test retains its valid control and refusal assertions.
+
+A subsequent focused run passed 10/12. Two valid Forget controls returned the generic
+403 response before the negative test mutation. A temporary timing run then passed all
+three selected proof cases. The cause of the two control failures remains unconfirmed;
+they are not labelled as an established flake. Temporary timing changes were removed.
+Logs: `/tmp/p4-15-review2-proof-fixture.log` and `/tmp/p4-15-review2-control-timing.log`.
+
+Failing-first commits `9d64e52c3`, `303ccf87c` and `0e0d3242a` recorded the missing direct
+preparation, late loaded-receipt reads, and accepted refused/malformed preparation replies.
+The slow gateway cases cover Recall, Correct and Forget with loaded references, including
+a scope other than the requested one. Current permission checks and the two-second limit
+are unchanged. Correct and Forget remain disabled.
+
+Own PASS: full lint (zero errors, 26 warnings), Knip, full typecheck, event catalogue
+(153 types), changelog validation, and 558 related memory/context/proof/security tests.
+Focused lint and server typecheck also passed after the final fixture changes.
+No dependency or business event was added. Authority and event-security tests were not edited.
+Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.

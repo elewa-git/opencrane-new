@@ -1,25 +1,36 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi, type TestContext } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
 import * as crypto from 'node:crypto';
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { request, type IncomingMessage } from 'node:http';
+import { once } from 'node:events';
 import { setTimeout as pause } from 'node:timers/promises';
 import { proxy } from '../../computer/test/server.ts';
 import type { MemoryIdentity } from '@opencrane/events';
+import { EventStore } from '@opencrane/event-store';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
-import { envelope, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
-  verifyMemoryContext } from '@opencrane/models';
+import { envelope, history, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
+  verifyMemoryContext, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { limits, listFacts } from '../src/memory/reads.ts';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import * as memoryPreparation from '../../../libs/models/src/memory-prepare-request.ts';
+import { timeMemoryPath } from './support/memory-path-timing.ts';
+
+declare module 'vitest' {
+  interface TaskMeta {
+    teamAssistant?: boolean;
+  }
+}
 
 async function cryptoModule() {
   const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
@@ -43,7 +54,15 @@ const rememberDeclaration = { name: 'remember', reviewed: true, costCents: 0,
   review: rememberReview };
 const recallTool = toolEvidence(recallDeclaration);
 const rememberTool = toolEvidence(rememberDeclaration);
-const memoryCatalogue = catalogueEvidence([recallTool, rememberTool]);
+const changeReview = { action: 'Change saved memory', consequence: 'A fact is replaced or forgotten.',
+  targetArgument: 'memoryId', fields: ['memoryId', 'expectedRevision'], stepUp: false };
+const forgetDeclaration = { name: 'forget', reviewed: true, costCents: 0,
+  review: changeReview };
+const correctDeclaration = { name: 'correct', reviewed: true, costCents: 0,
+  review: changeReview };
+const forgetTool = toolEvidence(forgetDeclaration);
+const correctTool = toolEvidence(correctDeclaration);
+const memoryCatalogue = catalogueEvidence([recallTool, rememberTool, forgetTool, correctTool]);
 const metadata = { threadId: 'thread', callId: 'memory-call',
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
   'io.modelcontextprotocol/clientCapabilities': {} };
@@ -120,6 +139,8 @@ async function prepare(team = false) {
       ...encrypted });
   }
   await setup.runner.run(projection);
+  await prepareMemoryAccess(false);
+  await prepareRecallPage('deliver');
   const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
     binding: setup.binding, feed: { memberId }, identity: setup.identity,
     dispatchGeneration: 'memory-instance', keyDirectory: dirname(setup.options.configFile) };
@@ -129,30 +150,51 @@ async function prepare(team = false) {
   const upstream = new URL(address).host;
   setup.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
-  await setup.restart();
-  // Warm service clients. Cold calls may correctly refuse when the access deadline expires.
+  await restartMemoryGateway();
+  // Check the gateway only after its access and data readers are ready.
   const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
   const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
-  await setup.call(discoveryHeaders, discovery, route);
+  const ready = await setup.call(discoveryHeaders, discovery, route);
+  expect(ready.status, ready.text).toBe(200);
 }
 function memberId() {
   return Promise.resolve('alice');
 }
 function captureContext(request: import('fastify').FastifyRequest,
   _reply: import('fastify').FastifyReply, done: () => void) {
+  if (request.url.endsWith('/prepare')) {
+    done();
+    return;
+  }
   capability = String(request.headers['x-memory-context'] ?? '');
   for (const name of ['authorization', 'x-turn-token', 'session-id']) {
     expect(request.headers[name]).toBeUndefined();
   }
   done();
 }
+function restartMemoryGateway(target = setup) {
+  // Replace only disposable test gateways. No request is in progress during setup.
+  return target.restart('SIGKILL');
+}
 async function close() {
   const currentApp = app;
   app = undefined!;
-  await currentApp?.close();
   const currentSetup = setup;
   setup = undefined!;
-  await currentSetup?.close();
+  await closeMemoryServices(currentSetup, currentApp);
+}
+async function closeMemoryServices(target: typeof setup | undefined,
+  backend: typeof app | undefined) {
+  // Finish every call and assertion before disposal. Do not wait for gateway drain here.
+  const child = target?.gatewayChild();
+  child?.kill('SIGKILL');
+  // Stop accepting connections before disconnecting clients, including incomplete requests.
+  if (backend?.server.listening) {
+    backend.server.close();
+  }
+  backend?.server.closeAllConnections();
+  await backend?.close();
+  await target?.close();
 }
 async function renewGatewayCredentials() {
   // Keep each test on the same live turn with a fresh two-minute token.
@@ -173,12 +215,155 @@ async function renewGatewayCredentials() {
   // Keep catalogue expiry from hiding the memory check each test intends to exercise.
   await setup.append('mcp-memory', 'mcp.catalogue_checked', check);
 }
-async function preparePersonal() {
-  await prepare();
+// Finish the chosen fixture before the test starts. Avoid a second startup outliving a timeout.
+async function prepareFixture(context: TestContext) {
+  await prepare(context.task.meta.teamAssistant === true);
 }
-beforeEach(preparePersonal, 120_000);
+const teamFixture = { meta: { teamAssistant: true } };
+beforeEach(prepareFixture, 120_000);
 beforeEach(renewGatewayCredentials);
 afterEach(close);
+
+async function closesIncompleteBackendRequest() {
+  const address = app.server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Missing memory backend address');
+  }
+  const incoming = once(app.server, 'request');
+  const options = { host: '127.0.0.1', port: address.port, path: route, method: 'POST',
+    headers: { 'content-type': 'application/json', 'content-length': '16384' } };
+  const pending = request(options);
+  function ignoreClosedSocket() {
+    // Expect the fixture to disconnect this unfinished request during cleanup.
+  }
+  pending.on('error', ignoreClosedSocket);
+  pending.flushHeaders();
+  await incoming;
+  const closing = close();
+  function closed() {
+    return 'closed';
+  }
+  const completed = closing.then(closed);
+  const expired = pause(2000, 'still waiting');
+  try {
+    expect(await Promise.race([completed, expired])).toBe('closed');
+  } finally {
+    pending.destroy();
+    await closing;
+  }
+}
+it('closes an unfinished backend request before removing its service fixtures',
+  closesIncompleteBackendRequest);
+
+async function closesLateBackendRequest() {
+  const backend = app;
+  const address = backend.server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Missing backend address');
+  }
+  const port = address.port;
+  const originalClose = backend.close.bind(backend);
+  let pending: ReturnType<typeof request> | undefined;
+  async function closeWithLateConnection() {
+    if (backend.server.listening) {
+      const incoming = once(backend.server, 'request');
+      const options = { host: '127.0.0.1', port, path: route, method: 'POST', agent: false,
+        headers: { 'content-type': 'application/json', 'content-length': '16384' } };
+      pending = request(options);
+      function disconnected() {
+        // Expect cleanup to end this incomplete request.
+      }
+      pending.on('error', disconnected);
+      pending.flushHeaders();
+      await incoming;
+    }
+    return originalClose();
+  }
+  const promiseClose: { close(): Promise<undefined> } = backend;
+  const closingBackend = vi.spyOn(promiseClose, 'close');
+  closingBackend.mockImplementationOnce(closeWithLateConnection);
+  const closing = close();
+  function closed() {
+    return 'closed';
+  }
+  const completed = closing.then(closed);
+  const expired = pause(2000, 'still waiting');
+  try {
+    expect(await Promise.race([completed, expired])).toBe('closed');
+  } finally {
+    pending?.destroy();
+    await closing;
+    closingBackend.mockRestore();
+  }
+}
+it('stops accepting backend connections before disconnecting clients', closesLateBackendRequest);
+
+async function closesPausedGateway() {
+  const child = setup.gatewayChild();
+  if (!child) {
+    throw new Error('Missing memory fixture gateway');
+  }
+  // Reproduce a gateway that cannot finish graceful shutdown before the hook deadline.
+  expect(child.kill('SIGSTOP')).toBe(true);
+  const closing = close();
+  function closed() {
+    return 'closed';
+  }
+  const completed = closing.then(closed);
+  const expired = pause(2000, 'still waiting');
+  try {
+    expect(await Promise.race([completed, expired])).toBe('closed');
+    expect(child.signalCode).toBe('SIGKILL');
+  } finally {
+    child.kill('SIGKILL');
+    await closing;
+  }
+}
+it('removes service fixtures when the gateway cannot finish graceful shutdown', closesPausedGateway);
+
+async function replacesPausedGateway() {
+  const child = setup.gatewayChild();
+  if (!child) {
+    throw new Error('Missing memory fixture gateway');
+  }
+  expect(child.kill('SIGSTOP')).toBe(true);
+  const exited = once(child, 'exit');
+  const restarting = restartMemoryGateway();
+  function stopped() {
+    return 'stopped';
+  }
+  const completed = exited.then(stopped);
+  const expired = pause(2000, 'still waiting');
+  try {
+    // Bound shutdown separately because starting a new process needs its own readiness wait.
+    expect(await Promise.race([completed, expired])).toBe('stopped');
+    expect(child.signalCode).toBe('SIGKILL');
+    await restarting;
+    expect(setup.gatewayHealthy()).toBe(true);
+  } finally {
+    child.kill('SIGKILL');
+    await restarting;
+  }
+}
+it('replaces a fixture gateway that cannot finish graceful shutdown', replacesPausedGateway);
+
+async function replacesGatewayWithSlowStartup() {
+  const originalRestart = setup.restart.bind(setup);
+  async function restart(signal?: NodeJS.Signals) {
+    await originalRestart(signal);
+    // Keep startup slower than the shutdown check, without delaying the old child's exit.
+    await pause(2200);
+  }
+  const restarts = vi.spyOn(setup, 'restart');
+  restarts.mockImplementation(restart);
+  try {
+    await replacesPausedGateway();
+  } finally {
+    restarts.mockRestore();
+  }
+}
+it('waits for replacement startup after checking the paused gateway has exited',
+  replacesGatewayWithSlowStartup);
 
 function scopedRequester(team: boolean, kind: MemoryIdentity['scopeKind']) {
   if (team && kind !== 'person') {
@@ -256,7 +441,7 @@ async function scopedRecall(team: boolean) {
     const upstream = new URL(address).host;
     target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
       generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
-    await target.restart();
+    await restartMemoryGateway(target);
     await refuseUnboundScopes(target, backend);
     for (const scope of scopes) {
       const selectedId = memoryScopeId('test', scope.scopeKind, scope.ownerId);
@@ -286,10 +471,10 @@ async function scopedRecall(team: boolean) {
       const requester = scopedRequester(team, scope.scopeKind);
       const revokedFields = { resourceType: 'memory_read', resourceId: selectedId,
         ...requester, revokedBy: 'alice' };
-      const revoked = await target.append(grantStream('memory_read', selectedId),
-        'grant.revoked', revokedFields);
       const scopeClaims = { scopes: [selectedId] };
       const revokedToken = await signedRecall(target, scopeClaims, body);
+      const revoked = await target.append(grantStream('memory_read', selectedId),
+        'grant.revoked', revokedFields);
       const direct = { method: 'POST' as const, url: route,
         headers: { ...headers, 'x-memory-context': revokedToken }, payload: body };
       expect((await backend.inject(direct)).statusCode).toBe(403);
@@ -307,8 +492,7 @@ async function scopedRecall(team: boolean) {
       await allowScopedRead(target, selectedId, requester);
     }
   } finally {
-    await backend?.close();
-    await target.close();
+    await closeMemoryServices(target, backend);
   }
 }
 it.each([false, true])('recalls only the selected scope with live grants (team=%s)',
@@ -362,11 +546,12 @@ async function refuseUnboundScopes(target: typeof setup, backend: typeof app) {
 
 async function assertScopedRefused(target: typeof setup, backend: typeof app,
   body: typeof call, selectedId: string) {
-  const scopeClaims = { scopes: [selectedId] };
-  const token = await signedRecall(target, scopeClaims, body);
+  const claims = await recallClaims(target, body);
+  expect(claims.scopes).toEqual([selectedId]);
+  const token = await preparationToken(target, claims);
   const database = vi.spyOn(target.db, 'query');
   try {
-    const direct = { method: 'POST' as const, url: route,
+    const direct = { method: 'POST' as const, url: `${route}/prepare`,
       headers: { ...headers, 'x-memory-context': token }, payload: body };
     expect((await backend.inject(direct)).statusCode).toBe(403);
     expect((await target.call(headers, body, route)).status).toBe(403);
@@ -399,7 +584,7 @@ async function isolatedBackend(target: typeof setup) {
   const upstream = new URL(address).host;
   target.options.mcpRoutes.push({ serverId: 'memory', connectionId: 'server', upstream,
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' });
-  await target.restart();
+  await restartMemoryGateway(target);
   return backend;
 }
 
@@ -411,28 +596,78 @@ async function memoryBinding(target: typeof setup) {
     schemaDigest: memoryCatalogue.schemaDigest, policyRevision: policy.policyRevision };
 }
 
-async function signedRecall(target: typeof setup, overrides = {}, body = call) {
-  const parsed = parseMemoryRequest(JSON.stringify(body), headers);
-  const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
-    computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
-    thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
-    bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId,
-    requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
-  const dispatch = await memoryBinding(target);
-  return target.tokens.memoryContext({ ...claims, dispatch, ...overrides }, Date.now() + 2000);
+function isMemoryRoute(candidate: { serverId: string }) {
+  return candidate.serverId === 'memory';
 }
 
-async function assertRecallRefused(target: typeof setup, backend: typeof app) {
-  const token = await signedRecall(target);
-  const database = vi.spyOn(setup.db, 'query');
+async function recallClaims(target: typeof setup, body = call) {
+  const parsed = parseMemoryRequest(JSON.stringify(body), headers);
+  const dispatch = await memoryBinding(target);
+  return { silo: 'test', requester: 'alice', assistant: 'assistant',
+    computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
+    thread: 'thread', operation: 'recall', scopes: [parsed.input!.scopeId], contentAccess: 'private',
+    bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId, dispatch,
+    requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
+}
+
+async function signedRecall(target: typeof setup, overrides = {}, body = call) {
+  const claims = await recallClaims(target, body);
+  const fields = await prepareSignedMemory(target, claims, body, headers);
+  const finalClaims = { ...claims, ...fields, ...overrides };
+  return target.tokens.memoryContext(finalClaims, Date.now() + 2000);
+}
+
+async function preparationToken(target: typeof setup, claims: Record<string, unknown>) {
+  const preparationClaims = { ...claims, preparing: true };
+  return target.tokens.memoryContext(preparationClaims, Date.now() + 2000);
+}
+
+async function prepareSignedMemory(target: typeof setup, claims: Record<string, unknown>,
+  body: unknown, requestHeaders: typeof headers) {
+  const preparing = await preparationToken(target, claims);
+  const upstream = target.options.mcpRoutes.find(isMemoryRoute)!.upstream;
+  const request = { method: 'POST', headers: { ...requestHeaders,
+    'content-type': 'application/json', 'x-memory-context': preparing },
+    body: JSON.stringify(body) };
+  const preparation = await fetch(`http://${upstream}${route}/prepare`, request);
+  if (preparation.status !== 200) {
+    throw new Error(`Memory preparation refused (${preparation.status})`);
+  }
+  const prepared: unknown = await preparation.json();
+  const schema = z.strictObject({ preparationId: z.uuid(), inputGeneration: z.string().min(1) });
+  return schema.parse(prepared);
+}
+
+async function assertRecallPreparationRefused(target: typeof setup, backend: typeof app) {
+  const claims = await recallClaims(target);
+  const token = await preparationToken(target, claims);
+  const database = vi.spyOn(target.db, 'query');
   try {
     const requestHeaders = { ...headers, 'x-memory-context': token };
-    const request = { method: 'POST' as const, url: route,
+    const request = { method: 'POST' as const, url: `${route}/prepare`,
       headers: requestHeaders, payload: call };
     const response = await backend.inject(request);
     expect(response.statusCode, response.body).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
     expect(database).not.toHaveBeenCalled();
     const gateway = await target.call(headers, call, route);
+    expect(gateway.status, gateway.text).toBe(403);
+    expect(database).not.toHaveBeenCalled();
+  } finally {
+    database.mockRestore();
+  }
+}
+
+async function assertRecallFinalRefused(token: string) {
+  const database = vi.spyOn(setup.db, 'query');
+  try {
+    const request = { method: 'POST' as const, url: route, payload: call,
+      headers: { ...headers, 'x-memory-context': token } };
+    const response = await app.inject(request);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(database).not.toHaveBeenCalled();
+    const gateway = await setup.call(headers, call, route);
     expect(gateway.status, gateway.text).toBe(403);
     expect(database).not.toHaveBeenCalled();
   } finally {
@@ -456,9 +691,9 @@ async function recordedMemoryGrant(granteeKind: string) {
     const otherKind = granteeKind === 'member' ? 'assistant' : 'member';
     const otherId = otherKind === 'member' ? 'alice' : 'assistant';
     await grantMemory(target, otherKind, otherId);
-    await assertRecallRefused(target, backend);
+    await assertRecallPreparationRefused(target, backend);
     await grantMemory(target, otherKind, granteeId);
-    await assertRecallRefused(target, backend);
+    await assertRecallPreparationRefused(target, backend);
     await grantMemory(target, granteeKind, granteeId);
     const allowed = await target.call(headers, call, route);
     expect(allowed.status, allowed.text).toBe(200);
@@ -470,10 +705,9 @@ async function recordedMemoryGrant(granteeKind: string) {
     const identityKind = granteeKind === 'member' ? 'person' : 'assistant';
     expect(await target.auth.use(identityKind, granteeId, 'memory_read', scopeId))
       .toMatchObject({ allowed: true });
-    await assertRecallRefused(target, backend);
+    await assertRecallPreparationRefused(target, backend);
   } finally {
-    await backend?.close();
-    await target.close();
+    await closeMemoryServices(target, backend);
   }
 }
 it.each(['member', 'assistant'])(
@@ -492,7 +726,7 @@ it('requires recorded MCP grants independently of valid memory grants',
       await grantMemory(target, 'member', 'alice');
       await grantMemory(target, 'assistant', 'assistant');
       backend = await isolatedBackend(target);
-      await assertRecallRefused(target, backend);
+      await assertRecallPreparationRefused(target, backend);
       for (const granteeKind of ['member', 'assistant']) {
         const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
         const fields = { resourceType: 'mcp_server', resourceId: 'memory',
@@ -500,13 +734,12 @@ it('requires recorded MCP grants independently of valid memory grants',
         const grant = await target.append(grantStream('mcp_server', 'memory'),
           'grant.given', fields);
         await target.auth.handler.handle(grant, target.db);
-        if (granteeKind === 'member') await assertRecallRefused(target, backend);
+        if (granteeKind === 'member') await assertRecallPreparationRefused(target, backend);
       }
       const allowed = await target.call(headers, call, route);
       expect(allowed.status, allowed.text).toBe(200);
     } finally {
-      await backend?.close();
-      await target.close();
+      await closeMemoryServices(target, backend);
     }
   }, 120_000);
 
@@ -523,10 +756,9 @@ it.each([undefined, 'memory_free'] as const)(
       await grantMemory(target, 'member', 'alice');
       await grantMemory(target, 'assistant', 'assistant');
       backend = await isolatedBackend(target);
-      await assertRecallRefused(target, backend);
+      await assertRecallPreparationRefused(target, backend);
     } finally {
-      await backend?.close();
-      await target.close();
+      await closeMemoryServices(target, backend);
     }
   }, 120_000);
 
@@ -679,13 +911,14 @@ it('refuses changed MCP policy at both the gateway and backend', async function 
 });
 
 async function refusesMissingPermission(granteeKind: string) {
+  const token = await signedRecall(setup);
   const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
   const fields = { resourceType: 'memory_read', resourceId: scopeId,
     granteeKind, granteeId, revokedBy: 'alice' };
   const revoked = envelope('test', grantStream('memory_read', scopeId), 'grant.revoked', fields);
   await setup.auth.handler.handle(revoked, setup.db);
   try {
-    await assertRecallRefused(setup, app);
+    await assertRecallFinalRefused(token);
   } finally {
     await grantMemory(setup, granteeKind, granteeId, false);
   }
@@ -717,15 +950,16 @@ async function refusesWrongIdentity(overrides: Record<string, unknown>) {
 it.each(wrongIdentities)('refuses a signed backend context with another identity: %j',
   refusesWrongIdentity);
 
-it('refuses a signed body whose thread differs from the recorded start',
+it('refuses preparation whose signed thread differs from the recorded start',
   async function recordedThread() {
     const otherMetadata = { ...metadata, threadId: 'other' };
     const body = { ...call, params: { ...call.params, _meta: otherMetadata } };
-    const token = await signedRecall(setup, { thread: 'other' }, body);
+    const claims = await recallClaims(setup, body);
+    const token = await preparationToken(setup, { ...claims, thread: 'other' });
     const database = vi.spyOn(setup.db, 'query');
     try {
       const requestHeaders = { ...headers, 'x-memory-context': token };
-      const options = { method: 'POST' as const, url: route,
+      const options = { method: 'POST' as const, url: `${route}/prepare`,
         headers: requestHeaders, payload: body };
       const response = await app.inject(options);
       expect(response.statusCode).toBe(403);
@@ -746,12 +980,24 @@ it('refuses a start saved by another process and a computer that is no longer re
     await setup.nats.seed([start]);
     const forgedMetadata = { ...metadata, threadId: 'forged-thread' };
     const forgedBody = { ...call, params: { ...call.params, _meta: forgedMetadata } };
-    await refusesBackendIdentity({ turn: 'forged', thread: 'forged-thread' }, forgedBody);
+    const claims = await recallClaims(setup, forgedBody);
+    const token = await preparationToken(setup, { ...claims,
+      turn: 'forged', thread: 'forged-thread' });
+    const database = vi.spyOn(setup.db, 'query');
+    try {
+      const request = { method: 'POST' as const, url: `${route}/prepare`, payload: forgedBody,
+        headers: { ...headers, 'x-memory-context': token } };
+      const response = await app.inject(request);
+      expect(response.statusCode).toBe(403);
+      expect(database).not.toHaveBeenCalled();
+    } finally {
+      database.mockRestore();
+    }
     await setup.append('computer-assistant', 'computer.claimed',
       { assistantId: 'assistant', computerId: 'computer', generation: 1,
         tokenId: 'token:initial' });
     try {
-      await assertRecallRefused(setup, app);
+      await assertRecallPreparationRefused(setup, app);
     } finally {
       await setup.append('computer-assistant', 'computer.ready',
         { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
@@ -762,11 +1008,12 @@ it('refuses conflicting secondary Codex thread metadata at both admission points
   async function secondaryThread() {
     const otherMetadata = { ...metadata, 'x-codex-turn-metadata': { thread_id: 'other' } };
     const body = { ...call, params: { ...call.params, _meta: otherMetadata } };
-    const token = await signedRecall(setup, {}, body);
+    const claims = await recallClaims(setup, body);
+    const token = await preparationToken(setup, claims);
     const database = vi.spyOn(setup.db, 'query');
     try {
       const requestHeaders = { ...headers, 'x-memory-context': token };
-      const options = { method: 'POST' as const, url: route,
+      const options = { method: 'POST' as const, url: `${route}/prepare`,
         headers: requestHeaders, payload: body };
       expect((await app.inject(options)).statusCode).toBe(403);
       capability = '';
@@ -785,10 +1032,11 @@ const revokedGrants = [
     granteeId: 'assistant' },
 ];
 async function refusesRevokedGrant(grant: (typeof revokedGrants)[number]) {
+  const token = await signedRecall(setup);
   const subject = grantStream(grant.resourceType, grant.resourceId);
   const revoked = await setup.append(subject, 'grant.revoked', { ...grant, revokedBy: 'alice' });
   try {
-    await assertRecallRefused(setup, app);
+    await assertRecallFinalRefused(token);
   } finally {
     await setup.auth.handler.handle(revoked, setup.db);
     const restored = await setup.append(subject, 'grant.given', { ...grant, grantedBy: 'alice' });
@@ -801,6 +1049,7 @@ it.each(revokedGrants)('refuses a pending backend $resourceType revoke for $gran
 it('refuses when signing or verification is unavailable without reading facts',
   async function unavailableKeys() {
     const noSigner = await startDecision(setup.actor, setup.identity, setup.binding);
+    const token = await signedRecall(setup);
     const database = vi.spyOn(setup.db, 'query');
     try {
       const decisionHeaders = { ...setup.headers, ...headers };
@@ -814,7 +1063,6 @@ it('refuses when signing or verification is unavailable without reading facts',
         binding: setup.binding, feed: { memberId }, identity };
       const noVerifier = buildServer(testAuthConfig(), { memory });
       try {
-        const token = await signedRecall(setup);
         const requestHeaders = { ...headers, 'x-memory-context': token };
         const options = { method: 'POST' as const, url: route,
           headers: requestHeaders, payload: call };
@@ -948,14 +1196,26 @@ async function grantWrite(granteeKind: string) {
 function independentFact(fact: { memoryId: string }) {
   return fact.memoryId.startsWith('fact_');
 }
+// Avoid loading a full result page just to prepare a write's proof.
 async function recalledRemember(commandId: string, query = 'deliver') {
   await grantWrite('member');
   await grantWrite('assistant');
-  const recallArguments = { ...call.params.arguments, query };
+  await prepareMemoryAccess();
+  await prepareRecallPage(query);
+  const recallArguments = { ...call.params.arguments, query, limit: 2 };
   const selectedCall = { ...call, params: { ...call.params, arguments: recallArguments } };
-  const response = await setup.call(headers, selectedCall, route);
-  expect(response.status, response.text).toBe(200);
-  const page = recallProofSchema.parse(JSON.parse(response.text)).result.structuredContent;
+  // Issue the setup recall directly so gateway admission does not spend its short pass.
+  const token = await signedRecall(setup, undefined, selectedCall);
+  const requestHeaders = { ...headers, 'x-memory-context': token };
+  const request = { method: 'POST' as const, url: route,
+    headers: requestHeaders, payload: selectedCall };
+  const response = await app.inject(request);
+  expect(response.statusCode, response.body).toBe(200);
+  const page = recallProofSchema.parse(response.json()).result.structuredContent;
+  if (query === 'deliver') {
+    // Keep two loaded facts so a one-fact proof remains incomplete.
+    expect(page.facts).toHaveLength(2);
+  }
   // Choose an original test fact. Earlier tests deliberately erase sources of derived facts.
   const fact = page.facts.find(independentFact)!;
   const dependency = { scopeId, memoryId: fact.memoryId, revision: fact.revision };
@@ -964,6 +1224,133 @@ async function recalledRemember(commandId: string, query = 'deliver') {
     recallProof: page.recallProof };
   return { ...call, params: { ...call.params, name: 'remember', arguments: argumentsValue } };
 }
+async function prepareRecallPage(query: string) {
+  const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
+    binding: setup.binding, feed: { memberId } };
+  const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
+  const search = { q: query };
+  const bounds = { pageFacts: 2, pageBytes: limits.pageBytes };
+  const secret = testAuthConfig().cookieSecret;
+  // Wait for the checked projection and first search before starting the signed pass.
+  await listFacts(memory, 'alice', scope, search, secret, bounds);
+}
+
+function coldLookupClock() {
+  const originalDate = Date.now.bind(Date);
+  const originalPerformance = performance.now.bind(performance);
+  let elapsed = 0;
+  function dateNow() {
+    return originalDate() + elapsed;
+  }
+  function performanceNow() {
+    return originalPerformance() + elapsed;
+  }
+  const dates = vi.spyOn(Date, 'now');
+  dates.mockImplementation(dateNow);
+  const times = vi.spyOn(performance, 'now');
+  times.mockImplementation(performanceNow);
+  function advance() {
+    // Exceed the signed pass without waiting on a timer.
+    elapsed += 2200;
+  }
+  function restore() {
+    times.mockRestore();
+    dates.mockRestore();
+  }
+  return { advance, restore };
+}
+async function preparesFirstGatewayControl() {
+  await close();
+  const subject = grantStream('memory_read', scopeId);
+  // Keep each calling store for the delayed read.
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const originalRead = EventStore.prototype.readStream;
+  const clock = coldLookupClock();
+  let coldRead = false;
+  async function* readStream(this: EventStore,
+    ...args: Parameters<EventStore['readStream']>) {
+    if (args[0] === subject && !coldRead) {
+      coldRead = true;
+      clock.advance();
+    }
+    yield* originalRead.call(this, ...args);
+  }
+  const reads = vi.spyOn(EventStore.prototype, 'readStream');
+  reads.mockImplementation(readStream);
+  try {
+    await prepare();
+    const argumentsValue = { ...call.params.arguments, limit: 2 };
+    const selectedCall = { ...call, params: { ...call.params, arguments: argumentsValue } };
+    const response = await setup.call(headers, selectedCall, route);
+    expect(coldRead).toBe(true);
+    expect(response.status, response.text).toBe(200);
+  } finally {
+    reads.mockRestore();
+    clock.restore();
+  }
+}
+it('finishes shared read preparation before the first gateway recall',
+  preparesFirstGatewayControl, 120_000);
+
+async function preparesColdRecallAuthority(subject: string) {
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  const clock = coldLookupClock();
+  let coldRead = false;
+  async function* readStream(...args: Parameters<typeof originalRead>) {
+    const conversationSummary = subject === 'conversation-conversation';
+    const includesCloses = args[3] === true;
+    const selected = args[0] === subject && (!conversationSummary || includesCloses);
+    if (selected && !coldRead) {
+      coldRead = true;
+      clock.advance();
+    }
+    yield* originalRead(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(readStream);
+  try {
+    await recalledRemember('cold-recall-authority');
+    expect(coldRead).toBe(true);
+  } finally {
+    reads.mockRestore();
+    clock.restore();
+  }
+}
+const coldRecallSubjects = [
+  'member-alice',
+  'assistant-assistant',
+  'conversation-conversation',
+  grantStream('mcp_server', 'memory'),
+];
+it.each(coldRecallSubjects)(
+  'finishes a cold access lookup before signing the valid recall control: %s',
+  preparesColdRecallAuthority);
+
+async function preparesColdRecallProjection() {
+  const originalQuery = setup.db.query.bind(setup.db);
+  const clock = coldLookupClock();
+  let coldRead = false;
+  async function query<Row extends Record<string, unknown>>(sql: string,
+    parameters?: unknown[], options?: { deadline: number }) {
+    if (!coldRead && sql.includes('FROM memory_facts')) {
+      coldRead = true;
+      clock.advance();
+    }
+    return originalQuery<Row>(sql, parameters, options);
+  }
+  const queries = vi.spyOn(setup.db, 'query');
+  queries.mockImplementation(query);
+  try {
+    await recalledRemember('cold-recall-projection', 'exactly');
+    expect(coldRead).toBe(true);
+  } finally {
+    queries.mockRestore();
+    clock.restore();
+  }
+}
+it('finishes the projected fact search before signing the valid recall control',
+  preparesColdRecallProjection);
+
 async function signedRemember(body: Awaited<ReturnType<typeof recalledRemember>>, overrides = {}) {
   const parsed = parseMemoryRequest(JSON.stringify(body), rememberHeaders);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
@@ -1439,6 +1826,8 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       dispatchGeneration: 'memory-instance',
       keyDirectory: dirname(target.options.configFile) };
     backend = buildServer(testAuthConfig(), { memory });
+    // Finish server startup before issuing its two-second recall pass.
+    await backend.ready();
     const recallArguments = { scopeId: selectedId, query: '' };
     const recallBody = { ...call, params: { ...call.params, arguments: recallArguments } };
     const parsed = parseMemoryRequest(JSON.stringify(recallBody), headers);
@@ -1448,7 +1837,15 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       bodyDigest: parsed.bodyDigest, callId: recallBody.params._meta.callId,
       requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
     const dispatch = await memoryBinding(target);
-    const recalledToken = await target.tokens.memoryContext({ ...claims, dispatch }, Date.now() + 2000);
+    const preparing = await target.tokens.memoryContext({ ...claims, dispatch, preparing: true },
+      Date.now() + 2000);
+    const preparationRequest = { method: 'POST' as const, url: `${route}/prepare`,
+      payload: recallBody, headers: { ...headers, 'x-memory-context': preparing } };
+    const preparationReply = await backend.inject(preparationRequest);
+    const prepared = z.object({ preparationId: z.uuid(), inputGeneration: z.string() })
+      .parse(preparationReply.json());
+    const recalledToken = await target.tokens.memoryContext({ ...claims, dispatch, ...prepared },
+      Date.now() + 2000);
     const readHeaders = { ...headers, 'x-memory-context': recalledToken };
     const readRequest = { method: 'POST' as const, url: route,
       headers: readHeaders, payload: recallBody };
@@ -1484,7 +1881,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
         decisionRequest);
       expect(decision.status).toBe(403);
       const denied = z.object({ error: z.string() }).parse(await decision.json());
-      expect(denied.error).toContain('requester');
+      expect(denied.error).toBe('agent_person_scope_only');
       expect(await target.nats.store.head(`scope-${selectedId}`)).toBe(before);
       const { remember: commandRemember } = await import('../src/memory/commands.ts');
       const agent = { deadline: performance.now() + 2000, conversation: 'conversation',
@@ -1496,8 +1893,7 @@ async function refusesSharedScope(scopeKind: 'group' | 'assistant_notes') {
       append.mockRestore();
     }
   } finally {
-    await backend?.close();
-    await target.close();
+    await closeMemoryServices(target, backend);
   }
 }
 async function confirmAgent() {}
@@ -1911,12 +2307,7 @@ async function firstProofGeneration() {
 }
 it('binds the first proof to its prepared input generation', firstProofGeneration);
 
-async function changedLoadedContext(change: string, team = false) {
-  if (team) {
-    await close();
-    await prepare(true);
-    await renewGatewayCredentials();
-  }
+async function changedLoadedContext(change: string) {
   const body = await loadedWrite();
   const prepared = await contextRecord();
   if (change === 'superset') {
@@ -1940,11 +2331,8 @@ async function changedPersonalContext(change: string) {
 }
 it.each(['superset', 'invalidated', 'ended', 'group', 'assistant_notes'])(
   'refuses complete person lineage when the loaded context has %s', changedPersonalContext);
-async function mixedTeamContext(change: string) {
-  await changedLoadedContext(change, true);
-}
 it.each(['group', 'assistant_notes'])(
-  'refuses a team assistant write after loaded %s references', mixedTeamContext);
+  'refuses a team assistant write after loaded %s references', teamFixture, changedLoadedContext);
 
 async function racesLoadedContext(change: string) {
   const body = await loadedWrite();
@@ -2055,3 +2443,823 @@ async function missingLoadedEvidence(stage: string) {
 }
 it.each(['absent', 'prepared', 'empty'])(
   'refuses valid personal proofs with %s loaded evidence', missingLoadedEvidence);
+
+async function loadChangeFacts(revision: number) {
+  if (revision === 2) await saveHumanCorrection('fact_21');
+  const data = { conversationId: 'conversation', turnId: 'turn', requesterId: 'alice',
+    assistantId: 'assistant', computerId: 'computer', generation: 1, threadId: 'thread',
+    inputGeneration: 'change-input', projectionGeneration: 'projection', action: 'prepared',
+    delivery: null, callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
+    byteCount: 0, hasOmissions: false, reason: 'none' };
+  await seedEvidence(data);
+  const additions = [{ scopeId, memoryId: 'fact_21', revision },
+    { scopeId, memoryId: 'fact_22', revision: 1 }];
+  const position = await setup.nats.store.head(`scope-${scopeId}`);
+  const loaded = { ...data, action: 'loaded', delivery: 'initial', additions,
+    byteCount: 1, scopePositions: [{ scopeId, position }] };
+  await seedEvidence(loaded);
+  // Build a proof for the seeded references without delivering a recall.
+  const claims = await recallClaims(setup);
+  const token = await preparationToken(setup, claims);
+  const parsed = parseMemoryRequest(JSON.stringify(call), headers);
+  const context = await verifyMemoryContext(token, setup.identity, parsed);
+  const { recallProof } = await import('../src/memory/recall-proof.ts');
+  return recallProof(testAuthConfig().cookieSecret, context, [additions[0]!], data.inputGeneration);
+}
+async function changeRequest(operation: 'correct' | 'forget', checkControl = true, revision = 1) {
+  const catalogue = memoryCatalogue;
+  for (const tool of [recallTool, forgetTool, correctTool]) {
+    await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
+      connectionId: 'server', toolName: tool.name, toolRevision: tool.revision,
+      mode: 'allow', setBy: 'alice' });
+  }
+  await publishMemory(setup);
+  await grantWrite('member');
+  await grantWrite('assistant');
+  await prepareMemoryAccess();
+  const recallProof = await loadChangeFacts(revision);
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  const dependsOn = chat.memoryContext!.references;
+  const target = dependsOn[0]!;
+  const input: Record<string, unknown> = { scopeId, memoryId: target.memoryId,
+    commandId: 'change', expectedRevision: target.revision, recallProof };
+  if (operation === 'correct') {
+    const dependencies = dependsOn.slice(1);
+    Object.assign(input, { text: 'Replacement private canary', kind: 'fact', pinned: false,
+      expiresAt: null, dependsOn: dependencies });
+  }
+  const body = { ...call, params: { ...call.params, name: operation, arguments: input } };
+  const requestHeaders = { ...headers, 'mcp-name': operation };
+  const request = { body, requestHeaders, catalogue };
+  if (checkControl) {
+    const control = await sendChange(request);
+    expect(control.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+  }
+  return request;
+}
+async function prepareMemoryAccess(includeMemoryWrite = true) {
+  // Finish cold event and IAM reads before issuing the control's two-second pass.
+  const deadline = performance.now() + 10_000;
+  const checkApplied = setup.auth.applied.bind(setup.auth);
+  await readActiveMember(setup.nats.store, setup.binding, 'alice', 'member', checkApplied);
+  await prepareConversationAccess(deadline);
+  const resources = [
+    { resourceType: 'mcp_server', resourceId: 'memory' },
+    { resourceType: 'memory_read', resourceId: scopeId },
+  ];
+  if (includeMemoryWrite) {
+    const write = { resourceType: 'memory_write', resourceId: scopeId };
+    resources.push(write);
+  }
+  for (const { resourceType, resourceId } of resources) {
+    const subject = grantStream(resourceType, resourceId);
+    const grants = await history(setup.nats.store, subject, 'test', deadline);
+    for (const grant of grants) {
+      const applied = await setup.auth.applied(grant.event.id);
+      expect(applied).toBe(true);
+    }
+    const requester = await setup.auth.use('person', 'alice', resourceType, resourceId);
+    expect(requester.allowed).toBe(true);
+    const assistant = await setup.auth.use('assistant', 'assistant', resourceType, resourceId);
+    expect(assistant.allowed).toBe(true);
+  }
+}
+async function prepareConversationAccess(deadline: number) {
+  const creations = [
+    { subject: 'assistant-assistant', eventType: 'assistant.created' },
+    { subject: 'conversation-conversation', eventType: 'conversation.created' },
+  ];
+  for (const { subject, eventType } of creations) {
+    const rows = await history(setup.nats.store, subject, 'test', deadline);
+    for (const row of rows) {
+      if (row.event.type === eventType) {
+        const applied = await setup.auth.applied(row.event.id);
+        expect(applied).toBe(true);
+      }
+    }
+  }
+  const acting = await setup.auth.actsFor('alice', 'assistant');
+  expect(acting.allowed).toBe(true);
+  const participation = await setup.auth.conversation('alice', 'conversation', 'post');
+  expect(participation.allowed).toBe(true);
+  // Load the initial chat summary before the signed pass starts its short access checks.
+  await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+}
+type ChangeRequest = Awaited<ReturnType<typeof changeRequest>>;
+
+async function preparesColdChangeGrant(operation: 'correct' | 'forget') {
+  const subject = grantStream('memory_write', scopeId);
+  const original = setup.nats.store.readStream.bind(setup.nats.store);
+  let coldRead = false;
+  async function* readStream(...args: Parameters<typeof original>) {
+    if (args[0] === subject && !coldRead) {
+      coldRead = true;
+      // Reproduce a first grant lookup taking longer than the signed pass lasts.
+      await pause(2200);
+    }
+    yield* original(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  try {
+    await changeRequest(operation);
+    expect(coldRead).toBe(true);
+  } finally {
+    reads.mockRestore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'finishes a cold write-grant lookup before signing the valid %s control', preparesColdChangeGrant);
+
+async function preparesColdChangeReceipt(operation: 'correct' | 'forget') {
+  const original = setup.auth.applied.bind(setup.auth);
+  let coldRead = false;
+  async function applied(eventId: string) {
+    if (!coldRead) {
+      coldRead = true;
+      // Reproduce a first IAM receipt lookup taking longer than the signed pass lasts.
+      await pause(2200);
+    }
+    return original(eventId);
+  }
+  const receipts = vi.spyOn(setup.auth, 'applied').mockImplementation(applied);
+  try {
+    await changeRequest(operation);
+    expect(coldRead).toBe(true);
+  } finally {
+    receipts.mockRestore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'finishes a cold IAM receipt lookup before signing the valid %s control',
+  preparesColdChangeReceipt);
+
+async function changeToken(request: ChangeRequest, overrides = {}) {
+  const parsed = parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
+  const dispatch = await memoryBinding(setup);
+  dispatch.schemaDigest = request.catalogue.schemaDigest;
+  const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
+    computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
+    thread: 'thread', operation: request.body.params.name,
+    scopes: [request.body.params.arguments['scopeId']], contentAccess: 'private',
+    bodyDigest: parsed.bodyDigest, callId: metadata.callId, requestId: randomUUID(),
+    contextPosition: 0, dispatch };
+  const fields = await prepareSignedMemory(setup, claims, request.body, request.requestHeaders);
+  const finalClaims = { ...claims, ...fields, ...overrides };
+  return setup.tokens.memoryContext(finalClaims, Date.now() + 2000);
+}
+async function sendChange(request: ChangeRequest, token?: string) {
+  const signed = token ?? await changeToken(request);
+  const requestHeaders = { ...request.requestHeaders, 'x-memory-context': signed };
+  return app.inject({ method: 'POST', url: route, headers: requestHeaders, payload: request.body });
+}
+async function unavailableChange(operation: 'correct' | 'forget') {
+  const request = await changeRequest(operation, false);
+  const position = await setup.nats.store.head(`scope-${scopeId}`);
+  const directory = dirname(setup.options.configFile);
+  const files = readdirSync(directory);
+  const response = await sendChange(request);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+  const gateway = await setup.call(request.requestHeaders, request.body, route);
+  expect(gateway.status, gateway.text).toBe(403);
+  expect(JSON.parse(gateway.text)).toEqual(response.json());
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(position);
+  expect(readdirSync(directory)).toEqual(files);
+  const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
+  const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
+  const listed = await setup.call(discoveryHeaders, discovery, route);
+  expect(listed.status, listed.text).toBe(200);
+  expect(listed.text).toContain('recall');
+  expect(listed.text).not.toMatch(/correct|forget/u);
+}
+it.each(['forget', 'correct'] as const)(
+  'checks %s completely but keeps it switched off without files or events', unavailableChange);
+
+async function refusedChange(request: ChangeRequest, reason?: string) {
+  const response = await sendChange(request);
+  expect(response.statusCode).toBe(403);
+  const expected: Record<string, string> = { status: 'refused' };
+  if (reason) expected['reason'] = reason;
+  expect(response.json()).toEqual(expected);
+}
+async function changeGrant(resourceType: string, granteeKind: string, recorded: boolean) {
+  const request = await changeRequest('forget');
+  const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+  const subject = grantStream(resourceType, scopeId);
+  const data = { resourceType, resourceId: scopeId, granteeKind, granteeId, revokedBy: 'alice' };
+  if (recorded) {
+    // Leave OpenFGA allowed to prove that the saved grant is checked separately.
+    await setup.append(subject, 'grant.revoked', data);
+  } else {
+    const event = envelope('test', subject, 'grant.revoked', data);
+    await setup.auth.handler.handle(event, setup.db);
+  }
+  await refusedChange(request);
+}
+const changeGrants = [
+  ['memory_read', 'member', true], ['memory_read', 'assistant', true],
+  ['memory_write', 'member', true], ['memory_write', 'assistant', true],
+  ['memory_read', 'member', false], ['memory_read', 'assistant', false],
+  ['memory_write', 'member', false], ['memory_write', 'assistant', false],
+] as const;
+it.each(changeGrants)('checks %s for %s (recorded=%s) before forget', changeGrant);
+
+async function changeGrantDuringLineage(operation: 'correct' | 'forget', restore: boolean,
+  recorded = true) {
+  const request = await changeRequest(operation);
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  const scopeSubject = `scope-${scopeId}`;
+  const before = await setup.nats.store.head(scopeSubject);
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  let scopeChecked = false;
+  let originalDeadline: number | undefined;
+  let changed = false;
+  let finished = false;
+  async function* readStream(subject: string, from?: number, deadline?: number,
+    includeConversationCloses?: boolean) {
+    const lineageRead = scopeChecked && !changed && subject === 'conversation-conversation';
+    if (lineageRead) {
+      expect(from).toBe(chat.sequence + 1);
+      expect(includeConversationCloses).toBe(true);
+      expect(deadline).toBe(originalDeadline);
+      changed = true;
+      const fields = { resourceType: 'memory_write', resourceId: scopeId,
+        granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'alice' };
+      const subject = grantStream('memory_write', scopeId);
+      let revoked = envelope('test', subject, 'grant.revoked', fields);
+      if (recorded) {
+        revoked = await setup.append(subject, 'grant.revoked', fields);
+      }
+      await setup.auth.handler.handle(revoked, setup.db);
+      if (restore) {
+        await grantWrite('assistant');
+      }
+    }
+    yield* originalRead(subject, from, deadline, includeConversationCloses);
+    // Wait for target validation so the change happens in the final conversation-tail read.
+    if (subject === scopeSubject) {
+      scopeChecked = true;
+      originalDeadline = deadline;
+    }
+    if (lineageRead) {
+      expect(performance.now()).toBeLessThan(originalDeadline!);
+      finished = true;
+    }
+  }
+  // Install the race after preparation so it exercises the final signed check.
+  const token = await changeToken(request);
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  try {
+    const response = await sendChange(request, token);
+    expect(changed).toBe(true);
+    expect(finished).toBe(true);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(await setup.nats.store.head(scopeSubject)).toBe(before);
+  } finally {
+    reads.mockRestore();
+  }
+}
+const changedLineageGrants = [
+  ['correct', false], ['correct', true], ['forget', false], ['forget', true],
+] as const;
+it.each(changedLineageGrants)(
+  'refuses %s when its write grant changes during the lineage read (restored=%s)',
+  changeGrantDuringLineage);
+
+async function changesIamDuringLineage(operation: 'correct' | 'forget') {
+  await changeGrantDuringLineage(operation, false, false);
+}
+it.each(['correct', 'forget'] as const)(
+  'rechecks current IAM permissions during final %s validation', changesIamDuringLineage);
+
+async function preparesLineageObservation(operation: 'correct' | 'forget') {
+  const originalHead = setup.nats.store.head.bind(setup.nats.store);
+  const clock = coldLookupClock();
+  let observe = false;
+  let delayed = false;
+  async function head(subject?: string, deadline?: number, includeConversationCloses?: boolean) {
+    if (observe && !delayed && deadline === undefined && subject === `scope-${scopeId}`) {
+      delayed = true;
+      clock.advance();
+    }
+    return originalHead(subject, deadline, includeConversationCloses);
+  }
+  const originalContext = setup.tokens.memoryContext.bind(setup.tokens);
+  async function memoryContext(...args: Parameters<typeof originalContext>) {
+    const signed = await originalContext(...args);
+    // Start observing after the valid control; the next scope read belongs to test setup.
+    if (args[0]['operation'] === operation) observe = true;
+    return signed;
+  }
+  const positions = vi.spyOn(setup.nats.store, 'head');
+  positions.mockImplementation(head);
+  const contexts = vi.spyOn(setup.tokens, 'memoryContext');
+  contexts.mockImplementation(memoryContext);
+  try {
+    await changeGrantDuringLineage(operation, false);
+    expect(delayed).toBe(true);
+  } finally {
+    contexts.mockRestore();
+    positions.mockRestore();
+    clock.restore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'finishes the %s lineage test observations before signing its request',
+  preparesLineageObservation);
+
+async function changePolicy(value: 'ask' | 'block') {
+  const request = await changeRequest('correct');
+  await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
+    connectionId: 'server', toolName: 'correct', toolRevision: correctTool.revision,
+    mode: value, setBy: 'alice' });
+  await publishMemory(setup);
+  const position = await setup.nats.store.head('conversation-conversation');
+  const appends = vi.spyOn(setup.nats.store, 'append');
+  let reason: string | undefined;
+  if (value === 'ask') {
+    reason = 'memory_tool_configuration';
+    const offeredHeaders = { ...request.requestHeaders, 'x-opencrane-tool-mode': 'allow' };
+    request.requestHeaders = offeredHeaders;
+  }
+  await refusedChange(request, reason);
+  const response = await setup.call(request.requestHeaders, request.body, route);
+  expect(response.status).toBe(403);
+  if (reason) {
+    expect(JSON.parse(response.text)).toEqual({ status: 'refused', reason });
+  }
+  expect(await setup.nats.store.head('conversation-conversation')).toBe(position);
+  for (const [command] of appends.mock.calls) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    expect(event.type).not.toBe('tool.approval_requested');
+  }
+  appends.mockRestore();
+}
+it.each(['ask', 'block'] as const)('checks correct policy independently of recall: %s', changePolicy);
+
+async function changeScope(kind: 'group' | 'assistant_notes', loaded: boolean) {
+  const assistant = await history(setup.nats.store, 'assistant-assistant', 'test');
+  expect(assistant[0]?.event.data).toMatchObject({ kind: 'team' });
+  const request = await changeRequest('forget');
+  const owner = kind === 'group' ? 'sales' : 'assistant';
+  const otherScope = memoryScopeId('test', kind, owner);
+  if (loaded) {
+    const saved = await contextRecord();
+    const loadedEvidence = { ...saved, action: 'loaded', delivery: 'recall',
+      callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64), byteCount: 1,
+      additions: [{ scopeId: otherScope, memoryId: 'other', revision: 1 }],
+      scopePositions: [{ scopeId: otherScope, position: 0 }] };
+    await seedEvidence(loadedEvidence);
+    await refusedChange(request);
+  } else {
+    request.body.params.arguments['scopeId'] = otherScope;
+    await refusedChange(request, 'agent_person_scope_only');
+  }
+}
+it.each([['group', false], ['assistant_notes', false], ['group', true]] as const)(
+  'refuses %s scope (already loaded=%s) for forget',
+  teamFixture, changeScope);
+
+async function changedTargetProof(change: string) {
+  const currentRevision = change === 'old' ? 2 : 1;
+  const request = await changeRequest('forget', true, currentRevision);
+  const input = request.body.params.arguments;
+  const saved = await contextRecord();
+  const token = await changeToken(request);
+  const parsed = parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
+  const context = await verifyMemoryContext(token, setup.identity, parsed);
+  let generation = saved.inputGeneration;
+  let memoryId = String(input['memoryId']);
+  const revision = 1;
+  if (change === 'turn') context.turn = 'other-turn';
+  if (change === 'computer') context.generation = 2;
+  if (change === 'input') generation = 'other-input';
+  if (change === 'missing') {
+    const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+    memoryId = chat.memoryContext!.references[1]!.memoryId;
+  }
+  if (change === 'unloaded') {
+    memoryId = 'fact_20';
+    input['memoryId'] = memoryId;
+  }
+  const { recallProof } = await import('../src/memory/recall-proof.ts');
+  input['recallProof'] = recallProof(testAuthConfig().cookieSecret, context,
+    [{ memoryId, revision }], generation);
+  await refusedChange(request);
+}
+it.each(['turn', 'computer', 'input', 'old', 'missing', 'unloaded'])(
+  'refuses a target proof with %s evidence', changedTargetProof);
+
+async function correctionDependencies(change: 'self' | 'selective') {
+  const request = await changeRequest('correct');
+  const input = request.body.params.arguments;
+  const dependencies = z.array(z.object({ scopeId: z.string(), memoryId: z.string(),
+    revision: z.number() })).parse(input['dependsOn']);
+  if (change === 'self') {
+    dependencies.push({ scopeId, memoryId: String(input['memoryId']), revision: 1 });
+  } else {
+    dependencies.pop();
+  }
+  input['dependsOn'] = dependencies;
+  await refusedChange(request);
+}
+it.each(['self', 'selective'] as const)(
+  'refuses %s correction dependencies', correctionDependencies);
+
+async function saveHumanCorrection(memoryId: string) {
+  const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice', memoryId,
+    revision: 2, expectedRevision: 1, supersedes: { memoryId, revision: 1 }, reason: 'human',
+    kind: 'fact', pinned: false, expiresAt: null, sources: [], dependsOn: [],
+    ciphertext: 'A'.repeat(40), keyId: `key:${'a'.repeat(64)}` };
+  const event = envelope('test', `scope-${scopeId}`, 'memory.corrected', data);
+  event.principal = { kind: 'human', id: 'alice' };
+  event.source = 'opencrane-server';
+  await setup.nats.seed([event]);
+}
+async function changedBeforeBackend() {
+  const request = await changeRequest('forget');
+  const token = await changeToken(request);
+  await saveHumanCorrection(String(request.body.params.arguments['memoryId']));
+  const response = await sendChange(request, token);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses a human correction saved after signing and before the backend check',
+  changedBeforeBackend);
+async function wrongChangeOperation() {
+  const request = await changeRequest('correct');
+  // Use forget's references so a dependency refusal cannot hide a missing operation check.
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  request.body.params.arguments['dependsOn'] = chat.memoryContext!.references;
+  const token = await changeToken(request, { operation: 'forget' });
+  const response = await sendChange(request, token);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses a forget pass with a correct body', wrongChangeOperation);
+async function strictChangeInputs(operation: 'correct' | 'forget') {
+  const request = await changeRequest(operation);
+  const input = request.body.params.arguments;
+  input['unexpected'] = true;
+  function parse() {
+    return parseMemoryRequest(JSON.stringify(request.body), request.requestHeaders);
+  }
+  expect(parse).toThrow();
+}
+it.each(['correct', 'forget'] as const)('keeps %s inputs strict', strictChangeInputs);
+async function missingChangeTool() {
+  const request = await changeRequest('correct');
+  const catalogue = catalogueEvidence([recallTool, forgetTool]);
+  await setup.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
+    connectionId: 'server', accountMode: 'none', ...catalogue });
+  await reviewCatalogue(setup, 'memory');
+  await mode(setup, 'allow');
+  await publishMemory(setup);
+  request.catalogue = catalogue;
+  await refusedChange(request);
+}
+it('denies correct when the reviewed catalogue has no correct tool', missingChangeTool);
+
+const backendDelays = [
+  ['recall', 'history'], ['recall', 'IAM'],
+  ['correct', 'history'], ['correct', 'IAM'],
+  ['forget', 'history'], ['forget', 'IAM'],
+] as const;
+async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
+  step: 'history' | 'IAM', revoke = false) {
+  let body: unknown = call;
+  let requestHeaders = headers;
+  let token = '';
+  let change: ChangeRequest | undefined;
+  if (operation === 'recall') {
+    // Sign only after the server finishes the deliberately slow preparation.
+  } else {
+    const request = await changeRequest(operation, false);
+    body = request.body;
+    requestHeaders = request.requestHeaders;
+    change = request;
+  }
+  async function delay() {
+    await pause(2200);
+    if (revoke) {
+      const revokedGrant = { resourceType: 'memory_read', resourceId: scopeId,
+        granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
+      await setup.append(grantStream('memory_read', scopeId), 'grant.revoked', revokedGrant);
+    }
+  }
+  const timing = timeMemoryPath(setup, step, delay);
+  try {
+    if (operation === 'recall') {
+      if (revoke) {
+        const claims = await recallClaims(setup);
+        const preparing = await preparationToken(setup, claims);
+        const request = { method: 'POST' as const, url: `${route}/prepare`, payload: call,
+          headers: { ...headers, 'x-memory-context': preparing } };
+        const response = await app.inject(request);
+        expect(response.statusCode).toBe(403);
+        expect(response.json()).toEqual({ status: 'refused' });
+        timing.report(operation, revoke);
+        expect(timing.delayed()).toBe(true);
+        return;
+      }
+      token = await signedRecall(setup);
+    }
+    if (change) {
+      token = await changeToken(change);
+    }
+    const forwardedHeaders = { ...requestHeaders, 'content-type': 'application/json',
+      'x-memory-context': token };
+    const payload = JSON.stringify(body);
+    const request = { method: 'POST' as const, url: route, payload, headers: forwardedHeaders };
+    const response = await app.inject(request);
+    timing.report(operation, revoke);
+    expect(timing.delayed()).toBe(true);
+    if (revoke) {
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ status: 'refused' });
+    } else if (operation === 'recall') {
+      expect(response.statusCode).toBe(200);
+    } else {
+      expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+    }
+  } finally {
+    timing.restore();
+  }
+}
+it.each(backendDelays)('allows %s after a slow backend %s read', delayedBackend);
+async function revokedDuringBackend(operation: 'recall' | 'correct' | 'forget',
+  step: 'history' | 'IAM') {
+  await delayedBackend(operation, step, true);
+}
+const revokedChangeDelays = [
+  ['correct', 'history'], ['correct', 'IAM'], ['forget', 'history'], ['forget', 'IAM'],
+] as const;
+it.each(revokedChangeDelays)(
+  'refuses the final %s pass revoked during a slow backend %s read', revokedDuringBackend);
+async function revokedRecallPreparation(step: 'history' | 'IAM') {
+  await delayedBackend('recall', step, true);
+}
+it.each(['history', 'IAM'] as const)(
+  'refuses recall preparation revoked during a slow backend %s read', revokedRecallPreparation);
+
+async function refusesPreparation(change: 'missing' | 'reused' | 'expired' | 'mismatched') {
+  const original = await signedRecall(setup);
+  const claims = decodeJwt(original);
+  if (change === 'missing') delete claims['preparationId'];
+  if (change === 'mismatched') claims['inputGeneration'] = 'another-input';
+  const request = { method: 'POST' as const, url: route, payload: call,
+    headers: { ...headers, 'x-memory-context': original } };
+  if (change === 'reused') expect((await app.inject(request)).statusCode).toBe(200);
+  if (change === 'expired') await pause(30_100);
+  claims['dispatch'] = await memoryBinding(setup);
+  request.headers['x-memory-context'] = await setup.tokens.memoryContext(claims, Date.now() + 2000);
+  const response = await app.inject(request);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it.each(['missing', 'reused', 'expired', 'mismatched'] as const)(
+  'refuses a %s recall preparation', refusesPreparation, 40_000);
+
+async function gatewayPreparation(operation: 'recall' | 'correct' | 'forget',
+  step: 'history' | 'IAM') {
+  let body: Record<string, unknown> = call;
+  let requestHeaders = headers;
+  if (operation !== 'recall') {
+    const request = await changeRequest(operation, false);
+    body = request.body;
+    requestHeaders = request.requestHeaders;
+  }
+  function delay() {
+    return pause(2200);
+  }
+  const timing = timeMemoryPath(setup, step, delay);
+  try {
+    const response = await setup.call(requestHeaders, body, route);
+    expect(timing.delayed()).toBe(true);
+    if (operation === 'recall') {
+      expect(response.status, response.text).toBe(200);
+    } else {
+      expect(response.status).toBe(403);
+      expect(JSON.parse(response.text)).toEqual({
+        status: 'refused', reason: 'memory_tool_unavailable' });
+    }
+    expect(decodeJwt(capability)['preparationId']).toEqual(expect.any(String));
+  } finally {
+    timing.restore();
+  }
+}
+it.each(backendDelays)(
+  'prepares %s through the real gateway before signing after slow %s', gatewayPreparation);
+
+async function usesOnlyPreparedReceipts() {
+  const signed = await signedRecall(setup);
+  const receipts = vi.spyOn(setup.auth, 'applied');
+  try {
+    const request = { method: 'POST' as const, url: route, payload: call,
+      headers: { ...headers, 'x-memory-context': signed } };
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(200);
+    expect(receipts).not.toHaveBeenCalled();
+  } finally {
+    receipts.mockRestore();
+  }
+}
+it('uses prepared IAM receipts without loading them inside the signed recall',
+  usesOnlyPreparedReceipts);
+
+async function reusedForgetPreparation() {
+  const request = await changeRequest('forget', false);
+  const original = await changeToken(request);
+  const first = await sendChange(request, original);
+  expect(first.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+  const claims = decodeJwt(original);
+  claims['dispatch'] = await memoryBinding(setup);
+  const reused = await setup.tokens.memoryContext(claims, Date.now() + 2000);
+  const response = await sendChange(request, reused);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses a reused Forget preparation with a fresh signed pass', reusedForgetPreparation);
+
+async function revokedDuringCorrectPreparation() {
+  const request = await changeRequest('correct', false);
+  const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+  let revoked = false;
+  async function* slowScope(...args: Parameters<typeof readStream>) {
+    yield* readStream(...args);
+    if (args[0] === `scope-${scopeId}` && !revoked) {
+      revoked = true;
+      await pause(2200);
+      const fields = { resourceType: 'memory_write', resourceId: scopeId,
+        granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
+      await setup.append(grantStream('memory_write', scopeId), 'grant.revoked', fields);
+    }
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(slowScope);
+  let signed: string;
+  try {
+    signed = await changeToken(request);
+  } finally {
+    reads.mockRestore();
+  }
+  expect(revoked).toBe(true);
+  expect(decodeJwt(signed)['preparationId']).toEqual(expect.any(String));
+  const response = await sendChange(request, signed);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('refuses revocation during slow Correct preparation with a fresh pass',
+  revokedDuringCorrectPreparation);
+
+async function invalidChangePreparation(operation: 'correct' | 'forget',
+  change: 'missing' | 'expired' | 'mismatched') {
+  const request = await changeRequest(operation, false);
+  const original = await changeToken(request);
+  const claims = decodeJwt(original);
+  expect(claims['preparationId']).toEqual(expect.any(String));
+  if (change === 'missing') {
+    delete claims['preparationId'];
+  }
+  if (change === 'mismatched') {
+    claims['requestId'] = randomUUID();
+  }
+  if (change === 'expired') {
+    await pause(30_100);
+  }
+  claims['dispatch'] = await memoryBinding(setup);
+  const signed = await setup.tokens.memoryContext(claims, Date.now() + 2000);
+  const response = await sendChange(request, signed);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+const invalidChangePreparations = [
+  ['correct', 'missing'], ['correct', 'expired'], ['correct', 'mismatched'],
+  ['forget', 'missing'], ['forget', 'expired'], ['forget', 'mismatched'],
+] as const;
+it.each(invalidChangePreparations)('refuses %s with a %s preparation',
+  invalidChangePreparation, 40_000);
+
+async function usesPreparedChangeReads(operation: 'correct' | 'forget') {
+  const request = await changeRequest(operation, false);
+  const signed = await changeToken(request);
+  const receipts = vi.spyOn(setup.auth, 'applied');
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  try {
+    const response = await sendChange(request, signed);
+    expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+    expect(receipts).not.toHaveBeenCalled();
+    for (const [subject, from] of reads.mock.calls) {
+      if (subject === `scope-${scopeId}` || subject === 'conversation-conversation') {
+        expect(from).toBeGreaterThan(1);
+      }
+    }
+  } finally {
+    reads.mockRestore();
+    receipts.mockRestore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'uses prepared history and IAM receipts inside the signed %s pass', usesPreparedChangeReads);
+
+async function gatewayLoadedReceipts(operation: 'recall' | 'correct' | 'forget',
+  otherScope: boolean) {
+  let body: Record<string, unknown> = call;
+  let requestHeaders = headers;
+  if (operation === 'recall' && !otherScope) {
+    const initial = { ...call, params: { ...call.params,
+      _meta: { ...metadata, callId: 'loaded-person' } } };
+    const loaded = await setup.call(headers, initial, route);
+    expect(loaded.status, loaded.text).toBe(200);
+  } else if (operation !== 'recall') {
+    const request = await changeRequest(operation, false);
+    body = request.body;
+    requestHeaders = request.requestHeaders;
+  }
+  const requiredReceipts: string[] = [];
+  if (otherScope) {
+    await seedScopedFacts(setup, false);
+    const notesId = memoryScopeId('test', 'assistant_notes', 'assistant');
+    const notesCall = { ...call, params: { ...call.params,
+      arguments: { scopeId: notesId, query: '' },
+      _meta: { ...metadata, callId: 'loaded-notes' } } };
+    const loaded = await setup.call(headers, notesCall, route);
+    expect(loaded.status, loaded.text).toBe(200);
+    const grants = await history(setup.nats.store, grantStream('memory_read', notesId), 'test');
+    for (const grant of grants) requiredReceipts.push(grant.event.id);
+  }
+  let accessStarted = false;
+  let lateReceipts = 0;
+  const preparedReceipts = new Set<string>();
+  const originalStarted = memoryPreparation.memoryAccessStarted;
+  function startAccess(...args: Parameters<typeof originalStarted>) {
+    accessStarted = true;
+    return originalStarted(...args);
+  }
+  const originalApplied = setup.auth.applied.bind(setup.auth);
+  async function applied(eventId: string) {
+    if (accessStarted) {
+      lateReceipts += 1;
+      await pause(2200);
+    } else {
+      preparedReceipts.add(eventId);
+    }
+    return originalApplied(eventId);
+  }
+  const started = vi.spyOn(memoryPreparation, 'memoryAccessStarted').mockImplementation(startAccess);
+  const receipts = vi.spyOn(setup.auth, 'applied').mockImplementation(applied);
+  try {
+    const response = await setup.call(requestHeaders, body, route);
+    expect(accessStarted).toBe(true);
+    if (operation === 'recall') {
+      expect(response.status, response.text).toBe(200);
+    } else {
+      expect(response.status).toBe(403);
+      expect(JSON.parse(response.text)).toEqual({
+        status: 'refused', reason: 'memory_tool_unavailable' });
+    }
+    expect(lateReceipts).toBe(0);
+    for (const eventId of requiredReceipts) expect(preparedReceipts.has(eventId)).toBe(true);
+  } finally {
+    receipts.mockRestore();
+    started.mockRestore();
+  }
+}
+const loadedReceiptCases = [
+  ['recall', false], ['correct', false], ['forget', false], ['recall', true],
+] as const;
+it.each(loadedReceiptCases)(
+  'prepares loaded receipts before gateway %s access (another scope=%s)', gatewayLoadedReceipts);
+
+async function rejectsInvalidPreparationReply(status: number, responseBody: object) {
+  const originalFetch = globalThis.fetch;
+  async function fetchPreparation(input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1]) {
+    let url: string;
+    if (typeof input === 'string') {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else {
+      url = input.url;
+    }
+    if (url.endsWith(`${route}/prepare`)) {
+      return new Response(JSON.stringify(responseBody), { status });
+    }
+    return originalFetch(input, init);
+  }
+  const requests = vi.spyOn(globalThis, 'fetch').mockImplementation(fetchPreparation);
+  try {
+    await expect(signedRecall(setup)).rejects.toThrow();
+  } finally {
+    requests.mockRestore();
+  }
+}
+const invalidPreparationReplies = [
+  [403, { preparationId: '11111111-1111-4111-8111-111111111111', inputGeneration: 'input' }],
+  [200, { status: 'refused' }],
+] as const;
+it.each(invalidPreparationReplies)(
+  'rejects an invalid preparation reply with HTTP %s before signing', rejectsInvalidPreparationReply);
+
+async function reportsPreparationRefusal() {
+  await mode(setup, 'block');
+  await expect(signedRecall(setup)).rejects.toThrow('Memory preparation refused (403)');
+}
+it('reports a refused preparation before signing a recall pass', reportsPreparationRefusal);

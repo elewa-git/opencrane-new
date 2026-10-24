@@ -12,6 +12,11 @@ import { data } from './state.ts';
 import { groupMembership } from './paying-group.ts';
 import type { IncomingHttpHeaders } from 'node:http';
 
+type PreparedMemoryReads = {
+  activity: Awaited<ReturnType<typeof decisionActivity>>;
+  applied: (eventId: string) => Promise<boolean>;
+};
+
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const dispatchSchema = z.object({ permitDigest: digest, backendGeneration: identifier,
@@ -20,15 +25,19 @@ export type MemoryDispatch = z.infer<typeof dispatchSchema>;
 const claimsSchema = z.object({ silo: identifier, requester: identifier, assistant: identifier,
   computer: identifier, generation: z.int().positive(), conversation: identifier,
   turn: identifier, thread: identifier,
-  operation: z.enum(['recall', 'remember', 'server/discover', 'tools/list']),
+  operation: z.enum(['recall', 'remember', 'correct', 'forget', 'server/discover', 'tools/list']),
   scopes: z.array(digest).max(1), contentAccess: z.literal('private'),
   bodyDigest: digest, callId: z.string().min(1).max(200), requestId: z.uuid(),
+  preparing: z.boolean().optional(), preparationId: z.uuid().optional(),
+  inputGeneration: identifier.optional(),
   dispatch: dispatchSchema, contextPosition: z.int().nonnegative(), exp: z.number(), iat: z.number() });
 export type MemoryContext = z.infer<typeof claimsSchema>;
 
-export class MemoryPersonScopeOnly extends Error {
-  constructor() {
-    super('agent_person_scope_only: Agents can save facts only in the requester’s person scope.');
+const refusalCode = z.enum(['agent_person_scope_only', 'memory_tool_configuration',
+  'memory_tool_unavailable']);
+export class MemoryToolRefused extends Error {
+  constructor(code: z.infer<typeof refusalCode>) {
+    super(refusalCode.parse(code));
   }
 }
 
@@ -55,17 +64,31 @@ export async function verifyMemoryContext(token: string,
 export async function memoryRights(store: EventStore, binding: Binding,
   claims: Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' | 'generation' |
     'conversation' | 'turn' | 'thread'>, parsed: ReturnType<typeof parseMemoryRequest>,
-  deadline: number, includeDispatch?: (...subjects: string[]) => void) {
-  const activity = await liveMemoryTurn(store, binding, claims, parsed, deadline);
+  deadline: number, includeDispatch?: (...subjects: string[]) => void,
+  prepared?: PreparedMemoryReads) {
+  const activity = prepared?.activity ??
+    await prepareMemoryActivity(store, binding, claims, parsed, deadline);
+  if (prepared) await activity.confirm(deadline, false, true);
+  const applied = prepared?.applied;
   let writeAuthority: Awaited<ReturnType<typeof decisionAuthorityFence>> | undefined;
+  let readAuthority: Awaited<ReturnType<typeof decisionAuthorityFence>> | undefined;
   const rights = await check(deadline);
-  return { ...rights, confirm: check, writeAuthority };
+  async function confirm(checkDeadline = deadline) {
+    // Keep the full permission check for writes, including changes during validation.
+    if (prepared && readAuthority && writeAuthority === undefined) {
+      await confirmDecisionAccess(activity, readAuthority, false);
+      return rights;
+    }
+    return check(checkDeadline);
+  }
+  return { ...rights, confirm, writeAuthority };
 
   async function check(checkDeadline = deadline) {
     const authority = writeAuthority ?? await decisionAuthorityFence(store, performance.now(), [],
       claims.requester, claims.assistant, undefined, checkDeadline);
+    readAuthority = authority;
     // Keep the original write check so removing and restoring a grant still refuses the write.
-    if (parsed.input?.operation === 'remember') {
+    if (parsed.input && parsed.input.operation !== 'recall') {
       writeAuthority = authority;
     }
     async function confirmAuthority() {
@@ -80,6 +103,9 @@ export async function memoryRights(store: EventStore, binding: Binding,
     const fresh = Object.assign(confirmAuthority, snapshot);
     fresh.include('mcp-memory');
     const policy = await memoryToolPolicy(store, binding.silo, parsed, checkDeadline);
+    if (policy.outcome === 'ask') {
+      throw new MemoryToolRefused('memory_tool_configuration');
+    }
     if (policy.outcome !== 'allow') {
       throw new Error('Memory tool policy refused');
     }
@@ -89,27 +115,31 @@ export async function memoryRights(store: EventStore, binding: Binding,
       // for remember would spend more of the recall discovery deadline.
       canRemember = policy.policy.tools.some(allowsRemember);
     }
-    const selected = await selectedMemoryScope(store, binding, claims, parsed.input?.scopeId, fresh);
+    const selected = await selectedMemoryScope(store, binding, claims, parsed.input?.scopeId,
+      fresh, applied);
     const scope = selected.scope;
     await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
     let contextDigest = await currentAuthority(store, binding, claims.requester,
       claims.assistant, claims.conversation, 'mcp_server', 'memory', fresh,
-      activity.conversation);
+      activity.conversation, undefined, applied);
     // Keep discovery free of fact access. Each recall checks its selected scope separately.
     if (parsed.input) {
-      let resourceType = 'memory_read';
-      if (parsed.input.operation === 'remember') {
+      let resourceTypes = ['memory_read'];
+      if (parsed.input.operation !== 'recall') {
         // Limit agent writes to the requester, even when shared sources and grants are valid.
         if (scope.scopeKind !== 'person' || scope.ownerId !== claims.requester) {
-          throw new MemoryPersonScopeOnly();
+          throw new MemoryToolRefused('agent_person_scope_only');
         }
-        resourceType = 'memory_write';
+        resourceTypes = ['memory_read', 'memory_write'];
+        if (parsed.input.operation === 'remember') resourceTypes = ['memory_write'];
       }
-      await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,
-        fresh, selected.requesterGroup);
-      contextDigest = await currentAuthority(store, binding, claims.requester,
-        claims.assistant, claims.conversation, resourceType, scope.scopeId, fresh,
-        activity.conversation);
+      for (const resourceType of resourceTypes) {
+        await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,
+          fresh, selected.requesterGroup);
+        contextDigest = await currentAuthority(store, binding, claims.requester,
+          claims.assistant, claims.conversation, resourceType, scope.scopeId, fresh,
+          activity.conversation, undefined, applied);
+      }
     }
     await fresh();
     return { scope, contextDigest, contextPosition: fresh.head, canRemember, policy };
@@ -118,7 +148,8 @@ export async function memoryRights(store: EventStore, binding: Binding,
 
 async function selectedMemoryScope(store: EventStore, binding: Binding, claims: ThreadIdentity,
   selectedScopeId: string | undefined,
-  fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  fresh: Awaited<ReturnType<typeof authorityFence>>,
+  applied?: (eventId: string) => Promise<boolean>) {
   const subject = `assistant-${claims.assistant}`;
   fresh.include(subject);
   let assistant: z.infer<typeof assistantCreatedDataSchema> | undefined;
@@ -143,7 +174,7 @@ async function selectedMemoryScope(store: EventStore, binding: Binding, claims: 
     requesterGroup = assistant.ownerId;
     fresh.include(`team-${assistant.ownerId}`);
     await groupMembership(store, binding.silo, claims.requester, assistant.ownerId,
-      binding, fresh.deadline);
+      binding, fresh.deadline, applied);
     const groupScope = { scopeKind: 'group' as const, ownerId: assistant.ownerId };
     candidates.push(groupScope);
   } else if (assistant.ownerId !== claims.requester) {
@@ -226,12 +257,18 @@ async function memoryToolPolicy(store: EventStore, silo: string,
   const request = { jsonrpc: '2.0', id: parsed.request.id, method: 'tools/call', params: {
     name: toolName, arguments: parsed.input ?? {}, _meta: parsed.request.params._meta } };
   const call = parseMcpCall(JSON.stringify(request));
-  const headers = { ...parsed.headers, 'mcp-method': 'tools/call', 'mcp-name': toolName };
+  const headers: IncomingHttpHeaders = { ...parsed.headers,
+    'mcp-method': 'tools/call', 'mcp-name': toolName };
+  if (toolName === 'correct' || toolName === 'forget') {
+    // Report Ask as a configuration refusal even when the caller offered Allow.
+    delete headers['x-opencrane-tool-mode'];
+  }
   return mcpPolicy(store, silo, 'memory', 'server', call, headers, deadline);
 }
 
-type ThreadIdentity = Parameters<typeof memoryRights>[2];
-async function liveMemoryTurn(store: EventStore, binding: Binding, claims: ThreadIdentity,
+type ThreadIdentity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' |
+  'generation' | 'conversation' | 'turn' | 'thread'>;
+export async function prepareMemoryActivity(store: EventStore, binding: Binding, claims: ThreadIdentity,
   parsed: ReturnType<typeof parseMemoryRequest>, deadline: number) {
   if (claims.silo !== binding.silo || claims.thread !== parsed.request.params._meta.threadId) {
     throw new Error('Memory thread refused');
@@ -273,9 +310,11 @@ function requireLiveComputer(activity: Awaited<ReturnType<typeof decisionActivit
 
 export async function prepareMemoryContext(store: EventStore, binding: Binding,
   claims: ThreadIdentity, raw: string, headers: IncomingHttpHeaders, deadline: number,
-  requestId: string, includeDispatch?: (...subjects: string[]) => void) {
+  requestId: string, includeDispatch?: (...subjects: string[]) => void,
+  prepared?: PreparedMemoryReads) {
   const parsed = parseMemoryRequest(raw, headers);
-  const rights = await memoryRights(store, binding, claims, parsed, deadline, includeDispatch);
+  const rights = await memoryRights(store, binding, claims, parsed, deadline,
+    includeDispatch, prepared);
   const operation = parsed.input ? parsed.input.operation : parsed.request.method;
   const scopes = parsed.input ? [parsed.input.scopeId] : [];
   const callId = parsed.request.params._meta.callId;
@@ -284,26 +323,28 @@ export async function prepareMemoryContext(store: EventStore, binding: Binding,
   return { payload, policy: rights.policy, contextDigest: rights.contextDigest, callId };
 }
 
-export function prepareMemorySend(payload: Awaited<ReturnType<typeof prepareMemoryContext>>['payload'],
+export function prepareMemorySend(payload: Awaited<ReturnType<typeof prepareMemoryContext>>['payload'] &
+    { preparationId?: string; inputGeneration?: string },
   sign: (claims: Record<string, unknown>, expiresAt: number) => Promise<string>) {
   function signContext(dispatch: MemoryDispatch, expiresAt: number) {
     const claims = { ...payload, dispatch };
     return sign(claims, expiresAt);
   }
   const operation = payload.operation;
-  const method = operation === 'recall' || operation === 'remember' ? 'tools/call' : operation;
+  const method = operation === 'server/discover' || operation === 'tools/list'
+    ? operation : 'tools/call';
   return { method, sign: signContext };
 }
 
 export async function loadedMemoryRights(store: EventStore, binding: Binding,
   claims: ThreadIdentity, scopeId: string, fresh: Awaited<ReturnType<typeof authorityFence>>,
-  conversation: StoredEvent[]) {
-  const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh);
+  conversation: StoredEvent[], applied: (eventId: string) => Promise<boolean>) {
+  const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh, applied);
   await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'mcp_server', 'memory', fresh, conversation);
+    claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined, applied);
   await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scopeId,
     fresh, selected.requesterGroup);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'memory_read', scopeId, fresh, conversation);
+    claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined, applied);
 }

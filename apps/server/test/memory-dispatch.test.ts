@@ -24,6 +24,7 @@ let setup: Awaited<ReturnType<typeof fixture>>;
 let app: ReturnType<typeof buildServer>;
 let capability = '';
 let backendRequests = 0;
+let preparationRequests = 0;
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const route = '/mcp/memory/server';
 const recallTool = toolEvidence({ name: 'recall', reviewed: true, costCents: 0 });
@@ -81,6 +82,11 @@ async function prepare() {
   app = buildServer(testAuthConfig(), { memory });
   function capture(request: import('fastify').FastifyRequest,
     _reply: import('fastify').FastifyReply, done: () => void) {
+    if (request.url.endsWith('/prepare')) {
+      preparationRequests += 1;
+      done();
+      return;
+    }
     backendRequests += 1;
     capability = String(request.headers['x-memory-context'] ?? '');
     done();
@@ -120,15 +126,29 @@ async function memoryBinding(target: typeof setup) {
   return { permitDigest: bytes.toString('hex'), backendGeneration: 'memory-instance',
     schemaDigest: memoryCatalogue.schemaDigest, policyRevision: policy.policyRevision };
 }
-async function signedRecall(target: typeof setup, overrides = {}, body = call) {
+async function prepareRecall(target: typeof setup, body = call, backend = app) {
   const parsed = parseMemoryRequest(JSON.stringify(body), headers);
   const dispatch = await memoryBinding(target);
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant',
     computer: 'computer', generation: 1, conversation: 'conversation', turn: 'turn',
     thread: 'thread', operation: 'recall', scopes: [scopeId], contentAccess: 'private',
     bodyDigest: parsed.bodyDigest, callId: body.params._meta.callId, dispatch,
-    requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0, ...overrides };
-  return target.tokens.memoryContext(claims, Date.now() + 2000);
+    requestId: '11111111-1111-4111-8111-111111111111', contextPosition: 0 };
+  const preparationClaims = { ...claims, preparing: true };
+  const preparing = await target.tokens.memoryContext(preparationClaims, Date.now() + 2000);
+  const preparationRequest = { method: 'POST' as const, url: `${route}/prepare`, payload: body,
+    headers: { ...headers, 'x-memory-context': preparing } };
+  const response = await backend.inject(preparationRequest);
+  return { claims, response };
+}
+
+async function signedRecall(target: typeof setup, overrides = {}, body = call, backend = app) {
+  const { claims, response } = await prepareRecall(target, body, backend);
+  expect(response.statusCode, response.body).toBe(200);
+  const schema = z.strictObject({ preparationId: z.uuid(), inputGeneration: z.string().min(1) });
+  const prepared = schema.parse(response.json());
+  const finalClaims = { ...claims, ...prepared, ...overrides };
+  return target.tokens.memoryContext(finalClaims, Date.now() + 2000);
 }
 
 async function memoryPass(body: unknown, toolName: string) {
@@ -287,7 +307,7 @@ async function refusesReplayAfterRestart() {
     const response = await restarted.inject(request);
     expect(response.statusCode).toBe(403);
     const nextCall = recallCall('after-restart');
-    const fresh = await signedRecall(setup, {}, nextCall);
+    const fresh = await signedRecall(setup, {}, nextCall, restarted);
     const freshHeaders = { ...headers, 'x-memory-context': fresh };
     const freshRequest = { ...request, headers: freshHeaders, payload: nextCall };
     const allowed = await restarted.inject(freshRequest);
@@ -609,7 +629,9 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
     await expect.soft(savedContext()).resolves.toMatchObject(expected);
     await expect.soft(readChatFacts(cold, 'test', 'conversation', 'turn'))
       .resolves.toMatchObject(expected);
-    expect((await directRecall('after-close')).json()).toEqual({ status: 'refused' });
+    const afterClose = await prepareRecall(setup, recallCall('after-close'));
+    expect(afterClose.response.statusCode).toBe(403);
+    expect(afterClose.response.json()).toEqual({ status: 'refused' });
     expect(stages).toEqual(expectedStages);
   } finally {
     spy.mockRestore();
@@ -1747,3 +1769,58 @@ async function sanitisesMemoryPreparationError() {
   }
 }
 it('returns only the fixed refusal when memory preparation fails', sanitisesMemoryPreparationError);
+
+async function correctionAfterLoadedAppend() {
+  await seedRecallFact();
+  const initial = await directRecall('before-correction');
+  expect(initial.statusCode, initial.body).toBe(200);
+  const bridge = await renewalBridge();
+  expect(await bridge.exchange(1)).toHaveProperty('token');
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let changed = false;
+  async function correctAfterAppend(command: Parameters<typeof append>[0]) {
+    const saved = await append(command);
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.action === 'loaded') {
+      await changeLoadedMemory('correct');
+      changed = true;
+    }
+    return saved;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(correctAfterAppend);
+  try {
+    const response = await directRecall('correct-after-load');
+    expect(changed).toBe(true);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    const refused = { type: 'ack', sequence: 2, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(2)).toEqual(refused);
+    expect(await bridge.exchange(2)).toEqual(refused);
+    const decision = await setup.call();
+    expect(decision.status).toBe(403);
+    expect(decision.text).toContain('memory_context_unavailable');
+    expect(setup.received()).toBe(0);
+  } finally {
+    spy.mockRestore();
+    await bridge.close();
+  }
+}
+it('withholds recall corrected after its loaded append and refuses renewal and decision',
+  correctionAfterLoadedAppend);
+
+async function signedRecallHasPreparation() {
+  const preparationsBefore = preparationRequests;
+  const executionsBefore = backendRequests;
+  const token = await signedRecall(setup);
+  expect(preparationRequests).toBe(preparationsBefore + 1);
+  expect(backendRequests).toBe(executionsBefore);
+  const claims = decodeJwt(token);
+  expect(claims['preparationId']).toEqual(expect.any(String));
+  expect(claims['inputGeneration']).toEqual(expect.any(String));
+  const request = { method: 'POST' as const, url: route, payload: call,
+    headers: { ...headers, 'x-memory-context': token } };
+  const response = await app.inject(request);
+  expect(response.statusCode, response.body).toBe(200);
+}
+it('prepares the direct recall fixture before signing its executable pass',
+  signedRecallHasPreparation);

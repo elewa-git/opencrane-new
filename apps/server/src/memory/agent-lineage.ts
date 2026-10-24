@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import type { MemoryContext } from '@opencrane/models';
+import type { StoredEvent } from '@opencrane/event-store';
+import { memoryReferences, MemoryToolRefused, type MemoryContext,
+  type parseMemoryRequest } from '@opencrane/models';
+import { checkRecallProof } from './recall-proof.ts';
 import { MemoryRefused, type MemoryOptions } from './access.ts';
 import type { readRecallContext } from './recall-delivery.ts';
 
@@ -10,7 +13,8 @@ type Reference = NonNullable<Evidence['chat']['memoryContext']>['references'][nu
 function referenceKey(reference: Reference) {
   return JSON.stringify([reference.scopeId, reference.memoryId, reference.revision]);
 }
-function checkEvidence(context: MemoryContext, evidence: Evidence, dependencies: Reference[]) {
+function checkEvidence(context: MemoryContext, evidence: Evidence, dependencies: Reference[],
+  target?: Reference) {
   const { saved, chat } = evidence;
   const state = chat.memoryContext;
   if (!saved || state?.status !== 'loaded' || state.references.length === 0) {
@@ -25,7 +29,9 @@ function checkEvidence(context: MemoryContext, evidence: Evidence, dependencies:
   }
   const keys = dependencies.map(referenceKey);
   const supplied = new Set(keys);
-  if (supplied.size !== dependencies.length || supplied.size !== state.references.length) {
+  if (supplied.size !== dependencies.length) throw new MemoryRefused();
+  if (target) checkTargetEvidence(context.operation, dependencies, supplied, target);
+  if (supplied.size !== state.references.length) {
     throw new MemoryRefused();
   }
   for (const reference of state.references) {
@@ -35,10 +41,26 @@ function checkEvidence(context: MemoryContext, evidence: Evidence, dependencies:
   }
 }
 
+function checkTargetEvidence(operation: MemoryContext['operation'], dependencies: Reference[],
+  supplied: Set<string>, target: Reference) {
+  if (operation === 'correct') {
+    for (const dependency of dependencies) {
+      // Keep every revision of the target out of its replacement's dependencies.
+      if (dependency.memoryId === target.memoryId) {
+        throw new MemoryRefused();
+      }
+    }
+    supplied.add(referenceKey(target));
+  }
+  if (!supplied.has(referenceKey(target))) {
+    throw new MemoryRefused();
+  }
+}
+
 export function confirmAgentLineage(options: MemoryOptions, context: MemoryContext,
   evidence: Evidence, dependencies: Reference[], confirmRights: () => Promise<unknown>,
-  deadline: number) {
-  checkEvidence(context, evidence, dependencies);
+  deadline: number, target?: Reference) {
+  checkEvidence(context, evidence, dependencies, target);
   async function confirm() {
     await confirmRights();
     // Read only changes since the saved evidence, including participation-stream closure.
@@ -65,4 +87,38 @@ export function confirmAgentLineage(options: MemoryOptions, context: MemoryConte
     }
   }
   return confirm;
+}
+
+type Input = ReturnType<typeof parseMemoryRequest>['input'];
+export async function refuseAgentChange(options: MemoryOptions, context: MemoryContext,
+  evidence: Evidence, input: Input, secret: string, confirmRights: () => Promise<unknown>,
+  deadline: number, preparedRows?: StoredEvent[]) {
+  if (input?.operation !== 'correct' && input?.operation !== 'forget') return;
+  const target = { scopeId: input.scopeId, memoryId: input.memoryId,
+    revision: input.expectedRevision };
+  const loaded = evidence.chat.memoryContext?.references ?? [];
+  const dependencies = input.operation === 'correct' ? input.dependsOn : loaded;
+  const proved = [...dependencies, target];
+  checkRecallProof(secret, context, input.recallProof, proved,
+    evidence.inputGeneration, target);
+  const confirm = confirmAgentLineage(options, context, evidence, dependencies,
+    confirmRights, deadline, target);
+  if (!preparedRows) {
+    throw new MemoryRefused();
+  }
+  const rows = [...preparedRows];
+  const from = (rows.at(-1)?.sequence ?? 0) + 1;
+  // Read only later changes. Initial scope history belongs to preparation.
+  for await (const row of options.store.readStream(`scope-${input.scopeId}`, from, deadline)) {
+    if (row.event.silo !== options.silo) {
+      throw new MemoryRefused();
+    }
+    rows.push(row);
+  }
+  const references = memoryReferences(rows, options.silo, input.scopeId, 'event-only');
+  for (const reference of proved) {
+    if (references.current(reference) !== 'current') throw new MemoryRefused();
+  }
+  await confirm();
+  throw new MemoryToolRefused('memory_tool_unavailable');
 }

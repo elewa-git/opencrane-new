@@ -1,8 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { memoryContextRecordedEventSchema, type MemoryContextRecord } from '@opencrane/events';
-import { history, memoryReferences, foldMemoryContext, type MemoryContext,
+import { type memoryReferences, foldMemoryContext, type MemoryContext,
   type memoryRights, type MemoryContextState } from '@opencrane/models';
-import { memoryKeys } from '@opencrane/projections';
 import { readChatFacts } from '../chat/chat-summary.ts';
 import type { MemoryOptions } from './access.ts';
 import { memorySnapshot, type listFacts } from './reads.ts';
@@ -15,9 +14,20 @@ function digest(value: string) {
   hash.update(value);
   return hash.digest('hex');
 }
-export async function readRecallContext(options: MemoryOptions, context: MemoryContext) {
+export async function readRecallContext(options: MemoryOptions, context: MemoryContext,
+  isolate = false) {
   // Read history before starting the final short access checks.
-  const chat = await readChatFacts(options.store, options.silo, context.conversation, context.turn);
+  let prepared = false;
+  async function* readStream(...args: Parameters<typeof options.store.readStream>) {
+    if (prepared && args[1] === 1) throw new Error('Memory history unavailable');
+    yield* options.store.readStream(...args);
+  }
+  const store = isolate ? { readStream } : options.store;
+  function refresh() {
+    return readChatFacts(store, options.silo, context.conversation, context.turn);
+  }
+  const chat = await refresh();
+  prepared = true;
   if (chat.conversationClosed) {
     throw new Error('Memory turn ended');
   }
@@ -29,7 +39,7 @@ export async function readRecallContext(options: MemoryOptions, context: MemoryC
     saved = memoryContextRecordedEventSchema.parse(decoded).data;
   }
   const inputGeneration = saved?.inputGeneration ?? randomUUID();
-  return { chat, saved, inputGeneration };
+  return { chat, saved, inputGeneration, refresh };
 }
 function record(context: MemoryContext, state: Snapshot, inputGeneration: string) {
   const data: MemoryContextRecord = {
@@ -68,15 +78,18 @@ async function appendRecord(options: MemoryOptions, context: MemoryContext,
 
 export async function recordRecall(options: MemoryOptions, context: MemoryContext,
   rights: Rights, snapshot: Snapshot, page: Page, byteCount: number,
-  evidence: Awaited<ReturnType<typeof readRecallContext>>) {
+  evidence: Awaited<ReturnType<typeof readRecallContext>>,
+  references: ReturnType<typeof memoryReferences>) {
   const { inputGeneration } = evidence;
   // Include ordinary activity that arrived during access checks without changing the proof.
-  const chat = await readChatFacts(options.store, options.silo, context.conversation, context.turn);
+  const chat = await evidence.refresh();
+  if (JSON.stringify(chat.memoryContext) !==
+      JSON.stringify(evidence.chat.memoryContext)) {
+    throw new Error('Memory input changed');
+  }
   if (chat.turnEnded || chat.conversationClosed) {
     throw new Error('Memory turn ended');
   }
-  const rows = await history(options.store, `scope-${rights.scope.scopeId}`, options.silo,
-    performance.now() + 10_000);
   const data = record(context, snapshot, inputGeneration);
   const position = { scopeId: rights.scope.scopeId, position: snapshot.position };
   data.scopePositions = [position];
@@ -91,11 +104,6 @@ export async function recordRecall(options: MemoryOptions, context: MemoryContex
       memoryId: fact.memoryId, revision: fact.revision };
     additions.push(reference);
   }
-  if (!options.keyDirectory) {
-    throw new Error('Memory keys unavailable');
-  }
-  const keys = memoryKeys(options.keyDirectory);
-  const references = memoryReferences(rows, options.silo, rights.scope.scopeId, keys);
   async function confirm() {
     await rights.confirm();
     const current = await memorySnapshot(options, rights.scope);

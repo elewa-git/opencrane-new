@@ -48,6 +48,11 @@ export function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const segment = z.string().regex(/^[\w-]{1,200}$/u);
   segment.parse(route.serverId); segment.parse(route.connectionId);
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
+  let preparationWait: { http: { requestTimeout: string } } | undefined;
+  if (route.serverId === 'memory' && route.connectionId === 'server') {
+    // Allow time to load recall data before its separate two-second access check.
+    preparationWait = { http: { requestTimeout: '15s' } };
+  }
   const responseHeaders = ['x-request-id'];
   const upstreamHeaders = [...MCP_UPSTREAM_HEADERS];
   responseHeaders.push('x-opencrane-mcp-permit');
@@ -56,7 +61,7 @@ export function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
     policies: {
       jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
         location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
-      extAuthz: { host: new URL(decisionUrl).host,
+      extAuthz: { host: new URL(decisionUrl).host, policies: preparationWait,
         includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id',
           'mcp-protocol-version', 'mcp-method', 'mcp-name', 'x-opencrane-tool-mode',
           'x-opencrane-approval-id'],

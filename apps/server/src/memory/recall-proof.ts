@@ -44,7 +44,7 @@ export function recallProofBytes(secret: string, context: MemoryContext, limit: 
   return Buffer.byteLength(JSON.stringify({ recallProof: proof })) - 2 + 1;
 }
 export function checkRecallProof(secret: string, context: MemoryContext, proof: string,
-  dependencies: Dependency[], inputGeneration: string) {
+  dependencies: Dependency[], inputGeneration: string, target?: Dependency) {
   const [encoded, signed, extra] = proof.split('.');
   if (!encoded || !signed || extra !== undefined) {
     throw new MemoryRefused('Recall proof structure invalid');
@@ -78,6 +78,13 @@ export function checkRecallProof(secret: string, context: MemoryContext, proof: 
   const [binding, references] = parsed.data;
   if (binding !== threadBinding(context, inputGeneration)) {
     throw new MemoryRefused('Recall proof thread mismatch');
+  }
+  if (target) {
+    const { memoryId, revision } = target;
+    function matchesTarget(reference: z.infer<typeof referenceSchema>) {
+      return reference[0] === memoryId && reference[1] === revision;
+    }
+    if (!references.some(matchesTarget)) throw new MemoryRefused();
   }
   checkReturnedReferences(context, references, dependencies);
 }

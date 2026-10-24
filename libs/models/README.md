@@ -18,6 +18,10 @@ Reading saves each cancellation once. HTTP decisions defer that save until the s
 checks ownership and current write access. Used approvals keep their dispatch evidence,
 and saved denial or expiry stays final. Failed saves leave cancellation unconfirmed.
 
+Recall, Correct and Forget load chat history, saved memory and access receipts before
+the gateway starts its short access check. This includes every scope already loaded
+by the turn. Current permissions are still checked before use. Correct and Forget remain disabled.
+
 ## Where it fits
 
 This shared library is used by the server, background workers and personal computers.
@@ -28,8 +32,8 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval details and takeover cancellation, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image checks, control, provider choice and spending"]
-  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; rechecks loaded memory and corrected revisions; checks reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews and approval details, takeover cancellation, memory, owners, providers, free reachability, spending pages, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  models -->|checks remote HTTPS addresses, certificates, current revision promises and the running catalogue watch; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -73,6 +77,8 @@ The server uses the same check before releasing a renewed turn pass. A memory ch
 saved after the last memory read is checked at the next renewal or call.
 A corrected, forgotten or expired fact, an invalid dependency, or removed memory access
 refuses the next call. Other facts, messages and uploads do not refuse it.
+Recall, Correct and Forget prepare history before the gateway signs their short pass.
+Each call checks permissions again; prepared data never grants access.
 Memory writes keep their original access check. Removing and restoring a grant while
 the server reads memory references still refuses the write. The event store repeats
 that same check before saving the fact.
@@ -137,6 +143,10 @@ for both Allow and Ask. Admin review locks those values before a tool can be ena
 Spending call records can be read in small pages, filtered by their saved payer and
 assistant. They keep the original date, held money and recorded settlement after
 rollover or replay. Reading these records never permits spending.
+
+An agent's correction or forget request needs both read and write permission and that
+tool's reviewed Allow rule. Ask returns a configuration refusal without opening an approval.
+The backend checks the target proof, then refuses the operation because it is still disabled.
 
 ## What it is responsible for
 

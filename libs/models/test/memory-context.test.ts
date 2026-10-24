@@ -1,7 +1,7 @@
 import { beforeAll, expect, it, vi } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
 import { parseMemoryRequest } from '../src/mcp.ts';
-import { verifyMemoryContext } from '../src/memory-context.ts';
+import { MemoryToolRefused, verifyMemoryContext } from '../src/memory-context.ts';
 
 const scopeId = 'a'.repeat(64);
 const metadata = { threadId: 'thread', callId: 'call',
@@ -183,3 +183,55 @@ it('refuses when the verifier has no signing key', async function unavailableVer
   const missing = { ...identity, jwks: { keys: [] } };
   await expect(verifyMemoryContext(token, missing, parsed)).rejects.toThrow();
 });
+
+const invalidTargets = [
+  ['memoryId', 'bad/id'], ['memoryId', 'a'.repeat(201)],
+  ['expectedRevision', 0], ['expectedRevision', -1], ['expectedRevision', 1.5],
+] as const;
+function changeTargetControl(operation: 'correct' | 'forget') {
+  const argumentsValue = { scopeId, commandId: 'change', recallProof: 'signed-proof',
+    memoryId: 'fact_21', expectedRevision: 1 };
+  const replacement = { text: 'Replacement fact', kind: 'fact', pinned: false,
+    expiresAt: null, dependsOn: [] };
+  if (operation === 'correct') {
+    Object.assign(argumentsValue, replacement);
+  }
+  const params = { ...request.params, name: operation, arguments: argumentsValue };
+  const body = { ...request, params };
+  const requestHeaders = { ...headers, 'mcp-name': operation };
+  const control = parseMemoryRequest(JSON.stringify(body), requestHeaders);
+  const expected = { operation, memoryId: 'fact_21', expectedRevision: 1 };
+  expect(control.input).toMatchObject(expected);
+  return { body, requestHeaders };
+}
+function refuseInvalidTarget(operation: 'correct' | 'forget', field: string,
+  value: string | number) {
+  const { body, requestHeaders } = changeTargetControl(operation);
+  const argumentsValue = { ...body.params.arguments, [field]: value };
+  const params = { ...body.params, arguments: argumentsValue };
+  const invalidBody = { ...body, params };
+  function parse() {
+    return parseMemoryRequest(JSON.stringify(invalidBody), requestHeaders);
+  }
+  expect(parse).toThrow();
+}
+function refuseInvalidCorrectTarget(field: string, value: string | number) {
+  refuseInvalidTarget('correct', field, value);
+}
+function refuseInvalidForgetTarget(field: string, value: string | number) {
+  refuseInvalidTarget('forget', field, value);
+}
+it.each(invalidTargets)('refuses correct target %s=%s at parsing', refuseInvalidCorrectTarget);
+it.each(invalidTargets)('refuses forget target %s=%s at parsing', refuseInvalidForgetTarget);
+
+function refuseUnknownCode() {
+  const control = new MemoryToolRefused('memory_tool_unavailable');
+  expect(control.message).toBe('memory_tool_unavailable');
+  function construct() {
+    // Exercise runtime validation with a value that a typed caller cannot supply.
+    // @ts-expect-error Reject codes outside the public refusal list.
+    return new MemoryToolRefused('private diagnostic');
+  }
+  expect(construct).toThrow();
+}
+it('refuses an unknown memory refusal code at construction', refuseUnknownCode);

@@ -3,7 +3,7 @@ import { opendir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, isAuthorityChanged, MemoryPersonScopeOnly, memoryReferences,
+import { authorityFence, isAuthorityChanged, MemoryToolRefused, memoryReferences,
   readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryTextSchema, memoryWrittenDataSchema, memoryWrittenEventSchema,
@@ -103,7 +103,7 @@ function checkDependencies(rows: StoredEvent[], scope: Scope, input: Input,
 
 function requireAgentPersonScope(scope: Scope, requester: string) {
   if (scope.scopeKind !== 'person' || scope.ownerId !== requester) {
-    throw new MemoryPersonScopeOnly();
+    throw new MemoryToolRefused('agent_person_scope_only');
   }
 }
 

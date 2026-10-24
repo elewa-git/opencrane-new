@@ -33,6 +33,11 @@ unavailable gate delivery keep the wait pending. Reconnection reads the same res
 HTTP decisions check approval ownership and current write access before saving a
 cancellation, so a foreign approval stays unchanged.
 
+Recall, Correct and Forget load their history before the gateway signs the short pass.
+The server keeps that data briefly for one call and checks current access before use.
+Calls and turn renewal prepare access receipts for every memory scope already loaded.
+Correct and Forget validate their targets but remain disabled.
+
 ## Where it fits
 
 This package is the back-end layer. [apps/web](../web/README.md) is the website;
@@ -51,13 +56,22 @@ flowchart LR
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
-  runtime -->|checks permission| server
+  runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
 [OpenFGA](../../GLOSSARY.md#openfga-permissions-service) checks permissions.
 The [AI gateway](../../GLOSSARY.md#agentgateway-ai-gateway) sends model and tool calls
 only after the models process allows them.
+
+Agent correction and forget requests need a signed proof of a loaded, current personal fact.
+A correction names every other loaded fact as a dependency, with no revision of its own target.
+Both operations remain disabled after these checks and create no fact, key or command file.
+Discovery still lists recall alone.
+Memory tests finish their setup reads before signing short-lived requests. Separate tests
+delay history and permission reads inside the server and record only elapsed times.
+These check that slow preparation leaves the original two-second pass available
+for current permissions and memory revisions.
 
 ## What it is responsible for
 

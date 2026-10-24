@@ -156,6 +156,13 @@ const rememberInput = memoryWrittenDataSchema.pick({ kind: true, pinned: true,
   scopeId: z.string().regex(/^[a-f0-9]{64}$/u), commandId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
   text: memoryTextSchema, recallProof: z.string().min(1).max(10000) }).strict();
 
+const targetFields = rememberInput.pick({ scopeId: true, commandId: true, recallProof: true });
+const forgetInput = targetFields.extend({ memoryId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+    expectedRevision: z.int().positive() });
+const correctFields = rememberInput.pick({ text: true, kind: true, pinned: true,
+  expiresAt: true, dependsOn: true });
+const correctInput = forgetInput.extend(correctFields.shape);
+
 export function parseMemoryRequest(raw: string, headers: IncomingHttpHeaders) {
   if (Buffer.byteLength(raw) > 16384 || headers['mcp-session-id'] !== undefined) {
     throw new Error('Memory request refused');
@@ -172,6 +179,10 @@ export function parseMemoryRequest(raw: string, headers: IncomingHttpHeaders) {
       input = { operation: 'recall' as const, ...recallInput.parse(request.params.arguments) };
     } else if (request.params.name === 'remember') {
       input = { operation: 'remember' as const, ...rememberInput.parse(request.params.arguments) };
+    } else if (request.params.name === 'forget') {
+      input = { operation: 'forget' as const, ...forgetInput.parse(request.params.arguments) };
+    } else if (request.params.name === 'correct') {
+      input = { operation: 'correct' as const, ...correctInput.parse(request.params.arguments) };
     } else {
       throw new Error('Memory tool refused');
     }

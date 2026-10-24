@@ -3279,3 +3279,46 @@ state plus a prepared `invalidation` event without appending. After the server h
 checked ownership and write authority, `decideApproval` confirms access and saves
 that event with the checked sequence and deadline. A refused command saves nothing.
 The command never reloads full conversation history inside that short check.
+
+## Agent correction and forget decisions (Part of #97)
+
+Strict `correct` and `forget` inputs use the existing signed memory route and original
+expiry. Correct uses the HTTP replacement fields plus scopeId, memoryId, dependsOn
+and recallProof. Forget uses scopeId, memoryId, commandId, expectedRevision and recallProof.
+Both require the requester's person scope, saved requester/assistant read AND write
+grants, both current OpenFGA permissions and the selected tool's reviewed zero-cost Allow.
+Ask returns HTTP 403 with exactly `{status: 'refused', reason: 'memory_tool_configuration'}`
+through the gateway and backend, without an approval. Block and missing tools deny.
+The fixed refusal allowlist also contains `agent_person_scope_only` and
+`memory_tool_unavailable`. Configuration refusals keep the request id in the gateway
+response header. Native admission is unchanged.
+
+## Memory preparation request
+
+The models process asks the memory server to prepare recall, Correct or Forget before starting the
+short access check or signing the executable control. Preparation uses a separate
+`preparing: true` credential with the original two-second signature lifetime.
+Only its initial authentication uses that lifetime; loading has its own ten-second
+limit. The returned random `preparationId` and `inputGeneration` become signed claims
+on the later control. The preparation credential is refused on the execution route.
+The memory route allows 15 seconds for the HTTP authorisation response so preparation
+can finish. This transport timeout does not extend the signed pass or access deadline.
+
+`prepareMemoryReads` loads turn facts and IAM receipts without retaining a permission
+result. `memoryRights` uses those receipts only for already loaded events and checks
+current OpenFGA permissions and saved grants again. A new access event with no prepared
+receipt refuses the call. Correct and Forget also prepare write-grant receipts.
+Their final access checks retain the original two-second deadline and grant positions.
+Writes also repeat the current IAM permission queries during final validation; only
+reads use the shorter confirmation of saved positions.
+Remember and discovery continue to use their existing paths.
+
+### Loaded memory receipt preparation
+
+`prepareLoadedMemory` prepares IAM receipts for every scope already loaded by the turn,
+including scopes absent from the next tool request. It shares the receipt reader with
+`prepareMemoryReads`. `loadedMemoryRights` reuses those receipt facts for the selected
+scope, group membership and current authority checks. It still reads current saved grants
+and checks current OpenFGA permissions. New events without prepared receipts refuse.
+Preparation runs before the original two-second access check. It does not add conversation
+streams to the watched access streams. The same preparation also serves turn renewal.
