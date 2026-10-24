@@ -1,0 +1,1 @@
+- Fresh spare dev stacks prepare separate private survey and memory keys, share them with the required server workers, and preserve them on restart. Unsafe paths and changed reaction subscriptions refuse startup. Models cannot mount the private directories. Part of #94; supports #101. Live and Helm qualification remain NOT RUN.

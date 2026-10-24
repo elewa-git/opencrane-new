@@ -93,6 +93,11 @@ run is needed before changing the polling interval or batch size.
 
 ## Recovery and subscription changes
 
+`prepareDispatcher(runtime)` prepares a new manifest or returns false after logging
+an existing subscription mismatch. Call it under the `handler-dispatcher` database
+lock, before event writers start. It never resets existing jobs or checkpoints.
+Dev startup uses it before bootstrap; dispatch uses the same check before workers.
+
 Stop dispatchers/workers before recovery. PostgreSQL is disposable execution
 state and content: rebuild it together with the consumer from EVENTS, with
 external reactions disabled. Keep receipts while preserving external state.

@@ -31,7 +31,7 @@ const exec = promisify(execFile);
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
 const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
-if (memoryKeyDirectory) {
+if (secondary || memoryKeyDirectory) {
   names.push('memory');
 }
 type OwnerStartup = {
@@ -503,6 +503,12 @@ async function up(fresh: boolean) {
   await start('minio-tokens', ['--experimental-strip-types', 'infra/dev-stack/minio-tokens.ts'], { DEV_STACK_DIR: directory });
   await objects.setBucketLifecycle('quarantine', { Rule: [{ ID: 'abandoned-uploads', Status: 'Enabled', Filter: { Prefix: '' }, Expiration: { Days: 1 } }] });
   await run('npm', ['run', 'provision'], { ...base, ...await readEnv('command') });
+  if (secondary) {
+    const { preparePrivateDispatcher } = await import('./private-dispatcher.ts');
+    const dispatcherSettings = { ...await readEnv('dispatcher'), SILO_ID: settings['SILO_ID']!,
+      MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}` };
+    await preparePrivateDispatcher(dispatcherSettings);
+  }
   if (secondary && !real) {
     // Stop keeps reservations whose outcome is unknown, so leave room for each stub journey.
     const events = await connectEventStore(await readEnv('command'));
@@ -544,7 +550,7 @@ async function up(fresh: boolean) {
   for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
     'audit', 'memory']) {
     const projectionEnv = await readEnv('projection');
-    if (memoryKeyDirectory) {
+    if (!secondary && memoryKeyDirectory) {
       projectionEnv['MEMORY_KEY_DIRECTORY'] = memoryKeyDirectory;
     }
     await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], projectionEnv);
@@ -590,7 +596,7 @@ async function up(fresh: boolean) {
     MODEL_GATEWAY_CONTROL_PORT: settings['MODEL_GATEWAY_CONTROL_PORT']!,
     MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
     MODEL_STUB_MCP_REVISION: approvalRevision,
-    MODEL_STUB_MANAGED_FILE: `${directory}/model-managed-stub`,
+    MODEL_STUB_MANAGED_FILE: `${directory}/${secondary ? 'models/' : ''}model-managed-stub`,
     MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`,
     AGENTGATEWAY_BINARY: gatewayBinary,
     MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
@@ -598,6 +604,8 @@ async function up(fresh: boolean) {
   async function startModels() {
     const models = modelsEnvironment(modelSettings, directory, managed, real);
     if (secondary) {
+      await mkdir(`${directory}/models`, { recursive: true, mode: 0o700 });
+      await mkdir(`${directory}/conversation-keys`, { recursive: true, mode: 0o700 });
       const database = new URL(models['DATABASE_URL']!);
       database.hostname = 'postgres';
       database.port = '5432';
@@ -643,7 +651,7 @@ async function up(fresh: boolean) {
       ...(tokenBootstrap ? { BOOTSTRAP_TOKEN_FILE: `${directory}/bootstrap-token.json` } : {}),
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
-      ...(memoryKeyDirectory ? { MEMORY_KEY_DIRECTORY: memoryKeyDirectory } : {}),
+      ...(!secondary && memoryKeyDirectory ? { MEMORY_KEY_DIRECTORY: memoryKeyDirectory } : {}),
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
       PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,

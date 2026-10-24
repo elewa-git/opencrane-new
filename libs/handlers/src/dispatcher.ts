@@ -61,12 +61,10 @@ export async function dispatch(
   await db.lock("handler-dispatcher", run);
 }
 
-async function dispatchLocked(
-  connection: NatsConnection,
-  runtime: HandlerRuntime,
-  signal: AbortSignal,
-  ready?: () => Promise<void>,
-): Promise<void> {
+/** Prepare fresh subscriptions or report the required upgrade without changing saved work.
+ * Call while holding the handler-dispatcher database lock and before starting event writers.
+ */
+export async function prepareDispatcher(runtime: HandlerRuntime): Promise<boolean> {
   const { db, silo, handlers } = runtime.options;
   const manifest = checkHandlers(handlers);
   await db.query(`CREATE TABLE IF NOT EXISTS handler_dispatcher (
@@ -96,6 +94,20 @@ async function dispatchLocked(
       'Run npm run ops -- upgrade-handlers --confirm-writers-stopped and restart services. ' +
       'Computers are not suspended while the dispatcher waits';
     runtime.options.logger.error(fields, message);
+    return false;
+  }
+  return true;
+}
+
+async function dispatchLocked(
+  connection: NatsConnection,
+  runtime: HandlerRuntime,
+  signal: AbortSignal,
+  ready?: () => Promise<void>,
+): Promise<void> {
+  const { db, silo, handlers } = runtime.options;
+  const manifest = checkHandlers(handlers);
+  if (!await prepareDispatcher(runtime)) {
     if (!signal.aborted) {
       await once(signal, "abort");
     }

@@ -20,7 +20,7 @@ The list is stored in PostgreSQL using pg-boss, a job queue library.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> handlers["libs/handlers<br/>background job queue"]
-  ops["apps/ops<br/>background workers"] -->|runs the workers| handlers
+  ops["apps/ops and dev startup<br/>background workers"] -->|checks subscriptions; runs workers| handlers
   nats["NATS JetStream<br/>event log"] -->|new events| handlers
   handlers -->|runs work with cancellation and a deadline| reactions["libs/models and libs/authz<br/>registered reactions"]
   handlers -.-> store["libs/event-store<br/>connection and record checks"]
@@ -49,8 +49,8 @@ flowchart LR
 2. **A reaction fails.** Later jobs for the same item wait while unrelated jobs
    continue. The failed job remains available for an operator to repair and retry.
    Memory cleanup also records when cleanup is unavailable after retries run out.
-3. **A release changes subscriptions.** The dispatcher reports the change and
-   waits for shutdown. The upgrade adds jobs for relevant older events only once
+3. **A release changes subscriptions.** Startup can check subscriptions before admitting members. The dispatcher reports a
+   change and waits for shutdown. The upgrade adds jobs for relevant older events only once
    every other program using the database has stopped. Completed work stays completed.
 
 ## How to run or test it

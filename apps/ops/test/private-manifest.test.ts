@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { HandlerRuntime, prepareDispatcher, registerHandler } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
-import { dispatcherHandlerNames } from '../../apps/ops/src/dispatcher-handlers.ts';
-import { database } from '../../libs/projections/test/database.ts';
+import { dispatcherHandlerNames } from '../src/dispatcher-handlers.ts';
+import { preparePrivateDispatcher } from '../../../infra/dev-stack/private-dispatcher.ts';
+import { database } from '../../../libs/projections/test/database.ts';
 
-async function noReaction() {
-  throw new Error('Manifest preparation must not run reactions');
+function noReaction(): Promise<void> {
+  return Promise.reject(new Error('Manifest preparation must not run reactions'));
 }
 function handler(name: ReturnType<typeof dispatcherHandlerNames>[number]) {
   return registerHandler(name, noReaction);
@@ -14,8 +15,10 @@ function handler(name: ReturnType<typeof dispatcherHandlerNames>[number]) {
 async function manifest() {
   const storage = await database('pg');
   const logs: string[] = [];
-  function write(value: string) { logs.push(value); }
-  const logger = createLogger('private-manifest', { destination: { write } });
+  function write(value: string) {
+    logs.push(value);
+  }
+  const logger = createLogger('private-manifest', { destination: { write }, level: 'info' });
   const privateEnv = { PERSONAL_KEY_DIRECTORY: '/private-fixture/personal',
     MEMORY_KEY_DIRECTORY: '/private-fixture/memory' };
   const names = dispatcherHandlerNames(privateEnv);
@@ -25,6 +28,11 @@ async function manifest() {
     return storage.db.query('SELECT * FROM handler_dispatcher');
   }
   try {
+    const current = await storage.db.query<{ name: string }>('SELECT current_database() AS name');
+    const url = new URL(process.env['PG_TEST_URL']!);
+    url.pathname = `/${current.rows[0]!.name}`;
+    const env = { ...privateEnv, DATABASE_URL: url.href, SILO_ID: 'test' };
+    await preparePrivateDispatcher(env);
     assert.equal(await prepareDispatcher(runtime), true);
     const original = await saved();
     const text = JSON.stringify(original.rows);
@@ -40,6 +48,7 @@ async function manifest() {
     assert.equal(await prepareDispatcher(oldRuntime), true);
     await storage.db.query('UPDATE handler_dispatcher SET sequence=12');
     const old = await saved();
+    await assert.rejects(preparePrivateDispatcher(env), /stopped-services upgrade\/backfill/u);
     assert.equal(await prepareDispatcher(runtime), false);
     assert.deepEqual((await saved()).rows, old.rows);
     assert.match(logs.join(''), /upgrade-handlers --confirm-writers-stopped/u);

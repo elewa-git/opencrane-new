@@ -62,6 +62,12 @@ async function separateSettings() {
       assert.equal(projection['PERSONAL_KEY_DIRECTORY'], undefined);
       assert.equal((await settings(directory, 'command'))['MEMORY_KEY_DIRECTORY'], undefined);
       assert.equal(generate(home, id).status, 0);
+      const original = await readFile(`${directory}/server.env`, 'utf8');
+      const aliased = original.replace(`${directory}/memory-keys`, `${directory}/conversation-keys`);
+      await writeFile(`${directory}/server.env`, aliased);
+      assert.notEqual(generate(home, id).status, 0, 'Refuse changed saved custody');
+      assert.equal(await readFile(`${directory}/server.env`, 'utf8'), aliased);
+      await writeFile(`${directory}/server.env`, original);
       for (const suffix of ['personal-keys', 'memory-keys']) {
         assert.equal(await readFile(`${directory}/${suffix}/preserved`, 'utf8'), 'encrypted-fixture');
         assert.equal((await stat(`${directory}/${suffix}/deleted`)).size, 0);
@@ -96,6 +102,9 @@ async function unsafePaths() {
       await rm(path, { recursive: true, force: true });
     }
     assert.equal(generate(home, '1').status, 0);
+    await symlink(`${directory}/memory-keys`, `${directory}/conversation-keys`);
+    assert.notEqual(generate(home, '1').status, 0, 'Refuse conversation custody aliases');
+    await rm(`${directory}/conversation-keys`);
     await rm(`${directory}/memory-keys`, { recursive: true });
     assert.notEqual(generate(home, '1').status, 0, 'Never recreate lost custody');
   } finally {
@@ -103,3 +112,29 @@ async function unsafePaths() {
   }
 }
 test('supplied unsafe or foreign paths and lost custody refuse without repair', unsafePaths);
+
+async function suppliedOwnership() {
+  const files = (await import('node:fs/promises')).default;
+  const { syncBuiltinESMExports } = await import('node:module');
+  const { mock } = await import('node:test');
+  const { preparePrivateDirectories } = await import('./private-directories.ts');
+  const directory = await mkdtemp(`${tmpdir()}/private-owner-`);
+  const settings = await preparePrivateDirectories(directory, true);
+  const original = files.lstat;
+  async function foreignOwner(path: Parameters<typeof original>[0]) {
+    const details = await original(path);
+    if (path === settings.PERSONAL_KEY_DIRECTORY) details.uid += 1;
+    return details;
+  }
+  const mocked = mock.method(files, 'lstat', foreignOwner);
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(preparePrivateDirectories(directory, true, settings), /unsafe/u);
+    assert.equal((await stat(settings.PERSONAL_KEY_DIRECTORY)).mode & 0o777, 0o700);
+  } finally {
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('caller-supplied directories must belong to the current user', suppliedOwnership);

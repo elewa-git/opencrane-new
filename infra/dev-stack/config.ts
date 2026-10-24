@@ -1,8 +1,9 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
-import { chmod, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { stackId, secondary, ports, localOrigin } from './identity.ts';
+import { preparePrivateDirectories } from './private-directories.ts';
 import { certificates } from '../../libs/event-store/test/certificates.ts';
 
 process.umask(0o077);
@@ -50,8 +51,28 @@ export async function prepareDirectory(ownerRecord?: string, reclaimStale = fals
   }
   await chmod(directory, 0o700);
 }
+async function privateSettings(fresh: boolean) {
+  if (!secondary) return;
+  const keys = await preparePrivateDirectories(directory, fresh, process.env);
+  for (const role of ['server', 'dispatcher', 'projection']) {
+    const settings = await readEnv(role);
+    for (const [name, path] of Object.entries(keys)) {
+      if (role === 'projection' && name === 'PERSONAL_KEY_DIRECTORY') continue;
+      if (!fresh && settings[name] !== path) {
+        throw new Error('Private settings changed: stop services and upgrade/backfill handlers; '
+          + 'do not reset existing data');
+      }
+      settings[name] = path;
+    }
+    if (fresh) await writeEnv(role, settings);
+  }
+}
 export async function generate(origin: string) {
-  if (await exists(`${directory}/settings.env`)) return;
+  if (await exists(`${directory}/settings.env`)) {
+    await privateSettings(false);
+    return;
+  }
+  if (secondary) await preparePrivateDirectories(directory, true, process.env);
   // Reuse the real NATS test issuer; local certificates expire after 30 days.
   await certificates(directory, 30);
   const secret = () => randomBytes(32).toString('hex');
@@ -93,7 +114,11 @@ export async function generate(origin: string) {
   await writeEnv('admin', { DATABASE_URL: database('postgres', 'postgres') });
   await save('proxy.json', JSON.stringify(Object.fromEntries(['/api', '/auth', '/ws', '/members'].map((path) =>
     [path, { target: `http://127.0.0.1:${ports['SERVER_PORT']}`, ws: path === '/ws' }]))));
-  for (const file of await readdir(directory)) await chmod(`${directory}/${file}`, 0o600);
+  for (const file of await readdir(directory)) {
+    const details = await lstat(`${directory}/${file}`);
+    if (details.isFile()) await chmod(`${directory}/${file}`, 0o600);
+  }
+  await privateSettings(true);
   // Written last: an interrupted generator is safe to rerun.
   await writeEnv('settings', { ...ports, DEV_STACK_DIR: directory, ...(secondary ? { DEV_STACK_ROOT: root, DEV_STACK_UID: String(process.getuid!()), DEV_STACK_GID: String(process.getgid!()) } : {}), SILO_ID: 'dev', ORIGIN: origin,
     OPENFGA_API_URL: `http://127.0.0.1:${ports['FGA_PORT']}` });
