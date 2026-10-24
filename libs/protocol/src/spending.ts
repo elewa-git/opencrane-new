@@ -8,6 +8,7 @@ export const spendingCallsQuerySchema = z.object({
   continuation: z.string().min(1).max(4000).optional(),
   payingGroupId: filter.optional(),
   assistantId: filter.optional(),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u).optional(),
 }).strict();
 export const spendingCallsResponseSchema = z.object({
   rows: z.array(z.object({

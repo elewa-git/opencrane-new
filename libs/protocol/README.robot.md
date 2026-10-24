@@ -339,7 +339,9 @@ for filtering, loading and access checks.
 
 `spendingCallsQuerySchema` and `spendingCallsResponseSchema` define the strict
 calls-only [spending API](../../apps/server/README.robot.md#bounded-call-spending).
-Only bounded limit, continuation and payer/assistant filters are accepted.
+Only bounded limit, continuation, payer/assistant filters and optional `month` are accepted.
+`month` is strict `YYYY-MM` (01–12), meaning the original UTC reservation month.
+It combines with both other filters and is bound into the signed continuation.
 Rows contain safe references, original UTC dates, integer euro cents and accounting
 evidence. Settled cents may be null; recorded zero remains zero. Replies carry
 checkpoint, generation and continuation, without page totals or private work fields.

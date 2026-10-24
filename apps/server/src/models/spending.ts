@@ -57,7 +57,8 @@ function signature(secret: string, encoded: string) {
   return hmac.digest();
 }
 function continuation(secret: string, silo: string, query: SpendingCallsQuery) {
-  const identity = [silo, query.payingGroupId ?? null, query.assistantId ?? null];
+  const identity = [silo, query.payingGroupId ?? null, query.assistantId ?? null,
+    query.month ?? null];
   const hash = createHash('sha256');
   hash.update(JSON.stringify(identity));
   const binding = hash.digest('hex');
@@ -101,7 +102,7 @@ async function loadPage(options: ReadOptions, query: SpendingCallsQuery, secret:
   const cursor = continuation(secret, options.silo, query);
   const position = await options.store.head(`budget-${options.silo}`, deadline);
   const input = { after: cursor.after, limit: query.limit, payingGroupId: query.payingGroupId,
-    assistantId: query.assistantId };
+    assistantId: query.assistantId, month: query.month };
   const page = await readSpendingCalls(options.modelDb, options.silo, input, deadline);
   if (page.sequence < position) throw new Error('Spending unavailable');
   // Detect a replacement between the reader's checkpoint query and its call rows.
