@@ -266,7 +266,8 @@ async function review(request: FastifyRequest, reply: FastifyReply, config: Auth
     statusCode = 503;
   }
   const receipt = { status: result.status,
-    ...(result.status === 'appended' && 'sequence' in result ? { sequence: result.sequence } : {}) };
+    ...(result.status === 'appended' && 'sequence' in result ? { sequence: result.sequence } : {}),
+    ...(result.status === 'appended' && 'receipt' in result ? { receipt: result.receipt } : {}) };
   return reply.code(statusCode).send(receipt);
 }
 

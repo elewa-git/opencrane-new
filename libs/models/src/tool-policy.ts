@@ -51,8 +51,13 @@ export async function reviewToolPolicy(store: EventStore, binding: Binding, memb
   const valid = state.sequence === expectedSequence && tools !== null;
   const reference = { commandId, expectedSequence };
   const expiresAt = Date.parse(state.expiresAt ?? '');
-  return saveToolCommand(store, binding, memberId, serverId, 'mcp.server_reviewed',
+  const result = await saveToolCommand(store, binding, memberId, serverId, 'mcp.server_reviewed',
     payload, reference, rows, valid, expiresAt);
+  if (result.status !== 'appended' || !('sequence' in result)) {
+    return result;
+  }
+  return savedToolPolicyResult(store, binding.silo, memberId, serverId, reference,
+    'mcp.server_reviewed', payload, rows, result.sequence);
 }
 
 const publicationInput = z.strictObject({ ...commandFields, reviewRevision: z.int().positive() });
@@ -122,16 +127,17 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
   if (result.status !== 'appended' || !('sequence' in result)) {
     return result;
   }
-  return savedToolModeResult(store, binding.silo, memberId, serverId, command,
-    payload, rows, result.sequence);
+  return savedToolPolicyResult(store, binding.silo, memberId, serverId, command,
+    'mcp.tool_mode_set', payload, rows, result.sequence);
 }
 
-async function savedToolModeResult(store: EventStore, silo: string, memberId: string,
-  serverId: string, command: z.infer<typeof input>, payload: Record<string, unknown>,
+async function savedToolPolicyResult(store: EventStore, silo: string, memberId: string,
+  serverId: string, command: { commandId: string; expectedSequence: number },
+  type: 'mcp.tool_mode_set' | 'mcp.server_reviewed', payload: Record<string, unknown>,
   rows: StoredEvent[], sequence: number) {
   // Read the stored event so broker deduplication cannot confirm a different save.
   const saved = await store.readEvent(sequence, performance.now() + 10_000);
-  const receipt = toolModeReceipt(saved, silo, serverId, memberId, command.commandId);
+  const receipt = toolChangeReceipt(saved, silo, serverId, memberId, command.commandId);
   // Recover the original write position without adding fields to existing events.
   let originalSequence = 0;
   for (const row of rows) {
@@ -139,22 +145,34 @@ async function savedToolModeResult(store: EventStore, silo: string, memberId: st
       originalSequence = row.sequence;
     }
   }
-  if (!receipt || originalSequence !== command.expectedSequence ||
+  if (!receipt || saved.event.type !== type || originalSequence !== command.expectedSequence ||
       publicationDigest(saved.event.data) !== publicationDigest(payload)) {
     return { status: 'conflict' };
   }
   return { status: 'appended', sequence, receipt };
 }
 
-function toolModeReceipt(row: StoredEvent, silo: string, serverId: string,
+function toolChangeReceipt(row: StoredEvent, silo: string, serverId: string,
   memberId: string, changeRef: string) {
   const event = row.event;
   if (event.silo !== silo || event.subject !== `mcp-${serverId}` ||
       event.id !== changeRef || event.commandId !== changeRef ||
-      event.type !== 'mcp.tool_mode_set' || event.source !== 'opencrane-server' ||
+      event.source !== 'opencrane-server' ||
       event.principal?.kind !== 'human' || event.principal.id !== memberId) {
     return null;
   }
+  if (event.type === 'mcp.server_reviewed') {
+    return toolReviewReceipt(row, serverId, memberId, changeRef);
+  }
+  if (event.type !== 'mcp.tool_mode_set') {
+    return null;
+  }
+  return toolModeReceipt(row, serverId, memberId, changeRef);
+}
+
+function toolModeReceipt(row: StoredEvent, serverId: string, memberId: string,
+  changeRef: string) {
+  const event = row.event;
   const parsed = mcpToolModeSetDataSchema.safeParse(event.data);
   if (!parsed.success || parsed.data.serverId !== serverId || parsed.data.setBy !== memberId ||
       !parsed.data.connectionId || !parsed.data.toolRevision) {
@@ -164,6 +182,19 @@ function toolModeReceipt(row: StoredEvent, silo: string, serverId: string,
   return { changeRef, eventId: event.id, recordedAt: event.time, sequence: row.sequence,
     serverId, connectionId: data.connectionId, toolRevision: data.toolRevision,
     mode: data.mode, setBy: data.setBy };
+}
+
+function toolReviewReceipt(row: StoredEvent, serverId: string, memberId: string,
+  changeRef: string) {
+  const parsed = mcpServerReviewedDataSchema.safeParse(row.event.data);
+  if (!parsed.success || parsed.data.serverId !== serverId || parsed.data.reviewedBy !== memberId) {
+    return null;
+  }
+  const data = parsed.data;
+  // Return only saved review facts, without tool definitions or approval descriptions.
+  return { changeRef, eventId: row.event.id, recordedAt: row.event.time, sequence: row.sequence,
+    serverId, connectionId: data.connectionId, catalogueDigest: data.catalogueDigest,
+    policyRevision: data.policyRevision, reviewRevision: row.sequence, reviewedBy: data.reviewedBy };
 }
 
 export async function readToolModeChange(store: EventStore, binding: Binding, memberId: string,
@@ -193,7 +224,7 @@ async function loadToolModeChange(store: EventStore, silo: string, memberId: str
     return row.event.id === changeRef;
   }
   const saved = rows.find(matchesId);
-  const receipt = saved && toolModeReceipt(saved, silo, serverId, memberId, changeRef);
+  const receipt = saved && toolChangeReceipt(saved, silo, serverId, memberId, changeRef);
   if (!receipt) {
     return { status: 'unknown' };
   }

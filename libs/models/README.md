@@ -37,7 +37,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending pages, own saved profiles, personal account choices, saved tool choices and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending pages, own saved profiles, personal account choices, saved tool choices, reviews and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
@@ -390,9 +390,10 @@ After a custom tool finishes, Codex sends its result back to the model. The gate
 checks that request too, including the namespace that identifies the tool group,
 so the assistant can answer in the same turn.
 
-An admin can recover their saved tool-mode choice by its original reference.
-The receipt keeps the original date and revision even after the tools change.
-Current availability is checked separately.
+An owner or admin can recover their own saved tool-mode choice or review by its
+original reference. The receipt keeps the original date and saved position even
+after the tools change. A saved review does not mean the current catalogue is valid,
+the tools are published or the gateway has accepted them.
 
 The library saves or clears a person's explicit account choice for a tool server.
 The choice grants no access and does not verify the account. A changed or blocked profile

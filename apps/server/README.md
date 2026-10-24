@@ -27,8 +27,7 @@ The server checks receipts for the exact saved change before showing its progres
 It still checks access when loading fails, so errors do not reveal protected records.
 Admission history keeps each join separate, including when a person returns.
 Owners and admins can see who saved a spending resolution and the chosen amount,
-separately from observations and budget settlement. Detail also shows the current charge and hold,
-with the time they were checked. A saved resolution does not prove a released hold.
+separately from observations and budget settlement. A saved resolution does not prove a released hold.
 Conversation history keeps execution outcomes but omits resolution records and money amounts.
 Removal progress covers permissions and the member list. It does not report departure cleanup.
 
@@ -61,7 +60,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, own routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads own saved profiles; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -327,7 +326,9 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
    answer from the permissions service.
 7. **An admin adds a tool server.** The server checks the remote address, lists its
    tools and leaves them blocked until an admin reviews them. A lost reply to a tool-mode
-   change can be checked by its original reference, even after later changes. Remote discovery uses
+   change or review can be checked by its original reference, even after later changes.
+   Only the person who saved it can read that receipt, while still an owner or admin.
+   A saved review does not confirm publication or gateway acceptance. Remote discovery uses
    the public address checks shared by `libs/models`.
    Published calls require permission for both the person and the assistant. Removing
    either grant stops new calls and calls waiting to be sent, even while IAM, the
