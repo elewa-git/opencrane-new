@@ -8,7 +8,7 @@ import { ProjectionRunner, type Query } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { BudgetActor, envelope } from '../src/actor.ts';
 import { data, priceTableId, totals } from '../src/state.ts';
-import { budgets, readSpendingEffects } from '../src/accounting.ts';
+import { budgets, readSpendingEffects, readCurrentEffects } from '../src/accounting.ts';
 import { initialiseBudgetProjection, rebuildBudgetProjection } from '../src/rebuild.ts';
 import * as models from '../src/index.ts';
 
@@ -558,3 +558,49 @@ async function rollsBackFailedReplacement() {
 }
 it('rolls back rows, receipts and checkpoint together when replacement fails',
   rollsBackFailedReplacement);
+
+async function currentPage() {
+  const sequence = await nats.store.head();
+  return readCurrentEffects(postgres.db, 'test', sequence);
+}
+async function matchesCurrentEffectRules() {
+  const oldHold = await actor.reserve(call(), 120);
+  const released = await actor.reserve(call('support', 'support-assistant'), 100);
+  const late = await actor.reserve(call(), 110);
+  const disputed = await actor.reserve(call(), 120);
+  await runner.run(budgets);
+  const initial = await currentPage();
+  clock = new Date('2026-11-01T00:01:00.000Z');
+  const original = effectEvent(2, released);
+  const resolution = { ...original, data: { ...data(original), outcome: 'released',
+    evidence: [{ kind: 'dispatch_record', reference: 'private-unsent', digest: '0'.repeat(64) }] } };
+  await nats.seed([resolution, effectEvent(1, oldHold)]);
+  await runner.run(budgets);
+  expect((await currentPage()).rows[1]).toMatchObject({ state: 'resolution_pending',
+    heldCents: 100, settledCents: null });
+  await actor.settleRecorded(released, resolution.id);
+  await settle(late, 70);
+  await nats.seed([effectEvent(0, disputed), effectEvent(3, disputed)]);
+  await runner.run(budgets);
+  const result = await currentPage();
+  expect(result.rows).toMatchObject([
+    { permitId: oldHold, payingGroupId: 'sales', assistantId: 'sales-assistant',
+      state: 'outcome_unknown', heldCents: 120, settledCents: null },
+    { permitId: released, payingGroupId: 'support', assistantId: 'support-assistant',
+      state: 'released', heldCents: 0, settledCents: 0 },
+    { permitId: late, state: 'settled', heldCents: 0, settledCents: 70 },
+    { permitId: disputed, state: 'outcome_unknown', conflict: true, heldCents: 120 },
+  ]);
+  for (let index = 0; index < result.rows.length; index += 1) {
+    const row = result.rows[index]!;
+    const detail = await models.readEffect(nats.store, 'test', row.permitId);
+    expect(row).toMatchObject({ state: detail!.state, conflict: detail!.conflict,
+      settledCents: detail!.settledCents, effectPosition: detail!.sequence });
+    expect(row.position).toBe(initial.rows[index]!.position);
+    expect(row.reservedAt).toBe('2026-10-31T23:59:00.000Z');
+    expect(row.budgetPosition).toBeGreaterThanOrEqual(row.position);
+  }
+  expect(JSON.stringify(result)).not.toContain('private-');
+}
+it('matches current effect rules while keeping original attribution and exact held cents',
+  matchesCurrentEffectRules);
