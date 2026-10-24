@@ -7,11 +7,13 @@ import { sessionFor } from './members/routes.ts';
 import { readRoutineMetadata } from './routine-read.ts';
 import { readRoutineRuns, routineRunsQuery } from './routine-runs.ts';
 import { ConversationListChanged } from './chat/list-cursor.ts';
+import { readRoutineList, routineListQuery } from './routine-list.ts';
 
-const parameters = z.object({ routineId: z.string().regex(/^[\w-]{1,200}$/u) }).strict();
+const parameters = z.object({ routineId: z.string().regex(/^[\w-]{1,200}$/u).optional() }).strict();
 
 export function registerRoutineReads(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
+  app.get('/api/routines', handler);
   app.get('/api/routines/:routineId', handler);
   app.get('/api/routines/:routineId/runs', handler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
@@ -33,13 +35,16 @@ export function registerRoutineReads(app: FastifyInstance, config: AuthConfig,
     if (!parsed.success) {
       return reply.code(400).send({ status: 'refused' });
     }
-    const runs = request.routeOptions.url?.endsWith('/runs');
+    const runs = request.routeOptions.url === '/api/routines/:routineId/runs';
     const query = routineRunsQuery.safeParse(request.query);
     if (runs && !query.success) return reply.code(400).send({ status: 'refused' });
     try {
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) {
         throw new MemberAccessRefused('Active membership required');
+      }
+      if (parsed.data.routineId === undefined) {
+        return await sendRoutineList(request, reply, options, memberId, config.cookieSecret);
       }
       if (runs && query.success) {
         const page = await readRoutineRuns(options, memberId, parsed.data.routineId,
@@ -59,4 +64,12 @@ export function registerRoutineReads(app: FastifyInstance, config: AuthConfig,
       return reply.code(503).send({ status: 'unavailable' });
     }
   }
+}
+
+async function sendRoutineList(request: FastifyRequest, reply: FastifyReply,
+  options: GroupOptions, memberId: string, secret: string) {
+  const query = routineListQuery.safeParse(request.query);
+  if (!query.success) return reply.code(400).send({ status: 'refused' });
+  const page = await readRoutineList(options, memberId, query.data, secret);
+  return reply.send(page);
 }

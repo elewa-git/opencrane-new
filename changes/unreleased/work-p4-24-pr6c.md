@@ -1,0 +1,1 @@
+Members can read small pages of their own routine metadata, including retired routines. Filtered pages keep their continuation; stale or unavailable data never appears as an empty list. Changes to another owner’s routines do not restart pagination or change its replies. Execution remains disabled.

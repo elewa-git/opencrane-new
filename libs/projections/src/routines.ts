@@ -17,6 +17,8 @@ async function create(db: Query): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS routines (
     silo TEXT NOT NULL, routine_id TEXT NOT NULL, state JSONB NOT NULL,
     event_id TEXT NOT NULL, position BIGINT NOT NULL, PRIMARY KEY (silo, routine_id))`);
+  await db.query(`CREATE INDEX IF NOT EXISTS routines_owner_position
+    ON routines (silo, (state #>> '{definition,definition,ownerId}'), position)`);
   await db.query(`CREATE TABLE IF NOT EXISTS routine_occurrences (
     silo TEXT NOT NULL, routine_id TEXT NOT NULL, occurrence_id TEXT NOT NULL,
     kind TEXT NOT NULL, data JSONB NOT NULL, event_id TEXT NOT NULL, position BIGINT NOT NULL,

@@ -916,6 +916,10 @@ releasing the lock, then check that a later request succeeds.
 
 `routines` uses `ProjectionRunner` and the strict event parser with `foldRoutine`.
 `routines` stores current facts and their last event id and position.
+`routines_owner_position` indexes silo, the saved definition's owner id and position.
+It supports bounded own-routine pages without selecting other owners or private JSON.
+Initialisation adds this expression index to existing tables; replay recreates it.
+No table data migration or new event is needed.
 `routine_occurrences` stores each due with its frozen definition, activation, Stop
 request and first terminal result. It retains the due event id/position and terminal
 reference. Late records must match the original run even after later runs finish.
