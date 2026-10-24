@@ -18,7 +18,8 @@ let context: Awaited<ReturnType<typeof summonFixture>>;
 const eventSchema = eventEnvelopeSchema(z.unknown());
 const logger = createLogger('child-recovery-test');
 async function setup() {
-  context = await summonFixture();
+  const nats = await shortDuplicateWindowFixture();
+  context = await summonFixture(nats);
   await context.runner.initialise(childRequests);
 }
 async function cleanup() {
@@ -134,22 +135,22 @@ function worker() {
   }
   return close;
 }
-async function waitForInput(child: string) {
+async function waitForActivation(child: string) {
   for (let attempt = 0; attempt < 100; attempt++) {
     const rows = await chatHistory(context.nats.store, 'test', child);
-    if (rows.length === 2) {
+    if (rows.length === 3) {
       return rows;
     }
     await delay(100);
   }
-  throw new Error('Recovery did not save the first input');
+  throw new Error('Recovery did not save activation');
 }
 async function recoversWithoutPost(stage: string) {
   const { input, intent } = await savedRequest(stage);
   applyCreationPermissions();
   const stop = worker();
   try {
-    const rows = await waitForInput(intent.childConversationId);
+    const rows = await waitForActivation(intent.childConversationId);
     expect(rows[1]!.event.id).toBe(intent.firstInputId);
     const creation = conversationCreatedDataSchema.parse(rows[0]!.event.data);
     expect(creation).toMatchObject({ initialJoins: intent.initialJoins });
@@ -189,8 +190,8 @@ async function retriesUntilWorkerBuildsTable() {
       .toHaveLength(0);
     await context.runner.initialise(childRequests);
     await context.runner.run(childRequests);
-    const rows = await waitForInput(intent.childConversationId);
-    expect(rows).toHaveLength(2);
+    const rows = await waitForActivation(intent.childConversationId);
+    expect(rows).toHaveLength(3);
     expect(rows[1]!.event.id).toBe(intent.firstInputId);
   } finally {
     await stop();
@@ -206,12 +207,12 @@ async function racesWithPost() {
   const second = worker();
   try {
     await context.request(input.conversationId, 'children', start);
-    await waitForInput(intent.childConversationId);
+    await waitForActivation(intent.childConversationId);
   } finally {
     await first();
     await second();
   }
-  expect(await chatHistory(context.nats.store, 'test', intent.childConversationId)).toHaveLength(2);
+  expect(await chatHistory(context.nats.store, 'test', intent.childConversationId)).toHaveLength(3);
   const rows = await chatHistory(context.nats.store, 'test', input.conversationId);
   function isIntent(row: typeof rows[number]) {
     return row.event.type === 'conversation.child_requested';
@@ -245,6 +246,8 @@ it('refuses foreign or changed index records without an append', refusesChangedR
 async function rebuildsWithoutEffects() {
   const { input } = await savedRequest('conversation.child_requested');
   await reference(input.conversationId);
+  const unfinished = await savedRequest('message.posted');
+  expect(await reference(unfinished.input.conversationId)).toBeDefined();
   const before = await context.nats.store.head();
   const original = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');
   expect(JSON.stringify(original.rows)).not.toContain('canary');
@@ -288,17 +291,22 @@ async function refusesAfterAccessChanges(stage: string, kind: string) {
     const history = await chatHistory(context.nats.store, 'test', input.conversationId);
     const failure = history.at(-1)!.event;
     const reason = kind === 'closed' ? 'conversation_closed' : 'access_refused';
-    const failedStage = stage === 'conversation.created' ? 'first_input' : 'create';
+    let failedStage = 'create';
+    if (stage === 'conversation.created') failedStage = 'first_input';
+    if (stage === 'message.posted') failedStage = 'activation';
     expect(failure).toMatchObject({ type: 'conversation.child_start_failed',
       data: { requestId: input.requestId, attempt: 1, stage: failedStage, reason } });
     await recoverChildRequest(context.options, row);
     expect(await context.nats.store.head()).toBe(before + 1);
   }
   const rows = await chatHistory(context.nats.store, 'test', intent.childConversationId);
-  expect(rows.length).toBe(stage === 'conversation.child_requested' ? 0 : 1);
+  let expectedLength = 0;
+  if (stage === 'conversation.created') expectedLength = 1;
+  if (stage === 'message.posted') expectedLength = 2;
+  expect(rows).toHaveLength(expectedLength);
 }
 const refusedCases: [string, string][] = [];
-for (const stage of ['conversation.child_requested', 'conversation.created']) {
+for (const stage of ['conversation.child_requested', 'conversation.created', 'message.posted']) {
   for (const kind of ['closed', 'requester', 'payer', 'assistant', 'iam']) {
     refusedCases.push([stage, kind]);
   }
@@ -313,7 +321,7 @@ async function keepsOriginalJoins() {
   applyCreationPermissions();
   await recoverChildRequest(context.options, row);
   const rows = await chatHistory(context.nats.store, 'test', intent.childConversationId);
-  expect(rows).toHaveLength(2);
+  expect(rows).toHaveLength(3);
   expect(rows[0]!.event.data).toMatchObject({ initialJoins: intent.initialJoins });
 }
 it('keeps the original joins when another participant has left', keepsOriginalJoins);
@@ -399,7 +407,7 @@ async function processRecoversAndStops(fault: string) {
         }
         await delay(100);
       }
-      await waitForInput(intent.childConversationId);
+      await waitForActivation(intent.childConversationId);
       await server.stop();
       const output = server.stdout();
       const stopped = output.indexOf('Child recovery stopped cleanly');
@@ -430,7 +438,7 @@ async function keepsUncertainWorkQueued(kind: string) {
   if (child[0]) await context.auth.handler.handle(child[0].event, context.db);
   applyCreationPermissions();
   await recoverChildRequest(context.options, row);
-  expect(await chatHistory(context.nats.store, 'test', intent.childConversationId)).toHaveLength(2);
+  expect(await chatHistory(context.nats.store, 'test', intent.childConversationId)).toHaveLength(3);
 }
 it.each(['outage', 'applying'])('keeps %s queued then completes missing saves', keepsUncertainWorkQueued);
 
@@ -521,7 +529,7 @@ async function appliesCreationAfterPermissionRead() {
   await recoverChildRequest(context.options, row);
   await recoverChildRequest(context.options, row);
   const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
-  expect(child).toHaveLength(2);
+  expect(child).toHaveLength(3);
   expect(child[1]!.event.id).toBe(intent.firstInputId);
 }
 it('retries a denial read before the child creation receipt without saving failure',
@@ -555,7 +563,7 @@ async function retriesUnavailableSaveOrKey(kind: string) {
   expect(parent.filter(isFailure)).toHaveLength(0);
   await recoverChildRequest(context.options, row);
   const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
-  expect(child).toHaveLength(2);
+  expect(child).toHaveLength(3);
   expect(child[1]!.event.id).toBe(intent.firstInputId);
 }
 it.each(['append', 'key'])('keeps an unavailable %s retryable without saving failure',
@@ -654,3 +662,64 @@ async function hidesFailureFromRemovedMember() {
 }
 it('hides failed status like an unknown request for a removed silo member',
   hidesFailureFromRemovedMember);
+
+async function recoversActivationAppend(saved: boolean) {
+  const { input, intent } = await savedRequest('message.posted');
+  const row = await reference(input.conversationId);
+  expect(row).toBeDefined();
+  const append = context.nats.store.append.bind(context.nats.store);
+  async function crash(command: Parameters<typeof append>[0]) {
+    const event = eventSchema.parse(command.event);
+    if (event.type !== 'conversation.child_activated') return append(command);
+    if (saved) await append(command);
+    throw new Error('Activation reply unavailable');
+  }
+  const fault = vi.spyOn(context.nats.store, 'append').mockImplementation(crash);
+  await expect(recoverChildRequest(context.options, row)).rejects.toThrow();
+  fault.mockRestore();
+  const before = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+  expect(before).toHaveLength(saved ? 3 : 2);
+  await waitForDuplicateWindow(context.nats);
+  await context.restart();
+  const outcomes = await Promise.allSettled([recoverChildRequest(context.options, row),
+    recoverChildRequest(context.options, row)]);
+  expect(outcomes).toContainEqual({ status: 'fulfilled', value: undefined });
+  await recoverChildRequest(context.options, row);
+  const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+  expect(child).toHaveLength(3);
+  expect(child[2]!.event).toMatchObject({ type: 'conversation.child_activated',
+    data: { firstInputId: intent.firstInputId, intentEventId: row['intent_id'], attempt: 1,
+      requestedBy: intent.createdBy, payingGroupId: intent.payingGroupId } });
+  if (saved) expect(child).toEqual(before);
+  const parent = await chatHistory(context.nats.store, 'test', input.conversationId);
+  expect(parent.filter(isFailure)).toEqual([]);
+  await context.runner.run(childRequests);
+  expect(await reference(input.conversationId)).toBeUndefined();
+  await context.runner.rebuild(childRequests);
+  expect(await reference(input.conversationId)).toBeUndefined();
+  const reads = vi.spyOn(context.nats.store, 'readStream');
+  const stop = worker();
+  await delay(1200);
+  await stop();
+  for (const [subject] of reads.mock.calls) {
+    expect(subject).not.toBe(`conversation-${input.conversationId}`);
+    expect(subject).not.toBe(`conversation-${intent.childConversationId}`);
+  }
+}
+it.each([false, true])('recovers activation after crash with append saved=%s',
+  recoversActivationAppend);
+
+async function uncertainSavedActivation() {
+  const { input, intent } = await savedRequest('message.posted');
+  const row = await reference(input.conversationId);
+  await recoverChildRequest(context.options, row);
+  const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
+  expect(child).toHaveLength(3);
+  await context.append(`participation-${input.conversationId}`, 'participant.removed',
+    { conversationId: input.conversationId, participantId: 'alice', removedBy: 'bob' });
+  const before = await context.nats.store.head();
+  // Keep a stale index row from turning a saved activation into a failed attempt.
+  await expect(recoverChildRequest(context.options, row)).rejects.toThrow();
+  expect(await context.nats.store.head()).toBe(before);
+}
+it('does not save a refusal over an activation when its index is behind', uncertainSavedActivation);

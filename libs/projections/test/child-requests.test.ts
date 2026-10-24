@@ -73,3 +73,40 @@ async function rejectsInvalidRetry() {
   expect(await savedFailure()).toEqual([{ failed_attempt: 1, failure_id: 'failure' }]);
 }
 it('revalidates retry records before clearing a failure', rejectsInvalidRetry);
+
+const activation: EventEnvelope = { ...intent, id: 'activation', commandId: 'activation',
+  subject: 'conversation-child', type: 'conversation.child_activated',
+  data: { conversationId: 'child', parentConversationId: 'parent', requestId: 'request',
+    intentEventId: 'intent', intentPosition: 3, creationEventId: 'creation', creationPosition: 4,
+    firstInputId: 'input', firstInputPosition: 5, requestedBy: 'alice',
+    assistantId: 'helper', payingGroupId: 'payer', attempt: 1 } };
+async function retiresOnlyActivation() {
+  await childRequests.drop(storage.db);
+  await childRequests.create(storage.db);
+  await childRequests.apply(storage.db, intent, 3);
+  const input = { ...intent, id: 'input', commandId: 'input', subject: 'conversation-child',
+    type: 'message.posted', data: { conversationId: 'child', authorKind: 'human',
+      authorId: 'alice', contentType: 'text', ciphertext: 'ZW5jcnlwdGVkLW1lc3NhZ2U=', keyId: 'key:child' } };
+  await childRequests.apply(storage.db, input, 5);
+  expect(await savedFailure()).toHaveLength(1);
+  await childRequests.apply(storage.db, activation, 6);
+  expect(await savedFailure()).toEqual([]);
+}
+it('keeps saved first inputs queued until matching activation', retiresOnlyActivation);
+async function keepsWrongActivation(patch: object, silo: string) {
+  await childRequests.apply(storage.db, intent, 3);
+  const data = { ...activation.data as object, ...patch };
+  const event = { ...activation, silo, data };
+  await childRequests.apply(storage.db, event, 6);
+  expect(await savedFailure()).toHaveLength(1);
+}
+it.each([[{ firstInputId: 'other' }, 'test'], [{ intentEventId: 'other' }, 'test'],
+  [{ parentConversationId: 'other' }, 'test'], [{ requestId: 'other' }, 'test'],
+  [{ intentPosition: 2 }, 'test'], [{}, 'other']])(
+  'keeps candidates for mismatched activation %j in silo %s', keepsWrongActivation);
+async function refusesWrongActivationWriter() {
+  const event = { ...activation, subject: 'conversation-other' };
+  await expect(childRequests.apply(storage.db, event, 6)).rejects.toThrow();
+  expect(await savedFailure()).toHaveLength(1);
+}
+it('refuses activation on the wrong child stream', refusesWrongActivationWriter);

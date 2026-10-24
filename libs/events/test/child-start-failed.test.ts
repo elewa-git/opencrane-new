@@ -15,7 +15,7 @@ function refusesFields(patch: object) {
   const data = { ...failure.data, ...patch };
   expect(parseEventByType({ ...failure, data }).success).toBe(false);
 }
-it.each([{ attempt: 0 }, { attempt: 4 }, { attempt: 1.5 }, { stage: 'activation' },
+it.each([{ attempt: 0 }, { attempt: 4 }, { attempt: 1.5 }, { stage: 'dispatch' },
   { reason: 'outage' }, { text: 'private canary' }])('refuses failure fields %j', refusesFields);
 function refusesWriter(patch: object) {
   expect(parseEventByType({ ...failure, ...patch }).success).toBe(false);
@@ -25,3 +25,9 @@ it.each([{ source: 'computer' }, { subject: 'conversation-other' },
   { principal: { kind: 'system', id: 'computer' } }, { commandId: 'other' },
   { report: { computerId: 'pc', sequence: 1, digest: 'a'.repeat(64) } }])(
   'refuses failure writer %j', refusesWriter);
+
+function acceptsActivationFailure() {
+  const data = { ...failure.data, stage: 'activation' };
+  expect(parseEventByType({ ...failure, data }).success).toBe(true);
+}
+it('accepts a proven activation refusal', acceptsActivationFailure);

@@ -85,8 +85,13 @@ async function resumesMissingInput(created: boolean) {
   await recoverChildRequest(context.options, savedReference);
   await recoverChildRequest(context.options, savedReference);
   const rows = await chatHistory(context.nats.store, 'test', request.intent.childConversationId);
-  expect(rows).toHaveLength(2);
+  expect(rows).toHaveLength(3);
   expect(rows[1]!.event.id).toBe(request.intent.firstInputId);
+  expect(rows[2]!.event).toMatchObject({ type: 'conversation.child_activated',
+    data: { attempt: 2, payingGroupId: request.intent.payingGroupId,
+      assistantId: request.intent.assistantId, requestedBy: request.intent.createdBy } });
+  expect(rows[0]!.event.data).toMatchObject({ initialJoins: request.intent.initialJoins });
+  expect(await context.intent(request.input.conversationId)).toEqual(request.intent);
   expect(await childRequestHeld(context.options, rows[0]!.event.data)).toBe(true);
   await context.runner.run(childRequests);
   const live = await context.db.query('SELECT * FROM child_requests_v3 ORDER BY intent_position');

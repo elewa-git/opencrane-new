@@ -161,7 +161,7 @@ async function recoversWithContext(stage: string) {
 it.each(['conversation.child_requested', 'conversation.created', 'message.posted'])(
   'recovers after %s across restart, expiry, changed choices and replay', recovers);
 
-async function holdsWork(retry: boolean) {
+async function holdsWork(retry: boolean, allocate: boolean) {
   const input = await context.parent();
   const start = await review(input);
   const starts = await Promise.all([context.request(input.conversationId, 'children', start),
@@ -188,7 +188,7 @@ async function holdsWork(retry: boolean) {
   const recovering = watchChildRequests(options, createLogger('recovery-hold'), stop.signal);
   async function inputSaved() {
     const savedRows = await chatHistory(context.nats.store, 'test', saved.childConversationId);
-    return savedRows.length === 2;
+    return savedRows.length === 3;
   }
   try {
     await until(inputSaved);
@@ -216,7 +216,11 @@ async function holdsWork(retry: boolean) {
   const actor = new BudgetActor(context.nats.store, 'test');
   await actor.start(10_000, 10_000, 'payer');
   const selected = { computerId: 'computer', generation: 1, threadId: 'thread', model: 'gpt-6.1-sol' };
-  await allocateChildRoot(context.options, actor, 'alice', activationInput, attempt, selected);
+  if (allocate) {
+    await allocateChildRoot(context.options, actor, 'alice', activationInput, attempt, selected);
+  } else {
+    expect(actor.state.roots).toEqual([]);
+  }
   const before = await context.nats.store.head();
   const tokens = vi.spyOn(context.tokens, 'turn');
   function connection(): Promise<never> {
@@ -267,7 +271,8 @@ async function holdsWork(retry: boolean) {
     server.close();
   }
 }
-it.each([false, true])('holds delivery, resume, admission and tokens after allocation with retry=%s', holdsWork);
+it.each([[false, false], [true, false], [false, true], [true, true]])(
+  'holds delivery, resume, admission and tokens with retry=%s allocation=%s', holdsWork);
 
 async function retriesPermissionOutage() {
   const input = await context.parent();
