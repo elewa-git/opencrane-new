@@ -296,6 +296,94 @@ async function invalidResolution(invalid: typeof invalidCases[number]) {
 it.each(invalidCases)('refuses untrusted resolution metadata without exposing payload: %s',
   invalidResolution);
 
+async function conversationHistory(memberId: string) {
+  const response = await app.inject({ url: '/api/conversations/protected/history',
+    headers: headers(memberId) });
+  expect(response.statusCode).toBe(200);
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(response.body).not.toContain(canary);
+  return auditResponseSchema.parse(response.json());
+}
+async function participantResolution(memberId: 'member' | 'admin') {
+  const assistant = event('assistant.created', 'assistant-personal', {
+    assistantId: 'personal', ownerId: memberId, kind: 'personal',
+  });
+  const conversation = event('conversation.created', 'conversation-protected', {
+    conversationId: 'protected', assistantId: 'personal', createdBy: memberId,
+    mode: 'agent_session',
+  });
+  for (const saved of [assistant, conversation]) {
+    await append(saved);
+    await auth.handler.handle(saved, db);
+  }
+  const anchor = event('decision.recorded', 'decision-permit', {
+    permitId: 'permit', requestId: 'permit', conversationId: 'protected',
+    requesterId: memberId, outcome: 'allow', reason: 'model_allowed',
+  });
+  await append(anchor);
+  const reserved = event('budget.reserved', 'budget-test', {
+    permitId: 'permit', reservationId: 'permit', amountCents: 1000,
+  });
+  await append(reserved);
+  const observed = event('effect.observed', 'effect-permit', {
+    permitId: 'permit', outcome: 'success', costCents: 600,
+  });
+  await append(observed);
+  const settled = event('budget.settled', 'budget-test', {
+    permitId: 'permit', reservationId: 'permit', settledCents: 600,
+  });
+  await append(settled);
+  await runner.run(auditTrail);
+  const before = await conversationHistory(memberId);
+  expect(before.rows).toHaveLength(1);
+  expect(before.rows[0]).toMatchObject({ decision: 'allow', outcome: 'success' });
+
+  const saved = resolution();
+  await append(saved);
+  await runner.run(auditTrail);
+  expect(await savedRecord(anchor.id)).toMatchObject({ savedOutcome: 'settled',
+    amountCents: 600, actor: { kind: 'person', id: 'admin' } });
+  const organisation = auditResponseSchema.parse((await get(
+    '/api/org/history?requestId=permit')).json());
+  expect(organisation.rows[0]).toMatchObject({ reservedCents: 1000, settledCents: 600 });
+  expect(organisation.rows[0]?.records.find(isResolution)).toMatchObject({
+    savedOutcome: 'settled', amountCents: 600, actor: { kind: 'person', id: 'admin' },
+  });
+  if (memberId === 'admin') {
+    const demoted = event('member.role_changed', 'member-admin', {
+      memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+    await append(demoted);
+    await auth.handler.handle(demoted, db);
+    await runner.run(members);
+    await runner.run(auditTrail);
+  }
+  const eventPosition = await nats.store.head();
+  const appends = vi.spyOn(nats.store, 'append');
+  for (const replay of [false, true]) {
+    if (replay) {
+      const logger = createLogger('participant-resolution-replay', { level: 'silent' });
+      await rebuildAuditProjection(db, nats.store, logger, { verify: true });
+    }
+    const result = await conversationHistory(memberId);
+    expect.soft(result.rows[0]?.records.filter(isResolution)).toEqual([]);
+    expect.soft(result).toEqual(before);
+    expect.soft(result.rows[0]?.reservedCents).toBeUndefined();
+    expect.soft(result.rows[0]?.settledCents).toBeUndefined();
+    for (const record of result.rows[0]!.records) {
+      expect.soft(record.amountCents).toBeUndefined();
+      expect.soft(record.savedOutcome).toBeUndefined();
+    }
+    const refused = await app.inject({ url: '/api/org/history', headers: headers(memberId) });
+    expect(refused.statusCode).toBe(403);
+  }
+  expect(appends).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(eventPosition);
+}
+it.each(['member', 'admin'] as const)(
+  'keeps resolution details out of the %s requester history before and after replay',
+  participantResolution);
+
 async function boundedHistory() {
   const anchor = decision();
   await append(anchor);
