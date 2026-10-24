@@ -1576,7 +1576,8 @@ async function intervalCleansExhaustedReaction() {
     expect(attemptDeletes).toEqual([1, 1, 1, 1, 1, 1]);
     expect(test.store.deleteAttempts).toBe(6);
     const failed = await runtime.deadLetters(handler.name);
-    expect(failed).toMatchObject([{ state: 'failed', retryCount: 5 }]);
+    const expectedFailedJobs = [{ state: 'failed', retryCount: 5 }];
+    expect(failed).toMatchObject(expectedFailedJobs);
     expect(JSON.stringify(failed)).not.toContain(material);
     scan = runningScan(test, 100);
     await scan.pages();
