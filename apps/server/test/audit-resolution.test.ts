@@ -79,7 +79,9 @@ async function setup() {
   await runner.run(members);
   feed = await connectMemberFeed(String(dbs.queue.options.connectionString));
   const audit = { silo: 'test', store: nats.store, db, feed, binding: auth.binding };
+  vi.stubEnv('LOG_LEVEL', 'info');
   app = buildServer(config, { audit, logDestination: sink });
+  vi.unstubAllEnvs();
 }
 async function cleanup() {
   vi.restoreAllMocks();
@@ -93,8 +95,12 @@ beforeEach(setup, 120_000);
 afterEach(cleanup);
 
 function resolution(permitId = 'permit', outcome = 'settled', settledCents = 600) {
-  const evidence = [{ kind: 'provider_receipt', reference: canary,
+  let evidence: Record<string, unknown>[] = [{ kind: 'provider_receipt', reference: canary,
     digest: 'a'.repeat(64), amountCents: settledCents }];
+  if (outcome === 'released') {
+    evidence = [{ kind: 'dispatch_record', reference: canary,
+      digest: 'a'.repeat(64), notDispatched: true }];
+  }
   const saved = event('effect.resolved', `effect-${permitId}`, {
     permitId, reservationId: permitId, resolvedBy: 'admin', outcome, settledCents, evidence,
   });
@@ -114,6 +120,8 @@ async function get(url: string) {
   expect(response.statusCode).toBe(200);
   expect(response.headers['cache-control']).toBe('no-store');
   expect(response.body).not.toContain(canary);
+  expect(response.body).not.toContain('usage');
+  expect(response.body).not.toContain('evidence');
   return response;
 }
 function isResolution(record: AuditRecord) {
@@ -177,7 +185,14 @@ async function racingOperators() {
   await runner.run(auditTrail);
   await auditTrail.apply(db, saved.event, saved.sequence);
   expect(await savedRecord(anchor.id)).toEqual(original);
+  const settlement = event('budget.settled', 'budget-test', { permitId,
+    reservationId: permitId, settledCents: 600 });
+  await append(settlement);
+  await runner.run(auditTrail);
+  expect(await savedRecord(anchor.id)).toEqual(original);
   const before = await get(`/api/org/history?requestId=${permitId}`);
+  const settled = auditResponseSchema.parse(before.json());
+  expect(settled.rows[0]?.settledCents).toBe(600);
   const state = structuredClone(budget.state);
   const head = await nats.store.head();
   const appends = vi.spyOn(nats.store, 'append');
@@ -185,6 +200,12 @@ async function racingOperators() {
   await rebuildAuditProjection(db, nats.store, logger, { verify: true });
   expect(await savedRecord(anchor.id)).toEqual(original);
   expect((await get(`/api/org/history?requestId=${permitId}`)).body).toBe(before.body);
+  await db.query(
+    "UPDATE audit_entries SET metadata = metadata - 'savedOutcome' WHERE event_id = $1",
+    [saved.event.id]);
+  const rebuilt = await rebuildAuditProjection(db, nats.store, logger);
+  expect(rebuilt.changed).toBe(true);
+  expect(await savedRecord(anchor.id)).toEqual(original);
   expect(budget.state).toEqual(state);
   expect(appends).not.toHaveBeenCalled();
   expect(await nats.store.head()).toBe(head);
@@ -209,25 +230,62 @@ it.each(['settled', 'released'] as const)('records %s zero without claiming budg
 
 const invalidCases = ['resolver', 'source', 'subject', 'permit', 'reservation', 'system',
   'agent', 'absent-principal', 'payload', 'fraction', 'negative', 'overflow', 'released-cost',
-  'evidence'] as const;
+  'evidence', 'resolver-id', 'permit-id'] as const;
 async function invalidResolution(invalid: typeof invalidCases[number]) {
   const saved = resolution();
   const data = z.record(z.string(), z.unknown()).parse(saved.data);
   switch (invalid) {
-    case 'resolver': data['resolvedBy'] = 'operator'; break;
-    case 'source': saved.source = 'gateway'; break;
-    case 'subject': saved.subject = 'effect-other'; break;
-    case 'permit': data['permitId'] = 'other'; break;
-    case 'reservation': data['reservationId'] = 'other'; break;
-    case 'system': saved.principal = { kind: 'system', id: 'admin' }; break;
-    case 'agent': saved.principal = { kind: 'agent', id: 'admin' }; break;
-    case 'absent-principal': delete saved.principal; break;
-    case 'payload': data['credential'] = canary; break;
-    case 'fraction': data['settledCents'] = 0.5; break;
-    case 'negative': data['settledCents'] = -1; break;
-    case 'overflow': data['settledCents'] = Number.MAX_SAFE_INTEGER + 1; break;
-    case 'released-cost': data['outcome'] = 'released'; break;
-    case 'evidence': data['evidence'] = [{ reference: canary }]; break;
+    case 'resolver':
+      data['resolvedBy'] = 'operator';
+      break;
+    case 'resolver-id':
+      data['resolvedBy'] = 'invalid:resolver';
+      saved.principal = { kind: 'human', id: 'invalid:resolver' };
+      break;
+    case 'permit-id':
+      data['permitId'] = 'invalid:permit';
+      data['reservationId'] = 'invalid:permit';
+      saved.subject = 'effect-invalid:permit';
+      break;
+    case 'source':
+      saved.source = 'gateway';
+      break;
+    case 'subject':
+      saved.subject = 'effect-other';
+      break;
+    case 'permit':
+      data['permitId'] = 'other';
+      break;
+    case 'reservation':
+      data['reservationId'] = 'other';
+      break;
+    case 'system':
+      saved.principal = { kind: 'system', id: 'admin' };
+      break;
+    case 'agent':
+      saved.principal = { kind: 'agent', id: 'admin' };
+      break;
+    case 'absent-principal':
+      delete saved.principal;
+      break;
+    case 'payload':
+      data['credential'] = canary;
+      break;
+    case 'fraction':
+      data['settledCents'] = 0.5;
+      break;
+    case 'negative':
+      data['settledCents'] = -1;
+      break;
+    case 'overflow':
+      data['settledCents'] = Number.MAX_SAFE_INTEGER + 1;
+      break;
+    case 'released-cost':
+      data['outcome'] = 'released';
+      break;
+    case 'evidence':
+      data['evidence'] = [{ reference: canary }];
+      break;
   }
   saved.data = data;
   await expect(auditTrail.apply(db, saved, 100)).rejects.toThrow('Invalid resolution audit event');
@@ -336,6 +394,10 @@ async function accessAfterLoading(change: 'demotion' | 'removal' | 'slow') {
       expect(reads.mock.calls.map(subject)).toEqual(['member-admin', 'ownership-test']);
       expect(heads).not.toHaveBeenCalled();
     }
+  }
+  if (change === 'slow') {
+    expect(logs).toContain('Audit history unavailable');
+    expect(logs).toContain('Audit detail unavailable');
   }
   expect(logs).not.toContain(canary);
 }
