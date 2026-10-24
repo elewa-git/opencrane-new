@@ -1322,7 +1322,13 @@ async function observeRestoration(context: RestorationFixture, change: Restorati
   const repeated = await readToolPolicy(setup.nats.store, 'test', 'fixture');
   expect(repeated).toEqual(checked);
   if (change === 'restart after' || change === 'restart recovery') {
+    const previousChild = setup.gatewayChild();
+    await setup.runner.initialise(mcpCatalogue);
+    await setup.runner.run(mcpCatalogue);
+    expect(await readPublication(setup.db, 'test', 'fixture')).toMatchObject({ status: 'ready' });
     await restartRestoration(context);
+    expect(setup.gatewayChild()).not.toBe(previousChild);
+    expect(delivery.acknowledged()).toBeNull();
     const recovered = await readToolPolicy(setup.nats.store, 'test', 'fixture');
     expect(recovered).toMatchObject({ driftHeld: false, published: true,
       configurationObservation: restored.configurationObservation });
@@ -1332,6 +1338,15 @@ async function observeRestoration(context: RestorationFixture, change: Restorati
       await delivery.waitForWitness(record);
       await expect.poll(acknowledged, { timeout: 5000 }).toBeUndefined();
       await context.watch.check('fixture');
+      await setup.runner.run(mcpCatalogue);
+      expect(await readPublication(setup.db, 'test', 'fixture')).toMatchObject({
+        status: 'ready', changeRef: 'restore', generation: record.generation,
+        recordDigest: record.recordDigest });
+      const renewed = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+      expect(renewed).toMatchObject({ published: true, driftHeld: false,
+        policyRevision: recovered.policyRevision });
+      expect(renewed.configurationObservation!.processRef).not.toBe(
+        restored.configurationObservation!.processRef);
     }
   } else if (change === 'duplicate after drift') {
     context.capture.mockResolvedValue(context.initial.catalogue);
@@ -1418,6 +1433,8 @@ async function restoresReviewedDrift(change: RestorationCase) {
     expect(oldApproval.state).toBe(expectedState);
     if (change === 'restart recovery') {
       await verifyCatalogueRecoveryReplay(setup);
+      expect(await readPublication(setup.db, 'test', 'fixture')).toMatchObject({
+        status: 'ready', changeRef: 'restore' });
     } else {
       await verifyRestorationReplay(setup);
     }

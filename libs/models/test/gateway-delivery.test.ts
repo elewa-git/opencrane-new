@@ -242,7 +242,15 @@ async function recordsOnlyLiveAcknowledgement() {
   const first = gatewayObservationSchema.parse(rows[1]!.event.data);
   const second = gatewayObservationSchema.parse(later[2]!.event.data);
   expect(second.processRef).not.toBe(first.processRef);
-  expect(await memberReceipts(setup)).toHaveLength(1);
+  const receipts = await memberReceipts(setup);
+  expect(receipts).toHaveLength(2);
+  expect(receipts[0]!.event.data).toMatchObject({ processRef: first.processRef });
+  expect(receipts[1]!.event.data).toMatchObject({ processRef: second.processRef,
+    observedAt: second.observedAt });
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'ready',
+    observedAt: second.observedAt });
+  expect(await replacement.observe()).not.toBeNull();
+  expect(await memberReceipts(setup)).toEqual(receipts);
   await setup.nats.seed([envelope('test', 'mcp-alpha', 'mcp.server_unpublished',
     { serverId: 'alpha', unpublishedBy: 'admin' })]);
   expect(await replacement.observe()).toBeNull();
@@ -605,7 +613,7 @@ async function memberReceipts(setup: Awaited<ReturnType<typeof fixture>>) {
   return rows.filter(receipt);
 }
 
-async function savesOneReceiptPerOperation() {
+async function savesOneReceiptPerObservation() {
   const setup = await fixture();
   await waitForDeliveredWitness(setup);
   const original = await history(setup.nats.store, 'mcp-alpha', 'test');
@@ -644,12 +652,19 @@ async function savesOneReceiptPerOperation() {
   const next = await prepareGatewayConfiguration(setup.nats.store, 'test', 'bravo', 'publish-bravo');
   await setup.delivery.deliver(next);
   await expect.poll(setup.acknowledged, { timeout: 5000 }).toBeUndefined();
-  expect(await memberReceipts(setup)).toEqual(receipts);
+  const later = await memberReceipts(setup);
+  expect(later).toHaveLength(2);
+  expect(later[0]).toEqual(receipts[0]);
+  expect(later[1]!.event.data).toMatchObject({ changeRef: member.changeRef,
+    generation: 2, recordDigest: next.recordDigest, sourceSequence: member.sourceSequence });
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'ready', generation: 2 });
+  expect(await setup.delivery.observe()).not.toBeNull();
+  expect(await memberReceipts(setup)).toEqual(later);
   const bravo = toolPolicyFromRows(await history(setup.nats.store, 'mcp-bravo', 'test'));
   expect(bravo.configurationObservation).toMatchObject({ changeRef: 'publish-bravo', generation: 2 });
 }
-it('saves one receipt per operation under concurrent observation and unchanged generations',
-  savesOneReceiptPerOperation);
+it('saves one receipt per observation under concurrent probes and carried publications',
+  savesOneReceiptPerObservation);
 
 async function recoversLostMemberReply() {
   const setup = await fixture();
