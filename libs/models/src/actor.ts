@@ -25,6 +25,8 @@ export { history } from './event-history.ts';
 // Keep a hold for three minutes so usage reports have time to arrive.
 const SETTLE_TIMEOUT_MS = 180_000;
 
+type AccessCheck = (() => Promise<void>) & { deadline?: number };
+
 export class BudgetActor {
   readonly state = emptyBudget();
   private sequence = 0;
@@ -55,7 +57,10 @@ export class BudgetActor {
     return result;
   }
   private async append(type: string, payload: unknown, id: string = randomUUID(),
-    confirmAccess?: () => Promise<void>, deadline?: number) {
+    confirmAccess?: AccessCheck, deadline = confirmAccess?.deadline) {
+    // Keep one limit across all conflicts, including callers without an explicit deadline.
+    const retryDeadline = deadline ?? performance.now() + 2000;
+    if (confirmAccess) deadline = retryDeadline;
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
     this.requireReservationWrites(event, confirmAccess);
     // Reuse replayed history; configure checks its caller's command id before this append.
@@ -63,11 +68,16 @@ export class BudgetActor {
       ...(confirmAccess ? { checkAccess: confirmAccess } : {}),
       ...(deadline === undefined ? {} : { deadline }) };
     let result = await this.store.append(command);
-    if (result.status === 'conflict' &&
-        await this.canRepeatAppend(confirmAccess !== undefined)) {
+    while (result.status === 'conflict') {
+      if (!await this.canRepeatAppend(confirmAccess !== undefined, retryDeadline)) {
+        throw new Error('Budget append contention');
+      }
       this.requireReservationWrites(event, confirmAccess);
       // Recheck the original access snapshot before repeating the conditional append.
       await confirmAccess?.();
+      if (performance.now() >= retryDeadline) {
+        throw new Error('Authority snapshot expired');
+      }
       // Keep the same event id, time limit and global publish check.
       command.expectedSequence = this.sequence;
       result = await this.store.append(command);
@@ -86,14 +96,15 @@ export class BudgetActor {
       throw new Error('Provider setup changed');
     }
   }
-  private async canRepeatAppend(hasAccessCheck: boolean) {
+  private async canRepeatAppend(hasAccessCheck: boolean, deadline: number) {
     const subject = `budget-${this.silo}`;
     let position = this.sequence;
-    for await (const row of this.store.readStream(subject, this.sequence + 1)) {
+    for await (const row of this.store.readStream(subject, this.sequence + 1, deadline)) {
       // Refuse another budget writer's changes. Only switch-on leaves money untouched.
       if (row.event.silo !== this.silo || row.event.subject !== subject ||
           row.event.type !== 'provider.managed_calls_enabled') {
-        return false;
+        this.failed = true;
+        throw new Error('Budget writer lost its fence');
       }
       position = row.sequence;
     }
