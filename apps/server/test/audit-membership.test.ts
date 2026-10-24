@@ -485,7 +485,9 @@ async function removalProgress(iamFirst: boolean) {
   const rejoined = saved('member.joined', 'rejoined', {
     memberId: 'member', role: 'member', email: `${canary}@example.test`, displayName: canary,
   }, 'member');
-  const removedAgain = { ...removal, id: 'removed-again' };
+  const removedAgain = saved('member.removed', 'removed-again', {
+    memberId: 'member', removedBy: 'owner',
+  });
   for (const event of [rejoined, role, removedAgain]) {
     await append(event);
     await auth.handler.handle(event, db);
@@ -539,7 +541,7 @@ it.each([true, false])(
 
 async function removalPaging() {
   for (let index = 0; index < 52; index++) {
-    const event = { ...removal, id: `removal-${index}`,
+    const event = { ...removal, id: `removal-${index}`, commandId: `remove-${index}`,
       correlation: { conversation: 'conversation', turn: 'departures' } };
     await append(event);
   }
