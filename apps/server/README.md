@@ -123,6 +123,7 @@ It checks saved ownership and permissions, and recovers the original change afte
 reply. A separate internal operation lets the owner retire a routine with no active run.
 Retirement clears its next scheduled time and keeps permitted history. The original
 owner can recover a lost retirement reply while they still have metadata access.
+The server checks that access before reporting a saved change or revision conflict.
 Neither operation has a website route. Routine execution remains disabled.
 
 1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.

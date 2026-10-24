@@ -4925,7 +4925,9 @@ control revision. Execution stays disabled and retirement cannot restore schedul
 
 An exact retry returns the original `{ status: 'confirmed', changeId, eventId, position }`.
 Saved identity binds the original owner, target, preceding position and all revisions.
-Recovery checks current `read_metadata` access once, including retirement's IAM receipt.
+Every request checks current `read_metadata` access before checking saved change identity
+or revisions. Existing and unknown change ids give the same refusal when access is denied,
+without returning a receipt. Recovery checks access once, including retirement's IAM receipt.
 It does not require the management permission retirement removed or start a write window.
 Missing receipts, removed owners and IAM outages refuse. Replies and errors contain no
 instructions, credentials or service details.

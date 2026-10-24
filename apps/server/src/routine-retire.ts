@@ -90,12 +90,12 @@ export async function retireRoutine(store: EventStore, binding: Binding,
     }
     const auth = memberAuthorisation(binding, store);
     const saved = await auth.loadRoutineAccess(memberId, input.routineId);
+    // Check metadata access before revealing saved changes or revision conflicts.
+    if (!(await saved.check('read_metadata')).allowed) {
+      throw new RetirementRefused();
+    }
     const previous = previousRetirement(saved.rows, input, memberId);
     if (previous) {
-      // Require metadata access because retirement deliberately removes management.
-      if (!(await saved.check('read_metadata')).allowed) {
-        throw new RetirementRefused();
-      }
       return previous;
     }
     const data = retirementData(saved.state);
