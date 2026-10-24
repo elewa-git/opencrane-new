@@ -215,17 +215,19 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     }
-    await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
-    const admittedPosition = await admit(req, res, permit, route, position, deadline);
-    if (permit.gatewayBinding) {
-      // Refuse changes found after admission before recording a start.
-      await requirePublishedPositions(permit, admittedPosition, deadline);
-      requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit);
-    }
+    confirmSend.deadline = deadline;
     let observe: RemoteObserver | undefined;
     try {
-      observe = await recordStarted(permit, deadline);
+      // Save the HTTPS attempt before admission so a refusal can prove nothing was sent.
+      if (route.locator) observe = await recordStarted(permit, deadline);
+      await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
+      const admittedPosition = await admit(req, res, permit, route, position, deadline);
+      if (permit.gatewayBinding) {
+        await requirePublishedPositions(permit, admittedPosition, deadline);
+        requireCurrentRoute(permit);
+        requireFreshDispatch(req, res, permit);
+      }
+      if (!route.locator) observe = await recordStarted(permit, deadline);
       if (permit.gatewayBinding) {
         await permit.confirmAccess();
       }
