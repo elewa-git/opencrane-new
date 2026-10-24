@@ -8,7 +8,8 @@ import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
-import { BudgetActor, envelope, history, priceTableId, resolveEffect } from '@opencrane/models';
+import { budgets, initialiseBudgetProjection, rebuildBudgetProjection,
+  BudgetActor, envelope, history, priceTableId, resolveEffect } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditDetailSchema, auditResponseSchema, type AuditRecord } from '@opencrane/protocol';
 import { auditTrail, connectMemberFeed, members, pgDb, ProjectionRunner,
@@ -132,7 +133,9 @@ async function savedRecord(anchorId: string) {
   const detail = auditDetailSchema.parse(response.json());
   const matches = detail.records.filter(isResolution);
   expect(matches).toHaveLength(1);
-  return matches[0]!;
+  const saved = { ...matches[0]! };
+  delete saved.currentAccounting;
+  return saved;
 }
 async function racingOperators() {
   const budget = new BudgetActor(nats.store, 'test');
@@ -491,3 +494,47 @@ async function accessAfterLoading(change: 'demotion' | 'removal' | 'slow') {
 }
 it.each(['demotion', 'removal', 'slow'] as const)(
   'checks access once after successful or failed history loads: %s', accessAfterLoading);
+
+async function accountingRecord(anchorId: string) {
+  const response = await get(`/api/org/history/${anchorId}`);
+  const detail = auditDetailSchema.parse(response.json());
+  return detail.records.find(isResolution)!;
+}
+async function pendingAccounting() {
+  const budget = new BudgetActor(nats.store, 'test');
+  await budget.start(20000, 20000, 'group');
+  const call = { model: 'gpt-6-astra', priceTableId, computerId: canary,
+    assistantId: canary, requesterId: 'admin', conversationId: 'protected',
+    turnId: canary, threadId: canary, payingGroupId: 'group', contextDigest: '0'.repeat(64) };
+  const permitId = await budget.reserve(call, 1000);
+  const anchor = decision(permitId);
+  await append(anchor);
+  const saved = resolution(permitId);
+  await append(saved);
+  await runner.run(auditTrail);
+  const logger = createLogger('accounting-audit-test', { level: 'silent' });
+  await initialiseBudgetProjection(db, nats.store, logger);
+  const original = await savedRecord(anchor.id);
+  const pending = await accountingRecord(anchor.id);
+  expect(pending.currentAccounting).toMatchObject({ status: 'current', state: 'held',
+    heldCents: 1000, settledCents: null });
+  const position = await nats.store.head();
+  expect(pending.currentAccounting).toMatchObject({ sequence: position, generation: 0 });
+  await budget.settleRecorded(permitId, saved.id);
+  await runner.run(budgets);
+  expect((await accountingRecord(anchor.id)).currentAccounting).toMatchObject({
+    status: 'current', state: 'settled', heldCents: 0, settledCents: 600 });
+  expect(await savedRecord(anchor.id)).toEqual(original);
+  const state = structuredClone(budget.state);
+  const head = await nats.store.head();
+  const appends = vi.spyOn(nats.store, 'append');
+  await rebuildBudgetProjection(db, nats.store, logger, { verify: true });
+  expect((await accountingRecord(anchor.id)).currentAccounting).toMatchObject({
+    status: 'current', state: 'settled', heldCents: 0, settledCents: 600 });
+  expect(await savedRecord(anchor.id)).toEqual(original);
+  expect(budget.state).toEqual(state);
+  expect(appends).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(head);
+}
+it('shows the pending hold beside the saved choice, then changes only current accounting',
+  pendingAccounting);
