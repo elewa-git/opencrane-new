@@ -21,6 +21,8 @@ async function create(db: Query): Promise<void> {
     silo TEXT NOT NULL, routine_id TEXT NOT NULL, occurrence_id TEXT NOT NULL,
     kind TEXT NOT NULL, data JSONB NOT NULL, event_id TEXT NOT NULL, position BIGINT NOT NULL,
     PRIMARY KEY (silo, routine_id, occurrence_id))`);
+  await db.query(`CREATE INDEX IF NOT EXISTS routine_occurrences_position
+    ON routine_occurrences (silo, routine_id, position)`);
 }
 async function drop(db: Query): Promise<void> {
   await db.query('DROP TABLE IF EXISTS routine_occurrences, routines');
