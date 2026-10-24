@@ -4316,16 +4316,24 @@ It reuses `checkedChildInput` for history, saved creation/input and current acce
 Both histories load before the two-second write check. A final incremental parent read
 refuses a newly saved failure, retry or legacy close; small access streams detect removal
 and modern closure. The append retains the original deadline and expects the child's
-last position. The source-derived activation id is stable across attempts and replicas.
+last position. Every transport retry runs the same access and parent-attempt check.
+The source-derived activation id is stable across attempts and replicas.
 Retries verify the full saved binding and return its original row, beyond broker deduplication.
 
-This is admission-time ordering across streams, not an atomic parent/child transaction.
-A parent change after the final check can still precede the child append. Later root
-allocation and first start must check authority, attempt and closure again. IAM and storage
+The event store records the global log position before each final check and requires
+that position when publishing. A change saved between the check and publish refuses
+the append. Later root allocation and first start must check access, attempt and closure again.
+IAM and storage
 uncertainty throw without saving a failure or claiming activation. The recovery worker calls
 this command after saving or finding the first input. `childRequestHeld` and production
 start gates remain intact.
 First-start recovery and fresh-install qualification remain unfinished.
+
+Failure recording loads child history before append and checks later records during
+every publish attempt. It refuses an existing activation. The event store's global
+position check also prevents an activation between that read and the failure publish.
+The failure still requires the checked parent position, so a changed attempt also refuses it.
+Conflicts and uncertain writes remain queued for another recovery pass.
 
 ### Checked child root allocation
 

@@ -62,11 +62,6 @@ export async function recoverChildRequest(options: Options, value: unknown) {
   } catch (error) {
     const reason = failureReason(error);
     if (!reason) throw error;
-    // Check the log before recording refusal: another worker may already have activated it.
-    const latest = await chatHistory(options.store, options.silo, data.childConversationId);
-    for (const row of latest) {
-      if (row.event.type === 'conversation.child_activated') throw error;
-    }
     await recordChildStartFailure(options, intent.id, data, stage, reason, current.attempt);
   }
 }

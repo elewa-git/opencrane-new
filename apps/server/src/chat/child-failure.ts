@@ -29,12 +29,36 @@ export function childStartState(rows: StoredEvent[], intentEventId: string) {
 export function childStartFailure(rows: StoredEvent[], intentEventId: string) {
   return childStartState(rows, intentEventId).failure;
 }
+function requireUnactivated(row: StoredEvent) {
+  if (row.event.type === 'conversation.child_activated') {
+    throw new Error('Child already activated');
+  }
+}
+async function prepareActivationCheck(options: Pick<ChatOptions, 'store' | 'silo'>,
+  childConversationId: string) {
+  const rows = await chatHistory(options.store, options.silo, childConversationId);
+  const subject = `conversation-${childConversationId}`;
+  let sequence = 0;
+  for (const row of rows) {
+    requireUnactivated(row);
+    if (row.event.subject === subject) sequence = row.sequence;
+  }
+  const deadline = performance.now() + 10_000;
+  async function checkAccess() {
+    // Check only later records; the event store binds this check to each conditional publish.
+    for await (const row of options.store.readStream(subject, sequence + 1, deadline)) {
+      requireUnactivated(row);
+    }
+  }
+  return { deadline, checkAccess };
+}
 export async function recordChildStartFailure(options: Pick<ChatOptions, 'store' | 'silo'>,
   intentEventId: string, intent: ChildRequest, stage: 'create' | 'first_input' | 'activation',
   reason: 'access_refused' | 'conversation_closed' | 'record_changed', attempt = 1) {
   const rows = await chatHistory(options.store, options.silo, intent.conversationId);
   const current = childStartState(rows, intentEventId);
   if (current.failure || current.attempt !== attempt) return;
+  const activationCheck = await prepareActivationCheck(options, intent.childConversationId);
   const subject = `conversation-${intent.conversationId}`;
   let sequence = 0;
   for (const row of rows) {
@@ -49,7 +73,8 @@ export async function recordChildStartFailure(options: Pick<ChatOptions, 'store'
     data: { conversationId: intent.conversationId, requestId: intent.requestId,
       childConversationId: intent.childConversationId, intentEventId, attempt, stage, reason } };
   // Save the outcome even after close. This grants no permission to resume the child.
-  const command = { event, expectedSequence: sequence, historyChecked: true as const };
+  const command = { event, expectedSequence: sequence, historyChecked: true as const,
+    ...activationCheck };
   const result = await options.store.append(command);
   if (result.status !== 'appended') throw new Error('Child failure outcome unavailable');
 }

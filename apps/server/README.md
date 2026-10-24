@@ -51,7 +51,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, spending pages, resolution receipts, live updates, tool status and saved tool choices| server["apps/server<br/>the back end"]
   server -.->|checks access, allocates child allowances within the original time limit and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|records changes, checked owner pauses and retirements, takeover approval cancellations, access-checked control refusals, child recovery, activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
+  server -->|records changes, checked owner pauses and retirements, takeover approval cancellations, access-checked control refusals, checked child recovery, activations, retries and tool hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, spending by month, history and exact removal, role, ownership and saved receipts| postgres
@@ -162,8 +162,10 @@ A missing result never means that repeating the resolution is safe.
 
 A member can review a child chat from their own group message, then save its first input.
 The requester can retry a saved start failure, up to three attempts. A background worker
-completes missing child creation and first input after a restart or retry.
-It checks the saved request and current permissions each time. These children stay queued;
+completes missing child creation, first input and activation after a restart or retry.
+Each attempt to save activation checks current access and the parent attempt again.
+A worker cannot save a start failure after another worker has activated the child.
+These children stay queued;
 they cannot start assistant work yet. Retry replies check current access before reporting
 that the parent chat is closed.
 

@@ -1,1 +1,2 @@
 - Saved child requests now recover through activation after a restart, including requests with an existing first input. Proven refusals remain available for retry; assistant starts stay held.
+- Child activation retries recheck current access and the parent attempt. Competing recovery workers cannot save a start failure after the child activates.
