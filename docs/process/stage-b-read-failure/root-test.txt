@@ -1,0 +1,34 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/stage-b-read-failure
+
+ ❯ apps/server/test/memory-dispatch.test.ts (92 tests | 26 failed) 1114870ms
+   × consumes the memory pass and captured backend context once 16321ms
+   × refuses direct replay of the signed memory context 11750ms
+   × refuses a captured memory context after the backend restarts 15291ms
+   × consumes concurrent copies of one signed context only once 12577ms
+   × serialises evidence for concurrent memory calls on the same tool 13824ms
+   × records complete text-free evidence before returning recalled text 13733ms
+   × counts empty replies and refuses repeats and a fifth recall 13205ms
+   × refuses model, tool and recall after loaded memory forget 12683ms
+   × refuses model, tool and recall after loaded memory member_read 12783ms
+   × refuses model, tool and recall after loaded memory member_mcp 12709ms
+   × refuses forget saved before model admission 13229ms
+   × refuses loaded memory after cold decision and summary replay 13929ms
+   × loads slow scope history before access and checks new rows, revoke=false 12147ms
+   × loads slow scope history before access and checks new rows, revoke=true 14951ms
+   × refuses an old pass after another recall changes loaded evidence 12839ms
+   × refuses model when a loaded forget is saved during final access 12600ms
+   × refuses tool when a loaded forget is saved during final access 15500ms
+   × refuses model when a loaded forget is saved after final access 13371ms
+   × refuses tool when a loaded forget is saved after final access 14124ms
+   × refuses loaded memory when expiry advances during final confirmation 13929ms
+   × refuses turn renewal after cold replay with a forgotten dependency 10022ms
+   × allows correct during the final access read but refuses the next turn renewal 12219ms
+   × allows forget during the final access read but refuses the next turn renewal 13124ms
+   × refuses turn renewal when correct is visible at the last scope-position read 12827ms
+   × refuses turn renewal when forget is visible at the last scope-position read 12540ms
+   × refuses turn renewal when memory becomes ended during signing 10654ms

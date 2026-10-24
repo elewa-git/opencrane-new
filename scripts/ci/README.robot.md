@@ -1,8 +1,9 @@
 # CI test contracts
 
 `fixture-tests.mjs` owns the file list and the arguments passed to Vitest.
-It assigns six files to `fixtures-image` and eight to `fixtures-browser`.
-The image group includes screenshot-browser, which also needs Chromium.
+It assigns seven files to `fixtures-image` and eight to `fixtures-browser`.
+The image group includes screenshot-browser, which also needs Chromium, and the
+offline demo read test, which uses packaged Codex and local services.
 Approvals, live-view-k3d and screenshot-browser keep their existing opt-in flags.
 Chat-browser launches three scripts that use Chromium. No test retries are added.
 

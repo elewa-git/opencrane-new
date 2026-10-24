@@ -1,0 +1,88 @@
+{
+  "status": "FAIL",
+  "source": "unchanged rehearsal reply helper and hook from work/demo-stage-b-local-live",
+  "requestSha256": "29f23c31bc0a2cf5f1cc05fcfefcb022e6a38272b1ad7c28e713a3ba24891d18",
+  "firstModelTools": [
+    {
+      "type": "namespace",
+      "name": "functions",
+      "tools": [
+        {
+          "type": "custom",
+          "name": "exec"
+        },
+        {
+          "type": "function",
+          "name": "wait"
+        },
+        {
+          "type": "function",
+          "name": "request_user_input"
+        },
+        {
+          "type": "function",
+          "name": "request_user_input_async"
+        }
+      ]
+    },
+    {
+      "type": "namespace",
+      "name": "clock",
+      "tools": [
+        {
+          "type": "function",
+          "name": "sleep"
+        }
+      ]
+    },
+    {
+      "type": "namespace",
+      "name": "collaboration",
+      "tools": [
+        {
+          "type": "function",
+          "name": "followup_task"
+        },
+        {
+          "type": "function",
+          "name": "interrupt_agent"
+        },
+        {
+          "type": "function",
+          "name": "list_agents"
+        },
+        {
+          "type": "function",
+          "name": "send_message"
+        },
+        {
+          "type": "function",
+          "name": "spawn_agent"
+        },
+        {
+          "type": "function",
+          "name": "wait_agent"
+        }
+      ]
+    }
+  ],
+  "streamedReplies": [
+    "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_47239e61-1875-43ef-9fa2-096ec71ff7a9\"}}\n\n"
+  ],
+  "turn": {
+    "id": "01a16cff-4716-7e10-9a09-d6c3cd39418c",
+    "items": [],
+    "itemsView": "notLoaded",
+    "status": "failed",
+    "error": {
+      "message": "stream disconnected before completion: Transport error: network error: error decoding response body",
+      "codexErrorInfo": "other",
+      "additionalDetails": null,
+      "misalignment": null
+    },
+    "startedAt": 1792830031,
+    "completedAt": 1792830032,
+    "durationMs": 1092
+  },
+  "dispatches": []
+}

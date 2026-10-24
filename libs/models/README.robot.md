@@ -2,6 +2,18 @@
 
 For people, read [README.md](README.md) first.
 
+## Custom tool continuations
+
+`model-request.ts` accepts an optional `namespace` of at most 200 characters on
+`custom_tool_call`, matching the existing function-call rule. Codex includes it
+when returning the result of `functions.exec` to the model. Unknown fields,
+non-text outputs and hosted tools remain refused. Tool dispatch still uses the
+normal permission and saved-policy checks.
+
+`test/model-request.test.ts` checks the exact accepted field and strict refusals.
+`scripts/stage-b-read.test.mjs` checks a real Codex read and its next model request
+through the gateway. See the [offline read diagnosis](../../docs/process/stage-b-read-failure/receipt.md).
+
 ## Takeover approval cancellation
 
 `readApproval` reuses `readComputerControl`. Only a verified control with the exact

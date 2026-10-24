@@ -19,6 +19,7 @@ function partitionsTests() {
     'apps/server/test/bridge-credentials.test.ts',
     'apps/server/test/screenshot-browser.test.ts',
     'apps/server/test/upload.test.ts',
+    'scripts/stage-b-read.test.mjs',
   ]);
   assert.deepEqual(browserFiles, [
     'apps/server/test/approvals.test.ts',
@@ -46,7 +47,8 @@ function partitionsTests() {
 }
 
 function isTestFile(argument) {
-  return argument.endsWith('.test.ts') && !argument.startsWith('--');
+  const testFile = argument.endsWith('.test.ts') || argument.endsWith('.test.mjs');
+  return testFile && !argument.startsWith('--');
 }
 
 function isShardArgument(argument) {

@@ -28,7 +28,8 @@ const additionalTools = z.object({ type: z.literal('additional_tools'), id: z.st
   tools: z.array(localTool) }).strict();
 export const requestSchema = z.object({ model: z.enum(activeModelIds), stream: z.literal(true),
   input: z.union([z.string(), z.array(z.union([message, additionalTools, reasoningItem,
-    z.object({ type: z.literal('custom_tool_call'), call_id: z.string(), name: z.string(), input: z.string(), id: z.string().optional(),
+    z.object({ type: z.literal('custom_tool_call'), call_id: z.string(), name: z.string(),
+      namespace: z.string().max(200).optional(), input: z.string(), id: z.string().optional(),
       status: z.enum(['in_progress', 'completed', 'incomplete']).optional() }).strict(),
     z.object({ type: z.literal('custom_tool_call_output'), call_id: z.string(), output: z.union([z.string(), z.array(textContent)]), id: z.string().optional() }).strict(),
     z.object({ type: z.literal('function_call_output'), call_id: z.string(),

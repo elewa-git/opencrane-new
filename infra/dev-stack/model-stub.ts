@@ -1,6 +1,7 @@
 // Dev-stack qualification only: this process never contacts an external provider.
 import { appendFileSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import type { stageBModelCall } from './stage-b-model.ts';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 const approvalRevision = process.env['MODEL_STUB_MCP_REVISION'];
@@ -89,21 +90,41 @@ const server = createServer((req, res) => {
     const path = /\/workspace\/uploads\/[\w/-]+\/project\.pdf\.md/u.exec(prompt)?.[0];
     const inline = !prompt.includes('UPLOAD_PDF_PROOF') && prompt.includes('Untrusted document content') ? prompt : '';
     const code = /Project code: ([\w-]+)\./u.exec(output || inline)?.[1];
-    const answer = pdf ? (code ? `The project code is ${code}.` : 'PDF reading failed.') : 'Hello from your computer.';
+    let answer = 'Hello from your computer.';
+    if (pdf) {
+      answer = 'PDF reading failed.';
+      if (code) answer = `The project code is ${code}.`;
+    }
     const stopped = new AbortController();
     res.once('close', () => stopped.abort());
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const id = `resp_${randomUUID()}`, message = `msg_${randomUUID()}`;
     const emit = (event: { type: string; [name: string]: unknown }) => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     emit({ type: 'response.created', response: { id } });
-    if (pdf && !code && path && !output && !customOutput) {
+    let demoCall: ReturnType<typeof stageBModelCall>;
+    if (prompt.includes('STAGE_B_READ') || prompt.includes('STAGE_B_WRITE')) {
+      // Keep ordinary replies usable in the single-file wake Pod fixture.
+      const { stageBModelCall, stageBModelAnswer } = await import('./stage-b-model.ts');
+      demoCall = stageBModelCall(body);
+      answer = stageBModelAnswer(body) ?? answer;
+    }
+    if (demoCall) {
+      emit({ type: 'response.output_item.done', item: demoCall });
+    } else if (pdf && !code && path && !output && !customOutput) {
       // Read the file when inline text is empty, unavailable or missing the requested fact.
       // Match the real Sol call. A disabled host must fail, with no invented shell fallback.
       emit({ type: 'response.output_item.done', item: { type: 'custom_tool_call', id: `ct_${randomUUID()}`, status: 'completed', name: 'exec', call_id: `call_${randomUUID()}`, input: `text(await tools.exec_command({cmd: "cat ${path}", max_output_tokens: 1000}))` } });
     } else {
-    emit({ type: 'response.output_item.added', item: { id: message, type: 'message', role: 'assistant', content: [] } });
-    for (const delta of pdf ? [answer] : ['Hello ', 'from your ', 'computer.']) { emit({ type: 'response.output_text.delta', delta }); await delay(delta === 'Hello ' && prompt.includes('Say hello again.') ? 30_000 : 500, undefined, { signal: stopped.signal }); }
-    emit({ type: 'response.output_item.done', item: { id: message, type: 'message', role: 'assistant', content: [{ type: 'output_text', text: answer }] } });
+      emit({ type: 'response.output_item.added', item: { id: message, type: 'message', role: 'assistant', content: [] } });
+      let replyChunks = ['Hello ', 'from your ', 'computer.'];
+      if (pdf || prompt.includes('STAGE_B_')) replyChunks = [answer];
+      for (const delta of replyChunks) {
+        emit({ type: 'response.output_text.delta', delta });
+        let delayMs = 500;
+        if (delta === 'Hello ' && prompt.includes('Say hello again.')) delayMs = 30_000;
+        await delay(delayMs, undefined, { signal: stopped.signal });
+      }
+      emit({ type: 'response.output_item.done', item: { id: message, type: 'message', role: 'assistant', content: [{ type: 'output_text', text: answer }] } });
     }
     emit({ type: 'response.completed', response: { id, status: 'completed', model: 'gpt-6-luna', usage: { input_tokens: 1000, output_tokens: 120, total_tokens: 1120 } } });
     res.end();
