@@ -164,7 +164,7 @@ interface ReadResponse {
 }
 
 async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
-  extraResponses: ReadResponse[] = [], effectReadStatuses: number[] = []) {
+  extraResponses: ReadResponse[] = [], effectReadStatuses: number[] = [], failCapture = false) {
   const fixture = await files.mkdtemp(`${import.meta.dirname}/.budget-load-`);
   const fixtureSource = `${fixture}/browser-budgets.ts`;
   const source = new URL('./browser-budgets.ts', import.meta.url);
@@ -176,7 +176,7 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
     await files.writeFile(`${fixture}/workspace-${width}.png`, 'Synthetic screenshot');
   }
   const isolated = await import(fixtureSource) as typeof import('./browser-budgets.ts');
-  const screenshots: string[] = [];
+  const screenshots: { fullPage: boolean }[] = [];
   const listeners = new Set<(response: unknown) => void>();
   let failedWaits = 0;
   let navigations = 0;
@@ -258,8 +258,12 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
     }
     return { waitFor: missingEditor, isVisible };
   }
-  async function screenshot(options: { path: string }) {
-    screenshots.push(options.path);
+  async function screenshot(options: { fullPage: boolean }) {
+    screenshots.push(options);
+    if (failCapture) {
+      throw new Error('Synthetic private screenshot failure');
+    }
+    return Buffer.from('Synthetic screenshot');
   }
   async function get() {
     function status() {
@@ -304,7 +308,15 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
     const expected = { budgetReadStatuses: [statusCode], effectReadStatuses,
       editorState: failPageState ? unreadableState : editorState };
     assert.deepEqual(JSON.parse(contents), expected);
-    assert.equal(screenshots.length, 0, 'Do not capture page content or personal data');
+    assert.deepEqual(screenshots, [{ fullPage: true }],
+      'Keep the failed page before cleanup removes it');
+    const picturePath = `${fixture}/budget-editor-failure.png`;
+    if (failCapture) {
+      await assert.rejects(files.stat(picturePath), { code: 'ENOENT' });
+    } else {
+      assert.equal(await files.readFile(picturePath, 'utf8'), 'Synthetic screenshot');
+      assert.equal((await files.stat(picturePath)).mode & 0o777, 0o600);
+    }
     assert.equal(contents.includes('Synthetic private page detail'), false);
     assert.equal(listeners.size, 0, 'Remove response listeners after the failed load');
     assert.equal(failure.message, 'Spending budget editor did not load; inspect private evidence');
@@ -316,7 +328,7 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
 async function retainsUnavailableRead() {
   await retainsEditorLoadFailure();
 }
-test('keeps failed budget read statuses and fixed page states without page contents',
+test('keeps failed budget read statuses, fixed page states and a private picture',
   retainsUnavailableRead);
 
 async function retainsRefusedRead() {
@@ -359,3 +371,9 @@ async function retainsEffectsResponses() {
   await retainsEditorLoadFailure(503, false, effectReads, [200, 503]);
 }
 test('keeps effects GET statuses separately and in arrival order', retainsEffectsResponses);
+
+async function keepsEvidenceWhenCaptureFails() {
+  await retainsEditorLoadFailure(503, false, [], [], true);
+}
+test('keeps the original failure and HTTP evidence when taking its picture fails',
+  keepsEvidenceWhenCaptureFails);
