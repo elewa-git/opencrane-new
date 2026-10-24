@@ -2695,6 +2695,8 @@ async function changePolicy(value: 'ask' | 'block') {
 it.each(['ask', 'block'] as const)('checks correct policy independently of recall: %s', changePolicy);
 
 async function changeScope(kind: 'group' | 'assistant_notes', loaded: boolean) {
+  const assistant = await history(setup.nats.store, 'assistant-assistant', 'test');
+  expect(assistant[0]?.event.data).toMatchObject({ kind: 'team' });
   await close();
   await prepare(true);
   await renewGatewayCredentials();
@@ -2715,7 +2717,8 @@ async function changeScope(kind: 'group' | 'assistant_notes', loaded: boolean) {
   }
 }
 it.each([['group', false], ['assistant_notes', false], ['group', true]] as const)(
-  'refuses %s scope (already loaded=%s) for forget', changeScope);
+  'refuses %s scope (already loaded=%s) for forget',
+  { meta: { teamAssistant: true } }, changeScope);
 
 async function changedTargetProof(change: string) {
   const currentRevision = change === 'old' ? 2 : 1;
