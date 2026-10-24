@@ -488,19 +488,15 @@ it('restores one approval retry after IAM refuses a saved start without sending'
   recoversAfterSavedStart, 60_000);
 
 async function refusedBeforeAdmission(context: Context, approvalId: string) {
-  const append = context.setup.nats.store.append.bind(context.setup.nats.store);
+  const admitDispatch = context.setup.actor.admitDispatch.bind(context.setup.actor);
   let paused = false;
-  async function pauseAfterDecision(command: AppendCommand) {
-    const result = await append(command);
-    const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'decision.recorded') {
-      paused = true;
-      await fga.pause();
-    }
-    return result;
+  async function pauseBeforeAdmission(...parameters: Parameters<typeof admitDispatch>) {
+    await fga.pause();
+    paused = true;
+    return admitDispatch(...parameters);
   }
-  const writer = vi.spyOn(context.setup.nats.store, 'append');
-  writer.mockImplementation(pauseAfterDecision);
+  const admission = vi.spyOn(context.setup.actor, 'admitDispatch');
+  admission.mockImplementation(pauseBeforeAdmission);
   const before = context.remote.received.length;
   const connections = context.remote.connections();
   try {
@@ -512,7 +508,7 @@ async function refusedBeforeAdmission(context: Context, approvalId: string) {
     expect(context.remote.received).toHaveLength(before);
     expect(context.remote.connections()).toBe(connections);
   } finally {
-    writer.mockRestore();
+    admission.mockRestore();
   }
 }
 
