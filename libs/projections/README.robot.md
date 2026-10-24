@@ -756,7 +756,10 @@ generation entry. Rebuilding the catalogue repeats the same fold and starts no p
 
 ## Gateway receipts in tool policy
 
-`configurationObservation` holds the first matching per-operation gateway receipt.
+`configurationObservation` holds the latest matching gateway receipt for the publication.
+A new gateway process or generation refreshes it after an exact live observation.
+Repeated probes recover the same receipt. The status read still matches every receipt
+field to the current gateway observation; it never accepts an old process as current.
 The fold checks its publication change, fragment digest, review and source position.
 Receipt events preserve policyRevision. Changed policy or publication clears the field;
 unchanged checks and dispatch admission keep it. The catalogue stores it in the existing
@@ -837,7 +840,8 @@ Fresh-install live qualification after this correction remains NOT RUN.
 `publicationRevision` records the saved publication position. `isToolReviewCurrent`
 accepts either an unchanged review or that exact publication's approval invalidation.
 Other policy events clear this position or advance `policyRevision` past it. Failed checks
-therefore still require a new review. Receipt and status checks use the same rule.
+keep the review only when the exact publication was already acknowledged. Receipt and
+status checks use the same rule.
 A replacement publication holds a previously callable server until its exact live receipt.
 An intent with a stale source position or review cannot retain the reviewed authority.
 Rebuild repeats these decisions without configuration writes or upstream calls.

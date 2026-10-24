@@ -2377,21 +2377,24 @@ admission. Only calls with the requested conversation and turn are returned.
 ## Per-server gateway receipts (P3-4 PR 3b; Part of #45)
 
 After an exact live observation, `observe` saves `mcp.configuration_observed` on each
-member's MCP stream. Its fixed id hashes serverId, changeRef and fragmentDigest. Each
-append requires that stream's read position and the global position from before the checks.
-This also refuses a newer preparation saved during the receipt append. A lost reply is recovered on the next
-probe. Unchanged operations carried into another generation receive no extra receipt.
-A restarted child requires delivery and a new probe, even when these receipts exist.
+member's MCP stream. Its fixed id hashes all receipt fields, including the exact gateway
+observation. Each append requires that stream's read position and the global position
+from before the checks. This also refuses a newer preparation saved during the receipt
+append. A lost reply is recovered on the next probe without another receipt.
+A restarted child requires delivery and a new probe. Its receipt replaces the saved
+acknowledgement for the same reviewed publication. A publication carried into another
+generation also receives a receipt for that generation. Repeated probes add no events.
 
 `gatewayMemberCurrent` compares the current intent and entry digest, and requires the
-same policyRevision as at sourceSequence. Receipts, call admissions and unchanged checks
-keep it current. Withdrawal, changed policy, failed checks and replacement intents do not.
+same publicationRevision as at sourceSequence. Receipts, call admissions and unchanged
+checks keep it current. Failed checks pause calls until a fresh unchanged capture.
+Withdrawal, changed policy and replacement intents invalidate the member.
 The delivery checks the latest preparation again before each receipt and before returning.
-The fold retains only a receipt matching its intent and review; no receipt enables calls.
-A matching receipt can release a reviewed drift hold. Publication status is read by
-`libs/projections` from the catalogue tables. Initial publication and the Ready read
-remain unavailable here. Worker wiring, startup route removal, generation admission
-and fresh-install qualification remain separate work.
+The fold retains the latest receipt matching its intent and review. Fresh evidence can
+enable publication or release a reviewed drift hold. Publication status is read by
+`libs/projections` from the catalogue tables and still requires the exact gateway
+observation. Every call also needs the running watch and live gateway acknowledgement.
+Fresh-install qualification remains separate work.
 
 Tests use the pinned gateway, disposable NATS and PostgreSQL. The replay CLI compares
 rebuilt policy with the live projection; it writes no events or gateway configuration.
@@ -3382,6 +3385,7 @@ scope, group membership and current authority checks. It still reads current sav
 and checks current OpenFGA permissions. New events without prepared receipts refuse.
 Preparation runs before the original two-second access check. It does not add conversation
 streams to the watched access streams. The same preparation also serves turn renewal.
+
 ## Recovery after a catalogue check fails
 
 The watch waits for a real read before recording a startup result. If saved evidence
@@ -3391,6 +3395,8 @@ its acknowledgement and any existing drift hold. An unchanged check renews dates
 This restores availability for an unchanged acknowledged publication, while old approvals
 stay cancelled. A genuine change clears the receipt and keeps every tool held for review.
 The live gateway acknowledgement is still required for every published call.
+A gateway restart renews the member receipt after its exact live observation. Status
+then reports Ready for the new process, before and after catalogue replay.
 
 `mcp-dispatch.test.ts` checks watch replacement, failed capture recovery, refused changed
 tools and PostgreSQL replay with real NATS, PostgreSQL, OpenFGA and agentgateway fixtures.

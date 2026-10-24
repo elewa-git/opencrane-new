@@ -95,8 +95,8 @@ function applyConfigurationObservation(state: ToolPolicy, event: EventEnvelope,
   const receipt = mcpConfigurationObservationSchema.parse(event.data);
   const intent = state.publication;
   const next = { ...state, sequence };
-  // Keep only the first receipt for the unchanged publication request.
-  if (state.configurationObservation || !intent || receipt.changeRef !== intent.commandId ||
+  // Refresh the receipt after a new live observation of the same reviewed publication.
+  if (!intent || receipt.changeRef !== intent.commandId ||
       receipt.fragmentDigest !== intent.fragmentDigest ||
       receipt.reviewRevision !== intent.reviewRevision ||
       receipt.reviewRevision !== state.reviewRevision ||

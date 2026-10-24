@@ -39,7 +39,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
-  models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes and checks calls against only the latest current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|checks spending choices, child allowances and payer limits; rechecks access on publish retries; records tool starts, remote outcomes and spending; reads spending calls in pages by original UTC month and original resolution receipts; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
@@ -75,6 +75,8 @@ so a waiting approval can remain valid.
 A change to the tools or their rules ends that approval. Saving a replacement publication
 also ends waiting and unused approvals for that server. Reloading another server keeps
 them valid. A gateway acknowledgement cannot revive an ended approval.
+After a gateway restart, a new live check confirms the unchanged publication for that
+process. Publication status shows that confirmation after the receipt is saved.
 Every model, tool and recall call checks all memory facts already loaded by its turn.
 The server uses the same check before releasing a renewed turn pass. A memory change
 saved after the last memory read is checked at the next renewal or call.

@@ -141,19 +141,20 @@ export function gatewayDelivery(options: {
     if (!gatewayMemberCurrent(rows, member)) return false;
     const operation = { serverId: member.entry.serverId, changeRef: member.changeRef,
       fragmentDigest: member.fragmentDigest };
-    const id = `mcp-observed:${publicationDigest(operation)}`;
+    const { outcome: _outcome, ...observed } = gatewayObservationSchema.parse(observation.event.data);
+    const data = { ...operation, ...observed, reviewRevision: member.entry.reviewRevision,
+      sourceSequence: member.sourceSequence };
+    // Confirm each new process or configuration without repeating a saved observation.
+    const id = `mcp-observed:${publicationDigest(data)}`;
     const state = toolPolicyFromRows(rows);
     for (const row of rows) {
       if (row.event.id === id) {
-        return state.configurationObservation?.changeRef === member.changeRef &&
-          state.configurationObservation.fragmentDigest === member.fragmentDigest;
+        return state.configurationObservation !== undefined &&
+          publicationDigest(state.configurationObservation) === publicationDigest(data);
       }
     }
     const current = await gatewayConfigurationCurrent(options.store, options.silo, delivered.record);
     if (!current || !usable(delivered)) return false;
-    const { outcome: _outcome, ...observed } = gatewayObservationSchema.parse(observation.event.data);
-    const data = { ...operation, ...observed, reviewRevision: member.entry.reviewRevision,
-      sourceSequence: member.sourceSequence };
     const event = envelope(options.silo, subject, 'mcp.configuration_observed', data, id);
     // Refuse withdrawal on this server and newer preparations on the gateway stream.
     const command = { event, expectedSequence: state.sequence, expectedGlobalSequence, deadline };
