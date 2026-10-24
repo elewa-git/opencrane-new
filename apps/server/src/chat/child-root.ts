@@ -13,7 +13,7 @@ type Selection = { threadId: string; computerId: string; generation: number };
 type Admission = Awaited<ReturnType<typeof providerTurnAdmission>>;
 const assistantInput = z.object({ assistantId: chatIdSchema });
 const readyComputer = z.object({
-  assistantId: chatIdSchema, computerId: chatIdSchema, generation: z.int().positive(),
+  assistantId: chatIdSchema, computerId: z.string().min(1), generation: z.int().positive(),
 });
 
 async function loadPreparation(options: Options, value: unknown, selected: Selection) {
