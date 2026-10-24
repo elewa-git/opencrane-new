@@ -481,14 +481,13 @@ beforeAll(startReconciliation, 120_000);
 afterAll(stopReconciliation);
 
 async function candidateFixture(appendUntil = stage.appendUntil,
-  expectedSequence = 0, generation = 1) {
+  expectedSequence = 0, generation = 1, db = waitingCleanupDatabase(pgDb(storage.queue))) {
   const store = await fixture();
   candidateCount += 1;
   const input = { ...stage, siloId: 'test', profileId: `candidate-${candidateCount}`,
     operationId: `operation-${candidateCount}`, appendUntil, expectedSequence, generation };
   const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
   const saved = await store.custody.stage(input, material);
-  const db = pgDb(storage.queue);
   async function reconcile() {
     return reconcileConnectionStage(events.store, db, store.restart(), input);
   }
@@ -731,7 +730,8 @@ async function rechecksUnderCoordination() {
 it('reads the current reference again after acquiring cleanup coordination', rechecksUnderCoordination);
 
 async function excludesConcurrentStage() {
-  const test = await candidateFixture();
+  const database = pgDb(storage.queue);
+  const test = await candidateFixture(stage.appendUntil, 0, 1, database);
   await test.invalidate();
   async function stageInProgress() {
     expect(await test.reconcile()).toEqual({ status: 'retained' });
@@ -1164,8 +1164,8 @@ async function refusesMismatchedSavedStage() {
 it('requires the saved activation to match the private stage before rebuilding records',
   refusesMismatchedSavedStage);
 
-async function cleanupFixture() {
-  const test = await candidateFixture(Date.now() + 60_000);
+async function cleanupFixture(db = waitingCleanupDatabase(pgDb(storage.queue))) {
+  const test = await candidateFixture(Date.now() + 60_000, 0, 1, db);
   await test.activate();
   const rows = await history(events.store, test.subject, 'test');
   const previous = foldConnection(rows).data!;
@@ -1288,7 +1288,8 @@ it.each(['silo', 'subject', 'id', 'data'])(
   'requires the exact saved trigger, including %s', ignoresUnsavedTrigger);
 
 async function holdsLockUntilDeletionFinishes() {
-  const test = await cleanupFixture();
+  const database = pgDb(storage.queue);
+  const test = await cleanupFixture(database);
   const event = await test.revoke();
   const custody = test.store.restart();
   const entered = Promise.withResolvers<void>();
@@ -1608,7 +1609,6 @@ function waitingCleanupDatabase(database: Db): Db {
 
 async function pagedScan(restart: boolean) {
   const test = await candidateFixture();
-  test.db = waitingCleanupDatabase(test.db);
   for (let index = 1; index < 53; index += 1) {
     const candidate = { ...test.input, generation: index + 1, operationId: `scan-${index}` };
     const saved = await test.store.custody.stage(candidate, material);
