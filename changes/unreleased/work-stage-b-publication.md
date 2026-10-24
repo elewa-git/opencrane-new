@@ -1,0 +1,1 @@
+- Freshly reviewed tools become available to chat after their matching gateway confirmation. Publication readiness and the tool list now use the same policy availability check as chat; withdrawn reviews, stale acknowledgements and missing grants cannot enable tool offers.

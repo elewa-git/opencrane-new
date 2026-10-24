@@ -620,7 +620,7 @@ async function savesOneReceiptPerOperation() {
     generation: 1, recordDigest: setup.record.recordDigest });
   const after = toolPolicyFromRows(await history(setup.nats.store, 'mcp-alpha', 'test'));
   expect(after).toMatchObject({ policyRevision: before.policyRevision,
-    reviewRevision: before.reviewRevision, published: false,
+    reviewRevision: before.reviewRevision, published: true,
     configurationObservation: receipts[0]!.event.data });
   expect(await gatewayConfigurationCurrent(setup.nats.store, 'test', setup.record)).toBe(true);
   const bravoEntry = { ...member.entry, serverId: 'bravo' };
@@ -710,7 +710,7 @@ async function rebuildsReceiptsWithoutEffects() {
   const before = await storage.queue.query<{ policy: unknown }>('SELECT policy FROM mcp_catalogue');
   const receipts = await memberReceipts(setup);
   expect(before.rows[0]?.['policy']).toMatchObject({
-    configurationObservation: receipts[0]!.event.data, published: false });
+    configurationObservation: receipts[0]!.event.data, published: true });
   const status = await readPublication(pgDb(storage.queue), 'test', 'alpha');
   expect(status).toMatchObject({ status: 'ready' });
   const position = await setup.nats.store.head();
