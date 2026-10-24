@@ -1,5 +1,64 @@
 # Approval retry during a competing refusal
 
+## Current product correction, 24 October 2026
+
+The branch was fetched and rebased onto `origin/main`. The rebase completed without
+conflicts. The earlier investigation below is retained as history; its unexplained
+refusals are not reclassified as timing failures.
+
+Two unrelated member writes can interrupt consecutive conditional budget publishes.
+The first correction below only retried once. The current actor checks the budget
+after every conflict and reruns the original access check before publishing again.
+It passes the original deadline to conflict reads and checked publishes. It keeps
+one event id and the global publish condition. A changed budget still stops the old
+writer. An unrelated conflict alone does not permanently disable it.
+
+HTTPS dispatch now records its attempt before budget admission. A refused admission
+can close that confirmed attempt with trusted proof that nothing was sent. Approval
+recovery uses this saved proof, rechecks permission, and allows one replacement use.
+It never infers non-dispatch from a generic 403. Lost start replies stay uncertain.
+Private warnings record only the saved request id, fixed stage and reason labels,
+and elapsed milliseconds. The label `budget_write_refused` does not guess whether
+another writer or an unavailable append caused the refusal.
+
+### Current failing-first checks
+
+- `e08f4435f` commits the real-NATS, two-conflict actor cases before `db137609e`.
+  FAIL before the fix: unchanged access was refused and the original deadline was
+  missing from conflict operations. PASS after the fix: eight conflict cases,
+  including expiry, revocation, changed budget and continued writer use.
+- `4fac15301` commits the pre-admission HTTP recovery case before `654109a15`.
+  FAIL before the fix: consumed approval had `canRetry: false` after a refusal
+  with no remote connection. PASS after the fix: both recovery cases send once,
+  refuse the competing retry, keep two approval uses and reserve no money.
+- `a7bac44dc` commits the private diagnostic cases before `d372a5309`.
+  FAIL before the fix: dispatch refusals had no diagnostic. PASS after the fix:
+  fixed labels and elapsed time are present; private canaries, permits and stacks
+  are absent. `6a0b313ef` first requires an accurate budget-refusal label, followed
+  by `65677b6f6`. Both diagnostic cases then pass twice.
+
+Initial logs are `/tmp/ci-flakes-11-{actor,approval,diagnostics}-{red,green}.log`.
+Later logs and JSON reports are in `/tmp/ci-flakes-11-followup/`.
+The first focused lint found complexity and an untyped test value. Those were fixed.
+The first full lint had already read the earlier function and reported its complexity;
+that result remains FAIL. The subsequent lint uses the corrected source.
+
+### Current test setup
+
+Tests run at `nice -n 10`, with one worker per Vitest invocation and no root suite.
+Initial focused checks use the supplied test database on port 55432. Full checks
+and the stress batch use the throwaway `pgtest-ci-flakes-11-followup` database on
+port 33966, with `pg_isready` checked before use. Fixtures create their own NATS,
+OpenFGA, gateway and HTTPS services. No owner stack or Docker daemon settings changed.
+
+Each stress invocation runs both approval recovery cases. The two focused-suite
+passes run alongside the batch to provide load. The stress-only temporary Vitest
+configuration enables private warning logs and changes no test or deadline.
+
+## Earlier investigation
+
+Everything below records the earlier source and its own results.
+
 ## Cause
 
 The reported failure in [main run 40104402066](https://github.com/elewa-git/opencrane-new/actions/runs/40104402066)
