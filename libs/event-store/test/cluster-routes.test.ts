@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -6,6 +6,7 @@ import { connect as connectTcp } from 'node:net';
 import { resolve } from 'node:path';
 import { connect as connectTls } from 'node:tls';
 import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { PermissionViolationError, type NatsConnection } from '@nats-io/transport-node';
 import { createLogger } from '@opencrane/observability';
@@ -19,6 +20,7 @@ import { event } from './testing.ts';
 
 const routeExtensions = 'subjectAltName=DNS:localhost\nextendedKeyUsage=serverAuth,clientAuth\n';
 const roles = ['command', 'projection', 'dispatcher', 'computer', 'gateway'];
+const executeFile = promisify(execFile);
 type Peer = { name: string; port: number; route: number; monitor: number };
 
 async function clusterFixture(missingTrust = false, children: ChildProcess[] = []) {
@@ -264,9 +266,34 @@ async function refusesForeignCertificate() {
 it('refuses a foreign route CA with the right peer name and key usages',
   refusesForeignCertificate);
 
+async function issueExpiredRouteCertificate(directory: string) {
+  await issueCertificate(directory, 'expired', '/CN=expired', routeExtensions);
+  const config = `[ca]
+default_ca = test_ca
+[test_ca]
+database = expired-index.txt
+serial = expired-serial.txt
+new_certs_dir = .
+certificate = ca.crt
+private_key = ca.key
+default_md = sha256
+policy = subject_policy
+[subject_policy]
+commonName = supplied
+`;
+  await writeFile(`${directory}/expired-ca.conf`, config);
+  await writeFile(`${directory}/expired-index.txt`, '');
+  await writeFile(`${directory}/expired-serial.txt`, '01\n');
+  // Set both dates in the past so TLS rejects expiry rather than reversed dates.
+  const opensslArguments = ['ca', '-batch', '-notext', '-config', 'expired-ca.conf',
+    '-in', 'expired.csr', '-out', 'expired.crt', '-extfile', 'expired.ext',
+    '-startdate', '20200101000000Z', '-enddate', '20200102000000Z'];
+  await executeFile('openssl', opensslArguments, { cwd: directory });
+}
+
 async function refusesExpiredCertificate() {
   const directory = `${cluster.directory}/routes`;
-  await issueCertificate(directory, 'expired', '/CN=expired', routeExtensions, -1);
+  await issueExpiredRouteCertificate(directory);
   const certificate = new X509Certificate(await readFile(`${directory}/expired.crt`));
   const validFrom = Date.parse(certificate.validFrom);
   const validTo = Date.parse(certificate.validTo);
