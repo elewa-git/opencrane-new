@@ -1,0 +1,24 @@
+npm notice run typecheck
+npm notice run npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack
+npm notice run typecheck
+npm notice run tsc --noEmit
+npm notice run @opencrane/demo-mcp@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.json
+npm notice run @opencrane/odoo-mcp@0.1.0 typecheck
+npm notice run @opencrane/ops@0.1.0 typecheck
+npm notice run @opencrane/server@0.1.0 typecheck
+npm notice run @opencrane/web@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json
+npm notice run @opencrane/auth@0.1.0 typecheck
+npm notice run @opencrane/authz@0.1.0 typecheck
+npm notice run @opencrane/event-store@0.1.0 typecheck
+npm notice run @opencrane/events@0.1.0 typecheck
+npm notice run @opencrane/handlers@0.1.0 typecheck
+npm notice run @opencrane/models@0.1.0 typecheck
+npm notice run @opencrane/observability@0.1.0 typecheck
+npm notice run @opencrane/projections@0.1.0 typecheck
+npm notice run @opencrane/protocol@0.1.0 typecheck
+npm notice run typecheck:package
+npm notice run tsc --noEmit -p infra/package/tsconfig.json
+npm notice run typecheck:dev-stack
+npm notice run tsc --noEmit -p infra/dev-stack/tsconfig.json

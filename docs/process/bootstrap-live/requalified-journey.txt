@@ -3,7 +3,7 @@ PASS real secondary CI owner sign-in through Zitadel at 1280px
 PASS claimant is the sole joined owner, bound to the real CI subject; OpenFGA owner=true
 Upload transport: net::ERR_FAILED
 PASS browser upload 1280px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; 1 upload retries, 0 preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots
-PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 15776 ms, completion 17586 ms, browser journey 117178 ms; screenshot /home/jente/.config/opencrane/dev-stack-1/workspace-1280.png
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 15776 ms, completion 17586 ms, browser journey 117178 ms; screenshot <stack-dir-1>/workspace-1280.png
 PASS same installation token refused a second time with token_used
 PASS real secondary CI member sign-in through Zitadel at 1280px
 PASS second user refused with owner_exists after the owner claim; exactly one membership event

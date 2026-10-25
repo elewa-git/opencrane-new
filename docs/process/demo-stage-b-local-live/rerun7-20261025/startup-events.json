@@ -1,0 +1,1215 @@
+[
+  {
+    "sequence": 1,
+    "event": {
+      "id": "29fb887d-e2eb-47c1-a03c-1e54df4675a8",
+      "type": "budget.ceiling_set",
+      "commandId": "29fb887d-e2eb-47c1-a03c-1e54df4675a8",
+      "source": "dev-stack-stub-fixture",
+      "time": "2026-10-25T00:42:38.130Z",
+      "subject": "budget-dev",
+      "silo": "dev",
+      "principal": {
+        "id": "dev-only-stub-journey",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "scope": "global",
+        "ceilingCents": 100000,
+        "dailyCeilingCents": 100000,
+        "setBy": "dev-only-stub-journey"
+      }
+    }
+  },
+  {
+    "sequence": 2,
+    "event": {
+      "id": "d36e15cb-8245-4db0-89a5-9e1dbc1cc806",
+      "type": "budget.ceiling_set",
+      "commandId": "d36e15cb-8245-4db0-89a5-9e1dbc1cc806",
+      "source": "models",
+      "time": "2026-10-25T00:42:45.656Z",
+      "subject": "budget-dev",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "scope": "global",
+        "ceilingCents": 100000,
+        "dailyCeilingCents": 100000,
+        "setBy": "installation",
+        "defaultPayingGroupId": "installation-default"
+      }
+    }
+  },
+  {
+    "sequence": 3,
+    "event": {
+      "id": "43fbe4a6-5a81-42ef-a988-35accb5a4202",
+      "type": "budget.period_started",
+      "commandId": "43fbe4a6-5a81-42ef-a988-35accb5a4202",
+      "source": "models",
+      "time": "2026-10-25T00:42:54.640Z",
+      "subject": "budget-dev",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "periodStart": "2026-10-01T00:00:00.000Z"
+      }
+    }
+  },
+  {
+    "sequence": 4,
+    "event": {
+      "id": "5989f2b6-46ef-4e92-a9d2-234f01a617e5",
+      "type": "member.invited",
+      "commandId": "dev-owner-bootstrap-member.invited",
+      "source": "dev-stack-owner-bootstrap",
+      "time": "2026-10-25T00:42:59.868Z",
+      "subject": "member-jente-rosseel",
+      "silo": "dev",
+      "principal": {
+        "id": "378127409465593948",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "memberId": "jente-rosseel",
+        "email": "[EMAIL REDACTED]",
+        "role": "owner",
+        "invitedBy": "dev-only-bootstrap",
+        "invitationId": "invite-jente-rosseel",
+        "invitedIdentity": {
+          "issuer": "https://weownai-oidc-8dwlat.eu1.zitadel.cloud",
+          "sub": "378127409465593948"
+        },
+        "expiresAt": "2026-10-26T00:42:59.845Z"
+      }
+    }
+  },
+  {
+    "sequence": 5,
+    "event": {
+      "id": "35badc26-1c9a-484a-a9bd-9ef5020c293a",
+      "type": "member.joined",
+      "commandId": "dev-owner-bootstrap-member.joined",
+      "source": "dev-stack-owner-bootstrap",
+      "time": "2026-10-25T00:43:00.001Z",
+      "subject": "member-jente-rosseel",
+      "silo": "dev",
+      "principal": {
+        "id": "378127409465593948",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "memberId": "jente-rosseel",
+        "email": "[EMAIL REDACTED]",
+        "displayName": "Jente Rosseel",
+        "role": "owner",
+        "invitationId": "invite-jente-rosseel"
+      }
+    }
+  },
+  {
+    "sequence": 6,
+    "event": {
+      "id": "184ceaaf-4f8b-4436-a187-4ea2d6151341",
+      "type": "assistant.created",
+      "commandId": "35badc26-1c9a-484a-a9bd-9ef5020c293a:assistant.created",
+      "source": "opencrane-lifecycle",
+      "time": "2026-10-25T00:43:03.231Z",
+      "subject": "assistant-personal-f0ac5d35853f86e28f6fad1090da3787",
+      "silo": "dev",
+      "principal": {
+        "id": "computer-lifecycle",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "assistantId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "ownerId": "jente-rosseel",
+        "kind": "personal"
+      }
+    }
+  },
+  {
+    "sequence": 7,
+    "event": {
+      "id": "initial-model-grant-a903d4a3d02507f8f1cb6716aa548e82101391574d8fe3d51dc5b79bc9a3cf30",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-a903d4a3d02507f8f1cb6716aa548e82101391574d8fe3d51dc5b79bc9a3cf30",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.269Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC02LWFzdHJhIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-6-astra",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 8,
+    "event": {
+      "id": "initial-model-grant-61d655a4a990de88a0c9161a451f26241ea071260db17af9a8b02e10d640b8a1",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-61d655a4a990de88a0c9161a451f26241ea071260db17af9a8b02e10d640b8a1",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.289Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC02LjEtc29sIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-6.1-sol",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 9,
+    "event": {
+      "id": "initial-model-grant-28d364648d2ecb449ef5969c2f1e4b1026b05babacb36d8f1a4181276529c9e4",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-28d364648d2ecb449ef5969c2f1e4b1026b05babacb36d8f1a4181276529c9e4",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.312Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC02LWx1bmEiXQ",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-6-luna",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 10,
+    "event": {
+      "id": "initial-model-grant-f4b7fd9e688df2614e73ef275d609370f22024f7892e56654c132713d83618ea",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-f4b7fd9e688df2614e73ef275d609370f22024f7892e56654c132713d83618ea",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.333Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC02LXNvbCJd",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-6-sol",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 11,
+    "event": {
+      "id": "initial-model-grant-78c3a05152ae89c3642c76915a8f9dea429647364d86ee78c44e08e58a1b1cca",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-78c3a05152ae89c3642c76915a8f9dea429647364d86ee78c44e08e58a1b1cca",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.351Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjYtc29sIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.6-sol",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 12,
+    "event": {
+      "id": "initial-model-grant-95533dff1611d5b6c931b732b8503e046a3c36f231e9f4f1306a9be6423e9fd6",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-95533dff1611d5b6c931b732b8503e046a3c36f231e9f4f1306a9be6423e9fd6",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.381Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjYtdGVycmEiXQ",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.6-terra",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 13,
+    "event": {
+      "id": "initial-model-grant-3a948387091658a9027642ee321f6c9ca1cb570aa64d3ec11082fef71a792cf3",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-3a948387091658a9027642ee321f6c9ca1cb570aa64d3ec11082fef71a792cf3",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.527Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjYtbHVuYSJd",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.6-luna",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 14,
+    "event": {
+      "id": "initial-model-grant-0bf0dd3b860dbad7b15793ce27fdb181cd4ebf312a4ce0ff653a68b28bc155c6",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-0bf0dd3b860dbad7b15793ce27fdb181cd4ebf312a4ce0ff653a68b28bc155c6",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.638Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjUiXQ",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.5",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 15,
+    "event": {
+      "id": "initial-model-grant-32a2f375f0ef35ab6f108711935082385b0ce47167d14eecb30633ae2106f676",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-32a2f375f0ef35ab6f108711935082385b0ce47167d14eecb30633ae2106f676",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.653Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjUtcHJvIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.5-pro",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 16,
+    "event": {
+      "id": "3c588558-d519-4a63-aa90-c0864fb557e8",
+      "type": "computer.claimed",
+      "commandId": "184ceaaf-4f8b-4436-a187-4ea2d6151341:computer.claimed",
+      "source": "opencrane-lifecycle",
+      "time": "2026-10-25T00:43:03.654Z",
+      "subject": "computer-personal-f0ac5d35853f86e28f6fad1090da3787",
+      "silo": "dev",
+      "principal": {
+        "id": "computer-lifecycle",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "assistantId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "computerId": "computer-8758be48bf6edde9f441c77886319c13",
+        "generation": 1,
+        "tokenId": "token:e8afb69a-9438-4a8f-8087-b8e2d096b644"
+      }
+    }
+  },
+  {
+    "sequence": 17,
+    "event": {
+      "id": "initial-model-grant-c3fc6c0d05a34437f8fa9b3f105bb3c605392e8de6ccb70fea5b97b584387b33",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-c3fc6c0d05a34437f8fa9b3f105bb3c605392e8de6ccb70fea5b97b584387b33",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.667Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjQiXQ",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.4",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 18,
+    "event": {
+      "id": "initial-model-grant-c45f29274f4c6f850b335700e89707761fd45d45ee2e558b31b48396cf442886",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-c45f29274f4c6f850b335700e89707761fd45d45ee2e558b31b48396cf442886",
+      "source": "models",
+      "time": "2026-10-25T00:43:03.682Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjQtcHJvIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.4-pro",
+        "granteeId": "jente-rosseel",
+        "granteeKind": "member",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 19,
+    "event": {
+      "id": "initial-model-grant-c3770697b53536cb7271caddffd9de0803ced56fafabd276df1bda08024e4fb4",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-c3770697b53536cb7271caddffd9de0803ced56fafabd276df1bda08024e4fb4",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.169Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC02LWFzdHJhIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-6-astra",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 20,
+    "event": {
+      "id": "initial-model-grant-7a756440ca8beea1f0bfff0246cf62c70329ff9cd20c71926842ce2b6bc8aa5d",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-7a756440ca8beea1f0bfff0246cf62c70329ff9cd20c71926842ce2b6bc8aa5d",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.326Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC02LjEtc29sIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-6.1-sol",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 21,
+    "event": {
+      "id": "initial-model-grant-5e89f984ad3f1f91d645cb9b3bfadedf5c8270f09be320fc0d0cf10d13efe5ce",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-5e89f984ad3f1f91d645cb9b3bfadedf5c8270f09be320fc0d0cf10d13efe5ce",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.546Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC02LWx1bmEiXQ",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-6-luna",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 22,
+    "event": {
+      "id": "initial-model-grant-499e38aa2ff1d87698e41662ce78bd263949d2907bf7a208f38f08c1809a7848",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-499e38aa2ff1d87698e41662ce78bd263949d2907bf7a208f38f08c1809a7848",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.617Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC02LXNvbCJd",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-6-sol",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 23,
+    "event": {
+      "id": "initial-model-grant-eaebeb025c51495496afe8d42e44c2b3b388ba12a239fe2ce39f536590f058fe",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-eaebeb025c51495496afe8d42e44c2b3b388ba12a239fe2ce39f536590f058fe",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.632Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjYtc29sIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.6-sol",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 24,
+    "event": {
+      "id": "initial-model-grant-5669fa5761a13a52c0ebd7ce9a08f47548387a6f97dfd93d1395edea421e8a46",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-5669fa5761a13a52c0ebd7ce9a08f47548387a6f97dfd93d1395edea421e8a46",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.643Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjYtdGVycmEiXQ",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.6-terra",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 25,
+    "event": {
+      "id": "initial-model-grant-f495c7470a9257619f7a001f2c7a54b5089f32c866624eb94bbb6a5aab4365d7",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-f495c7470a9257619f7a001f2c7a54b5089f32c866624eb94bbb6a5aab4365d7",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.652Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjYtbHVuYSJd",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.6-luna",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 26,
+    "event": {
+      "id": "initial-model-grant-cf3915d41a324187d021c1bbabf4ceb3a3215322059e866eaaea268bb49aa68c",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-cf3915d41a324187d021c1bbabf4ceb3a3215322059e866eaaea268bb49aa68c",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.663Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjUiXQ",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.5",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 27,
+    "event": {
+      "id": "initial-model-grant-de5b3a457d06a33c934f2785d23d97d06a53a93c010d82a8a3995b0656e41720",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-de5b3a457d06a33c934f2785d23d97d06a53a93c010d82a8a3995b0656e41720",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.679Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjUtcHJvIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.5-pro",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 28,
+    "event": {
+      "id": "initial-model-grant-528f1d749afd6f9420588e568adbcb37e8c9c48e8efa2fe2308cb29b750c6c3f",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-528f1d749afd6f9420588e568adbcb37e8c9c48e8efa2fe2308cb29b750c6c3f",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.756Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjQiXQ",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.4",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 29,
+    "event": {
+      "id": "initial-model-grant-5870f3202872364c09c601e2bce0f0fe869e663e53d5abd444e1c8256dc52eae",
+      "type": "grant.given",
+      "commandId": "initial-model-grant-5870f3202872364c09c601e2bce0f0fe869e663e53d5abd444e1c8256dc52eae",
+      "source": "models",
+      "time": "2026-10-25T00:43:04.780Z",
+      "subject": "grant-WyJtb2RlbCIsImdwdC01LjQtcHJvIl0",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "resourceType": "model",
+        "resourceId": "gpt-5.4-pro",
+        "granteeId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "granteeKind": "assistant",
+        "grantedBy": "installation"
+      }
+    }
+  },
+  {
+    "sequence": 30,
+    "event": {
+      "id": "ownership-seed-dev",
+      "type": "ownership.seeded",
+      "commandId": "ownership-seed-dev",
+      "source": "models",
+      "time": "2026-10-25T00:43:14.177Z",
+      "subject": "ownership-dev",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "ownerIds": [
+          "jente-rosseel"
+        ]
+      }
+    }
+  },
+  {
+    "sequence": 31,
+    "event": {
+      "id": "015b4a2d-bedd-4b5e-bb53-a75b2f1cecb5",
+      "type": "provider.created",
+      "commandId": "4f793953-3cdd-4786-b9d5-da59372d9f7e",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:15.174Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "provider": "openai",
+        "name": "Local model stub",
+        "revision": 1,
+        "changedBy": "jente-rosseel"
+      }
+    }
+  },
+  {
+    "sequence": 32,
+    "event": {
+      "id": "85d85298-c702-47e2-a5db-38b3a3738e96",
+      "type": "provider.key_saved",
+      "commandId": "b60dea28-6cff-4e9d-8479-d8338e1b655c",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:16.126Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 2,
+        "changedBy": "jente-rosseel",
+        "secretRef": "secret:provider-3a7eadb8fbf25915047885fe1f89e324a03c3c9f9eb035c68e24626d089575de"
+      }
+    }
+  },
+  {
+    "sequence": 33,
+    "event": {
+      "id": "454fc1e8-c690-4cb5-8383-a4f0689a2725",
+      "type": "provider.verification_requested",
+      "commandId": "1fb30fa8-199d-4539-8f99-c8311a19b58a",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:17.089Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 2,
+        "changedBy": "jente-rosseel",
+        "attemptId": "1fb30fa8-199d-4539-8f99-c8311a19b58a",
+        "kind": "reachability"
+      }
+    }
+  },
+  {
+    "sequence": 34,
+    "event": {
+      "id": "01569acf-189f-4e38-b1fb-5066813f0aa2",
+      "type": "budget.call_dispatch_admitted",
+      "commandId": "01569acf-189f-4e38-b1fb-5066813f0aa2",
+      "source": "models",
+      "time": "2026-10-25T00:43:17.455Z",
+      "subject": "budget-dev",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "callId": "454fc1e8-c690-4cb5-8383-a4f0689a2725",
+        "decisionId": "454fc1e8-c690-4cb5-8383-a4f0689a2725",
+        "bodyDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "modelCall": {
+          "requestId": "454fc1e8-c690-4cb5-8383-a4f0689a2725",
+          "model": "provider-reachability",
+          "priceTableId": "openai-2026-10-02-all-eur95",
+          "computerId": "provider-dev-stub",
+          "assistantId": "provider-verification",
+          "requesterId": "jente-rosseel",
+          "conversationId": "provider-dev-stub",
+          "turnId": "1fb30fa8-199d-4539-8f99-c8311a19b58a",
+          "threadId": "1fb30fa8-199d-4539-8f99-c8311a19b58a",
+          "payingGroupId": "installation-default",
+          "contextDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    }
+  },
+  {
+    "sequence": 35,
+    "event": {
+      "id": "4524cde5-c523-42cc-af63-ef5bbbb31716",
+      "type": "provider.verification_dispatched",
+      "commandId": "internal:provider:1fb30fa8-199d-4539-8f99-c8311a19b58a:dispatch",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:17.466Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 2,
+        "changedBy": "jente-rosseel",
+        "attemptId": "1fb30fa8-199d-4539-8f99-c8311a19b58a",
+        "kind": "reachability"
+      }
+    }
+  },
+  {
+    "sequence": 36,
+    "event": {
+      "id": "c29a5f5c-9feb-401d-84aa-14adc7d798ae",
+      "type": "provider.verification_recorded",
+      "commandId": "internal:provider:1fb30fa8-199d-4539-8f99-c8311a19b58a:result",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:17.521Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 2,
+        "changedBy": "jente-rosseel",
+        "attemptId": "1fb30fa8-199d-4539-8f99-c8311a19b58a",
+        "kind": "reachability",
+        "outcome": "pass"
+      }
+    }
+  },
+  {
+    "sequence": 37,
+    "event": {
+      "id": "d69a39d2-3689-4c2a-b332-f062b3fa5f88",
+      "type": "provider.verification_requested",
+      "commandId": "aa7a81bd-eb63-4b54-a88d-9923a9a25a75",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:18.446Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 2,
+        "changedBy": "jente-rosseel",
+        "attemptId": "aa7a81bd-eb63-4b54-a88d-9923a9a25a75",
+        "kind": "model",
+        "model": "gpt-6.1-sol",
+        "reservedCents": 1
+      }
+    }
+  },
+  {
+    "sequence": 38,
+    "event": {
+      "id": "a9d93258-d620-4ed0-a2a0-74b095799dc6",
+      "type": "budget.reserved",
+      "commandId": "a9d93258-d620-4ed0-a2a0-74b095799dc6",
+      "source": "models",
+      "time": "2026-10-25T00:43:18.540Z",
+      "subject": "budget-dev",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "dispatchGate": 1,
+        "reservationId": "5edf2d3f-584d-483c-a768-200928219f97",
+        "permitId": "5edf2d3f-584d-483c-a768-200928219f97",
+        "amountCents": 1,
+        "payingGroupId": "installation-default",
+        "assistantId": "provider-verification",
+        "modelCall": {
+          "requestId": "d69a39d2-3689-4c2a-b332-f062b3fa5f88",
+          "model": "gpt-6.1-sol",
+          "priceTableId": "openai-2026-10-02-all-eur95",
+          "computerId": "provider-dev-stub",
+          "assistantId": "provider-verification",
+          "requesterId": "jente-rosseel",
+          "conversationId": "provider-dev-stub",
+          "turnId": "aa7a81bd-eb63-4b54-a88d-9923a9a25a75",
+          "threadId": "aa7a81bd-eb63-4b54-a88d-9923a9a25a75",
+          "payingGroupId": "installation-default",
+          "contextDigest": "354ebe498ec62276de620af258ce2f3f4c2768b0e3ddfef0fd64a093bef8a18c"
+        }
+      }
+    }
+  },
+  {
+    "sequence": 39,
+    "event": {
+      "id": "d69a39d2-3689-4c2a-b332-f062b3fa5f88:allow",
+      "type": "decision.recorded",
+      "commandId": "d69a39d2-3689-4c2a-b332-f062b3fa5f88:allow",
+      "source": "models",
+      "time": "2026-10-25T00:43:18.554Z",
+      "subject": "decision-d69a39d2-3689-4c2a-b332-f062b3fa5f88",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "requestId": "d69a39d2-3689-4c2a-b332-f062b3fa5f88",
+        "permitId": "5edf2d3f-584d-483c-a768-200928219f97",
+        "route": "model",
+        "outcome": "allow",
+        "reason": "provider_verification",
+        "contextDigest": "354ebe498ec62276de620af258ce2f3f4c2768b0e3ddfef0fd64a093bef8a18c"
+      }
+    }
+  },
+  {
+    "sequence": 40,
+    "event": {
+      "id": "0fb20449-0e86-4cc5-92ed-ae6df679a811",
+      "type": "budget.call_dispatch_admitted",
+      "commandId": "0fb20449-0e86-4cc5-92ed-ae6df679a811",
+      "source": "models",
+      "time": "2026-10-25T00:43:18.769Z",
+      "subject": "budget-dev",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "callId": "d69a39d2-3689-4c2a-b332-f062b3fa5f88",
+        "decisionId": "d69a39d2-3689-4c2a-b332-f062b3fa5f88:allow",
+        "bodyDigest": "793d19aa0d51a284232c4031825d5075b483ba62c609d705af3e52de7969f204",
+        "reservationId": "5edf2d3f-584d-483c-a768-200928219f97",
+        "modelCall": {
+          "requestId": "d69a39d2-3689-4c2a-b332-f062b3fa5f88",
+          "model": "gpt-6.1-sol",
+          "priceTableId": "openai-2026-10-02-all-eur95",
+          "computerId": "provider-dev-stub",
+          "assistantId": "provider-verification",
+          "requesterId": "jente-rosseel",
+          "conversationId": "provider-dev-stub",
+          "turnId": "aa7a81bd-eb63-4b54-a88d-9923a9a25a75",
+          "threadId": "aa7a81bd-eb63-4b54-a88d-9923a9a25a75",
+          "payingGroupId": "installation-default",
+          "contextDigest": "354ebe498ec62276de620af258ce2f3f4c2768b0e3ddfef0fd64a093bef8a18c"
+        }
+      }
+    }
+  },
+  {
+    "sequence": 41,
+    "event": {
+      "id": "e8f67d4c-d7f8-4156-a685-48facc43614d",
+      "type": "provider.verification_dispatched",
+      "commandId": "internal:provider:aa7a81bd-eb63-4b54-a88d-9923a9a25a75:dispatch",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:18.775Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 2,
+        "changedBy": "jente-rosseel",
+        "attemptId": "aa7a81bd-eb63-4b54-a88d-9923a9a25a75",
+        "kind": "model",
+        "model": "gpt-6.1-sol",
+        "reservedCents": 1,
+        "reservationId": "5edf2d3f-584d-483c-a768-200928219f97"
+      }
+    }
+  },
+  {
+    "sequence": 42,
+    "event": {
+      "id": "5edf2d3f-584d-483c-a768-200928219f97:effect.observed",
+      "type": "effect.observed",
+      "commandId": "5edf2d3f-584d-483c-a768-200928219f97:effect.observed",
+      "source": "models",
+      "time": "2026-10-25T00:43:18.834Z",
+      "subject": "effect-5edf2d3f-584d-483c-a768-200928219f97",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "permitId": "5edf2d3f-584d-483c-a768-200928219f97",
+        "computerId": "provider-dev-stub",
+        "tool": "gpt-6.1-sol",
+        "destination": "openai",
+        "costCents": 1,
+        "outcome": "success",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 1,
+          "cachedInputTokens": 0,
+          "cacheWriteTokens": 0,
+          "priceTableId": "openai-2026-10-02-all-eur95"
+        }
+      }
+    }
+  },
+  {
+    "sequence": 43,
+    "event": {
+      "id": "be292b38-c16b-49fb-9572-54955d156c0a",
+      "type": "budget.settled",
+      "commandId": "be292b38-c16b-49fb-9572-54955d156c0a",
+      "source": "models",
+      "time": "2026-10-25T00:43:18.864Z",
+      "subject": "budget-dev",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "reservationId": "5edf2d3f-584d-483c-a768-200928219f97",
+        "permitId": "5edf2d3f-584d-483c-a768-200928219f97",
+        "settledCents": 1
+      }
+    }
+  },
+  {
+    "sequence": 44,
+    "event": {
+      "id": "3181df85-d402-41bd-8bc3-48a62b98cf56",
+      "type": "provider.verification_recorded",
+      "commandId": "internal:provider:aa7a81bd-eb63-4b54-a88d-9923a9a25a75:result",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:18.900Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 2,
+        "changedBy": "jente-rosseel",
+        "attemptId": "aa7a81bd-eb63-4b54-a88d-9923a9a25a75",
+        "kind": "model",
+        "model": "gpt-6.1-sol",
+        "reservedCents": 1,
+        "reservationId": "5edf2d3f-584d-483c-a768-200928219f97",
+        "settledCents": 1,
+        "outcome": "pass"
+      }
+    }
+  },
+  {
+    "sequence": 45,
+    "event": {
+      "id": "741aea76-8c80-4b7e-b26c-1aebb0848762",
+      "type": "provider.models_selected",
+      "commandId": "f02d0b2d-7824-4cd7-b512-f0ad2a12f3ac",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:19.520Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 3,
+        "changedBy": "jente-rosseel",
+        "models": [
+          "gpt-6.1-sol",
+          "gpt-6-luna"
+        ]
+      }
+    }
+  },
+  {
+    "sequence": 46,
+    "event": {
+      "id": "5cad042d-0be8-4eb7-9d88-4c0c79ace183",
+      "type": "provider.model_binding_set",
+      "commandId": "system:seed-provider-default",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:20.389Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 3,
+        "changedBy": "jente-rosseel",
+        "kind": "silo_default",
+        "dependantId": "dev",
+        "task": "chat_turn",
+        "expectedProviderSequence": 45,
+        "previousBindingSequence": 0,
+        "state": "active",
+        "model": "gpt-6.1-sol"
+      }
+    }
+  },
+  {
+    "sequence": 47,
+    "event": {
+      "id": "a6e8aa3a-9bde-42df-84a3-5626e8b277a3",
+      "type": "provider.model_binding_set",
+      "commandId": "4d1e63a0-7ddc-408a-a511-3428a2b41f3a",
+      "source": "opencrane-server",
+      "time": "2026-10-25T00:43:21.239Z",
+      "subject": "provider-dev-stub",
+      "silo": "dev",
+      "principal": {
+        "id": "jente-rosseel",
+        "kind": "human"
+      },
+      "correlation": {},
+      "data": {
+        "providerId": "dev-stub",
+        "revision": 3,
+        "changedBy": "jente-rosseel",
+        "kind": "silo_default",
+        "dependantId": "dev",
+        "task": "chat_turn",
+        "expectedProviderSequence": 46,
+        "previousBindingSequence": 46,
+        "state": "active",
+        "model": "gpt-6.1-sol"
+      }
+    }
+  },
+  {
+    "sequence": 48,
+    "event": {
+      "id": "e51e5a3d-603a-46fc-ae35-d1358699f385",
+      "type": "computer.ready",
+      "commandId": "3c588558-d519-4a63-aa90-c0864fb557e8:computer.ready",
+      "source": "opencrane-lifecycle",
+      "time": "2026-10-25T00:43:21.799Z",
+      "subject": "computer-personal-f0ac5d35853f86e28f6fad1090da3787",
+      "silo": "dev",
+      "principal": {
+        "id": "computer-lifecycle",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "assistantId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "computerId": "computer-8758be48bf6edde9f441c77886319c13",
+        "generation": 1,
+        "podUid": "f46b5059-7864-4993-a536-3a32cc7f0daf",
+        "sandboxUid": "2c9e8091-ee0a-4d0e-a0fd-79d8490af06e"
+      }
+    }
+  }
+]

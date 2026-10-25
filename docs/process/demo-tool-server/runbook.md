@@ -24,7 +24,7 @@ or owner-stack changes are part of this work. Missing reachability stays a block
 ## Systemd-owned lifecycle, after the missing inputs are supplied
 
 These are future operator steps, not a deployment receipt. Choose an unused port; do not stop
-its current owner. Run from `/home/jente/dev/wt/demo-tool-server` in Bash as the process owner.
+its current owner. Run from `<worktree>` in Bash as the process owner.
 The transient user unit `opencrane-demo-mcp.service` owns the process. Stopping the unit never
 uses a saved numeric PID. No shell signal trap is installed, and the shell may close after
 startup. Systemd removes the unit when the process exits, including after startup failure.

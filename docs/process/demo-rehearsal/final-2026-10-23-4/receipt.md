@@ -18,7 +18,7 @@ receipt does not establish a failed model reply.
 Pinned source: `fe606c2fcb678bbfe5f424d8a8d3af8fb877611a`, the starting `origin/main`.
 It includes `53e6326a6`, the earlier checker corrections and the Stop correction
 merged in #611. Every live check used that commit. The worktree is
-`/home/jente/dev/wt/demo-final-rehearsal-4`, branch `work/demo-final-rehearsal-4`.
+`<worktree>`, branch `work/demo-final-rehearsal-4`.
 `npm ci` passed. Both requested tools were symlinked from the main checkout's `.tools/`.
 No application, checker, event, dependency or protected test changed.
 

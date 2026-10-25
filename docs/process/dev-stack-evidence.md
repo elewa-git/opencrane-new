@@ -100,7 +100,7 @@ is `infra/dev-stack/up.sh --fresh`; the owner/orchestrator chooses its schedule.
 **PASS:** `work/lifecycle` at `df2492d5e4e19723f248c2bf86c98837f33b4a2a`,
 on `ocn-dev` with the existing `k3d-ocn` gVisor cluster. The main checkout's
 stack was stopped before transferring its ownership marker to
-`/home/jente/dev/wt/lifecycle`. Zitadel files and `zitadel.json` were retained.
+`<worktree>`. Zitadel files and `zitadel.json` were retained.
 No branch application or journey failure was found; no code fix was needed.
 
 | Command | Result | Join → Ready | Resume → Ready | Pod replacement |
@@ -139,7 +139,7 @@ PostgreSQL run above passed.
 ### Restore the owner's main stack
 
 Stopped the worktree stack, restored `stack-owner` to
-`/home/jente/dev/opencrane-new`, and ran that checkout's `up.sh` at
+`<worktree>`, and ran that checkout's `up.sh` at
 `ea1f71c7385e7506b17854ca814c4e513328222f`. This first restoration attempt
 **FAILED**: the dispatcher correctly rejected the saved lifecycle handler set
 with “Dispatcher subscriptions changed; a controlled rebuild is required”.

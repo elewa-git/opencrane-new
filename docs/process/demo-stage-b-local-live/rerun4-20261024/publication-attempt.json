@@ -1,0 +1,134 @@
+{
+  "status": "FAIL",
+  "step": "review and publication",
+  "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+  "grants": [
+    {
+      "command": {
+        "commandId": "e13fdbf7-d681-4595-941d-439a63f4c319",
+        "expectedSequence": 0,
+        "action": "grant",
+        "granteeKind": "member",
+        "granteeId": "zitadel-owner"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "e13fdbf7-d681-4595-941d-439a63f4c319",
+        "operation": "grant.given",
+        "sequence": 371,
+        "changeId": "07ef2b69-40f5-48dc-8786-515b69bac542",
+        "currentSequence": 371,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    },
+    {
+      "command": {
+        "commandId": "9183217a-d500-4984-b661-97ebc6331eb2",
+        "expectedSequence": 371,
+        "action": "grant",
+        "granteeKind": "assistant",
+        "granteeId": "personal-c42ec7d216021c21e399398cb63017af"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "9183217a-d500-4984-b661-97ebc6331eb2",
+        "operation": "grant.given",
+        "sequence": 372,
+        "changeId": "d5c8bd0d-8019-4221-b24b-9535744a9760",
+        "currentSequence": 372,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    }
+  ],
+  "posts": [
+    {
+      "path": "/api/org/integrations/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/access/changes",
+      "status": 200,
+      "command": {
+        "commandId": "e13fdbf7-d681-4595-941d-439a63f4c319",
+        "expectedSequence": 0,
+        "action": "grant",
+        "granteeKind": "member",
+        "granteeId": "zitadel-owner"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "e13fdbf7-d681-4595-941d-439a63f4c319",
+        "operation": "grant.given",
+        "sequence": 371,
+        "changeId": "07ef2b69-40f5-48dc-8786-515b69bac542",
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    },
+    {
+      "path": "/api/org/integrations/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/access/changes",
+      "status": 200,
+      "command": {
+        "commandId": "9183217a-d500-4984-b661-97ebc6331eb2",
+        "expectedSequence": 371,
+        "action": "grant",
+        "granteeKind": "assistant",
+        "granteeId": "personal-c42ec7d216021c21e399398cb63017af"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "9183217a-d500-4984-b661-97ebc6331eb2",
+        "operation": "grant.given",
+        "sequence": 372,
+        "changeId": "d5c8bd0d-8019-4221-b24b-9535744a9760",
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    },
+    {
+      "path": "/api/org/integrations/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/review",
+      "status": 200,
+      "command": {
+        "commandId": "d36e97f8-cd4a-4bea-bc8d-27c63005ebe3",
+        "expectedSequence": 370,
+        "catalogueDigest": "51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d",
+        "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "accountMode": "none",
+        "policyRevision": 369,
+        "tools": [
+          {
+            "name": "read_fixture_quote",
+            "revision": "596e8cdb3e0f5b5e622a9c73c98bf7fc613dc39ab90eaba733abbac7cf3e7eb2",
+            "reviewDigest": "001e7622ab037b2182a348381b88f45675e827f000a40de46ca7a4a7eea4d729",
+            "mode": "allow"
+          },
+          {
+            "name": "change_delivery_slot",
+            "revision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+            "reviewDigest": "31532a92268eb70a4070eeb6ac83ef4938598735a7b59bbf3e36eb6bc3ca66d1",
+            "mode": "ask"
+          }
+        ]
+      },
+      "receipt": {
+        "status": "appended",
+        "sequence": 373
+      }
+    },
+    {
+      "path": "/api/org/integrations/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/publication",
+      "status": 200,
+      "command": {
+        "commandId": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+        "expectedSequence": 373,
+        "reviewRevision": 373
+      },
+      "receipt": {
+        "status": "appended",
+        "sequence": 374
+      }
+    }
+  ]
+}

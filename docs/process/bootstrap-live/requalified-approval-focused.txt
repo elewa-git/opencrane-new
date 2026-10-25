@@ -3,7 +3,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run apps/server/test/approvals.test.ts --maxWorkers=2 -t opens one encrypted Ask card
 
- RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  1 passed (1)

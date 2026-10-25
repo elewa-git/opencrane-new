@@ -1,0 +1,6 @@
+npm notice run npx
+npm notice run 'markdownlint-cli2' docs/process/demo-stage-b-local-live/receipt.md
+markdownlint-cli2 v0.23.3 (markdownlint v0.41.1)
+Finding: docs/process/demo-stage-b-local-live/receipt.md *.md docs/**/*.md spikes/README.md spikes/*/README.md apps/*/README*.md libs/*/README*.md infra/*/README*.md tools/*/README*.md !docs/design/chat/README.robot.md !docs/design/handoff-v2/[0-9]*/README.robot.md
+Linting: 303 files
+Summary: 0 issues in 0 files

@@ -3,7 +3,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/stage-b-read-failure
+ RUN  v5.0.3 <worktree>
 
  ❯ apps/server/test/memory-dispatch.test.ts (92 tests | 26 failed) 1114870ms
    × consumes the memory pass and captured backend context once 16321ms

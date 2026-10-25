@@ -65,7 +65,7 @@ The public entrypoint is tailnet HTTPS; the stack's listener/firewall check pass
 [Sanitised journey output](chat-final-stack-evidence.txt) records the checks.
 The shared owner marker was transferred only after stopping its original stack.
 After qualification, worktree `down.sh` passed (13.62s), the marker was restored
-to `/home/jente/dev/opencrane-new`, and that checkout's `up.sh --fresh` passed.
+to `<worktree>`, and that checkout's `up.sh --fresh` passed.
 The original checkout had independently advanced to `5ca26b6` (#65); its working
 tree is clean and its stack is left running. A final verified HTTPS GET of
 `https://ocn-dev.tail00285e.ts.net/` returned **200** with the app root present.

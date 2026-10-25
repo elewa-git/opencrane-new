@@ -4,7 +4,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/f2-drawers
+ RUN  v5.0.3 <worktree>
 
  ❯ apps/server/test/live-view.test.ts (15 tests | 1 failed) 94768ms
    × bounds redemption of pre-issued tickets and rejects reuse without opening another desktop 8620ms
@@ -71,7 +71,7 @@ locator.waitFor: Error: strict mode violation: getByText('Can\'t reach your pod'
 Call log:
   - waiting for getByText('Can\'t reach your pod', { exact: true }) to be visible
 
-    at /home/jente/dev/wt/f2-drawers/scripts/check-chat-browser.mjs:101:77 {
+    at <worktree>/scripts/check-chat-browser.mjs:101:77 {
   log: [
     "  - waiting for getByText('Can\\'t reach your pod', { exact: true }) to be visible"
   ]

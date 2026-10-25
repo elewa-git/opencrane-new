@@ -1,0 +1,43 @@
+PASS dev-only owner bootstrap: jente-rosseel owner; OpenFGA owner=true
+PASS provider setup: switched on managed calls
+PASS website readiness: 52979ms
+PASS existing members/assistants have model grant history, including explicit revocations
+PASS sign-in: owner and member via Zitadel + PKCE at the selected stack origin at 390px, and member at 1280px, in separate browser contexts
+PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me
+PASS wrong organisation: real Zitadel token refused by a different server org pin; no session
+PASS expired session: real two-second login cookie refused by session and protected API routes
+PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
+PASS new member and assistant model grants reach OpenFGA before chat
+Upload transport: net::ERR_FAILED
+PASS browser upload 390px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; 1 upload retries, 0 preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots
+PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 8205 ms, completion 9780 ms, browser journey 105820 ms; screenshot <stack-dir-1>/workspace-390.png
+PASS browser live view 390px: conversation panel → no grant refused → granted real desktop + Codex/stub turn → revoked in 320 ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets
+Upload transport: net::ERR_FAILED
+Preview transport: net::ERR_ABORTED
+Preview transport: net::ERR_ABORTED
+PASS browser upload 1280px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; 1 upload retries, 0 preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 2929 ms, completion 4700 ms, browser journey 85903 ms; screenshot <stack-dir-1>/workspace-1280.png
+PASS browser live view 1280px: conversation panel → no grant refused → granted real desktop + Codex/stub turn → revoked in 427 ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets
+SKIP approval journey: waits for #45 rows 4, 5 and 14
+PASS joined member HTTP message → streamed Codex/stub reply → projection; 4712 ms (first token 2654 ms); browser reconnect no duplicates
+PASS PDF upload → ClamAV before storage → bridge/MarkItDown → Codex/stub reads Willow-47; EICAR refused
+PASS suspended computer wakes on HTTP message and completes Codex reply; 19431 ms; wake-to-first-token 17497 ms
+PASS assistant/computer lifecycle: join→Ready 20306 ms; resume 19472 ms; Pod replacement kept disk
+PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused
+PASS fresh audit 390px: own stub turn, allow and success shown separately; other member and owner refused private history
+PASS fresh audit 1280px: own stub turn, allow and success shown separately; other member and owner refused private history
+PASS fresh audit: owner organisation metadata without private text; member organisation history refused; live process and model/gateway log canaries absent
+PASS fresh: default paying group migration is idempotent; one installation event, existing ceilings preserved
+PASS fresh 1280px: owner saves paying_group ceiling in UI; over-ceiling stub call refused and retained after reload
+PASS fresh 1280px: owner saves assistant ceiling in UI; over-ceiling stub call refused and retained after reload
+PASS fresh 390px: owner saves paying_group ceiling in UI; over-ceiling stub call refused and retained after reload
+PASS fresh 390px: owner saves assistant ceiling in UI; over-ceiling stub call refused and retained after reload
+PASS npm run replay -- members --verify
+PASS npm run replay -- mcp-catalogue --verify
+PASS loopback HTTP web page
+PASS token boundary: empty 303 body; manual/follow fetch, XHR, DOM and page cookies expose no ID token
+PASS logs: no ID token in the five stack process logs
+PASS form sign-out: top-level POST → 303 → Zitadel → home; no chooser, no session cookie; no-session POST refused
+PASS next sign-in: remembered identity still requires credentials; successful reauthentication
+PASS listener check: all secondary host ports on loopback
+Stack ready: http://127.0.0.1:25106/org/integrations (Zitadel sign-in)

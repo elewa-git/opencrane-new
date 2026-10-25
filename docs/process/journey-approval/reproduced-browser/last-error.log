@@ -4,10 +4,10 @@ node:internal/modules/run_main:123
     ^
 
 AssertionError [ERR_ASSERTION]: Approval journey timeout
-    at until (file:///home/jente/dev/wt/journey-approval/infra/dev-stack/approval-journey.ts:46:30)
-    at async decide (file:///home/jente/dev/wt/journey-approval/infra/dev-stack/approval-journey.ts:102:11)
-    at async approvalJourney (file:///home/jente/dev/wt/journey-approval/infra/dev-stack/approval-journey.ts:120:31)
-    at async file:///home/jente/dev/wt/journey-approval/infra/dev-stack/journey.ts:209:16 {
+    at until (file://<worktree>/infra/dev-stack/approval-journey.ts:46:30)
+    at async decide (file://<worktree>/infra/dev-stack/approval-journey.ts:102:11)
+    at async approvalJourney (file://<worktree>/infra/dev-stack/approval-journey.ts:120:31)
+    at async file://<worktree>/infra/dev-stack/journey.ts:209:16 {
   generatedMessage: false,
   code: 'ERR_ASSERTION',
   actual: false,

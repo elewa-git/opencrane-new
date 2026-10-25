@@ -1,0 +1,10 @@
+npm notice run npx
+npm notice run 'vitest' run libs/events/test/security-rules.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  438 passed (438)
+   Start at  14:38:53
+   Duration  2.25s (transform 41%, import 31%, tests 27%)

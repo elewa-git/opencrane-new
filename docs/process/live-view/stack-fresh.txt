@@ -6,9 +6,9 @@ PASS wrong organisation: real Zitadel token refused by a different server org pi
 PASS expired session: real two-second login cookie refused by session and protected API routes
 PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
 PASS new member and assistant model grants reach OpenFGA before chat
-PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 6047 ms, completion 7859 ms, browser journey 14759 ms; screenshot /home/jente/.config/opencrane/dev-stack-1/workspace-390.png
+PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 6047 ms, completion 7859 ms, browser journey 14759 ms; screenshot <stack-dir-1>/workspace-390.png
 PASS browser live view 390px: conversation panel → no grant refused → granted real desktop + Codex/stub turn → revoked in 334 ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets
-PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 4051 ms, completion 5800 ms, browser journey 13729 ms; screenshot /home/jente/.config/opencrane/dev-stack-1/workspace-1280.png
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 4051 ms, completion 5800 ms, browser journey 13729 ms; screenshot <stack-dir-1>/workspace-1280.png
 PASS browser live view 1280px: conversation panel → no grant refused → granted real desktop + Codex/stub turn → revoked in 341 ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets
 PASS joined member HTTP message → streamed Codex/stub reply → projection; 4188 ms (first token 2139 ms); browser reconnect no duplicates
 PASS suspended computer wakes on HTTP message and completes Codex reply; 29127 ms; wake-to-first-token 27194 ms

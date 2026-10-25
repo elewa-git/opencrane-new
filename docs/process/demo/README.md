@@ -58,8 +58,8 @@ files, budgets, service data and computer disks.**
 
 ```sh
 DEV_STACK_ID=1 \
-ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key \
-DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key \
+ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key \
+DEV_REAL_PROVIDER_FILE=<worktree>/.keys/.openai-key \
 infra/dev-stack/demo-up.sh
 # After rehearsal, remove only the id printed by the launcher.
 infra/dev-stack/down.sh --id 1
@@ -120,7 +120,7 @@ uses product APIs; it does not change the existing owner bootstrap.
 
 ```sh
 # OWNER-RUN ONLY, after every prerequisite above is satisfied.
-cd /home/jente/dev/opencrane-new
+cd <worktree>
 infra/dev-stack/down.sh --id owner
 export DEMO_SHA=f11df5c56fe08e4bac477cc4c3f375288568c0cd
 printf '%s\n' "$DEMO_SHA" | rg '^[0-9a-f]{40}$' || exit 1
@@ -128,8 +128,8 @@ git fetch origin
 git merge-base --is-ancestor "$DEMO_SHA" origin/main || exit 1
 git switch --detach "$DEMO_SHA"
 npm ci
-export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
-export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
+export DEV_REAL_PROVIDER_FILE=<worktree>/.keys/.openai-key
+export ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key
 export COMPUTER_IDLE_MS=14400000
 infra/dev-stack/up.sh --id owner --owner-run --fresh
 DEV_STACK_ID=owner node --experimental-strip-types infra/dev-stack/demo-seed-run.ts --owner-run
@@ -144,8 +144,8 @@ The credential is supplied by file path only; it is never placed in a command ar
 
 ```sh
 # OWNER-RUN ONLY, after the qualified refresh above.
-cd /home/jente/dev/opencrane-new
-export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
+cd <worktree>
+export DEV_REAL_PROVIDER_FILE=<worktree>/.keys/.openai-key
 export COMPUTER_IDLE_MS=14400000
 infra/dev-stack/up.sh --id owner --owner-run
 ```
@@ -166,7 +166,7 @@ terminal and absent fleet marker as the real start.
 
 ```sh
 # OWNER-RUN ONLY, after accepting the data wipe above.
-cd /home/jente/dev/opencrane-new
+cd <worktree>
 infra/dev-stack/down.sh --id owner
 unset DEV_REAL_PROVIDER_FILE
 infra/dev-stack/up.sh --id owner --owner-run --fresh

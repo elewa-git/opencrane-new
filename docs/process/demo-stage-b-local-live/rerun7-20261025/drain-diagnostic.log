@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/provider-drain-diagnostic.test.ts --maxWorkers=2 -t reproduces a drain conflict caused only by computer readiness
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 16 skipped (17)
+   Start at  00:46:32
+   Duration  12.10s (transform 56%, tests 26%, import 19%)
+
+  Transform  transforming modules took 6.61s · 56% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

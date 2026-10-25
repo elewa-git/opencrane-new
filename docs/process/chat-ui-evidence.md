@@ -23,7 +23,7 @@ Zitadel is restricted to organisation `393311211338337681`; access is tailnet-on
 | Computer image build and qualification | PASS | `b2a2852e085fe852a61125f48258630ac284ab1090e35fcf235e9eed9b8a3994`; licence, gVisor, fresh/resumed isolation and document checks |
 | Fresh dev stack | PASS | `up.sh --fresh`: real browser chat/Stop/reload, wake, disk persistence, replay, logout and listener checks |
 | Plain dev stack up | PASS | `up.sh`: same browser and lifecycle journey against retained state |
-| Main checkout restored fresh | PASS | Stopped this stack, restored `stack-owner` to `/home/jente/dev/opencrane-new`, ran its `up.sh --fresh`; checkout remains clean |
+| Main checkout restored fresh | PASS | Stopped this stack, restored `stack-owner` to `<worktree>`, ran its `up.sh --fresh`; checkout remains clean |
 
 [Computer qualification receipt](chat-computer-evidence.json) records the exact
 image digest. Its `source` is the base HEAD at build time; the build includes

@@ -30,6 +30,15 @@ async function startsFromWakePodFixture(): Promise<void> {
       if (/Stub ready \d+/u.test(output)) break;
     }
     assert.match(output, /Stub ready \d+/u);
+    const port = /Stub ready (\d+)/u.exec(output)?.[1];
+    assert(port);
+    const message = { type: 'message', role: 'user', content: 'Say hello.' };
+    const request = { method: 'POST', body: JSON.stringify({ input: [message] }) };
+    const response = await fetch(`http://127.0.0.1:${port}/v1/responses`, request);
+    assert.equal(response.status, 200);
+    const events = await response.text();
+    assert.match(events, /Hello from your computer\./u);
+    assert.match(events, /event: response.completed/u);
   } finally {
     if (stub.exitCode === null) {
       const stopped = once(stub, 'exit');

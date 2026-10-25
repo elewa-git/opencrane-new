@@ -1,0 +1,359 @@
+{
+  "policy": {
+    "silo": "dev",
+    "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+    "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+    "accountMode": "none",
+    "startupReviewRequired": false,
+    "rejected": false,
+    "published": true,
+    "driftHeld": false,
+    "reviewRevision": 323,
+    "publication": {
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "publishedBy": "zitadel-owner",
+      "commandId": "b64c51b7-5a4c-46b5-9fbd-a365d1086388",
+      "expectedSequence": 323,
+      "reviewRevision": 323,
+      "fragmentDigest": "9cb1d4ca84fceec1899da5d73c9228c826f9204160e4cb03f6686b81d17863aa"
+    },
+    "publicationRevision": 324,
+    "configurationObservation": {
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "changeRef": "b64c51b7-5a4c-46b5-9fbd-a365d1086388",
+      "reviewRevision": 323,
+      "fragmentDigest": "9cb1d4ca84fceec1899da5d73c9228c826f9204160e4cb03f6686b81d17863aa",
+      "sourceSequence": 324,
+      "generation": 1,
+      "recordDigest": "4164e35b6328719c72038079bb1bca40a4166b6d332cfa11365b875629f03c51",
+      "configDigest": "daed4f0e203e02898774fc120f91117d0bab4f5f4848c175d297920bd548d2fc",
+      "processRef": "e7e5fe0d-6a8f-4f52-934d-acb1fe755ff9",
+      "observedAt": "2026-10-24T17:35:52.163Z"
+    },
+    "sequence": 369,
+    "policyRevision": 324,
+    "catalogue": {
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "toolCount": 2,
+      "schemaDigest": "51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d",
+      "serverInfo": {
+        "name": "OpenCrane demo",
+        "version": "0.1.0"
+      },
+      "checkedAt": "2026-10-24T17:35:21.971Z",
+      "expiresAt": "2026-10-24T17:40:21.971Z",
+      "discoverResult": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"OpenCrane demo\",\"version\":\"0.1.0\"}},\"cacheScope\":\"public\",\"capabilities\":{\"experimental\":{\"io.opencrane/expectedRevision\":{}},\"tools\":{}},\"resultType\":\"complete\",\"serverInfo\":{\"name\":\"OpenCrane demo\",\"version\":\"0.1.0\"},\"supportedVersions\":[\"2026-07-28\"],\"ttlMs\":300000}",
+      "rejectedTools": [],
+      "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "accountMode": "none",
+      "tools": [
+        {
+          "name": "read_fixture_quote",
+          "revision": "596e8cdb3e0f5b5e622a9c73c98bf7fc613dc39ab90eaba733abbac7cf3e7eb2",
+          "reviewed": false,
+          "readOnly": true,
+          "destructive": false,
+          "costCents": 0,
+          "review": {
+            "action": "Read demo quote",
+            "consequence": "Read the synthetic quote without changing it.",
+            "targetArgument": "quoteId",
+            "fields": [
+              "quoteId"
+            ],
+            "stepUp": false
+          },
+          "definition": "{\"_meta\":{\"io.opencrane/costCents\":0,\"io.opencrane/review\":{\"action\":\"Read demo quote\",\"consequence\":\"Read the synthetic quote without changing it.\",\"fields\":[\"quoteId\"],\"stepUp\":false,\"targetArgument\":\"quoteId\"}},\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Read a synthetic demo quote. No supplier is contacted.\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"}},\"required\":[\"quoteId\"],\"type\":\"object\"},\"name\":\"read_fixture_quote\",\"outputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"amountCents\":{\"const\":12500,\"type\":\"number\"},\"effectCount\":{\"maximum\":9007199254740991,\"minimum\":0,\"type\":\"integer\"},\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\",\"amountCents\",\"effectCount\"],\"type\":\"object\"}}"
+        },
+        {
+          "name": "change_delivery_slot",
+          "revision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+          "reviewed": false,
+          "readOnly": false,
+          "destructive": true,
+          "costCents": 0,
+          "review": {
+            "action": "Change demo delivery slot",
+            "consequence": "Replace the slot in this demo process. No real delivery changes.",
+            "targetArgument": "quoteId",
+            "fields": [
+              "quoteId",
+              "slot"
+            ],
+            "stepUp": false
+          },
+          "definition": "{\"_meta\":{\"io.opencrane/costCents\":0,\"io.opencrane/review\":{\"action\":\"Change demo delivery slot\",\"consequence\":\"Replace the slot in this demo process. No real delivery changes.\",\"fields\":[\"quoteId\",\"slot\"],\"stepUp\":false,\"targetArgument\":\"quoteId\"}},\"annotations\":{\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":false},\"description\":\"Change only the synthetic demo delivery slot.\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\"],\"type\":\"object\"},\"name\":\"change_delivery_slot\",\"outputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"amountCents\":{\"const\":12500,\"type\":\"number\"},\"effectCount\":{\"maximum\":9007199254740991,\"minimum\":0,\"type\":\"integer\"},\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\",\"amountCents\",\"effectCount\"],\"type\":\"object\"}}"
+        }
+      ]
+    },
+    "previousCatalogue": null,
+    "checkedAt": "2026-10-24T17:35:24.392Z",
+    "expiresAt": "2026-10-24T17:40:24.392Z",
+    "tools": [
+      {
+        "name": "read_fixture_quote",
+        "revision": "596e8cdb3e0f5b5e622a9c73c98bf7fc613dc39ab90eaba733abbac7cf3e7eb2",
+        "reviewed": true,
+        "readOnly": true,
+        "costCents": 0,
+        "mode": "allow",
+        "suggestion": "allow"
+      },
+      {
+        "name": "change_delivery_slot",
+        "revision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+        "reviewed": true,
+        "readOnly": false,
+        "costCents": 0,
+        "mode": "ask",
+        "suggestion": "ask"
+      }
+    ]
+  },
+  "rehearsedAt": "2026-10-24T17:38:28.719Z",
+  "conversationId": "82160bf9-524c-49a3-838f-0b8cec127521",
+  "callId": "exec-5bcb3e8d-11c1-4709-a5d1-4d8c8b347149",
+  "records": {
+    "request": {
+      "sequence": 361,
+      "event": {
+        "id": "request-24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+        "type": "tool.approval_requested",
+        "commandId": "request-24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+        "source": "models",
+        "time": "2026-10-24T17:38:14.682Z",
+        "subject": "approval-24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "approvalId": "24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+          "conversationId": "82160bf9-524c-49a3-838f-0b8cec127521",
+          "turnId": "c7f30632-8b14-479d-ba8c-0e6f8fd6bafe",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "requesterId": "zitadel-owner",
+          "tool": "change_delivery_slot",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolRevision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+          "schemaDigest": "51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d",
+          "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "profile": "none",
+          "policySequence": 324,
+          "dispatchBinding": "f9a6072f47d42fa6e9c0f0c0ebb2f091e939e573d29ee9c1550d395778302690",
+          "digestVersion": "lossless-json-v1",
+          "argumentsDigest": "e793a7eb3b624ed1194a9d57ed23495b48f9cabadd60e07f38237e16f5bb1846",
+          "expiresAt": "2026-10-24T17:53:14.664Z",
+          "stepUp": false,
+          "missingFields": [],
+          "ciphertext": "B+Lhg8mCjQJUdKLW7sKl9hPqxvGuycqMoEss2PFb2DkKGTWVZpUEG4Txs4xTQ9DnscxEqkd51wF+8RQWJwvYyDqUFiicGuUcqZSp1zlqaYV3hE/QYdWbTKvUcYPAZST7uIBJVeMRW6yimN++IrySigHQibccjXCEwtnad0+Kf2dl/0a8IhIFmcvUgTTJDIoDGpW0Kw3/NdCZ8Zojeuv0NdV1hiUfoLhMrDKimhrkyuiJbWdifqif8IvwEF5bi+RvjyE1xK+LlzOQSPZoUQ8k+klndnxsV8U9JY+iQxPpwa8mi1M4ib6PsiGXh/sElR8Lpx2EuXbJ2Hq+Jje4Vgfgdl5GA6BEHtPzZ06cnAxmCN0KIUxNn/GPdPq2TbmD9xarbPTZ92Aw5SREUdTiCRJhNw0PMpUF8/awvuEP2vCZOegcaYgCuJ1NvTMuzhZljFq5NUuThS3hUSD8vmij/jq0ejG+t+UuOIKmSSCCAIAV",
+          "keyId": "key:e03d768feebab753bdfc1ce1c0c1eee2d4b758a99542f40f38d30a99e39d81a4",
+          "reviewDigest": "d431b6f784f3604a7a5fbce07e2d51929b77e88f6c35f4d48d11b34c2e777a7f"
+        }
+      }
+    },
+    "approvalDecision": {
+      "sequence": 365,
+      "event": {
+        "id": "0ce8af50-b015-4496-92f0-43c7aef63bad",
+        "type": "approval.decided",
+        "commandId": "0ce8af50-b015-4496-92f0-43c7aef63bad",
+        "source": "opencrane-server",
+        "time": "2026-10-24T17:38:19.243Z",
+        "subject": "approval-24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-owner",
+          "kind": "human"
+        },
+        "correlation": {},
+        "data": {
+          "approvalId": "24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+          "decision": "approved",
+          "decidedBy": "zitadel-owner"
+        }
+      }
+    },
+    "approvalUse": {
+      "sequence": 366,
+      "event": {
+        "id": "23a93b5a-08a0-4601-875b-29e2b59508ae",
+        "type": "approval.used",
+        "commandId": "23a93b5a-08a0-4601-875b-29e2b59508ae",
+        "source": "models",
+        "time": "2026-10-24T17:38:20.632Z",
+        "subject": "approval-24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "approvalId": "24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+          "permitId": "42965118-05dd-4d5e-a724-18922daf42e9"
+        }
+      }
+    },
+    "dispatchDecision": {
+      "sequence": 367,
+      "event": {
+        "id": "65645649-e867-42c4-9096-3a4f0a0bfcc5",
+        "type": "decision.recorded",
+        "commandId": "65645649-e867-42c4-9096-3a4f0a0bfcc5",
+        "source": "models",
+        "time": "2026-10-24T17:38:20.641Z",
+        "subject": "decision-42965118-05dd-4d5e-a724-18922daf42e9",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {
+          "approval": "24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15"
+        },
+        "data": {
+          "callId": "exec-5bcb3e8d-11c1-4709-a5d1-4d8c8b347149",
+          "logicalRequestId": "24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "change_delivery_slot",
+          "requestId": "42965118-05dd-4d5e-a724-18922daf42e9",
+          "requesterId": "zitadel-owner",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "conversationId": "82160bf9-524c-49a3-838f-0b8cec127521",
+          "turnId": "c7f30632-8b14-479d-ba8c-0e6f8fd6bafe",
+          "permitId": "42965118-05dd-4d5e-a724-18922daf42e9",
+          "route": "mcp",
+          "outcome": "allow",
+          "reason": "approval_used",
+          "contextDigest": "0b1be619a2a9ace120b0325b027a7fcbf8bbc3d8944d34545beed2f47f5874f8"
+        }
+      }
+    },
+    "dispatch": {
+      "sequence": 371,
+      "event": {
+        "id": "42965118-05dd-4d5e-a724-18922daf42e9:tool-dispatch",
+        "type": "tool.dispatch_recorded",
+        "commandId": "42965118-05dd-4d5e-a724-18922daf42e9:tool-dispatch",
+        "source": "models",
+        "time": "2026-10-24T17:38:21.292Z",
+        "subject": "decision-42965118-05dd-4d5e-a724-18922daf42e9",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "conversationId": "82160bf9-524c-49a3-838f-0b8cec127521",
+          "turnId": "c7f30632-8b14-479d-ba8c-0e6f8fd6bafe",
+          "callId": "exec-5bcb3e8d-11c1-4709-a5d1-4d8c8b347149",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "change_delivery_slot",
+          "requestId": "42965118-05dd-4d5e-a724-18922daf42e9",
+          "logicalRequestId": "24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+          "approvalId": "24b73ad050a72fcd3ac9025049d92837d219c56d0d1fdb626be2e4e641fbed15",
+          "startedAt": "2026-10-24T17:38:21.082Z",
+          "durationMs": 209,
+          "outcome": "responded",
+          "evidence": "adapter_response_received",
+          "adapter": {
+            "decisionId": "65645649-e867-42c4-9096-3a4f0a0bfcc5",
+            "startId": "42965118-05dd-4d5e-a724-18922daf42e9:tool-dispatch-started",
+            "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+            "generation": 1,
+            "recordDigest": "4164e35b6328719c72038079bb1bca40a4166b6d332cfa11365b875629f03c51",
+            "reviewRevision": 323
+          }
+        }
+      }
+    }
+  },
+  "publicationCommandId": "b64c51b7-5a4c-46b5-9fbd-a365d1086388",
+  "gateway": {
+    "generation": 1,
+    "recordDigest": "4164e35b6328719c72038079bb1bca40a4166b6d332cfa11365b875629f03c51",
+    "configDigest": "daed4f0e203e02898774fc120f91117d0bab4f5f4848c175d297920bd548d2fc",
+    "processRef": "e7e5fe0d-6a8f-4f52-934d-acb1fe755ff9",
+    "outcome": "loaded",
+    "observedAt": "2026-10-24T17:35:52.163Z"
+  },
+  "grants": [
+    {
+      "command": {
+        "commandId": "af4d974d-63f6-409a-ba46-62b2c7842c90",
+        "expectedSequence": 0,
+        "action": "grant",
+        "granteeKind": "member",
+        "granteeId": "zitadel-owner"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "af4d974d-63f6-409a-ba46-62b2c7842c90",
+        "operation": "grant.given",
+        "sequence": 321,
+        "changeId": "924546f3-59e2-4d58-9f8a-33474ccd7d42",
+        "currentSequence": 321,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    },
+    {
+      "command": {
+        "commandId": "da80c9c3-e1d1-4ed9-85ea-d6e53c9040cc",
+        "expectedSequence": 321,
+        "action": "grant",
+        "granteeKind": "assistant",
+        "granteeId": "personal-c42ec7d216021c21e399398cb63017af"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "da80c9c3-e1d1-4ed9-85ea-d6e53c9040cc",
+        "operation": "grant.given",
+        "sequence": 322,
+        "changeId": "62907f42-09d7-4d72-9f42-98fc35481edb",
+        "currentSequence": 322,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    }
+  ],
+  "before": {
+    "quoteId": "DEMO-001",
+    "amountCents": 12500,
+    "slot": "morning",
+    "effectCount": 0
+  },
+  "waiting": {
+    "quoteId": "DEMO-001",
+    "amountCents": 12500,
+    "slot": "morning",
+    "effectCount": 0
+  },
+  "after": {
+    "quoteId": "DEMO-001",
+    "amountCents": 12500,
+    "slot": "afternoon",
+    "effectCount": 1
+  },
+  "turnId": "c7f30632-8b14-479d-ba8c-0e6f8fd6bafe",
+  "replyTurnId": "c7f30632-8b14-479d-ba8c-0e6f8fd6bafe",
+  "requesterId": "zitadel-owner",
+  "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+  "approval": {
+    "decision": "approve",
+    "decidedBy": "zitadel-owner",
+    "turnId": "c7f30632-8b14-479d-ba8c-0e6f8fd6bafe"
+  },
+  "toolReservedCents": 0,
+  "toolChargedCents": 0
+}

@@ -7,7 +7,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2 --reporter=verbose
 
- RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+ RUN  v5.0.3 <worktree>
 
  ✓ libs/auth/test/codec.test.ts > createEnvelopeCodec > rejects an authentication tag that is too long 5ms
  ✓ libs/auth/test/codec.test.ts > createEnvelopeCodec > rejects a nonce cut down to 4 bytes 7ms

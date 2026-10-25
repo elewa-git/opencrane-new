@@ -4,22 +4,22 @@ npm notice run npm run lint:code && npm run lint:deps && npm run lint:unused && 
 npm notice run lint:code
 npm notice run eslint .
 
-/home/jente/dev/wt/p3-16-liveview/apps/computer/src/channel.ts
+<worktree>/apps/computer/src/channel.ts
   43:8  warning  Function 'bridgeChannel' has too many lines (100). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/p3-16-liveview/apps/server/src/auth/routes.ts
+<worktree>/apps/server/src/auth/routes.ts
   55:8  warning  Function 'registerAuthRoutes' has too many lines (93). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/p3-16-liveview/apps/server/src/computers/view.ts
+<worktree>/apps/server/src/computers/view.ts
   26:8  warning  Function 'registerLiveView' has too many lines (131). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/p3-16-liveview/apps/server/src/realtime.ts
+<worktree>/apps/server/src/realtime.ts
   17:8  warning  Function 'memberSubscription' has too many lines (82). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/p3-16-liveview/apps/server/src/websocket.ts
+<worktree>/apps/server/src/websocket.ts
   51:8  warning  Function 'attachWebSocketServer' has too many lines (119). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/p3-16-liveview/libs/authz/src/members.ts
+<worktree>/libs/authz/src/members.ts
   30:8  warning  Function 'memberAuthorisation' has too many lines (106). Maximum allowed is 80  max-lines-per-function
 
 ✖ 6 problems (0 errors, 6 warnings)
@@ -71,7 +71,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/p3-16-liveview
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  64 passed | 3 skipped (67)
@@ -96,7 +96,7 @@ Application bundle generation complete. [10.300 seconds] - 2026-10-03T09:05:46.2
 ▲ [WARNING] src/app/app.css exceeded maximum budget. Budget 4.00 kB was not met by 3.32 kB with a total of 7.32 kB.
 
 
-Output location: /home/jente/dev/wt/p3-16-liveview/apps/web/dist/web
+Output location: <worktree>/apps/web/dist/web
 
 
 COMMAND RECEIPT: web-test
@@ -126,7 +126,7 @@ chunk-KTNSMZVU.js                     | viewer                             | 202
 Application bundle generation complete. [10.132 seconds] - 2026-10-03T08:49:02.612Z
 
 
- RUN  v4.1.11 /home/jente/dev/wt/p3-16-liveview/apps/web
+ RUN  v4.1.11 <worktree>/apps/web
 
 
  Test Files  5 passed (5)
@@ -139,7 +139,7 @@ COMMAND RECEIPT: k3d-final
 npm notice run npx
 npm notice run 'vitest' run apps/server/test/live-view-k3d.test.ts --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/p3-16-liveview
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  1 passed (1)

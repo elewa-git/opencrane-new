@@ -1,0 +1,58 @@
+{
+  "status": "FAIL",
+  "step": "Fresh install provider setup",
+  "message": "Provider setup drain: 409",
+  "drainRequest": {
+    "startedAt": "2026-10-25T00:43:21.733Z",
+    "completedAt": "2026-10-25T00:43:21.977Z",
+    "status": 409
+  },
+  "lastProviderPosition": 47,
+  "concurrentEvent": {
+    "sequence": 48,
+    "event": {
+      "id": "e51e5a3d-603a-46fc-ae35-d1358699f385",
+      "type": "computer.ready",
+      "commandId": "3c588558-d519-4a63-aa90-c0864fb557e8:computer.ready",
+      "source": "opencrane-lifecycle",
+      "time": "2026-10-25T00:43:21.799Z",
+      "subject": "computer-personal-f0ac5d35853f86e28f6fad1090da3787",
+      "silo": "dev",
+      "principal": {
+        "id": "computer-lifecycle",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "assistantId": "personal-f0ac5d35853f86e28f6fad1090da3787",
+        "computerId": "computer-8758be48bf6edde9f441c77886319c13",
+        "generation": 1,
+        "podUid": "f46b5059-7864-4993-a536-3a32cc7f0daf",
+        "sandboxUid": "2c9e8091-ee0a-4d0e-a0fd-79d8490af06e"
+      }
+    }
+  },
+  "interpretation": "The drain command requires the entire event log to remain unchanged. Computer readiness moved that position during the request. No provider or budget change followed provider position 47.",
+  "websiteStarted": false,
+  "stageBCollectorStarted": false,
+  "checker": "NOT RUN",
+  "captures": "NOT RUN",
+  "ownerSignIn": "NOT RUN",
+  "paidCalls": 0,
+  "productCodeChanged": false,
+  "harnessWorkaround": false,
+  "diagnostic": {
+    "result": "PASS: reproduced HTTP 409",
+    "fixture": "Original provider-drain test setup with a computer.ready event inserted immediately before the real drain append",
+    "assertions": [
+      "Global expected position equals the position before computer readiness",
+      "HTTP response is 409",
+      "Only computer readiness is appended",
+      "Provider position is unchanged",
+      "Managed calls remain disabled and draining remains false"
+    ],
+    "scope": "Isolated test services; no live stack writes",
+    "testCases": 1,
+    "otherCasesSkipped": 16
+  }
+}

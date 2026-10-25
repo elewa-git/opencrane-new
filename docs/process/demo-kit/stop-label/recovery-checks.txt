@@ -6,7 +6,7 @@ Restored the product file byte for byte before both final passing runs.
 npm notice run npx
 npm notice run 'vitest' run apps/computer/test/recovery-stop.test.ts --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/demo-stop-label
+ RUN  v5.0.3 <worktree>
 
  ❯ apps/computer/test/recovery-stop.test.ts (1 test | 1 failed) 1713ms
    × keeps Reply failed and partial text live and after reload when recovery precedes Stop delivery 1710ms
@@ -81,7 +81,7 @@ First final passing run, after moving the test into apps/web/test:
 npm notice run npx
 npm notice run 'vitest' run apps/web/test/recovery-stop.test.ts apps/computer/test/turn-model.test.ts apps/server/test/tool-reports.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/demo-stop-label
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  4 passed (4)
@@ -94,7 +94,7 @@ Second final passing run:
 npm notice run npx
 npm notice run 'vitest' run apps/web/test/recovery-stop.test.ts apps/computer/test/turn-model.test.ts apps/server/test/tool-reports.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/demo-stop-label
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  4 passed (4)

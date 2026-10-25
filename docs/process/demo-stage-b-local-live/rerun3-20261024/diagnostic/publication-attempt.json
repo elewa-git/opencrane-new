@@ -1,0 +1,52 @@
+{
+  "status": "FAIL",
+  "step": "review and publication",
+  "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+  "grants": [
+    {
+      "command": {
+        "commandId": "94c5549d-177c-4477-bbd4-fe8c23653c88",
+        "expectedSequence": 0,
+        "action": "grant",
+        "granteeKind": "member",
+        "granteeId": "zitadel-owner"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "94c5549d-177c-4477-bbd4-fe8c23653c88",
+        "operation": "grant.given",
+        "sequence": 373,
+        "changeId": "ecdfdaad-40a2-4588-bbc2-67b00abc36b2",
+        "currentSequence": 374,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    },
+    {
+      "command": {
+        "commandId": "c7149c05-cf86-4027-98d1-e0e4bd880431",
+        "expectedSequence": 373,
+        "action": "grant",
+        "granteeKind": "assistant",
+        "granteeId": "personal-c42ec7d216021c21e399398cb63017af"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "c7149c05-cf86-4027-98d1-e0e4bd880431",
+        "operation": "grant.given",
+        "sequence": 374,
+        "changeId": "a86fd230-a2aa-4951-a388-e5fcd7b4c19f",
+        "currentSequence": 374,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    }
+  ],
+  "posts": []
+}

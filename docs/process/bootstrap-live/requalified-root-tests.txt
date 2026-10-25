@@ -3,7 +3,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+ RUN  v5.0.3 <worktree>
 
  ❯ apps/server/test/approvals.test.ts (22 tests | 1 failed | 1 skipped) 177852ms
    × opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart 17863ms

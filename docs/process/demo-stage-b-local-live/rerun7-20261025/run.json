@@ -1,0 +1,147 @@
+{
+  "status": "FAIL",
+  "source": {
+    "source": "80242cfea2c731ac54360599314aac0b462d9d43",
+    "rebasedOnto": "3b623f52a841601a62c99629790cf4f2d08e0839",
+    "branch": "work/demo-stage-b-local-live",
+    "rebaseFinished": true,
+    "mainIsAncestor": true,
+    "slot": 1
+  },
+  "liveFailure": "Provider drain conflicts with unrelated computer readiness",
+  "approvalProof": "NOT RUN",
+  "captures": "NOT RUN",
+  "captureCount": 0,
+  "ownerSignIn": "NOT RUN",
+  "paidCalls": 0,
+  "sourceChecks": {
+    "drain-diagnostic": "PASS",
+    "tests-1": "PASS",
+    "tests-2": "PASS",
+    "read-integration-1": "PASS",
+    "read-integration-2": "PASS",
+    "security": "PASS",
+    "lint": "PASS",
+    "typecheck-final": "PASS",
+    "events": "PASS",
+    "knip": "PASS",
+    "changelog": "PASS"
+  },
+  "cleanup": {
+    "status": "PASS",
+    "slot": 1,
+    "directoryRemoved": true,
+    "composeContainersRemoved": true,
+    "namespacesRemoved": true,
+    "testDatabase": "PASS: removed with volume",
+    "ownerStackTouched": false,
+    "paidCalls": 0
+  },
+  "files": [
+    {
+      "name": "changelog.log",
+      "bytes": 87,
+      "sha256": "37cf7e6e60bcf0c312bb626a56b11276abd03c70d9dc70334b4b5b2d681e02c8"
+    },
+    {
+      "name": "check-exits.txt",
+      "bytes": 145,
+      "sha256": "31fb433540c9872d5644fbd87f36433273bb844451b7090ef8f3a06de148f5eb"
+    },
+    {
+      "name": "cleanup.json",
+      "bytes": 224,
+      "sha256": "ad0dc5d642213d7df2a60f49139498cf2dad1988a351fadcb9110804506a9a32"
+    },
+    {
+      "name": "drain-diagnostic-addition.txt",
+      "bytes": 1504,
+      "sha256": "e5ed38eecef9519e9d114245f9f9ba102b29539f94b9ffae34b773162e7d0c6a"
+    },
+    {
+      "name": "drain-diagnostic.log",
+      "bytes": 607,
+      "sha256": "3befa67d1e1250b557c8052b9dc2b01be1fe09971571384adaefc0709f0d2fdd"
+    },
+    {
+      "name": "events.log",
+      "bytes": 192,
+      "sha256": "7cac846dfd58b0a730a4b7ac796e83f046febdc939260e6b6b04e870c20884ea"
+    },
+    {
+      "name": "failure.json",
+      "bytes": 2113,
+      "sha256": "5929e4accea6b32d8b6e0415c73f1484a2d06b03668b2eccc4843a73b558259f"
+    },
+    {
+      "name": "knip.log",
+      "bytes": 197,
+      "sha256": "0b24692a4cd87fa2f9d206709a0bcb7bd7ee68011a0b2bbe9de031e8d57ff3b8"
+    },
+    {
+      "name": "lint.log",
+      "bytes": 6364,
+      "sha256": "310420e19ccbe2757657b503e6b93a25bfabeeadcc180c6507fb5502dffee35c"
+    },
+    {
+      "name": "ownership.json",
+      "bytes": 320,
+      "sha256": "066bb89cfc5ecea14328c238d9e7780f4f776d9aa16abc60d06419bf2e5357aa"
+    },
+    {
+      "name": "read-integration-1.log",
+      "bytes": 251,
+      "sha256": "985855d2c151596d3c151a029d157620719b4881be2d0bf01b501865f8e7c228"
+    },
+    {
+      "name": "read-integration-2.log",
+      "bytes": 251,
+      "sha256": "32ae2ebe949bec1fc61eeff9b0f0398a9ea47a4d5c28fb7e79480106f8512093"
+    },
+    {
+      "name": "runtime.json",
+      "bytes": 513,
+      "sha256": "98d4cb5716dd740600d2fd1e122cfa14ab864800da9334a553b8f7bab1d3a88b"
+    },
+    {
+      "name": "security.log",
+      "bytes": 265,
+      "sha256": "fa55f5d2b57de29f97a9255611e4856d4a0aebaf61cecf29a44f210afcbdf366"
+    },
+    {
+      "name": "server.log",
+      "bytes": 11201,
+      "sha256": "bca7aaa39f883da8bc7d0c2fc039717e8b01766a2460c6838f23fa602eac2ff1"
+    },
+    {
+      "name": "source.json",
+      "bytes": 229,
+      "sha256": "e839a9f1d616ac6219e244b0da14833a6dc9fe5d55079464dab4345ebac9c77e"
+    },
+    {
+      "name": "startup-events.json",
+      "bytes": 36869,
+      "sha256": "0e37204651d5d41be723b257344687c13d8e17d34373cac29efa67f901f5f5e9"
+    },
+    {
+      "name": "tests-1.log",
+      "bytes": 13418,
+      "sha256": "a18e24f985dbbc7060926f4e14b9f550f3326e407141dffe6efbd1859dfae7dd"
+    },
+    {
+      "name": "tests-2.log",
+      "bytes": 13415,
+      "sha256": "95a10b8da75fb07c4918c3f14092bbf7720fe7b87e8aa28296223adb564adf32"
+    },
+    {
+      "name": "typecheck-final.log",
+      "bytes": 1244,
+      "sha256": "b87edc4166374a407e6071e0682559bfff7bd7d41c4dbf267c290686ae4fa75a"
+    },
+    {
+      "name": "up.log",
+      "bytes": 97,
+      "sha256": "177a194aa351483f01162d09d19935344ff73fbafa146e13b92698ed107c9b65"
+    }
+  ]
+}

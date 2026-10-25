@@ -1,0 +1,2566 @@
+{
+  "source": "174a5436c36d351fdbae7444bc97b3e4b87453bb",
+  "status": "PARTIAL",
+  "failedSteps": [
+    "TimeoutError: locator.waitFor: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0.', { exact: true }) to be visible\u001b[22m\n"
+  ],
+  "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+  "personal": {
+    "memberId": "zitadel-owner",
+    "displayName": "zitadel-owner",
+    "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+    "memoryAdmission": {
+      "state": "disabled",
+      "failing": [
+        "The P4-15 private memory checks have not run yet."
+      ]
+    }
+  },
+  "grants": [
+    {
+      "command": {
+        "commandId": "e13fdbf7-d681-4595-941d-439a63f4c319",
+        "expectedSequence": 0,
+        "action": "grant",
+        "granteeKind": "member",
+        "granteeId": "zitadel-owner"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "e13fdbf7-d681-4595-941d-439a63f4c319",
+        "operation": "grant.given",
+        "sequence": 371,
+        "changeId": "07ef2b69-40f5-48dc-8786-515b69bac542",
+        "currentSequence": 371,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    },
+    {
+      "command": {
+        "commandId": "9183217a-d500-4984-b661-97ebc6331eb2",
+        "expectedSequence": 371,
+        "action": "grant",
+        "granteeKind": "assistant",
+        "granteeId": "personal-c42ec7d216021c21e399398cb63017af"
+      },
+      "receipt": {
+        "status": "appended",
+        "commandId": "9183217a-d500-4984-b661-97ebc6331eb2",
+        "operation": "grant.given",
+        "sequence": 372,
+        "changeId": "d5c8bd0d-8019-4221-b24b-9535744a9760",
+        "currentSequence": 372,
+        "projection": {
+          "content": "current",
+          "iam": "current"
+        },
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61"
+      }
+    }
+  ],
+  "policy": {
+    "silo": "dev",
+    "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+    "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+    "accountMode": "none",
+    "startupReviewRequired": false,
+    "rejected": false,
+    "published": true,
+    "driftHeld": false,
+    "reviewRevision": 373,
+    "publication": {
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "publishedBy": "zitadel-owner",
+      "commandId": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+      "expectedSequence": 373,
+      "reviewRevision": 373,
+      "fragmentDigest": "443931d6491a4fc4ccb9f356687f81e2524a0cd894b7b774587c03b10fcceeb8"
+    },
+    "publicationRevision": 374,
+    "configurationObservation": {
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "changeRef": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+      "reviewRevision": 373,
+      "fragmentDigest": "443931d6491a4fc4ccb9f356687f81e2524a0cd894b7b774587c03b10fcceeb8",
+      "sourceSequence": 374,
+      "generation": 1,
+      "recordDigest": "c809822633df535758f910b7d497fe0db2dc679db6ab35445eb9de692ac461b2",
+      "configDigest": "c2da0ba5b675a12e06882d40ce3036d8201d42b6aace73bbcbc072f382e74e43",
+      "processRef": "0fae7546-ed06-486a-b137-4a05aba8296e",
+      "observedAt": "2026-10-24T14:21:15.389Z"
+    },
+    "sequence": 377,
+    "policyRevision": 374,
+    "catalogue": {
+      "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "toolCount": 2,
+      "schemaDigest": "51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d",
+      "serverInfo": {
+        "name": "OpenCrane demo",
+        "version": "0.1.0"
+      },
+      "checkedAt": "2026-10-24T14:20:18.617Z",
+      "expiresAt": "2026-10-24T14:25:18.617Z",
+      "discoverResult": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"OpenCrane demo\",\"version\":\"0.1.0\"}},\"cacheScope\":\"public\",\"capabilities\":{\"experimental\":{\"io.opencrane/expectedRevision\":{}},\"tools\":{}},\"resultType\":\"complete\",\"serverInfo\":{\"name\":\"OpenCrane demo\",\"version\":\"0.1.0\"},\"supportedVersions\":[\"2026-07-28\"],\"ttlMs\":300000}",
+      "rejectedTools": [],
+      "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+      "accountMode": "none",
+      "tools": [
+        {
+          "name": "read_fixture_quote",
+          "revision": "596e8cdb3e0f5b5e622a9c73c98bf7fc613dc39ab90eaba733abbac7cf3e7eb2",
+          "reviewed": false,
+          "readOnly": true,
+          "destructive": false,
+          "costCents": 0,
+          "review": {
+            "action": "Read demo quote",
+            "consequence": "Read the synthetic quote without changing it.",
+            "targetArgument": "quoteId",
+            "fields": [
+              "quoteId"
+            ],
+            "stepUp": false
+          },
+          "definition": "{\"_meta\":{\"io.opencrane/costCents\":0,\"io.opencrane/review\":{\"action\":\"Read demo quote\",\"consequence\":\"Read the synthetic quote without changing it.\",\"fields\":[\"quoteId\"],\"stepUp\":false,\"targetArgument\":\"quoteId\"}},\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Read a synthetic demo quote. No supplier is contacted.\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"}},\"required\":[\"quoteId\"],\"type\":\"object\"},\"name\":\"read_fixture_quote\",\"outputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"amountCents\":{\"const\":12500,\"type\":\"number\"},\"effectCount\":{\"maximum\":9007199254740991,\"minimum\":0,\"type\":\"integer\"},\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\",\"amountCents\",\"effectCount\"],\"type\":\"object\"}}"
+        },
+        {
+          "name": "change_delivery_slot",
+          "revision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+          "reviewed": false,
+          "readOnly": false,
+          "destructive": true,
+          "costCents": 0,
+          "review": {
+            "action": "Change demo delivery slot",
+            "consequence": "Replace the slot in this demo process. No real delivery changes.",
+            "targetArgument": "quoteId",
+            "fields": [
+              "quoteId",
+              "slot"
+            ],
+            "stepUp": false
+          },
+          "definition": "{\"_meta\":{\"io.opencrane/costCents\":0,\"io.opencrane/review\":{\"action\":\"Change demo delivery slot\",\"consequence\":\"Replace the slot in this demo process. No real delivery changes.\",\"fields\":[\"quoteId\",\"slot\"],\"stepUp\":false,\"targetArgument\":\"quoteId\"}},\"annotations\":{\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":false},\"description\":\"Change only the synthetic demo delivery slot.\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\"],\"type\":\"object\"},\"name\":\"change_delivery_slot\",\"outputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"amountCents\":{\"const\":12500,\"type\":\"number\"},\"effectCount\":{\"maximum\":9007199254740991,\"minimum\":0,\"type\":\"integer\"},\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\",\"amountCents\",\"effectCount\"],\"type\":\"object\"}}"
+        }
+      ]
+    },
+    "previousCatalogue": null,
+    "checkedAt": "2026-10-24T14:20:20.751Z",
+    "expiresAt": "2026-10-24T14:25:20.751Z",
+    "tools": [
+      {
+        "name": "read_fixture_quote",
+        "revision": "596e8cdb3e0f5b5e622a9c73c98bf7fc613dc39ab90eaba733abbac7cf3e7eb2",
+        "reviewed": true,
+        "readOnly": true,
+        "costCents": 0,
+        "mode": "allow",
+        "suggestion": "allow"
+      },
+      {
+        "name": "change_delivery_slot",
+        "revision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+        "reviewed": true,
+        "readOnly": false,
+        "costCents": 0,
+        "mode": "ask",
+        "suggestion": "ask"
+      }
+    ]
+  },
+  "policyAvailable": true,
+  "before": {
+    "at": "2026-10-24T14:22:50.787Z",
+    "value": {
+      "quoteId": "DEMO-001",
+      "amountCents": 12500,
+      "slot": "morning",
+      "effectCount": 0
+    }
+  },
+  "spendingBefore": {
+    "models": [
+      {
+        "id": "gpt-6-astra",
+        "short": {
+          "inputCents": 950000,
+          "cachedInputCents": 95000,
+          "cacheWriteCents": 1187500,
+          "outputCents": 4750000
+        },
+        "long": {
+          "inputCents": 1900000,
+          "cachedInputCents": 190000,
+          "cacheWriteCents": 2375000,
+          "outputCents": 7125000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-6.1-sol",
+        "short": {
+          "inputCents": 190000,
+          "cachedInputCents": 9500,
+          "cacheWriteCents": 237500,
+          "outputCents": 950000
+        },
+        "long": {
+          "inputCents": 380000,
+          "cachedInputCents": 19000,
+          "cacheWriteCents": 475000,
+          "outputCents": 1425000
+        },
+        "default": true,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-6-luna",
+        "short": {
+          "inputCents": 9500,
+          "cachedInputCents": 950,
+          "cacheWriteCents": 11875,
+          "outputCents": 47500
+        },
+        "long": {
+          "inputCents": 19000,
+          "cachedInputCents": 1900,
+          "cacheWriteCents": 23750,
+          "outputCents": 71250
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-6-sol",
+        "short": {
+          "inputCents": 190000,
+          "cachedInputCents": 19000,
+          "cacheWriteCents": 237500,
+          "outputCents": 950000
+        },
+        "long": {
+          "inputCents": 380000,
+          "cachedInputCents": 38000,
+          "cacheWriteCents": 475000,
+          "outputCents": 1425000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "short": {
+          "inputCents": 380000,
+          "cachedInputCents": 38000,
+          "cacheWriteCents": 475000,
+          "outputCents": 1900000
+        },
+        "long": {
+          "inputCents": 760000,
+          "cachedInputCents": 76000,
+          "cacheWriteCents": 950000,
+          "outputCents": 2850000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.6-terra",
+        "short": {
+          "inputCents": 190000,
+          "cachedInputCents": 19000,
+          "cacheWriteCents": 237500,
+          "outputCents": 1140000
+        },
+        "long": {
+          "inputCents": 380000,
+          "cachedInputCents": 38000,
+          "cacheWriteCents": 475000,
+          "outputCents": 1710000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "short": {
+          "inputCents": 19000,
+          "cachedInputCents": 1900,
+          "cacheWriteCents": 23750,
+          "outputCents": 114000
+        },
+        "long": {
+          "inputCents": 38000,
+          "cachedInputCents": 3800,
+          "cacheWriteCents": 47500,
+          "outputCents": 171000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.5",
+        "short": {
+          "inputCents": 475000,
+          "cachedInputCents": 47500,
+          "cacheWriteCents": null,
+          "outputCents": 2850000
+        },
+        "long": {
+          "inputCents": 950000,
+          "cachedInputCents": 95000,
+          "cacheWriteCents": null,
+          "outputCents": 4275000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.5-pro",
+        "short": {
+          "inputCents": 2850000,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 17100000
+        },
+        "long": {
+          "inputCents": 5700000,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 25650000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.4",
+        "short": {
+          "inputCents": 237500,
+          "cachedInputCents": 23750,
+          "cacheWriteCents": null,
+          "outputCents": 1425000
+        },
+        "long": {
+          "inputCents": 475000,
+          "cachedInputCents": 47500,
+          "cacheWriteCents": null,
+          "outputCents": 2137500
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.4-pro",
+        "short": {
+          "inputCents": 2850000,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 17100000
+        },
+        "long": {
+          "inputCents": 5700000,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 25650000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5-nano",
+        "short": {
+          "inputCents": 4750,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 38000
+        },
+        "long": {
+          "inputCents": 4750,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 38000
+        },
+        "default": false,
+        "retired": true,
+        "priceTableId": "openai-2026-10-02-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5-mini",
+        "short": {
+          "inputCents": 23750,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 190000
+        },
+        "long": {
+          "inputCents": 23750,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 190000
+        },
+        "default": false,
+        "retired": true,
+        "priceTableId": "openai-2026-10-02-eur95",
+        "perTokens": 1000000000
+      }
+    ],
+    "taskRouting": {
+      "chat_turn": {
+        "model": "gpt-6.1-sol",
+        "reason": "Complex tasks that also need to manage time and cost"
+      },
+      "ambiguous_problem": {
+        "model": "gpt-6-astra",
+        "reason": "Ambiguous problems needing broad context"
+      },
+      "deep_analysis": {
+        "model": "gpt-6-astra",
+        "reason": "Demanding analysis with exacting requirements"
+      },
+      "ambitious_deliverable": {
+        "model": "gpt-6-astra",
+        "reason": "Ambitious projects needing complete results"
+      },
+      "scoped_task": {
+        "model": "gpt-6-luna",
+        "reason": "Well-scoped problem-solving"
+      },
+      "triage": {
+        "model": "gpt-6-luna",
+        "reason": "Prioritising work with clear constraints"
+      },
+      "frequent_automation": {
+        "model": "gpt-6-luna",
+        "reason": "Frequent automation"
+      },
+      "conversation_title": {
+        "model": "gpt-6-luna",
+        "reason": "Short conversation titles"
+      },
+      "classify_upload": {
+        "model": "gpt-6-luna",
+        "reason": "Simple data extraction and classification"
+      },
+      "summary": {
+        "model": "gpt-6-luna",
+        "reason": "Scoped summaries"
+      }
+    },
+    "priceTableId": "openai-2026-10-02-all-eur95",
+    "shortContextTokens": 272000,
+    "todayCents": 11,
+    "monthCents": 11,
+    "reservedCents": 32,
+    "dailyCeilingCents": 5000,
+    "ceilingCents": 20000,
+    "budget": {
+      "todayCents": 11,
+      "monthCents": 11,
+      "reservedCents": 32,
+      "dailyCeilingCents": 5000,
+      "ceilingCents": 20000,
+      "stops": [
+        {
+          "id": "cbe2f546-1880-4899-a37b-ce5fb49f12c2",
+          "position": 328,
+          "reasons": [
+            {
+              "scope": "paying_group",
+              "scopeId": "budget-journey",
+              "kind": "monthly",
+              "reason": "zero_ceiling",
+              "periodStart": "2026-10-01T00:00:00.000Z",
+              "resetAt": "2026-11-01T00:00:00.000Z",
+              "ceilingCents": 0,
+              "settledCents": 0,
+              "reservedCents": 0,
+              "attemptedBoundCents": 0,
+              "configurationId": "cbe2f546-1880-4899-a37b-ce5fb49f12c2"
+            }
+          ]
+        },
+        {
+          "id": "0fdc5043-debb-485a-8074-c7b0caf72f20",
+          "position": 337,
+          "reasons": [
+            {
+              "scope": "assistant",
+              "scopeId": "team-budget-journey",
+              "kind": "monthly",
+              "reason": "zero_ceiling",
+              "periodStart": "2026-10-01T00:00:00.000Z",
+              "resetAt": "2026-11-01T00:00:00.000Z",
+              "ceilingCents": 0,
+              "settledCents": 0,
+              "reservedCents": 0,
+              "attemptedBoundCents": 0,
+              "configurationId": "0fdc5043-debb-485a-8074-c7b0caf72f20"
+            }
+          ]
+        },
+        {
+          "id": "a24d6b06-c949-431c-bd6c-a7101b56254b",
+          "position": 346,
+          "reasons": [
+            {
+              "scope": "paying_group",
+              "scopeId": "budget-journey",
+              "kind": "monthly",
+              "reason": "zero_ceiling",
+              "periodStart": "2026-10-01T00:00:00.000Z",
+              "resetAt": "2026-11-01T00:00:00.000Z",
+              "ceilingCents": 0,
+              "settledCents": 0,
+              "reservedCents": 0,
+              "attemptedBoundCents": 0,
+              "configurationId": "a24d6b06-c949-431c-bd6c-a7101b56254b"
+            }
+          ]
+        },
+        {
+          "id": "c16ca8e8-5b97-4917-94c0-908659487e1f",
+          "position": 355,
+          "reasons": [
+            {
+              "scope": "assistant",
+              "scopeId": "team-budget-journey",
+              "kind": "monthly",
+              "reason": "zero_ceiling",
+              "periodStart": "2026-10-01T00:00:00.000Z",
+              "resetAt": "2026-11-01T00:00:00.000Z",
+              "ceilingCents": 0,
+              "settledCents": 0,
+              "reservedCents": 0,
+              "attemptedBoundCents": 0,
+              "configurationId": "c16ca8e8-5b97-4917-94c0-908659487e1f"
+            }
+          ]
+        }
+      ],
+      "stoppedWork": [],
+      "sequence": 367,
+      "defaultPayingGroupId": "installation-default",
+      "periodStart": "2026-10-01T00:00:00.000Z",
+      "ceilings": [
+        {
+          "scope": "paying_group",
+          "scopeId": "budget-journey",
+          "ceilingCents": 20000,
+          "todayCents": 0,
+          "monthCents": 0,
+          "reservedCents": 0,
+          "dailyCeilingCents": 5000
+        },
+        {
+          "scope": "assistant",
+          "scopeId": "team-budget-journey",
+          "ceilingCents": 20000,
+          "todayCents": 0,
+          "monthCents": 0,
+          "reservedCents": 0,
+          "dailyCeilingCents": 5000
+        }
+      ]
+    }
+  },
+  "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+  "chatRecords": [
+    {
+      "sequence": 378,
+      "event": {
+        "id": "create-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "type": "conversation.created",
+        "commandId": "create-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "source": "opencrane-server",
+        "time": "2026-10-24T14:22:53.990Z",
+        "subject": "conversation-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-owner",
+          "kind": "human"
+        },
+        "correlation": {},
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "createdBy": "zitadel-owner",
+          "mode": "agent_session"
+        }
+      }
+    },
+    {
+      "sequence": 379,
+      "event": {
+        "id": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "type": "message.posted",
+        "commandId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "source": "opencrane-server",
+        "time": "2026-10-24T14:22:55.115Z",
+        "subject": "conversation-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-owner",
+          "kind": "human"
+        },
+        "correlation": {},
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "authorId": "zitadel-owner",
+          "authorKind": "human",
+          "ciphertext": "gaj2YR0xPZYeuiN9s3dHPAXH+8EFc2kF0MZlEz6rQbmoJ/QYgBJMS8oQ1rX8ABBgb0eCwShg+yjWY5elC5rjZIe6EKLDwV3qMoG5z7HX9oL0vEVJ5EbMn7K4TNt3dUPslj9UqEmoPc/MK7hGXRtBZnK6",
+          "keyId": "key:554cc992745745cc83fb98ac9d22cfeed14aa06534b4d233280cfa107a20342f",
+          "contentType": "text"
+        }
+      }
+    },
+    {
+      "sequence": 380,
+      "event": {
+        "id": "bridge-35ea4fc4cfaafc7184c7ccb61a3d21dadbdca6d10dcb6cee73408a104bfa943c",
+        "type": "agent.turn_started",
+        "commandId": "bridge-35ea4fc4cfaafc7184c7ccb61a3d21dadbdca6d10dcb6cee73408a104bfa943c",
+        "source": "computer-bridge",
+        "time": "2026-10-24T14:23:02.433Z",
+        "subject": "conversation-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "silo": "dev",
+        "principal": {
+          "id": "personal-c42ec7d216021c21e399398cb63017af",
+          "kind": "agent"
+        },
+        "correlation": {},
+        "report": {
+          "sequence": 1,
+          "digest": "401807ebf8a900cbcdc8135928435dedf8bbeed6230342b1b04b00c69803d87b",
+          "computerId": "computer-530750581c929c9e05a1a2bcff59adce"
+        },
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "threadId": "01a16e4b-18df-7110-a75b-9825e4a6166a"
+        }
+      }
+    },
+    {
+      "sequence": 387,
+      "event": {
+        "id": "bridge-7037718f281cce07520c05f1326ec38970cc7ff9f4ef8f017866687c6a70430e",
+        "type": "agent.tool_call_started",
+        "commandId": "bridge-7037718f281cce07520c05f1326ec38970cc7ff9f4ef8f017866687c6a70430e",
+        "source": "computer-bridge",
+        "time": "2026-10-24T14:23:08.431Z",
+        "subject": "conversation-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "silo": "dev",
+        "principal": {
+          "id": "personal-c42ec7d216021c21e399398cb63017af",
+          "kind": "agent"
+        },
+        "correlation": {},
+        "report": {
+          "sequence": 2,
+          "digest": "a9fd2ee59f21607bc2c1a955060e2168d57e2633f550e24b76691fa7230d43eb",
+          "computerId": "computer-530750581c929c9e05a1a2bcff59adce"
+        },
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "callId": "exec-73a68b89-8d1b-4391-a71c-376ac9909187",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "read_fixture_quote"
+        }
+      }
+    },
+    {
+      "sequence": 390,
+      "event": {
+        "id": "bridge-a3beb12963c0e2eacc0c60576957d4a6e9a5deb72c01373cec4a0806d33bcdd7",
+        "type": "agent.tool_call_finished",
+        "commandId": "bridge-a3beb12963c0e2eacc0c60576957d4a6e9a5deb72c01373cec4a0806d33bcdd7",
+        "source": "computer-bridge",
+        "time": "2026-10-24T14:23:09.166Z",
+        "subject": "conversation-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "silo": "dev",
+        "principal": {
+          "id": "personal-c42ec7d216021c21e399398cb63017af",
+          "kind": "agent"
+        },
+        "correlation": {},
+        "report": {
+          "sequence": 3,
+          "digest": "17224b9c731ed2cd8fba9e02c13184e20e5826126762f4dc821860226fc8d8ff",
+          "computerId": "computer-530750581c929c9e05a1a2bcff59adce"
+        },
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "callId": "exec-73a68b89-8d1b-4391-a71c-376ac9909187",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "read_fixture_quote",
+          "status": "failed",
+          "durationMs": 633
+        }
+      }
+    },
+    {
+      "sequence": 394,
+      "event": {
+        "id": "bridge-4c00d59550fa8738624f01ab971d016a508c60b06a6c9cd9e9fadf125e204ed3",
+        "type": "agent.message_delta",
+        "commandId": "bridge-4c00d59550fa8738624f01ab971d016a508c60b06a6c9cd9e9fadf125e204ed3",
+        "source": "computer-bridge",
+        "time": "2026-10-24T14:23:11.287Z",
+        "subject": "conversation-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "silo": "dev",
+        "principal": {
+          "id": "personal-c42ec7d216021c21e399398cb63017af",
+          "kind": "agent"
+        },
+        "correlation": {},
+        "report": {
+          "sequence": 4,
+          "digest": "4b119d7cbdd45dae9640872cd243ad5be69e16ea3f4defbdc4d1c2c2d534f4a3",
+          "computerId": "computer-530750581c929c9e05a1a2bcff59adce"
+        },
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "messageId": "msg_7f915515-8676-4816-a156-6638cc891431",
+          "ciphertext": "mEUtd19nNRRlO6kT9cquxs2c5VmQHS/NaHeGQMF6QqIKGzrtWeLEKEljVKof+Mw5UB1bMMqeuieSyZV5z7bzpAU=",
+          "keyId": "key:554cc992745745cc83fb98ac9d22cfeed14aa06534b4d233280cfa107a20342f",
+          "contentType": "text"
+        }
+      }
+    },
+    {
+      "sequence": 396,
+      "event": {
+        "id": "bridge-67c00f69b5ba6a1ccc9637d1257b86a13e3689ecafc13fd1ece7e98a7adeffbf",
+        "type": "agent.message_completed",
+        "commandId": "bridge-67c00f69b5ba6a1ccc9637d1257b86a13e3689ecafc13fd1ece7e98a7adeffbf",
+        "source": "computer-bridge",
+        "time": "2026-10-24T14:23:11.559Z",
+        "subject": "conversation-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "silo": "dev",
+        "principal": {
+          "id": "personal-c42ec7d216021c21e399398cb63017af",
+          "kind": "agent"
+        },
+        "correlation": {},
+        "report": {
+          "sequence": 5,
+          "digest": "d310c9e82bf8ce5812bcc4e6d9061b0d39db9fdbbb43f99b2052892350cacd0d",
+          "computerId": "computer-530750581c929c9e05a1a2bcff59adce"
+        },
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "messageId": "msg_7f915515-8676-4816-a156-6638cc891431",
+          "ciphertext": "rL6zg4m6NaHVGv9NfrVcoQbzpLTO1vZ3LLFROE1y0+M0MoU7cclth9/CVj5TN5cb0wLv09GyEJQttwVabqQ2rfw=",
+          "keyId": "key:554cc992745745cc83fb98ac9d22cfeed14aa06534b4d233280cfa107a20342f",
+          "contentType": "text"
+        }
+      }
+    },
+    {
+      "sequence": 397,
+      "event": {
+        "id": "bridge-e4d634cd4fd5d24e1a737529a26839f2c29641d4c646b03dc7b7de401fbe7fb2",
+        "type": "agent.turn_completed",
+        "commandId": "bridge-e4d634cd4fd5d24e1a737529a26839f2c29641d4c646b03dc7b7de401fbe7fb2",
+        "source": "computer-bridge",
+        "time": "2026-10-24T14:23:11.835Z",
+        "subject": "conversation-0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "silo": "dev",
+        "principal": {
+          "id": "personal-c42ec7d216021c21e399398cb63017af",
+          "kind": "agent"
+        },
+        "correlation": {},
+        "report": {
+          "sequence": 6,
+          "digest": "cc59e5066bba855c27d28ae4408e82833b9cc61dd5f061acae9423ccd52de42a",
+          "computerId": "computer-530750581c929c9e05a1a2bcff59adce"
+        },
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9"
+        }
+      }
+    }
+  ],
+  "decisionRecords": [
+    {
+      "sequence": 383,
+      "event": {
+        "id": "102296d8-f424-4960-86c1-3039df40d973",
+        "type": "decision.recorded",
+        "commandId": "102296d8-f424-4960-86c1-3039df40d973",
+        "source": "models",
+        "time": "2026-10-24T14:23:06.125Z",
+        "subject": "decision-9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "requestId": "9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+          "requesterId": "zitadel-owner",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "permitId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+          "route": "model",
+          "outcome": "allow",
+          "reason": "model_allowed",
+          "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0"
+        }
+      }
+    },
+    {
+      "sequence": 388,
+      "event": {
+        "id": "a511af8c-cb52-4f89-be15-ed2abf40567b",
+        "type": "decision.recorded",
+        "commandId": "a511af8c-cb52-4f89-be15-ed2abf40567b",
+        "source": "models",
+        "time": "2026-10-24T14:23:08.837Z",
+        "subject": "decision-eef9d40f-7646-41a3-9609-77481e48f60c",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "callId": "exec-73a68b89-8d1b-4391-a71c-376ac9909187",
+          "logicalRequestId": "20335d3fb612f4759c967348826f79d185e89bcf8758d7cbfe7fc1df467e66fa",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "read_fixture_quote",
+          "requestId": "eef9d40f-7646-41a3-9609-77481e48f60c",
+          "requesterId": "zitadel-owner",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "route": "mcp",
+          "outcome": "allow",
+          "reason": "policy_allow",
+          "contextDigest": "be880486ca6a7741c4c6ef53c0e404fe1868f3c537f27628dbfd04ddc14299bf"
+        }
+      }
+    },
+    {
+      "sequence": 389,
+      "event": {
+        "id": "eef9d40f-7646-41a3-9609-77481e48f60c:tool-dispatch",
+        "type": "tool.dispatch_recorded",
+        "commandId": "eef9d40f-7646-41a3-9609-77481e48f60c:tool-dispatch",
+        "source": "models",
+        "time": "2026-10-24T14:23:08.963078Z",
+        "subject": "decision-eef9d40f-7646-41a3-9609-77481e48f60c",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "callId": "exec-73a68b89-8d1b-4391-a71c-376ac9909187",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolName": "read_fixture_quote",
+          "requestId": "eef9d40f-7646-41a3-9609-77481e48f60c",
+          "logicalRequestId": "20335d3fb612f4759c967348826f79d185e89bcf8758d7cbfe7fc1df467e66fa",
+          "startedAt": "2026-10-24T14:23:08.837Z",
+          "durationMs": 548,
+          "outcome": "responded",
+          "evidence": "response_received"
+        }
+      }
+    },
+    {
+      "sequence": 392,
+      "event": {
+        "id": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+        "type": "decision.recorded",
+        "commandId": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+        "source": "models",
+        "time": "2026-10-24T14:23:10.783Z",
+        "subject": "decision-5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "requestId": "5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+          "requesterId": "zitadel-owner",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+          "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+          "permitId": "d136607a-562f-4aa6-a778-34d633665930",
+          "route": "model",
+          "outcome": "allow",
+          "reason": "model_allowed",
+          "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0"
+        }
+      }
+    }
+  ],
+  "approvalRecords": [],
+  "budgetRecords": [
+    {
+      "sequence": 382,
+      "event": {
+        "id": "eb9b895a-07c1-4fce-b165-3d348429fb2f",
+        "type": "budget.reserved",
+        "commandId": "eb9b895a-07c1-4fce-b165-3d348429fb2f",
+        "source": "models",
+        "time": "2026-10-24T14:23:06.095Z",
+        "subject": "budget-dev",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "dispatchGate": 1,
+          "reservationId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+          "permitId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+          "amountCents": 17,
+          "payingGroupId": "installation-default",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "modelCall": {
+            "providerId": "dev-stub",
+            "bindingSequence": 47,
+            "requestId": "9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+            "model": "gpt-6.1-sol",
+            "priceTableId": "openai-2026-10-02-all-eur95",
+            "computerId": "computer-530750581c929c9e05a1a2bcff59adce",
+            "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+            "requesterId": "zitadel-owner",
+            "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+            "generation": 1,
+            "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+            "threadId": "01a16e4b-18df-7110-a75b-9825e4a6166a",
+            "payingGroupId": "installation-default",
+            "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0"
+          }
+        }
+      }
+    },
+    {
+      "sequence": 384,
+      "event": {
+        "id": "ad0b559a-9666-4ce8-be9a-445a115c9602",
+        "type": "budget.call_dispatch_admitted",
+        "commandId": "ad0b559a-9666-4ce8-be9a-445a115c9602",
+        "source": "models",
+        "time": "2026-10-24T14:23:06.165Z",
+        "subject": "budget-dev",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "callId": "9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+          "decisionId": "102296d8-f424-4960-86c1-3039df40d973",
+          "bodyDigest": "563f872622dfd818d7c78ecb405ecdd2113ee04a38cd3c40060847cf6ebbdd57",
+          "reservationId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+          "modelCall": {
+            "providerId": "dev-stub",
+            "bindingSequence": 47,
+            "requestId": "9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+            "model": "gpt-6.1-sol",
+            "priceTableId": "openai-2026-10-02-all-eur95",
+            "computerId": "computer-530750581c929c9e05a1a2bcff59adce",
+            "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+            "requesterId": "zitadel-owner",
+            "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+            "generation": 1,
+            "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+            "threadId": "01a16e4b-18df-7110-a75b-9825e4a6166a",
+            "payingGroupId": "installation-default",
+            "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0"
+          }
+        }
+      }
+    },
+    {
+      "sequence": 386,
+      "event": {
+        "id": "4d4286bc-fcbb-4944-92cb-b2ce6252b58a",
+        "type": "budget.settled",
+        "commandId": "4d4286bc-fcbb-4944-92cb-b2ce6252b58a",
+        "source": "models",
+        "time": "2026-10-24T14:23:06.632Z",
+        "subject": "budget-dev",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "reservationId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+          "permitId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+          "settledCents": 1
+        }
+      }
+    },
+    {
+      "sequence": 391,
+      "event": {
+        "id": "8dae51ac-defc-48e9-bf06-095337d6d71c",
+        "type": "budget.reserved",
+        "commandId": "8dae51ac-defc-48e9-bf06-095337d6d71c",
+        "source": "models",
+        "time": "2026-10-24T14:23:10.747Z",
+        "subject": "budget-dev",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "dispatchGate": 1,
+          "reservationId": "d136607a-562f-4aa6-a778-34d633665930",
+          "permitId": "d136607a-562f-4aa6-a778-34d633665930",
+          "amountCents": 17,
+          "payingGroupId": "installation-default",
+          "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+          "modelCall": {
+            "providerId": "dev-stub",
+            "bindingSequence": 47,
+            "requestId": "5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+            "model": "gpt-6.1-sol",
+            "priceTableId": "openai-2026-10-02-all-eur95",
+            "computerId": "computer-530750581c929c9e05a1a2bcff59adce",
+            "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+            "requesterId": "zitadel-owner",
+            "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+            "generation": 1,
+            "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+            "threadId": "01a16e4b-18df-7110-a75b-9825e4a6166a",
+            "payingGroupId": "installation-default",
+            "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0"
+          }
+        }
+      }
+    },
+    {
+      "sequence": 393,
+      "event": {
+        "id": "82e6c2fd-fb89-48bb-bf54-247875798763",
+        "type": "budget.call_dispatch_admitted",
+        "commandId": "82e6c2fd-fb89-48bb-bf54-247875798763",
+        "source": "models",
+        "time": "2026-10-24T14:23:10.845Z",
+        "subject": "budget-dev",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "callId": "5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+          "decisionId": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+          "bodyDigest": "159ef9776e6440e94def0e416f0bf872208e992541ea31ed69bcfbc7edc551d6",
+          "reservationId": "d136607a-562f-4aa6-a778-34d633665930",
+          "modelCall": {
+            "providerId": "dev-stub",
+            "bindingSequence": 47,
+            "requestId": "5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+            "model": "gpt-6.1-sol",
+            "priceTableId": "openai-2026-10-02-all-eur95",
+            "computerId": "computer-530750581c929c9e05a1a2bcff59adce",
+            "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+            "requesterId": "zitadel-owner",
+            "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+            "generation": 1,
+            "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+            "threadId": "01a16e4b-18df-7110-a75b-9825e4a6166a",
+            "payingGroupId": "installation-default",
+            "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0"
+          }
+        }
+      }
+    },
+    {
+      "sequence": 399,
+      "event": {
+        "id": "dad11101-a1a6-4456-b1b9-0ffa59029184",
+        "type": "budget.settled",
+        "commandId": "dad11101-a1a6-4456-b1b9-0ffa59029184",
+        "source": "models",
+        "time": "2026-10-24T14:23:12.053Z",
+        "subject": "budget-dev",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "reservationId": "d136607a-562f-4aa6-a778-34d633665930",
+          "permitId": "d136607a-562f-4aa6-a778-34d633665930",
+          "settledCents": 1
+        }
+      }
+    }
+  ],
+  "mcpRecords": [
+    {
+      "sequence": 368,
+      "event": {
+        "id": "3236d73b-c750-4429-af1a-90532b6ea6a6",
+        "type": "mcp.server_registered",
+        "commandId": "chg_467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "source": "opencrane-server",
+        "time": "2026-10-24T14:20:18.085Z",
+        "subject": "mcp-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-owner",
+          "kind": "human"
+        },
+        "correlation": {},
+        "data": {
+          "kind": "remote",
+          "locator": "https://mcp.example.test/",
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "registeredBy": "zitadel-owner"
+        }
+      }
+    },
+    {
+      "sequence": 369,
+      "event": {
+        "id": "3236d73b-c750-4429-af1a-90532b6ea6a6-discovery",
+        "type": "mcp.server_discovered",
+        "commandId": "3236d73b-c750-4429-af1a-90532b6ea6a6-discovery",
+        "source": "models",
+        "time": "2026-10-24T14:20:19.421Z",
+        "subject": "mcp-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "toolCount": 2,
+          "schemaDigest": "51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d",
+          "serverInfo": {
+            "name": "OpenCrane demo",
+            "version": "0.1.0"
+          },
+          "checkedAt": "2026-10-24T14:20:18.617Z",
+          "expiresAt": "2026-10-24T14:25:18.617Z",
+          "discoverResult": "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"OpenCrane demo\",\"version\":\"0.1.0\"}},\"cacheScope\":\"public\",\"capabilities\":{\"experimental\":{\"io.opencrane/expectedRevision\":{}},\"tools\":{}},\"resultType\":\"complete\",\"serverInfo\":{\"name\":\"OpenCrane demo\",\"version\":\"0.1.0\"},\"supportedVersions\":[\"2026-07-28\"],\"ttlMs\":300000}",
+          "rejectedTools": [],
+          "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "accountMode": "none",
+          "tools": [
+            {
+              "name": "read_fixture_quote",
+              "revision": "596e8cdb3e0f5b5e622a9c73c98bf7fc613dc39ab90eaba733abbac7cf3e7eb2",
+              "reviewed": false,
+              "readOnly": true,
+              "destructive": false,
+              "costCents": 0,
+              "review": {
+                "action": "Read demo quote",
+                "consequence": "Read the synthetic quote without changing it.",
+                "targetArgument": "quoteId",
+                "fields": [
+                  "quoteId"
+                ],
+                "stepUp": false
+              },
+              "definition": "{\"_meta\":{\"io.opencrane/costCents\":0,\"io.opencrane/review\":{\"action\":\"Read demo quote\",\"consequence\":\"Read the synthetic quote without changing it.\",\"fields\":[\"quoteId\"],\"stepUp\":false,\"targetArgument\":\"quoteId\"}},\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Read a synthetic demo quote. No supplier is contacted.\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"}},\"required\":[\"quoteId\"],\"type\":\"object\"},\"name\":\"read_fixture_quote\",\"outputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"amountCents\":{\"const\":12500,\"type\":\"number\"},\"effectCount\":{\"maximum\":9007199254740991,\"minimum\":0,\"type\":\"integer\"},\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\",\"amountCents\",\"effectCount\"],\"type\":\"object\"}}"
+            },
+            {
+              "name": "change_delivery_slot",
+              "revision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+              "reviewed": false,
+              "readOnly": false,
+              "destructive": true,
+              "costCents": 0,
+              "review": {
+                "action": "Change demo delivery slot",
+                "consequence": "Replace the slot in this demo process. No real delivery changes.",
+                "targetArgument": "quoteId",
+                "fields": [
+                  "quoteId",
+                  "slot"
+                ],
+                "stepUp": false
+              },
+              "definition": "{\"_meta\":{\"io.opencrane/costCents\":0,\"io.opencrane/review\":{\"action\":\"Change demo delivery slot\",\"consequence\":\"Replace the slot in this demo process. No real delivery changes.\",\"fields\":[\"quoteId\",\"slot\"],\"stepUp\":false,\"targetArgument\":\"quoteId\"}},\"annotations\":{\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":false},\"description\":\"Change only the synthetic demo delivery slot.\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\"],\"type\":\"object\"},\"name\":\"change_delivery_slot\",\"outputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"amountCents\":{\"const\":12500,\"type\":\"number\"},\"effectCount\":{\"maximum\":9007199254740991,\"minimum\":0,\"type\":\"integer\"},\"quoteId\":{\"const\":\"DEMO-001\",\"type\":\"string\"},\"slot\":{\"enum\":[\"morning\",\"afternoon\"],\"type\":\"string\"}},\"required\":[\"quoteId\",\"slot\",\"amountCents\",\"effectCount\"],\"type\":\"object\"}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 370,
+      "event": {
+        "id": "fc5fbfc7-4b97-4a48-b8a9-bc20d7fb8d11",
+        "type": "mcp.catalogue_checked",
+        "commandId": "fc5fbfc7-4b97-4a48-b8a9-bc20d7fb8d11",
+        "source": "models",
+        "time": "2026-10-24T14:20:21.387Z",
+        "subject": "mcp-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "outcome": "unchanged",
+          "schemaDigest": "51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d",
+          "checkedAt": "2026-10-24T14:20:20.751Z",
+          "expiresAt": "2026-10-24T14:25:20.751Z"
+        }
+      }
+    },
+    {
+      "sequence": 373,
+      "event": {
+        "id": "d36e97f8-cd4a-4bea-bc8d-27c63005ebe3",
+        "type": "mcp.server_reviewed",
+        "commandId": "d36e97f8-cd4a-4bea-bc8d-27c63005ebe3",
+        "source": "opencrane-server",
+        "time": "2026-10-24T14:21:13.868Z",
+        "subject": "mcp-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-owner",
+          "kind": "human"
+        },
+        "correlation": {},
+        "data": {
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "catalogueDigest": "51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d",
+          "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "accountMode": "none",
+          "policyRevision": 369,
+          "reviewedBy": "zitadel-owner",
+          "tools": [
+            {
+              "name": "read_fixture_quote",
+              "revision": "596e8cdb3e0f5b5e622a9c73c98bf7fc613dc39ab90eaba733abbac7cf3e7eb2",
+              "reviewDigest": "001e7622ab037b2182a348381b88f45675e827f000a40de46ca7a4a7eea4d729",
+              "mode": "allow"
+            },
+            {
+              "name": "change_delivery_slot",
+              "revision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+              "reviewDigest": "31532a92268eb70a4070eeb6ac83ef4938598735a7b59bbf3e36eb6bc3ca66d1",
+              "mode": "ask"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 374,
+      "event": {
+        "id": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+        "type": "mcp.server_published",
+        "commandId": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+        "source": "opencrane-server",
+        "time": "2026-10-24T14:21:14.101Z",
+        "subject": "mcp-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-owner",
+          "kind": "human"
+        },
+        "correlation": {},
+        "data": {
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "publishedBy": "zitadel-owner",
+          "commandId": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+          "expectedSequence": 373,
+          "reviewRevision": 373,
+          "fragmentDigest": "443931d6491a4fc4ccb9f356687f81e2524a0cd894b7b774587c03b10fcceeb8"
+        }
+      }
+    },
+    {
+      "sequence": 377,
+      "event": {
+        "id": "mcp-observed:e7fa6cf486f9bb638e8848faff656c7747329f9643d2921de30eedba01413d91",
+        "type": "mcp.configuration_observed",
+        "commandId": "mcp-observed:e7fa6cf486f9bb638e8848faff656c7747329f9643d2921de30eedba01413d91",
+        "source": "models",
+        "time": "2026-10-24T14:21:15.603Z",
+        "subject": "mcp-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+          "changeRef": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+          "reviewRevision": 373,
+          "fragmentDigest": "443931d6491a4fc4ccb9f356687f81e2524a0cd894b7b774587c03b10fcceeb8",
+          "sourceSequence": 374,
+          "generation": 1,
+          "recordDigest": "c809822633df535758f910b7d497fe0db2dc679db6ab35445eb9de692ac461b2",
+          "configDigest": "c2da0ba5b675a12e06882d40ce3036d8201d42b6aace73bbcbc072f382e74e43",
+          "processRef": "0fae7546-ed06-486a-b137-4a05aba8296e",
+          "observedAt": "2026-10-24T14:21:15.389Z"
+        }
+      }
+    }
+  ],
+  "gatewayRecords": [
+    {
+      "sequence": 375,
+      "event": {
+        "id": "88512776-b60b-4cbd-9340-3aa25d482fe9",
+        "type": "gateway.configuration_requested",
+        "commandId": "88512776-b60b-4cbd-9340-3aa25d482fe9",
+        "source": "models",
+        "time": "2026-10-24T14:21:14.584Z",
+        "subject": "gateway-config-dev",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "changeRef": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+          "generation": 1,
+          "rendererVersion": "1",
+          "members": [
+            {
+              "entry": {
+                "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+                "catalogueDigest": "51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d",
+                "connectionId": "installed-467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+                "accountMode": "none",
+                "tools": [
+                  {
+                    "name": "read_fixture_quote",
+                    "revision": "596e8cdb3e0f5b5e622a9c73c98bf7fc613dc39ab90eaba733abbac7cf3e7eb2",
+                    "reviewDigest": "001e7622ab037b2182a348381b88f45675e827f000a40de46ca7a4a7eea4d729",
+                    "mode": "allow"
+                  },
+                  {
+                    "name": "change_delivery_slot",
+                    "revision": "57c803783a44eefa23ffa22056cb268a0d173103584730336966d53fde920869",
+                    "reviewDigest": "31532a92268eb70a4070eeb6ac83ef4938598735a7b59bbf3e36eb6bc3ca66d1",
+                    "mode": "ask"
+                  }
+                ],
+                "reviewRevision": 373
+              },
+              "changeRef": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+              "sourceSequence": 374,
+              "fragmentDigest": "443931d6491a4fc4ccb9f356687f81e2524a0cd894b7b774587c03b10fcceeb8"
+            }
+          ],
+          "recordDigest": "c809822633df535758f910b7d497fe0db2dc679db6ab35445eb9de692ac461b2"
+        }
+      }
+    },
+    {
+      "sequence": 376,
+      "event": {
+        "id": "gateway-observed:c809822633df535758f910b7d497fe0db2dc679db6ab35445eb9de692ac461b2:c2da0ba5b675a12e06882d40ce3036d8201d42b6aace73bbcbc072f382e74e43:0fae7546-ed06-486a-b137-4a05aba8296e",
+        "type": "gateway.configuration_observed",
+        "commandId": "gateway-observed:c809822633df535758f910b7d497fe0db2dc679db6ab35445eb9de692ac461b2:c2da0ba5b675a12e06882d40ce3036d8201d42b6aace73bbcbc072f382e74e43:0fae7546-ed06-486a-b137-4a05aba8296e",
+        "source": "models",
+        "time": "2026-10-24T14:21:15.389Z",
+        "subject": "gateway-config-dev",
+        "silo": "dev",
+        "principal": {
+          "id": "models",
+          "kind": "system"
+        },
+        "correlation": {},
+        "data": {
+          "generation": 1,
+          "recordDigest": "c809822633df535758f910b7d497fe0db2dc679db6ab35445eb9de692ac461b2",
+          "configDigest": "c2da0ba5b675a12e06882d40ce3036d8201d42b6aace73bbcbc072f382e74e43",
+          "processRef": "0fae7546-ed06-486a-b137-4a05aba8296e",
+          "outcome": "loaded",
+          "observedAt": "2026-10-24T14:21:15.389Z"
+        }
+      }
+    }
+  ],
+  "finalReadback": {
+    "at": "2026-10-24T14:24:02.777Z",
+    "value": {
+      "quoteId": "DEMO-001",
+      "amountCents": 12500,
+      "slot": "morning",
+      "effectCount": 0
+    }
+  },
+  "spending": {
+    "models": [
+      {
+        "id": "gpt-6-astra",
+        "short": {
+          "inputCents": 950000,
+          "cachedInputCents": 95000,
+          "cacheWriteCents": 1187500,
+          "outputCents": 4750000
+        },
+        "long": {
+          "inputCents": 1900000,
+          "cachedInputCents": 190000,
+          "cacheWriteCents": 2375000,
+          "outputCents": 7125000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-6.1-sol",
+        "short": {
+          "inputCents": 190000,
+          "cachedInputCents": 9500,
+          "cacheWriteCents": 237500,
+          "outputCents": 950000
+        },
+        "long": {
+          "inputCents": 380000,
+          "cachedInputCents": 19000,
+          "cacheWriteCents": 475000,
+          "outputCents": 1425000
+        },
+        "default": true,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-6-luna",
+        "short": {
+          "inputCents": 9500,
+          "cachedInputCents": 950,
+          "cacheWriteCents": 11875,
+          "outputCents": 47500
+        },
+        "long": {
+          "inputCents": 19000,
+          "cachedInputCents": 1900,
+          "cacheWriteCents": 23750,
+          "outputCents": 71250
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-6-sol",
+        "short": {
+          "inputCents": 190000,
+          "cachedInputCents": 19000,
+          "cacheWriteCents": 237500,
+          "outputCents": 950000
+        },
+        "long": {
+          "inputCents": 380000,
+          "cachedInputCents": 38000,
+          "cacheWriteCents": 475000,
+          "outputCents": 1425000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "short": {
+          "inputCents": 380000,
+          "cachedInputCents": 38000,
+          "cacheWriteCents": 475000,
+          "outputCents": 1900000
+        },
+        "long": {
+          "inputCents": 760000,
+          "cachedInputCents": 76000,
+          "cacheWriteCents": 950000,
+          "outputCents": 2850000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.6-terra",
+        "short": {
+          "inputCents": 190000,
+          "cachedInputCents": 19000,
+          "cacheWriteCents": 237500,
+          "outputCents": 1140000
+        },
+        "long": {
+          "inputCents": 380000,
+          "cachedInputCents": 38000,
+          "cacheWriteCents": 475000,
+          "outputCents": 1710000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "short": {
+          "inputCents": 19000,
+          "cachedInputCents": 1900,
+          "cacheWriteCents": 23750,
+          "outputCents": 114000
+        },
+        "long": {
+          "inputCents": 38000,
+          "cachedInputCents": 3800,
+          "cacheWriteCents": 47500,
+          "outputCents": 171000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.5",
+        "short": {
+          "inputCents": 475000,
+          "cachedInputCents": 47500,
+          "cacheWriteCents": null,
+          "outputCents": 2850000
+        },
+        "long": {
+          "inputCents": 950000,
+          "cachedInputCents": 95000,
+          "cacheWriteCents": null,
+          "outputCents": 4275000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.5-pro",
+        "short": {
+          "inputCents": 2850000,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 17100000
+        },
+        "long": {
+          "inputCents": 5700000,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 25650000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.4",
+        "short": {
+          "inputCents": 237500,
+          "cachedInputCents": 23750,
+          "cacheWriteCents": null,
+          "outputCents": 1425000
+        },
+        "long": {
+          "inputCents": 475000,
+          "cachedInputCents": 47500,
+          "cacheWriteCents": null,
+          "outputCents": 2137500
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5.4-pro",
+        "short": {
+          "inputCents": 2850000,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 17100000
+        },
+        "long": {
+          "inputCents": 5700000,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 25650000
+        },
+        "default": false,
+        "retired": false,
+        "priceTableId": "openai-2026-10-02-all-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5-nano",
+        "short": {
+          "inputCents": 4750,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 38000
+        },
+        "long": {
+          "inputCents": 4750,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 38000
+        },
+        "default": false,
+        "retired": true,
+        "priceTableId": "openai-2026-10-02-eur95",
+        "perTokens": 1000000000
+      },
+      {
+        "id": "gpt-5-mini",
+        "short": {
+          "inputCents": 23750,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 190000
+        },
+        "long": {
+          "inputCents": 23750,
+          "cachedInputCents": null,
+          "cacheWriteCents": null,
+          "outputCents": 190000
+        },
+        "default": false,
+        "retired": true,
+        "priceTableId": "openai-2026-10-02-eur95",
+        "perTokens": 1000000000
+      }
+    ],
+    "taskRouting": {
+      "chat_turn": {
+        "model": "gpt-6.1-sol",
+        "reason": "Complex tasks that also need to manage time and cost"
+      },
+      "ambiguous_problem": {
+        "model": "gpt-6-astra",
+        "reason": "Ambiguous problems needing broad context"
+      },
+      "deep_analysis": {
+        "model": "gpt-6-astra",
+        "reason": "Demanding analysis with exacting requirements"
+      },
+      "ambitious_deliverable": {
+        "model": "gpt-6-astra",
+        "reason": "Ambitious projects needing complete results"
+      },
+      "scoped_task": {
+        "model": "gpt-6-luna",
+        "reason": "Well-scoped problem-solving"
+      },
+      "triage": {
+        "model": "gpt-6-luna",
+        "reason": "Prioritising work with clear constraints"
+      },
+      "frequent_automation": {
+        "model": "gpt-6-luna",
+        "reason": "Frequent automation"
+      },
+      "conversation_title": {
+        "model": "gpt-6-luna",
+        "reason": "Short conversation titles"
+      },
+      "classify_upload": {
+        "model": "gpt-6-luna",
+        "reason": "Simple data extraction and classification"
+      },
+      "summary": {
+        "model": "gpt-6-luna",
+        "reason": "Scoped summaries"
+      }
+    },
+    "priceTableId": "openai-2026-10-02-all-eur95",
+    "shortContextTokens": 272000,
+    "todayCents": 13,
+    "monthCents": 13,
+    "reservedCents": 32,
+    "dailyCeilingCents": 5000,
+    "ceilingCents": 20000,
+    "budget": {
+      "todayCents": 13,
+      "monthCents": 13,
+      "reservedCents": 32,
+      "dailyCeilingCents": 5000,
+      "ceilingCents": 20000,
+      "stops": [
+        {
+          "id": "cbe2f546-1880-4899-a37b-ce5fb49f12c2",
+          "position": 328,
+          "reasons": [
+            {
+              "scope": "paying_group",
+              "scopeId": "budget-journey",
+              "kind": "monthly",
+              "reason": "zero_ceiling",
+              "periodStart": "2026-10-01T00:00:00.000Z",
+              "resetAt": "2026-11-01T00:00:00.000Z",
+              "ceilingCents": 0,
+              "settledCents": 0,
+              "reservedCents": 0,
+              "attemptedBoundCents": 0,
+              "configurationId": "cbe2f546-1880-4899-a37b-ce5fb49f12c2"
+            }
+          ]
+        },
+        {
+          "id": "0fdc5043-debb-485a-8074-c7b0caf72f20",
+          "position": 337,
+          "reasons": [
+            {
+              "scope": "assistant",
+              "scopeId": "team-budget-journey",
+              "kind": "monthly",
+              "reason": "zero_ceiling",
+              "periodStart": "2026-10-01T00:00:00.000Z",
+              "resetAt": "2026-11-01T00:00:00.000Z",
+              "ceilingCents": 0,
+              "settledCents": 0,
+              "reservedCents": 0,
+              "attemptedBoundCents": 0,
+              "configurationId": "0fdc5043-debb-485a-8074-c7b0caf72f20"
+            }
+          ]
+        },
+        {
+          "id": "a24d6b06-c949-431c-bd6c-a7101b56254b",
+          "position": 346,
+          "reasons": [
+            {
+              "scope": "paying_group",
+              "scopeId": "budget-journey",
+              "kind": "monthly",
+              "reason": "zero_ceiling",
+              "periodStart": "2026-10-01T00:00:00.000Z",
+              "resetAt": "2026-11-01T00:00:00.000Z",
+              "ceilingCents": 0,
+              "settledCents": 0,
+              "reservedCents": 0,
+              "attemptedBoundCents": 0,
+              "configurationId": "a24d6b06-c949-431c-bd6c-a7101b56254b"
+            }
+          ]
+        },
+        {
+          "id": "c16ca8e8-5b97-4917-94c0-908659487e1f",
+          "position": 355,
+          "reasons": [
+            {
+              "scope": "assistant",
+              "scopeId": "team-budget-journey",
+              "kind": "monthly",
+              "reason": "zero_ceiling",
+              "periodStart": "2026-10-01T00:00:00.000Z",
+              "resetAt": "2026-11-01T00:00:00.000Z",
+              "ceilingCents": 0,
+              "settledCents": 0,
+              "reservedCents": 0,
+              "attemptedBoundCents": 0,
+              "configurationId": "c16ca8e8-5b97-4917-94c0-908659487e1f"
+            }
+          ]
+        }
+      ],
+      "stoppedWork": [],
+      "sequence": 399,
+      "defaultPayingGroupId": "installation-default",
+      "periodStart": "2026-10-01T00:00:00.000Z",
+      "ceilings": [
+        {
+          "scope": "paying_group",
+          "scopeId": "budget-journey",
+          "ceilingCents": 20000,
+          "todayCents": 0,
+          "monthCents": 0,
+          "reservedCents": 0,
+          "dailyCeilingCents": 5000
+        },
+        {
+          "scope": "assistant",
+          "scopeId": "team-budget-journey",
+          "ceilingCents": 20000,
+          "todayCents": 0,
+          "monthCents": 0,
+          "reservedCents": 0,
+          "dailyCeilingCents": 5000
+        }
+      ]
+    }
+  },
+  "changeHistory": {
+    "rows": [
+      {
+        "id": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+        "requestId": "5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+        "permitId": "d136607a-562f-4aa6-a778-34d633665930",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "requesterId": "zitadel-owner",
+        "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0",
+        "decision": "allow",
+        "outcome": "success",
+        "reservedCents": 17,
+        "settledCents": 1,
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:23:10.747Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "54486455fd3fdd1a3032cbdf30d1c87b29424864cd76391440ce6f531304a5ba",
+            "eventId": "8dae51ac-defc-48e9-bf06-095337d6d71c",
+            "type": "budget.reserved",
+            "position": 391,
+            "source": "authoritative",
+            "status": "recorded",
+            "amountCents": 17
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:10.783Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "2f3ac29ea874f201a80733d6aea0306bbf7d28fded6f5b46a6d6e1127d61c606",
+            "eventId": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+            "type": "decision.recorded",
+            "position": 392,
+            "source": "decision",
+            "status": "allow",
+            "reason": "Model call permitted"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:11.530Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "81962e5623cfc1794de88bded64a0485ac7c0e34ebe0e836fb57691dd160172d",
+            "eventId": "d136607a-562f-4aa6-a778-34d633665930:effect.observed",
+            "type": "effect.observed",
+            "position": 395,
+            "source": "gateway",
+            "status": "success"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:12.053Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "a7a6b1683361bdb070c756882ee995e885750146bad83eac6e3942d6fcbb0a66",
+            "eventId": "dad11101-a1a6-4456-b1b9-0ffa59029184",
+            "type": "budget.settled",
+            "position": 399,
+            "source": "authoritative",
+            "status": "recorded",
+            "amountCents": 1
+          }
+        ]
+      },
+      {
+        "id": "a511af8c-cb52-4f89-be15-ed2abf40567b",
+        "requestId": "eef9d40f-7646-41a3-9609-77481e48f60c",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "requesterId": "zitadel-owner",
+        "contextDigest": "be880486ca6a7741c4c6ef53c0e404fe1868f3c537f27628dbfd04ddc14299bf",
+        "decision": "allow",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:23:08.837Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "c7d8461ebc6ce7e252655737ea568f5f4ab4b65288301e57d9c9e1d8aee23031",
+            "eventId": "a511af8c-cb52-4f89-be15-ed2abf40567b",
+            "type": "decision.recorded",
+            "position": 388,
+            "source": "decision",
+            "status": "allow",
+            "reason": "Tool policy permits this call"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:08.963078Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "81b25a24a32dee9a338d9f7828d7654abed389209b17878bead15aabab2882f3",
+            "eventId": "eef9d40f-7646-41a3-9609-77481e48f60c:tool-dispatch",
+            "type": "tool.dispatch_recorded",
+            "position": 389,
+            "source": "gateway",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "102296d8-f424-4960-86c1-3039df40d973",
+        "requestId": "9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+        "permitId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "requesterId": "zitadel-owner",
+        "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0",
+        "decision": "allow",
+        "outcome": "success",
+        "reservedCents": 17,
+        "settledCents": 1,
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:23:06.095Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "28c795ea22efc6c1b06e91270d8b513dc461609ee7cfe0e4411dcd1586cd3692",
+            "eventId": "eb9b895a-07c1-4fce-b165-3d348429fb2f",
+            "type": "budget.reserved",
+            "position": 382,
+            "source": "authoritative",
+            "status": "recorded",
+            "amountCents": 17
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:06.125Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "e2e0eb89961f4bab29ec4a1dea6839fec89fbed6b494c1f9fc99c44cc2c3384d",
+            "eventId": "102296d8-f424-4960-86c1-3039df40d973",
+            "type": "decision.recorded",
+            "position": 383,
+            "source": "decision",
+            "status": "allow",
+            "reason": "Model call permitted"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:06.246Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "f7f19c444f40990cdde56b699abdb468b9d42837e3cd3699554a4fe5205bf37b",
+            "eventId": "15beec2e-f79f-45b5-abc0-77da2bf2018b:effect.observed",
+            "type": "effect.observed",
+            "position": 385,
+            "source": "gateway",
+            "status": "success"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:06.632Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "314a88508ebab80f36af42a24418c75d6c8b8ffe0549ab39129c0d3de3c3eb5b",
+            "eventId": "4d4286bc-fcbb-4944-92cb-b2ce6252b58a",
+            "type": "budget.settled",
+            "position": 386,
+            "source": "authoritative",
+            "status": "recorded",
+            "amountCents": 1
+          }
+        ]
+      },
+      {
+        "id": "mcp-observed:e7fa6cf486f9bb638e8848faff656c7747329f9643d2921de30eedba01413d91",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:21:15.603Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "1387256bb3c1058fd65ca216e7f9c7d901a0a40d2117b2f97227d59237d7c75c",
+            "eventId": "mcp-observed:e7fa6cf486f9bb638e8848faff656c7747329f9643d2921de30eedba01413d91",
+            "type": "mcp.configuration_observed",
+            "position": 377,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:21:14.101Z",
+            "actor": {
+              "kind": "unverified"
+            },
+            "commandRef": "5fd62f55d68e5f0b77debcbc648250e8610deb0d3af073a3a8655a4069a0c547",
+            "eventId": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+            "type": "mcp.server_published",
+            "position": 374,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "d36e97f8-cd4a-4bea-bc8d-27c63005ebe3",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:21:13.868Z",
+            "actor": {
+              "kind": "unverified"
+            },
+            "commandRef": "e0f4f2fd73d8053bd4b7a60586af0eb4a1bde437060cecc2d773ac7b6683c796",
+            "eventId": "d36e97f8-cd4a-4bea-bc8d-27c63005ebe3",
+            "type": "mcp.server_reviewed",
+            "position": 373,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "d5c8bd0d-8019-4221-b24b-9535744a9760",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:21:09.982Z",
+            "actor": {
+              "kind": "unverified"
+            },
+            "commandRef": "82feca0f259b0490db2862dbb1c2baee343b957c65dbfcd61062b1a1e7842688",
+            "eventId": "d5c8bd0d-8019-4221-b24b-9535744a9760",
+            "type": "grant.given",
+            "position": 372,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "07ef2b69-40f5-48dc-8786-515b69bac542",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:21:08.247Z",
+            "actor": {
+              "kind": "unverified"
+            },
+            "commandRef": "51d382162af2911c0d931c8bf63e3201ca2b3a8d8831003cfcabee64c96b2aea",
+            "eventId": "07ef2b69-40f5-48dc-8786-515b69bac542",
+            "type": "grant.given",
+            "position": 371,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "fc5fbfc7-4b97-4a48-b8a9-bc20d7fb8d11",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:20:21.387Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "9073cc7b2c310a3894098e76906f20885957d261e957bb136185e19cc27ec51f",
+            "eventId": "fc5fbfc7-4b97-4a48-b8a9-bc20d7fb8d11",
+            "type": "mcp.catalogue_checked",
+            "position": 370,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "3236d73b-c750-4429-af1a-90532b6ea6a6-discovery",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:20:19.421Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "b7340e018a39764c35760e0c9b07d70040c89b3a81959f91b652191c452440a0",
+            "eventId": "3236d73b-c750-4429-af1a-90532b6ea6a6-discovery",
+            "type": "mcp.server_discovered",
+            "position": 369,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "3236d73b-c750-4429-af1a-90532b6ea6a6",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:20:18.085Z",
+            "actor": {
+              "kind": "unverified"
+            },
+            "commandRef": "88801d2ddaf747058ba225e2e7669fbd58c3e9413f4274a54d02b5efac4f3ace",
+            "eventId": "3236d73b-c750-4429-af1a-90532b6ea6a6",
+            "type": "mcp.server_registered",
+            "position": 368,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "c245a1de-aa86-43c0-9cca-1190d93d5681",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:17:29.715Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "0a838afe853458bec8cf5412cff53ed92ecc450201e3e214c1325a8db5d7faef",
+            "eventId": "c245a1de-aa86-43c0-9cca-1190d93d5681",
+            "type": "budget.ceiling_set",
+            "position": 366,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "3a7f6a8c-3ec5-4e16-932c-1e2710476625",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:17:29.061Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "87e60319246c1920932ad04ca069262a7bd8bf229e68946fc06b2e956d6ee5b2",
+            "eventId": "3a7f6a8c-3ec5-4e16-932c-1e2710476625",
+            "type": "budget.ceiling_set",
+            "position": 365,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "ec1a08a1-693d-49ca-9ecf-fecdfb8b851e",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:17:28.362Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "5dfb17ff33208ee285138443bb00d089c61fa191edc5704ba212af1b123073be",
+            "eventId": "ec1a08a1-693d-49ca-9ecf-fecdfb8b851e",
+            "type": "budget.ceiling_set",
+            "position": 364,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "a66a8403-ef89-4d18-bba4-8ad672c0ca45",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:16:57.189Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "23d41d007f1c78ac2276881e79e965d50ef789086ddd91fe7f54a17f69099c59",
+            "eventId": "a66a8403-ef89-4d18-bba4-8ad672c0ca45",
+            "type": "budget.ceiling_set",
+            "position": 363,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "ef57e4c1-dbd3-4e3f-9939-e45d9942ee33",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:16:53.955Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "193e0e268af8210e3c9920e1ea83156e33393db2a112ae02fad2c3ae9d9e27c3",
+            "eventId": "ef57e4c1-dbd3-4e3f-9939-e45d9942ee33",
+            "type": "budget.ceiling_set",
+            "position": 362,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "6d3f54ca-cff0-4be0-8c0a-98d6f0aba4c9",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:16:50.621Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "6130a6b3078d8cc05457b4ced4b109b23b52d55b2e90e9288ca695f6b28fe8bb",
+            "eventId": "6d3f54ca-cff0-4be0-8c0a-98d6f0aba4c9",
+            "type": "budget.ceiling_set",
+            "position": 361,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "58a04e397f88505921541067fef6194cddc97cf72e9075b3735bad02c6fbab4a",
+        "requestId": "58a04e397f88505921541067fef6194cddc97cf72e9075b3735bad02c6fbab4a",
+        "conversationId": "920f4745-73ae-4f71-b065-c81741095920",
+        "turnId": "a94f6b73-7dca-4d5b-a589-017298bd6a9c",
+        "requesterId": "zitadel-member",
+        "contextDigest": "277f50b01ee4c7b52cd554956c143a38a5b0fabd72629fea05534b6c78b787ab",
+        "decision": "deny",
+        "outcome": "not_dispatched",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:16:45.745Z",
+            "actor": {
+              "kind": "system",
+              "id": "turn-lifecycle"
+            },
+            "commandRef": "adbf2b59c75df3b594b7d8219ff0be5828da7eb488be3d2cb7e344395682d592",
+            "eventId": "58a04e397f88505921541067fef6194cddc97cf72e9075b3735bad02c6fbab4a",
+            "type": "decision.recorded",
+            "position": 359,
+            "source": "decision",
+            "status": "deny",
+            "reason": "Spending cap reached"
+          }
+        ]
+      },
+      {
+        "id": "c16ca8e8-5b97-4917-94c0-908659487e1f",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:16:37.917Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "80826b6b9a8d5948f6e494eea8c6b4ade8efb6628fda701941ab0e4f27e8e1d3",
+            "eventId": "c16ca8e8-5b97-4917-94c0-908659487e1f",
+            "type": "budget.ceiling_set",
+            "position": 355,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "dfc93c63-de9d-48e8-ba32-f60096524f1e",
+        "decision": "not_recorded",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:16:34.943Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "46028b6a196fb4c189b479adcde05c18bb2dea3e6effaa0b73b39699b565ac53",
+            "eventId": "dfc93c63-de9d-48e8-ba32-f60096524f1e",
+            "type": "budget.ceiling_set",
+            "position": 354,
+            "source": "authoritative",
+            "status": "recorded"
+          }
+        ]
+      }
+    ],
+    "nextBefore": 354
+  },
+  "actionHistory": {
+    "rows": [
+      {
+        "id": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+        "requestId": "5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+        "permitId": "d136607a-562f-4aa6-a778-34d633665930",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "requesterId": "zitadel-owner",
+        "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0",
+        "decision": "allow",
+        "outcome": "success",
+        "reservedCents": 17,
+        "settledCents": 1,
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:23:10.747Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "54486455fd3fdd1a3032cbdf30d1c87b29424864cd76391440ce6f531304a5ba",
+            "eventId": "8dae51ac-defc-48e9-bf06-095337d6d71c",
+            "type": "budget.reserved",
+            "position": 391,
+            "source": "authoritative",
+            "status": "recorded",
+            "amountCents": 17
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:10.783Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "2f3ac29ea874f201a80733d6aea0306bbf7d28fded6f5b46a6d6e1127d61c606",
+            "eventId": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+            "type": "decision.recorded",
+            "position": 392,
+            "source": "decision",
+            "status": "allow",
+            "reason": "Model call permitted"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:11.530Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "81962e5623cfc1794de88bded64a0485ac7c0e34ebe0e836fb57691dd160172d",
+            "eventId": "d136607a-562f-4aa6-a778-34d633665930:effect.observed",
+            "type": "effect.observed",
+            "position": 395,
+            "source": "gateway",
+            "status": "success"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:12.053Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "a7a6b1683361bdb070c756882ee995e885750146bad83eac6e3942d6fcbb0a66",
+            "eventId": "dad11101-a1a6-4456-b1b9-0ffa59029184",
+            "type": "budget.settled",
+            "position": 399,
+            "source": "authoritative",
+            "status": "recorded",
+            "amountCents": 1
+          }
+        ]
+      },
+      {
+        "id": "a511af8c-cb52-4f89-be15-ed2abf40567b",
+        "requestId": "eef9d40f-7646-41a3-9609-77481e48f60c",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "requesterId": "zitadel-owner",
+        "contextDigest": "be880486ca6a7741c4c6ef53c0e404fe1868f3c537f27628dbfd04ddc14299bf",
+        "decision": "allow",
+        "outcome": "recorded",
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:23:08.837Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "c7d8461ebc6ce7e252655737ea568f5f4ab4b65288301e57d9c9e1d8aee23031",
+            "eventId": "a511af8c-cb52-4f89-be15-ed2abf40567b",
+            "type": "decision.recorded",
+            "position": 388,
+            "source": "decision",
+            "status": "allow",
+            "reason": "Tool policy permits this call"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:08.963078Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "81b25a24a32dee9a338d9f7828d7654abed389209b17878bead15aabab2882f3",
+            "eventId": "eef9d40f-7646-41a3-9609-77481e48f60c:tool-dispatch",
+            "type": "tool.dispatch_recorded",
+            "position": 389,
+            "source": "gateway",
+            "status": "recorded"
+          }
+        ]
+      },
+      {
+        "id": "102296d8-f424-4960-86c1-3039df40d973",
+        "requestId": "9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+        "permitId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "requesterId": "zitadel-owner",
+        "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0",
+        "decision": "allow",
+        "outcome": "success",
+        "reservedCents": 17,
+        "settledCents": 1,
+        "records": [
+          {
+            "recordedAt": "2026-10-24T14:23:06.095Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "28c795ea22efc6c1b06e91270d8b513dc461609ee7cfe0e4411dcd1586cd3692",
+            "eventId": "eb9b895a-07c1-4fce-b165-3d348429fb2f",
+            "type": "budget.reserved",
+            "position": 382,
+            "source": "authoritative",
+            "status": "recorded",
+            "amountCents": 17
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:06.125Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "e2e0eb89961f4bab29ec4a1dea6839fec89fbed6b494c1f9fc99c44cc2c3384d",
+            "eventId": "102296d8-f424-4960-86c1-3039df40d973",
+            "type": "decision.recorded",
+            "position": 383,
+            "source": "decision",
+            "status": "allow",
+            "reason": "Model call permitted"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:06.246Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "f7f19c444f40990cdde56b699abdb468b9d42837e3cd3699554a4fe5205bf37b",
+            "eventId": "15beec2e-f79f-45b5-abc0-77da2bf2018b:effect.observed",
+            "type": "effect.observed",
+            "position": 385,
+            "source": "gateway",
+            "status": "success"
+          },
+          {
+            "recordedAt": "2026-10-24T14:23:06.632Z",
+            "actor": {
+              "kind": "system",
+              "id": "models"
+            },
+            "commandRef": "314a88508ebab80f36af42a24418c75d6c8b8ffe0549ab39129c0d3de3c3eb5b",
+            "eventId": "4d4286bc-fcbb-4944-92cb-b2ce6252b58a",
+            "type": "budget.settled",
+            "position": 386,
+            "source": "authoritative",
+            "status": "recorded",
+            "amountCents": 1
+          }
+        ]
+      }
+    ]
+  }
+}

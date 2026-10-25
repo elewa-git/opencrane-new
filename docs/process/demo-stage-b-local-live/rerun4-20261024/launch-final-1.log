@@ -1,0 +1,46 @@
+TAP version 13
+# Subtest: the launch entry refuses the owner before loading settings or services
+ok 1 - the launch entry refuses the owner before loading settings or services
+  ---
+  duration_ms: 400.804076
+  type: 'test'
+  ...
+# Subtest: only discovery, watch and dispatch change in the complete entrypoints
+ok 2 - only discovery, watch and dispatch change in the complete entrypoints
+  ---
+  duration_ms: 7.956037
+  type: 'test'
+  ...
+# Subtest: the complete models entrypoint supplies the dispatch service transport
+ok 3 - the complete models entrypoint supplies the dispatch service transport
+  ---
+  duration_ms: 5.863208
+  type: 'test'
+  ...
+# Subtest: missing or ambiguous network injection refuses the whole launch
+ok 4 - missing or ambiguous network injection refuses the whole launch
+  ---
+  duration_ms: 6.715109
+  type: 'test'
+  ...
+# Subtest: one fixture effect without approval records or before approval never qualifies
+ok 5 - one fixture effect without approval records or before approval never qualifies
+  ---
+  duration_ms: 91.859874
+  type: 'test'
+  ...
+# Subtest: the free model calls only an offered demo tool and never repeats after its result
+ok 6 - the free model calls only an offered demo tool and never repeats after its result
+  ---
+  duration_ms: 13.487886
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1951.039037

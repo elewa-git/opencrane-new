@@ -1,0 +1,13 @@
+{
+  "errors": [
+    {
+      "name": "Error",
+      "message": "getaddrinfo ENOTFOUND mcp.example.test",
+      "stack": "Error: getaddrinfo ENOTFOUND mcp.example.test\n    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:internal/dns/promises:102:17)"
+    }
+  ],
+  "cause": "The test launcher supplied network, but McpDispatchOptions reads remoteNetwork. Dispatch therefore used ordinary DNS.",
+  "failingTestCommit": "75ded173a",
+  "fixCommit": "c5625cad7",
+  "productChecksChanged": false
+}

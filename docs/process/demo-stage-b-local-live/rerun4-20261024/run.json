@@ -1,0 +1,463 @@
+{
+  "status": "PARTIAL",
+  "base": "78686e106f160caedd51ca26419846b921d2eead",
+  "originalSource": "174a5436c36d351fdbae7444bc97b3e4b87453bb",
+  "correctedSource": "c5625cad7445d9ba458b78b41d05cc00c638933a",
+  "rebase": "PASS",
+  "slot": 1,
+  "freshInstalls": 1,
+  "paidCalls": 0,
+  "publication": "PASS",
+  "bridgeAcceptance": "PASS",
+  "correctedReadExecution": "PASS",
+  "chatDisplay": "FAIL",
+  "approvalAndWrite": "NOT RUN",
+  "approvalQualification": "FAIL",
+  "freshBaseline": "FAIL",
+  "externalOwnerBrowserSignIn": "NOT RUN",
+  "effects": 0,
+  "capturesInspectedByEye": 40,
+  "cleanup": {
+    "status": "PASS",
+    "slot": 1,
+    "launcherStopped": true,
+    "stackDirectoryAbsent": true,
+    "composeContainersAbsent": true,
+    "namespacesAbsent": true,
+    "temporaryModelsImageRemoved": true,
+    "ownerStackTouched": false,
+    "testDatabaseRemovedWithVolume": true
+  },
+  "checks": {
+    "stageA": {
+      "status": "PASS",
+      "tests": 21
+    },
+    "changedHelpers": {
+      "status": "PASS",
+      "testsPerRun": 41,
+      "runs": 2
+    },
+    "realReadIntegration": {
+      "status": "PASS",
+      "testsPerRun": 2,
+      "runs": 2
+    },
+    "security": {
+      "status": "PASS",
+      "tests": 438
+    },
+    "finalLaunchFile": {
+      "status": "PASS",
+      "testsPerRun": 6,
+      "runs": 2
+    },
+    "lint": {
+      "status": "PASS",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 26
+    },
+    "typecheck": {
+      "status": "PASS",
+      "initialFullCommand": "FAIL",
+      "initialExitCode": 2,
+      "workspaces": "PASS",
+      "package": "PASS",
+      "devStackFinal": "PASS",
+      "finalDevStackExitCode": 0,
+      "reason": "An older test needed to narrow the model call shape before reading arguments.",
+      "rerun": "nice -n 10 npm run typecheck:dev-stack"
+    },
+    "events": {
+      "status": "PASS",
+      "types": 153
+    },
+    "knip": {
+      "status": "PASS"
+    },
+    "changelog": {
+      "status": "PASS"
+    },
+    "fullRootSuite": {
+      "status": "NOT RUN",
+      "reason": "Excluded by the build prompt"
+    },
+    "priority": "nice -n 10",
+    "database": "Ready disposable PostgreSQL supplied through PG_TEST_URL; removed with volume",
+    "finalDocs": {
+      "status": "PASS"
+    },
+    "finalLinks": {
+      "status": "PASS",
+      "links": 111
+    }
+  },
+  "artifacts": [
+    {
+      "path": "action-history-1280.png",
+      "sha256": "75f3d4865a5aae14d67682994ce6ef7da04a22a78273cf494357377895bf3433",
+      "inspectedByEye": true
+    },
+    {
+      "path": "action-history-390.png",
+      "sha256": "f955e6f2d908e7a4215ae475380f9717c250df246b1ab4ab5ba1802c472c2b4d",
+      "inspectedByEye": true
+    },
+    {
+      "path": "baseline-budget-failure.json",
+      "sha256": "7d0842c23386e3b76031f58a104cc313b197dec42e8260cc433e93f1a676c46d"
+    },
+    {
+      "path": "baseline-failure.log",
+      "sha256": "76741f3c84a796c7b2216f44ef8bab23e10e8475909c9ce95ea0ffbe10c79907"
+    },
+    {
+      "path": "browser-first.json",
+      "sha256": "751bd079694716805bf40f47457e35943286ed0620e515781bfc1805115d09ca"
+    },
+    {
+      "path": "change-history-1280.png",
+      "sha256": "246c76c4219824e52d471fde9139a82426c5da76f01612dd60ea5094005b01a1",
+      "inspectedByEye": true
+    },
+    {
+      "path": "change-history-390.png",
+      "sha256": "f4e36a70dc59fec84751d706671bc847620a8d19802b6785e176b863f5c8c582",
+      "inspectedByEye": true
+    },
+    {
+      "path": "changelog.log",
+      "sha256": "37cf7e6e60bcf0c312bb626a56b11276abd03c70d9dc70334b4b5b2d681e02c8"
+    },
+    {
+      "path": "chosen-modes-1280.png",
+      "sha256": "b7a8918ab43ebdf87c776fcd0078464fd74ec4cd8eaab54e59d05ecc9709b1a9",
+      "inspectedByEye": true
+    },
+    {
+      "path": "chosen-modes-390.png",
+      "sha256": "ce6e5e09aa51cd9500064c238f3e12e35368af251c5bb18dd83a8aa3b293d29e",
+      "inspectedByEye": true
+    },
+    {
+      "path": "cleanup.json",
+      "sha256": "98cc90878c49a033b0862dd232be917a8398476c0d67fd6054c4ae30c172d219"
+    },
+    {
+      "path": "corrected/action-history-1280.png",
+      "sha256": "e253cb74785a0b5e0f1305568b5f1dd9e2dc24f17a1dbbf186c8bbf27e869c62",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/action-history-390.png",
+      "sha256": "d871cbf0c20f2e6e435a837aa5cf97fdda653c0123493bf177b1855fb4f1aa7d",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/change-history-1280.png",
+      "sha256": "f77c2c95b58e0bc91bafa82f48674cce24b9682031f15354069d1e476d72c207",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/change-history-390.png",
+      "sha256": "e46eefe6d556cb58bebda7808fa9768d7843b38cf743385b1098f409286f203c",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/failed-chat-1280.png",
+      "sha256": "815a614f9941333630d7a6a6edc54ee4adb204337756cc0c13911a9bb87ba3ba",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/failed-chat-390.png",
+      "sha256": "21f1936af59850c385dd830a4f0eed04ca2130bcedefa70bb32bd00d10b26524",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/failure-analysis.json",
+      "sha256": "45f54218132d83ae175b7c7b2b6bbd2dc34dcd392811d1c0f6b82d738ac975f2"
+    },
+    {
+      "path": "corrected/feed-diagnosis.json",
+      "sha256": "1527edbf6fef61795be359a12463e6f3dbe34212fd438483b2329c4145583436"
+    },
+    {
+      "path": "corrected/live-probe.json",
+      "sha256": "712100bf61b644e811f0294040777b87ccf43d334270cd4b1edcef3217637120"
+    },
+    {
+      "path": "corrected/publication-loaded-1280.png",
+      "sha256": "0b5b3ec6d1f4520fd3363c35ad6d995cb5307187433c2fb976821e59f3c0807b",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/publication-loaded-390.png",
+      "sha256": "6fd4a3ca249411346d0c867b96f2d41947a55f071ac02612e39ac290d5147b62",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/publication-status.json",
+      "sha256": "f5281029cfbb690b08c97b70ad50b36569758aae4741a4ea1b14dd46393e8133"
+    },
+    {
+      "path": "corrected/publication.json",
+      "sha256": "6d712ca6c8738ed74e9b0ea665c5274d2f1fb1f53de8945b61356ba6653924cd"
+    },
+    {
+      "path": "corrected/read-chat-1280.png",
+      "sha256": "aaebaf267c11a696fe1e2952d0c31c31111217e8bc38dc1d1ae3b48ad6e99474",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/read-chat-390.png",
+      "sha256": "669780143c95807c3523894aabd777b041d380372282af498e5fc19a329da0b5",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/read-chat-reloaded-1280.png",
+      "sha256": "40ebc7f1efebeb7c4694a5b9cecb8973dbc1c4b6678285364adff89092d08583",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/read-chat-reloaded-390.png",
+      "sha256": "9713b10d8bfeae569ef3d10cd2eec60573d83ab65a1290e8488cf22d9d48d321",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/spending-1280.png",
+      "sha256": "fd111135dacad176d9bbfe67d35ce39853fd502b8f07b179fa324c4e7b823e58",
+      "inspectedByEye": true
+    },
+    {
+      "path": "corrected/spending-390.png",
+      "sha256": "e7bd337b014e3cf2d321bbdada71537c2eb68904150321c2e16a41da76460872",
+      "inspectedByEye": true
+    },
+    {
+      "path": "decisions.json",
+      "sha256": "51abe1d04366ca8fe2d9e52d492e75b778d1a478d18a105640b23471b07b857c"
+    },
+    {
+      "path": "diagnostic-read-1280.png",
+      "sha256": "c47ac6aa7932c7c127f443edf8e1d3b8831bb8c0935cfdb4c1e86d06934e540a",
+      "inspectedByEye": true
+    },
+    {
+      "path": "diagnostic-read-390.png",
+      "sha256": "532e2770b8cb1946ce9095dc47ab596ad6881ce3c6abed672150ce9454e82820",
+      "inspectedByEye": true
+    },
+    {
+      "path": "dispatch-injection-after.log",
+      "sha256": "658fb65a61e7a9431c359cb6ff4a959ab8453978c6441dff233096f17990fc2b"
+    },
+    {
+      "path": "dispatch-injection-before.log",
+      "sha256": "42dcd52f070d70d8627cade80b30b2bfaedec91b0033c244e9c8ddf00cf797b4"
+    },
+    {
+      "path": "events.log",
+      "sha256": "7cac846dfd58b0a730a4b7ac796e83f046febdc939260e6b6b04e870c20884ea"
+    },
+    {
+      "path": "failed-chat-1280.png",
+      "sha256": "c1119d51c0868494490de5cfb582ae370d641537f591de92da59661bde8f7692",
+      "inspectedByEye": true
+    },
+    {
+      "path": "failed-chat-390.png",
+      "sha256": "cc1454d3ad01fb21385d017d33324990db3d6128c036c3a3f4fc8595ada19db0",
+      "inspectedByEye": true
+    },
+    {
+      "path": "final-docs.log",
+      "sha256": "3306b78ca78fd873c2d3a7858ab7f604f1b038e6c75f714048677a874b155b73"
+    },
+    {
+      "path": "final-links.log",
+      "sha256": "a723474f0bdb2cc421faebd9db37d36fe515abbd2cbc5a8fd03366fbeb6557b8"
+    },
+    {
+      "path": "knip.log",
+      "sha256": "0b24692a4cd87fa2f9d206709a0bcb7bd7ee68011a0b2bbe9de031e8d57ff3b8"
+    },
+    {
+      "path": "launch-diagnosis.json",
+      "sha256": "ed4be8198d4c3411d21244a95c905da93ab33880aeae91f86cd3e23fda18b84f"
+    },
+    {
+      "path": "launch-final-1.log",
+      "sha256": "96c06730763ac8d17287010601d8cfc1d0dc752a073d54ee8c0a121598e2d95d"
+    },
+    {
+      "path": "launch-final-2.log",
+      "sha256": "496cfbeb8a04813c7d1bf7b545351f49930d8b5c25fc6d4c7831ff0625de1ab3"
+    },
+    {
+      "path": "lint.log",
+      "sha256": "03e94f6de55cf88c84297286d822d059cc752497aeacf43017e1b1570435b449"
+    },
+    {
+      "path": "live-probe.json",
+      "sha256": "dd5af2e2a17f2fd5492ebb850c6f9cc333ee2cffa2d0338af182d2a69fee8c13"
+    },
+    {
+      "path": "model-exchanges.json",
+      "sha256": "26f43d7663c09bf375b8cb088d561b33e4c1578046c7c09fd222d236745eada7"
+    },
+    {
+      "path": "ownership.json",
+      "sha256": "1601d8f3e419615a6805bbcfe2bd5e3e1aab13276781fc1d3dbd232e3ab58544"
+    },
+    {
+      "path": "publication-attempt.json",
+      "sha256": "5f3c1d1ed6793d32c63e693f731e99babb8391389d5dde642ed0814894d575bd"
+    },
+    {
+      "path": "publication-failed-1280.png",
+      "sha256": "bad39c72c404c605c45d0b0495e31922d7fb8e94121e708f692a3f39bc8ead1a",
+      "inspectedByEye": true
+    },
+    {
+      "path": "publication-failed-390.png",
+      "sha256": "baa77f053b3c7236706716e054abb4cdf6117753b16e4d7370f215490b352dcc",
+      "inspectedByEye": true
+    },
+    {
+      "path": "publication-loaded-1280.png",
+      "sha256": "5951c56dca202b7c151e9467b37d723600fe29d42e8a63acba29cbcfa91872f6",
+      "inspectedByEye": true
+    },
+    {
+      "path": "publication-loaded-390.png",
+      "sha256": "24b479334189d6a91d27b883590a6ed227db7208f05bd3232ddd52ef0e618b1e",
+      "inspectedByEye": true
+    },
+    {
+      "path": "publication-status.json",
+      "sha256": "e2b3f7fd2b0715472f44dc5e05902cd2c4caebaa9e6e537ade81ff92e1b297bd"
+    },
+    {
+      "path": "publication.json",
+      "sha256": "6d712ca6c8738ed74e9b0ea665c5274d2f1fb1f53de8945b61356ba6653924cd"
+    },
+    {
+      "path": "read-chat-1280.png",
+      "sha256": "01edead43fffe8e08df7b98d248ab80e252185a76a167cd0ebb74e5677778d4d",
+      "inspectedByEye": true
+    },
+    {
+      "path": "read-chat-390.png",
+      "sha256": "6f10d989617b78aa92477b5ed40c46adde1ac5b192a40372ffdc403346d0723c",
+      "inspectedByEye": true
+    },
+    {
+      "path": "read-chat-reloaded-1280.png",
+      "sha256": "207dfd7f5ea75e44c5ae68f244bfff1e17f63de0739bcf543db96e948f6048ae",
+      "inspectedByEye": true
+    },
+    {
+      "path": "read-chat-reloaded-390.png",
+      "sha256": "cc1454d3ad01fb21385d017d33324990db3d6128c036c3a3f4fc8595ada19db0",
+      "inspectedByEye": true
+    },
+    {
+      "path": "read-integration-1.log",
+      "sha256": "14c5722a0a79874973360b7b5b42124f110b042e3cf5f17158f66b81179b7507"
+    },
+    {
+      "path": "read-integration-2.log",
+      "sha256": "516120096db4995106c08514a0d381b87e990c69b5e7ece73ffcf810e640c5c3"
+    },
+    {
+      "path": "restart-policy.json",
+      "sha256": "5379d7cbea5d6cf6dc600cbed42eabf7fce2384e5f3ccb98eebca1c201977740"
+    },
+    {
+      "path": "review-1280.png",
+      "sha256": "f2cf7cdf083bc8777b322713c95161378b63c73843db2a61e2a87a1e63b3eb78",
+      "inspectedByEye": true
+    },
+    {
+      "path": "review-390.png",
+      "sha256": "36f564bea8c2146e2402dd086a51efec3902b210c4ce6a76511cbe8e5c44485f",
+      "inspectedByEye": true
+    },
+    {
+      "path": "runtime.json",
+      "sha256": "0fc0ead6d74465446ad5d9c78f96ead34be8a27f654bea894faf9f30a663a477"
+    },
+    {
+      "path": "saved-audience-1280.png",
+      "sha256": "27475bd0f18bdb53d155ee9918103cac656c8fb322ee11fb5dff4548f16b68b0",
+      "inspectedByEye": true
+    },
+    {
+      "path": "saved-audience-390.png",
+      "sha256": "15a57ec8073cc10aaa4517f7effb166037afbfed41b947440c239deebbc45532",
+      "inspectedByEye": true
+    },
+    {
+      "path": "security.log",
+      "sha256": "cf45e91cdad0ec90d9e7294a6fc1555510aa9d3c3d15c20792b58c5bc3bc21b1"
+    },
+    {
+      "path": "sign-in.json",
+      "sha256": "bd1731200970839365123660083153f00d10af175028e65314c0fe9bdedcdbc0"
+    },
+    {
+      "path": "source.json",
+      "sha256": "4a5f165f17a07230432f5d3825364f6b7e947286fe8dc0e91bf49595d52a7b4f"
+    },
+    {
+      "path": "spending-1280.png",
+      "sha256": "75581ddeda11a33b7eb6f4622ffe1f562e21ece75cb9ef0a61610462885633e2",
+      "inspectedByEye": true
+    },
+    {
+      "path": "spending-390.png",
+      "sha256": "f052e1e498c57e6f15f2cd379c1311cb71c4865499c932fff98c8965f1d23a23",
+      "inspectedByEye": true
+    },
+    {
+      "path": "stage-a.log",
+      "sha256": "7f848392bf031c007b495f3cb7ee99c079f52ae05e802b7cfaefd893cb4737f7"
+    },
+    {
+      "path": "tests-1.log",
+      "sha256": "7d1bcf04957f13c45104e559b828156873df6b0e39768d12e3fdde544e5721d0"
+    },
+    {
+      "path": "tests-2.log",
+      "sha256": "cece284789d068cf4275839dd3587185bf65d28498eae91e1af68ac45098318b"
+    },
+    {
+      "path": "tools-1280.png",
+      "sha256": "b7a8918ab43ebdf87c776fcd0078464fd74ec4cd8eaab54e59d05ecc9709b1a9",
+      "inspectedByEye": true
+    },
+    {
+      "path": "tools-390.png",
+      "sha256": "ce6e5e09aa51cd9500064c238f3e12e35368af251c5bb18dd83a8aa3b293d29e",
+      "inspectedByEye": true
+    },
+    {
+      "path": "typecheck-dev-stack-final.log",
+      "sha256": "45f96d18bc7a398ac60bfb63c131ae0486317e5d24abbdf3307afefbebaffc21"
+    },
+    {
+      "path": "typecheck.log",
+      "sha256": "e72b8e35c34287406311ea467baa7935ba35831bf93c89161f4504059266188c"
+    },
+    {
+      "path": "verify-failure.log",
+      "sha256": "dd05beb76fb865efc0979d5556e35a2718cdace04685f1a5375fc47b4a64ddfb"
+    }
+  ],
+  "stageARegression": "PASS",
+  "generation": 1,
+  "readReviewRevision": 373,
+  "readDispatchPosition": 444,
+  "textLogFormatting": "Trailing whitespace removed; original logs retained privately."
+}

@@ -1,0 +1,26 @@
+{
+  "source": "edca5278d381ed1d50abfb9454cfe67dfe372c09",
+  "rebasedOnto": "fd1626af64013c20f60272c3d6700e5254f6c6be",
+  "computerImages": [
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    },
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    },
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    }
+  ],
+  "testModelsImage": "sha256:cbbb1f9c05db4b37084636afd0099fad2eab048124d61edea6d7ab6f4d76fa96",
+  "slot": 1,
+  "codexVersion": "0.159.2",
+  "gatewayVersion": "1.5.0",
+  "gatewayRevision": "fe6732474a96a0363dfb9822859af4e9bab360fa"
+}

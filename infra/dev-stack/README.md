@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts in Docker| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|starts apps; checks journeys, tool evidence, ownership and private failure pictures| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|starts apps; keeps keys private; checks journeys and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster| devbox
 ```
@@ -41,6 +41,7 @@ configuration changes. Its background jobs keep their own database.
 - Prepares Kubernetes so background workers can start one
   [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
 - Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
+  The stand-in also runs on its own for computer startup checks.
 - Runs browser checks for chat, files, people, groups, shared assistants and spending.
   Checks money in admin Change history and keeps it out of member action history.
   Scrolls waiting approvals into view before saving desktop and phone pictures.
@@ -56,7 +57,12 @@ configuration changes. Its background jobs keep their own database.
   linked approval and dispatch records in event-log order.
   A disposable computer also checks that the free model can call a published read
   tool and answer with its result in the same chat turn.
-  The separate browser and chat rehearsal is still to be connected to these checks.
+  A guarded test launch keeps the full server and models processes and connects both
+  to one local demo server. It shares only the slot claim and demo socket with models;
+  personal and memory keys stay outside that container.
+  The collector saves each reply from the demo quote checks and each original event
+  before continuing. Closing the browser keeps the saved evidence. The receipt states
+  which browser steps were checked.
 
 ## Processes it handles
 

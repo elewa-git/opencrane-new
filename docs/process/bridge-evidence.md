@@ -9,7 +9,7 @@ The [first review-fix receipt](bridge-fixes-evidence.md) and
 Environment: developer box, Node 22.23.3, npm 12.2.0, existing `k3d-ocn`
 cluster with gVisor and local-path PVCs. Fresh means disposable dev-stack
 state and computer namespaces were recreated, not a new host or cluster.
-The owner stack was stopped from `/home/jente/dev/opencrane-new` in **7.69 s**,
+The owner stack was stopped from `<worktree>` in **7.69 s**,
 then the ownership marker was moved to this worktree. `npm ci` passed in
 **20.15 s**. Zitadel files were retained; only org `393311211338337681` was
 used. Application listeners remained on loopback/tailnet; the model listener
@@ -136,7 +136,7 @@ from committed evidence. No credential or token value is included here.
 ## Owner-stack restoration
 
 The branch was committed, then `infra/dev-stack/down.sh` passed in **10.78 s**.
-The ownership marker was returned to `/home/jente/dev/opencrane-new` at main
+The ownership marker was returned to `<worktree>` at main
 commit `3e5c899b53795c4c0e4b04786cf56da7120aee81`. Restoration used main's
 `up.sh --fresh`, because its handler set cannot consume this branch's events.
 The first attempt failed before bootstrap when the model gateway exited:
@@ -156,7 +156,7 @@ chat bridge journey. Logs: `main-fresh-final.log` in the local artefact director
 The initial gateway-startup failure's exact cause was not established.
 
 The stack is running from main at <https://ocn-dev.tail00285e.ts.net/>. Its
-checkout is clean. The marker names `/home/jente/dev/opencrane-new`; all saved
+checkout is clean. The marker names `<worktree>`; all saved
 Zitadel files match their pre-restoration hashes. Restoration results were added
 to this evidence commit afterwards. Nothing was pushed.
 

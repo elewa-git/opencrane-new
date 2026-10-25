@@ -32,4 +32,4 @@ Application bundle generation complete. [23.633 seconds] - 2026-10-04T06:26:56.8
   For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
 
 
-Output location: /home/jente/dev/wt/bootstrap-token/apps/web/dist/web
+Output location: <worktree>/apps/web/dist/web

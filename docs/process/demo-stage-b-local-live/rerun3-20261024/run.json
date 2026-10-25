@@ -1,0 +1,547 @@
+{
+  "date": "2026-10-24",
+  "status": "PARTIAL",
+  "source": "a294ebd1d0789c9639a0caaa4cfa84934044e16f",
+  "base": "e3a97a8881e5dfd2d8f0f8701e751215f27a3b74",
+  "rebase": "PASS",
+  "slot": 1,
+  "freshInstall": true,
+  "localDemoServer": true,
+  "paidCalls": 0,
+  "results": {
+    "stageARegression": "PASS",
+    "freshBaseline": "PASS",
+    "externalOwnerMembershipAndAccess": "PASS",
+    "externalOwnerBrowserSignIn": "NOT RUN",
+    "discovery": "PASS",
+    "exactCostReviewAndModes": "PASS",
+    "bothAudienceGrants": "PASS",
+    "publicationAndGatewayAcknowledgement": "PASS",
+    "bridgeAcceptanceThroughToModelTools": "PARTIAL",
+    "realChatRead": "FAIL",
+    "writeApprovalAndSingleEffect": "NOT RUN",
+    "independentServerReadbacks": "PASS",
+    "approvalEvidenceChecker": "FAIL",
+    "spendingAndChangeHistory": "PARTIAL",
+    "nativeConsent12b": "NOT RUN"
+  },
+  "originalPublication": {
+    "memberGrantSequence": 373,
+    "assistantGrantSequence": 374,
+    "reviewExpectedSequence": 372,
+    "reviewSequence": 375,
+    "publicationSequence": 376,
+    "observationSequence": 380,
+    "generation": 1,
+    "publicationCommandId": "54b8b7e0-1a01-4a95-a3e3-825a8bf9a440",
+    "gatewayProcessId": "499bcc6a-d4e5-4819-ba50-85dd2e1f9fd3"
+  },
+  "originalRead": {
+    "conversationId": "e03a1978-1b98-4864-875a-77fbf6a20fd9",
+    "turnId": "64e6cdd9-2500-4f60-8187-ac70214648b0",
+    "modelRequestId": "0f7437e2-6fd7-4603-b6ec-2ab17c887a3a",
+    "outcome": "model_error",
+    "reservedCents": 17,
+    "settlementObserved": false,
+    "rootCause": "Unresolved: the original model request body was not captured."
+  },
+  "diagnosis": {
+    "modelsRestartedOnceForExistingPrivateCapture": true,
+    "diagnosticReadReservedCents": 16,
+    "diagnosticReadSettlementObserved": false,
+    "diagnosticRequestHadDemoTools": false,
+    "caveat": "The restart held publication before the diagnostic read; its missing tools do not prove the original failure cause.",
+    "recoveryDefect": "A new watch saves failure before an unchanged check. The failed check withdraws publication. Review requires a catalogue comparison that does not exist, leaving no browser recovery action.",
+    "failureSequence": 1105,
+    "unchangedSequence": 1106,
+    "bypassUsed": false
+  },
+  "countsAcrossBothReadAttempts": {
+    "toolDispatches": 0,
+    "approvalRequests": 0,
+    "effects": 0
+  },
+  "spendingIncludingBaseline": {
+    "afterOriginalRead": {
+      "settledCents": 11,
+      "reservedCents": 49
+    },
+    "afterDiagnosticRead": {
+      "settledCents": 11,
+      "reservedCents": 65
+    },
+    "declaredToolCostCents": 0
+  },
+  "checks": {
+    "stageA": {
+      "status": "PASS",
+      "tests": 21
+    },
+    "changedAndHelperTestsFirst": {
+      "status": "PASS",
+      "tests": 35
+    },
+    "changedAndHelperTestsSecond": {
+      "status": "PASS",
+      "tests": 35
+    },
+    "securityRules": {
+      "status": "PASS",
+      "tests": 438
+    },
+    "typecheck": "PASS",
+    "events": {
+      "status": "PASS",
+      "types": 153
+    },
+    "knip": "PASS",
+    "changelog": "PASS",
+    "lint": "PASS",
+    "fullRootSuite": "NOT RUN",
+    "postgres": "Disposable PostgreSQL 17.6 supplied through PG_TEST_URL; readiness passed before tests.",
+    "priority": "All checks and tests invoked under nice -n 10.",
+    "lintWarnings": 25,
+    "markdown": "PASS"
+  },
+  "cleanup": {
+    "status": "PASS",
+    "slotReleased": true,
+    "ownedStackRemoved": true,
+    "ownedLauncherStopped": true,
+    "temporaryModelsImageRemoved": true,
+    "testDatabaseAndVolumeRemoved": true,
+    "ownerStackTouched": false
+  },
+  "captures": {
+    "count": 34,
+    "allInspectedByEye": true,
+    "widths": [
+      1280,
+      390
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "baseline.log",
+      "bytes": 4547,
+      "sha256": "14de4ddb5784ff58c994b285fd017b303c83020184d4f665190323ba8c0315d8"
+    },
+    {
+      "path": "bridge-inputs.json",
+      "bytes": 1086,
+      "sha256": "8c2d64c3e7174fdeb6ba1cc391709e48b55125ccaf8d49ed7732575b4378374f"
+    },
+    {
+      "path": "browser-first.json",
+      "bytes": 176,
+      "sha256": "751bd079694716805bf40f47457e35943286ed0620e515781bfc1805115d09ca"
+    },
+    {
+      "path": "change-history-1280.png",
+      "bytes": 853867,
+      "sha256": "8dc3c745a480d9ee189bfb4e4124e646aa2b863a08711cdd0a6f56dd01849434",
+      "width": 1280,
+      "height": 6257,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "change-history-390.png",
+      "bytes": 781506,
+      "sha256": "2485ed98af735bb2cac8e0716223c95c45f805212ad1091d43b2811a58fa6bca",
+      "width": 390,
+      "height": 8770,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "changelog.log",
+      "bytes": 87,
+      "sha256": "37cf7e6e60bcf0c312bb626a56b11276abd03c70d9dc70334b4b5b2d681e02c8"
+    },
+    {
+      "path": "chosen-modes-1280.png",
+      "bytes": 178309,
+      "sha256": "b7a8918ab43ebdf87c776fcd0078464fd74ec4cd8eaab54e59d05ecc9709b1a9",
+      "width": 1280,
+      "height": 1389,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "chosen-modes-390.png",
+      "bytes": 131158,
+      "sha256": "ce6e5e09aa51cd9500064c238f3e12e35368af251c5bb18dd83a8aa3b293d29e",
+      "width": 390,
+      "height": 1599,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic/chosen-modes-1280.png",
+      "bytes": 131421,
+      "sha256": "5d4d41174d7e189ec6acdbc360224ec3fc965c7753a2131c43186f36b8cbe2e4",
+      "width": 1280,
+      "height": 1007,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic/chosen-modes-390.png",
+      "bytes": 97966,
+      "sha256": "0d04f175822ebdf3eee0ad4ba8a31096d8781c3135b8dc27ae37efe5ce2f2968",
+      "width": 390,
+      "height": 1239,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic/publication-attempt.json",
+      "bytes": 1570,
+      "sha256": "275b62b90422a41aab5feffa7faa39a60efa62b6700732370c3498bdff0845fe"
+    },
+    {
+      "path": "diagnostic/publication-failed-1280.png",
+      "bytes": 131420,
+      "sha256": "86624a3719297d592e44944967acd16c5c466e5387f64c6626565ef71fbd876e",
+      "width": 1280,
+      "height": 1007,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic/publication-failed-390.png",
+      "bytes": 97966,
+      "sha256": "0d04f175822ebdf3eee0ad4ba8a31096d8781c3135b8dc27ae37efe5ce2f2968",
+      "width": 390,
+      "height": 1239,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic/saved-audience-1280.png",
+      "bytes": 131420,
+      "sha256": "86624a3719297d592e44944967acd16c5c466e5387f64c6626565ef71fbd876e",
+      "width": 1280,
+      "height": 1007,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic/saved-audience-390.png",
+      "bytes": 97966,
+      "sha256": "0d04f175822ebdf3eee0ad4ba8a31096d8781c3135b8dc27ae37efe5ce2f2968",
+      "width": 390,
+      "height": 1239,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic-history-1280.png",
+      "bytes": 837006,
+      "sha256": "a9957793b1d244149caef78160c996f762ef211a8ee631f994f0b33051b1e089",
+      "width": 1280,
+      "height": 6295,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic-history-390.png",
+      "bytes": 761187,
+      "sha256": "91e998a7719557717a2e8fd650aacfe6967a21b5e38590a0371ed729935777aa",
+      "width": 390,
+      "height": 8635,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic-policy-records.json",
+      "bytes": 12665,
+      "sha256": "538fb24bede64fc9f05864761b0299ebb43d6529dde36804422bbb7a2650e96f"
+    },
+    {
+      "path": "diagnostic-probe.json",
+      "bytes": 53525,
+      "sha256": "49bea30b86ed6e97f85b25a9fb098de5eae49bb565f128c43942c6e77561d813"
+    },
+    {
+      "path": "diagnostic-spending-1280.png",
+      "bytes": 324019,
+      "sha256": "1093bf58fe505f8261b866f7d032b2238a34dd3504d540766d7505361cdbd60d",
+      "width": 1280,
+      "height": 1957,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "diagnostic-spending-390.png",
+      "bytes": 311802,
+      "sha256": "a2598468042db72b4db40c4e53f310049c5645b20c0a5a7109a9787289259f7e",
+      "width": 390,
+      "height": 3223,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "events.log",
+      "bytes": 192,
+      "sha256": "7cac846dfd58b0a730a4b7ac796e83f046febdc939260e6b6b04e870c20884ea"
+    },
+    {
+      "path": "failed-chat-1280.png",
+      "bytes": 154045,
+      "sha256": "a974ea46a4a3c826d557e0e8fefd8dff2fa67d47e17984fd54aa8cb129de64be",
+      "width": 1280,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "failed-chat-390.png",
+      "bytes": 63255,
+      "sha256": "ca5ef22500125c41382cb4bf021f3b45af8c471a0e030b1ee114eec7eb56d0d9",
+      "width": 390,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "failure-analysis.json",
+      "bytes": 3782,
+      "sha256": "762c964208a98ffb01d1f4835410c2b3022d8ba7b53b527f8fa7b6f7484adea2"
+    },
+    {
+      "path": "knip.log",
+      "bytes": 197,
+      "sha256": "0b24692a4cd87fa2f9d206709a0bcb7bd7ee68011a0b2bbe9de031e8d57ff3b8"
+    },
+    {
+      "path": "lint.log",
+      "bytes": 6369,
+      "sha256": "bd35fd50f094aeaddf11aaae410e86be7382b2cfa7aa1c06f2766fc52b167b1e"
+    },
+    {
+      "path": "live-probe.json",
+      "bytes": 55798,
+      "sha256": "79475c7a9c353b562320a61531446c808d97ea242aed57882bd41f224ace5266"
+    },
+    {
+      "path": "original-bridge-inputs.json",
+      "bytes": 4373,
+      "sha256": "dc6840d7732066d94568a8704cebc415b750d5296f2319de8e378cc8ecd1b2ec"
+    },
+    {
+      "path": "ownership.json",
+      "bytes": 320,
+      "sha256": "59263e601459d67ef5a450754bffc1b4e7924cbd7160793bc4b3c537d44ba9d0"
+    },
+    {
+      "path": "publication-loaded-1280.png",
+      "bytes": 118786,
+      "sha256": "5419f9c681030b1109fefd8f0c5594fd7d1d7fb131deb46374d67a60105c0671",
+      "width": 1280,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "publication-loaded-390.png",
+      "bytes": 68847,
+      "sha256": "902e94ead29ea9939f22e2d425ad625845feec433b1b9a3c07017651f97d154b",
+      "width": 390,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "publication-status.json",
+      "bytes": 446,
+      "sha256": "358596ada991aa50c0b27d9bee8398f456bc74371ce6f02b0e875a57f1cb4742"
+    },
+    {
+      "path": "publication.json",
+      "bytes": 26589,
+      "sha256": "e278e5da7c587799d60b302ba45df9e899f1de76bfaf5ae8511a1c1a8aa64c5f"
+    },
+    {
+      "path": "published-1280.png",
+      "bytes": 96795,
+      "sha256": "59a0a91123f6a0b73c7a31f011b8086d6e9ae7a6b013b1564007a506625cf946",
+      "width": 1280,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "published-390.png",
+      "bytes": 266451,
+      "sha256": "acbb4ce91b7cfb385916aa428d5f53bd5653f7f5dbb52e8ec17a849c366e6f76",
+      "width": 390,
+      "height": 2731,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "read-chat-1280.png",
+      "bytes": 144116,
+      "sha256": "542b2637473d2c50ad720e9f8b68e0c68d9fe7f19f14ec20288140ce27206d4d",
+      "width": 1280,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "read-chat-390.png",
+      "bytes": 64390,
+      "sha256": "7d3b858437fb7f8ec3fed3b315f619a5c4c05cc7cb6be9e9d74280293cb9e5fb",
+      "width": 390,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "read-chat-reloaded-1280.png",
+      "bytes": 145951,
+      "sha256": "49bfb7f46b6b0646aef3521e339ac1a3910819260522067be3d045a766903aee",
+      "width": 1280,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "read-chat-reloaded-390.png",
+      "bytes": 63255,
+      "sha256": "ca5ef22500125c41382cb4bf021f3b45af8c471a0e030b1ee114eec7eb56d0d9",
+      "width": 390,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "renewal-blocked-1280.png",
+      "bytes": 134183,
+      "sha256": "dc129aac651ad68d5d1e33d54aca2becab058252d84ec0d5ce1cef19af7b606f",
+      "width": 1280,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "renewal-blocked-390.png",
+      "bytes": 85566,
+      "sha256": "63d6d0e32cb9fe1a0fd49822f44ba4100d29d58438cdbe7e33da5c5f1bac3189",
+      "width": 390,
+      "height": 900,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "review-1280.png",
+      "bytes": 348093,
+      "sha256": "66127531c9cf395209213e857fa88146ea86285b17cb02ff008ff27d012773a4",
+      "width": 1280,
+      "height": 2250,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "review-390.png",
+      "bytes": 280362,
+      "sha256": "3f1e2d73df0abbaf08211a97ce94082be5ae13c8cc0b291b36e64b8c48ec2242",
+      "width": 390,
+      "height": 2861,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "runtime.json",
+      "bytes": 1286,
+      "sha256": "84800a49abe028be062bcbc6dac50af2412bdd132af8e6370badb5e84b367c65"
+    },
+    {
+      "path": "saved-audience-1280.png",
+      "bytes": 191399,
+      "sha256": "27475bd0f18bdb53d155ee9918103cac656c8fb322ee11fb5dff4548f16b68b0",
+      "width": 1280,
+      "height": 1435,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "saved-audience-390.png",
+      "bytes": 145938,
+      "sha256": "15a57ec8073cc10aaa4517f7effb166037afbfed41b947440c239deebbc45532",
+      "width": 390,
+      "height": 1699,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "security.log",
+      "bytes": 276,
+      "sha256": "049f15c9b389ad42bbd60a96bfcffe8d6196eaa34a8c188e94d8612270fd33eb"
+    },
+    {
+      "path": "sign-in.json",
+      "bytes": 162,
+      "sha256": "bd1731200970839365123660083153f00d10af175028e65314c0fe9bdedcdbc0"
+    },
+    {
+      "path": "spending-1280.png",
+      "bytes": 300784,
+      "sha256": "1fb888d75e45e5fbcb3700640c77f8c8f85af33948dcbcf8880b6dcc3d3a3949",
+      "width": 1280,
+      "height": 1864,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "spending-390.png",
+      "bytes": 281126,
+      "sha256": "f8fedc5e03d76bc9728acc54570db2cb20bdf5c2d181efaf7e3d3f96ab684d3e",
+      "width": 390,
+      "height": 2937,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "stage-a.log",
+      "bytes": 6470,
+      "sha256": "dc8d0b1d3a55e891fd553b006ed6407b976bd435cb210973cf4fc30dce1ef9ee"
+    },
+    {
+      "path": "tests-1.log",
+      "bytes": 7001,
+      "sha256": "b2ef78d0e63e4d91d6ed40eeec9614341b8f9e61fc4515746bf4f217499cc28a"
+    },
+    {
+      "path": "tests-2.log",
+      "bytes": 7001,
+      "sha256": "eba0837dc4c6ac488e148c474de0e35bf445939ca88c56b754e78f69f20cabac"
+    },
+    {
+      "path": "tools-1280.png",
+      "bytes": 178309,
+      "sha256": "b7a8918ab43ebdf87c776fcd0078464fd74ec4cd8eaab54e59d05ecc9709b1a9",
+      "width": 1280,
+      "height": 1389,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "tools-390.png",
+      "bytes": 131158,
+      "sha256": "ce6e5e09aa51cd9500064c238f3e12e35368af251c5bb18dd83a8aa3b293d29e",
+      "width": 390,
+      "height": 1599,
+      "inspectedByEye": true,
+      "emailAddressesMasked": true
+    },
+    {
+      "path": "typecheck.log",
+      "bytes": 1244,
+      "sha256": "b87edc4166374a407e6071e0682559bfff7bd7d41c4dbf267c290686ae4fa75a"
+    }
+  ],
+  "logRedaction": "Email addresses masked and trailing whitespace removed; private originals retained."
+}

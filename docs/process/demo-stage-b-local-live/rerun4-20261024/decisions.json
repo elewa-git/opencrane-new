@@ -1,0 +1,122 @@
+[
+  {
+    "sequence": 383,
+    "event": {
+      "id": "102296d8-f424-4960-86c1-3039df40d973",
+      "type": "decision.recorded",
+      "commandId": "102296d8-f424-4960-86c1-3039df40d973",
+      "source": "models",
+      "time": "2026-10-24T14:23:06.125Z",
+      "subject": "decision-9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "requestId": "9a0feb15-6e0b-476c-a7fc-69607f0d9eaf",
+        "requesterId": "zitadel-owner",
+        "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "permitId": "15beec2e-f79f-45b5-abc0-77da2bf2018b",
+        "route": "model",
+        "outcome": "allow",
+        "reason": "model_allowed",
+        "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0"
+      }
+    }
+  },
+  {
+    "sequence": 388,
+    "event": {
+      "id": "a511af8c-cb52-4f89-be15-ed2abf40567b",
+      "type": "decision.recorded",
+      "commandId": "a511af8c-cb52-4f89-be15-ed2abf40567b",
+      "source": "models",
+      "time": "2026-10-24T14:23:08.837Z",
+      "subject": "decision-eef9d40f-7646-41a3-9609-77481e48f60c",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "callId": "exec-73a68b89-8d1b-4391-a71c-376ac9909187",
+        "logicalRequestId": "20335d3fb612f4759c967348826f79d185e89bcf8758d7cbfe7fc1df467e66fa",
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "toolName": "read_fixture_quote",
+        "requestId": "eef9d40f-7646-41a3-9609-77481e48f60c",
+        "requesterId": "zitadel-owner",
+        "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "route": "mcp",
+        "outcome": "allow",
+        "reason": "policy_allow",
+        "contextDigest": "be880486ca6a7741c4c6ef53c0e404fe1868f3c537f27628dbfd04ddc14299bf"
+      }
+    }
+  },
+  {
+    "sequence": 389,
+    "event": {
+      "id": "eef9d40f-7646-41a3-9609-77481e48f60c:tool-dispatch",
+      "type": "tool.dispatch_recorded",
+      "commandId": "eef9d40f-7646-41a3-9609-77481e48f60c:tool-dispatch",
+      "source": "models",
+      "time": "2026-10-24T14:23:08.963078Z",
+      "subject": "decision-eef9d40f-7646-41a3-9609-77481e48f60c",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "callId": "exec-73a68b89-8d1b-4391-a71c-376ac9909187",
+        "serverId": "467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61",
+        "toolName": "read_fixture_quote",
+        "requestId": "eef9d40f-7646-41a3-9609-77481e48f60c",
+        "logicalRequestId": "20335d3fb612f4759c967348826f79d185e89bcf8758d7cbfe7fc1df467e66fa",
+        "startedAt": "2026-10-24T14:23:08.837Z",
+        "durationMs": 548,
+        "outcome": "responded",
+        "evidence": "response_received"
+      }
+    }
+  },
+  {
+    "sequence": 392,
+    "event": {
+      "id": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+      "type": "decision.recorded",
+      "commandId": "4e1278d7-81c5-4f59-a2c6-aae911ba5d12",
+      "source": "models",
+      "time": "2026-10-24T14:23:10.783Z",
+      "subject": "decision-5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+      "silo": "dev",
+      "principal": {
+        "id": "models",
+        "kind": "system"
+      },
+      "correlation": {},
+      "data": {
+        "requestId": "5ffd173f-14af-4cf5-bdbf-8c584c755a44",
+        "requesterId": "zitadel-owner",
+        "assistantId": "personal-c42ec7d216021c21e399398cb63017af",
+        "conversationId": "0675e8b0-55bb-454a-9359-be5f5f6658e2",
+        "turnId": "0da66c64-4236-46b4-914d-33fa7b40d5b9",
+        "permitId": "d136607a-562f-4aa6-a778-34d633665930",
+        "route": "model",
+        "outcome": "allow",
+        "reason": "model_allowed",
+        "contextDigest": "bb4e219d32741a409088773dd9e8eacf8d5cb2ac3952944c48828ae45207d6b0"
+      }
+    }
+  }
+]

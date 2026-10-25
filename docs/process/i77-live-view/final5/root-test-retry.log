@@ -3,7 +3,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/i77-batch5
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  127 passed | 4 skipped (131)

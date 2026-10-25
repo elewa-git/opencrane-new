@@ -1,0 +1,10 @@
+{
+  "changeRef": "3df68aac-7a71-4696-ad24-fd46a6c406a7",
+  "fragmentDigest": "443931d6491a4fc4ccb9f356687f81e2524a0cd894b7b774587c03b10fcceeb8",
+  "requestedAt": "2026-10-24T14:21:14.101Z",
+  "generation": 1,
+  "recordDigest": "c809822633df535758f910b7d497fe0db2dc679db6ab35445eb9de692ac461b2",
+  "status": "ready",
+  "configDigest": "c2da0ba5b675a12e06882d40ce3036d8201d42b6aace73bbcbc072f382e74e43",
+  "observedAt": "2026-10-24T14:28:34.685Z"
+}

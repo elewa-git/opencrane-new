@@ -8,7 +8,7 @@ live sign-in journey. The record below describes the earlier sign-in release.
 Issue #11, 2 October 2026, branch `work/zitadel-signin`.
 Final findings fixed on top of `747102fc38cf3a4dcfb1d9aa45d48bdad5c8ef98`.
 This receipt is committed with the fixes; the final handoff records its HEAD SHA.
-The dev stack runs from `/home/jente/dev/wt/zitadel-signin` and is left running.
+The dev stack runs from `<worktree>` and is left running.
 Resource names, public IDs, redirect URLs and secret-file references are in the
 [dev-stack README](../../infra/dev-stack/README.md). No dependency was added.
 
@@ -67,7 +67,7 @@ WebSocket, typed integrations, anonymous/member refusal and replay verification.
 
 Source: `Onboarding Wireframes.dc.html` in the supplied design handoff.
 The retired capture script produced six card captures and six same-scale
-comparisons in `/home/jente/.fleet/signin-shots/`:
+comparisons in `<home>/.fleet/signin-shots/`:
 
 - `{1a,1b,1d}-{1280,390}.png`: live cards at device scale 1.
 - `reference-{1a,1b,1d}.png`: source frame crops without labels or notes.

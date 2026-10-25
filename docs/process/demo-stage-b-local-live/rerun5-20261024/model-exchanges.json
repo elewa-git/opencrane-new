@@ -1,0 +1,97 @@
+[
+  {
+    "sha256": "555e712ac9e2dcc7a936d23df8b23181619e20070bbd9316f1017da572352c04",
+    "toolOutputs": []
+  },
+  {
+    "sha256": "03c751c65e67df2c420d4d8042f5293e2f1e614a7e00bcd577ece09f72a03e6a",
+    "toolOutputs": [
+      {
+        "type": "custom_tool_call_output",
+        "id": "ctco_01a16efd-b52d-7de0-bcd2-afa87752aa52",
+        "call_id": "call_read_fixture_quote",
+        "output": [
+          {
+            "type": "input_text",
+            "text": "Script completed\nWall time 2.7 seconds\nOutput:\n"
+          },
+          {
+            "type": "input_text",
+            "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__read_fixture_quote\"}"
+          },
+          {
+            "type": "input_text",
+            "text": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"quoteId\\\":\\\"DEMO-001\\\",\\\"amountCents\\\":12500,\\\"slot\\\":\\\"morning\\\",\\\"effectCount\\\":0}\"}],\"structuredContent\":{\"quoteId\":\"DEMO-001\",\"amountCents\":12500,\"slot\":\"morning\",\"effectCount\":0},\"isError\":false}"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "sha256": "78da127c1f7e5b595d151c866c7ea6f283825c51e2949a56f721277ede51b174",
+    "toolOutputs": [
+      {
+        "type": "custom_tool_call_output",
+        "id": "ctco_01a16efd-b52d-7de0-bcd2-afa87752aa52",
+        "call_id": "call_read_fixture_quote",
+        "output": [
+          {
+            "type": "input_text",
+            "text": "Script completed\nWall time 2.7 seconds\nOutput:\n"
+          },
+          {
+            "type": "input_text",
+            "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__read_fixture_quote\"}"
+          },
+          {
+            "type": "input_text",
+            "text": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"quoteId\\\":\\\"DEMO-001\\\",\\\"amountCents\\\":12500,\\\"slot\\\":\\\"morning\\\",\\\"effectCount\\\":0}\"}],\"structuredContent\":{\"quoteId\":\"DEMO-001\",\"amountCents\":12500,\"slot\":\"morning\",\"effectCount\":0},\"isError\":false}"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "sha256": "9c9e2773f171c393c7c6f9afecdd512b02c7557815e85474a9f221df9c2f25f3",
+    "toolOutputs": [
+      {
+        "type": "custom_tool_call_output",
+        "id": "ctco_01a16efd-b52d-7de0-bcd2-afa87752aa52",
+        "call_id": "call_read_fixture_quote",
+        "output": [
+          {
+            "type": "input_text",
+            "text": "Script completed\nWall time 2.7 seconds\nOutput:\n"
+          },
+          {
+            "type": "input_text",
+            "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__read_fixture_quote\"}"
+          },
+          {
+            "type": "input_text",
+            "text": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"quoteId\\\":\\\"DEMO-001\\\",\\\"amountCents\\\":12500,\\\"slot\\\":\\\"morning\\\",\\\"effectCount\\\":0}\"}],\"structuredContent\":{\"quoteId\":\"DEMO-001\",\"amountCents\":12500,\"slot\":\"morning\",\"effectCount\":0},\"isError\":false}"
+          }
+        ]
+      },
+      {
+        "type": "custom_tool_call_output",
+        "id": "ctco_01a16efd-fc81-7ac1-87c1-2539e21408b9",
+        "call_id": "call_change_delivery_slot",
+        "output": [
+          {
+            "type": "input_text",
+            "text": "Script completed\nWall time 7.2 seconds\nOutput:\n"
+          },
+          {
+            "type": "input_text",
+            "text": "{\"offeredTool\":\"mcp__oc_817e192ca1__change_delivery_slot\"}"
+          },
+          {
+            "type": "input_text",
+            "text": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"quoteId\\\":\\\"DEMO-001\\\",\\\"amountCents\\\":12500,\\\"slot\\\":\\\"afternoon\\\",\\\"effectCount\\\":1}\"}],\"structuredContent\":{\"quoteId\":\"DEMO-001\",\"amountCents\":12500,\"slot\":\"afternoon\",\"effectCount\":1},\"isError\":false}"
+          }
+        ]
+      }
+    ]
+  }
+]

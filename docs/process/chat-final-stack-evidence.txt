@@ -69,5 +69,5 @@ PASS next sign-in: remembered identity still requires credentials; successful re
 PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d
 Stack ready: https://ocn-dev.tail00285e.ts.net/org/integrations (Zitadel sign-in)
 
-PASS restoration: owner marker /home/jente/dev/opencrane-new; checkout clean; stack left running
+PASS restoration: owner marker <worktree>; checkout clean; stack left running
 PASS final HTTPS GET https://ocn-dev.tail00285e.ts.net/: 200; app root present

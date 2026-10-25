@@ -4,7 +4,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/i77-batch5
+ RUN  v5.0.3 <worktree>
 
  ❯ libs/models/test/gateway.test.ts (81 tests | 1 failed | 1 skipped) 697391ms
    × resets at the exact UTC month boundary, holds unknown money and attributes late usage to the original group and month 40006ms

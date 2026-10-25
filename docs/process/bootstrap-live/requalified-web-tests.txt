@@ -38,7 +38,7 @@ chunk-7ONZXKUC.js                     | viewer                             | 202
 Application bundle generation complete. [14.369 seconds] - 2026-10-04T11:18:40.521Z
 
 
- RUN  v4.1.11 /home/jente/dev/wt/bootstrap-token/apps/web
+ RUN  v4.1.11 <worktree>/apps/web
 
 
  Test Files  11 passed (11)

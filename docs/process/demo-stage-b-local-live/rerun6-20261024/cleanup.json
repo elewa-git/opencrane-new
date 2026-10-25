@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "slot": 1,
+  "slotDirectoryRemoved": true,
+  "remainingContainers": "",
+  "remainingNamespaces": [],
+  "launcherExit": 0,
+  "downExit": 0,
+  "temporaryImageRemoved": true,
+  "ownerStackTouched": false,
+  "paidCalls": 0,
+  "namespaceCheck": "No namespace with the owned opencrane-dev-1 prefix remains",
+  "testDatabaseRemovedWithVolume": true
+}

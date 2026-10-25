@@ -55,7 +55,7 @@ successful resumed run below; this task ran no network repair.
 Date: 4 October 2026, 06:03–06:07 UTC. Source: `a3ef79c5d377a666b41791f261c083cad57c721a`
 plus the secondary override and journey in this change. `claim.sh` allocated id
 `2`; `DEV_STACK_ID=2`,
-`ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key` and
+`ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key` and
 `DEV_OWNER_BOOTSTRAP=0` were set. Both installations used `up.sh --id 2 --fresh`.
 The owner stack and host networking settings were untouched.
 
@@ -126,7 +126,7 @@ Claim a secondary stack only, then run:
 set -e
 until stack_id=$(infra/dev-stack/claim.sh); do sleep 60; done
 export DEV_STACK_ID="$stack_id"
-export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
+export ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key
 export DEV_OWNER_BOOTSTRAP=0
 trap 'infra/dev-stack/down.sh --id "$DEV_STACK_ID"' EXIT
 infra/dev-stack/up.sh --fresh
@@ -235,7 +235,7 @@ Evidence: [startup](requalified-startup-attempt1.txt),
 same `b74a97b`; the fixture included the full-Chromium selection above. The
 claim loop waited while both secondary slots belonged to other worktrees.
 `DEV_STACK_ID=1`,
-`ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key` and
+`ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key` and
 `DEV_OWNER_BOOTSTRAP=0` were set. Both installations used `up.sh --fresh` on
 that claimed slot. Only the local stub model was configured. The owner stack and
 host networking were not operated or changed.

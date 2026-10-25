@@ -82,6 +82,104 @@ It must run the one fresh browser/chat journey before reporting live qualificati
 Native shell and file-edit consent remains NOT RUN under the 23 October decision.
 See [the receipt and remaining work](../../docs/process/demo-stage-b-local/receipt.md).
 
+## Guarded local launch
+
+Part of #574, PR 14b. `stage-b-live.ts` runs after one fresh secondary start.
+It checks the requested id, claimed id and worktree marker before reading settings.
+It refuses real-provider mode. It keeps the existing server environment and the
+models Compose service, including its separate network and gateway process.
+Before stopping the server, it builds `Dockerfile.stage-b` from the same pinned
+Node image. The test image adds Debian main OpenSSL 3.0.22-1~deb12u1 for certificate
+generation. Its installed copyright file declares Apache-2.0. This image is only
+for the rehearsal; customer runtime images are unchanged.
+The PID and start time must still match before the server is stopped.
+
+`stage-b-entry.ts` checks both production entrypoint sources before loading services.
+A test-only Node load hook changes exactly three arguments: server discovery,
+models catalogue watch and models dispatch. Missing or repeated matching code refuses
+launch. Every other statement stays unchanged. Product entrypoint files are not
+edited and do not import fixtures. No production setting enables this transport.
+Dispatch receives the adapter through `McpDispatchOptions.remoteNetwork`. The launch
+test evaluates the generated options and checks this property, so a misspelt setting
+cannot silently select ordinary DNS.
+
+The rehearsal Compose override mounts `stack-owner` and `stage-b-demo.sock` read-only.
+The ordinary secondary configuration supplies the remaining models files. It does not
+mount the whole stack directory. A disposable container test checks the slot guard,
+the demo socket, the read-only claim and the absence of personal keys. This keeps the
+local launch compatible with the private-directory isolation introduced by #646.
+
+Each process uses `test/demo-remote.ts` for the synthetic hostname's public DNS pin,
+SNI, certificate checks and fresh TLS connections. Behind TLS, the adapters forward
+to one Unix socket in the owned stack directory. `apps/demo-mcp` owns that socket
+and the shared fixture state. A missing socket refuses before services start.
+The transport test writes through one adapter and reads the actual effect through
+another. Those direct calls are test coverage, not approval qualification.
+
+The free model understands `STAGE_B_READ` and `STAGE_B_WRITE` rehearsal messages.
+It calls only the matching tool offered by Codex and refuses a missing tool. It
+answers with the returned quote after receiving a tool result, without repeating the call.
+The model loads the tools helper only for those rehearsal messages. Ordinary replies
+still run from the single-file model stub used by the wake Pod check.
+The evidence checker still requires original approval and dispatch records.
+
+```sh
+DEV_STACK_ID=1 STAGE_B_CLAIMED_ID=1 nice -n 10 node --experimental-strip-types \
+  infra/dev-stack/stage-b-live.ts
+```
+
+The ids above must be the slot returned by this worktree's `claim.sh`.
+The launcher stays running during the browser check. Stop it before running
+`infra/dev-stack/down.sh --id` for that same slot. The normal down command removes
+the owned Compose service and its generated override file. Never use this launch
+against the owner or another worktree's claim.
+
+The tracked collector is `scripts/collect-stage-b-evidence.mjs`. It replaces the
+untracked sixth-run probe. It uses the claimed slot's existing signed-in browser
+state and a new output directory containing the original `publication.json`.
+It refuses existing `live-probe.json` or `live-probe.jsonl` files rather than
+replacing an earlier run. A future authorised journey can run it with:
+
+```sh
+DEV_STACK_ID=1 STAGE_B_CLAIMED_ID=1 nice -n 10 node --experimental-strip-types \
+  scripts/collect-stage-b-evidence.mjs /path/to/new-evidence-directory
+```
+
+`stage-b-collector.ts` saves every observation synchronously to `live-probe.jsonl`
+and flushes it to disk before updating `live-probe.json` by an atomic rename.
+The journal keeps earlier values when a later observation replaces a summary field.
+Each original event is saved before reading the next one. The HTTP readback keeps
+its original response body and status before parsing or checking the quote.
+Quote checks refuse unexpected fields. The refused response is still saved.
+Approval commands and response status are saved before waiting for the body.
+An unfinished browser body never holds up saving other evidence. Both files redact
+email addresses and use mode `0600`. A collector interrupted during a summary write
+leaves the previous complete summary and the saved journal. `checkStageBApproval`
+is unchanged and still refuses an incomplete set of original proof.
+
+Offline checks use a disposable demo server, child process and browser. They stop
+the child immediately after its first readback, fail an event stream after one
+original record, and close the browser during an unfinished approval response.
+These are ordinary test fixtures; they do not run a live product journey.
+The existing CI Node test step selects this regression and the launch and network
+checks. The test-selection guard requires all three file paths.
+
+```sh
+nice -n 10 node --experimental-strip-types --test infra/dev-stack/stage-b-collector.test.ts
+```
+
+Results and remaining conditions are in
+[the local live receipt](../../docs/process/demo-stage-b-local-live/receipt.md).
+The latest fresh run passed the baseline, publication, read, requester approval,
+exactly one write, reload, drawer and spending/history checks. The tracked collector
+saved the original demo readback bodies and events and exited normally. The unchanged
+`checkStageBApproval` accepted the complete proof during collection and from disk.
+All 46 public captures were inspected. The separate owner's personal browser login
+remains NOT RUN and needs the owner. Earlier failed and incomplete runs remain in
+the receipt. No product or collector code changed during this rerun.
+Native consent, public deployment and the later repeated or long-wait journeys
+remain excluded from this launch.
+
 ## TypeScript checks
 
 `npm run typecheck:dev-stack` runs `tsc --noEmit` with this folder's existing

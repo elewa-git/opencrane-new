@@ -203,7 +203,7 @@ ran at approximately **13:06 UTC**. Its non-secret receipt is:
 Command (under `/tmp/opencrane-dev-stack-zitadel-$(id -u).lock`):
 
 ```sh
-DEV_STACK_ID=owner ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key \
+DEV_STACK_ID=owner ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key \
   node --experimental-strip-types infra/dev-stack/zitadel-setup.ts --restore-owner-app
 ```
 

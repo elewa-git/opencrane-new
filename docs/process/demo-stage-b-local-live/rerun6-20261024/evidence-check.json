@@ -1,0 +1,16 @@
+{
+  "durableFlowChecks": "PASS",
+  "checker": "FAIL",
+  "checkerError": "Error: Approval evidence refused",
+  "reason": "Original before and waiting readbacks were lost when the collector was terminated.",
+  "dispatches": 2,
+  "readDispatches": 1,
+  "writeDispatches": 1,
+  "effectCount": 1,
+  "modelReservedCents": 69,
+  "modelChargedCents": 4,
+  "toolReservedCents": 0,
+  "toolChargedCents": 0,
+  "modelCalls": 4,
+  "reservedCentsAfter": 32
+}

@@ -1,0 +1,10 @@
+npm notice run npx
+npm notice run 'vitest' run scripts/stage-b-read.test.mjs --maxWorkers=2
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  00:47:14
+   Duration  32.52s (tests 83%, transform 12%, import 5%)

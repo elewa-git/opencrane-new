@@ -115,7 +115,7 @@ was put in Helm values or this receipt.
 | Worker and bootstrap chart tests before change | FAIL | The part a chart had no worker Deployments or owner bootstrap Job. The new render tests failed against it. |
 | Worker and bootstrap chart tests after change | PASS | The render now has the member, conversation, budget and dispatcher workers and the owner bootstrap Job. |
 | Fresh Helm install | PASS | The final pinned image started server, web, NATS, PostgreSQL, OpenFGA and eight workers. All Deployments reached Ready. The bootstrap Job completed on its first attempt. |
-| Separate owner user | PASS | The installed projection contained `jente-rosseel`, `jente@elewa.ke`, role `owner`, status `joined`. The Job confirmed its event-backed OpenFGA owner grant. The existing Zitadel user was not changed. |
+| Separate owner user | PASS | The installed projection contained `jente-rosseel`, `<email>`, role `owner`, status `joined`. The Job confirmed its event-backed OpenFGA owner grant. The existing Zitadel user was not changed. |
 | Sign-in page and browser session | PASS | Loopback website returned HTTP 200 and sign-in redirected. A real browser signed in with the slot's separate CI user and `/auth/me` confirmed the session. |
 | Stub-model chat turn | FAIL | The signed-in workspace API returned HTTP 503. This minimal chart has no chat key directory, model gateway or computer runtime, so no turn was sent or completed. |
 | Outside-tailnet probe | PASS | A throwaway process on Docker's bridge network could not connect to the loopback forward on port 25106. The forward listened only on `127.0.0.1`; the chart exposed only ClusterIP services. |
@@ -312,7 +312,7 @@ value was written to this receipt or to Helm values.
 | Private network | PASS | All five services were ClusterIP. There was no Ingress. A throwaway process on Docker's bridge could not reach the loopback-only forward on port 25106. |
 | Image licences | PASS | A fresh Syft scan matched all 454 reviewed application components. The added agentgateway binary has a checksum and Apache-2.0 review. The pinned computer image points to its existing 385-component licence review, checked by hash. The other image reviews still passed. |
 | Cleanup and isolation | PASS | Cleanup removed the computer claim before the warm pool, then removed the namespace and released slot 1. The owner namespace UIDs, every existing container name and ID, and loopback listener on 44200 matched the snapshots taken before installation. The package forward on 25106 was gone. Another worktree added slot 2 containers during this check; this install did not touch them. |
-| Existing person's own Zitadel login | NOT RUN | The available browser credential belongs to a separate Dev test owner linked to the `jente@elewa.ke` member. No credential path was available for the existing person's Zitadel account. That account was not changed. |
+| Existing person's own Zitadel login | NOT RUN | The available browser credential belongs to a separate Dev test owner linked to the `<email>` member. No credential path was available for the existing person's Zitadel account. That account was not changed. |
 
 The chart includes the same pinned computer image already reviewed in
 `apps/computer/licences.json`. The package's image inventory checks that file's
@@ -415,7 +415,7 @@ namespace was `opencrane-package-1`, UID
 `c9c0e50c-710c-46de-aee1-6225be63fccc`. The existing Zitadel management
 token was passed by file path. The package used its own generated wrapping key
 and local model stub. No external model key was needed. The sign-in account was
-the separate OpenCrane 2 Dev CI owner linked to the `jente@elewa.ke` member.
+the separate OpenCrane 2 Dev CI owner linked to the `<email>` member.
 The existing person's Zitadel account and the owner stack were not changed.
 
 | Live check | Result | Observation |
@@ -452,23 +452,23 @@ The other image pins came from `infra/package/reviewed-images.json`.
 
 Before claiming, the exact sequence was written to
 `/tmp/p5-2-qualified-live/setup.md`. It was reconstructed from the passing
-pair's `last.md` and `events.jsonl` under `/home/jente/.fleet/p5-2-pr1`, the
+pair's `last.md` and `events.jsonl` under `<home>/.fleet/p5-2-pr1`, the
 [package operator notes](../../infra/package/README.robot.md), and this receipt.
 
 1. `df -h /` showed 93 GiB free. `infra/dev-stack/claim.sh` returned `1`.
 2. With `DEV_STACK_ID=1` and `ZITADEL_KEY_FILE` pointing to
-   `/home/jente/dev/opencrane-new/.keys/.zitadel-key`, read-only provider setup
+   `<worktree>/.keys/.zitadel-key`, read-only provider setup
    ran as `nice -n 10 node --experimental-strip-types
    infra/dev-stack/zitadel-setup.ts --read-only`. It confirmed the secondary app
    and test users were ready and copied the slot's private sign-in settings.
-3. `/home/jente/.config/opencrane/dev-stack-1/package-values.json` was recreated
+3. `<stack-dir-1>/package-values.json` was recreated
    with mode `0600`. It contained the reviewed chart version and image pins,
    the six required Secret names prefixed with `package-` in kebab case, and
    `ingress`, `loadBalancer` and `funnel` all set to `false`. It contained no
    Secret values. This step had been missed in the previous stopped attempt.
 4. With the same environment, the command was `nice -n 10 node
    --experimental-strip-types infra/package/fresh-twice.ts
-   /home/jente/.config/opencrane/dev-stack-1/package-values.json`. The runner
+   <stack-dir-1>/package-values.json`. The runner
    prepared each namespace and its six Secrets, installed Helm revision 1,
    checked fresh data and owner access, forwarded loopback, captured the browser
    journey and removed the package. Provider preparation remained read-only.
@@ -476,7 +476,7 @@ pair's `last.md` and `events.jsonl` under `/home/jente/.fleet/p5-2-pr1`, the
    slot. Namespace, storage, claim and listener removal were checked afterwards.
 
 The key was passed as a path only. The separate OpenCrane 2 Dev slot test owner
-signed in and was linked to the `jente@elewa.ke` member. The person's own
+signed in and was linked to the `<email>` member. The person's own
 Zitadel account was not changed. No owner stack command was run.
 
 ### Results for each install

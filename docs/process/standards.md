@@ -200,6 +200,11 @@ Examples from OpenCrane 1, snapshot `468742b97`:
 | Good: `libs/backend/server/iam/membership/main/src/ed25519-fleet-membership-signature-verifier.ts:12–15` explains why the signed digest is recomputed. | Preserve the security reason; it is not obvious from the signature. |
 | Bad: `libs/contracts/src/agents/agent-capability-grant.types.ts:105`: `/** Identifies this grant record. */` above `readonly id: string`. | Remove it unless a real id format/scope constraint needs explaining. |
 
+`lint:docs` also checks every tracked text file under `docs/process/` for
+home-directory paths, private dev-stack paths and email addresses. Public evidence
+uses placeholders such as `<home>`, `<worktree>`, `<stack-dir-1>` and `<email>`.
+Screenshots need visual inspection before publication.
+
 Use [markdownlint](https://github.com/DavidAnson/markdownlint) for headings, lists, fences and duplicate headings. Use [Lychee](https://lychee.cli.rs/) for local file links in required checks and external links on a scheduled run; transient remote failures should not block an unrelated code change. Keep site dead-link checking when there is a website. Use [Vale](https://docs.vale.sh/) as an advisory UK-English/clarity check with a short domain allowlist, not a ban on technical vocabulary. Tools cannot verify that a claim is true: review consequential promises against code and evidence.
 
 ## Prompt set to keep

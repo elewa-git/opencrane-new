@@ -1,0 +1,235 @@
+{
+  "checker": "PASS",
+  "originalReadbackBodies": "PASS",
+  "originalEventOrder": "PASS",
+  "dispatches": 2,
+  "readDispatches": 1,
+  "writeDispatches": 1,
+  "effectCount": 1,
+  "costs": {
+    "modelReservedCents": 69,
+    "modelChargedCents": 4,
+    "toolReservedCents": 0,
+    "toolChargedCents": 0,
+    "basis": "Every reservation and settlement belongs to a model call; reviewed tools cost zero."
+  },
+  "spendingBefore": {
+    "todayCents": 11,
+    "monthCents": 11,
+    "reservedCents": 32,
+    "dailyCeilingCents": 5000,
+    "ceilingCents": 20000,
+    "stops": [
+      {
+        "id": "44188995-c0fd-4842-98db-57a31fa1ca7b",
+        "position": 328,
+        "reasons": [
+          {
+            "scope": "paying_group",
+            "scopeId": "budget-journey",
+            "kind": "monthly",
+            "reason": "zero_ceiling",
+            "periodStart": "2026-10-01T00:00:00.000Z",
+            "resetAt": "2026-11-01T00:00:00.000Z",
+            "ceilingCents": 0,
+            "settledCents": 0,
+            "reservedCents": 0,
+            "attemptedBoundCents": 0,
+            "configurationId": "44188995-c0fd-4842-98db-57a31fa1ca7b"
+          }
+        ]
+      },
+      {
+        "id": "a763f417-3e8d-41c0-aa4e-59150f3085ac",
+        "position": 337,
+        "reasons": [
+          {
+            "scope": "assistant",
+            "scopeId": "team-budget-journey",
+            "kind": "monthly",
+            "reason": "zero_ceiling",
+            "periodStart": "2026-10-01T00:00:00.000Z",
+            "resetAt": "2026-11-01T00:00:00.000Z",
+            "ceilingCents": 0,
+            "settledCents": 0,
+            "reservedCents": 0,
+            "attemptedBoundCents": 0,
+            "configurationId": "a763f417-3e8d-41c0-aa4e-59150f3085ac"
+          }
+        ]
+      },
+      {
+        "id": "d1c663f3-36e3-43a2-b1fd-5a5aa7a44f1f",
+        "position": 346,
+        "reasons": [
+          {
+            "scope": "paying_group",
+            "scopeId": "budget-journey",
+            "kind": "monthly",
+            "reason": "zero_ceiling",
+            "periodStart": "2026-10-01T00:00:00.000Z",
+            "resetAt": "2026-11-01T00:00:00.000Z",
+            "ceilingCents": 0,
+            "settledCents": 0,
+            "reservedCents": 0,
+            "attemptedBoundCents": 0,
+            "configurationId": "d1c663f3-36e3-43a2-b1fd-5a5aa7a44f1f"
+          }
+        ]
+      },
+      {
+        "id": "65854aac-95d6-4005-b3df-947a2bef4408",
+        "position": 355,
+        "reasons": [
+          {
+            "scope": "assistant",
+            "scopeId": "team-budget-journey",
+            "kind": "monthly",
+            "reason": "zero_ceiling",
+            "periodStart": "2026-10-01T00:00:00.000Z",
+            "resetAt": "2026-11-01T00:00:00.000Z",
+            "ceilingCents": 0,
+            "settledCents": 0,
+            "reservedCents": 0,
+            "attemptedBoundCents": 0,
+            "configurationId": "65854aac-95d6-4005-b3df-947a2bef4408"
+          }
+        ]
+      }
+    ],
+    "stoppedWork": [],
+    "sequence": 368,
+    "defaultPayingGroupId": "installation-default",
+    "periodStart": "2026-10-01T00:00:00.000Z",
+    "ceilings": [
+      {
+        "scope": "paying_group",
+        "scopeId": "budget-journey",
+        "ceilingCents": 20000,
+        "todayCents": 0,
+        "monthCents": 0,
+        "reservedCents": 0,
+        "dailyCeilingCents": 5000
+      },
+      {
+        "scope": "assistant",
+        "scopeId": "team-budget-journey",
+        "ceilingCents": 20000,
+        "todayCents": 0,
+        "monthCents": 0,
+        "reservedCents": 0,
+        "dailyCeilingCents": 5000
+      }
+    ]
+  },
+  "spendingAfter": {
+    "todayCents": 15,
+    "monthCents": 15,
+    "reservedCents": 32,
+    "dailyCeilingCents": 5000,
+    "ceilingCents": 20000,
+    "stops": [
+      {
+        "id": "44188995-c0fd-4842-98db-57a31fa1ca7b",
+        "position": 328,
+        "reasons": [
+          {
+            "scope": "paying_group",
+            "scopeId": "budget-journey",
+            "kind": "monthly",
+            "reason": "zero_ceiling",
+            "periodStart": "2026-10-01T00:00:00.000Z",
+            "resetAt": "2026-11-01T00:00:00.000Z",
+            "ceilingCents": 0,
+            "settledCents": 0,
+            "reservedCents": 0,
+            "attemptedBoundCents": 0,
+            "configurationId": "44188995-c0fd-4842-98db-57a31fa1ca7b"
+          }
+        ]
+      },
+      {
+        "id": "a763f417-3e8d-41c0-aa4e-59150f3085ac",
+        "position": 337,
+        "reasons": [
+          {
+            "scope": "assistant",
+            "scopeId": "team-budget-journey",
+            "kind": "monthly",
+            "reason": "zero_ceiling",
+            "periodStart": "2026-10-01T00:00:00.000Z",
+            "resetAt": "2026-11-01T00:00:00.000Z",
+            "ceilingCents": 0,
+            "settledCents": 0,
+            "reservedCents": 0,
+            "attemptedBoundCents": 0,
+            "configurationId": "a763f417-3e8d-41c0-aa4e-59150f3085ac"
+          }
+        ]
+      },
+      {
+        "id": "d1c663f3-36e3-43a2-b1fd-5a5aa7a44f1f",
+        "position": 346,
+        "reasons": [
+          {
+            "scope": "paying_group",
+            "scopeId": "budget-journey",
+            "kind": "monthly",
+            "reason": "zero_ceiling",
+            "periodStart": "2026-10-01T00:00:00.000Z",
+            "resetAt": "2026-11-01T00:00:00.000Z",
+            "ceilingCents": 0,
+            "settledCents": 0,
+            "reservedCents": 0,
+            "attemptedBoundCents": 0,
+            "configurationId": "d1c663f3-36e3-43a2-b1fd-5a5aa7a44f1f"
+          }
+        ]
+      },
+      {
+        "id": "65854aac-95d6-4005-b3df-947a2bef4408",
+        "position": 355,
+        "reasons": [
+          {
+            "scope": "assistant",
+            "scopeId": "team-budget-journey",
+            "kind": "monthly",
+            "reason": "zero_ceiling",
+            "periodStart": "2026-10-01T00:00:00.000Z",
+            "resetAt": "2026-11-01T00:00:00.000Z",
+            "ceilingCents": 0,
+            "settledCents": 0,
+            "reservedCents": 0,
+            "attemptedBoundCents": 0,
+            "configurationId": "65854aac-95d6-4005-b3df-947a2bef4408"
+          }
+        ]
+      }
+    ],
+    "stoppedWork": [],
+    "sequence": 430,
+    "defaultPayingGroupId": "installation-default",
+    "periodStart": "2026-10-01T00:00:00.000Z",
+    "ceilings": [
+      {
+        "scope": "paying_group",
+        "scopeId": "budget-journey",
+        "ceilingCents": 20000,
+        "todayCents": 0,
+        "monthCents": 0,
+        "reservedCents": 0,
+        "dailyCeilingCents": 5000
+      },
+      {
+        "scope": "assistant",
+        "scopeId": "team-budget-journey",
+        "ceilingCents": 20000,
+        "todayCents": 0,
+        "monthCents": 0,
+        "reservedCents": 0,
+        "dailyCeilingCents": 5000
+      }
+    ]
+  },
+  "paidCalls": 0
+}

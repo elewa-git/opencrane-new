@@ -1,7 +1,7 @@
 # Invitation panel screen check
 
 The browser captures use intercepted API replies with an Owner signed in as
-`jente@elewa.ke`. They cover the form, invalid address, created link, copied link
+`<email>`. They cover the form, invalid address, created link, copied link
 and uncertain create reply at desktop and phone widths. Motion is reduced. The
 script checks for horizontal overflow and controls smaller than 44 pixels.
 It also checks that Done returns focus to Invite people and that an invalid

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -u
-cd /home/jente/dev/wt/i77-batch4
+cd <worktree>
 output=docs/process/i77-live-view/final4
 sampler_pid=
 stack_id=
@@ -29,7 +29,7 @@ for claim_attempt in $(seq 1 11); do
   sleep 120
 done
 export DEV_STACK_ID="$stack_id"
-export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
+export ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key
 printf '%s\n' "$stack_id" > "$output/claimed-stack.txt"
 infra/dev-stack/up.sh --fresh > "$output/startup.log" 2>&1
 echo "STARTUP exit=$?"

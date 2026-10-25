@@ -1,0 +1,256 @@
+TAP version 13
+# Subtest: the approval stub checks revision and generation before recording any effect
+ok 1 - the approval stub checks revision and generation before recording any effect
+  ---
+  duration_ms: 300.968052
+  type: 'test'
+  ...
+# Subtest: the approval stub refuses startup without its instance generation
+ok 2 - the approval stub refuses startup without its instance generation
+  ---
+  duration_ms: 219.253942
+  type: 'test'
+  ...
+# Subtest: the approval stub refuses startup without its catalogue revision
+ok 3 - the approval stub refuses startup without its catalogue revision
+  ---
+  duration_ms: 216.797302
+  type: 'test'
+  ...
+# Subtest: the wake Pod fixture starts the stub with only its packaged files
+ok 4 - the wake Pod fixture starts the stub with only its packaged files
+  ---
+  duration_ms: 1784.938151
+  type: 'test'
+  ...
+# Subtest: the stub verifies managed calls, counts credentials and keeps streaming
+ok 5 - the stub verifies managed calls, counts credentials and keeps streaming
+  ---
+  duration_ms: 1779.322445
+  type: 'test'
+  ...
+# Subtest: missing and empty credential files never match or disclose a bearer or file location
+ok 6 - missing and empty credential files never match or disclose a bearer or file location
+  ---
+  duration_ms: 260.702466
+  type: 'test'
+  ...
+# Subtest: the PDF stand-in reads the converted file when inline text is unavailable or empty
+ok 7 - the PDF stand-in reads the converted file when inline text is unavailable or empty
+  ---
+  duration_ms: 2253.12431
+  type: 'test'
+  ...
+# Subtest: the launch entry refuses the owner before loading settings or services
+ok 8 - the launch entry refuses the owner before loading settings or services
+  ---
+  duration_ms: 316.936554
+  type: 'test'
+  ...
+# Subtest: only discovery, watch and dispatch change in the complete entrypoints
+ok 9 - only discovery, watch and dispatch change in the complete entrypoints
+  ---
+  duration_ms: 7.632872
+  type: 'test'
+  ...
+# Subtest: the complete models entrypoint supplies the dispatch service transport
+ok 10 - the complete models entrypoint supplies the dispatch service transport
+  ---
+  duration_ms: 7.218061
+  type: 'test'
+  ...
+# Subtest: missing or ambiguous network injection refuses the whole launch
+ok 11 - missing or ambiguous network injection refuses the whole launch
+  ---
+  duration_ms: 5.533978
+  type: 'test'
+  ...
+# Subtest: one fixture effect without approval records or before approval never qualifies
+ok 12 - one fixture effect without approval records or before approval never qualifies
+  ---
+  duration_ms: 76.559388
+  type: 'test'
+  ...
+# Subtest: the free model calls only an offered demo tool and never repeats after its result
+ok 13 - the free model calls only an offered demo tool and never repeats after its result
+  ---
+  duration_ms: 7.477646
+  type: 'test'
+  ...
+# Subtest: wrong, owner and foreign slots refuse before settings
+ok 14 - wrong, owner and foreign slots refuse before settings
+  ---
+  duration_ms: 31.100322
+  type: 'test'
+  ...
+# Subtest: an invalid slot refuses even when its claim and owner match
+ok 15 - an invalid slot refuses even when its claim and owner match
+  ---
+  duration_ms: 14.326023
+  type: 'test'
+  ...
+# Subtest: a symlink refuses even when the redirected owner matches
+ok 16 - a symlink refuses even when the redirected owner matches
+  ---
+  duration_ms: 4.858268
+  type: 'test'
+  ...
+# Subtest: real demo discovery and TLS calls retain zero costs and read back one effect
+ok 17 - real demo discovery and TLS calls retain zero costs and read back one effect
+  ---
+  duration_ms: 1395.968196
+  type: 'test'
+  ...
+# Subtest: private and mixed DNS and other hosts never open a socket
+ok 18 - private and mixed DNS and other hosts never open a socket
+  ---
+  duration_ms: 469.394152
+  type: 'test'
+  ...
+# Subtest: bad certificates and redirects refuse without another connection
+ok 19 - bad certificates and redirects refuse without another connection
+  ---
+  duration_ms: 860.951575
+  type: 'test'
+  ...
+# Subtest: the adapter requires TLS verification, SNI, no pooling and the checked public pin
+ok 20 - the adapter requires TLS verification, SNI, no pooling and the checked public pin
+  ---
+  duration_ms: 279.900973
+  type: 'test'
+  ...
+# Subtest: incomplete publication, grants, approval, effects or spending cannot pass
+ok 21 - incomplete publication, grants, approval, effects or spending cannot pass
+  ---
+  duration_ms: 87.84401
+  type: 'test'
+  ...
+# Subtest: invalid evidence errors contain no supplied values
+ok 22 - invalid evidence errors contain no supplied values
+  ---
+  duration_ms: 1.463526
+  type: 'test'
+  ...
+# Subtest: a policy without a saved catalogue refuses
+ok 23 - a policy without a saved catalogue refuses
+  ---
+  duration_ms: 2.632589
+  type: 'test'
+  ...
+# Subtest: a policy whose freshness expired at rehearsal time refuses
+ok 24 - a policy whose freshness expired at rehearsal time refuses
+  ---
+  duration_ms: 2.603031
+  type: 'test'
+  ...
+# Subtest: a policy awaiting startup review refuses
+ok 25 - a policy awaiting startup review refuses
+  ---
+  duration_ms: 1.892863
+  type: 'test'
+  ...
+# Subtest: a policy without either freshness date refuses
+ok 26 - a policy without either freshness date refuses
+  ---
+  duration_ms: 3.589036
+  type: 'test'
+  ...
+# Subtest: a catalogue without its saved definition refuses
+ok 27 - a catalogue without its saved definition refuses
+  ---
+  duration_ms: 1.843987
+  type: 'test'
+  ...
+# Subtest: a reviewed choice for a different saved definition refuses
+ok 28 - a reviewed choice for a different saved definition refuses
+  ---
+  duration_ms: 3.122836
+  type: 'test'
+  ...
+# Subtest: freshness checked after the rehearsal refuses
+ok 29 - freshness checked after the rehearsal refuses
+  ---
+  duration_ms: 2.019641
+  type: 'test'
+  ...
+# Subtest: a direct write without original approval and dispatch records refuses
+ok 30 - a direct write without original approval and dispatch records refuses
+  ---
+  duration_ms: 1.851821
+  type: 'test'
+  ...
+# Subtest: a write dispatched before its approval refuses
+ok 31 - a write dispatched before its approval refuses
+  ---
+  duration_ms: 2.595387
+  type: 'test'
+  ...
+# Subtest: an approval decision for another call refuses
+ok 32 - an approval decision for another call refuses
+  ---
+  duration_ms: 2.936704
+  type: 'test'
+  ...
+# Subtest: each original approval and dispatch record is required
+ok 33 - each original approval and dispatch record is required
+  ---
+  duration_ms: 7.628772
+  type: 'test'
+  ...
+# Subtest: unrelated approval or dispatch records refuse
+ok 34 - unrelated approval or dispatch records refuse
+  ---
+  duration_ms: 20.82963
+  type: 'test'
+  ...
+# Subtest: the first response calls the published deferred read once and answers its result
+ok 35 - the first response calls the published deferred read once and answers its result
+  ---
+  duration_ms: 12.23293
+  type: 'test'
+  ...
+# Subtest: missing and ambiguous deferred tools refuse without a guessed call
+ok 36 - missing and ambiguous deferred tools refuse without a guessed call
+  ---
+  duration_ms: 3.377198
+  type: 'test'
+  ...
+# Subtest: direct namespaces in either request location still complete the read
+ok 37 - direct namespaces in either request location still complete the read
+  ---
+  duration_ms: 1.982064
+  type: 'test'
+  ...
+# Subtest: only this turn and call result can answer, and a failed tool is not repeated
+ok 38 - only this turn and call result can answer, and a failed tool is not repeated
+  ---
+  duration_ms: 0.695893
+  type: 'test'
+  ...
+# Subtest: ordinary prompts stay unchanged and the write uses the same deferred interface
+ok 39 - ordinary prompts stay unchanged and the write uses the same deferred interface
+  ---
+  duration_ms: 0.91896
+  type: 'test'
+  ...
+# Subtest: separate guarded transports reach one demo server and read back its actual effect
+ok 40 - separate guarded transports reach one demo server and read back its actual effect
+  ---
+  duration_ms: 1003.684638
+  type: 'test'
+  ...
+# Subtest: missing local transport refuses before services start
+ok 41 - missing local transport refuses before services start
+  ---
+  duration_ms: 1.909867
+  type: 'test'
+  ...
+1..41
+# tests 41
+# suites 0
+# pass 41
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 18429.140135

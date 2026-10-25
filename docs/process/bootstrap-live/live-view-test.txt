@@ -3,7 +3,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run apps/server/test/live-view.test.ts --maxWorkers=2 -t admits bounded slow authority reads
 
- RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+ RUN  v5.0.3 <worktree>
 
  ❯ apps/server/test/live-view.test.ts (11 tests | 1 failed | 10 skipped) 9343ms
    × admits bounded slow authority reads and keeps their desktop stream connected 9333ms
