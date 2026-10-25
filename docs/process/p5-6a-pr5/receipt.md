@@ -47,3 +47,46 @@ or projection tests were run. Safe logs are `/tmp/p5-6a-pr5-red.log`,
 `/tmp/p5-6a-pr5-final2.log`, `/tmp/p5-6a-pr5-final3.log`,
 `/tmp/p5-6a-pr5-smoke-final.log`,
 `/tmp/p5-6a-pr5-lint.log` and `/tmp/p5-6a-pr5-typecheck.log`.
+
+## Transport failure cleanup, 25 October 2026
+
+Source: `bd69ee6d9380fd821e6cbb70bbe6a19fd3b4584e`.
+Rebased onto `origin/main` at `11ed0475a09333a1eadcc603a8ce076679ae0e0c`;
+the rebase completed and that base is an ancestor of this branch.
+Environment: this existing worktree, not a fresh installation. Tests used disposable
+TCP/process fixtures and fake children. No owner stack was changed.
+
+A timeout, cancellation or oversized reply now stops the shared scanner as soon
+as it is detected. Pending and new scans refuse before the failed Docker client
+closes. The failed request waits for container cleanup and gives the killed client
+up to 30 seconds to close. A missing close event cannot leave it waiting forever.
+
+- PASS — failing-first test commit `ed9f10cc9`: all three new concurrent cases
+  failed because another scan could still start after the transport failure.
+  Test commit `749583feb` also requires the request to wait for bounded child
+  cleanup. Those assertions failed before that wait was added.
+- PASS — all 65 launcher tests passed twice. The second run also covered release,
+  refresh and unchanged security rules: 569 tests across four files passed.
+  The fake failing child never emits close, including after a timeout. New scans
+  start no Docker process, the other pending transfer cannot return clean, and
+  all requests refuse after cleanup. Existing child-exit assertions remain intact.
+- PASS — full repository typecheck, event catalogue check (154 matching event
+  types), standalone changelog lint and whitespace checks.
+- PASS — full lint, including Knip, dependency rules, documentation, links,
+  fixtures, package licences and changelog. ESLint reported zero errors and
+  25 warnings in unchanged files.
+- NOT RUN — full root suite and projection tests, as requested for this fix.
+  Fresh-database clean/EICAR, HTTPS, issuance, consumer and live two-silo journeys
+  remain unqualified.
+
+Commands used `nice -n 10`. Tests used `--maxWorkers=1` and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The first test command selected `scripts/clamav-launch.test.mjs`; the second also
+selected `scripts/clamav-release.test.mjs`, `scripts/clamav-refresh.test.mjs` and
+`libs/events/test/security-rules.test.ts`. Repository checks used
+`npm run lint`, `npm run typecheck`, `npm run check:events` and
+`npm run lint:changelog`. The lint command includes `npm run lint:unused` (Knip).
+
+Safe logs: `/tmp/p5-6a-pr5-fix-cleanup-red.log`,
+`/tmp/p5-6a-pr5-fix-launch1.log`, `/tmp/p5-6a-pr5-fix-tests2.log`,
+`/tmp/p5-6a-pr5-fix-typecheck.log` and `/tmp/p5-6a-pr5-fix-lint.log`.
