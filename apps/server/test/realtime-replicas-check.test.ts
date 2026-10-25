@@ -76,6 +76,8 @@ it('rejects an incorrect close outcome', rejectsWrongClosure);
 const staleResets = [
   [resync, bob], [bob, resync],
   [{ ...resync, generation: 0 }],
+  [{ ...resync, position: 9 }],
+  [{ ...resync, memberId: 'foreign' }],
   [{ type: 'ready' as const, position: 0, generation: 1 }],
 ];
 function rejectsUnsafeReset(messages: Delivery[]) {

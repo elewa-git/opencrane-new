@@ -1176,7 +1176,27 @@ generations and close outcomes. Socket waits stop after five seconds; process
 startup/shutdown use `test/support/process.ts` bounds. No production behaviour,
 event/API names or access deadlines change.
 
-P5-10 PR 1 is process-level source proof only. Packaged replicas, budget failover,
+`test/realtime-replicas-isolation.test.ts` gives two silos separate NATS,
+PostgreSQL databases, OpenFGA stores and configured organisations. Both use the
+same cookie secret, issuer, subjects, member ids and cursor numbers.
+The test compares full member rows, including email, name, role and status.
+A foreign cookie receives HTTP 401 because the redirect URI is part of its encryption
+key. A locally encrypted session for the other organisation receives HTTP 403, as
+do wrong and missing Origins. All fail before subscription. An authorised local session can reuse a numeric
+position, but receives only local history. After B's projection repair, A's old
+generation receives only a reset with position 0, generation 1 and close 1013.
+B's full reload contains exactly its four changes. A's surviving process also
+refuses saved removal while SQL/OpenFGA lag and closes during a real IAM outage.
+
+Child startup, shutdown, setup and cleanup errors have canary checks. Cleanup
+continues after a failing resource. Socket input is limited to 16 KiB per message
+and 64 replies per connection; refused HTTP bodies are limited to 1 KiB.
+Full replies stay in test memory; annotations keep the existing safe fields.
+No event/API field or dependency was added. The unchanged `RISKY_FIELD_NAME`
+expression in `libs/events/test/security-rules.test.ts` still applies.
+See the [two-silo run record](../../docs/process/p5-10-pr2/receipt.md).
+
+P5-10 PRs 1 and 2 are process-level source proof only. Packaged replicas, budget failover,
 gateway/live-view/browser/network isolation and scanner consumers remain NOT RUN.
 Full row qualification still needs P5-5 and P5-6b. See the
 [run record](../../docs/process/p5-10-pr1/receipt.md).

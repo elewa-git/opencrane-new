@@ -438,6 +438,8 @@ The browser can reconnect and keep the chat. Losing access still clears its cont
 The realtime tests start two server processes with shared disposable services.
 They check that a member-list connection resumes on the other server, and that
 saved access changes still refuse it when database and permission updates lag.
+A separate test gives two silos the same member ids and resume positions. It checks
+that cookies, browser Origins and rebuilt member lists keep their records apart.
 These tests do not qualify a packaged installation.
 
 ```sh
