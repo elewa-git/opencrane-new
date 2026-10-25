@@ -184,6 +184,28 @@ async function historicalEvidence(fault: string, settings: NodeJS.ProcessEnv) {
   settings['SOURCE_MEMORY_KEY_DIRECTORY'] = incomplete;
 }
 
+const matchingDamage = ['empty', 'missing', 'wrong-key'] as const;
+it.each(matchingDamage)('refuses matching %s surviving custody in both folders',
+  async function damagedSurvivor(fault) {
+    const damagedSource = `${directory}/survivor-${fault}`;
+    await cp(sourceDirectory, damagedSource, { recursive: true });
+    const path = `${damagedSource}/${references.get('neighbour-1')!}`;
+    if (fault === 'missing') {
+      await rm(path);
+    } else if (fault === 'empty') {
+      await writeFile(path, Buffer.alloc(0));
+    } else {
+      await writeFile(path, Buffer.alloc(32, 7));
+    }
+    await resetCandidate(damagedSource);
+    const settings = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: damagedSource, EXPECT_REFUSAL: '1' };
+    await expect(run(settings)).rejects.toMatchObject({
+      stdout: 'effects:0\n', stderr: refused,
+    });
+    const tables = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
+    expect(tables.rows).toEqual([]);
+  });
+
 async function snapshot() {
   const facts = await storage.db.query('SELECT * FROM memory_facts ORDER BY scope_id, memory_id');
   const receipts = await storage.db.query('SELECT * FROM projection_events ORDER BY event_id');
