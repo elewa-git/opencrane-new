@@ -110,12 +110,13 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   deadline = performance.now() + 10_000): Promise<'duplicate' | 'recorded'> {
   const report = reportSchema.parse(value);
   if (report.assistantId !== context.assistantId) throw new ReportRejected('Assistant mismatch');
-  const digest = reportDigest(batch?.at(-1) ?? report);
   const first = batch?.[0] ?? report;
   const facts = await readChatFacts(store, context.silo, report.conversationId,
     report.turnId, context.computerId, first.sequence, deadline);
   const created = agentSessionData(facts.created);
   const authorId = reportAuthor(report, context.assistantId, created, facts.message);
+  requireMemoryFreeContent(report, facts);
+  const digest = reportDigest(batch?.at(-1) ?? report);
   const subject = `conversation-${report.conversationId}`;
   if (facts.reportPosition !== undefined) {
     return verifyRecordedReport(store, keys, context, report, batch, facts.reportPosition, digest);
@@ -133,7 +134,7 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   const append = store.append.bind(store, command);
   const result = await chatWrite(store, subject, 'report', append);
   if (result.status === 'conflict' && performance.now() < deadline) {
-    // Reload after a competing Stop or message. Never repeat an uncertain append.
+    // Reload after a competing append, including memory evidence. Never repeat an uncertain append.
     return recordReport(store, keys, context, value, batch, deadline);
   }
   if (result.status === 'rejected') throw new ReportRejected('Report append rejected');
@@ -146,6 +147,16 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
     await verifyAppendedBatch(store, context, batch, committed!);
   }
   return 'recorded' as const;
+}
+
+function requireMemoryFreeContent(report: Report, facts: ChatFacts) {
+  if (facts.memoryContext === undefined) return;
+  // Keep even prepared or ended memory out of conversation-key copies and saved text hashes.
+  const hasText = 'text' in report && report.text !== undefined;
+  const hasCommandDigest = 'commandDigest' in report && report.commandDigest !== undefined;
+  if (hasText || hasCommandDigest) {
+    throw new ReportRejected('Memory-bearing report content refused');
+  }
 }
 
 async function verifyAppendedBatch(store: EventStore, context: ReportContext,

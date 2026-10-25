@@ -21,6 +21,7 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
   const messages: StoredEvent[] = [];
   const completed = new Set<string>();
   const lost = new Set<string>();
+  const memoryTurns = new Set<string>();
   const replies = new Map<string, StoredEvent[]>();
   for (const row of rows) {
     const type = row.event.type;
@@ -28,6 +29,11 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
       if (isEarlierMessage(row, message, requesterId)) {
         messages.push(row);
       }
+      continue;
+    }
+    if (type === 'agent.memory_context_recorded') {
+      const turnId = eventData(row)['turnId'];
+      if (typeof turnId === 'string') memoryTurns.add(turnId);
       continue;
     }
     if (!['agent.turn_completed', 'agent.output_lost', 'agent.message_completed'].includes(type)) {
@@ -43,6 +49,8 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
       replies.set(turnId, texts);
     }
   }
+  // Exclude the whole turn before decryption, including replies saved before its first recall.
+  for (const turnId of memoryTurns) replies.delete(turnId);
   if (!messages.length) return undefined;
   const result: PrivateContext = { exchanges: [], omittedExchanges: messages.length };
   for (const earlier of messages.reverse()) {
