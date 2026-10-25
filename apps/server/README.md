@@ -48,6 +48,8 @@ Calls and turn renewal prepare access receipts for every memory scope already lo
 Correct and Forget validate their targets but remain disabled.
 After a restart, memory recovery uses the existing private keys and saved command records.
 Overlapping recovery calls wait for the same scan to finish before reporting completion.
+A new assistant with no access to notes does not block personal memory.
+Notes with access grants still need the assistant's permissions to be ready.
 
 ## Where it fits
 
@@ -64,7 +66,7 @@ flowchart LR
   server -->|reads own saved profiles and original change, publication and selection receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
+  server -->|reads memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server

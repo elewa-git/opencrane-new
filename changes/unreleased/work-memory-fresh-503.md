@@ -1,0 +1,1 @@
+- Personal memory now opens while a new assistant's permissions are being set up, when that assistant has no note grants. Notes with grants still require all permission checks.
