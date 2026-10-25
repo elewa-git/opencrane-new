@@ -11,7 +11,7 @@ verification run or proof of the complete capability.
 
 Sources: both issues/comments, #46/#54/#53/#93/#107/#108/#63, PRs #71/#114/#186/#192/#328, requested main
 modules, evidence/review notes, specs, AGENTS.md, plan, standards, ADRs, catalogue and local handoffs.
-Accepted stop-tree design: `/home/jente/.fleet/reviews/p4-11-design.md`.
+Accepted stop-tree design: `<home>/.fleet/reviews/p4-11-design.md`.
 
 \#54 is closed: #71 delivered budgets. #46 remains open; its comments report merged
 back-end slices but unfinished screens/qualification. Reuse its live approval path;
@@ -224,7 +224,7 @@ event ids, upstream counts and cents as PASS/FAIL/PARTIAL/NOT RUN. Dev first, He
 
 ## 5. Screens, APIs and handoff gaps
 
-Use `/home/jente/dev/design-handoffs/v2/02-wrk/` and `03-spd/`, not their stale apps/opencrane-ui name. Both
+Use `<home>/dev/design-handoffs/v2/02-wrk/` and `03-spd/`, not their stale apps/opencrane-ui name. Both
 widths exist for the listed frames. PLAN.md rows P3-14/P3-15 and its WRK-40–45 gap note need updating in
 implementation: #192 is built; scope/reset reports and participant readback still need APIs.
 

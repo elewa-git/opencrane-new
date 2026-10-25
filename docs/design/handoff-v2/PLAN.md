@@ -539,7 +539,7 @@ and state detail were checked in the design sources, including the shell grid,
 mobile menus, effect review, member search, account fields and screenshot flow.
 Rendered frames inspected where structure was ambiguous: OVR-08 at 390px,
 ONB-50 at 390px and SPD-24 at 1280px, under
-`/home/jente/dev/design-handoffs/v2/NN-key/png/`. These are design references only.
+`<home>/dev/design-handoffs/v2/NN-key/png/`. These are design references only.
 
 Validation: `npx markdownlint-cli2 docs/design/handoff-v2/PLAN.md` — PASS.
 Frame-index comparison — PASS: all 380 named states covered across the 43 ticket

@@ -5,11 +5,12 @@ import { Pool } from 'pg';
 import { connectEventStore, type StoredEvent } from '@opencrane/event-store';
 import { getEventDefinition, memberInvitedDataSchema, memberJoinedDataSchema, parseEventByType } from '@opencrane/events';
 import { memberAuthorisation } from '@opencrane/authz';
-import { readEnv, root } from './config.ts';
+import { readEnv, readOwnerEmail, root } from './config.ts';
 
 // Create the development owner when a fresh local stack has no owner yet.
 const memberId = 'jente-rosseel';
-const email = 'jente@elewa.ke';
+const email = process.env['DEV_OWNER_EMAIL'] ?? await readOwnerEmail();
+assert(email, 'Set the private dev-owner-email file before owner bootstrap');
 const invitationId = 'invite-jente-rosseel';
 const settings = await readEnv('settings');
 const oidc = JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')) as {

@@ -1734,7 +1734,7 @@ A later submission consults event history and cannot create a second owner.
 All claim replies use `Cache-Control: no-store`.
 
 The existing dev stack retains its explicit invitation/join owner bootstrap
-for `jente@elewa.ke`; see its [instructions](../../infra/dev-stack/README.robot.md#zitadel-sign-in).
+for the privately configured owner test user; see its [instructions](../../infra/dev-stack/README.robot.md#zitadel-sign-in).
 This production token path never uses the dev external-identity exception.
 Ownership transfer remains #24. The production install uses the token method alone.
 

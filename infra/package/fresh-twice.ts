@@ -4,7 +4,7 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { directory, root } from '../dev-stack/config.ts';
+import { directory, readOwnerEmail, root } from '../dev-stack/config.ts';
 import { secondary, stackId } from '../dev-stack/identity.ts';
 import { requireOwner, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
@@ -26,6 +26,7 @@ type FreshState = {
 };
 type OwnerState = {
   issuer: string; expectedIssuer: string; subject: string; expectedSubject: string;
+  expectedEmail: string;
   identityRows: readonly { memberId: string; issuer: string; subject: string }[];
   providerEmailVerified: boolean; role: string; status: string;
   memberEmail: string; eventTypes: readonly string[];
@@ -102,12 +103,13 @@ function checkOwnerBinding(state: OwnerState) {
   assert(state.providerEmailVerified, 'Provider email is unverified');
   assert.equal(state.role, 'owner', 'Member is not an owner');
   assert.equal(state.status, 'joined', 'Owner has not joined');
-  assert.equal(state.memberEmail, 'jente@elewa.ke', 'Owner member email differs');
+  assert(state.expectedEmail, 'Expected owner email is missing');
+  assert.equal(state.memberEmail, state.expectedEmail, 'Owner member email differs');
   assert.deepEqual(state.eventTypes, ['member.invited', 'member.joined'],
     'Owner invitation and join events differ');
   assert.deepEqual(state.ownerEvents, [
-    { email: 'jente@elewa.ke', role: 'owner', subject: state.subject },
-    { email: 'jente@elewa.ke', role: 'owner', subject: state.subject },
+    { email: state.expectedEmail, role: 'owner', subject: state.subject },
+    { email: state.expectedEmail, role: 'owner', subject: state.subject },
   ], 'Owner invitation or join differs');
   assert(state.openFgaOwner, 'OpenFGA owner check failed');
 }
@@ -316,7 +318,9 @@ export async function runOnce(index: number, values: string, previous?: FreshSta
       settings.users.owner.id);
     const pinned = JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`,
       'utf8')) as { issuer: string };
+    const ownerEmail = await readOwnerEmail();
     const owner: OwnerState = {
+      expectedEmail: ownerEmail,
       issuer: settings.issuer, expectedIssuer: pinned.issuer,
       subject: settings.users.owner.id, expectedSubject: settings.users.owner.id,
       identityRows: data.identities ?? [], providerEmailVerified: verified,

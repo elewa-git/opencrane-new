@@ -26,6 +26,9 @@ async function fixture(home: string, id: string) {
     extraIdentities: [],
   }));
   await writeFile(`${directory}/zitadel-client-secret`, 'fixture-only');
+  const emailFile = `${home}/.config/opencrane/dev-owner-email`;
+  const fileOptions = { mode: 0o600 };
+  await writeFile(emailFile, 'owner@example.test\n', fileOptions);
   return directory;
 }
 async function settings(directory: string, role: string) {
@@ -62,6 +65,8 @@ async function separateSettings() {
       assert.equal(projection['PERSONAL_KEY_DIRECTORY'], undefined);
       assert.equal((await settings(directory, 'command'))['MEMORY_KEY_DIRECTORY'], undefined);
       assert.equal(generate(home, id).status, 0);
+      const ownerEmail = await readFile(`${home}/.config/opencrane/dev-owner-email`, 'utf8');
+      assert.equal(ownerEmail.trim(), 'owner@example.test');
       const original = await readFile(`${directory}/server.env`, 'utf8');
       const aliased = original.replace(`${directory}/memory-keys`, `${directory}/conversation-keys`);
       await writeFile(`${directory}/server.env`, aliased);
@@ -138,3 +143,28 @@ async function suppliedOwnership() {
   }
 }
 test('caller-supplied directories must belong to the current user', suppliedOwnership);
+
+async function retainsOwnerEmailAfterTeardown() {
+  const home = await mkdtemp(`${tmpdir()}/private-owner-email-`);
+  const cleanup = { recursive: true, force: true };
+  try {
+    const directory = await fixture(home, '1');
+    await rm(directory, cleanup);
+    const script = `
+const config = await import('./infra/dev-stack/config.ts');
+console.log(await config.readOwnerEmail());
+`;
+    const args = ['--experimental-strip-types', '--input-type=module', '--eval', script];
+    const env = { PATH: process.env['PATH'], HOME: home, DEV_STACK_ID: '1' };
+    const options = { env, encoding: 'utf8' as const, timeout: 20_000 };
+    const result = spawnSync(process.execPath, args, options);
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), 'owner@example.test');
+  } finally {
+    await rm(home, cleanup);
+  }
+}
+
+test('the private owner email survives deletion of a disposable stack',
+  retainsOwnerEmailAfterTeardown);

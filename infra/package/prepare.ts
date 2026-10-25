@@ -5,7 +5,9 @@ import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import { promisify } from 'node:util';
 import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { tokenIssuer } from '@opencrane/auth';
-import { authEnv, directory, generate, readEnv, root, writeEnv } from '../dev-stack/config.ts';
+import {
+  authEnv, directory, generate, readEnv, readOwnerEmail, root, writeEnv,
+} from '../dev-stack/config.ts';
 import { localOrigin, secondary, stackId } from '../dev-stack/identity.ts';
 import { verifyPackageOwner } from '../dev-stack/packaged.ts';
 
@@ -41,6 +43,8 @@ function databaseUrl(role: string, password: string, database: string) {
 }
 
 async function prepareSettings() {
+  const ownerEmail = await readOwnerEmail();
+  assert(ownerEmail, 'Private dev-owner-email file is empty');
   await generate(localOrigin);
   // Give the private Kubernetes service its own DNS name on the existing short-lived certificate.
   await issueCertificate(directory, 'server', '/CN=nats',
@@ -71,6 +75,7 @@ async function prepareSettings() {
     .map(([name, value]) => [`COMMAND_${name}`, value]));
   await writeEnv('package-runtime', {
     ...auth, ...commandSettings, ...commandForDispatcher,
+    DEV_OWNER_EMAIL: ownerEmail,
     OIDC_CLIENT_SECRET_FILE: '/run/opencrane/files/zitadel-client-secret',
     DATABASE_URL: serverDatabase,
     PROJECTION_DATABASE_URL: projectionDatabase,

@@ -344,7 +344,7 @@ PR 1–3 evidence uses real NATS/PostgreSQL/OpenFGA/gateway/socket fixtures and 
 process/desktop claims additionally require the real pinned gVisor image. Parameterise crash injection at
 every arrow in the recovery table, before and after each append/receipt/open/close; assert no overlapping
 agent/human input at Xvnc, no second writer and exact upstream counts. Replay projections while upstream
-counters stay fixed. Journeys add **`jente@elewa.ke` as a separate owner user**, beside requester A, requester B
+counters stay fixed. Journeys add **the privately configured owner test user as a separate owner user**, beside requester A, requester B
 and a read-only participant; an owner cannot control without requester rights. Do not merge identities or use
 an owner session as the requester fixture. Run two active conversations on one computer, with a local tool and
 pending approval, through takeover, renewal, explicit return, disconnect and recovery. #63 repeats this twice

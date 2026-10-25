@@ -11,7 +11,7 @@ No model calls; network use was limited to GitHub reads.
 Read issues #90–#93 and #90–#92 Design/comments; accepted fleet notes `p4-5-design.md`
 and `p4-6-design.md`; AGENTS.md, plan/standards, Phase 4 spec/decisions and money rules.
 Read `05-thr/README.md` and both frame sizes for THR-12, 20–23, 30–32, 40–45,
-40-RM, 50–53 and 60–62 under `/home/jente/dev/design-handoffs/v2/`.
+40-RM, 50–53 and 60–62 under `<home>/dev/design-handoffs/v2/`.
 Inspected server chat/turn/participation/private-context/bridge/realtime, computer
 runner/input/private launch, event/projection/OpenFGA, model authority/decision,
 budget actor/state and file code, plus relevant robot READMEs. Some docs are older

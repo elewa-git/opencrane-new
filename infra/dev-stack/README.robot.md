@@ -438,7 +438,7 @@ No separate test suite or repository build from this task ran during either atte
   Compose containers remained for `opencrane-dev-1`. The owner stack was not used.
 
 The earlier provider-start task retained its eventual **208.291-second** Angular build
-in `/home/jente/.fleet/demo-provider-start/events.jsonl`. The upload-list failure logs
+in `<home>/.fleet/demo-provider-start/events.jsonl`. The upload-list failure logs
 are under `~/.opencrane/daily-fresh/nightly-20261022T193759-c67e4dbf-24db-4d87-9faf-333d9bbb15fc/`.
 The earlier task also recorded a host load average of 28.53 after that build. The website
 still uses two build workers and a 768 MiB JavaScript heap on a secondary stack. That
@@ -465,7 +465,7 @@ Use the command interface below from each worktree, after `npm ci`:
 stack_id=$(infra/dev-stack/claim.sh) || exit 1
 export DEV_STACK_ID="$stack_id"
 # Point to the existing PAT file when this worktree has no .keys directory.
-export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
+export ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key
 infra/dev-stack/up.sh --fresh
 infra/dev-stack/status.sh
 infra/dev-stack/journey.sh
@@ -731,7 +731,7 @@ Each `up` also runs a dev-only owner bootstrap after the projections and dispatc
 start. Through the command NKey it conditionally appends `member.invited` and
 `member.joined`, binding that issuer and subject to owner member `jente-rosseel`.
 Existing stream state is checked first, so plain and `--fresh` runs do not duplicate it.
-This dev-only bootstrap for `jente@elewa.ke` remains in place. Production installs
+This dev-only bootstrap for the privately configured owner test user remains in place. Production installs
 use the [one-time token command and claim screen](../../apps/server/README.robot.md#first-owner-bootstrap-12),
 which refuse a silo that already has an owner. Dev exceptions for external
 identities do not apply to the token claim; its user must belong to the configured
@@ -1270,7 +1270,7 @@ It cannot report PASS through the former seeded startup route.
 
 Fresh starts with the dev Owner bootstrap run `provider-setup.ts` after server health
 and before `journey.ts`. A five-minute dev-only session represents the bootstrapped
-Owner, `jente@elewa.ke`. Setup uses product HTTP routes with the configured Origin:
+Owner, the privately configured owner test user. Setup uses product HTTP routes with the configured Origin:
 create OpenAI connection, save random stub credential, check reachability, accept the
 quoted model test, enable `modelForTask('chat_turn')` and `gpt-6-luna`, explicitly
 select the silo default, drain, then switch on. Every write waits for its receipt.
@@ -1905,3 +1905,16 @@ infra/dev-stack/browser-audit.test.ts infra/dev-stack/stage-b-capture.test.ts`.
 `npm run visual:stage-b-polish` checks the built website with browser fixtures at both
 widths and writes eight captures to `/tmp/stage-b-polish-captures`. These fixtures
 check display and collection, not a fresh-install journey.
+
+## Private owner email
+
+The development owner email comes from `<home>/.config/opencrane/dev-owner-email`,
+outside the repository and every disposable stack directory. The file contains
+only the real email address, on one line. The operator keeps it private with file
+mode `0600`. A fresh start or deletion of a claimed stack leaves this file in place,
+so the nightly job and new claims can reuse the setting.
+
+The operator supplies the file before an owner bootstrap or packaged install.
+The [package notes](../package/README.robot.md#private-owner-email) describe how
+the packaged bootstrap receives the same value. No real address belongs in this
+repository.

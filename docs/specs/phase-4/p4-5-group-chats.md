@@ -11,7 +11,7 @@ Read GitHub issues [#87](https://github.com/elewa-git/opencrane-new/issues/87),
 [#90](https://github.com/elewa-git/opencrane-new/issues/90) and the prerequisite
 [#216](https://github.com/elewa-git/opencrane-new/issues/216).
 Read the local handoff README and both sizes of THR-06–08, 10–13 and 16 in
-`/home/jente/dev/design-handoffs/v2/05-thr/`.
+`<home>/dev/design-handoffs/v2/05-thr/`.
 Read `AGENTS.md`, `plan.md`, `docs/process/standards.md`, the chat parts of
 `docs/design/handoff-v2/PLAN.md`, Phase 4 spec/tickets/decisions and ADRs 0001–0006.
 

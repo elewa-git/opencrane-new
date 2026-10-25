@@ -4,7 +4,7 @@ Design for [#47](https://github.com/elewa-git/opencrane-new/issues/47) and [#48]
 
 ## Existing contracts and gaps
 
-Read #45/#46/#50/#51, their designs, AGENTS.md, the relevant plan/spec sections, all six ADRs, and the current governed tool, upload, storage and image-policy paths. Design source: `/home/jente/dev/design-handoffs/v2/01-int/README.md`, its HTML frames and admission/comparison PNGs. The old application name and example versions in these frames are stale; build screens in `apps/web` and display actual evidence. ADR 0003's October updates supersede its earlier stateless-MCP blocker.
+Read #45/#46/#50/#51, their designs, AGENTS.md, the relevant plan/spec sections, all six ADRs, and the current governed tool, upload, storage and image-policy paths. Design source: `<home>/dev/design-handoffs/v2/01-int/README.md`, its HTML frames and admission/comparison PNGs. The old application name and example versions in these frames are stale; build screens in `apps/web` and display actual evidence. ADR 0003's October updates supersede its earlier stateless-MCP blocker.
 
 The current implementation provides these useful parts:
 

@@ -33,7 +33,7 @@ implementation evidence**: nothing here shows that the product behaves this way.
 
 The rendered frames (`png/<ID>-1280.png` and `png/<ID>-390.png`, 760 images, about 82MB) and
 the self-contained offline HTML are kept out of git. On the dev box they are in
-`/home/jente/dev/design-handoffs/v2/<NN-key>/`, with the original zips in `zips/`.
+`<home>/dev/design-handoffs/v2/<NN-key>/`, with the original zips in `zips/`.
 
 ## How builders use it
 

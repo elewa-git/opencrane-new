@@ -2,7 +2,7 @@
 
 10 October 2026. Design only for [#100](https://github.com/elewa-git/opencrane-new/issues/100),
 [#101](https://github.com/elewa-git/opencrane-new/issues/101) and [#102](https://github.com/elewa-git/opencrane-new/issues/102),
-under #82 and #33. Repository: `/home/jente/dev/wt/p4-18-design`, branch `work/p4-18-design`. HEAD, local origin/main and GitHub
+under #82 and #33. Repository: `<worktree>`, branch `work/p4-18-design`. HEAD, local origin/main and GitHub
 main matched `dd3880237b87f98bab1793a5e1ceec1addfdfbbc`.
 
 ## 1. Basis, delivered parts and scope
@@ -10,9 +10,9 @@ main matched `dd3880237b87f98bab1793a5e1ceec1addfdfbbc`.
 Read the requested issue bodies, Design sections and discussions; #33, #82, #85, #88, #94–#98, #49/#50 and #121; merged #162,
 \#285 and #322. Read AGENTS.md, plan.md, the engineering standard, glossary, Phase 4 tickets/spec/decisions, the event catalogue,
 the lifecycle spec, handoff PLAN (API A, ONB rows/gap), ADR decisions and relevant code. The accepted notes are
-`/home/jente/.fleet/reviews/p4-15-design.md` and `/home/jente/.fleet/reviews/p4-6-design.md`; #97's accepted defaults remain in
+`<home>/.fleet/reviews/p4-15-design.md` and `<home>/.fleet/reviews/p4-6-design.md`; #97's accepted defaults remain in
 force. Inspected all 26 ONB phone states, representative desktop states and INT-60/61, THR-01–04/14 references under
-`/home/jente/dev/design-handoffs/v2/`. Frames prove design only.
+`<home>/dev/design-handoffs/v2/`. Frames prove design only.
 
 \#162 supplies `/account`, Preferences, Assistant and My tools navigation and the settings shell. Account currently reads only
 the session name. `/auth/me` reports authentication and token claims, not current membership, editable settings, email or
@@ -370,6 +370,6 @@ canaries. Helm/managed-cluster qualification belongs later.
 PASS: requested read-only source/issue/frame inspection and this external design artefact. NOT RUN: product code, tests, builds,
 stacks, model calls and all fresh/live qualification. Existing private-memory capability remains PARTIAL/disabled; this design
 is not a runtime PASS. Only this note was written. Repository files stayed unchanged and network use was GitHub reads. Later dev
-access is tailnet-only, never tailscale funnel. Any necessary Zitadel changes stay inside OpenCrane 2 Dev; `jente@elewa.ke` stays
+access is tailnet-only, never tailscale funnel. Any necessary Zitadel changes stay inside OpenCrane 2 Dev; the privately configured owner test user stays
 a separate owner test account. OSI application licences and Debian main OS rules remain mandatory; no new runtime component is
 proposed.

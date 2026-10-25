@@ -351,7 +351,7 @@ pre-dispatch refusals; sent work retains partial/unknown evidence and is never r
 Use real disposable NATS/PostgreSQL/OpenFGA/gateway, pinned gVisor and recording endpoints.
 Use a fixture-controlled DNS/public-address setup without a production private-host exception;
 keep transport pin tests separate from private fixture networking. No paid providers needed.
-Journeys add **jente@elewa.ke as a separate owner user**, two distinct requesters and a
+Journeys add **the privately configured owner test user as a separate owner user**, two distinct requesters and a
 read-only participant. Owner status alone never grants requester browsing/control.
 #63 repeats twice fresh, with every negative, rebuild, restart/Pod replacement and
 1280/390/reduced-motion/accessibility evidence. Source substitutes stay NOT RUN live.

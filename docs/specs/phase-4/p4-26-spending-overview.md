@@ -9,7 +9,7 @@ tests, builds, stacks, model calls and live qualification: NOT RUN. Network: Git
 
 Read requested issues/designs/comments, PRs, main modules/tests, AGENTS.md, standards, plan,
 ADRs 0001–0006, catalogue, tickets, D13/D27/D28, handoff PLAN/gaps, READMEs and 1280/390 frames.
-The accepted root note is `/home/jente/.fleet/reviews/p4-11-design.md`.
+The accepted root note is `<home>/.fleet/reviews/p4-11-design.md`.
 `p4-24-design.md` is absent; #106/#107 supply the routine requirements.
 GitHub now reports [#328](https://github.com/elewa-git/opencrane-new/pull/328) MERGED:
 delegation contracts and outcome replay exist; root allowance and native dispatch do not.

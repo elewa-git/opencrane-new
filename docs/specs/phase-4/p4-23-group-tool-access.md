@@ -1,7 +1,7 @@
 # Tool access and company connections for groups
 
 Design for [#105](https://github.com/elewa-git/opencrane-new/issues/105), 10 October 2026. Read-only checkout
-/home/jente/dev/wt/p4-23-design, work/p4-23-design. HEAD, origin/main and GitHub main:
+`<worktree>`, work/p4-23-design. HEAD, origin/main and GitHub main:
 dd3880237b87f98bab1793a5e1ceec1addfdfbbc. Only this note was written; no product edits, stacks, tests, model
 calls, spending or handoff requests. Network reads: GitHub only. Implementation/checks/review/fresh journeys:
 NOT RUN.
@@ -10,7 +10,7 @@ NOT RUN.
 
 Read the requested issues/comments/Design sections, named source, AGENTS.md, plan.md, standards, ADRs
 0001–0006, Phase 4 spec/P4-23/D24, Phase 3 D02/D11/D16, API contracts and handoff PLAN rows. Build on the
-accepted p3-4-rest-design.md, p3-6-design.md and p3-8-design.md in /home/jente/.fleet/reviews/.
+accepted p3-4-rest-design.md, p3-6-design.md and p3-8-design.md in `<home>/.fleet/reviews/`.
 p4-24-design.md was absent; #106/#107 govern routines. Inspected INT/PPL READMEs and all mapped PNGs at both
 widths.
 
@@ -376,6 +376,6 @@ honestly.
 Tools remain zero-cost; all money fields are integer euro cents, never floats, and nothing spends outside the
 recorded allowance or bypasses root/global/group/assistant hard stops. Dev stack first, Helm later. Tailnet
 only through tailscale serve, never Tailscale Funnel. Future Zitadel changes stay solely in **OpenCrane 2
-Dev**; journeys add `jente@elewa.ke` as a separate Owner user and use separate ordinary requesters. Tool
+Dev**; journeys add the privately configured owner test user as a separate Owner user and use separate ordinary requesters. Tool
 descriptions, upstream account names, scope text and Odoo data are bounded escaped data, never instructions,
 authority or executable HTML. No model judges access or drift.

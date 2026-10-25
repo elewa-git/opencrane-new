@@ -4,7 +4,7 @@
 
 ## Basis and what exists
 
-Read the issue bodies and discussions for #95, #97 and #98, the accepted [accepted memory design](p4-12-memory.md), and `docs/specs/phase-4/p4-12-memory.md`. Read AGENTS.md, the engineering standard, the memory section of plan.md, D14–D20, the event catalogue and the relevant package contracts. Inspected all six #95 frames at 1280px and 390px, their HTML definitions and the README under `/home/jente/dev/design-handoffs/v2/06-mem/`. Also cover MEM-20/21 from the issue comment.
+Read the issue bodies and discussions for #95, #97 and #98, the accepted [accepted memory design](p4-12-memory.md), and `docs/specs/phase-4/p4-12-memory.md`. Read AGENTS.md, the engineering standard, the memory section of plan.md, D14–D20, the event catalogue and the relevant package contracts. Inspected all six #95 frames at 1280px and 390px, their HTML definitions and the README under `<home>/dev/design-handoffs/v2/06-mem/`. Also cover MEM-20/21 from the issue comment.
 
 Checkout, local origin/main and GitHub main matched `03630f1b983d3ae27c8060af215f3f88be474aa8` when read. Current source includes:
 

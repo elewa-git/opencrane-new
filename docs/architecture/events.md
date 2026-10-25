@@ -236,7 +236,7 @@ Ownership transfer belongs to #24. Neither the token nor its
 hash is event data. Projection/reactions treat this event as a joined owner,
 including identity binding, personal assistant and initial model grants. The
 model process seeds the installation's default paying group as for every owner.
-The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke`.
+The dev stack retains its explicit invitation/join bootstrap for the privately configured owner test user.
 
 ### Assistants and computers
 

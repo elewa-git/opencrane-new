@@ -257,7 +257,7 @@ function makeFixtures(scenario) {
 async function serveIdentity(route) {
   await route.fulfill({ json: {
     authenticated: true,
-    user: { email: 'jente@elewa.ke', role: 'Owner' },
+    user: { email: 'owner@example.test', role: 'Owner' },
   } });
 }
 
