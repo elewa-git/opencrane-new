@@ -1181,7 +1181,6 @@ gateway/live-view/browser/network isolation and scanner consumers remain NOT RUN
 Full row qualification still needs P5-5 and P5-6b. See the
 [run record](../../docs/process/p5-10-pr1/receipt.md).
 
-
 ## Organisation integrations
 
 `GET /api/org/integrations` requires the encrypted session cookie, the configured silo and
