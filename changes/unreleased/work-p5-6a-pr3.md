@@ -1,0 +1,1 @@
+- Packaging can bind reviewed scanner database evidence to an inspected immutable image. The verifier checks the exact database set without network access, refuses stale or incomplete update evidence, and publishes a bounded record only after inspection and cleanup succeed. This record does not admit uploads or change the running scanner.

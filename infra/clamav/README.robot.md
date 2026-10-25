@@ -68,10 +68,55 @@ container has stopped before removing a leftover
 manifest and the former `signatures.sha256` before running the updater. The new
 JSON is renamed into place only after every check passes.
 
-P5-6a PR 2 covers candidate evidence only. Reviewed image-to-manifest release
-binding, immutable loaded databases, HTTPS, expiry during scans and consumer
-admission remain later work. Copying this JSON never makes it trusted or newer.
+P5-6a PR 2 covers candidate evidence only. Copying this JSON never makes it trusted or newer.
 Tests in `scripts/clamav-refresh.test.mjs` use temporary files and updater fixtures;
 they are not live upstream, clean/EICAR or two-silo qualification.
 The Docker fixture also checks that failed container cleanup blocks a retry and
 successful cleanup allows one. It does not induce a real Docker connection failure.
+
+## Packaging evidence
+
+P5-6a PR 3 builds on PR 2's squash commit
+`b88276a8d76c8f8ce15613fad1012b77b82fdfed`. The trusted packaging job supplies a
+reviewed candidate manifest, its separately approved SHA-256 (64 lowercase hex
+characters) and a reviewed scanner image reference ending in `@sha256:…`.
+The approval must come from the job's review inputs, not a hash supplied alongside
+untrusted JSON. The image review still includes flattened UnRAR removal and the
+licence checks; database inspection does not replace either check.
+
+```sh
+node infra/clamav/release.mjs /private/job/signatures.json "$APPROVED_MANIFEST_SHA256" \
+  "$REVIEWED_SCANNER_IMAGE" /private/job/new-release
+```
+
+The parent directory is private to the packaging job. The destination is a new,
+absolute directory, on the same filesystem as its sibling `new-release.lock`.
+Keep earlier records in separate directories. The verifier refuses mutable tags
+and host paths as image references. Docker must already have both digest-selected
+images; pulls are disabled. It creates a scanner container without starting it,
+checks its resolved image identity and copies `/var/lib/clamav` from that container.
+That directory must contain only main, daily and bytecode, each as one regular
+CVD or CLD file. A second, network-disabled container uses the existing pinned
+tools with a read-only copy of those files. No host database input is accepted.
+
+The verifier reuses the updater's hash, version and build-time checks. It compares
+the results with the approved manifest and requires successful upstream evidence
+for all three databases. It refuses future dates and update checks older than
+24 hours, including checks that expire during inspection. Old build dates are
+allowed. Copies, mtimes and restarts never change the approved update-check time.
+Each database is at most 512 MiB; the input manifest is at most 8 KiB, tool output
+at most 1 MiB and each Docker operation at most 15 minutes. The complete attempt
+must also finish within 15 minutes; each container removal has 30 seconds.
+
+After all checks and container removals succeed, the verifier atomically renames
+the private attempt directory into place. Its `release.json` is at most 1 KiB and
+contains only `formatVersion`, `imageDigest`, `manifestDigest`, `databaseUpdatedAt`
+and `inspectedAt`. Errors use the fixed message `Scanner release refused`.
+Failed cleanup retains the lock directory and its container names; an operator
+confirms those containers are removed before deleting that directory. No later
+attempt can reuse it while it remains. Other failures leave no new release record.
+
+The release tests use Docker and tool fixtures, including publication and cleanup
+failures and private canaries. These are not real image or live scanner qualification.
+Immutable loaded-set startup with no reload, HTTPS, scan expiry, consumers and
+fresh-install clean/EICAR/two-silo checks remain later work. This record admits no upload.

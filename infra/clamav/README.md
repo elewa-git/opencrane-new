@@ -20,6 +20,7 @@ flowchart LR
   stack -->|builds and starts| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes| clamav
   clamav -->|candidate updater checks| updates["ClamAV update service"]
+  packaging["packaging job"] -->|checks image databases| clamav
 ```
 
 ## What it is responsible for
@@ -29,6 +30,7 @@ flowchart LR
 - Sets limits for file size, scan size and archive depth.
 - Leaves out RAR scanning because its plug-ins are not open source; uploads also refuse RAR files.
 - Prepares updated virus definitions separately for review, with hashes and verified dates.
+- Checks that a packaged image contains exactly the reviewed virus definitions.
 - Keeps the original scanner code from the earlier version of OpenCrane, with its licence, for reference.
 
 ## Processes it handles
@@ -39,6 +41,8 @@ flowchart LR
 3. **An operator updates the virus list.** The refresh script prepares a separate
    candidate and records when the complete virus list was checked successfully.
    The running scanner keeps its current list until a reviewed image replaces it.
+4. **A packaging job checks an image.** The release verifier inspects its virus
+   definitions without network access and records the image and manifest hashes.
 
 ## How to run or test it
 
@@ -48,6 +52,14 @@ an already running scanner. Its `signatures.json` file records database versions
 build dates, hashes and the successful update-check time. Unchanged files keep their
 original build dates. A failed refresh removes the previous candidate record.
 This file is evidence for review; it does not authorise uploads or image admission.
+
+The release verifier takes this reviewed file, its separately approved SHA-256
+hash and an immutable image reference. It records success only after checking
+the image's actual files and removing its temporary containers. The complete
+update check must be within 24 hours, even when the files themselves are older.
+Neither JSON file grants trust or admits an upload. The verifier does not deploy
+an image or refresh a running scanner. Commands and limits are in
+[README.robot.md](README.robot.md#packaging-evidence).
 
 If updater cleanup fails, the directory stays locked to prevent another updater
 from changing the same files. An operator must confirm the updater has stopped
