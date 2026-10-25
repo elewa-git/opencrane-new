@@ -6,6 +6,7 @@ import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { connect, createServer, type Socket } from "node:net";
 import { resolve } from "node:path";
 import { TimeoutError, type NatsConnection } from "@nats-io/transport-node";
+export { TimeoutError };
 import { certificates, sharedCertificates } from "./certificates.ts";
 import { jetstream, jetstreamManager } from "@nats-io/jetstream";
 import { wireSubject } from "../src/contract.ts";

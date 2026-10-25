@@ -1,10 +1,9 @@
 import { EventStore } from '@opencrane/event-store';
-import { TimeoutError } from '@nats-io/transport-node';
 import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay.ts';
 import { JetStreamApiError, jetstream, jetstreamManager } from '@nats-io/jetstream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
-import { countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
+import { countReads, expectNoWholeReads, lostReplyStore, natsFixture, TimeoutError } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
 import { createLogger } from '@opencrane/observability';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';

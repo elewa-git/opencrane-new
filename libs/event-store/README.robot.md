@@ -300,7 +300,8 @@ For focused tests, run `sh scripts/fetch-nats.sh`, then
 `npx vitest run libs/event-store/test`. Tests launch random-port NATS servers
 and prove conditional races, scoped retries, ordered reads, restart/outage
 bounds and native snapshot/restore idempotency. `@opencrane/event-store/testing`
-is test infrastructure only. Its `countReads(store)` helper wraps the instance's
+is test infrastructure only. It exports the NATS `TimeoutError` for tests that
+need to fail a read with the real transport error type. Its `countReads(store)` helper wraps the instance's
 `readStream`, including append's internal searches. Calls record subject,
 fromSequence and yielded rows; `clear()` starts a new measurement.
 `expectNoWholeReads(calls, largestAllowed = 20)` refuses reads from sequence 1
