@@ -1,0 +1,32 @@
+25 October 2026 — local builder checks
+
+Commands use nice -n 10. Vitest uses PG_TEST_URL for disposable PostgreSQL,
+--maxWorkers=1 and --no-file-parallelism.
+
+Failing-first: npx vitest run apps/server/test/company-opt-in-read.test.ts
+Initial result: 18 failed before implementation. An invalid removal fixture
+reason was also corrected before the passing runs.
+
+Final run 1: npx vitest run apps/server/test/company-opt-in-read.test.ts
+Test Files 1 passed (1); Tests 21 passed (21); Duration 27.84s.
+Final run 2: same command.
+Test Files 1 passed (1); Tests 21 passed (21); Duration 26.07s.
+
+Broader run: npx vitest run apps/server/test/company-opt-in-read.test.ts
+apps/server/test/integrations.test.ts libs/models/test/company-opt-in.test.ts
+libs/events/test/security-rules.test.ts
+Test Files 1 failed | 3 passed (4); Tests 1 failed | 588 passed (589).
+FAIL: integrations.test.ts — loads through the dev proxy and preserves the
+accessible refresh journey in Chromium.
+AssertionError: Building... expected '' not to be ''.
+The web server did not print its Local URL within the 60,000 ms startup wait.
+No browser assertion ran. This failure remains FAIL; it was not rerun.
+
+npm run typecheck: exit 0.
+Final npm run typecheck -w apps/server: exit 0.
+npm run lint: full code scan found one no-misused-promises error in the new
+error handler, plus 25 warnings. The handler now returns no value.
+Final eslint on company-opt-in-read.ts, routes.ts and the HTTP test: exit 0.
+lint:deps, lint:unused (knip), lint:docs, lint:readmes, lint:links,
+lint:fixtures, check:package-licences and lint:changelog: exit 0.
+npm run check:events: 154 event types agree.
