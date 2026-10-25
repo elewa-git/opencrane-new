@@ -221,6 +221,10 @@ that its running binary is healthy. Digest/licence promotion remains later work.
 Before Helm runs, the installer reads both basic-auth Secrets in the owned namespace.
 It compares their passwords with bootstrap and runtime connections in memory,
 including the existing server, dispatcher and OpenFGA roles and database names.
+All four generated role passwords must contain exactly 64 lower-case hexadecimal
+characters, as bootstrap requires. The installer also checks the connections after
+bootstrap imports its own Secret over the runtime Secret. Conflicting connection
+fields refuse before Helm, even when the runtime connections are valid.
 It refuses connection query parameters that override checked fields. Errors discard
 private values and dependency output. Rendered `imageName` fields must match the
 exact reviewed PostgreSQL image; container `image` fields retain their existing check.
@@ -235,7 +239,8 @@ The [installer receipt](../../docs/process/p5-3-pr2/receipt.md) records local ch
 The fresh-install runner and NATS route preparation tests use `packaged-fixture.ts`
 to copy the installer and its local imports into temporary worktrees. The helper
 checks imports with the installed TypeScript parser. A new local import must join
-the shared file list before either fixture can run. These checks do not change
+the shared file list before either fixture can run. A negative fixture adds an
+unlisted local import and checks that copying refuses with the missing filename. These checks do not change
 installation behaviour or replace the existing ownership and certificate assertions.
 
 [Bootstrap](https://cloudnative-pg.io/docs/1.30/bootstrap/),

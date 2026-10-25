@@ -29,6 +29,15 @@ function basicAuth(secret: Secret, username: string) {
   return field(secret, 'password');
 }
 
+function generatedPassword(secret: Secret, name: string) {
+  const password = field(secret, name);
+  // Match bootstrap's generated role format before Helm can create resources.
+  if (!/^[a-f0-9]{64}$/u.test(password)) {
+    throw new Error('Invalid generated role password');
+  }
+  return password;
+}
+
 function database(secret: Secret, key: string, user: string, name: string, password: string) {
   const url = new URL(field(secret, key));
   if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.hostname !== 'postgres' ||
@@ -85,14 +94,20 @@ async function checkCredentials(values: Settings, namespace: string, kubectl: Ku
   const runtime = await readSecret(kubectl, namespace, values.secrets['runtime']!);
   const openfga = await readSecret(kubectl, namespace, values.secrets['openfga']!);
   database(bootstrap, 'POSTGRES_ADMIN_URL', 'postgres', 'postgres', adminPassword);
-  if (field(bootstrap, 'PROJECTION_PASSWORD') !== projectionPassword) {
+  if (generatedPassword(bootstrap, 'PROJECTION_PASSWORD') !== projectionPassword) {
     throw new Error('CNPG projection password differs from bootstrap');
   }
-  database(runtime, 'PROJECTION_DATABASE_URL', 'projection', 'projections', projectionPassword);
-  database(runtime, 'DATABASE_URL', 'server', 'projections', field(bootstrap, 'SERVER_PASSWORD'));
-  database(runtime, 'HANDLER_DATABASE_URL', 'dispatcher', 'handlers',
-    field(bootstrap, 'DISPATCHER_PASSWORD'));
-  database(openfga, 'OPENFGA_DATASTORE_URI', 'openfga', 'openfga', field(bootstrap, 'OPENFGA_PASSWORD'));
+  const serverPassword = generatedPassword(bootstrap, 'SERVER_PASSWORD');
+  const dispatcherPassword = generatedPassword(bootstrap, 'DISPATCHER_PASSWORD');
+  const openfgaPassword = generatedPassword(bootstrap, 'OPENFGA_PASSWORD');
+  // Check both the runtime connections and bootstrap's later Secret import.
+  const bootstrapEnvironment: Secret = { data: { ...runtime.data, ...bootstrap.data } };
+  for (const environment of [runtime, bootstrapEnvironment]) {
+    database(environment, 'PROJECTION_DATABASE_URL', 'projection', 'projections', projectionPassword);
+    database(environment, 'DATABASE_URL', 'server', 'projections', serverPassword);
+    database(environment, 'HANDLER_DATABASE_URL', 'dispatcher', 'handlers', dispatcherPassword);
+  }
+  database(openfga, 'OPENFGA_DATASTORE_URI', 'openfga', 'openfga', openfgaPassword);
 }
 
 export async function checkCnpgInstallation(values: Settings, namespace: string, kubectl: Kubectl) {

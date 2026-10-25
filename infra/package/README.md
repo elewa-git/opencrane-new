@@ -21,7 +21,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and event recovery"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks test space, cluster access and database inputs| package
+  stack -->|checks test space, cluster access and bootstrap connections| package
   package -->|uses local cluster| devbox
   package -->|starts| apps["Website, server and workers<br/>product requests and background jobs"]
   package -->|runs| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
@@ -40,6 +40,8 @@ The default database still runs as one container. An optional chart setting desc
 PostgreSQL with a standby, a second copy ready to take over. CloudNativePG, a Kubernetes
 controller for PostgreSQL, must be installed separately. This option currently checks
 the installed controller version and private database settings before Helm starts.
+It refuses passwords that the setup job cannot use and conflicting connection
+settings in the setup job's Secret.
 The shipped image review still refuses this option. Credential preparation and a
 running install still need work.
 

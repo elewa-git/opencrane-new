@@ -21,7 +21,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks inputs and can install instead| package["infra/package<br/>Helm install"]
+  stack -->|checks database inputs before installation| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
@@ -55,6 +55,7 @@ available for diagnosis.
   text after a reload. Uses separate messages and invitations for each screen width and
   attempt, and saves step pictures before recording success.
 - Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
+  Checks password format and conflicting database connections before installation.
 - Keeps two spare test stacks separate from the owner's copy and from each other.
 - Checks sign-in, personal memory reads, saves, correction and forgetting on an
   empty installation. Checks supplied memory receipts and records incomplete

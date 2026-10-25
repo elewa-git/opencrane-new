@@ -292,7 +292,9 @@ for (const [key, secretName, urlKey, user, databaseName] of roles) {
       const fixture = validFixture();
       fixture.secrets.bootstrap.data[key] = encoded(password);
       fixture.secrets[secretName].data[urlKey] = encoded(database(user, databaseName, password));
-      if (user === 'projection') fixture.secrets.application.data.password = encoded(password);
+      if (user === 'projection') {
+        fixture.secrets.application.data.password = encoded(password);
+      }
       await runFixture(fixture, refusal);
     }
     test(`CNPG installer refuses matching ${key} ${reason} password before Helm`,
