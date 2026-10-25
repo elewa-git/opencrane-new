@@ -259,6 +259,158 @@ async function recoversOriginalReview() {
 it('recovers the first review after a lost reply, later review, restart and replay',
   recoversOriginalReview);
 
+type PublicationInput = { commandId: string; expectedSequence: number; reviewRevision: number };
+function postPublication(payload: PublicationInput, actor = 'admin') {
+  const request = { method: 'POST' as const, url: '/api/org/integrations/fixture/publication',
+    headers: headers(actor), payload };
+  return app.inject(request);
+}
+async function preparePublication(commandId: string) {
+  const input = await reviewCommand(`${commandId}-review`);
+  const grant = { resourceType: 'mcp_server', resourceId: 'fixture',
+    granteeKind: 'member', granteeId: 'admin', grantedBy: 'owner' };
+  await append('grant-mcp_server-fixture', 'grant.given', grant, false);
+  const response = await postReview(input);
+  expect(response.statusCode).toBe(200);
+  const result = response.json<{ sequence: number }>();
+  expect(result.sequence).toBeGreaterThan(input.expectedSequence + 1);
+  await append('grant-mcp_server-fixture', 'grant.given', grant, false);
+  return { commandId, expectedSequence: result.sequence, reviewRevision: result.sequence };
+}
+async function recoversOriginalPublication() {
+  const input = await preparePublication('publication-original');
+  const appendEvent = nats.store.append.bind(nats.store);
+  async function loseReply(input: Parameters<typeof appendEvent>[0]): Promise<never> {
+    await appendEvent(input);
+    throw new Error('PRIVATE-CANARY');
+  }
+  const lost = vi.spyOn(nats.store, 'append').mockImplementation(loseReply);
+  try {
+    expect((await postPublication(input)).statusCode).toBe(503);
+  } finally {
+    lost.mockRestore();
+  }
+  const original = await nats.store.readEvent(await nats.store.head('mcp-fixture'));
+  expect(original.event.type).toBe('mcp.server_published');
+  expect(original.sequence).toBeGreaterThan(input.expectedSequence + 1);
+  const data = z.object({ fragmentDigest: z.string() }).parse(original.event.data);
+  const receipt = { changeRef: input.commandId, eventId: original.event.id,
+    recordedAt: original.event.time, sequence: original.sequence, serverId: 'fixture',
+    reviewRevision: input.reviewRevision, fragmentDigest: data.fragmentDigest, publishedBy: 'admin' };
+  const withdrawal = { serverId: 'fixture', unpublishedBy: 'admin' };
+  await append('mcp-fixture', 'mcp.server_unpublished', withdrawal);
+  const changedDefinition = definition.replace('PRIVATE-CANARY', 'PRIVATE-CANARY-PUBLISHED');
+  const changed = { ...tool, definition: changedDefinition,
+    revision: losslessJson(changedDefinition).digest };
+  await discover(changed);
+  const laterInput = await preparePublication('publication-later');
+  const later = await postPublication(laterInput);
+  expect(later.statusCode).toBe(200);
+  const laterSequence = await nats.store.head('mcp-fixture');
+  expect(laterSequence).toBeGreaterThan(laterInput.expectedSequence + 1);
+  await delay(150);
+  await app.close();
+  const catalogue = { rows: unexpected, tools: unexpected };
+  const integrations = { silo: 'acme', store: nats.store, binding: auth.binding,
+    feed: { memberId }, catalogue };
+  const options = { integrations, logDestination };
+  app = buildServer(config, options);
+  await runner.rebuild(mcpCatalogue);
+  const before = await nats.store.head();
+  const recovered = await get(input.commandId);
+  expect(recovered.statusCode).toBe(200);
+  expect(recovered.headers['cache-control']).toBe('no-store');
+  expect(recovered.json()).toEqual({ status: 'appended', receipt, availability: {
+    status: 'unavailable', reason: 'requester_assistant_required', policy: 'unavailable',
+    sequence: laterSequence } });
+  expect(later.json()).toMatchObject({ status: 'appended', sequence: laterSequence,
+    receipt: { changeRef: laterInput.commandId, sequence: laterSequence,
+      reviewRevision: laterInput.reviewRevision } });
+  const retried = await postPublication(input);
+  expect(retried.statusCode).toBe(200);
+  expect(retried.json()).toEqual({ status: 'appended', sequence: original.sequence, receipt });
+  const changedPayload = { ...input, reviewRevision: laterInput.reviewRevision };
+  expect((await postPublication(changedPayload)).statusCode).toBe(409);
+  expect((await postPublication(input, 'owner')).statusCode).toBe(409);
+  const changedPosition = { ...input, expectedSequence: before };
+  expect((await postPublication(changedPosition)).statusCode).toBe(409);
+  const stale = { ...input, commandId: 'publication-stale' };
+  expect((await postPublication(stale)).statusCode).toBe(409);
+  expect((await get(stale.commandId)).json()).toEqual({ status: 'unknown' });
+  expect((await get(input.commandId, 'fixture', 'owner')).json()).toEqual({ status: 'unknown' });
+  expect(await nats.store.head()).toBe(before);
+  expect(recovered.body + retried.body + later.body + logs).not.toContain('PRIVATE-CANARY');
+}
+it('recovers the first publication after withdrawal, changes, restart and replay',
+  recoversOriginalPublication);
+
+async function rejectsForgedPublications() {
+  const rows = await history(nats.store, 'mcp-fixture', 'acme');
+  function isPublication(row: typeof rows[number]) {
+    return row.event.id === 'publication-original';
+  }
+  const saved = rows.find(isPublication)!;
+  const data = z.record(z.string(), z.unknown()).parse(saved.event.data);
+  const patches = [{ subject: 'mcp-other' }, { silo: 'other' }, { id: 'different' },
+    { commandId: 'different' }, { type: 'mcp.server_unpublished' }, { source: 'untrusted' },
+    { principal: { kind: 'system' as const, id: 'admin' } },
+    { principal: { kind: 'human' as const, id: 'owner' } },
+    { data: { ...data, publishedBy: 'owner' } }, { data: { ...data, serverId: 'other' } },
+    { data: { ...data, commandId: 'different' } },
+    { data: { ...data, fragmentDigest: 'PRIVATE-CANARY' } },
+    { data: { serverId: 'fixture', publishedBy: 'admin' } }];
+  for (const patch of patches) {
+    const substituted = { ...saved, event: { ...saved.event, ...patch } };
+    const originalRead = nats.store.readStream.bind(nats.store);
+    async function* replace(stream: string, from?: number, deadline?: number) {
+      if (stream === 'mcp-fixture') {
+        yield substituted;
+        return;
+      }
+      yield* originalRead(stream, from, deadline);
+    }
+    const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(replace);
+    try {
+      const response = await get('publication-original');
+      expect(response.json()).toEqual({ status: 'unknown' });
+      expect(response.body + logs).not.toContain('PRIVATE-CANARY');
+    } finally {
+      spy.mockRestore();
+    }
+  }
+  expect((await get('publication-original', 'other')).json()).toEqual({ status: 'unknown' });
+}
+it('refuses forged publication identities, payloads and legacy publication records',
+  rejectsForgedPublications);
+
+async function rejectsConflictingPublications() {
+  const rows = await history(nats.store, 'mcp-fixture', 'acme');
+  function isPublication(row: typeof rows[number]) {
+    return row.event.id === 'publication-original';
+  }
+  const saved = rows.find(isPublication)!;
+  const data = z.object({ commandId: z.string(), expectedSequence: z.number(),
+    reviewRevision: z.number() }).parse(saved.event.data);
+  const conflicting = { ...saved, sequence: rows.at(-1)!.sequence + 1,
+    event: { ...saved.event, source: 'untrusted' } };
+  const read = nats.store.readStream.bind(nats.store);
+  async function* conflict(stream: string, from?: number, deadline?: number) {
+    yield* read(stream, from, deadline);
+    if (stream === 'mcp-fixture') {
+      yield conflicting;
+    }
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(conflict);
+  try {
+    expect((await get('publication-original')).json()).toEqual({ status: 'unknown' });
+    expect((await postPublication(data)).statusCode).toBe(409);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('cannot confirm conflicting evidence for the same publication reference',
+  rejectsConflictingPublications);
+
 async function rejectsForgedReviews() {
   const rows = await history(nats.store, 'mcp-fixture', 'acme');
   function isReview(row: typeof rows[number]) {
@@ -383,12 +535,12 @@ async function accessAfterLoading(change: string, failed: boolean, reference: st
   }
 }
 async function successfulLoading(change: string) {
-  for (const reference of ['original', 'review-original']) {
+  for (const reference of ['original', 'review-original', 'publication-original']) {
     await accessAfterLoading(change, false, reference);
   }
 }
 async function failedLoading(change: string) {
-  for (const reference of ['original', 'review-original']) {
+  for (const reference of ['original', 'review-original', 'publication-original']) {
     await accessAfterLoading(change, true, reference);
   }
 }
@@ -423,7 +575,7 @@ async function readsWithoutEffects() {
   const fetches = vi.spyOn(globalThis, 'fetch').mockImplementation(unexpected);
   const requests = vi.spyOn(https, 'request').mockImplementation(unexpected);
   try {
-    for (const reference of ['original', 'review-original']) {
+    for (const reference of ['original', 'review-original', 'publication-original']) {
       offset = 0;
       checks = 0;
       const response = await get(reference);
@@ -471,7 +623,7 @@ async function refusesExpiredHistory() {
   const clock = vi.spyOn(performance, 'now').mockImplementation(now);
   const streams = vi.spyOn(nats.store, 'readStream').mockImplementation(expired);
   try {
-    const response = await get('review-original');
+    const response = await get('publication-original');
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ status: 'unavailable' });
     expect(checks).toBe(1);
@@ -480,4 +632,4 @@ async function refusesExpiredHistory() {
     streams.mockRestore();
   }
 }
-it('limits review history loading and still checks access after expiry', refusesExpiredHistory);
+it('limits publication history loading and still checks access after expiry', refusesExpiredHistory);
