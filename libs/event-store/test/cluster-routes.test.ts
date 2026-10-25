@@ -183,29 +183,10 @@ async function completeRoutes(fixture: Awaited<ReturnType<typeof clusterFixture>
   expect(actual.sort()).toEqual(expected.sort());
 }
 
-async function metadataReady(fixture: Awaited<ReturnType<typeof clusterFixture>>, peer: Peer) {
-  const response = await fetch(`http://127.0.0.1:${peer.monitor}/jsz`,
-    { signal: AbortSignal.timeout(1000) });
-  const info: unknown = await response.json();
-  const leader: unknown = expect.stringMatching(/^peer-[123]$/);
-  expect(info).toMatchObject({ meta_cluster: { cluster_size: 3, leader } });
-  if (!info || typeof info !== 'object' || !('meta_cluster' in info)) {
-    throw new Error('Missing metadata cluster');
-  }
-  const metadata = info.meta_cluster;
-  if (!metadata || typeof metadata !== 'object' || !('leader' in metadata)) {
-    throw new Error('Missing metadata leader');
-  }
-  if (metadata.leader === peer.name) {
-    const replicas: unknown[] = [];
-    for (const candidate of fixture.peers) {
-      if (candidate !== peer) {
-        replicas.push({ name: candidate.name, current: true });
-      }
-    }
-    // Check follower progress on the leader; followers do not track each other.
-    expect(metadata).toMatchObject({ replicas });
-  }
+async function metadataReady(peer: Peer) {
+  const url = `http://127.0.0.1:${peer.monitor}/healthz?js-meta-only=true`;
+  const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
+  expect(response.status).toBe(200);
 }
 
 async function connectedPeers(fixture: Awaited<ReturnType<typeof clusterFixture>>) {
@@ -217,7 +198,7 @@ async function connectedPeers(fixture: Awaited<ReturnType<typeof clusterFixture>
   await vi.waitFor(allRoutesConnected, { timeout: 10_000 });
   async function allMetadataReady() {
     for (const peer of fixture.peers) {
-      await metadataReady(fixture, peer);
+      await metadataReady(peer);
     }
   }
   await vi.waitFor(allMetadataReady, { timeout: 10_000 });

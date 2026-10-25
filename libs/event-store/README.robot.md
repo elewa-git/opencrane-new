@@ -289,7 +289,9 @@ configuration and a fresh silo installation remain unqualified.
 disposable pinned servers. Setup waits for all three pooled routes and the dedicated
 `$SYS` route between each pair of servers. Seeing both peer names is not enough:
 the system route carries cluster information and the pooled routes carry requests.
-It checks metadata follower progress on the leader, then creates `EVENTS`.
+It waits for the built-in metadata health check on each server, then creates `EVENTS`.
+This checks contact with a metadata leader and current local metadata without
+requiring repeated detailed cluster reports.
 NATS can report metadata readiness before receiving the peer statistics needed for
 stream placement. `cluster-stream.ts` polls creation only for API error 10005, status
 400, with the exact description `no suitable peers for placement, peer offline`.
