@@ -765,6 +765,8 @@ It must load personal memory, save and search a fact, and retain it after server
 restart. A second case grants note access and requires HTTP 503 until the
 assistant permission handler finishes. Key directories stay private (0700).
 These are service integration tests; they do not qualify governed MCP recall.
+The [first-load receipt](../../docs/process/memory-fresh-503/receipt.md) records
+the failing-first result, fresh browser checks and the remaining projection-lag UI limitation.
 
 `GET /api/memory/scopes?assistantId=...&groupId=...` returns the requester's own
 scope and permitted selected scopes, their audiences, separate operation rights and limits.
