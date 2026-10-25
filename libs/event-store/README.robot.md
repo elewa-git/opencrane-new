@@ -289,10 +289,17 @@ configuration and a fresh silo installation remain unqualified.
 disposable pinned servers. Setup waits for all three pooled routes and the dedicated
 `$SYS` route between each pair of servers. Seeing both peer names is not enough:
 the system route carries cluster information and the pooled routes carry requests.
-It checks metadata follower progress on the leader, creates `EVENTS` once without
-retrying, then waits for its leader and two current replicas before any route probe.
-The first test checks these conditions without polling. Setup retains the existing
-five-second route and stream-copy limits and ten-second metadata limit.
+It checks metadata follower progress on the leader, then creates `EVENTS`.
+NATS can report metadata readiness before receiving the peer statistics needed for
+stream placement. `cluster-stream.ts` polls creation only for API error 10005, status
+400, with the exact description `no suitable peers for placement, peer offline`.
+Other errors, including timeouts with an unknown creation result, throw immediately.
+After creation, setup waits for the stream leader and two current, online replicas
+before any route probe. `cluster-stream.test.ts` checks the selective wait and
+immediate propagation of other errors, including an incompatible replica count.
+The first test checks these conditions without polling. Setup waits at most ten seconds for complete routes and metadata, and five seconds
+each for placement and current stream copies. These waits poll real state and finish
+as soon as it is ready; they do not add a fixed startup delay.
 It checks route authentication, a leader with two current
 replicas, conditional append, stale-position refusal and PostgreSQL member replay
 through the projection identity. It also checks publish refusals and rejects R3

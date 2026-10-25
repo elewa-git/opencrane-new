@@ -16,6 +16,7 @@ import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { connectNats, createEventStore } from '../src/index.ts';
 import { certificates, issueCertificate, sharedCertificates } from './certificates.ts';
 import { freePort } from './ports.ts';
+import { waitForClusterStream } from './cluster-stream.ts';
 import { event } from './testing.ts';
 
 const routeExtensions = 'subjectAltName=DNS:localhost\nextendedKeyUsage=serverAuth,clientAuth\n';
@@ -213,7 +214,7 @@ async function connectedPeers(fixture: Awaited<ReturnType<typeof clusterFixture>
       await completeRoutes(fixture, peer);
     }
   }
-  await vi.waitFor(allRoutesConnected, { timeout: 5000 });
+  await vi.waitFor(allRoutesConnected, { timeout: 10_000 });
   async function allMetadataReady() {
     for (const peer of fixture.peers) {
       await metadataReady(fixture, peer);
@@ -275,7 +276,7 @@ async function prepareCluster() {
   await connectedPeers(cluster);
   const connection = await cluster.client(cluster.peers[0]!);
   const store = await createEventStore(connection);
-  await store.ensureStream({ replicas: 3 });
+  await waitForClusterStream(store);
   await replicasAreCurrent(connection);
 }
 async function closeCluster() {

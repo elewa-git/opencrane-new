@@ -19,6 +19,7 @@ it('waits when routed metadata peers still lack placement statistics', waitsForP
 
 const failures = [
   new Error('timeout'),
+  new Error(peerOffline),
   new Error('Incompatible stream num_replicas'),
   new JetStreamApiError({ code: 403, err_code: 10005, description: peerOffline }),
   new JetStreamApiError({ code: 400, err_code: 10023, description: peerOffline }),
