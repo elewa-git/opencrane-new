@@ -168,10 +168,11 @@ export class BudgetWriter {
       throw new Error('Budget receipt mismatch');
     }
     const consumed = saved.sequence <= this.sequence;
-    this.accept(saved);
     if (!consumed && result.outcome?.kind === 'duplicate_saved') {
+      // Read intervening writes before advancing, so another writer cannot hide behind a duplicate.
       await this.recover(deadline);
     }
+    this.accept(saved);
     this.pending = undefined;
     if (consumed && event.type === 'budget.call_dispatch_admitted') {
       throw new Error('Dispatch already admitted');
