@@ -1,0 +1,35 @@
+25 October 2026 — local process tests; no fresh packaged install.
+Source: fe0f43f7c8dead2c34e3816bd2dc33f2c986adf0.
+Linux x86_64; Node 22.23.3; NATS 2.15.0.
+All lint, typecheck and Vitest commands use nice -n 10.
+Vitest uses --maxWorkers=1.
+
+PASS npm ci; symlinked requested NATS and Lychee tools.
+PASS expected failing-first checker run: 3 failures, 17 passes.
+     The new quorum-outcome checker was not yet implemented.
+FAIL initial package typecheck: commandId required bracket access.
+     Fixed the test's index-signature access before the final runs.
+PASS preliminary batch: checker + quorum + existing leader-loss, 23 tests.
+PASS repeated preliminary batch: same 23 tests.
+FAIL final combined batch: 22 passes, 1 failure; 50.18 seconds.
+     All 21 changed tests passed.
+     Existing cluster-failover.test.ts failed at line 45:
+     TypeError: .toMatch() expects to receive a string, but got undefined.
+     The stream reported no leader within the ten-second election wait.
+     Retained as FAIL; no further retry of that regression was run.
+PASS next changed-file run: 21 tests; 33.68 seconds.
+FAIL initial focused lint: throw in finally and a narrowed type assertion.
+     Rewrote cleanup and the deliberately corrupted acknowledgement fixture.
+FAIL first full lint: the same two errors, read before those fixes.
+PASS final changed-file run 1: 21 tests; 31.47 seconds.
+PASS final changed-file run 2: 21 tests; 36.03 seconds.
+PASS final focused ESLint check.
+PASS full typecheck and final event-store typecheck.
+PASS final full npm run lint, including knip and changelog.
+     ESLint reported 0 errors and 25 warnings in existing code.
+PASS standalone npm run lint:changelog.
+PASS security-rules.test.ts: 438 tests.
+     Used the requested PG_TEST_URL setting; this suite uses no PostgreSQL fixture.
+PASS check:events: 154 event types agree.
+PASS cleanup: no owned NATS processes or cluster directories remain.
+NOT RUN zones, Kubernetes node/PVC loss, backup survival, packaged recovery.
