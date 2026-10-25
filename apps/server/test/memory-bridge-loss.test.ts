@@ -116,6 +116,9 @@ async function acknowledgesUnavailableOutput() {
   expect(saved).toHaveLength(1);
   expect(saved[0]?.event.type).toBe('agent.output_lost');
   expect(saved[0]?.event.data).toEqual({ conversationId: 'alice', turnId: 'turn-alice' });
+  // Check the known digest of the text-free report, independent of incoming reply bytes.
+  const expectedLossDigest = '4085714351236783928b4bd9f10ec54eba4addeb0ced8cc9dc00d8bf0714a9e5';
+  expect(saved[0]?.event.report?.digest).toBe(expectedLossDigest);
   const hash = createHash('sha256');
   hash.update(JSON.stringify(value));
   expect(JSON.stringify(saved)).not.toContain(hash.digest('hex'));
