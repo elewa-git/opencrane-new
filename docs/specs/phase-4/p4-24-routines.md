@@ -12,11 +12,11 @@ GitHub writes.
 
 Read #106/#107 including Design sections/comments, #89/#93/#105/#46/#49/#50, #108/#109/#85 and their comments; merged
 #161/#245/#247/#287/#308/#311 and #328. Read AGENTS.md, plan.md, engineering standard, Phase 4 tickets and D13/D25/D26, handoff PLAN
-including gap rows, event catalogue and ADRs 0001–0006. Read `/home/jente/.fleet/reviews/p4-11-design.md`, especially its accepted
+including gap rows, event catalogue and ADRs 0001–0006. Read `<home>/.fleet/reviews/p4-11-design.md`, especially its accepted
 Routines default. Inspected the requested handlers, ops, models, server chat/assistants/inventory, events, projection runner/audit
 and web approvals/organisation files on main. Read the external 09-rtn README and all RTN states in its design source; inspected key
 list/create/detail/Ask/edit/reassign/retry/DST PNGs at 1280/390 and OVR-20 at 390. References are under
-`/home/jente/dev/design-handoffs/v2/`; they are intended screens.
+`<home>/dev/design-handoffs/v2/`; they are intended screens.
 
 #89 supplies private requester threads, one shared assistant computer and fixed payer. Its disk/browser still has shared-state
 limits: retain restricted execution, refused team uploads/screenshots and no credentials on disk. Do not enable memory or native

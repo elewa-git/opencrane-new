@@ -1,6 +1,6 @@
 # Scoped memory: design for #94
 
-8 October 2026. Design only. Inspected `work/p4-12-design`, SHA `7f3e9b90261dce1136e0d73836ae991cac6b6cef`, equal to local `origin/main`. Read GitHub issues [#94](https://github.com/elewa-git/opencrane-new/issues/94), [#95](https://github.com/elewa-git/opencrane-new/issues/95), [#97](https://github.com/elewa-git/opencrane-new/issues/97) and parent #82. Read the MEM frame definitions and handoff README under `/home/jente/dev/design-handoffs/v2/06-mem/`; inspected representative desktop and phone PNGs. All twelve requested frame ids are mapped below.
+8 October 2026. Design only. Inspected `work/p4-12-design`, SHA `7f3e9b90261dce1136e0d73836ae991cac6b6cef`, equal to local `origin/main`. Read GitHub issues [#94](https://github.com/elewa-git/opencrane-new/issues/94), [#95](https://github.com/elewa-git/opencrane-new/issues/95), [#97](https://github.com/elewa-git/opencrane-new/issues/97) and parent #82. Read the MEM frame definitions and handoff README under `<home>/dev/design-handoffs/v2/06-mem/`; inspected representative desktop and phone PNGs. All twelve requested frame ids are mapped below.
 
 The governing defaults are `plan.md` Memory, D14–D19 in `docs/specs/phase-4/decisions.md`, `docs/design/handoff-v2/PLAN.md` Memory, `AGENTS.md`, and ADRs 0001–0006. Current source, rather than historical spike claims, determines what needs building. This note proposes contracts; none are implemented or qualified by this task.
 

@@ -115,7 +115,7 @@ scaling for the newer runners. Rebuild it from all downloaded shard and fixture
 JSON reports, supplying the original checkout path recorded in those reports:
 
 ```sh
-node scripts/ci/refresh-timings.mjs /home/runner/work/opencrane-new/opencrane-new reports/*/report.json
+node scripts/ci/refresh-timings.mjs <worktree> reports/*/report.json
 ```
 
 Refresh from complete, successful runs in a separate small PR.

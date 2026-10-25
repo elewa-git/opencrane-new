@@ -29,9 +29,9 @@ const owner = {
   identityRows: [{ memberId: 'jente-rosseel', issuer: 'https://issuer.example',
     subject: 'test-owner' }],
   providerEmailVerified: true, role: 'owner', status: 'joined',
-  memberEmail: 'jente@elewa.ke', ownerEvents: [
-    { email: 'jente@elewa.ke', role: 'owner', subject: 'test-owner' },
-    { email: 'jente@elewa.ke', role: 'owner', subject: 'test-owner' },
+  expectedEmail: 'owner@example.test', memberEmail: 'owner@example.test', ownerEvents: [
+    { email: 'owner@example.test', role: 'owner', subject: 'test-owner' },
+    { email: 'owner@example.test', role: 'owner', subject: 'test-owner' },
   ],
   eventTypes: ['member.invited', 'member.joined'], openFgaOwner: true,
   authenticated: true, authenticatedSubject: 'test-owner',
@@ -79,6 +79,7 @@ for (const [reason, change] of staleCases) {
 
 const ownerCases = [
   ['no identity row', { identityRows: [] }],
+  ['missing configured email', { expectedEmail: '' }],
   ['unverified email', { providerEmailVerified: false }],
   ['role member', { role: 'member' }],
   ['not joined', { status: 'invited' }],
@@ -118,8 +119,8 @@ test('internally consistent foreign subject fails the expected subject compariso
   const foreignOwner = { ...owner, subject: 'other', authenticatedSubject: 'other',
     identityRows: [{ ...owner.identityRows[0]!, subject: 'other' }],
     ownerEvents: [
-      { email: 'jente@elewa.ke', role: 'owner', subject: 'other' },
-      { email: 'jente@elewa.ke', role: 'owner', subject: 'other' },
+      { email: 'owner@example.test', role: 'owner', subject: 'other' },
+      { email: 'owner@example.test', role: 'owner', subject: 'other' },
     ] };
   function acceptForeignSubject() {
     checkOwner(foreignOwner);

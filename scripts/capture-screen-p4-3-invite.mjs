@@ -10,7 +10,7 @@ const contentTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': '
   '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 const count = { status: 'current', value: 1 };
 const unavailable = { status: 'unavailable', value: null };
-const owner = { memberId: 'jente', displayName: 'Jente', email: 'jente@elewa.ke',
+const owner = { memberId: 'jente', displayName: 'Jente', email: 'owner@example.test',
   role: 'owner', status: 'joined', joinedAt: '2026-10-01T00:00:00Z', groups: [] };
 const directory = { rows: [owner], next: null, counts: { members: count, groups: unavailable,
   pendingInvitations: unavailable, acceptedInvitations: unavailable },

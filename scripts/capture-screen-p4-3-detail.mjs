@@ -8,7 +8,7 @@ const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://detail.opencrane.test';
 const contentTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
-// Treat the sample viewer as Owner jente@elewa.ke. The API replies contain no viewer email.
+// Treat the sample viewer as Owner owner@example.test. The API replies contain no viewer email.
 const member = { memberId: 'alex-kim', displayName: 'Alex Kim', email: 'alex@example.test',
   role: 'member', status: 'joined', joinedAt: '2026-03-12T10:00:00Z',
   groups: [{ groupId: 'sales', name: 'Sales team', membershipSource: 'local' }],

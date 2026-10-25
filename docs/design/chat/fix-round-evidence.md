@@ -60,7 +60,7 @@ without increasing any test timeout. That run exposed a separate stale Angular
 prebundle: its cached protocol module lacked the new slug export, so the
 organisation-integrations page never sent its initial API request. An isolated
 run reproduced the timeout. `npm exec -w apps/web -- ng cache clean` removed only
-this worktree's cache; the shared stack uses `/home/jente/dev/opencrane-new`.
+this worktree's cache; the shared stack uses `<worktree>`.
 The isolated integration file then passed all eight tests. The complete suite
 was rerun after that cleanup. The final capture also exposed an immediate row-count
 assertion racing Angular’s tab render; it now waits for the first Activity row

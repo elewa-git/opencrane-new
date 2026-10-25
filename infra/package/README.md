@@ -59,6 +59,9 @@ content connection to coordinate gateway configuration changes with delivery.
 
 ## How to run or test it
 
+The development owner email is configured in a private file outside the repository.
+The [operator notes](README.robot.md#private-owner-email) explain that setting.
+
 The [operator notes](README.robot.md) explain the image review and private settings
 needed before installation. After a claim, the returned stack number selects the install:
 

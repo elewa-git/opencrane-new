@@ -34,7 +34,7 @@ named Kubernetes secrets from files under the claimed slot. It also prepares the
 development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
 values in Helm values, command arguments or receipts.
 The owner bootstrap links the separate development sign-in account to the
-`jente@elewa.ke` owner member in this install. It does not edit the existing
+privately configured owner member in this install. It does not edit the existing
 Zitadel user with that email.
 
 The `runtime` secret supplies text settings to the server and workers.
@@ -146,3 +146,11 @@ to `check-licences.py` to compare a fresh scan with the reviewed inventory.
 The computer image uses its existing full licence inventory in
 `apps/computer/licences.json`; this package checks that file's digest and its
 image pin before installation.
+
+## Private owner email
+
+The development owner email uses the [private host file](../dev-stack/README.robot.md#private-owner-email)
+shared by development stacks. Preparation reads it before creating credentials,
+then copies its value into the private runtime Secret as `DEV_OWNER_EMAIL`.
+The packaged bootstrap receives that environment setting. The twice-fresh check
+compares the member and both events against the private file's address.

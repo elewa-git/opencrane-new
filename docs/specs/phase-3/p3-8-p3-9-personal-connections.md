@@ -8,7 +8,7 @@ Only this note was written. No product changes, stacks, tests, model calls or sp
 
 ## Readiness and sources
 
-Read both issues, comments and Design sections; #45–#48, #51, #53, #105, #63 and #100; the accepted `/home/jente/.fleet/reviews/p3-6-design.md`; and open PR #329.
+Read both issues, comments and Design sections; #45–#48, #51, #53, #105, #63 and #100; the accepted `<home>/.fleet/reviews/p3-6-design.md`; and open PR #329.
 Read AGENTS.md, the engineering standard, all six ADRs, Phase 3 tickets/spec/decisions, D08 and D14–D17 with their OC1 rows, the root plan and event catalogue.
 Read the named model/event/projection, server, computer, auth/authz, dev-stack, Odoo and web paths. Read the INT handoff README/HTML and requested PNG sets, WRK-10/11, OVR-20 and the PLAN rows for both issues.
 Reuse narrowly from OC1 `libs/backend/server/gateways/mcp/main/src/connections/`, source commit `10abd0ef6`; preserve its licence and record the source in the owning README.robot.md.
@@ -304,7 +304,7 @@ Record source-ready versus fresh-live results explicitly. A fixture-only pass is
 | Question | Recommended default / boundary |
 | --- | --- |
 | Which disposable OAuth provider? | A separate application in the existing Zitadel **OpenCrane 2 Dev** organisation, with code + PKCE and refresh enabled, separate exact tool callback and a small zero-cost resource fixture that validates its tokens/scopes. Do not reuse the web SSO app. |
-| Which users and account identity? | Two disposable ordinary integration accounts; keep `jente@elewa.ke` a separate owner test user. Pin verified issuer/subject; explicitly confirm first identity. Odoo bearer ACL evidence and Zitadel OAuth evidence are separate; do not claim Odoo has native OAuth from this fixture. |
+| Which users and account identity? | Two disposable ordinary integration accounts; keep the privately configured owner test user separate. Pin verified issuer/subject; explicitly confirm first identity. Odoo bearer ACL evidence and Zitadel OAuth evidence are separate; do not claim Odoo has native OAuth from this fixture. |
 | Which callback and provider reachability? | Registered `https://ocn-dev.tail00285e.ts.net/api/my/tools/oauth/callback` via tailscale serve, subject to the actual dev origin check; no funnel. If the provider cannot return through the user's tailnet browser, stop and fix that route rather than expose a public callback. |
 | What Zitadel changes are allowed later? | Only the OpenCrane 2 Dev org, with resource-owner checks, separate tool app and synthetic users. No changes to other organisations or the owner's account. This design performs no changes. |
 | Which dev custody backend and at-rest evidence? | Narrow OC1 Kubernetes Secret adapter; report any missing control-plane encryption/backups qualification as PARTIAL. A file adapter is an alternative only if exact identity/version custody is specified and qualified. Production encryption/KMS is Phase 5. |

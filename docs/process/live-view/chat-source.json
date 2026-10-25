@@ -1,4 +1,5 @@
 {
+  "publicCopyNote": "The infra/dev-stack/README.md hash describes the public copy after the privacy sweep. Other source hashes still describe the original run.",
   "date": "2026-10-03",
   "base": "cc8d8c08adb2fb391d438077c9b306a86a89b33d",
   "reviewFixHead": "7e65b3edb4eb6613c96cec96dad580841eff6b0d",
@@ -34,7 +35,7 @@
     "apps/web/test/live-view-main.ts": "866087bb27148d3f04ae0192f7cf912a485aa90cd207e1dc7090c6ad22b698f1",
     "apps/web/test/tsconfig.json": "615cad0f73e6fab9ea146839254efab23032593a9b95d3f3b25618a57216afbc",
     "apps/web/test/tsconfig.live-view.json": "a09f941c5bbd5be7a8af4cc0f1408f10eb596822ca41afee28ec6bb9eaabc425",
-    "infra/dev-stack/README.md": "78ed01f42341320b944102256f3e47e66adffc8714297cfe89c6048ff23b6360",
+    "infra/dev-stack/README.md": "4ed52b49c0d8b34b38e52b1c2954de18b7e678c2d6b668946de4e07044627a85",
     "infra/dev-stack/browser-live-view.ts": "7fa65fc6df232a30bb1448f1e122420c0c11cb588291c2e04adebb54880c1722",
     "infra/dev-stack/browser-signin.ts": "52182aba05eb277c6d3b2355177bacd47ced542a02abdef3b1760335cfa381da",
     "infra/dev-stack/computer-admission.mjs": "f9258c45013291d1785a70dcd3be9df23cfe2d6e2d3af1468bed727d2c7141e4",

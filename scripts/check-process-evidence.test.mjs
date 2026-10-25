@@ -36,8 +36,11 @@ function runCheck() {
 beforeEach(createRepository);
 afterEach(removeRepository);
 
+const operatorWorkChat = '/home' + '/operator/work/chat';
+const operatorProject = '/home' + '/operator/project';
+
 const privateValues = [
-  ['/home/operator/work/chat', 'home-directory path'],
+  [operatorWorkChat, 'home-directory path'],
   ['/Users/operator/work/chat', 'home-directory path'],
   ['/root/.config/settings', 'home-directory path'],
   ['/root', 'home-directory path'],
@@ -66,7 +69,7 @@ function rejectsPrivateValue(value, description) {
 test.each(privateValues)('refuses %s in tracked evidence', rejectsPrivateValue);
 
 function reportsEveryFile() {
-  writeFile('docs/process/first.log', 'PASS\n/home/operator/project\n');
+  writeFile('docs/process/first.log', `PASS\n${operatorProject}\n`);
   writeFile('docs/process/nested/receipt.md', 'person@example.invalid\n');
 
   const result = runCheck();
@@ -81,8 +84,8 @@ test('reports all affected files and line numbers', reportsEveryFile);
 function allowsPublicEvidence() {
   writeFile('docs/process/receipt.md', '<home>/.fleet/log\n<stack-dir>/output\n<email>\n');
   writeFile('docs/process/run.json', '{"directory":"<worktree>/apps/server"}\n');
-  writeFile('docs/process/local.log', '/home/operator/project\n', false);
-  writeFile('docs/other.md', '/home/operator/project\n');
+  writeFile('docs/process/local.log', `${operatorProject}\n`, false);
+  writeFile('docs/other.md', `${operatorProject}\n`);
   writeFile('docs/process/image.png', Buffer.from([137, 80, 78, 71, 0, 10]));
 
   const result = runCheck();
@@ -95,7 +98,7 @@ test('allows placeholders and checks tracked process text only', allowsPublicEvi
 
 function checksWorkingCopy() {
   writeFile('docs/process/receipt.md', 'PASS\n');
-  writeFile('docs/process/receipt.md', '/home/operator/project\n', false);
+  writeFile('docs/process/receipt.md', `${operatorProject}\n`, false);
 
   const result = runCheck();
 

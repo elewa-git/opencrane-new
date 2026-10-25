@@ -4,7 +4,7 @@
 <!-- markdownlint-disable MD018 MD033 MD034 -->
 
 Design for [#45](https://github.com/elewa-git/opencrane-new/issues/45) and [#46](https://github.com/elewa-git/opencrane-new/issues/46), 10 October 2026.
-Read-only checkout: `/home/jente/dev/wt/p3-4-rest-design`, `work/p3-4-rest-design`.
+Read-only checkout: `<worktree>`, `work/p3-4-rest-design`.
 HEAD, origin/main and GitHub main agreed at `d53e8e35aa949a9044685259eeda38540628d0c6`.
 This is a proposal. Runtime checks, independent review and live journeys: NOT RUN.
 Only this note is retained; no product changes, stacks, tests, model calls or spending.
@@ -33,9 +33,9 @@ Core policy/IAM/approval proof: [#68](https://github.com/elewa-git/opencrane-new
 #45 screens: [#204](https://github.com/elewa-git/opencrane-new/pull/204), [#222](https://github.com/elewa-git/opencrane-new/pull/222).
 #46 screens: [#221](https://github.com/elewa-git/opencrane-new/pull/221), [#225](https://github.com/elewa-git/opencrane-new/pull/225), [#297](https://github.com/elewa-git/opencrane-new/pull/297), [#308](https://github.com/elewa-git/opencrane-new/pull/308).
 #46 backend: [#250](https://github.com/elewa-git/opencrane-new/pull/250), [#258](https://github.com/elewa-git/opencrane-new/pull/258), [#265](https://github.com/elewa-git/opencrane-new/pull/265), [#270](https://github.com/elewa-git/opencrane-new/pull/270), [#283](https://github.com/elewa-git/opencrane-new/pull/283), [#287](https://github.com/elewa-git/opencrane-new/pull/287), [#311](https://github.com/elewa-git/opencrane-new/pull/311).
-The backend spec `/home/jente/.fleet/prompts/p3-5-backend-spec.md` has PRs 1–5 merged;
+The backend spec `<home>/.fleet/prompts/p3-5-backend-spec.md` has PRs 1–5 merged;
 #311 covers parts of 7–8. Merge is not live proof; replace its seeded journey with product APIs.
-Keep accepted `/home/jente/.fleet/reviews/p3-6-design.md` and open [#329](https://github.com/elewa-git/opencrane-new/pull/329)
+Keep accepted `<home>/.fleet/reviews/p3-6-design.md` and open [#329](https://github.com/elewa-git/opencrane-new/pull/329)
 compatible: stable policyRevision, dated catalogues, immutable snapshots, final dispatch and drift restore.
 #329 is not on main; reuse its catalogue fold without weakening refusals.
 Read AGENTS.md, plan.md, standards, tickets P3-4/P3-5, decisions D02/D04/D09–D11,
@@ -204,7 +204,7 @@ Lost Pod/bridge fails its old turn, cancels unconsumed actions, discards holds a
 again. A possibly dispatched call stays unknown even if Codex reports failed/completed.
 An HTTP response cannot prove a business write; timeout cannot justify a refund.
 
-Live journey: add jente@elewa.ke as a separate Owner user in OpenCrane 2 Dev, preserving the
+Live journey: add the privately configured owner test user as a separate Owner user in OpenCrane 2 Dev, preserving the
 existing owner and testing an ordinary requester separately. On a fresh secondary stack use product
 register/discover/review/grant/publish, wait for digest/IAM
 receipts, then let pinned Codex call a zero-cost recorded fixture through its private proxy.
@@ -260,7 +260,7 @@ Keep receipt dates/expiry; rebuilds/replacement Pods cannot revive approvals or 
 ## 4. Screens mapped to APIs and the 390px layout
 
 Inspected README and both PNG widths for every requested frame in
-`/home/jente/dev/design-handoffs/v2/01-int` and `02-wrk`. Use apps/web, not the old handoff app name.
+`<home>/dev/design-handoffs/v2/01-int` and `02-wrk`. Use apps/web, not the old handoff app name.
 E = existing; P = proposed. INT root is `/api/org/integrations`; C is `/api/conversations/:id`.
 Proposed under INT /:serverId: POST /review, /publication, /removal; GET /facts, /review,
 /removal-review and /changes/:commandId. GET /access and /access/candidates; POST /access/changes
@@ -351,7 +351,7 @@ exceeding about 600 changed lines before building. Server/contracts precede new 
 | 11 / #46 / 420 | Approval UTC decision/use/end times and typed recorded cancellation causes. | Every supported cause, old missing reason, retry use history, unknown cause omitted; history read before short access check; replay times identical. |
 | 12 / #46 / 570 | Saved on-request wire capture, explicit native replies and removal of memory-free never. | Real pinned Codex local-stub capture; supported consent still Ask; unsupported requests one reply/refusal; private tools off; new output never refuses a reader. |
 | 13 / #46 / 560 | Original-call status and retained-byte authorised retry continuation. | Proof required, forged observation refused, two-tab/wake race one replacement, lost/restarted/ended hold never sends, original expiry retained; projection/receipt loss stays unknown. |
-| 14 / #45+#46, feeds #63 / 590 | Fresh-install governed fixture journey via product publication/grants, separate jente@elewa.ke Owner. | Real gateway recorded upstream, stale route and 2 s revokes; Codex same-turn approve/deny/reconnect/Pod loss, two widths and 15-minute wait/16-minute expiry observation; two fresh runs. |
+| 14 / #45+#46, feeds #63 / 590 | Fresh-install governed fixture journey via product publication/grants, a separate, privately configured owner test user. | Real gateway recorded upstream, stale route and 2 s revokes; Codex same-turn approve/deny/reconnect/Pod loss, two widths and 15-minute wait/16-minute expiry observation; two fresh runs. |
 | 15 / #45 / 540 | Publication/review/four facts screens and exact-change recovery, prompts A/D/F/J. | 390px/desktop/keyboard/reduced motion; never Ready before digest; partial grants, lost reply, stale edit and late revoked read. |
 | 16 / #45 / 480 | Published people/assistant grant edits, prompt B. | Separate receipt per grant; IAM Applying; intersection explanation; mobile wrapping and no group UX. |
 | 17 / #45 / 480 | Removal review/block/results, prompts C/E. | Missing dependencies/pending publication disable Remove; original status GET only; account kept, Removed/reinstall facts truthful. |

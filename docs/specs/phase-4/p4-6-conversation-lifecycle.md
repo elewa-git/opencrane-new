@@ -9,10 +9,10 @@ Base: `work/p4-6-design`; HEAD, local `origin/main` and GitHub `main` all
 
 Read #88's body, Design and comments, [#90](https://github.com/elewa-git/opencrane-new/issues/90)
 and [#96](https://github.com/elewa-git/opencrane-new/issues/96), including their comments.
-Read `/home/jente/.fleet/reviews/p4-5-design.md`, `AGENTS.md`, relevant `plan.md` rules,
+Read `<home>/.fleet/reviews/p4-5-design.md`, `AGENTS.md`, relevant `plan.md` rules,
 `docs/process/standards.md`, Phase 4 spec/decisions/tickets and group-chat contract.
 Read the local `05-thr/README.md` and both sizes of THR-01–04 and THR-14–16 under
-`/home/jente/dev/design-handoffs/v2/`. The frames describe intended behaviour.
+`<home>/dev/design-handoffs/v2/`. The frames describe intended behaviour.
 
 Code inspected: server chat commands/access/participation/reads/routes/realtime,
 summary, bridge/poll/dispatch, private session/context and turn/report commands;

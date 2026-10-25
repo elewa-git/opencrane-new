@@ -17,7 +17,7 @@ assistant computers run.
 flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|starts in Docker| services["Local services<br/>jobs, content and access"]
+  stack -->|starts services; creates the configured test owner| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
@@ -84,6 +84,9 @@ configuration changes. Its background jobs keep their own database.
    that stack. If both spare stacks are busy, it records a skipped run.
 
 ## How to run or test it
+
+The development owner email is configured in a private file outside the repository.
+The [operator notes](README.robot.md#private-owner-email) explain that setting.
 
 The machine needs Docker, Node 22 and the cluster prepared by
 [infra/devbox](../devbox/README.md). These commands claim and use a spare stack:

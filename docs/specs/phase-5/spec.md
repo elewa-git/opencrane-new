@@ -232,7 +232,7 @@ Each runs twice on independently fresh packaged state, with separate install ids
 empty event/database/object/volume state and fresh bootstrap. The second run cannot
 reuse the first run's silo data. Existing external identity accounts and reviewed
 images may be reused and must be named. Every fresh and restored test environment
-must include `jente@elewa.ke` as a verified owner test user. Assert the trusted
+must include the privately configured owner test user as a verified owner test user. Assert the trusted
 issuer/subject and verified email, the event-backed owner role, and real browser
 sign-in to that silo at 1280/390. Absence, an unverified identity, a non-owner role
 or failed sign-in blocks acceptance. Use the existing identity/bootstrap path;

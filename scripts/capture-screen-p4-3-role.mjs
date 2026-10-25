@@ -8,7 +8,7 @@ import { pageHasNoOverflow, waitForFonts } from './visual-helpers.mjs';
 const output = resolve('docs/process/screen-p4-3-role');
 const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://screen-p4-3-role.opencrane.test';
-// Show the sample page to an Owner signed in as jente@elewa.ke.
+// Show the sample page to an Owner signed in as owner@example.test.
 const member = { memberId: 'alex-kim', displayName: 'Alex Kim', role: 'member',
   permissions: { changeRole: true, remove: true, manageOwnership: true },
   email: 'alex@example.test', status: 'joined', joinedAt: '2026-03-12T10:00:00Z',

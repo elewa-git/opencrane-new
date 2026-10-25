@@ -1,7 +1,7 @@
 # Read and approve an Odoo draft-note change
 
 Design for [#53](https://github.com/elewa-git/opencrane-new/issues/53), 10 October 2026. Read-only checkout:
-`/home/jente/dev/wt/p3-12-design`, branch `work/p3-12-design`. HEAD, local `origin/main` and GitHub main all checked at
+`<worktree>`, branch `work/p3-12-design`. HEAD, local `origin/main` and GitHub main all checked at
 `dd3880237b87f98bab1793a5e1ceec1addfdfbbc`. This note is a proposal. Implementation, tests and live qualification: **NOT RUN**. Only this
 file was written. No repository edits, deployments, fixture starts, tests, model calls or spending. Network access was limited to GitHub
 reads.
@@ -11,7 +11,7 @@ reads.
 Read #53 and comments; #47, #49, #50, #52, #46, #48, #51, #63 and #105 with their comments; PRs #329,
 \#65, #287, #308 and #311; AGENTS.md, the engineering standard, plan.md, all six ADRs, the event
 catalogue and the requested source paths. Read Phase 3 tickets and decisions D18, D19 and D21, the accepted joint designs
-`/home/jente/.fleet/reviews/p3-6-design.md` and `p3-8-design.md`, and the local INT/WRK handoff README/HTML, relevant phone PNGs and PLAN.md
+`<home>/.fleet/reviews/p3-6-design.md` and `p3-8-design.md`, and the local INT/WRK handoff README/HTML, relevant phone PNGs and PLAN.md
 P3-12 row.
 
 - #47/#48's joint design and defaults are accepted. #329 is OPEN, not main:

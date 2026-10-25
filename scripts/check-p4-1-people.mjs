@@ -24,7 +24,7 @@ let conflictRemove = false;
 let refuseRemove = false;
 const contentTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
-// Treat the sample browser as jente@elewa.ke, an Owner.
+// Treat the sample browser as owner@example.test, an Owner.
 const groups = [
   group('sales-team', 'Sales team', 'local', [
     member('alex-kim', 'Alex Kim', 'local'), member('grace-achieng', 'Grace Achieng', 'local'),

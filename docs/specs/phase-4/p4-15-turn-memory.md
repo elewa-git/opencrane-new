@@ -9,7 +9,7 @@ The critical path is #94 → #95 → #97 → #98 → #99, with qualified #96 als
 Read the bodies, Design sections and discussions of #97, #98, #99 and #96; the accepted
 [memory design](https://github.com/elewa-git/opencrane-new/issues/94) and [correct/forget design](https://github.com/elewa-git/opencrane-new/issues/95); AGENTS.md,
 the engineering standard, plan.md Memory, D14–D20 and the event catalogue. Read the MEM HTML
-definitions and handoff rules under `/home/jente/dev/design-handoffs/v2/06-mem/` and the
+definitions and handoff rules under `<home>/dev/design-handoffs/v2/06-mem/` and the
 THR-72 definition. Inspected representative desktop/390px preferences, context, batch,
 detail and Decisions PNGs. Frames are references, never implementation evidence.
 

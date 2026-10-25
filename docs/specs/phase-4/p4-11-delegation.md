@@ -10,10 +10,10 @@ No model calls; network use was limited to GitHub reads.
 ## Sources, reuse and gaps on main
 
 Read #93 including Design/comments; #90 defaults; #106/#107 including Design/comments;
-accepted `/home/jente/.fleet/reviews/p4-8-design.md` and `p4-6-design.md`; AGENTS.md,
+accepted `<home>/.fleet/reviews/p4-8-design.md` and `p4-6-design.md`; AGENTS.md,
 plan, engineering standard, Phase 4 spec/decisions D13/D25/D26 and event catalogue.
 Read the local `05-thr/README.md`, integration plan and THR-60–62 at 1280/390 px
-under `/home/jente/dev/design-handoffs/v2/`. Frames describe intended behaviour.
+under `<home>/dev/design-handoffs/v2/`. Frames describe intended behaviour.
 Inspected merged models actor/state/decision/activity/authority/reconciliation,
 token issuer, OpenFGA model, computer runner/proxy/config/private launch, server
 turn/report/Stop/bridge commands, projections and relevant robot contracts.

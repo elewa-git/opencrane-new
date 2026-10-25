@@ -8,7 +8,7 @@ Only this external note was written. Tests, stacks, model calls and live evidenc
 ## Basis and delivery gates
 
 Read #99 and its Design section; #93–#99, #104, #106/#107 and #110; defaults on #93/#94/#95/#97;
-accepted `/home/jente/.fleet/reviews/p4-{11,12,13,15}-design.md`, especially p4-15 section 4;
+accepted `<home>/.fleet/reviews/p4-{11,12,13,15}-design.md`, especially p4-15 section 4;
 AGENTS.md, plan.md Memory, engineering standards, Phase 4 tickets/spec/D15–D20,
 `p4-12-memory.md`, event catalogue, handoff PLAN and ADRs 0002/0004. Inspected the requested
 handler, ops, budget/gateway/authority, server memory/chat, computer, projection, web and dev

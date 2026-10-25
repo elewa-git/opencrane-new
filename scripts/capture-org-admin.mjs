@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 
-const output = '/home/jente/.fleet/org-admin-shots';
+const output = resolve('.tools/org-admin-shots');
 const base = 'http://127.0.0.1:4200';
 const row = (serverId, name, kind, label, detail, total, allowed,
   source = { kind: 'remote_url', label: 'Remote URL', detail: `${serverId}.example.com` },

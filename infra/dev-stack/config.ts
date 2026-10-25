@@ -25,6 +25,13 @@ export async function readEnv(name: string): Promise<Record<string, string>> {
   return Object.fromEntries((await readFile(`${directory}/${name}.env`, 'utf8')).trim().split('\n')
     .filter(Boolean).map((line) => { const index = line.indexOf('='); return [line.slice(0, index), line.slice(index + 1)]; }));
 }
+
+export async function readOwnerEmail() {
+  const file = `${homedir()}/.config/opencrane/dev-owner-email`;
+  const contents = await readFile(file, 'utf8');
+  return contents.trim();
+}
+
 export async function writeEnv(name: string, env: Record<string, string>) {
   for (const value of Object.values(env)) if (/[\r\n]/u.test(value)) throw new Error('Multiline setting refused');
   await save(`${name}.env`, Object.entries(env).map(([key, value]) => `${key}=${value}\n`).join(''));

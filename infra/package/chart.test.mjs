@@ -110,7 +110,7 @@ function isFileSourceArgument(argument) {
   return argument.startsWith('--from-file=');
 }
 
-async function preparedSecretsFixture() {
+async function preparedSecretsFixture(withOwner = true) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
   const settings = new Map();
   const secrets = new Map();
@@ -133,6 +133,12 @@ async function preparedSecretsFixture() {
       'zitadel-client-secret']) {
       writeFileSync(join(directory, name), `test-${name}`);
     }
+  }
+  async function readOwnerFixture() {
+    if (withOwner) {
+      return 'owner@example.test';
+    }
+    return '';
   }
   async function readFixture(name) {
     return settings.get(name) ?? {};
@@ -157,6 +163,7 @@ async function preparedSecretsFixture() {
     '../dev-stack/config.ts': {
       authEnv: async () => ({ OIDC_CLIENT_SECRET_ENV_VAR: 'OIDC_CLIENT_SECRET' }),
       directory, generate: generateFixture, readEnv: readFixture,
+      readOwnerEmail: readOwnerFixture,
       root: process.cwd(), writeEnv: writeFixture,
     },
     '../dev-stack/identity.ts': { localOrigin: 'http://localhost:25106', stackId: 'test' },
@@ -171,7 +178,12 @@ async function preparedSecretsFixture() {
     await provisionSecrets(values.secrets);
     return { key, settings, secrets };
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    const remainingFiles = readdirSync(directory);
+    const cleanup = { recursive: true, force: true };
+    rmSync(directory, cleanup);
+    if (!withOwner) {
+      assert.deepEqual(remainingFiles, [], 'Missing owner settings changed private files');
+    }
   }
 }
 
@@ -284,6 +296,8 @@ test('preparation keeps the binary wrapping key in the file Secret', async () =>
   const runtime = settings.get('package-runtime');
   const runtimeFiles = secrets.get('runtime-files');
   const runtimeSecret = secrets.get('runtime');
+  assert.equal(runtime.DEV_OWNER_EMAIL, 'owner@example.test');
+  assert.equal(runtimeSecret.DEV_OWNER_EMAIL.toString('utf8'), 'owner@example.test');
   assert.deepEqual(runtimeFiles['conversation-wrap-key'], key);
   assert.equal(runtime.CONVERSATION_WRAP_KEY_FILE,
     '/run/opencrane/files/conversation-wrap-key');
@@ -373,3 +387,11 @@ test('a binary key stays in a mounted Secret and outside every environment impor
     }
   }
 });
+
+async function refusesMissingPrivateOwnerEmail() {
+  const expected = /Private dev-owner-email file is empty/u;
+  await assert.rejects(preparedSecretsFixture(false), expected);
+}
+
+test('refuses missing owner email before preparing private credentials',
+  refusesMissingPrivateOwnerEmail);
