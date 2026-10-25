@@ -1,0 +1,30 @@
+[
+  {
+    "name": "cleanup-memory",
+    "state": "failed",
+    "retry_count": 5,
+    "change_id": "5fe16cdb7d6041aec94805aa34b7998e01e5703517eb229cb8f52b82f7694c16",
+    "error": "Memory cleanup attempt failed"
+  },
+  {
+    "name": "cleanup-memory",
+    "state": "created",
+    "retry_count": 0,
+    "change_id": "408dac0272c3216902fbc4b7d147a4799a5c83c2114a25ac6bc3acbda17f73ac",
+    "error": null
+  },
+  {
+    "name": "cleanup-memory-dead",
+    "state": "completed",
+    "retry_count": 0,
+    "change_id": "5fe16cdb7d6041aec94805aa34b7998e01e5703517eb229cb8f52b82f7694c16",
+    "error": null
+  },
+  {
+    "name": "cleanup-memory",
+    "state": "created",
+    "retry_count": 0,
+    "change_id": "7838743977efa0f0d42d69461d21e980be2d54f0088874747e76d0502c8a8c29",
+    "error": null
+  }
+]

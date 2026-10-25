@@ -1,0 +1,169 @@
+{
+  "receipts": [
+    {
+      "outcome": "saved",
+      "changeId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+      "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+      "revision": 1,
+      "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+      "audience": {
+        "kind": "person",
+        "ownerId": "bootstrap-owner"
+      },
+      "savedAt": "2026-10-25T16:23:22.189Z"
+    },
+    {
+      "operation": "correct",
+      "outcome": "accepted",
+      "changeId": "13aaaa45effffaa107f873888c8ada15a42d8e92978a71b5331c0b42108e2191",
+      "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+      "revision": 2,
+      "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+      "audience": {
+        "kind": "person",
+        "ownerId": "bootstrap-owner"
+      },
+      "acceptedAt": "2026-10-25T16:23:25.882Z",
+      "contentStatus": "current",
+      "cleanupStatus": "pending"
+    },
+    {
+      "operation": "forget",
+      "outcome": "accepted",
+      "changeId": "048e67f5438f2883273d5be208e046ff44cd3c62fd1cd44958c97c81b428c071",
+      "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+      "revision": 3,
+      "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+      "audience": {
+        "kind": "person",
+        "ownerId": "bootstrap-owner"
+      },
+      "acceptedAt": "2026-10-25T16:23:28.367Z",
+      "hidden": true,
+      "cleanupStatus": "pending"
+    }
+  ],
+  "originals": [
+    {
+      "outcome": "saved",
+      "changeId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+      "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+      "revision": 1,
+      "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+      "audience": {
+        "kind": "person",
+        "ownerId": "bootstrap-owner"
+      },
+      "savedAt": "2026-10-25T16:23:22.189Z",
+      "contentStatus": "erased"
+    },
+    {
+      "operation": "correct",
+      "outcome": "accepted",
+      "changeId": "13aaaa45effffaa107f873888c8ada15a42d8e92978a71b5331c0b42108e2191",
+      "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+      "revision": 2,
+      "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+      "audience": {
+        "kind": "person",
+        "ownerId": "bootstrap-owner"
+      },
+      "acceptedAt": "2026-10-25T16:23:25.882Z",
+      "contentStatus": "erased",
+      "cleanupStatus": "completed",
+      "completedAt": "2026-10-25T16:23:27.373Z"
+    },
+    {
+      "operation": "forget",
+      "outcome": "accepted",
+      "changeId": "048e67f5438f2883273d5be208e046ff44cd3c62fd1cd44958c97c81b428c071",
+      "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+      "revision": 3,
+      "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+      "audience": {
+        "kind": "person",
+        "ownerId": "bootstrap-owner"
+      },
+      "acceptedAt": "2026-10-25T16:23:28.367Z",
+      "hidden": true,
+      "cleanupStatus": "forgotten",
+      "forgottenAt": "2026-10-25T16:23:29.226Z"
+    }
+  ],
+  "recovery": [
+    "POST",
+    "GET"
+  ],
+  "snapshots": [
+    {
+      "stage": "reload",
+      "forgotten": {
+        "status": "unavailable",
+        "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+        "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+        "revision": 3,
+        "reason": "forgotten",
+        "canForget": true,
+        "canCorrect": false
+      },
+      "facts": [
+        {
+          "memoryId": "fb59d7559556845112b79b64cda07037b8eb20a73ea996c9d7820204c24f157c",
+          "revision": 2,
+          "text": "The synthetic orchard opens on Tuesday."
+        }
+      ]
+    },
+    {
+      "stage": "restart",
+      "forgotten": {
+        "status": "unavailable",
+        "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+        "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+        "revision": 3,
+        "reason": "forgotten",
+        "canForget": true,
+        "canCorrect": false
+      },
+      "facts": [
+        {
+          "memoryId": "fb59d7559556845112b79b64cda07037b8eb20a73ea996c9d7820204c24f157c",
+          "revision": 2,
+          "text": "The synthetic orchard opens on Tuesday."
+        }
+      ]
+    },
+    {
+      "stage": "replay",
+      "forgotten": {
+        "status": "unavailable",
+        "scopeId": "613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf",
+        "memoryId": "d164506b37df99c6cf208d6e39fe5d9fc93fe957dea52730bb0d25b52babf0d6",
+        "revision": 3,
+        "reason": "forgotten",
+        "canForget": true,
+        "canCorrect": false
+      },
+      "facts": [
+        {
+          "memoryId": "fb59d7559556845112b79b64cda07037b8eb20a73ea996c9d7820204c24f157c",
+          "revision": 2,
+          "text": "The synthetic orchard opens on Tuesday."
+        }
+      ]
+    }
+  ],
+  "survivor": {
+    "memoryId": "fb59d7559556845112b79b64cda07037b8eb20a73ea996c9d7820204c24f157c",
+    "revision": 2,
+    "text": "The synthetic orchard opens on Tuesday."
+  },
+  "forgottenText": "The synthetic garden gate is green.",
+  "replay": {
+    "eventsBefore": 58,
+    "eventsAfter": 58,
+    "callsBefore": 0,
+    "callsAfter": 0,
+    "exit": 0
+  }
+}

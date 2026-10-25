@@ -1,0 +1,9 @@
+{"name":"session-read","value":{"status":200},"at":"2026-10-25T13:12:21.261Z"}
+{"name":"session-read","value":{"status":200},"at":"2026-10-25T13:12:27.991Z"}
+{"name":"bootstrap","value":{"result":"PASS","empty":true,"realSso":true},"at":"2026-10-25T13:12:28.357Z"}
+{"name":"session-read","value":{"status":200},"at":"2026-10-25T13:12:29.961Z"}
+{"name":"failure","value":{"result":"FAIL","stage":"first personal memory read"},"at":"2026-10-25T13:16:04.366Z"}
+{"name":"first-read-collector-stalled","value":{"result":"FAIL","bodyReadStalled":true,"captureRecoveredThroughCollectorInspector":true},"at":"2026-10-25T13:16:05.302Z"}
+{"name":"later-read-only-scopes","value":{"status":200,"body":{"scopes":[{"scopeId":"613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf","scopeKind":"person","ownerId":"bootstrap-owner","audience":{"kind":"person","ownerId":"bootstrap-owner"},"canRead":true,"canWrite":true,"canForget":true,"canCorrect":true}],"limits":{"textBytes":4096,"pageFacts":20,"pageBytes":16384,"queryBytes":256,"queryTerms":8,"sources":8,"dependencies":32,"commandBytes":16384}}},"at":"2026-10-25T13:18:54.907Z"}
+{"name":"later-read-only-empty","value":{"result":"PASS","width":1280},"at":"2026-10-25T13:18:58.349Z"}
+{"name":"later-read-only-empty","value":{"result":"PASS","width":390},"at":"2026-10-25T13:19:00.188Z"}

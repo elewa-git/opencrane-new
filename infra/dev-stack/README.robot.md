@@ -8,11 +8,51 @@ For people, read [README.md](README.md) first.
 the first scopes reply status before reading its body. That body read stops after
 ten seconds and records an unavailable body separately. An applying reply can wait
 for the browser to recover through its own GET retries; the collector sends no retry.
-The rest of the journey stays on its draft branch.
+The browser journey below uses the same response collector.
 
 `nice -n 10 node --experimental-strip-types --test
 infra/dev-stack/memory-personal-browser.test.ts` checks a stalled body and a complete
 reply without starting a development stack.
+
+## Personal memory qualification
+
+Part of #94 and #95. `memory-personal-live.ts` uses an empty secondary installation,
+real SSO and the free model stub. Start with `DEV_OWNER_BOOTSTRAP=0` and `--fresh`.
+Supply the id returned by `claim.sh` as both `DEV_STACK_ID` and `MEMORY_CLAIMED_ID`.
+Set `ZITADEL_KEY_FILE` to the existing setup credential path for stack startup.
+The launcher refuses an existing observations file. Preserve earlier evidence before
+starting a separate attempt; do not combine attempts into a passing result.
+
+```sh
+nice -n 10 node --experimental-strip-types infra/dev-stack/memory-personal-live.ts
+nice -n 10 node --experimental-strip-types --test infra/dev-stack/memory-personal.test.ts
+```
+
+The collector signs in, claims the empty silo and records the first scopes reply.
+It then saves, searches, opens, corrects and forgets a synthetic personal fact through
+browser controls. Once the response body is available, it saves the write receipt
+before checking the outcome. Write-response body collection still has no timeout.
+After stack startup, configure the test contact email privately in
+`memory-owner-email` inside the claimed slot directory. The collector reads that file;
+the browser session stays in that directory too.
+New evidence goes into `docs/process/memory-fresh-personal/permissions-fixed-rerun/`; the launcher
+refuses an existing observations file. Earlier attempts remain separate.
+The acceptance checker additionally requires original receipts, GET-only lost-reply
+recovery, retained correction, completed cleanup and absence of forgotten text after
+reload, restart and replay. Its unit tests use synthetic evidence.
+The runs use temporary collectors for those additional checks. They are not yet part
+of the tracked launcher. The receipt distinguishes their results and failures.
+The latest fresh run passes desktop and phone save, search, correction and forgetting.
+The browser recovers from applying permissions through its own GET retries. Lost-reply
+recovery sends one status GET without repeating the write. Another member cannot read
+the owner's facts. Reload and server restart retain the corrected fact and exclude
+both forgotten facts. The receipt records the offline rebuild and final acceptance.
+Memory replay refuses `--verify`; the operator compares HTTP readbacks instead.
+The checker requires unchanged event counts and zero local model requests during replay.
+No helper inspects private memory key files. Native memory remains off and NOT RUN.
+Resizing recreates the panel; submitted forms stay at one width until the receipt is read.
+Release the claimed slot with `down.sh --id` after inspecting the saved pictures.
+See [the qualification receipt](../../docs/process/memory-fresh-personal/receipt.md).
 
 ## First demo read turn
 

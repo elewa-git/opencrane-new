@@ -1,0 +1,38 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "startedAt": 1792933949585
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "startedAt": 1792933949980,
+    "status": 503,
+    "durationMs": 481.49418900000455
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "startedAt": 1792934164382
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "startedAt": 1792934164556
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "startedAt": 1792934165079,
+    "status": 200,
+    "durationMs": 109.05457899998873
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts",
+    "startedAt": 1792934165240,
+    "status": 200,
+    "durationMs": 157.8938480000361
+  }
+]
