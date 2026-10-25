@@ -1317,9 +1317,12 @@ It checks generation, checkpoint coverage and category position again before ret
 Unrelated checkpoint progress is allowed. `routines.position` remains the captured
 category position, including when duplicate outcomes leave a row's position unchanged.
 Any saved row gives `unsupported`; a caught-up empty table gives `absent`.
-No definition, instruction, count or routine history is fetched. Failed preparation
-still reaches current member and provider permission checks before a fixed unavailable
-error. Routine execution and destructive-operation blockers are unchanged.
+No definition, instruction, count or routine history is fetched. The reader saves the
+requested provider's creation record separately for its permission check. Failed or
+expired provider inventory and dependency preparation still reach current member and
+provider permission checks before a fixed unavailable error. Invalid saved provider
+history follows the same order. Routine execution and destructive-operation blockers
+are unchanged.
 Tests: `apps/server/test/provider-routine-presence.test.ts` and the existing provider suites.
 
 Binding commands find saved ids across actors on the same provider. Actor or request

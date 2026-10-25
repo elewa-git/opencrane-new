@@ -227,29 +227,47 @@ async function checkedHistory(store: EventStore, silo: string, subject: string, 
   return rows;
 }
 
-async function prepareDependencies(store: EventStore, db: Query, silo: string,
-  providerPosition: number) {
+async function providerCreation(store: EventStore, silo: string, providerId: string) {
+  const subject = `provider-${providerId}`;
+  const deadline = performance.now() + 10_000;
+  // Read only the creation record needed for permission, even if the inventory fails.
+  for await (const row of store.readStream(subject, 1, deadline)) {
+    if (row.event.silo !== silo || row.event.subject !== subject ||
+      row.event.type !== 'provider.created') {
+      throw new Error('Provider creation unavailable');
+    }
+    return [row];
+  }
+  return [];
+}
+
+async function prepareDependencies(store: EventStore, db: Query, silo: string) {
+  const current = await inventory(store, silo);
   const deadline = performance.now() + 10_000;
   const assistants = await checkedHistory(store, silo, 'assistant-*', deadline);
   const routines = await providerRoutinePresence(store, db, silo, deadline);
-  if (await store.head('provider-*', deadline) !== providerPosition) {
+  if (await store.head('provider-*', deadline) !== current.position) {
     throw new Error('Provider history changed');
   }
-  return { assistants, routines };
+  return { current, assistants, routines };
 }
 
 export async function providerDependencies(store: EventStore, binding: Binding,
   memberId: string, providerId: string, db: Query) {
-  const current = await inventory(store, binding.silo);
-  const loading = prepareDependencies(store, db, binding.silo, current.position);
+  const creation = providerCreation(store, binding.silo, providerId);
+  const [provider] = await Promise.allSettled([creation]);
+  const loading = prepareDependencies(store, db, binding.silo);
   const [prepared] = await Promise.allSettled([loading]);
   await readActiveMember(store, binding, memberId, 'admin');
-  await providerPermission(binding, memberId, connectionRows(current.rows, providerId));
-  // Check current rights before disclosing missing or failed routine preparation.
+  if (provider.status === 'rejected') {
+    throw new Error('Provider dependencies unavailable');
+  }
+  await providerPermission(binding, memberId, provider.value);
+  // Check current rights before disclosing any failed dependency preparation.
   if (prepared.status === 'rejected') {
     throw new Error('Provider dependencies unavailable');
   }
-  const { assistants, routines } = prepared.value;
+  const { current, assistants, routines } = prepared.value;
   const assistantIds = new Set<string>();
   for (const row of assistants) {
     if (isAssistantCreation(row)) {
