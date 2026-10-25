@@ -22,7 +22,7 @@ flowchart LR
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves results| nats
-  ops -->|keeps jobs, reads content and coordinates changes| pg["PostgreSQL<br/>jobs and content databases"]
+  ops -->|keeps jobs separate from content reads| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
@@ -158,7 +158,11 @@ For a lost computer, cleanup saves another loss record before completion.
 This prevents an earlier claim from succeeding after cleanup finishes.
 Departure status in the API is not available yet. Rebuilding read tables never runs this cleanup.
 
-When cleanup fails repeatedly, the original job stays available for an operator to retry.
+Memory cleanup checks the content database before reporting that forgotten text is gone.
+Its waiting jobs and completion notes stay in the separate jobs database.
+
+When cleanup fails repeatedly, the original job stays in place. Restarting the dispatcher
+retries it in order; an operator can also retry it after repair.
 The fact and its dependent copies stay hidden. The dispatcher restores pending cleanup jobs
 from saved events before its workers resume if the job tables were lost. If a failed job's
 unavailable report was lost, the dispatcher records it after the event store recovers.

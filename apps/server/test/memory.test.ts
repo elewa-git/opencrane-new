@@ -208,7 +208,7 @@ describe('personal HTTP correction', function correctionCases() {
       for await (const row of nats.store.readStream(`scope-${scopeId}`)) {
         if (row.event.id === receipt.changeId) {
           expect(row.event.data).toMatchObject({ sources: [{ memberId: 'bob', commandId: 'source-receipt' }] });
-          await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
+          await memoryCleanupHandler(nats.store, keys, memory.db).handle(row.event, memory.db);
         }
       }
       expect(keys.status(identity)).toBe('destroyed');
@@ -301,7 +301,7 @@ describe('personal HTTP correction', function correctionCases() {
           await runner.run(projection);
           for await (const row of nats.store.readStream(`scope-${identity.scopeId}`)) {
             if (row.event.id === response.json<{ changeId: string }>().changeId) {
-              await memoryCleanupHandler(nats.store, keys).handle(row.event, memory.db);
+              await memoryCleanupHandler(nats.store, keys, memory.db).handle(row.event, memory.db);
             }
           }
           await expect(access(reservationPath)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -603,7 +603,7 @@ for (const kind of ['group', 'personal', 'team'] as const) {
   it.each(['completion', 'exhaustion'] as const)(
     `runs shared cleanup worker for ${kind}: %s`, async function sharedCleanupWorker(mode) {
       const { target, identity, candidate, tombstone } = await acceptedSharedCleanup(kind, mode);
-      const reaction = memoryCleanupHandler(nats.store, keys);
+      const reaction = memoryCleanupHandler(nats.store, keys, memory.db);
       const logger = createLogger('shared-cleanup-http-test');
       const db = pgDb(storage.queue);
       const options = { db, logger, silo: 'acme', handlers: [reaction], retryLimit: 0 };

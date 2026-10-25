@@ -134,7 +134,7 @@ it('publishes only revision four, preserves its links and erases the old depende
     expect(refs.current({ ...root, revision: 4 })).toBe('current');
     expect(refs.current({ ...root, revision: 3 })).toBe('superseded');
     expect(refs.current({ ...root, memoryId: 'grandchild' })).not.toBe('current');
-    const reaction = memoryCleanupHandler(nats.store, keys);
+    const reaction = memoryCleanupHandler(nats.store, keys, storage.db);
     expect(reaction.eventTypes).toContain('memory.corrected');
     await reaction.handle(correction, storage.db);
     await reaction.handle(correction, storage.db);
@@ -164,7 +164,7 @@ it('recovers correction cleanup, records exhaustion and keeps later revision key
     await save('root', 5, [{ scopeId, memoryId: 'source', revision: 1 }]);
     const candidate = { ...root, revision: 6 };
     keys.provision(candidate);
-    const reaction = memoryCleanupHandler(nats.store, keys);
+    const reaction = memoryCleanupHandler(nats.store, keys, storage.db);
     await expect(reaction.handle(correction, storage.db)).rejects.toThrow();
     const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test', handlers: [reaction] });
     try {
@@ -173,7 +173,7 @@ it('recovers correction cleanup, records exhaustion and keeps later revision key
       expect(await recoverMemoryCleanup(runtime, nats.reader, checkpoint)).toBe(4);
       await storage.db.query("UPDATE pgboss.job SET state='failed' " +
         "WHERE name='cleanup-memory' AND data->>'id'=$1", [correction.id]);
-      expect(await recoverMemoryCleanup(runtime, nats.reader, checkpoint)).toBe(0);
+      expect(await recoverMemoryCleanup(runtime, nats.reader, checkpoint)).toBe(1);
       await runner.run(memoryProjection(keys));
       await storage.db.query("UPDATE memory_facts SET revision=4 WHERE memory_id='root'");
       await expect(reaction.handle(correction, storage.db)).rejects.toThrow(
@@ -204,7 +204,7 @@ it('keeps a later forget permanent and removes the current and candidate keys',
         ownerId: 'alice', memoryId: 'root', expectedRevision: 4, revision: 5 } };
     await nats.seed([forgotten]);
     await runner.run(memoryProjection(keys));
-    await memoryCleanupHandler(nats.store, keys).handle(correction, storage.db);
+    await memoryCleanupHandler(nats.store, keys, storage.db).handle(correction, storage.db);
     expect(keys.status({ ...root, revision: 4 })).toBe('destroyed');
     expect(keys.status(candidate)).toBe('destroyed');
     await save('root', 6);
@@ -256,7 +256,7 @@ it('closes the candidate after the greatest hidden revision in reordered history
         ownerId: 'alice', memoryId: 'root', expectedRevision: 4, revision: 5 } };
     await nats.seed([forgotten]);
     await runner.run(memoryProjection(keys));
-    await memoryCleanupHandler(nats.store, keys).handle(correction, storage.db);
+    await memoryCleanupHandler(nats.store, keys, storage.db).handle(correction, storage.db);
     expect(keys.status(candidate)).toBe('destroyed');
   });
 
@@ -282,7 +282,7 @@ it.each(unrelatedCompletions)('keeps cleanup pending for an unrelated completion
     const record = completion(correction.id);
     const data = { ...record.data, ...patch };
     await nats.seed([{ ...record, subject: `scope-${data.scopeId}`, data }]);
-    const reaction = memoryCleanupHandler(nats.store, keys);
+    const reaction = memoryCleanupHandler(nats.store, keys, storage.db);
     const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test', handlers: [reaction] });
     try {
       await runtime.start();
@@ -307,7 +307,7 @@ it.each([{ silo: 'other' }, { subject: 'scope-other' }])(
       }
     }
     vi.spyOn(nats.store, 'readStream').mockImplementation(damagedHistory);
-    const reaction = memoryCleanupHandler(nats.store, keys);
+    const reaction = memoryCleanupHandler(nats.store, keys, storage.db);
     await expect(reaction.handle(correction, storage.db))
       .rejects.toThrow('Unsupported memory cleanup history');
     expect(keys.status(root)).toBe('available');
@@ -320,7 +320,7 @@ it('refuses cleanup when a legacy value has no recorded ownership', async functi
   await nats.seed([legacy]);
   const correction = await save('root', 2);
   await runner.run(memoryProjection(keys));
-  await expect(memoryCleanupHandler(nats.store, keys).handle(correction, storage.db))
+  await expect(memoryCleanupHandler(nats.store, keys, storage.db).handle(correction, storage.db))
     .rejects.toThrow('Memory cleanup requires recorded ownership');
   expect(keys.status(root)).toBe('available');
 });
@@ -332,7 +332,7 @@ it('refuses completion when key deletion returns without a permanent marker',
     await runner.run(memoryProjection(keys));
     function noDeletion() {}
     const failedKeys = { ...keys, delete: noDeletion };
-    await expect(memoryCleanupHandler(nats.store, failedKeys).handle(correction, storage.db))
+    await expect(memoryCleanupHandler(nats.store, failedKeys, storage.db).handle(correction, storage.db))
       .rejects.toThrow('Memory deletion was not verified');
     expect(keys.status(root)).toBe('available');
     expect(await nats.store.head()).toBe(2);
@@ -351,7 +351,7 @@ it.each(remainingSearchData)('refuses correction cleanup while a hidden row reta
     await runner.run(memoryProjection(keys));
     await storage.db.query(`UPDATE memory_facts SET ${assignment} WHERE memory_id='child'`);
     const sequence = await nats.store.head();
-    await expect(memoryCleanupHandler(nats.store, keys).handle(correction, storage.db))
+    await expect(memoryCleanupHandler(nats.store, keys, storage.db).handle(correction, storage.db))
       .rejects.toThrow('Memory search removal was not verified');
     expect(await nats.store.head()).toBe(sequence);
   });
@@ -361,7 +361,7 @@ it('refuses completion when an affected projected row is missing', async functio
   await runner.run(memoryProjection(keys));
   await storage.db.query("DELETE FROM memory_facts WHERE memory_id='child'");
   const sequence = await nats.store.head();
-  await expect(memoryCleanupHandler(nats.store, keys).handle(correction, storage.db))
+  await expect(memoryCleanupHandler(nats.store, keys, storage.db).handle(correction, storage.db))
     .rejects.toThrow('Memory removal has not been projected');
   expect(await nats.store.head()).toBe(sequence);
 });
@@ -370,7 +370,7 @@ it.each(['checkpoint', 'silo'])('refuses recovery with an invalid %s',
   async function invalidRecovery(boundary) {
     await save('root');
     await save('root', 2);
-    const reaction = memoryCleanupHandler(nats.store, keys);
+    const reaction = memoryCleanupHandler(nats.store, keys, storage.db);
     let silo = 'test';
     let checkpoint = 3;
     let message = 'Cleanup recovery checkpoint exceeds history';
@@ -395,7 +395,7 @@ it.each(invalidOriginals)('refuses an exhaustion report with an invalid %s',
   async function invalidOriginal(boundary) {
     await save('root');
     const correction = await save('root', 2);
-    const reaction = memoryCleanupHandler(nats.store, keys);
+    const reaction = memoryCleanupHandler(nats.store, keys, storage.db);
     const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test', handlers: [reaction] });
     async function enqueue(tx: Parameters<typeof reaction.handle>[1]) {
       await runtime.enqueue(reaction, correction, tx);
@@ -483,7 +483,7 @@ it('reuses saved cleanup after a lost reply and preserves another owner with the
     }
     const failing = vi.spyOn(nats.store, 'append');
     failing.mockImplementation(lostReply);
-    const reaction = memoryCleanupHandler(nats.store, keys);
+    const reaction = memoryCleanupHandler(nats.store, keys, storage.db);
     await expect(reaction.handle(correction, storage.db)).rejects.toThrow('Reply lost');
     failing.mockRestore();
     const sequence = await nats.store.head();

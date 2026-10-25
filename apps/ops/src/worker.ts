@@ -191,7 +191,8 @@ try {
     }
     const memoryDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
     if (memoryDirectory) {
-      available.push(memoryCleanupHandler(commands.store, memoryKeys(memoryDirectory)));
+      const cleanup = memoryCleanupHandler(commands.store, memoryKeys(memoryDirectory), content!.db);
+      available.push(cleanup);
     }
     const decisionUrl = process.env['MODEL_DECISION_URL'];
     if (decisionUrl) {

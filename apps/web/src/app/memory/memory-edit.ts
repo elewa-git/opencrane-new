@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input, output, signal, type OnDestr
 import { DatePipe } from '@angular/common';
 import { ModalSheet } from '../ui/modal-sheet';
 import { isObject, type Fact } from './memory-panel-data';
-import { detailResult, detailUrl, readJson, type DetailRead } from './memory-panel-reads';
+import { detailResult, detailUrl, readJson, waitForRetry, type DetailRead } from './memory-panel-reads';
 import { storeValidation } from './memory-panel-store-input';
 
 type State = 'closed' | 'editing' | 'sending' | 'unknown' | 'conflict' | 'reading' |
@@ -29,11 +29,13 @@ export class MemoryEdit implements OnDestroy {
   protected readonly error = signal('');
   protected readonly receipt = signal<Receipt | undefined>(undefined);
   protected readonly refreshing = signal(false);
+  protected readonly awaitingRevision = signal(false);
   protected readonly missingReason = signal('');
   protected opener: HTMLElement | undefined;
   protected revision: Fact | undefined;
   private commandId = '';
   private alive = true;
+  private refreshController: AbortController | undefined;
   private readonly viewport = window.visualViewport;
   protected readonly viewportHeight = signal(`${this.viewport?.height ?? window.innerHeight}px`);
   private readonly resized = this.resizeViewport.bind(this);
@@ -42,6 +44,7 @@ export class MemoryEdit implements OnDestroy {
 
   ngOnDestroy(): void {
     this.alive = false;
+    this.refreshController?.abort();
     this.draft.set('');
     this.revision = undefined;
     this.viewport?.removeEventListener('resize', this.resized);
@@ -53,7 +56,7 @@ export class MemoryEdit implements OnDestroy {
   }
 
   protected open(event: Event): void {
-    if (this.refreshing() || !this.enabled()) return;
+    if (this.refreshing() || this.awaitingRevision() || !this.enabled()) return;
     if (this.state() !== 'closed' && this.state() !== 'accepted') return;
     if (event.currentTarget instanceof HTMLElement) this.opener = event.currentTarget;
     this.revision = this.fact();
@@ -149,6 +152,7 @@ export class MemoryEdit implements OnDestroy {
       cleanupStatus: String(body['cleanupStatus']),
     };
     this.receipt.set(receipt);
+    this.awaitingRevision.set(true);
     this.draft.set('');
     this.revision = undefined;
     this.state.set('accepted');
@@ -156,20 +160,31 @@ export class MemoryEdit implements OnDestroy {
   }
 
   protected async refresh(): Promise<void> {
+    if (this.refreshing()) return;
     if (this.state() !== 'conflict' && this.state() !== 'accepted') return;
     const accepted = this.state() === 'accepted';
     if (!accepted) this.state.set('reading');
     const url = detailUrl(this.scopeId(), this.fact().memoryId);
     const controller = new AbortController();
+    this.refreshController = controller;
     this.refreshing.set(true);
-    const reply = await readJson(url, controller.signal);
+    this.error.set('');
+    const abort = controller.abort.bind(controller);
+    const timeout = window.setTimeout(abort, 5000);
+    const result = await this.readRevision(url, controller.signal);
+    window.clearTimeout(timeout);
     if (!this.alive) return;
     this.refreshing.set(false);
-    const result = detailResult(reply);
     if (result.kind === 'access') {
       this.accessLost.emit();
       return;
     }
+    if (result.kind === 'unavailable') {
+      this.error.set('Details are unavailable right now. Try refreshing again.');
+      if (!accepted) this.state.set('conflict');
+      return;
+    }
+    this.awaitingRevision.set(false);
     if (result.kind === 'missing') {
       this.missingReason.set(result.reason);
       this.draft.set('');
@@ -184,5 +199,21 @@ export class MemoryEdit implements OnDestroy {
       }
     }
     this.refreshed.emit(result);
+  }
+
+  private async readRevision(url: string, signal: AbortSignal): Promise<DetailRead> {
+    const savedRevision = this.receipt()?.revision;
+    while (!signal.aborted) {
+      const reply = await readJson(url, signal);
+      if (signal.aborted) break;
+      const result = detailResult(reply);
+      if (savedRevision === undefined || result.kind === 'access' || result.kind === 'missing') {
+        return result;
+      }
+      if (result.kind === 'ok' && result.detail.fact.revision >= savedRevision) return result;
+      // Wait for the saved revision without repeating the correction or replacing current controls.
+      await new Promise<void>(waitForRetry.bind(null, 0.25));
+    }
+    return { kind: 'unavailable' };
   }
 }

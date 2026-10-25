@@ -262,8 +262,10 @@ export class HandlerRuntime {
   }
 
   /** Retry the original first job; never retry its copy after later jobs. */
-  async replay(name: Handler["name"], id: string): Promise<void> {
-    await this.options.db.transaction(async (tx) => {
+  async replay(name: Handler["name"], id: string, options = { resetRetries: false }): Promise<void> {
+    const boss = this.boss;
+    const retryLimit = this.options.retryLimit ?? 5;
+    async function retryOriginal(tx: Query) {
       const result = await tx.query<{ state: string }>(
         "SELECT state FROM pgboss.job WHERE name = $1 AND id = $2 FOR UPDATE",
         [name, id],
@@ -271,8 +273,18 @@ export class HandlerRuntime {
       if (result.rows[0]?.state !== "failed") {
         throw new Error("Dead-letter head not found");
       }
-      await this.boss.retry(name, id, { db: transactionAdapter(tx) });
-    });
+      const retryOptions = { db: transactionAdapter(tx) };
+      await boss.retry(name, id, retryOptions);
+      if (options.resetRetries) {
+        // Give repaired jobs the normal retry allowance if a dependency is still catching up.
+        await tx.query(
+          'UPDATE pgboss.job SET retry_count=0, retry_limit=$3, started_on=NULL ' +
+          'WHERE name=$1 AND id=$2',
+          [name, id, retryLimit],
+        );
+      }
+    }
+    await this.options.db.transaction(retryOriginal);
   }
 
   async startNightly(scan: (occurrence: Date) => Promise<void>): Promise<void> {

@@ -100,7 +100,7 @@ async function configuredServices() {
     await nats.seed([forgotten]);
     await runner.run(projection);
     const cleanupKeys = memoryKeys(restarted.MEMORY_KEY_DIRECTORY);
-    await memoryCleanupHandler(nats.store, cleanupKeys).handle(forgotten, storage.db);
+    await memoryCleanupHandler(nats.store, cleanupKeys, storage.db).handle(forgotten, storage.db);
     await runner.rebuild(projection);
     assert.equal(memory.status(identity), 'destroyed');
     await preparePrivateDirectories(directory, false);

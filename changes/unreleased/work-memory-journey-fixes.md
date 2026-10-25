@@ -1,0 +1,2 @@
+- Memory correction and forgetting now verify cleanup in the content database. Dispatcher restart retries failed cleanup jobs in their original order and finishes queued work without duplicate completion records.
+- After a personal memory correction, the screen waits briefly for the saved revision, shows “Saving...” and keeps Edit and Forget visible during temporary read failures. A timed-out wait offers a refresh without sending the correction again.
