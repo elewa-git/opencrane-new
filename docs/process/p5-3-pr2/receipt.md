@@ -95,3 +95,67 @@ After this final rebase, targeted ESLint for the three changed server code/test
 files and `npm run typecheck -w apps/server` both passed. Documentation, local
 links, Knip, changelog and event checks also passed again. These commands used
 `nice -n 10`.
+
+## Bootstrap credential refusal repair
+
+Date: 25 October 2026. Implementation: `1a427bbda`.
+Final test source: `f6c27cf47ab829314865eda8adcb84d27ab80781`.
+The failing-first test commit is `8b9aee5e6`.
+
+Fetching and rebasing onto `origin/main` at `f85834091` completed successfully.
+That commit is an ancestor of the branch, and both Git rebase state directories
+are absent.
+
+The installer checks both runtime database connections and the environment after
+bootstrap imports its Secret. A conflicting bootstrap connection now refuses
+before any Helm command. All four generated role passwords must match bootstrap's
+existing lower-case hexadecimal format. The complete fixture now uses compatible
+passwords; separate negative cases keep connections aligned while supplying
+unsupported passwords.
+
+Environment: Node 22.23.3, this worktree, synthetic Kubernetes replies, real Helm
+rendering, disposable certificate/NATS fixtures and Chromium browser tests.
+No live CNPG installation or product journey was started.
+
+| Check | Observed result | Status |
+| --- | --- | --- |
+| Failing-first refusals | Three connection overrides and 16 password-format cases reached Helm and failed their refusal assertions before the fix | PASS |
+| Final CNPG tests, twice | 126 passed each time; no failures or skips | PASS |
+| All 48 CI infrastructure files, run 1 | 537 passed; no failures or skips | PASS |
+| All 48 CI infrastructure files, run 2 | 537 passed; no failures or skips | PASS |
+| Guard-removal probes in temporary copies | All 12 distinct removals caused the retained test to fail | PASS |
+| `npm run lint`, including Knip and changelog | No errors; 25 existing code warnings | PASS |
+| `npm run typecheck` | All workspaces, package and development-stack checks passed | PASS |
+| `npm run check:events` | 154 event types agree | PASS |
+| Separate `npm run lint:changelog` | No errors | PASS |
+| Full root suite and live CNPG/fresh-install journeys | Not exercised | NOT RUN |
+
+Both full runs selected the literal infrastructure test paths from
+`.github/workflows/ci.yml`. The main group ran 46 files with
+`node --experimental-strip-types --test --test-concurrency=2`; the two browser
+files ran afterwards with `--test-concurrency=1`, as CI requires. Each complete
+run covered package, render, preflight, fresh-install, NATS-route and claim tests.
+Run 1 took 693 seconds; run 2 took 1066 seconds.
+Tests used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Tests, builds, lint and typecheck used `nice -n 10`.
+
+Run 1 used implementation `1a427bbda`. The only later test change made the existing
+bootstrap-password mismatch fixture use a valid generated password, so it checks
+equality separately from format. Run 2 includes that stronger fixture. The final
+126 CNPG tests also passed twice after this test change. Product code did not
+change between the full runs.
+
+The removal probes covered strict base64, URL scheme, hostname, port, database,
+username, query overrides, server-password alignment, bootstrap import order,
+role-password format, projection-password equality and the fixture import-list
+assertion. They ran in temporary source copies; the files used by the full suites
+were untouched. Missing, non-string and empty connection fields also have retained
+installer refusal cases. Removing redundant field guards individually is not
+claimed by these probes.
+
+The shipped CNPG image refusal and the existing ownership and certificate checks
+still pass. Subprocess arguments carry references and paths; the tests reject
+private values in output or arguments. Live standby, promotion, backup/WAL,
+restore and storage denial remain NOT RUN.
+
+The [check summary](checks.txt) records the final counts.

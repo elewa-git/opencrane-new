@@ -39,3 +39,25 @@ PASS infrastructure, workflow, dependencies and certificate fixture match tested
 The full infrastructure runs preceded this final rebase; new server memory behaviour is not claimed.
 PASS after final rebase: targeted server ESLint and server workspace typecheck.
 PASS after final rebase: documentation, local links, Knip, changelog and event checks.
+
+Bootstrap credential refusal repair, 25 October 2026
+Implementation: 1a427bbda
+Final test source: f6c27cf47ab829314865eda8adcb84d27ab80781
+Failing-first test source: 8b9aee5e6
+
+PASS rebase completed onto fetched origin/main f85834091; no rebase state remains.
+PASS failing-first proof: 3 connection overrides and 16 password-format refusals failed before the fix.
+PASS final CNPG run 1: 126 passed, 0 failed, 0 skipped.
+PASS final CNPG run 2: 126 passed, 0 failed, 0 skipped.
+PASS all 48 CI infrastructure files, run 1: 528 + 9 = 537 passed, 0 failed, 0 skipped (693 s).
+PASS all 48 CI infrastructure files, run 2: 528 + 9 = 537 passed, 0 failed, 0 skipped (1066 s).
+Run 1 preceded the test-only password-mismatch strengthening; run 2 and both final CNPG runs include it.
+PASS 12 distinct guard-removal probes in temporary copies, including the fixture import-list assertion.
+PASS lint, including Knip and changelog: 0 errors, 25 existing code warnings.
+PASS typecheck: all workspaces, package and development-stack scripts.
+PASS check:events: 154 event types agree.
+PASS separate lint:changelog.
+All tests used the supplied PG_TEST_URL and nice -n 10; lint, typecheck and builds also used nice.
+PASS shipped CNPG image refusal; existing ownership and certificate assertions retained.
+NOT RUN full root suite, live CNPG installation, fresh product journeys, standby/promotion,
+backup/WAL, restore and storage denial.
