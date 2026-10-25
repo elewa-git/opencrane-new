@@ -310,26 +310,11 @@ export async function changePersonalConnection(store: EventStore, binding: Bindi
     throw new Error('Connection owner required');
   }
   const requiredRole = isRevoke ? 'member' as const : 'admin' as const;
-  await readActiveMember(store, binding, actorId, requiredRole);
   const profileSubject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
   const controlSubject = `connection-control-${input.userId}-${input.serverId}`;
   const subject = isRevoke ? profileSubject : controlSubject;
-  const profileRows = await history(store, profileSubject, binding.silo, performance.now() + 10_000);
-  let rows = profileRows;
-  if (!isRevoke) {
-    rows = await history(store, subject, binding.silo, performance.now() + 10_000);
-  }
   const operationId = connectionOperationId(binding.silo, subject, input.changeRef);
-  function originalOperation(row: StoredEvent) {
-    return row.event.id === operationId;
-  }
-  const original = rows.find(originalOperation);
-  if (!original) {
-    requireControlTarget(profileRows, input);
-    if ((rows.at(-1)?.sequence ?? 0) !== input.expectedSequence) {
-      throw new Error('Connection conflict');
-    }
-  }
+  const loaded = await prepareControl(store, binding.silo, input, profileSubject, subject, operationId);
   const fields = { userId: input.userId, serverId: input.serverId,
     profile: input.profileId, expectedSequence: input.expectedSequence };
   const payload = isRevoke
@@ -339,13 +324,45 @@ export async function changePersonalConnection(store: EventStore, binding: Bindi
   const event = { ...envelope(binding.silo, subject, type, payload, operationId),
     commandId: input.changeRef, source: 'opencrane-server',
     principal: { kind: 'human' as const, id: actorId } };
-  // Read profile history before starting the short actor membership check.
+  // Check current permission once after preparation, including when history failed.
   const fresh = await authorityFence(store, performance.now(), [`member-${actorId}`]);
   const options = { requiredRole, fresh };
   await activeMember(store, binding, actorId, options);
-  const sequence = await appendControl(store, event, input.expectedSequence, fresh, original);
+  if (loaded.status === 'failed') {
+    throw loaded.failure;
+  }
+  const sequence = await appendControl(store, event, input.expectedSequence, fresh, loaded.original);
   const status = isRevoke ? 'revoked' as const : 'disabled' as const;
   return { status, sequence, changeRef: input.changeRef };
+}
+
+async function prepareControl(store: EventStore, silo: string,
+  input: z.infer<typeof controlSchema>, profileSubject: string, subject: string,
+  operationId: string) {
+  try {
+    const profileRows = await history(store, profileSubject, silo, performance.now() + 10_000);
+    let rows = profileRows;
+    if (subject !== profileSubject) {
+      rows = await history(store, subject, silo, performance.now() + 10_000);
+    }
+    function originalOperation(row: StoredEvent) {
+      return row.event.id === operationId;
+    }
+    const original = rows.find(originalOperation);
+    if (!original) {
+      requireControlTarget(profileRows, input);
+      if ((rows.at(-1)?.sequence ?? 0) !== input.expectedSequence) {
+        throw new Error('Connection conflict');
+      }
+    }
+    return { status: 'loaded' as const, original };
+  } catch (error) {
+    let failure = new Error('Connection history unavailable', { cause: error });
+    if (error instanceof Error) {
+      failure = error;
+    }
+    return { status: 'failed' as const, failure };
+  }
 }
 
 function requireControlTarget(rows: StoredEvent[], input: z.infer<typeof controlSchema>) {

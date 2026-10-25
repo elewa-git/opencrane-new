@@ -5558,3 +5558,38 @@ OpenFGA and PostgreSQL. They cover roles, invalid input, stale positions, demoti
 and registration races, slow history, private errors, restart and lost replies beyond
 broker deduplication. Opt-in grants no account use; company selection remains unavailable.
 Live company-account use and fresh-install qualification remain NOT RUN.
+
+## Personal account revoke HTTP (Part of #49)
+
+`POST /api/my/tools/:serverId/profiles/:profileId/revoke` accepts only `changeRef`
+and non-negative integer `expectedSequence`. The route derives the owner from the
+session and fixes the action to revoke. It uses `memberReads`, the selection route's
+organisation, exact Origin and silo checks, a 4096-byte body limit and no-store replies.
+Path and change ids use the existing bounded identifier schema; the router's own path
+length limit also applies. Query fields and supplied owners or actions are refused.
+
+The route calls `changePersonalConnection` once. The command prepares profile history,
+then checks current membership once, including when preparation failed. A permission
+refusal stays refused; the route does not repeat that check. The final freshness check,
+two-second write deadline and conditional append still apply. Responses are
+400 for invalid input, 401 for no session, 403 for access refusal, 413 for an oversized
+body, and fixed 503 unavailable for command conflicts or dependency failures.
+No dependency message is returned or logged. Success contains only `status: revoked`,
+`sequence` and `changeRef`. Exact retries return the original receipt.
+
+Recovery uses the existing profile `GET .../changes/:changeRef`. Missing evidence
+remains 404 unknown, including after an uncertain append; it never proves non-application.
+Revocation confirms only a local event, not upstream token revocation. This route has
+no custody or provider dependency and does not run cleanup. Replay and receipt reads
+release or delete nothing. Live qualification is NOT RUN.
+
+`test/connection-profile-revoke.test.ts` covers owner isolation, strict input, stale
+revisions, original retries beyond deduplication, lost replies, unavailable appends,
+invalid histories, removal during preparation and private canaries in failures.
+It also counts permission checks after successful, failed, missing or stale
+preparation, a denial followed by an OpenFGA outage, missing configuration and an
+absent member lookup. The command tests cover malformed actors, final access changes
+and expiry, and each original-event identity field during append readback.
+Direct handler checks cover bounded, strict path parameters. HTTP tests also reject
+each mismatched target field before append and race two requests against the same
+saved revision, confirming one saved event and the same receipt.

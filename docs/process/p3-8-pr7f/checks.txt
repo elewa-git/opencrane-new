@@ -1,0 +1,69 @@
+Own checks, 25 October 2026.
+All suites used nice -n 10 and one worker.
+PG_TEST_URL used the supplied test database on port 55432.
+The red run is expected to fail before implementation.
+The broader run has one corrected router-status assertion; see receipt.md.
+
+p3-8-pr7f-red.log
+⎯⎯⎯⎯⎯⎯ Failed Tests 25 ⎯⎯⎯⎯⎯⎯⎯
+Test Files  1 failed (1)
+Tests  25 failed (25)
+Duration  14.24s (transform 55%, tests 25%, import 20%)
+
+p3-8-pr7f-tests-1.log
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+Test Files  1 failed | 5 passed (6)
+Tests  1 failed | 580 passed (581)
+Duration  112.16s (tests 77%, import 13%, transform 10%)
+
+p3-8-pr7f-final-tests-1.log
+Test Files  2 passed (2)
+Tests  54 passed (54)
+Duration  68.68s (tests 59%, transform 25%, import 16%)
+
+p3-8-pr7f-final-tests-2.log
+Test Files  1 passed (1)
+Tests  27 passed (27)
+Duration  40.43s (tests 50%, transform 37%, import 13%)
+
+p3-8-pr7f-events.log
+check:events — OK: 154 event types agree between the registry and the catalogue.
+
+p3-8-pr7f-field-names.log
+PASS: six API names pass the unchanged risky-field matcher; no new events.
+
+Static checks:
+PASS: full typecheck before rebase; server and models typechecks after rebase.
+PASS: final ESLint on corrected and rebased source files (zero errors).
+PASS: dependency rules, Knip, documentation, READMEs, links, fixtures and licences.
+PASS: changelog lint. No dependencies were added.
+NOT RUN: full root suite and fresh live use.
+
+Permission check correction, 25 October 2026.
+Source: 47390aa5084aa247720668c99e1d9547d385d6f1.
+Base: 35e7e10e97854a706f69cebf22eee4e2c049e149; rebase finished.
+Test-first: 8c5464604; five regressions failed before the implementation.
+All checks used nice -n 10. Tests used one worker and the supplied PG_TEST_URL.
+
+Final suite command:
+npx vitest run apps/server/test/connection-profile-revoke.test.ts libs/models/test/bearer-connections.test.ts apps/server/test/connection-profile-read.test.ts apps/server/test/connection-change-read.test.ts --maxWorkers=1
+
+p3-8-pr7f-fix-final-5.log
+Test Files  4 passed (4)
+Tests  127 passed (127)
+Duration  85.79s
+
+p3-8-pr7f-fix-final-6.log
+Test Files  4 passed (4)
+Tests  127 passed (127)
+Duration  73.78s
+
+PASS: 438 security-rule tests in the first broader run; protected files unchanged.
+PASS: full workspace typecheck and final server/models typechecks.
+FAIL (corrected): initial full ESLint scan found two unbound fixture methods.
+PASS: final changed-file ESLint checks; 25 existing full-scan warnings remain.
+FAIL (corrected): a fixture imported the private authz client.
+PASS: final dependency checks use the existing public OpenFGA SDK.
+PASS: Knip, docs, READMEs, links, fixtures, package licences and changelog lint.
+PASS: event catalogue; 154 event types agree.
+NOT RUN: full root suite, mutation tests, fresh-install credential use and HTTP-to-custody deletion.

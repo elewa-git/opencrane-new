@@ -1,3 +1,4 @@
+import { OpenFgaClient } from '@openfga/sdk';
 import { z } from 'zod';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -255,6 +256,120 @@ async function ownerRevoke() {
   expect(JSON.stringify({ rows, result })).not.toContain(material);
 }
 it('lets only the owner invalidate a profile and recovers the same revoke', ownerRevoke);
+
+async function invalidControlActor(actorId: string) {
+  const test = fixture();
+  const created = await test.save();
+  const input = { ...controlInput(test, created.sequence), action: 'disable' };
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const writes = vi.spyOn(nats.store, 'append');
+  try {
+    await expect(changePersonalConnection(nats.store, binding, actorId, input))
+      .rejects.toThrow('Connection input invalid');
+    expect(reads).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['', 'bad actor', 'x'.repeat(201)])('rejects malformed actor %s', invalidControlActor);
+
+async function finalRevokeCheck(outcome: string) {
+  const test = fixture();
+  const created = await test.save();
+  const input = controlInput(test, created.sequence);
+  const client = new OpenFgaClient(binding);
+  const check = client.check.bind(client);
+  const head = nats.store.head.bind(nats.store);
+  let permitted = false;
+  let finalReads = 0;
+  let pendingReads = 0;
+  let expired = false;
+  async function permission(...args: Parameters<typeof check>) {
+    const [tuple] = args;
+    const result = await check(...args);
+    if (tuple.relation === 'member' && result.allowed) {
+      permitted = true;
+    }
+    return result;
+  }
+  async function changedHead(subject?: string, deadline?: number) {
+    pendingReads += 1;
+    const sequence = await head(subject, deadline);
+    pendingReads -= 1;
+    if (permitted && subject === 'member-alice') {
+      finalReads += 1;
+      if (finalReads === 2) {
+        if (outcome === 'expired') {
+          expired = true;
+        } else {
+          return created.sequence + 1;
+        }
+      }
+    }
+    // Finish concurrent position reads before advancing the access check's clock.
+    if (expired && pendingReads === 0) {
+      vi.spyOn(performance, 'now').mockReturnValue(deadline! + 1);
+    }
+    return sequence;
+  }
+  vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(permission);
+  vi.spyOn(nats.store, 'head').mockImplementation(changedHead);
+  const writes = vi.spyOn(nats.store, 'append');
+  try {
+    const reason = outcome === 'expired' ? 'Authority snapshot expired' : 'Authority changed';
+    await expect(changePersonalConnection(nats.store, binding, 'alice', input))
+      .rejects.toThrow(reason);
+    expect(writes).not.toHaveBeenCalled();
+    expect(finalReads).toBe(2);
+  } finally {
+    vi.restoreAllMocks();
+  }
+  expect(await nats.store.head(test.subject)).toBe(created.sequence);
+}
+it.each(['changed', 'expired'])('refuses revoke when final access is %s', finalRevokeCheck);
+
+async function invalidRevokeReadback(field: string) {
+  const test = fixture();
+  const created = await test.save();
+  const input = controlInput(test, created.sequence);
+  const read = nats.store.readStream.bind(nats.store);
+  async function* readback(subject: string, from?: number, deadline?: number) {
+    for await (const row of read(subject, from, deadline)) {
+      if (subject === test.subject && from !== undefined && from > created.sequence) {
+        if (field === 'missing') {
+          return;
+        }
+        if (field === 'principal kind') {
+          row.event.principal = { kind: 'system', id: 'alice' };
+        } else if (field === 'principal id') {
+          row.event.principal = { kind: 'human', id: 'bob' };
+        } else if (field === 'data') {
+          row.event.data = { ...input, revokedBy: 'bob' };
+        } else {
+          Object.assign(row.event, { [field]: 'different' });
+        }
+      }
+      yield row;
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(readback);
+  try {
+    const reason = field === 'missing' ? 'Connection append unconfirmed' : 'Connection conflict';
+    await expect(changePersonalConnection(nats.store, binding, 'alice', input))
+      .rejects.toThrow(reason);
+  } finally {
+    vi.restoreAllMocks();
+  }
+  const rows = await history(nats.store, test.subject, 'test');
+  expect(rows).toHaveLength(2);
+  const receipt = await changePersonalConnection(nats.store, binding, 'alice', input);
+  expect(receipt).toEqual({ status: 'revoked', sequence: rows[1]!.sequence, changeRef: 'stop' });
+  expect(await nats.store.head(test.subject)).toBe(rows[1]!.sequence);
+}
+it.each(['missing', 'id', 'silo', 'subject', 'type', 'commandId',
+  'principal kind', 'principal id', 'data'])(
+  'keeps revoke unconfirmed when readback has invalid %s', invalidRevokeReadback);
 
 async function refusedControl() {
   const test = fixture();

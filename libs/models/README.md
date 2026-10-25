@@ -44,7 +44,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending and current effect pages, own saved profiles and original change receipts, personal account choices from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending and current effect pages, own saved profiles and original change receipts, personal account choices and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
@@ -526,8 +526,12 @@ This adapter grants no tool access.
 Personal bearer commands save a staged reference or replace it at the expected version.
 The stream keeps only references and exact storage identities. Saved profiles remain
 unavailable for tool calls until their upstream account identity can be checked.
-Owners can revoke their own profiles. Admins can block a member's personal connections
-to one server, including later reconnects with a new profile. Both changes keep the
+Owners can revoke their own profiles through the server. The command returns the
+original receipt for an exact retry, without revoking anything at the provider.
+It checks current permission once after preparing the saved history, including when
+that history could not be loaded. A permission refusal takes precedence over a history error.
+Admins can block a member's personal connections to one server, including later
+reconnects with a new profile. Both changes keep the
 stored token until cleanup can prove deletion is safe.
 A live maintenance function checks one staged secret while holding the same lock as
 staging and saving. It keeps current references. After the save deadline, it records

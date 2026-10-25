@@ -6,6 +6,7 @@ import { MemberAccessRefused, readOwnConnectionProfile, readOwnConnectionChange,
 import { z } from 'zod';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
+import { registerConnectionProfileRevoke } from './profile-revoke-route.ts';
 import { registerConnectionSelection } from './selection-route.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
@@ -17,6 +18,7 @@ const emptyQuery = z.strictObject({});
 export function registerConnectionProfileRead(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
   registerConnectionSelection(app, config, options);
+  registerConnectionProfileRevoke(app, config, options);
   app.get('/api/my/tools/:serverId/profiles/:profileId', handler);
   app.get('/api/my/tools/:serverId/profiles/:profileId/changes/:changeRef', changeHandler);
   app.get('/api/my/tools/:serverId/selection/changes/:changeRef', selectionHandler);

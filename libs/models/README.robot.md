@@ -2000,7 +2000,8 @@ the existing custody tests separately exercise the private HTTP adapter.
 
 ## Personal revoke and admin disable (P3-8 PR 3, first part of row 3)
 
-`changePersonalConnection(store, binding, actorId, input)` is internal, with no HTTP route.
+`changePersonalConnection(store, binding, actorId, input)` is exported for the personal
+revoke HTTP route. Admin disable remains internal.
 The binding and actor come from authenticated server context. Strict input names action
 (revoke/disable), userId, serverId, profileId, changeRef and expectedSequence.
 Revoke requires the current owner and the profile stream revision. It appends
@@ -2013,7 +2014,10 @@ Only a later explicit admin enable could remove it; no enable command exists her
 
 Each command makes one conditional append. The original change reference recovers its
 confirmed receipt after a lost reply, but changed retry details conflict. Membership is
-checked again on retries. No token is read or returned, and neither command deletes one.
+checked once after preparation on both new requests and retries. Saved-history and
+target failures wait for that permission decision, so a refusal takes precedence.
+The final freshness and deadline checks still guard the conditional append.
+No token is read or returned, and neither command deletes one.
 Save checks the control stream before staging and again in its short access check.
 It captures the `connection-*` category position before the final control and profile
 revision checks. Its one native conditional append requires that category position to
