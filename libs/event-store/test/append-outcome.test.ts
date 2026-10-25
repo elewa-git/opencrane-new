@@ -25,7 +25,7 @@ async function distinguishesSavedCommands() {
   const command = { event: event('saved'), expectedSequence: 0, historyChecked: true as const };
   expect(await store.appendOutcome(command)).toEqual({ status: 'appended', sequence: 1 });
   expect(await store.appendOutcome(command)).toEqual({ status: 'duplicate_saved', sequence: 1 });
-  const retry = { ...command, historyChecked: undefined };
+  const retry = { event: command.event, expectedSequence: command.expectedSequence };
   expect(await store.appendOutcome(retry)).toEqual({ status: 'duplicate_saved', sequence: 1 });
   expect(await store.head()).toBe(1);
 }
