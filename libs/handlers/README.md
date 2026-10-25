@@ -90,6 +90,8 @@ const handler = registerHandler('claim-computer', checkEvent);
 
 ## Where to read more
 
+- [Event recovery checks](../../infra/package/README.md): restores an earlier event copy
+  after an interrupted subscription change, with reactions stopped.
 - [README.robot.md](README.robot.md): queue rules, settings, recovery and tests.
 - [Events](../events/README.md): the list of reaction names and event types.
 - [Projections](../projections/README.md): database helpers used by reactions.

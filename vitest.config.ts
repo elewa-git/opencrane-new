@@ -1,11 +1,12 @@
 import { defineConfig } from 'vitest/config';
 import DurationSequencer from './scripts/ci/sequencer.mjs';
 
-// One config for every package: vitest finds every *.test.ts file under
-// apps/ and libs/, plus checks under scripts/, so new packages share this config.
+// Keep package recovery fixtures in the same file list as library and app tests,
+// so the ordinary CI shards run their real NATS and PostgreSQL checks.
 export default defineConfig({
   test: {
-    include: ['apps/**/*.test.ts', 'libs/**/*.test.ts', 'scripts/*.test.mjs'],
+    include: ['apps/**/*.test.ts', 'libs/**/*.test.ts', 'scripts/*.test.mjs',
+      'infra/package/upgrade-recovery*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', 'spikes/**'],
     environment: 'node',
     sequence: { sequencer: DurationSequencer },

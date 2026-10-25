@@ -222,6 +222,12 @@ inside a chunk, inside final publication and just after publication commits.
 The worker process check is `apps/ops/test/worker-subscriptions.test.ts`. Million-event throughput and
 fresh-install upgrade qualification are NOT RUN.
 
+The package's `upgrade-recovery*.test.ts` files reuse the committed-chunk crash
+fixture for recovery from a pre-upgrade event export. Its optional `effectUrl`
+argument gives the child a local recording endpoint for reaction callbacks.
+The parent supplies that address only in this fixture; it is never a product setting.
+These checks preserve parked jobs and do not resume them during projection replay.
+
 Keep event-id receipts for retained external state. Workers check these receipts
 before invoking reactions, including newly subscribed historical events. External
 services still need their own event-id idempotency rule for a crash before the SQL

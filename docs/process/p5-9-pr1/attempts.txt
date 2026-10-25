@@ -1,0 +1,23 @@
+Initial test-first run — FAIL, expected
+  vitest run infra/package/upgrade-recovery-check.test.ts
+    infra/package/upgrade-recovery.test.ts --maxWorkers=1
+  Both suites could not load their unbuilt collector/checker modules.
+  No test cases executed. Tests committed in 5284b01c4.
+
+Checker with empty implementation — FAIL, expected
+  vitest run infra/package/upgrade-recovery-check.test.ts --maxWorkers=1
+  1 valid case passed; all 11 rejection cases failed because no refusal was thrown.
+
+First integration run — FAIL
+  12 checker cases passed; both integration cases failed.
+  The first case reached the 30-second test timeout.
+  The second case refused Incompatible handler queue: update-openfga/retryLimit.
+  The parent fixture used retryLimit=1; the existing upgrade crash child uses 5.
+  The parent now uses 5. The composed integration cases have a 90-second test limit.
+  This does not change a production timeout or add a retry.
+
+All runs used nice -n 10. These failures remain part of the evidence.
+
+First knip run — FAIL
+  The new test imported the NATS SDK outside its owning library.
+  It now reads stream information through the existing checked response schema.

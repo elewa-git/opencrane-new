@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and event recovery"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks test space, cluster access and bootstrap connections| package
@@ -55,6 +55,7 @@ running install still need work.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log for an operator.
 - Restores checked events into an empty disposable NATS target.
+- Checks event recovery after an interrupted change to handler subscriptions.
 - Removes only this worktree's install, including after an interrupted launcher.
 
 ## Processes it handles
@@ -110,6 +111,11 @@ it to a separate disposable NATS server with no event stream. It checks the rest
 events and leaves uncertain results isolated for inspection. It starts no product
 processes. This does not restore or reopen a working installation.
 The [restore notes](README.robot.md#event-byte-restore) explain the requirements.
+
+A separate test interrupts a change to the events that background handlers receive.
+It restores the earlier event copy and rebuilds membership tables with reactions
+stopped. This checks event recovery only. It does not qualify a package upgrade.
+The [recovery notes](README.robot.md#interrupted-handler-upgrade-check) explain the proof.
 
 ## Folders
 

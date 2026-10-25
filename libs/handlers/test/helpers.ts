@@ -165,7 +165,7 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
         return Number(row.rows[0]?.sequence) === sequence;
       });
     },
-    async crash(mode: string) {
+    async crash(mode: string, effectUrl?: string) {
       const child = fork(new URL("./crash-process.ts", import.meta.url), [], {
         execArgv: ["--experimental-strip-types"],
         env: {
@@ -173,6 +173,7 @@ export async function fixture(options: { idleTimeoutMillis?: number; max?: numbe
           PG_TEST_URL: connectionString,
           ...nats.env((mode.startsWith("projection") || mode.startsWith("upgrade")) ? "projection" : "dispatcher"),
           CRASH_MODE: mode,
+          CRASH_EFFECT_URL: effectUrl,
         },
         stdio: ["ignore", "pipe", "pipe", "ipc"],
       });
