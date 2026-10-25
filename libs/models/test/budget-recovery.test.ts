@@ -191,6 +191,60 @@ async function duplicateAfterReplacement() {
 it('stops on replacement writes before accepting their duplicate receipt',
   duplicateAfterReplacement);
 
+async function concurrentConfigurationReceipt(change: 'none' | 'amount' | 'administrator') {
+  const read = store.readStream.bind(store);
+  const bothRead = Promise.withResolvers<void>();
+  let reads = 0;
+  async function* barrier(...args: Parameters<typeof read>) {
+    const rows = [];
+    for await (const row of read(...args)) rows.push(row);
+    reads += 1;
+    if (reads === 2) bothRead.resolve();
+    if (reads <= 2) await bothRead.promise;
+    for (const row of rows) yield row;
+  }
+  const reading = vi.spyOn(store, 'readStream');
+  reading.mockImplementation(barrier);
+  const publishing = Promise.withResolvers<void>();
+  const retryPrepared = Promise.withResolvers<void>();
+  const publish = client.publish.bind(client);
+  async function holdFirstPublish(...args: Parameters<typeof publish>) {
+    publishing.resolve();
+    await retryPrepared.promise;
+    return publish(...args);
+  }
+  client.publish = holdFirstPublish;
+  async function retryAccess() {
+    await publishing.promise;
+    retryPrepared.resolve();
+  }
+  const payload = { scope: 'global', ceilingCents: 150, setBy: 'alice' };
+  const retryPayload = { ...payload };
+  if (change === 'amount') retryPayload.ceilingCents = 200;
+  if (change === 'administrator') retryPayload.setBy = 'bob';
+  const revision = actor.state.sequence;
+  const first = actor.configure(payload, 'concurrent-config', revision);
+  const retry = actor.configure(retryPayload, 'concurrent-config', revision, retryAccess);
+  const results = await Promise.all([first, retry]);
+  expect(results[0]).toMatchObject({ status: 'appended' });
+  if (change === 'none') {
+    expect(results[1]).toEqual(results[0]);
+  } else {
+    expect(results[1]).toEqual({ status: 'conflict' });
+  }
+  expect(actor.state.ceilingCents).toBe(150);
+  function isCommand(row: Awaited<ReturnType<typeof history>>[number]) {
+    return row.event.commandId === 'concurrent-config';
+  }
+  const rows = await history(store, 'budget-test', 'test');
+  expect(rows.filter(isCommand)).toHaveLength(1);
+  await actor.reserve(call, 1);
+  expect(totals(actor.state).reservedCents).toBe(1);
+}
+it.each(['none', 'amount', 'administrator'] as const)(
+  'returns the original concurrent configuration receipt only for identical input (change: %s)',
+  concurrentConfigurationReceipt);
+
 async function queuedExpiry() {
   const entered = Promise.withResolvers<void>();
   const released = Promise.withResolvers<void>();
