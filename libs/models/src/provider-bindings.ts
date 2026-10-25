@@ -7,11 +7,12 @@ import {
 } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { applyProvider, type ProviderState } from '@opencrane/projections';
+import { applyProvider, type ProviderState, type Query } from '@opencrane/projections';
 import { history } from './actor.ts';
 import { readActiveMember } from './member-authority.ts';
 import { modelForTask } from './routing.ts';
 import { models } from './state.ts';
+import { providerRoutinePresence } from './provider-routine-presence.ts';
 import {
   ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
   providerReceipt, providerSecretRef,
@@ -226,17 +227,47 @@ async function checkedHistory(store: EventStore, silo: string, subject: string, 
   return rows;
 }
 
-export async function providerDependencies(store: EventStore, binding: Binding,
-  memberId: string, providerId: string) {
-  const current = await inventory(store, binding.silo);
+async function providerCreation(store: EventStore, silo: string, providerId: string) {
+  const subject = `provider-${providerId}`;
   const deadline = performance.now() + 10_000;
-  const assistants = await checkedHistory(store, binding.silo, 'assistant-*', deadline);
-  const routines = await checkedHistory(store, binding.silo, 'routine-*', deadline);
+  // Read only the creation record needed for permission, even if the inventory fails.
+  for await (const row of store.readStream(subject, 1, deadline)) {
+    if (row.event.silo !== silo || row.event.subject !== subject ||
+      row.event.type !== 'provider.created') {
+      throw new Error('Provider creation unavailable');
+    }
+    return [row];
+  }
+  return [];
+}
+
+async function prepareDependencies(store: EventStore, db: Query, silo: string) {
+  const current = await inventory(store, silo);
+  const deadline = performance.now() + 10_000;
+  const assistants = await checkedHistory(store, silo, 'assistant-*', deadline);
+  const routines = await providerRoutinePresence(store, db, silo, deadline);
   if (await store.head('provider-*', deadline) !== current.position) {
     throw new Error('Provider history changed');
   }
+  return { current, assistants, routines };
+}
+
+export async function providerDependencies(store: EventStore, binding: Binding,
+  memberId: string, providerId: string, db: Query) {
+  const creation = providerCreation(store, binding.silo, providerId);
+  const [provider] = await Promise.allSettled([creation]);
+  const loading = prepareDependencies(store, db, binding.silo);
+  const [prepared] = await Promise.allSettled([loading]);
   await readActiveMember(store, binding, memberId, 'admin');
-  await providerPermission(binding, memberId, connectionRows(current.rows, providerId));
+  if (provider.status === 'rejected') {
+    throw new Error('Provider dependencies unavailable');
+  }
+  await providerPermission(binding, memberId, provider.value);
+  // Check current rights before disclosing any failed dependency preparation.
+  if (prepared.status === 'rejected') {
+    throw new Error('Provider dependencies unavailable');
+  }
+  const { current, assistants, routines } = prepared.value;
   const assistantIds = new Set<string>();
   for (const row of assistants) {
     if (isAssistantCreation(row)) {
@@ -261,10 +292,7 @@ export async function providerDependencies(store: EventStore, binding: Binding,
   }
   return {
     rows, expectedProviderSequence: current.position, ordinaryCallsAvailable: false,
-    routines: {
-      status: routines.length ? 'unsupported' : 'absent',
-      position: routines.at(-1)?.sequence ?? 0,
-    },
+    routines,
   };
 }
 

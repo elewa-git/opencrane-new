@@ -309,7 +309,8 @@ async function bindings(request: FastifyRequest, reply: FastifyReply,
       memberId, providerId, request.body);
     return reply.send(receipt);
   }
-  const result = await providerDependencies(options.store, options.binding, memberId, providerId);
+  const result = await providerDependencies(options.store, options.binding,
+    memberId, providerId, options.db);
   return reply.send(result);
 }
 

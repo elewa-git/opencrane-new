@@ -19,6 +19,11 @@ Switch-on requires a default provider and waits for earlier calls to finish char
 
 The separate models process reads the saved switch-on choice at startup and on later checks. After switch-on, it takes the provider key selected for each checked call. A leftover fallback-key setting stops startup; an older running process exits and needs restarting. Gateway configuration reloads keep the same provider mode. Both server processes use the same conversation-key protection in a packaged installation.
 
+Dependency requests check for saved routines through one indexed database position.
+They require the routine table to have caught up with the event log. Older and retired
+routines still mean that complete dependency information is unsupported. A failed read
+cannot report an empty result, and current permissions are checked before returning it.
+
 ## Main files
 
 | File | What it does |
