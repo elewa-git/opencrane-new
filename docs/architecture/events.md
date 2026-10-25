@@ -79,6 +79,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `gateway-<request>` | safe gateway evidence | observation recorded |
 | `provider-<providerId>` | company model provider | configuration and verification |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
+| `connection-company-<server>` | admin company opt-in for one exact installation | opt-in recorded or removed |
 | `connection-control-<user>-<server>` | admin block for a member's personal profiles | disabled |
 | `view-<reference>` | bounded desktop view or refused control attempt | started, stopped, refused |
 | `grant-<resource>` | shared resource (type and id) | given, revoked |
@@ -395,6 +396,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.instance_observed` | authenticated, run-bound lifecycle worker | matching run, Pod UID, checked workload and expected sequence; system principal and change id for new reports; starting, failed, stopping, absent or unknown; no callable state | none |
 | `mcp.instance_stop_requested` | current owner or admin command | close the exact run with its original start and stop references; `owner_stop` requires the instance owner, while `admin_stop` records the acting admin | `stop-mcp-instance` checks the saved current run, stops its exact Kubernetes workload and records absence when configured |
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade; departure revocation reaction | grants | OpenFGA tuples |
+| `connection.company_opt_in_set` | explicit admin opt-in/removal command | company control fold binds silo, server, installation and registration revision; defaults to disabled | no grant, credential, selection, release or provider call |
 | `connection.selected` | explicit personal select/clear command | selection fold binds the requester, server, installation and checked profile revision; clear chooses nothing | no grant, custody read, release or provider call |
 | `connection.created` | personal bearer create command after private staging | connection fold (exact reference and generation; identity unverified) | explicit live candidate cleanup keeps current references; no automatic reaction |
 | `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | `cleanup-connection` confirms the saved rotation and removes superseded exact generations under the shared profile lock; never release on replay |

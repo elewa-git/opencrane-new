@@ -98,3 +98,6 @@ export { prepareMemoryReads } from './memory-preparation.ts';
 
 export { changeConnectionSelection, SelectionInputInvalid, SelectionConflict }
   from './connection-selection.ts';
+
+export { changeCompanyOptIn, foldCompanyOptIn, CompanyOptInConflict,
+  CompanyOptInInputInvalid } from './company-opt-in.ts';

@@ -3410,8 +3410,9 @@ and access once. Replay keeps the highest observed position; older rows cannot r
 a cleared choice. Missing, cleared, rotated, revoked, disabled, incomplete and replaced
 profiles choose nothing. Selection preserves saved_unverified and never grants access,
 reads custody, calls a provider or falls back to another profile. Connecting never selects.
-Tests use bearer fixtures with real NATS, PostgreSQL and OpenFGA. Company opt-in, company
-profiles, UI, release, dispatch and fresh-install qualification remain later work.
+Tests use bearer fixtures with real NATS, PostgreSQL and OpenFGA. Company opt-in is
+recorded separately below. Company profiles, UI, release, dispatch and fresh-install
+qualification remain later work.
 
 The expired-catalogue fixture derives both dates from one timestamp. Its five-minute
 lifetime must remain valid even when the clock advances between reads. A regression
@@ -3782,3 +3783,26 @@ diagnostics remain for the second part. Existing approval evidence and binding c
 The retained 53/60 approval-load result is unresolved until the replacement path is qualified.
 `test/budget-recovery.test.ts` covers delayed publication, failed recovery reads, saved
 payloads and failed application. The two named call-retry and root-budget money tests stay unchanged.
+
+## Company account opt-in (P3-8 PR 4b; Part of #49)
+
+`changeCompanyOptIn(store, binding, memberId, input)` takes the member from authenticated
+context. Strict input names serverId, connectionId, registrationRevision, enabled,
+expectedSequence and changeRef. Current owner/admin membership supplies authority.
+History loads with a ten-second limit before the two-second write check. Membership
+refusal takes precedence over failed history and conflicting retries. Only the small
+membership and ownership streams enter the access check. The server position is checked
+inside the conditional append, which also guards the global event position.
+
+One event is saved on `connection-company-<serverId>`. The silo, subject and changeRef
+produce its deterministic id. Exact retries return the original receipt, including
+after disable, re-registration or broker deduplication expiry. Changed inputs or actors
+under that reference conflict. Unknown append results remain unavailable until retried.
+The receipt has enabled, sequence and changeRef; it confirms a saved choice, not current use.
+
+`foldCompanyOptIn(rows, installation)` requires the current silo, serverId, connectionId
+and registrationRevision. Absence means disabled. Re-registration invalidates old opt-in,
+even if discovery reuses the connection id. Old duplicate rows cannot restore removal.
+Replay starts no work. The command grants nothing and touches no custody or provider.
+Personal `connectionServer` eligibility is unchanged. Company profiles, selection,
+release, dispatch, HTTP, UI and OAuth remain later work. Fresh-company qualification: NOT RUN.
