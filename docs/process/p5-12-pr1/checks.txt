@@ -1,11 +1,13 @@
-2026-10-25 — own checks only. All lint, typecheck and test commands use nice -n 10.
-PASS: npm ci; worktree tool symlinks installed.
-EXPECTED FAIL: test-only commit 6d7a23746, 11 cases, missing preflight executable.
-PASS: PG_TEST_URL=<disposable database> npx vitest run libs/projections/test/memory-restore.test.ts --maxWorkers=1 — 15 cases per run, three passing runs.
-PASS: libs/events/test/security-rules.test.ts — 438 cases, once with the recovery suite.
+2026-10-25 — own checks only. Source: e740fedf9. CPU-intensive commands used nice -n 10.
+PASS: git fetch origin; rebase onto f85834091; rebase completed and origin/main is an ancestor.
+FAIL (expected before fix): a62b04ae3 — matching empty surviving custody reached the forbidden database connection; the missing and wrong-key cases already refused.
+FAIL (expected before fix): f793caef4 — an earlier live fact reached the decryption guard before later deletion, next-revision, key-identity and stability refusals.
+PASS: PG_TEST_URL=<disposable PostgreSQL> nice -n 10 npx vitest run libs/projections/test/memory-restore.test.ts libs/projections/test/memory-keys.test.ts apps/ops/test/memory-replay.test.ts libs/event-store/test/event-restore.test.ts --maxWorkers=1 — 77 cases per run, three passing runs.
+PASS: libs/events/test/security-rules.test.ts — 438 cases, once alongside the first recovery run; 515 total cases in that run.
+PASS: changed libs/projections/test/memory-restore.test.ts after the final clarity edits — 26 cases per run, two further passing runs.
+PASS: npm run lint — 25 existing size warnings, no errors; includes Knip, documentation, dependency, licence and changelog checks.
+PASS: npm run typecheck — all workspaces, package and dev-stack; typecheck:package repeated after the final clarity edits.
 PASS: npm run check:events — 154 registered and documented event types agree.
-PASS: npx knip; npm run lint:changelog; focused ESLint; git diff --check.
-PASS: npm run lint (25 existing size warnings, no errors).
-PASS: npm run typecheck, including package and dev-stack checks.
-Development fixes: explicit ProcessEnv typing; checked retention-limit truncation replaced refused fixture delete/purge requests.
-NOT RUN: full root test suite, browser qualification, full P5-8/P4-13–17, company/rights recovery, computer no-disk proof.
+PASS: focused ESLint for changed projection files; explicit preflight ESLint with --no-ignore --parser-options '{"project":"infra/package/tsconfig.json"}'. The root lint configuration excludes infrastructure.
+PASS: git diff --check; disposable PostgreSQL container removed with docker rm -f -v.
+NOT RUN: full root test suite, browser qualification, full P5-8/P4-13–17, company/rights recovery, fresh product installation and computer no-disk proof. CI is not awaited after push.
