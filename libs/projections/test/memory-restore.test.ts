@@ -62,8 +62,8 @@ async function prepare() {
   survivor = { ...root, ownerId: 'bob', memoryId: 'neighbour',
     scopeId: memoryScopeId('test', 'person', 'bob') };
   const dependency = [{ scopeId, memoryId: 'root', revision: 1 }];
-  await source.seed([value('root'), value('child', 'alice', 1, dependency),
-    value('child', 'alice', 2), value('neighbour', 'bob')]);
+  await source.seed([value('neighbour', 'bob'), value('root'),
+    value('child', 'alice', 1, dependency), value('child', 'alice', 2)]);
   await cp(sourceDirectory, `${directory}/stale`, { recursive: true });
   const backup = `${directory}/backup`;
   await collectEventBackup(source.connection,
@@ -79,7 +79,11 @@ async function prepare() {
     subject: `scope-${scopeId}`, data }]);
   const keys = memoryKeys(sourceDirectory);
   for (const identity of [root, child, { ...child, revision: 2 },
-    { ...root, revision: 2 }, { ...child, revision: 3 }]) keys.delete(identity);
+    { ...root, revision: 2 }, { ...child, revision: 3 }]) {
+    const reference = keys.provision(identity);
+    references.set(`${identity.memoryId}-${identity.revision}`, reference.slice(4));
+    keys.delete(identity);
+  }
   // Use the frozen source only for byte restoration, never as current deletion evidence.
   await restoreEventBackup(frozen.connection, target.connection,
     { silo: 'test', directory: older, disposable: true });
@@ -94,11 +98,14 @@ async function prepare() {
   }
   const guard = `import { mock } from 'node:test';
 import { EventStore } from '@opencrane/event-store';
+import * as eventStore from '@opencrane/event-store';
+import { writeFileSync } from 'node:fs';
 import { HandlerRuntime } from '@opencrane/handlers';
 import { SandboxClient } from '../../apps/ops/src/kubernetes.ts';
 import * as auth from '@opencrane/auth';
 import * as projections from '@opencrane/projections';
 let effects = 0;
+let injected = 0;
 function forbidden() { effects++; throw new Error('Forbidden recovery effect'); }
 mock.method(EventStore.prototype, 'append', forbidden);
 mock.method(HandlerRuntime.prototype, 'start', forbidden);
@@ -107,13 +114,62 @@ mock.method(SandboxClient.prototype, 'credentials', forbidden);
 mock.method(globalThis, 'fetch', forbidden);
 mock.module('@opencrane/auth', { namedExports: { ...auth, tokenIssuer: forbidden } });
 function guardedKeys(path) {
-  return { ...projections.memoryKeys(path), provision: forbidden, delete: forbidden,
+  const keys = projections.memoryKeys(path);
+  function status(identity) {
+    const result = keys.status(identity);
+    const changedDirectory = process.env.CHANGE_INVENTORY;
+    if (changedDirectory) {
+      writeFileSync(changedDirectory + '/' + 'f'.repeat(64), Buffer.alloc(0), { mode: 0o600 });
+      injected++;
+    }
+    return result;
+  }
+  const guarded = { ...keys, status, provision: forbidden, delete: forbidden,
     discardUnpublished: forbidden, encrypt: forbidden };
+  if (process.env.EXPECT_NO_DECRYPT) guarded.decrypt = forbidden;
+  return guarded;
 }
+async function guardedConnection(settings) {
+  const connection = await eventStore.connectNats(settings);
+  const request = connection.request.bind(connection);
+  let infoReads = 0;
+  async function checkedRequest(subject, ...args) {
+    const reply = await request(subject, ...args);
+    if (process.env.CHANGE_IDENTITY && subject === '$JS.API.STREAM.MSG.GET.EVENTS') {
+      const saved = reply.json();
+      if (saved.message.seq === 2) {
+        const event = JSON.parse(Buffer.from(saved.message.data, 'base64').toString('utf8'));
+        event.data.keyId = 'key:' + 'f'.repeat(64);
+        saved.message.data = Buffer.from(JSON.stringify(event)).toString('base64');
+        injected++;
+        function json() { return saved; }
+        return { data: reply.data, json };
+      }
+    }
+    if (subject !== '$JS.API.STREAM.INFO.EVENTS') return reply;
+    infoReads++;
+    const side = settings ? 'source' : 'target';
+    if (process.env.CHANGE_HISTORY !== side || infoReads !== 2) return reply;
+    const changed = { ...reply.json(), created: '2000-01-01T00:00:00.000Z' };
+    injected++;
+    function json() { return changed; }
+    return { data: reply.data, json };
+  }
+  mock.method(connection, 'request', checkedRequest);
+  return connection;
+}
+mock.module('@opencrane/event-store', {
+  namedExports: { ...eventStore, connectNats: guardedConnection },
+});
 const namedExports = { ...projections, memoryKeys: guardedKeys };
 if (process.env.EXPECT_REFUSAL) namedExports.connectProjectionDb = forbidden;
 mock.module('@opencrane/projections', { namedExports });
-process.on('exit', function report() { process.stdout.write('effects:' + effects + '\\n'); });
+process.on('exit', function report() {
+  if ((process.env.CHANGE_HISTORY || process.env.CHANGE_INVENTORY || process.env.CHANGE_IDENTITY)
+      && injected === 0) effects++;
+  if (process.env.CHANGE_IDENTITY && injected !== 2) effects++;
+  process.stdout.write('effects:' + effects + '\\n');
+});
 `;
   await writeFile(`${directory}/guard.mjs`, guard);
 }
@@ -199,6 +255,35 @@ it.each(matchingDamage)('refuses matching %s surviving custody in both folders',
     }
     await resetCandidate(damagedSource);
     const settings = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: damagedSource, EXPECT_REFUSAL: '1' };
+    await expect(run(settings)).rejects.toMatchObject({
+      stdout: 'effects:0\n', stderr: refused,
+    });
+    const tables = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
+    expect(tables.rows).toEqual([]);
+  });
+
+const lateRefusals = ['root-1', 'root-2', 'child-3', 'key-identity', 'source-history', 'target-history',
+  'source-inventory', 'candidate-inventory'] as const;
+it.each(lateRefusals)('refuses %s before decrypting an earlier surviving fact',
+  async function refuseBeforeDecryption(fault) {
+    const changedSource = `${directory}/late-${fault}`;
+    await cp(sourceDirectory, changedSource, { recursive: true });
+    const settings: NodeJS.ProcessEnv = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: changedSource,
+      EXPECT_REFUSAL: '1', EXPECT_NO_DECRYPT: '1' };
+    if (fault === 'key-identity') {
+      settings['CHANGE_IDENTITY'] = '1';
+    } else if (fault === 'source-history') {
+      settings['CHANGE_HISTORY'] = 'source';
+    } else if (fault === 'target-history') {
+      settings['CHANGE_HISTORY'] = 'target';
+    } else if (fault === 'source-inventory') {
+      settings['CHANGE_INVENTORY'] = changedSource;
+    } else if (fault === 'candidate-inventory') {
+      settings['CHANGE_INVENTORY'] = candidate;
+    } else {
+      await rm(`${changedSource}/${references.get(fault)!}`);
+    }
+    await resetCandidate(changedSource);
     await expect(run(settings)).rejects.toMatchObject({
       stdout: 'effects:0\n', stderr: refused,
     });
