@@ -1,0 +1,1 @@
+- Memory-derived bridge replies now become text-free unavailable status with normal acknowledgements, so retrying or reconnecting cannot save their private text or block other chats. Requester-only private delivery remains planned and memory admission stays disabled.

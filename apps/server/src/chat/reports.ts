@@ -13,6 +13,7 @@ import { chatWrite } from './write-priority.ts';
 
 // Permanent refusals need operator attention; reconnecting cannot repair them.
 export class ReportRejected extends Error {}
+class MemoryReportRejected extends ReportRejected {}
 
 const existingReportSchema = z.object({ sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
@@ -93,6 +94,39 @@ export async function recordReports(store: EventStore, keys: ReturnType<typeof c
   return recordReport(store, keys, context, combined, reports);
 }
 
+export async function recordBridgeReports(store: EventStore,
+  keys: ReturnType<typeof conversationKeys>, context: ReportContext, values: unknown[]) {
+  try {
+    return await recordReports(store, keys, context, values);
+  } catch (error) {
+    if (!(error instanceof MemoryReportRejected)) {
+      throw error;
+    }
+    // Consume unavailable output without saving its bytes or a hash of those bytes.
+    // Keep malformed status reports and command hashes permanently refused.
+    const losses = [];
+    for (const value of values) {
+      const report = reportSchema.parse(value);
+      if (!['agent.message_delta', 'agent.message_completed', 'agent.reasoning_summarised']
+        .includes(report.type) || ('commandDigest' in report && report.commandDigest !== undefined)) {
+        throw error;
+      }
+      const loss = { type: 'agent.output_lost', sequence: report.sequence,
+        previousSequence: report.previousSequence, conversationId: report.conversationId,
+        turnId: report.turnId, assistantId: context.assistantId };
+      losses.push(loss);
+    }
+    let result: 'recorded' | 'duplicate' = 'duplicate';
+    for (const loss of losses) {
+      const saved = await recordReport(store, keys, context, loss);
+      if (saved === 'recorded') {
+        result = saved;
+      }
+    }
+    return result;
+  }
+}
+
 export async function reportPosition(store: EventStore, silo: string, computerId: string) {
   const sequences = new Set<number>();
   for await (const { event } of readEvents(store, 1, await store.head())) {
@@ -155,7 +189,7 @@ function requireMemoryFreeContent(report: Report, facts: ChatFacts) {
   const hasText = 'text' in report && report.text !== undefined;
   const hasCommandDigest = 'commandDigest' in report && report.commandDigest !== undefined;
   if (hasText || hasCommandDigest) {
-    throw new ReportRejected('Memory-bearing report content refused');
+    throw new MemoryReportRejected('Memory-bearing report content refused');
   }
 }
 
