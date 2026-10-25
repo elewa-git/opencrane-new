@@ -63,6 +63,11 @@ export async function configureBudget(actor: BudgetActor, binding: Binding,
     }
     await fresh();
   }
+  function currentDeadline() {
+    return fresh?.deadline;
+  }
+  // Share the exact deadline once history preparation creates the access check.
+  Object.defineProperty(confirmAccess, 'deadline', { get: currentDeadline });
   const { commandId, expectedSequence, ...payload } = budgetCommandSchema.parse(raw);
   const configuration = { ...payload, setBy: checked.memberId };
   const result = await actor.configure(configuration, commandId, expectedSequence, confirmAccess);

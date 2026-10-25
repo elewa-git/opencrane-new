@@ -92,15 +92,23 @@ export class BudgetActor {
     }
   }
 
-  configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number,
+  async configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number,
     fresh?: () => Promise<void>) {
+    const originalDeadline = knownAccessDeadline(fresh);
+    const preparationDeadline = Math.min(originalDeadline ?? Infinity, performance.now() + 10_000);
+    const preparing = prepareCeilingChange(this, raw, commandId, expectedSequence,
+      fresh, preparationDeadline);
+    const prepared = await withinBudgetDeadline(preparing, preparationDeadline);
     const save = async () => {
-      const prepared = await prepareCeilingChange(this, raw, commandId, expectedSequence, fresh);
       if (prepared.status !== 'ready') return prepared;
+      // Check again after queue waiting, because another command may have changed the revision.
+      if (expectedSequence !== undefined && expectedSequence !== this.state.sequence) {
+        return { status: 'conflict' as const };
+      }
       await this.append('budget.ceiling_set', prepared.payload, commandId, fresh);
       return this.ceilingReceipts.receipt(this.state);
     };
-    return this.serial(save, accessDeadline(fresh));
+    return this.serial(save, accessDeadline(fresh, originalDeadline));
   }
   setRootAllowance(raw: unknown, firstCallBoundCents: number, fresh?: () => Promise<void>,
     deadline?: number) {
@@ -498,8 +506,14 @@ function redundantTimeout(type: string, reason: string, rows: Awaited<ReturnType
 }
 
 function accessDeadline(checkAccess?: () => Promise<void>, deadline?: number) {
-  const original: unknown = deadline ?? Reflect.get(checkAccess ?? {}, 'deadline');
+  const original = deadline ?? knownAccessDeadline(checkAccess);
   const fallback = performance.now() + 2000;
   if (typeof original === 'number') return Math.min(original, fallback);
   return fallback;
+}
+
+function knownAccessDeadline(checkAccess?: () => Promise<void>) {
+  const deadline: unknown = Reflect.get(checkAccess ?? {}, 'deadline');
+  if (typeof deadline === 'number') return deadline;
+  return undefined;
 }

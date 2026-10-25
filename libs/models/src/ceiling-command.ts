@@ -28,11 +28,11 @@ export function ceilingReceiptFromHistory(row: StoredEvent, rows: StoredEvent[])
 export async function prepareCeilingChange(
   actor: { store: EventStore; silo: string; state: BudgetState },
   raw: unknown, commandId: string, expectedSequence?: number,
-  fresh?: (newCommand?: boolean) => Promise<void>,
+  fresh?: (newCommand?: boolean) => Promise<void>, deadline = performance.now() + 10_000,
 ) {
   const payload = budgetCeilingSetDataSchema.parse(raw);
   const subject = `budget-${actor.silo}`;
-  const rows = await history(actor.store, subject, actor.silo, performance.now() + 10_000);
+  const rows = await history(actor.store, subject, actor.silo, deadline);
   function matchesCommand(row: StoredEvent) {
     return row.event.commandId === commandId;
   }
@@ -43,7 +43,7 @@ export async function prepareCeilingChange(
     // Read the saved stop too; a replacement writer may have recorded this change.
     receipt = ceilingReceiptFromHistory(prior, rows);
   }
-  // Start the caller's write check only after history and queue waiting have finished.
+  // Start the caller's write check only after reading history.
   // Keep saved retries independent of choices that have since become unavailable.
   await fresh?.(!prior);
   if (prior) return receipt ?? { status: 'conflict' as const };
