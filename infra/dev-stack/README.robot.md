@@ -536,6 +536,12 @@ A record keeps the claim busy even before a namespace exists or after the launch
 and 15-minute grace period end. Uncertain Docker or Kubernetes state retains it.
 A partial target must be cleaned up before another creation attempt.
 
+`claim.test.ts` uses `test/claim-ports.mjs` in its child processes. It keeps the
+real port checker but gives its socket probes ports chosen by the operating system.
+The occupied-model-port case maps that probe to a real listener held by the test.
+All existing slot refusal and reclaim assertions still run. These fixtures can
+run beside a live secondary stack without using its ports or changing its processes.
+
 Commands capture output in memory and discard dependency errors. The kubeconfig
 and ownership file are mode 0600. Inspection takes at most ten seconds per command;
 creation has a 150-second command limit and a 120-second k3d limit. Node registration

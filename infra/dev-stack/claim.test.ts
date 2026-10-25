@@ -8,6 +8,13 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
+
+function claimEnvironment(home: string, busyPort = 0) {
+  const preload = new URL('./test/claim-ports.mjs', import.meta.url).href;
+  return { PATH: `${home}/bin:${process.env['PATH']}`, HOME: home,
+    NODE_OPTIONS: `--import=${preload}`, CLAIM_TEST_BUSY_PORT: String(busyPort) };
+}
+
 async function mockKubectl(bin: string) {
   const script = `#!/bin/sh
 case " $* " in
@@ -28,11 +35,13 @@ test('claim skips a slot with a held port and leaves it unclaimed', async () => 
   await writeFile(`${bin}/docker`, '#!/bin/sh\nexit 0\n');
   await chmod(`${bin}/docker`, 0o755);
   // Model-stub port: checking just the browser or database is insufficient.
-  const held = createServer().listen(25110, '127.0.0.1');
+  const held = createServer().listen(0, '127.0.0.1');
   try {
     await once(held, 'listening');
+    const address = held.address();
+    assert(address && typeof address !== 'string');
     const { stdout } = await exec('infra/dev-stack/claim.sh', {
-      env: { PATH: `${bin}:${process.env['PATH']}`, HOME: home },
+      env: claimEnvironment(home, address.port),
     });
     assert.equal(stdout.trim(), '2');
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-1`), { code: 'ENOENT' });
@@ -50,7 +59,7 @@ test('status leaves a free slot alone and claim reuses this worktree slot', asyn
   await mockKubectl(bin);
   await writeFile(`${bin}/docker`, '#!/bin/sh\nexit 0\n');
   await chmod(`${bin}/docker`, 0o755);
-  const env = { PATH: `${bin}:${process.env['PATH']}`, HOME: home };
+  const env = claimEnvironment(home);
   const slotDirectory = `${home}/.config/opencrane/dev-stack-1`;
   try {
     const status = await exec('infra/dev-stack/run.sh', ['status', '--id', '1'], { env });
@@ -88,7 +97,7 @@ async function createClaimFixture(runningContainer = false) {
   await chmod(`${bin}/docker`, 0o755);
   await writeFile(`${bin}/helm`, '#!/bin/sh\ncase " $* " in\n  *" list "*) printf "[]\\n" ;;\nesac\n');
   await chmod(`${bin}/helm`, 0o755);
-  const env = { PATH: `${bin}:${process.env['PATH']}`, HOME: home };
+  const env = claimEnvironment(home);
   return { home, slotDirectory, env };
 }
 
