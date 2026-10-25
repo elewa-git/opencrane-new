@@ -22,3 +22,8 @@ postgres:
   operatorContract: ""
   superuserSecret: ""
   applicationSecret: ""
+natsCluster:
+  enabled: false
+  renderOnly: false
+  routeCASecret: ""
+  peerCertificateSecrets: []

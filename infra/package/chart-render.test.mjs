@@ -251,6 +251,22 @@ function threePrivatePeers() {
     }
     assert.equal(mountedSecrets.get('route-ca'), values.natsCluster.routeCASecret);
     assert.equal(mountedSecrets.get('route-identity'), values.natsCluster.peerCertificateSecrets[index]);
+    assert.equal(mountedSecrets.size, 3);
+    assert.deepEqual(container.volumeMounts, [
+      { name: 'data', mountPath: '/data' },
+      { name: 'config', mountPath: '/etc/nats', readOnly: true },
+      { name: 'settings', mountPath: '/tls', readOnly: true },
+      { name: 'route-ca', mountPath: '/route-ca', readOnly: true },
+      { name: 'route-identity', mountPath: '/route-identity', readOnly: true },
+    ]);
+    for (const mount of container.volumeMounts) {
+      if (mount.name !== 'data') assert.equal(mount.readOnly, true);
+    }
+    const configuration = spec.volumes.find(isConfigurationVolume);
+    assert.deepEqual(configuration.projected.sources, [
+      { configMap: { name: 'nats-cluster' } },
+      { secret: { name: values.secrets.nats, items: [{ key: 'nats.conf', path: 'nats.conf' }] } },
+    ]);
     const env = peerEnvironment(peer);
     names.add(env.NATS_SERVER_NAME);
     assert.equal(env.NATS_ROUTE_ADVERTISE, `${peerDns(index)}:6222`);
@@ -281,6 +297,10 @@ function threePrivatePeers() {
     assert.notEqual(resource.kind, 'Ingress');
     assert.notEqual(resource.kind, 'Gateway');
   }
+}
+
+function isConfigurationVolume(volume) {
+  return volume.name === 'config';
 }
 
 function isDataMount(mount) {
@@ -323,6 +343,8 @@ for (const invalid of invalidClusters) {
 }
 
 async function validatesRenderedConfiguration() {
+  const fetched = spawnSync('sh', ['scripts/fetch-nats.sh'], { encoding: 'utf8' });
+  assert.equal(fetched.status, 0, 'The pinned NATS test server must be available');
   const resources = renderedResources(clusterValues());
   const config = resources.get('ConfigMap/nats-cluster').data['cluster.conf'];
   assert.equal(config, await readFile('infra/nats/cluster.conf', 'utf8'));
@@ -357,8 +379,14 @@ async function validatesRenderedConfiguration() {
       assert.equal(result.status, 0, 'Pinned NATS must accept the rendered DNS and TLS configuration');
       env.NATS_ROUTE_CA_FILE = `${directory}/absent.crt`;
       assert.notEqual(spawnSync('.tools/nats-server', args, { env }).status, 0);
-      delete env.NATS_ROUTE_CA_FILE;
-      assert.notEqual(spawnSync('.tools/nats-server', args, { env }).status, 0);
+      env.NATS_ROUTE_CA_FILE = `${directory}/routes/ca.crt`;
+      for (const name of ['NATS_ROUTE_CA_FILE', 'NATS_ROUTE_CERT_FILE', 'NATS_ROUTE_KEY_FILE',
+        'NATS_ROUTE_1', 'NATS_ROUTE_2', 'NATS_CA_FILE']) {
+        const incomplete = { ...env };
+        delete incomplete[name];
+        const refused = spawnSync('.tools/nats-server', args, { env: incomplete });
+        assert.notEqual(refused.status, 0, `NATS must refuse missing ${name}`);
+      }
     }
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -366,3 +394,22 @@ async function validatesRenderedConfiguration() {
 }
 test('pinned NATS validates rendered DNS and refuses missing route trust',
   validatesRenderedConfiguration);
+
+async function refusesClusterInstallation() {
+  const directory = await mkdtemp(join(tmpdir(), 'chart-install-'));
+  try {
+    const values = clusterValues();
+    const review = { chartVersion: values.chartVersion, images: values.images };
+    await writeFile(`${directory}/values.json`, JSON.stringify(values));
+    await writeFile(`${directory}/review.json`, JSON.stringify(review));
+    const args = ['infra/package/preflight.mjs', `${directory}/values.json`,
+      `${directory}/review.json`];
+    const result = spawnSync('node', args, { encoding: 'utf8' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Unsupported package setting/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('ordinary installer refuses even a complete cluster render configuration',
+  refusesClusterInstallation);

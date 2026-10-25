@@ -23,7 +23,7 @@ flowchart LR
   stack -->|reserves test space| package
   package -->|uses local cluster| devbox
   package -->|starts| apps["Website, server and workers<br/>product requests and background jobs"]
-  package -->|runs| services["Core services<br/>jobs, content, access and optional standby"]
+  package -->|runs| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
 ```
 
@@ -46,6 +46,7 @@ installation files only. Credential preparation and a running install still need
 - Uses fixed, reviewed images and checks their licences before installation.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
 - Refuses missing private settings and public network access.
+- Renders an optional three-peer event log for inspection, with separate storage and certificates.
 - Gives computers the private gateway address and short-lived access passes.
 - Removes only this worktree's install, including after an interrupted launcher.
 
@@ -80,6 +81,10 @@ infra/package/forward.sh
 infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"
 infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 ```
+
+The optional event-log render describes three private NATS peers on separate Kubernetes
+nodes. Installation still uses one peer. Three-peer setup and live checks are not built yet;
+the ordinary installer refuses that mode.
 
 The chart render test needs Helm and checks the installation files without starting
 an install. It uses made-up settings. The [operator notes](README.robot.md) give the command.

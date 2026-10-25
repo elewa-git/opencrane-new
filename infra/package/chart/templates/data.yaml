@@ -68,6 +68,7 @@ spec:
         resources:
           requests: { storage: 1Gi }
 {{- end }}
+{{- if not .Values.natsCluster.enabled }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -106,3 +107,4 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests: { storage: 1Gi }
+{{- end }}

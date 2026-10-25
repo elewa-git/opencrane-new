@@ -1,0 +1,104 @@
+{{- if .Values.natsCluster.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-cluster
+data:
+  cluster.conf: |
+{{ .Files.Get "cluster.conf" | indent 4 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nats
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: { app: nats }
+{{- range $index, $certificate := .Values.natsCluster.peerCertificateSecrets }}
+{{- $peer := printf "nats-%d" $index }}
+{{- $dns := printf "%s-0.nats-routes.%s.svc.cluster.local" $peer $.Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $peer }}
+spec:
+  serviceName: nats-routes
+  replicas: 1
+  selector:
+    matchLabels: { app: nats, peer: {{ $peer }} }
+  template:
+    metadata:
+      labels: { app: nats, peer: {{ $peer }} }
+    spec:
+      securityContext: { fsGroup: 1000 }
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: { app: nats }
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: nats
+          image: {{ $.Values.images.nats | quote }}
+          args: [-c, /etc/nats/cluster.conf]
+          envFrom:
+            - secretRef: { name: {{ $.Values.secrets.nats | quote }} }
+          env:
+            - { name: NATS_SERVER_NAME, value: {{ $peer | quote }} }
+            - { name: NATS_CLUSTER_NAME, value: "opencrane" }
+            - { name: NATS_STORE_DIR, value: "/data" }
+            - { name: NATS_ROUTE_LISTEN, value: "0.0.0.0:6222" }
+            - { name: NATS_ROUTE_ADVERTISE, value: {{ printf "%s:6222" $dns | quote }} }
+            - { name: NATS_ROUTE_CA_FILE, value: "/route-ca/ca.crt" }
+            - { name: NATS_ROUTE_CERT_FILE, value: "/route-identity/tls.crt" }
+            - { name: NATS_ROUTE_KEY_FILE, value: "/route-identity/tls.key" }
+{{- $route := 0 }}
+{{- range $other := until 3 }}
+{{- if ne $other $index }}
+{{- $route = add1 $route }}
+            - name: NATS_ROUTE_{{ $route }}
+              value: {{ printf "nats-route://nats-%d-0.nats-routes.%s.svc.cluster.local:6222" $other $.Release.Namespace | quote }}
+{{- end }}
+{{- end }}
+          ports: [{ containerPort: 4222 }, { containerPort: 6222 }]
+          readinessProbe:
+            tcpSocket: { port: 4222 }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /etc/nats, readOnly: true }
+            - { name: settings, mountPath: /tls, readOnly: true }
+            - { name: route-ca, mountPath: /route-ca, readOnly: true }
+            - { name: route-identity, mountPath: /route-identity, readOnly: true }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: config
+          projected:
+            sources:
+              - configMap:
+                  name: nats-cluster
+              - secret:
+                  name: {{ $.Values.secrets.nats | quote }}
+                  items: [{ key: nats.conf, path: nats.conf }]
+        - name: settings
+          secret: { secretName: {{ $.Values.secrets.nats | quote }} }
+        - name: route-ca
+          secret:
+            secretName: {{ $.Values.natsCluster.routeCASecret | quote }}
+            items: [{ key: ca.crt, path: ca.crt }]
+        - name: route-identity
+          secret:
+            secretName: {{ $certificate | quote }}
+            items: [{ key: tls.crt, path: tls.crt }, { key: tls.key, path: tls.key }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 1Gi }
+{{- end }}
+{{- end }}

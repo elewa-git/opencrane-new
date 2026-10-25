@@ -224,3 +224,54 @@ refusal keeps that path closed. No bootstrap or event-store behaviour changes he
 The [receipt](../../docs/process/p5-3-pr1/receipt.md) records checks and limits.
 Backup/WAL, all-database restore, storage denial, live standby and promotion remain
 NOT RUN under #15. Rendering is not live k3d proof.
+
+## Three-peer NATS rendering
+
+P5-4 PR 2 adds an opt-in render path. It does not install or qualify R3. The
+ordinary installer still rejects `natsCluster` as an unsupported package setting,
+even with complete references. Preparation and bootstrap still request R1.
+The cluster render omits the R1 bootstrap Job. Other application templates are
+unchanged and are not ready for an R3 installation. Never apply this output as a
+working package. Provisioning, R3 runtime wiring and image promotion come later.
+
+These chart-only settings are added to an otherwise complete values file:
+
+| Setting | Default | Required for the cluster render |
+| --- | --- | --- |
+| `natsCluster.enabled` | `false` | `true` |
+| `natsCluster.renderOnly` | `false` | `true`; otherwise rendering refuses |
+| `natsCluster.routeCASecret` | empty | Separate Secret containing only public route trust in `ca.crt` |
+| `natsCluster.peerCertificateSecrets` | empty list | Three distinct Secrets, ordered 0–2, each with `tls.crt` and `tls.key` |
+
+The chart renders three one-replica StatefulSets, `nats-0` through `nats-2`.
+Their Pods are `nats-0-0` through `nats-2-0`; each gets its own `data` PVC.
+Required anti-affinity places peers on different Kubernetes nodes. Fewer than
+three eligible nodes leaves Pods pending. The disruption budget keeps at least
+two ready Pods during voluntary eviction. A TCP readiness probe checks the client
+listener only; it does not prove an R3 stream or a working quorum.
+
+The private headless Service `nats-routes` publishes addresses before readiness
+so peers can discover each other during startup. Peer `i` advertises
+`nats-i-0.nats-routes.<namespace>.svc.cluster.local:6222` and lists the other two
+addresses explicitly. This render assumes Kubernetes' `cluster.local` DNS domain.
+Each certificate must cover that peer's full DNS name and have both `serverAuth`
+and `clientAuth` usages. Only that peer mounts its certificate Secret.
+Route trust must contain a separate route-only issuer, never the client CA.
+The chart rejects reused Secret names, but offline rendering cannot inspect
+certificate contents or prove which issuer signed them. Issuer custody and
+certificate issuance remain prerequisites for later provisioning.
+
+The ConfigMap uses a chart copy of `infra/nats/cluster.conf`; the render test
+requires byte-for-byte equality. It includes the existing `nats.conf` from
+`secrets.nats`, preserving client TLS and account permissions. Client files and
+public NKey settings still come from that Secret. Route trust, identity, addresses
+and storage are set explicitly per peer. Required Secret keys have no optional
+fallback. No signing key belongs in the route trust Secret.
+
+`chart-render.test.mjs` checks the real Helm output and uses the pinned NATS server
+to parse each peer's configuration with disposable certificates. It checks missing
+trust refusals, storage, node separation rules, private services, the disruption
+budget and unchanged default rendering. `preflight.test.mjs` checks the ordinary
+installer's refusal. Existing event-store cluster tests retain real TLS refusals.
+[The receipt](../../docs/process/p5-4-pr2/receipt.md) separates source checks from
+three-node placement, R3 bootstrap, rotation and P5-5, all still NOT RUN.

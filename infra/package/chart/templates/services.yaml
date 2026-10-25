@@ -51,3 +51,16 @@ spec:
   type: ClusterIP
   selector: { app: web }
   ports: [{ port: 80, targetPort: 8080 }]
+{{- if .Values.natsCluster.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-routes
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: nats }
+  ports: [{ name: routes, port: 6222, targetPort: 6222 }]
+{{- end }}
