@@ -1,0 +1,1 @@
+- Add two-server realtime tests for ordered reconnect, saved access removal and demotion, permission-service outage and projection repair. Packaged replica qualification remains outstanding.

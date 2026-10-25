@@ -415,6 +415,11 @@ The browser can reconnect and keep the chat. Losing access still clears its cont
 
 ## How to run or test it
 
+The realtime tests start two server processes with shared disposable services.
+They check that a member-list connection resumes on the other server, and that
+saved access changes still refuse it when database and permission updates lag.
+These tests do not qualify a packaged installation.
+
 ```sh
 npm start -w apps/server
 npm run models -w apps/server

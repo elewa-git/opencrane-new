@@ -1159,6 +1159,28 @@ Changes have no pruning yet. An equal online rebuild keeps its generation,
 so clients retaining positions can resume without reloading.
 Multi-replica fan-out over NATS core is **not implemented**.
 
+`test/realtime-replicas.test.ts` starts two `main.ts` processes with distinct PIDs
+and ports. They share real disposable NATS, PostgreSQL projections and OpenFGA.
+The existing PostgreSQL feed replays the accepted position and generation on the
+second server after the first stops. A held database read places a saved change
+during reconnect; changes before disconnect and after catch-up are checked too.
+Saved removal and demotion refuse reconnect while both read services still grant
+admin access. OpenFGA outage closes/refuses without protected delivery. Unrelated
+conversation activity keeps the authorised member feed open. Projection repair
+uses the existing resync and generation protocol.
+
+The checker rejects repeated processes/ports, missing, duplicated, reordered or
+changed deliveries, stale-generation acceptance and protected records around
+refusal. Test annotations contain only process/member ids, ports, positions,
+generations and close outcomes. Socket waits stop after five seconds; process
+startup/shutdown use `test/support/process.ts` bounds. No production behaviour,
+event/API names or access deadlines change.
+
+P5-10 PR 1 is process-level source proof only. Packaged replicas, budget failover,
+gateway/live-view/browser/network isolation and scanner consumers remain NOT RUN.
+Full row qualification still needs P5-5 and P5-6b. See the
+[run record](../../docs/process/p5-10-pr1/receipt.md).
+
 ## Organisation integrations
 
 `GET /api/org/integrations` requires the encrypted session cookie, the configured silo and
