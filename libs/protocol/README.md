@@ -22,6 +22,9 @@ reply flag says whether the tool replied; it grants no permission to repeat the 
 Change history also carries the saved settled or released choice and amount.
 The amount may be zero; it does not report a completed payment or hold release.
 
+Current effect pages carry original payer and assistant references, states and held or settled cents.
+A saved resolution can stay pending while its hold remains. These states do not prove outside success.
+
 Saved effect pages keep observations, uncertainty and resolutions separate. Amounts use integer euro cents, and a missing amount differs from zero.
 
 ## Where it fits
@@ -31,7 +34,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.->|chat, approval and other replies| protocol["libs/protocol<br/>shared reply shapes"]
-  server["apps/server<br/>back end"] -.->|saved spending, effects and current accounting replies| protocol
+  server["apps/server<br/>back end"] -.->|saved spending, current effect pages and accounting replies| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]

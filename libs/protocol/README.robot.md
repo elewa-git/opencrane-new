@@ -426,3 +426,11 @@ An `applying` result includes the check time and optional position/generation, w
 money. An `unavailable` result includes only status and check time. No result claims
 that the saved resolution caused current accounting or that execution finished.
 The saved resolution fields remain separate. Older replies can omit this field.
+
+## Current effect pages
+
+`currentEffectsQuerySchema` accepts only limit and continuation.
+`currentEffectsResponseSchema` checks bounded rows with safe state, integer euro cents
+and positions. Null settlement differs from zero. Extra fields are refused.
+See the [current effect API](../../apps/server/README.robot.md#bounded-current-effect-pages)
+for access, deadlines, continuation bindings and failure replies.

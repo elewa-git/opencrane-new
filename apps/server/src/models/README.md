@@ -4,6 +4,7 @@ This folder lets owners and admins choose who may use each AI model. It serves t
 
 ## What it is responsible for
 
+- Returns bounded current effect states with original payers and held or settled cents.
 - Returns bounded saved effect records separately from current effect state.
 - Returns bounded call spending pages to current owners and admins, optionally by original UTC month.
 - Lists recorded model access and suitable recipients from the same customer installation.
@@ -19,6 +20,7 @@ Admins can revoke a departed person's grant. Revoking access that is already abs
 | File | What it does |
 | --- | --- |
 | [access-routes.ts](access-routes.ts) | Registers model, tool-access and destination requests and checks organisation access. |
+| [current-effects.ts](current-effects.ts) | Reads current effect pages and checks finance access. |
 | [spending-effects.ts](spending-effects.ts) | Reads saved effect records and checks current finance access. |
 | [spending.ts](spending.ts) | Reads call spending and checks current finance access. |
 | [access-changes.ts](access-changes.ts) | Saves model grants and recovers their original results. |

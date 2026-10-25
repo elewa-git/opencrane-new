@@ -112,3 +112,5 @@ export { spendingCallsQuerySchema, spendingCallsResponseSchema,
   type SpendingCallsQuery, type SpendingCallsResponse } from './spending.ts';
 export { spendingEffectsQuerySchema, spendingEffectsResponseSchema,
   type SpendingEffectsQuery, type SpendingEffectsResponse } from './spending-effects.ts';
+export { currentEffectsQuerySchema, currentEffectsResponseSchema,
+  type CurrentEffectsQuery, type CurrentEffectsResponse } from './current-effects.ts';

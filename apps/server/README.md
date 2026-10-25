@@ -64,7 +64,7 @@ flowchart LR
   server -->|reads own saved profiles and original change, publication and selection receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads conversations, spending by month, history, current accounting and exact membership receipts| postgres
+  server -->|reads conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
@@ -143,6 +143,10 @@ can be used now is checked separately. Missing evidence never means it is safe t
 Members can recover their own original account selection or clear receipt by its
 change reference. Later choices do not replace it. Reading requires current silo
 membership and changes nothing. Missing evidence stays unknown and never permits a resend.
+
+Owners and admins can page through current effect states and held or settled cents.
+The server checks current access after loading, even when the data is unavailable.
+These pages preserve old holds and never repeat an outside action.
 
 A person lists their own routines in small pages. Admins using this list also see only
 their own routines. Changes to another owner’s routines do not restart these pages.
