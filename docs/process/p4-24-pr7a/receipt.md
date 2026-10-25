@@ -71,3 +71,52 @@ The security field-name rule and both authority test files are unchanged.
 
 NOT RUN: full root suite, fresh-install live qualification, stacks and model calls.
 CI will not be awaited after the draft PR is opened.
+
+## Access and fixture corrections
+
+Rebased onto `5d3bfadc5` and confirmed that it is an ancestor of this branch.
+The rebase finished with a clean worktree before these corrections.
+
+Provider inventory now loads inside the deferred dependency preparation. A separate
+read takes only the requested provider's creation record for its permission check.
+Current membership and provider permission are checked before reporting an inventory
+failure. Removed administrators, ordinary members and callers requesting a missing
+provider still receive 403. An authorised administrator receives a fixed 503 response.
+Execution remains disabled.
+
+Test-only commit `9e1c66fcd` came first. Nine assertions failed with 503 instead of 403
+for failed, expired and malformed inventory reads. The three authorised-administrator
+cases passed. After the fix, all 12 cases passed. They also check that private error
+details stay out of replies and logs and that no events are appended.
+
+Test-only commit `bdf4ca6b6` added a healthy GET before each assistant-lag,
+assistant-change and provider-change fault. All three failed because the fixture
+lacked routine data. Initialising the routine projection supplies its table and
+checkpoint. All three then passed, including their original 503 assertions.
+
+The correction checks use `nice -n 10` and one test worker. They use disposable NATS
+and OpenFGA fixtures and a dedicated PostgreSQL 17.6 container,
+`pgtest-p4-24-pr7a-fixes`, on random loopback port 39719. This follows the throwaway
+database instruction. No owner stack, secondary dev stack or model call is used.
+The throwaway database container and volume were removed with `docker rm -f -v`.
+
+| Correction check | Result |
+| --- | --- |
+| Inventory error regressions | PASS, 12 cases after the expected failing run |
+| Healthy reads before history faults | PASS, three cases after the expected failing run |
+| Provider presence, bindings, guards and drain suites | PASS, 116 tests twice |
+| Workspace, package and dev-stack typechecks | PASS |
+| Full lint pipeline, including Knip | PASS, zero errors and 25 existing code warnings |
+| Event catalogue | PASS, 154 event types agree |
+| Changelog | PASS |
+
+Both complete provider runs use the same final code. Logs are
+`/tmp/p4-24-pr7a-fixes-pass1.log` and `/tmp/p4-24-pr7a-fixes-pass2.log`.
+The test-first logs are `/tmp/p4-24-pr7a-fix1-red.log` and
+`/tmp/p4-24-pr7a-fix2-red.log`; their targeted passing runs replace `red` with `green`.
+Other check logs use `/tmp/p4-24-pr7a-fixes-` followed by `typecheck`, `events`,
+`changelog` or `lint`, and `.log`.
+
+NOT RUN in this correction: full root suite and fresh-install live qualification.
+The earlier routine-worker result above is unchanged; that suite was not rerun here.
+The PR remains a draft. CI will not be awaited after pushing.
