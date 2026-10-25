@@ -64,17 +64,17 @@ function runUpdater(candidate) {
     stdio: ['ignore', 'pipe', 'pipe'],
   };
   try {
-    return execFileSync('docker', args, options);
+    const output = execFileSync('docker', args, options);
+    return { output, containerStopped: true };
   } catch {
     // Remove the container too: stopping a timed-out Docker client alone leaves it running.
     const cleanupOptions = { timeout: 30_000, stdio: 'ignore' };
     try {
       execFileSync('docker', ['rm', '-f', '-v', containerName], cleanupOptions);
     } catch {
-      // Keep the same refusal if Docker is unavailable; never publish partial evidence.
-      throw new Error(refusal);
+      return { containerStopped: false };
     }
-    throw new Error(refusal);
+    return { containerStopped: true };
   }
 }
 
@@ -224,6 +224,7 @@ async function refresh(candidate) {
   await mkdir(lock);
   const removeFileOptions = { force: true };
   const removeDirectoryOptions = { recursive: true, force: true };
+  let containerStopped = true;
   try {
     // Remove previous success before updating any file, even if this attempt fails later.
     await rm(join(candidate, 'signatures.json'), removeFileOptions);
@@ -235,10 +236,13 @@ async function refresh(candidate) {
       requireEvidence(status.isFile());
     }
     const startedAt = Date.now();
-    const output = runUpdater(candidate);
+    containerStopped = false;
+    const updater = runUpdater(candidate);
+    containerStopped = updater.containerStopped;
+    requireEvidence(typeof updater.output === 'string');
     const checkedAt = Date.now();
     requireEvidence(checkedAt >= startedAt && checkedAt - startedAt <= deadlineMs);
-    const manifest = await buildManifest(candidate, output, checkedAt);
+    const manifest = await buildManifest(candidate, updater.output, checkedAt);
     const completedAt = Date.now();
     requireEvidence(completedAt >= checkedAt && completedAt - startedAt <= deadlineMs);
     const encoded = JSON.stringify(manifest, null, 2) + '\n';
@@ -248,7 +252,10 @@ async function refresh(candidate) {
     await writeFile(temporary, encoded, manifestOptions);
     await rename(temporary, join(candidate, 'signatures.json'));
   } finally {
-    await rm(lock, removeDirectoryOptions);
+    // Keep the lock if an updater may still be writing to the candidate files.
+    if (containerStopped) {
+      await rm(lock, removeDirectoryOptions);
+    }
   }
 }
 

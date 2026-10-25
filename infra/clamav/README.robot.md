@@ -59,8 +59,11 @@ missing, duplicate, symbolic-link or altered databases. Each file is at most
 512 MiB, captured tool output at most 1 MiB, and the manifest at most 8 KiB.
 The update and verification have a 15-minute limit; container cleanup has a
 30-second limit. The candidate directory must be private to the packaging job.
-A directory lock prevents concurrent helper runs. After an interrupted run, the
-operator confirms its updater container has stopped before removing a leftover
+A directory lock prevents concurrent helper runs. If the Docker client fails,
+the helper attempts to remove its container. Failed cleanup keeps the lock and
+blocks later attempts because the updater may still be writing candidate files.
+After failed cleanup or an interrupted run, the operator confirms its updater
+container has stopped before removing a leftover
 `.refresh-lock` directory. Starting another attempt removes both the old JSON
 manifest and the former `signatures.sha256` before running the updater. The new
 JSON is renamed into place only after every check passes.
@@ -70,3 +73,5 @@ binding, immutable loaded databases, HTTPS, expiry during scans and consumer
 admission remain later work. Copying this JSON never makes it trusted or newer.
 Tests in `scripts/clamav-refresh.test.mjs` use temporary files and updater fixtures;
 they are not live upstream, clean/EICAR or two-silo qualification.
+The Docker fixture also checks that failed container cleanup blocks a retry and
+successful cleanup allows one. It does not induce a real Docker connection failure.

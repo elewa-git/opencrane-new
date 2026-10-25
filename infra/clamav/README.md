@@ -49,6 +49,10 @@ build dates, hashes and the successful update-check time. Unchanged files keep t
 original build dates. A failed refresh removes the previous candidate record.
 This file is evidence for review; it does not authorise uploads or image admission.
 
+If updater cleanup fails, the directory stays locked to prevent another updater
+from changing the same files. An operator must confirm the updater has stopped
+before removing the lock, as described in [README.robot.md](README.robot.md).
+
 ```sh
 infra/dev-stack/up.sh
 nice -n 10 npm test -- apps/server/test/upload.test.ts
