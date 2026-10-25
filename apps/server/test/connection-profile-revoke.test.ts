@@ -1,10 +1,10 @@
+import { OpenFgaClient } from '@openfga/sdk';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import type { FastifyRequest } from 'fastify';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
-import { TupleClient, type Tuple } from '../../../libs/authz/src/client.ts';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { envelope, history, foldConnection } from '@opencrane/models';
 import * as custody from '../../../libs/models/src/connection-custody.ts';
@@ -384,7 +384,7 @@ it('refuses a stale revision of an otherwise usable profile', staleSequence);
 async function onePermissionCheck(outcome: string) {
   const fixture = await saved();
   const read = nats.store.readStream.bind(nats.store);
-  const client = new TupleClient(binding);
+  const client = new OpenFgaClient(binding);
   const check = client.check.bind(client);
   let prepared = false;
   let checks = 0;
@@ -402,7 +402,8 @@ async function onePermissionCheck(outcome: string) {
     }
     yield* read(subject, from, deadline);
   }
-  async function permission(tuple: Tuple) {
+  async function permission(...args: Parameters<typeof check>) {
+    const [tuple] = args;
     if (tuple.relation === 'member') {
       checks += 1;
       if (!prepared) {
@@ -411,15 +412,16 @@ async function onePermissionCheck(outcome: string) {
       if (denied) {
         throw new Error(privateCanary);
       }
-      if (prepared && outcome === 'denied permission') {
-        denied = true;
-        return { status: 'ok' as const, allowed: false };
-      }
     }
-    return check(tuple);
+    const result = await check(...args);
+    if (tuple.relation === 'member' && prepared && outcome === 'denied permission') {
+      denied = true;
+      return { ...result, allowed: false };
+    }
+    return result;
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(prepare);
-  vi.spyOn(TupleClient.prototype, 'check').mockImplementation(permission);
+  vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(permission);
   const writes = vi.spyOn(nats.store, 'append');
   try {
     let expectedStatus = 503;

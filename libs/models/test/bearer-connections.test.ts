@@ -1,7 +1,7 @@
+import { OpenFgaClient } from '@openfga/sdk';
 import { z } from 'zod';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
-import { TupleClient, type Tuple } from '../../authz/src/client.ts';
 import { databases, openfga } from '@opencrane/authz/testing';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -278,15 +278,16 @@ async function finalRevokeCheck(outcome: string) {
   const test = fixture();
   const created = await test.save();
   const input = controlInput(test, created.sequence);
-  const client = new TupleClient(binding);
+  const client = new OpenFgaClient(binding);
   const check = client.check.bind(client);
   const head = nats.store.head.bind(nats.store);
   let permitted = false;
   let finalReads = 0;
   let pendingReads = 0;
   let expired = false;
-  async function permission(tuple: Tuple) {
-    const result = await check(tuple);
+  async function permission(...args: Parameters<typeof check>) {
+    const [tuple] = args;
+    const result = await check(...args);
     if (tuple.relation === 'member' && result.allowed) {
       permitted = true;
     }
@@ -312,7 +313,7 @@ async function finalRevokeCheck(outcome: string) {
     }
     return sequence;
   }
-  vi.spyOn(TupleClient.prototype, 'check').mockImplementation(permission);
+  vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(permission);
   vi.spyOn(nats.store, 'head').mockImplementation(changedHead);
   const writes = vi.spyOn(nats.store, 'append');
   try {
