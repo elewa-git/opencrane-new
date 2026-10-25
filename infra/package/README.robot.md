@@ -333,7 +333,11 @@ Limits are 64 MiB each for scanned event bytes and snapshot bytes, 100,000 event
 1 MiB per management reply, two seconds per request and 60 seconds overall.
 Tests can tighten the byte/time bounds. Connection setup shares the command's
 60-second deadline; a 65-second process limit also bounds shutdown. SIGINT/SIGTERM
-cancel capture. Lost connections, missing final chunks, malformed replies, holes,
+cancel capture. Snapshot messages with failure status headers refuse, including
+empty final messages with status 500 (block read failure) or 408 (acknowledgement
+timeout). These failures remove partial output and publish no descriptor. Errors
+never include the server's status description.
+Lost connections, missing final chunks, malformed replies, holes,
 changed creation time, configuration or retained positions refuse. The command
 saves no consumer state and never changes admission or resumes work.
 

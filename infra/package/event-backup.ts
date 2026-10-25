@@ -137,6 +137,8 @@ async function receiveSnapshot(connection: NatsConnection, archive: number,
     try {
       bounds.check();
       if (error || finalReceived) throw refusal();
+      // Reject NATS failure statuses before an empty message can mark the archive complete.
+      if (message.headers?.hasError) throw refusal();
       if (message.data.length === 0) {
         finalReceived = true;
         completed.resolve();

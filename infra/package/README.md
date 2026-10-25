@@ -93,7 +93,8 @@ an install. It uses made-up settings. The [operator notes](README.robot.md) give
 
 The operator event-copy command saves native NATS bytes and a private description
 of their source, positions and checksums. It refuses a log that changes during
-capture. Stable positions do not prove that writers stopped. This is only the
+capture or a snapshot that NATS reports as failed, and removes partial output.
+Stable positions do not prove that writers stopped. This is only the
 event part of recovery; database, file and computer-volume backups still need work.
 The [operator notes](README.robot.md#event-byte-export) describe its limits.
 
