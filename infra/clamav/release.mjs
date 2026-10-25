@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { inspectionScript, toolImage, verifyDatabases } from './refresh.mjs';
 
 const refusal = 'Scanner release refused';
@@ -24,10 +25,10 @@ function timestamp(value) {
   return milliseconds;
 }
 
-function validateManifest(manifest, now) {
+export function validateManifest(manifest, now) {
   requireEvidence(manifest.formatVersion === 1 && manifest.toolImage === toolImage);
   const updatedAt = timestamp(manifest.databaseUpdatedAt);
-  requireEvidence(updatedAt <= now && now - updatedAt <= maxAgeMs);
+  requireEvidence(updatedAt <= now && now - updatedAt < maxAgeMs);
   const evidence = manifest.updaterEvidence;
   requireEvidence(evidence.tool === 'FreshClam' && evidence.exitCode === 0 &&
     Array.isArray(evidence.databases) && Array.isArray(manifest.databases) &&
@@ -45,37 +46,42 @@ function validateManifest(manifest, now) {
   }
 }
 
-async function readApprovedManifest(path, approvedSha) {
-  requireEvidence(/^[a-f0-9]{64}$/.test(approvedSha));
+export async function readBoundedBytes(path, maximum = 8192) {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const status = await handle.stat();
-    requireEvidence(status.isFile() && status.size > 0 && status.size <= 8192);
-    const buffer = Buffer.alloc(8193);
+    requireEvidence(status.isFile() && status.size > 0 && status.size <= maximum);
+    const buffer = Buffer.alloc(maximum + 1);
     const { bytesRead } = await handle.read(buffer);
     requireEvidence(bytesRead === status.size);
-    const bytes = buffer.subarray(0, bytesRead);
-    const hash = createHash('sha256');
-    hash.update(bytes);
-    requireEvidence(hash.digest('hex') === approvedSha);
-    return JSON.parse(bytes.toString('utf8'));
+    return buffer.subarray(0, bytesRead);
   } finally {
     await handle.close();
   }
 }
 
-function docker(args) {
-  const options = { encoding: 'utf8', timeout: deadlineMs, maxBuffer: 1024 * 1024,
+export async function readApprovedManifest(path, approvedSha) {
+  requireEvidence(/^[a-f0-9]{64}$/.test(approvedSha));
+  const bytes = await readBoundedBytes(path);
+  const hash = createHash('sha256');
+  hash.update(bytes);
+  requireEvidence(hash.digest('hex') === approvedSha);
+  return JSON.parse(bytes.toString('utf8'));
+}
+
+export function docker(args, timeout = deadlineMs) {
+  const options = { encoding: 'utf8', timeout, maxBuffer: 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'] };
   return execFileSync('docker', args, options);
 }
 
-function removeContainers(containers) {
+export function removeContainers(containers) {
   let stopped = true;
-  for (const name of containers) {
+  for (const name of [...containers]) {
     try {
       const options = { timeout: 30_000, stdio: 'ignore' };
       execFileSync('docker', ['rm', '-f', '-v', name], options);
+      containers.splice(containers.indexOf(name), 1);
     } catch {
       // Keep the private attempt directory if Docker cannot confirm removal.
       stopped = false;
@@ -84,7 +90,7 @@ function removeContainers(containers) {
   return stopped;
 }
 
-async function reserveContainer(lock, containers) {
+export async function reserveContainer(lock, containers) {
   const name = `clamav-release-${randomUUID()}`;
   containers.push(name);
   const options = { mode: 0o600 };
@@ -93,7 +99,6 @@ async function reserveContainer(lock, containers) {
 }
 
 async function inspectImage(image, lock, containers, manifest) {
-  const directory = join(lock, 'databases');
   const imageId = docker(['image', 'inspect', '--format', '{{.Id}}', image]).trim();
   requireEvidence(/^sha256:[a-f0-9]{64}$/.test(imageId));
   const scanner = await reserveContainer(lock, containers);
@@ -101,6 +106,11 @@ async function inspectImage(image, lock, containers, manifest) {
     '--entrypoint', '/bin/false', image]);
   const actualId = docker(['inspect', '--format', '{{.Image}}', scanner]).trim();
   requireEvidence(actualId === imageId);
+  await inspectContainer(scanner, lock, containers, manifest);
+}
+
+export async function inspectContainer(scanner, lock, containers, manifest, now = Date.now) {
+  const directory = join(lock, 'databases');
   // Copy only from the created image container, never a caller's database directory.
   docker(['cp', `${scanner}:/var/lib/clamav/.`, directory]);
   const files = await readdir(directory);
@@ -111,11 +121,11 @@ async function inspectImage(image, lock, containers, manifest) {
   }
   const inspector = await reserveContainer(lock, containers);
   const output = docker(['run', '--pull', 'never', '--name', inspector,
-    '--network', 'none', '--read-only',
+    '--network', 'none', '--read-only', '--log-driver', 'none',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--entrypoint', 'sh',
     '--mount', `type=bind,src=${directory},dst=/signatures,readonly`,
     '--workdir', '/signatures', toolImage, '-c', inspectionScript]);
-  const databases = await verifyDatabases(directory, output, Date.now(), manifest.updaterEvidence);
+  const databases = await verifyDatabases(directory, output, now(), manifest.updaterEvidence);
   requireEvidence(isDeepStrictEqual(databases, manifest.databases));
 }
 
@@ -165,12 +175,14 @@ async function release(manifestPath, approvedSha, image, destination) {
   }
 }
 
-try {
-  requireEvidence(process.argv.length === 6);
-  await release(...process.argv.slice(2));
-  process.stdout.write('Scanner release evidence recorded.\n');
-} catch {
-  // Discard tool output and underlying errors, which may contain private paths or identities.
-  process.stderr.write(`${refusal}\n`);
-  process.exitCode = 1;
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    requireEvidence(process.argv.length === 6);
+    await release(...process.argv.slice(2));
+    process.stdout.write('Scanner release evidence recorded.\n');
+  } catch {
+    // Discard tool output and underlying errors, which may contain private paths or identities.
+    process.stderr.write(`${refusal}\n`);
+    process.exitCode = 1;
+  }
 }

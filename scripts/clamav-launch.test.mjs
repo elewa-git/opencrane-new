@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-vi.mock('node:child_process', async function mockDocker(importOriginal) {
+async function mockDocker(importOriginal) {
   const original = await importOriginal();
   return { ...original, execFileSync: vi.fn(original.execFileSync) };
-});
+}
+vi.mock('node:child_process', mockDocker);
 
 const image = `scanner@sha256:${'a'.repeat(64)}`;
 const imageId = `sha256:${'b'.repeat(64)}`;
@@ -24,7 +25,9 @@ let realExec;
 let launchScanner;
 
 function hash(bytes) {
-  return createHash('sha256').update(bytes).digest('hex');
+  const digest = createHash('sha256');
+  digest.update(bytes);
+  return digest.digest('hex');
 }
 
 function approve() {
@@ -89,13 +92,17 @@ function docker(command, args) {
   return '';
 }
 
+function currentTime() {
+  return now;
+}
+
 async function setup() {
   vi.useFakeTimers();
   now = Date.parse('2026-10-25T12:00:00.000Z');
   scratch = mkdtempSync(join(tmpdir(), 'scanner-test-'));
   options = { image, manifestPath: join(scratch, 'manifest.json'),
     releasePath: join(scratch, 'release.json'), ownership: join(scratch, 'owner'),
-    clock: function clock() { return now; } };
+    clock: currentTime };
   manifest = { formatVersion: 1,
     toolImage: 'clamav/clamav-debian:1.5.2@' +
       'sha256:14e2e0805c6a5ff6728ea591c05565e0f0954d93e8701919012c3a8c44e20674',
@@ -106,9 +113,11 @@ async function setup() {
     const header = 'ClamAV-VDB:01 Jan 2020 00-00 +0000:42:1:90:hash:signature:builder:1577836800';
     const bytes = header.padEnd(512, ' ') + name;
     writeFileSync(join(scratch, file), bytes);
-    manifest.databases.push({ file, sha256: hash(bytes), version: 42,
-      builtAt: '2020-01-01T00:00:00.000Z' });
-    manifest.updaterEvidence.databases.push({ file, version: 42, result: 'up-to-date' });
+    const database = { file, sha256: hash(bytes), version: 42,
+      builtAt: '2020-01-01T00:00:00.000Z' };
+    const evidence = { file, version: 42, result: 'up-to-date' };
+    manifest.databases.push(database);
+    manifest.updaterEvidence.databases.push(evidence);
   }
   approve();
   commands = [];
@@ -123,23 +132,42 @@ async function cleanup() {
   mode = '';
   await session?.stop();
   vi.useRealTimers();
-  rmSync(scratch, { recursive: true, force: true });
+  const removeOptions = { recursive: true, force: true };
+  rmSync(scratch, removeOptions);
 }
 beforeEach(setup);
 afterEach(cleanup);
 
-function starts(args) { return args[0] === 'start'; }
-function creates(args) { return args[0] === 'create'; }
-function removes(args) { return args[0] === 'rm'; }
+function starts(args) {
+  return args[0] === 'start';
+}
+function creates(args) {
+  return args[0] === 'create';
+}
+function removes(args) {
+  return args[0] === 'rm';
+}
 
 async function refuses(reason) {
   mode = reason;
-  if (reason === 'approval') { options.approvedSha = ''; }
-  if (reason === 'release') { writeFileSync(options.releasePath, '{}'); }
-  if (reason === 'future') { manifest.databaseUpdatedAt = new Date(now + 1).toISOString(); }
-  if (reason === 'stale') { manifest.databaseUpdatedAt = new Date(now - 86400000).toISOString(); }
-  if (reason === 'partial') { manifest.updaterEvidence.databases.pop(); }
-  if (['future', 'stale', 'partial'].includes(reason)) { approve(); }
+  if (reason === 'approval') {
+    options.approvedSha = '';
+  }
+  if (reason === 'release') {
+    writeFileSync(options.releasePath, '{}');
+  }
+  if (reason === 'future') {
+    manifest.databaseUpdatedAt = new Date(now + 1).toISOString();
+  }
+  if (reason === 'stale') {
+    manifest.databaseUpdatedAt = new Date(now - 86400000).toISOString();
+  }
+  if (reason === 'partial') {
+    manifest.updaterEvidence.databases.pop();
+  }
+  if (['future', 'stale', 'partial'].includes(reason)) {
+    approve();
+  }
   await expect(launchScanner(options)).rejects.toThrow('Scanner launch refused');
   expect(commands.filter(starts)).toHaveLength(0);
 }
@@ -172,16 +200,27 @@ test('loads old builds with a fresh check and stops readiness at expiry', starts
 async function rejectsLastMomentChange(change) {
   session = await launchScanner(options);
   const script = commands.find(creates).at(-1);
-  const preflight = script.slice(0, script.indexOf('cat >')) + '\nprintf verified';
-  if (change === 'changed') { writeFileSync(join(scratch, 'daily.cvd'), 'private-canary'); }
-  if (change === 'missing') { rmSync(join(scratch, 'daily.cvd')); }
-  if (change === 'extra') { writeFileSync(join(scratch, 'extra.ndb'), 'extra'); }
-  if (change === 'symlink') {
-    rmSync(join(scratch, 'daily.cvd'));
-    symlinkSync('main.cvd', join(scratch, 'daily.cvd'));
+  const preflight = script.slice(0, script.indexOf('exec /usr/sbin/clamd')) + '\nprintf verified';
+  const directory = join(options.ownership, 'databases');
+  const runOptions = { cwd: directory, stdio: 'pipe' };
+  expect(realExec('sh', ['-c', preflight], runOptions).toString()).toBe('verified');
+  if (change === 'changed') {
+    writeFileSync(join(directory, 'daily.cvd'), 'private-canary');
   }
-  const runOptions = { cwd: scratch, stdio: 'pipe' };
-  expect(function runGate() { realExec('sh', ['-c', preflight], runOptions); }).toThrow();
+  if (change === 'missing') {
+    rmSync(join(directory, 'daily.cvd'));
+  }
+  if (change === 'extra') {
+    writeFileSync(join(directory, 'extra.ndb'), 'extra');
+  }
+  if (change === 'symlink') {
+    rmSync(join(directory, 'daily.cvd'));
+    symlinkSync(join(scratch, 'daily.cvd'), join(directory, 'daily.cvd'));
+  }
+  function runGate() {
+    realExec('sh', ['-c', preflight], runOptions);
+  }
+  expect(runGate).toThrow();
 }
 test.each(['changed', 'missing', 'extra', 'symlink'])(
   'the actual container start script refuses a later %s file', rejectsLastMomentChange);
@@ -208,3 +247,32 @@ async function stopsOnTerm() {
   }
 }
 test('TERM removes only owned containers', stopsOnTerm);
+
+async function expiresWithoutPolling() {
+  session = await launchScanner(options);
+  await vi.advanceTimersByTimeAsync(86400000);
+  await session.stop();
+  expect(await session.ready()).toBe(false);
+  expect(session.databaseUpdatedAt).toBe(manifest.databaseUpdatedAt);
+}
+test('expiry stops the container even without a readiness request', expiresWithoutPolling);
+
+async function cleansFailedStart() {
+  mode = 'daemon';
+  await expect(launchScanner(options)).rejects.toEqual(new Error('Scanner launch refused'));
+  expect(commands.filter(removes)).toHaveLength(2);
+  mode = '';
+  session = await launchScanner(options);
+  expect(await session.ready()).toBe(true);
+}
+test('sanitises daemon failures and permits retry only after cleanup', cleansFailedStart);
+
+async function rejectsReleaseMismatch(field) {
+  const record = JSON.parse(readFileSync(options.releasePath, 'utf8'));
+  record[field] = 'private-canary';
+  writeFileSync(options.releasePath, JSON.stringify(record));
+  await expect(launchScanner(options)).rejects.toEqual(new Error('Scanner launch refused'));
+  expect(commands).toHaveLength(0);
+}
+test.each(['imageDigest', 'manifestDigest', 'databaseUpdatedAt', 'inspectedAt'])(
+  'rejects changed release %s before Docker runs', rejectsReleaseMismatch);

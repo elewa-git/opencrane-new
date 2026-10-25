@@ -1,0 +1,1 @@
+- Added a separate scanner launcher that checks approved release evidence and the actual database files, keeps the loaded set read-only, and stops it when its verified update check reaches 24 hours. Current uploads are unchanged; live qualification remains outstanding.

@@ -21,6 +21,7 @@ flowchart LR
   server["apps/server<br/>file uploads"] -->|sends file bytes| clamav
   clamav -->|candidate updater checks| updates["ClamAV update service"]
   packaging["packaging job"] -->|checks image databases| clamav
+  launcher["separate launcher"] -->|starts verified databases| clamav
 ```
 
 ## What it is responsible for
@@ -31,6 +32,7 @@ flowchart LR
 - Leaves out RAR scanning because its plug-ins are not open source; uploads also refuse RAR files.
 - Prepares updated virus definitions separately for review, with hashes and verified dates.
 - Checks that a packaged image contains exactly the reviewed virus definitions.
+- Offers a separate launcher that keeps those files read-only and stops at database expiry.
 - Keeps the original scanner code from the earlier version of OpenCrane, with its licence, for reference.
 
 ## Processes it handles
@@ -43,6 +45,8 @@ flowchart LR
    The running scanner keeps its current list until a reviewed image replaces it.
 4. **A packaging job checks an image.** The release verifier inspects its virus
    definitions without network access and records the image and manifest hashes.
+5. **The separate launcher starts a scanner.** It checks the approved files again,
+   starts only that set, and stops it 24 hours after its verified update check.
 
 ## How to run or test it
 
@@ -60,6 +64,11 @@ update check must be within 24 hours, even when the files themselves are older.
 Neither JSON file grants trust or admits an upload. The verifier does not deploy
 an image or refresh a running scanner. Commands and limits are in
 [README.robot.md](README.robot.md#packaging-evidence).
+
+The separate launcher keeps ClamAV inside its own container, with no host port
+or database mount. It does not run FreshClam or offer a reload command. Its
+readiness check refuses expired databases; restarting never makes them newer.
+This launcher is not yet connected to uploads or the planned HTTPS service.
 
 If updater cleanup fails, the directory stays locked to prevent another updater
 from changing the same files. An operator must confirm the updater has stopped

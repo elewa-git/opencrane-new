@@ -118,5 +118,38 @@ attempt can reuse it while it remains. Other failures leave no new release recor
 
 The release tests use Docker and tool fixtures, including publication and cleanup
 failures and private canaries. These are not real image or live scanner qualification.
-Immutable loaded-set startup with no reload, HTTPS, scan expiry, consumers and
-fresh-install clean/EICAR/two-silo checks remain later work. This record admits no upload.
+HTTPS, scan expiry, consumers and fresh-install clean/EICAR/two-silo checks remain
+later work. This record admits no upload.
+
+## Verified database launch
+
+P5-6a PR 4 adds `launch.mjs`, separate from the current upload scanner.
+The trusted job supplies the approved image reference, independent manifest hash,
+manifest and matching `release.json`. These inputs carry the same review trust as
+packaging; the launcher does not verify cryptographic signatures. Image approval
+still includes UnRAR removal and the licence checks.
+
+```sh
+node infra/clamav/launch.mjs /private/job/signatures.json "$APPROVED_MANIFEST_SHA256" \
+  "$REVIEWED_SCANNER_IMAGE" /private/job/release.json /private/job/scanner-owner
+```
+
+The ownership directory must be new, absolute and under a private parent. The
+launcher reuses release inspection against its own container, then checks hashes,
+regular files and the exact file count again inside the read-only running container
+before starting clamd. No database mount is accepted, including image-declared
+volumes. The daemon runs as `clamav`, with no capabilities, network access or host
+port. Its TCP listener is container-local loopback. Automatic reload is disabled;
+the launcher exposes no reload operation. FreshClam never runs. Limits are one CPU,
+2 GiB memory and 64 processes. Container logs are disabled.
+
+`launchScanner` returns `ready()`, `stop()` and the unchanged `databaseUpdatedAt`.
+Readiness checks freshness before and after a daemon ping. A timer also removes
+owned containers at 24 hours; backwards time refuses. Startup has a 15-minute
+limit, its initial ping has 65 seconds, later pings six seconds and each container
+removal 30 seconds. TERM/INT and failure remove only recorded container names.
+Unconfirmed removal retains the ownership directory and prevents another attempt;
+an operator must confirm those containers are gone before removing it.
+Errors contain only `Scanner launch refused`. No customer bytes or scan results
+are recorded. Fixture evidence cannot qualify live scanning. Fresh reviewed inputs,
+HTTPS, issuance, per-scan expiry, consumers and two-silo qualification remain later.
