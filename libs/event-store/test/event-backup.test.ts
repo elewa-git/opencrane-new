@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { AckPolicy, jetstream, jetstreamManager } from '@nats-io/jetstream';
-import type { Msg, Subscription, SubscriptionOptions } from '@nats-io/transport-node';
+import { headers, type Msg, type Subscription, type SubscriptionOptions }
+  from '@nats-io/transport-node';
 import { collectEventBackup, descriptorSchema } from '../../../infra/package/event-backup.ts';
 import { event, natsFixture } from './testing.ts';
 
@@ -170,6 +171,62 @@ async function refusesExistingDestination(kind: 'existing' | 'symlink') {
   }
 }
 
+async function checksFinalSnapshotStatus(status: number) {
+  const setup = await fixture();
+  const connection = setup.source.connection;
+  const subscribe = connection.subscribe.bind(connection);
+  let captureSubscription: Subscription | undefined;
+  let receivedBytes = 0;
+  let finalReceived = false;
+  function subscribeWithFinalStatus(subject: string, options?: SubscriptionOptions) {
+    const callback = options?.callback;
+    function deliver(error: Error | null, message: Msg) {
+      if (message.data.length > 0) {
+        receivedBytes += message.data.length;
+      } else {
+        expect(error).toBeNull();
+        expect(receivedBytes).toBeGreaterThan(0);
+        expect(statSync(join(setup.destination, 'events.partial')).size).toBe(receivedBytes);
+        finalReceived = true;
+        if (status !== 0) {
+          const failureHeaders = headers(status, canary);
+          vi.spyOn(message, 'headers', 'get').mockReturnValue(failureHeaders);
+        } else {
+          expect(message.headers).toBeUndefined();
+        }
+      }
+      return callback?.(error, message);
+    }
+    const subscriptionOptions = { ...options, callback: deliver };
+    captureSubscription = subscribe(subject, subscriptionOptions);
+    return captureSubscription;
+  }
+  vi.spyOn(connection, 'subscribe').mockImplementation(subscribeWithFinalStatus);
+  try {
+    const capture = collectEventBackup(connection, setup.options);
+    if (status === 0) {
+      await capture;
+      const descriptorText = await readFile(join(setup.destination, 'descriptor.json'), 'utf8');
+      const descriptor = descriptorSchema.parse(JSON.parse(descriptorText));
+      const archive = await readFile(join(setup.destination, 'events.snapshot'));
+      const archiveHash = createHash('sha256');
+      archiveHash.update(archive);
+      expect(descriptor.byteCount).toBe(receivedBytes);
+      expect(archive.length).toBe(receivedBytes);
+      expect(descriptor.sha256).toBe(archiveHash.digest('hex'));
+      expect(await readdir(setup.destination)).toEqual(['descriptor.json', 'events.snapshot']);
+    } else {
+      await expect(capture).rejects.toEqual(new Error('Event backup refused'));
+      expect(await readdir(setup.directory)).toEqual([]);
+    }
+    expect(finalReceived).toBe(true);
+    expect(captureSubscription?.isClosed()).toBe(true);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+
 async function refusesOrdinaryIdentity(role: string) {
   const setup = await fixture();
   try {
@@ -204,6 +261,13 @@ async function checksExecutablePermissions(role: string) {
 
 it('exports native bytes, restores identities and preserves command idempotency', restoresNativeBytes);
 it.each(failures)('refuses %s and removes partial files', refusesCaptureFault);
+it.each([500, 408])('refuses final snapshot status %s after data and removes the backup',
+  checksFinalSnapshotStatus);
+it('publishes the backup after a clean final snapshot message', checksCleanFinalSnapshot);
 it.each(['existing', 'symlink'] as const)('refuses an %s destination', refusesExistingDestination);
 it.each(['projection', 'dispatcher', 'computer', 'gateway'])('refuses %s', refusesOrdinaryIdentity);
 it.each(['command', 'projection'])('operator executable uses %s permissions', checksExecutablePermissions);
+
+async function checksCleanFinalSnapshot() {
+  await checksFinalSnapshotStatus(0);
+}
