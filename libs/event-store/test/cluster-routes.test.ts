@@ -15,18 +15,32 @@ import { database } from '../../projections/test/database.ts';
 import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { connectNats, createEventStore } from '../src/index.ts';
 import { certificates, issueCertificate, sharedCertificates } from './certificates.ts';
-import { freePort } from './ports.ts';
+import { reservePort } from './ports.ts';
 import { waitForClusterStream } from './cluster-stream.ts';
 import { event } from './testing.ts';
 
 const routeExtensions = 'subjectAltName=DNS:localhost\nextendedKeyUsage=serverAuth,clientAuth\n';
 const roles = ['command', 'projection', 'dispatcher', 'computer', 'gateway'];
 const executeFile = promisify(execFile);
-type Peer = { name: string; port: number; route: number; monitor: number };
+type PortReservation = Awaited<ReturnType<typeof reservePort>>;
+type Peer = { name: string; port: number; route: number; monitor: number;
+  reservations: PortReservation[] };
+
+async function releaseReservations(reservations: PortReservation[]) {
+  for (const reservation of reservations) {
+    await reservation.release();
+  }
+}
 
 async function clusterFixture(missingTrust = false, children: ChildProcess[] = []) {
   const directory = await mkdtemp(resolve('.tools/nats-cluster-'));
   const connections: NatsConnection[] = [];
+  const reservations: PortReservation[] = [];
+  async function reservePeerPort() {
+    const reservation = await reservePort();
+    reservations.push(reservation);
+    return reservation;
+  }
   async function close() {
     try {
       for (const connection of connections) {
@@ -42,7 +56,11 @@ async function clusterFixture(missingTrust = false, children: ChildProcess[] = [
           }
         }
       } finally {
-        await rm(directory, { recursive: true, force: true });
+        try {
+          await releaseReservations(reservations);
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
       }
     }
   }
@@ -72,8 +90,12 @@ async function clusterFixture(missingTrust = false, children: ChildProcess[] = [
         await readFile(`${directory}/${role}.pub`, 'utf8');
     }
     for (let index = 1; index <= 3; index++) {
-      const peer = { name: `peer-${index}`, port: await freePort(),
-        route: await freePort(), monitor: await freePort() };
+      const clientPort = await reservePeerPort();
+      const routePort = await reservePeerPort();
+      const monitorPort = await reservePeerPort();
+      const peer = { name: `peer-${index}`, port: clientPort.port,
+        route: routePort.port, monitor: monitorPort.port,
+        reservations: [clientPort, routePort, monitorPort] };
       peers.push(peer);
       await issueCertificate(`${directory}/routes`, peer.name, `/CN=${peer.name}`,
         routeExtensions);
@@ -103,6 +125,8 @@ async function clusterFixture(missingTrust = false, children: ChildProcess[] = [
       if (missingTrust && peer.name === 'peer-3') {
         serverEnv.NATS_ROUTE_CA_FILE = `${directory}/routes/absent.crt`;
       }
+      // Release only this peer's ports immediately before the server binds them.
+      await releaseReservations(peer.reservations);
       await startPeer(directory, serverEnv, children);
     }
     return { directory, peers, client, close };

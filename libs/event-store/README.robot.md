@@ -286,7 +286,12 @@ See the [event catalogue](../../docs/architecture/events.md) and
 configuration and a fresh silo installation remain unqualified.
 
 `test/cluster-routes.test.ts` uses the production cluster configuration with three
-disposable pinned servers. Setup waits for all three pooled routes and the dedicated
+disposable pinned servers. It holds each chosen port with `reservePort()` during
+certificate setup, then releases that peer's ports immediately before starting it.
+The holding listener closes incoming probes so early route attempts cannot delay
+its release. The ordinary `freePort()` API still releases its port before returning.
+`ports.test.ts` checks both exclusive use while held and successful reuse after release.
+Setup waits for all three pooled routes and the dedicated
 `$SYS` route between each pair of servers. Seeing both peer names is not enough:
 the system route carries cluster information and the pooled routes carry requests.
 It waits for the built-in metadata health check on each server, then creates `EVENTS`.

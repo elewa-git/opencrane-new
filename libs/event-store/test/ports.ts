@@ -1,5 +1,5 @@
 import { once } from 'node:events';
-import { createServer } from 'node:net';
+import { createServer, type Socket } from 'node:net';
 
 const portsPerWorker = 200;
 let nextOffset = 0;
@@ -13,40 +13,48 @@ function workerPortStart() {
   return 20_000 + worker * portsPerWorker;
 }
 
-async function portIsAvailable(port: number) {
-  const listener = createServer();
+function closeProbe(socket: Socket) {
+  socket.destroy();
+}
+
+async function reserve(port: number) {
+  const listener = createServer(closeProbe);
   try {
     listener.listen(port, '127.0.0.1');
     await once(listener, 'listening');
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'EADDRINUSE') {
-      return false;
+      return undefined;
     }
     throw error;
   }
-  const closed = once(listener, 'close');
-  listener.close();
-  await closed;
-  return true;
+  async function release() {
+    if (!listener.listening) {
+      return;
+    }
+    const closed = once(listener, 'close');
+    listener.close();
+    await closed;
+  }
+  return { port, release };
 }
 
-export async function freePort() {
+export async function reservePort() {
   const first = workerPortStart();
   for (let attempt = 0; attempt < portsPerWorker; attempt++) {
     const port = first + nextOffset;
     nextOffset = (nextOffset + 1) % portsPerWorker;
-    // Skip listeners from other test runs. Keep simultaneous callers on different ports.
-    if (await portIsAvailable(port)) {
-      return port;
+    // Hold the listener so other test processes cannot choose this port during setup.
+    const reservation = await reserve(port);
+    if (reservation) {
+      return reservation;
     }
   }
   throw new Error('All test ports for this Vitest worker are in use');
 }
 
-export async function reservePort() {
-  const port = await freePort();
-  function release() {
-    return Promise.resolve();
-  }
-  return { port, release };
+export async function freePort() {
+  const reservation = await reservePort();
+  await reservation.release();
+  return reservation.port;
 }
