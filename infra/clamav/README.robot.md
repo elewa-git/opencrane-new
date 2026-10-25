@@ -104,9 +104,11 @@ the results with the approved manifest and requires successful upstream evidence
 for all three databases. It refuses future dates and update checks older than
 24 hours, including checks that expire during inspection. Old build dates are
 allowed. Copies, mtimes and restarts never change the approved update-check time.
-Each database is at most 512 MiB; the input manifest is at most 8 KiB, tool output
-at most 1 MiB and each Docker operation at most 15 minutes. The complete attempt
-must also finish within 15 minutes; each container removal has 30 seconds.
+Each database is at most 512 MiB; the input manifest is at most 8 KiB and tool output
+at most 1 MiB. Each Docker operation gets only the time remaining from one
+15-minute allowance. No inspection operation starts once that time runs out.
+The complete attempt must finish within 15 minutes; each container removal has
+its own 30-second limit, even after the inspection allowance runs out.
 
 After all checks and container removals succeed, the verifier atomically renames
 the private attempt directory into place. Its `release.json` is at most 1 KiB and
@@ -118,5 +120,41 @@ attempt can reuse it while it remains. Other failures leave no new release recor
 
 The release tests use Docker and tool fixtures, including publication and cleanup
 failures and private canaries. These are not real image or live scanner qualification.
-Immutable loaded-set startup with no reload, HTTPS, scan expiry, consumers and
-fresh-install clean/EICAR/two-silo checks remain later work. This record admits no upload.
+HTTPS, scan expiry, consumers and fresh-install clean/EICAR/two-silo checks remain
+later work. This record admits no upload.
+
+## Verified database launch
+
+P5-6a PR 4 adds `launch.mjs`, separate from the current upload scanner.
+The trusted job supplies the approved image reference, independent manifest hash,
+manifest and matching `release.json`. These inputs carry the same review trust as
+packaging; the launcher does not verify cryptographic signatures. Image approval
+still includes UnRAR removal and the licence checks.
+
+```sh
+node infra/clamav/launch.mjs /private/job/signatures.json "$APPROVED_MANIFEST_SHA256" \
+  "$REVIEWED_SCANNER_IMAGE" /private/job/release.json /private/job/scanner-owner
+```
+
+The ownership directory must be new, absolute and under a private parent. The
+launcher reuses release inspection against its own container, then checks hashes,
+regular files and the exact file count again inside the read-only running container
+before starting clamd. No database mount is accepted, including image-declared
+volumes. The daemon runs as `clamav`, with no capabilities, network access or host
+port. Its TCP listener is container-local loopback. Automatic reload is disabled;
+the launcher exposes no reload operation. FreshClam never runs. Limits are one CPU,
+2 GiB memory and 64 processes. Container logs are disabled.
+
+`launchScanner` returns `ready()`, `stop()` and the unchanged `databaseUpdatedAt`.
+Readiness checks freshness before and after a daemon ping. A timer also removes
+owned containers at 24 hours; backwards time refuses. Startup has a 15-minute
+limit shared by image lookup, creation, inspection, start and the initial ping.
+Each Docker call gets only the time remaining; no call starts when none remains.
+The initial ping also has a 65-second limit, later pings six seconds and each
+container removal its own 30 seconds. Cleanup keeps that separate limit after
+startup time runs out. TERM/INT and failure remove only recorded container names.
+Unconfirmed removal retains the ownership directory and prevents another attempt;
+an operator must confirm those containers are gone before removing it.
+Errors contain only `Scanner launch refused`. No customer bytes or scan results
+are recorded. Fixture evidence cannot qualify live scanning. Fresh reviewed inputs,
+HTTPS, issuance, per-scan expiry, consumers and two-silo qualification remain later.

@@ -73,7 +73,45 @@ console.log('Version: ' + (process.env.MODE === 'metadata' ? '43' : '42'));
 console.log('Verification OK.');
 `;
 const publicationFixture = `import fs from 'node:fs';
+import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
+const mode = process.env.MODE;
+if (mode.startsWith('slow-docker')) {
+  const startedAt = Date.now();
+  const originalExec = childProcess.execFileSync;
+  let elapsed = 0;
+  let operations = 0;
+  function currentTime() {
+    return startedAt + elapsed;
+  }
+  function slowDocker(command, args, options) {
+    let delay = 0;
+    if (args[0] !== 'rm') {
+      if (mode === 'slow-docker') {
+        delay = 840_000;
+      } else if (mode === 'slow-docker-exact') {
+        delay = operations === 0 ? 900_000 : 0;
+      } else {
+        const selected = Number(mode.slice('slow-docker-'.length));
+        delay = operations === 0 && selected > 0 ? 840_000 : 1000;
+        if (operations === selected) {
+          delay = 960_000;
+        }
+      }
+      operations++;
+    }
+    const timing = { operation: args[0], startedAt: elapsed, timeout: options.timeout };
+    elapsed += Math.min(delay, options.timeout);
+    timing.finishedAt = elapsed;
+    fs.appendFileSync(process.env.SCRATCH + '/timings', JSON.stringify(timing) + '\\n');
+    if (delay > options.timeout) {
+      throw new Error('private-canary Docker timeout');
+    }
+    return originalExec(command, args, options);
+  }
+  Date.now = currentTime;
+  childProcess.execFileSync = slowDocker;
+}
 const original = fs.promises.rename;
 async function checkedRename(source, destination) {
   JSON.parse(fs.readFileSync(source + '/release.json', 'utf8'));
@@ -277,3 +315,55 @@ function keepsEarlierRecords() {
   expect(run().status).toBe(0);
 }
 test('preserves separate earlier records and permits retry after confirmed cleanup', keepsEarlierRecords);
+
+function isStartup(timing) {
+  return timing.operation !== 'rm';
+}
+
+function isCleanup(timing) {
+  return timing.operation === 'rm';
+}
+
+function expectDeadlineAndCleanup(operationCount, cleanupCount) {
+  const encoded = readFileSync(join(scratch, 'timings'), 'utf8').trim();
+  const lines = encoded.split('\n');
+  const timings = lines.map(JSON.parse);
+  const startup = timings.filter(isStartup);
+  expect(startup).toHaveLength(operationCount);
+  expect(startup.at(-1).finishedAt).toBe(900_000);
+  for (const timing of startup) {
+    expect(timing.timeout).toBeGreaterThan(0);
+    expect(timing.startedAt + timing.timeout).toBeLessThanOrEqual(900_000);
+  }
+  const cleanup = timings.filter(isCleanup);
+  expect(cleanup).toHaveLength(cleanupCount);
+  for (const timing of cleanup) {
+    expect(timing.timeout).toBe(30_000);
+  }
+  expect(existsSync(`${output}.lock`)).toBe(false);
+}
+
+function stopsCumulativeDelay() {
+  refused(run('slow-docker'));
+  expectDeadlineAndCleanup(2, 1);
+}
+test('stops cumulative slow Docker calls at the overall release deadline', stopsCumulativeDelay);
+
+function boundsSlowOperation(index) {
+  refused(run(`slow-docker-${index}`));
+  let cleanupCount = 1;
+  if (index === 0) {
+    cleanupCount = 0;
+  } else if (index === 4) {
+    cleanupCount = 2;
+  }
+  expectDeadlineAndCleanup(index + 1, cleanupCount);
+}
+test.each([0, 1, 2, 3, 4])(
+  'bounds release Docker operation %i by the remaining attempt time', boundsSlowOperation);
+
+function stopsAtExactDeadline() {
+  refused(run('slow-docker-exact'));
+  expectDeadlineAndCleanup(1, 1);
+}
+test('starts no further Docker work when the release allowance is exhausted', stopsAtExactDeadline);
