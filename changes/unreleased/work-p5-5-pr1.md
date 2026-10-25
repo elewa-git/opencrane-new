@@ -1,0 +1,1 @@
+- Check that saved events survive a NATS stream leader stopping and rejoining with its original storage. The process fixture checks continued writes, lost-reply recovery, event order and subject positions. Packaged node and volume loss remain untested.

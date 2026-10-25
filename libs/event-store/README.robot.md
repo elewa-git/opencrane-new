@@ -393,3 +393,31 @@ Workers 0 to 24 are supported. The helper skips `EADDRINUSE` and stops after
 200 attempts. This keeps ports below 25000, away from the secondary dev stacks
 at 25100 and 25200 and the Linux outgoing range starting at 32768.
 Separate test runs can share worker ids, so listeners are checked before use.
+
+## Process failure and rejoin checks
+
+`test/cluster-fixture.ts` shares the TLS cluster setup with `cluster-routes.test.ts`.
+It tracks only its own children and restarts a stopped peer with the same settings
+and storage directory. Startup, route checks, replica checks and process exit have
+bounded waits. Provisioning waits only after the exact typed peer-offline
+placement refusal; a timeout or other error fails immediately. Captured process
+output stays private.
+
+`cluster-failover.test.ts` detects the EVENTS stream leader, starts a conditional
+append and kills that process. It waits for a new leader and a current surviving
+replica before writing again. It checks stale-position refusal and uses the existing
+lost-reply helper to check recovery of the exact saved receipt. After rejoin it
+compares retained history, subject positions, the returning replica's current flag
+and its local message count and sequence range. Repeating the recovered command,
+including with another event id, must leave history unchanged.
+
+`failover-check.test.ts` first rejects missing, repeated, reordered or moved records
+and changed subject positions. The checker keeps acknowledgements and unresolved
+outcomes separate, including when an unresolved event is visible in history. An
+unseen timeout never becomes a claim of safe absence. The real test adds a safe
+Vitest annotation containing fixture event ids, positions and the racing outcome.
+These tests use one principal; duplicate-command checks are scoped to each subject.
+
+P5-5 PR 1 provides process evidence only. Packaged node/PVC loss, placement and
+rotation remain NOT RUN. Later k3d proof requires `infra/dev-stack/claim.sh` and
+completed P5-4. See [the receipt](../../docs/process/p5-5-pr1/receipt.md).
