@@ -215,7 +215,9 @@ async function gatewayCall(setup: Setup, approvalId?: string) {
     events.push(await setup.nats.store.readEvent(sequence));
   }
   function decision(row: typeof events[number]) {
-    if (row.event.type !== 'decision.recorded') return false;
+    if (row.event.type !== 'decision.recorded') {
+      return false;
+    }
     const data = z.object({ callId: z.string().optional() }).parse(row.event.data);
     return data.callId === callId;
   }
@@ -560,9 +562,12 @@ async function recoversUnsentApproval(stage: 'saved start' | 'budget admission',
   }
   expect(approvalRows.filter(consumed)).toHaveLength(2);
 }
+async function recoversWithRealClock(stage: 'saved start' | 'budget admission') {
+  await recoversUnsentApproval(stage);
+}
 it.each(['saved start', 'budget admission'] as const)(
   'restores one approval retry after refusal at %s without sending',
-  recoversUnsentApproval, 60_000);
+  recoversWithRealClock, 60_000);
 
 // Make both calls read the restored approval before either can consume it.
 async function raceApprovalCalls(context: Context, approvalId: string, slowHistory: boolean) {
@@ -575,9 +580,14 @@ async function raceApprovalCalls(context: Context, approvalId: string, slowHisto
   const restoredReads: number[] = [];
   const trace: { stage: string; requestId?: string; sequence?: number;
     status?: string; remainingMs?: number }[] = [];
+  // Control only the deadline regression; run the load cases on the real clock.
+  const startedAt = now();
   let elapsed = 0;
   function currentTime() {
-    return now() + elapsed;
+    if (slowHistory) {
+      return startedAt + elapsed;
+    }
+    return now();
   }
   async function save(command: AppendCommand) {
     const event = z.object({ type: z.string(), data: z.unknown() }).parse(command.event);
@@ -585,7 +595,9 @@ async function raceApprovalCalls(context: Context, approvalId: string, slowHisto
       const data = z.object({ permitId: z.string() }).parse(event.data);
       attempts.push(data.permitId);
       trace.push({ stage: 'consume_attempt', requestId: data.permitId });
-      if (attempts.length === 2) ready.resolve();
+      if (attempts.length === 2) {
+        ready.resolve();
+      }
       await ready.promise;
     }
     const result = await append(command);
@@ -623,7 +635,9 @@ async function raceApprovalCalls(context: Context, approvalId: string, slowHisto
     expect(attempts).toHaveLength(2);
     expect(new Set(attempts).size).toBe(2);
     expect(restoredReads.length).toBeGreaterThanOrEqual(2);
-    if (slowHistory) expect(elapsed).toBeGreaterThanOrEqual(600);
+    if (slowHistory) {
+      expect(elapsed).toBeGreaterThanOrEqual(600);
+    }
     for (const reply of replies) {
       const decision = z.object({ requestId: z.string(), reason: z.string() })
         .parse(reply.evidence[0]!.event.data);
