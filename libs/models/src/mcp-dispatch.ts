@@ -1,3 +1,5 @@
+import { createLogger } from '@opencrane/observability';
+import { privateDecisionReason } from './decision-refusal.ts';
 import { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
@@ -57,7 +59,8 @@ interface Permit {
   accessDeadline: number;
   confirmAccess: () => Promise<void>;
 }
-type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatched') => Promise<void>;
+type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
+  deadline?: number) => Promise<void>;
 const remoteErrorSchema = z.strictObject({
   code: z.int(), message: z.string(), data: z.unknown().optional(),
 });
@@ -70,6 +73,7 @@ function digest(body: string) {
 
 export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   const { store, silo } = actor;
+  const logger = createLogger('mcp-dispatch');
   const signingKey = randomBytes(32);
   const pending = new Map<string, Permit>();
 
@@ -215,17 +219,26 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     }
-    await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt, undefined, deadline);
-    const admittedPosition = await admit(req, res, permit, route, position, deadline);
-    if (permit.gatewayBinding) {
-      // Refuse changes found after admission before recording a start.
-      await requirePublishedPositions(permit, admittedPosition, deadline);
-      requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit);
-    }
     let observe: RemoteObserver | undefined;
+    let stage = 'dispatch_start';
     try {
-      observe = await recordStarted(permit, deadline);
+      // Save the HTTPS start before budget admission, so an unsent refusal has exact proof.
+      if (route.locator) {
+        observe = await recordStarted(permit, deadline);
+      }
+      stage = 'budget_admission';
+      await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt,
+        undefined, deadline);
+      stage = 'mcp_admission';
+      const admittedPosition = await admit(req, res, permit, route, position, deadline);
+      if (!route.locator && permit.gatewayBinding) {
+        stage = 'dispatch_start';
+        await requirePublishedPositions(permit, admittedPosition, deadline);
+        requireCurrentRoute(permit);
+        requireFreshDispatch(req, res, permit);
+        observe = await recordStarted(permit, deadline);
+      }
+      stage = 'final_access';
       if (permit.gatewayBinding) {
         await permit.confirmAccess();
       }
@@ -236,7 +249,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     } catch (error) {
-      await recordRefusedStart(permit, observe, startedAt);
+      await reportRefusal(permit, observe, startedAt, stage, deadline, error);
       throw error;
     }
     if (target) {
@@ -246,12 +259,29 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     forward(route, permit, body, res, memoryContext);
   }
 
+  async function reportRefusal(permit: Permit, observe: RemoteObserver | undefined,
+    startedAt: number, stage: string, deadline: number, error: unknown) {
+    const diagnostic = { stage, reason: privateDecisionReason(error),
+      elapsedMs: Math.ceil(performance.now() - startedAt),
+      accessRemainingMs: Math.max(0, Math.floor(deadline - performance.now())) };
+    logger.warn(diagnostic, 'MCP dispatch refused');
+    try {
+      await recordRefusedStart(permit, observe, startedAt);
+    } catch {
+      const evidence = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
+        elapsedMs: Math.ceil(performance.now() - startedAt) };
+      logger.warn(evidence, 'MCP dispatch refused');
+    }
+  }
+
   async function recordRefusedStart(permit: Permit, observe: RemoteObserver | undefined,
     startedAt: number) {
+    // Allow one second to save evidence only. This cannot extend permission to send.
+    const deadline = performance.now() + 1000;
     if (permit.route.locator) {
       // Record proof only after a confirmed start and before opening any connection.
       if (observe) {
-        await observe('not_dispatched');
+        await observe('not_dispatched', deadline);
       }
       return;
     }
@@ -262,7 +292,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
       evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
       durationMs: Math.ceil(performance.now() - startedAt) };
-    await recordToolObservation(actor, observation);
+    await recordToolObservation(actor, observation, deadline);
   }
 
   async function requirePublishedPositions(permit: Permit, admittedPosition: number,
@@ -309,12 +339,13 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const adapter = { silo: permit.silo, decisionId: permit.budget.decisionId,
       startId: event.id, connectionId: payload.connectionId, generation: payload.generation,
       recordDigest: payload.recordDigest, reviewRevision: payload.reviewRevision! };
-    async function observe(outcome: 'responded' | 'outcome_unknown' | 'not_dispatched') {
+    async function observe(outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
+      evidenceDeadline?: number) {
       const evidence = remoteEvidence(outcome);
       const observation = { id: permit.requestId, toolOutcome: outcome, evidence,
         observedAt: new Date().toISOString(),
         durationMs: Math.ceil(performance.now() - startedAt) } as const;
-      await recordAdapterObservation(actor, adapter, observation);
+      await recordAdapterObservation(actor, adapter, observation, evidenceDeadline);
     }
     return observe;
   }

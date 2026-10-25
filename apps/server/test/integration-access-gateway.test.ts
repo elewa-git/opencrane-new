@@ -1,6 +1,7 @@
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import * as observability from '@opencrane/observability';
 import { encodeSession } from '@opencrane/auth';
 import { grantStream } from '@opencrane/authz';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
@@ -207,7 +208,7 @@ async function gatewayCall(setup: Setup, approvalId?: string) {
   const before = await setup.nats.store.head();
   const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
     request);
-  await response.text();
+  const responseText = await response.text();
   const events: StoredEvent[] = [];
   const last = await setup.nats.store.head();
   for (let sequence = before + 1; sequence <= last; sequence++) {
@@ -219,7 +220,7 @@ async function gatewayCall(setup: Setup, approvalId?: string) {
   const admitted = events.find(decision);
   expect(admitted).toBeDefined();
   const evidence = await history(setup.nats.store, admitted!.event.subject, 'test');
-  return { status: response.status, raw, evidence };
+  return { status: response.status, raw, evidence, responseText };
 }
 
 type Context = Awaited<ReturnType<typeof gatewayFixture>>;
@@ -433,7 +434,25 @@ async function approveCall(context: Context, approvalId: string, action: 'approv
     true, fresh, current, setup.actor.now());
 }
 
+function dispatchWarnings() {
+  const createLogger = observability.createLogger;
+  const logger = createLogger('dispatch-test', { level: 'silent' });
+  const warnings = vi.spyOn(logger, 'warn');
+  function makeLogger(...parameters: Parameters<typeof createLogger>) {
+    if (parameters[0] === 'mcp-dispatch') {
+      return logger;
+    }
+    return createLogger(...parameters);
+  }
+  const factory = vi.spyOn(observability, 'createLogger');
+  factory.mockImplementation(makeLogger);
+  onTestFinished(factory.mockRestore.bind(factory));
+  onTestFinished(warnings.mockRestore.bind(warnings));
+  return warnings;
+}
+
 async function recoversUnsentApproval(stage: 'saved start' | 'budget admission') {
+  const warnings = dispatchWarnings();
   const context = await gatewayFixture('ask');
   const setup = context.setup;
   await context.grant('member');
@@ -443,6 +462,8 @@ async function recoversUnsentApproval(stage: 'saved start' | 'budget admission')
   const approvalId = requested.evidence[0]!.event.correlation.approval!;
   expect(approvalId).toBeDefined();
   expect((await approveCall(context, approvalId, 'approved')).status).toBe('appended');
+  const initialConnections = context.remote.connections();
+  const initialRequests = context.remote.received.length;
   if (stage === 'saved start') {
     try {
       const pauseIam = fga.pause.bind(fga);
@@ -451,8 +472,8 @@ async function recoversUnsentApproval(stage: 'saved start' | 'budget admission')
       await fga.resume();
     }
   } else {
-    async function refuseAdmission() {
-      throw new Error('PRIVATE_ADMISSION_CANARY');
+    function refuseAdmission() {
+      return Promise.reject(new Error('PRIVATE_ADMISSION_CANARY'));
     }
     const admission = vi.spyOn(setup.actor, 'admitDispatch');
     admission.mockImplementationOnce(refuseAdmission);
@@ -460,13 +481,19 @@ async function recoversUnsentApproval(stage: 'saved start' | 'budget admission')
       const refused = await context.call(approvalId);
       expect(admission).toHaveBeenCalledTimes(1);
       expect(refused.status).toBe(403);
+      expect(refused.responseText).not.toContain('PRIVATE_ADMISSION_CANARY');
+      const timing: unknown = expect.any(Number);
+      const diagnostic = { stage: 'budget_admission', reason: 'decision_unavailable',
+        elapsedMs: timing, accessRemainingMs: timing };
+      expect(warnings).toHaveBeenCalledWith(diagnostic, 'MCP dispatch refused');
+      expect(JSON.stringify(warnings.mock.calls)).not.toContain('PRIVATE_ADMISSION_CANARY');
       expect(refused.evidence).toHaveLength(3);
       expect(refused.evidence[1]!.event.type).toBe('tool.dispatch_started');
       const proof = { outcome: 'not_dispatched', evidence: 'adapter_dispatch_refused' };
       expect(refused.evidence[2]!.event.data).toMatchObject(proof);
       expect(JSON.stringify(refused.evidence)).not.toContain('PRIVATE_ADMISSION_CANARY');
-      expect(context.remote.connections()).toBe(0);
-      expect(context.remote.received).toHaveLength(0);
+      expect(context.remote.connections()).toBe(initialConnections);
+      expect(context.remote.received).toHaveLength(initialRequests);
     } finally {
       admission.mockRestore();
     }
@@ -485,7 +512,7 @@ async function recoversUnsentApproval(stage: 'saved start' | 'budget admission')
     return reply.status;
   }
   const statuses = replies.map(status);
-  expect(statuses.sort()).toEqual([200, 403]);
+  expect(statuses.sort(), JSON.stringify(warnings.mock.calls)).toEqual([200, 403]);
   expect(context.remote.received).toHaveLength(before + 1);
   const used = await readApproval(setup.nats.store, 'test', approvalId);
   expect(used).toMatchObject({ state: 'outcome_unknown', canRetry: false });
@@ -520,6 +547,98 @@ async function recoversUnsentApproval(stage: 'saved start' | 'budget admission')
 it.each(['saved start', 'budget admission'] as const)(
   'restores one approval retry after refusal at %s without sending',
   recoversUnsentApproval, 60_000);
+
+const missingProof = ['missing start', 'lost start', 'missing observation', 'failed read'] as const;
+async function refusesIncompleteProof(mode: typeof missingProof[number]) {
+  const warnings = dispatchWarnings();
+  const context = await gatewayFixture('ask');
+  const { setup } = context;
+  await context.grant('member');
+  await context.grant('assistant');
+  const requested = await context.call();
+  const approvalId = requested.evidence[0]!.event.correlation.approval!;
+  expect((await approveCall(context, approvalId, 'approved')).status).toBe('appended');
+  const initialConnections = context.remote.connections();
+  const initialRequests = context.remote.received.length;
+  const store = setup.nats.store;
+  const append = store.append.bind(store);
+  const read = store.readStream.bind(store);
+  let refused = false;
+  let injected = false;
+  const deadlines: number[] = [];
+  function refuseAdmission() {
+    refused = true;
+    return Promise.reject(new Error('PRIVATE_REFUSAL_CANARY'));
+  }
+  async function save(command: AppendCommand) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    const start = event.type === 'tool.dispatch_started';
+    const observation = event.type === 'tool.dispatch_recorded';
+    if ((start && mode === 'missing start') ||
+        (observation && mode === 'missing observation')) {
+      injected = true;
+      if (observation) deadlines.push(command.deadline ?? Infinity);
+      return { status: 'unavailable' as const, cause: new Error('PRIVATE_SAVE_CANARY') };
+    }
+    const result = await append(command);
+    if (start && mode === 'lost start') {
+      injected = true;
+      throw new Error('PRIVATE_SAVE_CANARY');
+    }
+    return result;
+  }
+  async function* readEvidence(...parameters: Parameters<typeof read>) {
+    if (refused && !injected && parameters[0].startsWith('decision-')) {
+      deadlines.push(parameters[2] ?? Infinity);
+      if (mode === 'failed read') {
+        injected = true;
+        throw new Error('PRIVATE_READ_CANARY');
+      }
+    }
+    yield* read(...parameters);
+  }
+  const writer = vi.spyOn(store, 'append');
+  const reader = vi.spyOn(store, 'readStream');
+  const admission = vi.spyOn(setup.actor, 'admitDispatch');
+  writer.mockImplementation(save);
+  reader.mockImplementation(readEvidence);
+  admission.mockImplementationOnce(refuseAdmission);
+  let response: Awaited<ReturnType<typeof context.call>>;
+  try {
+    response = await context.call(approvalId);
+    expect(response.status).toBe(403);
+    expect(response.responseText).not.toContain('PRIVATE_');
+  } finally {
+    writer.mockRestore();
+    reader.mockRestore();
+    admission.mockRestore();
+  }
+  expect(injected).toBe(true);
+  if (refused) {
+    expect(deadlines.length).toBeGreaterThan(0);
+    for (const deadline of deadlines) {
+      expect(Number.isFinite(deadline)).toBe(true);
+      expect(deadline).toBe(deadlines[0]);
+      expect(deadline - performance.now()).toBeLessThanOrEqual(1000);
+    }
+    const timing: unknown = expect.any(Number);
+    const diagnostic = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
+      elapsedMs: timing };
+    expect(warnings).toHaveBeenCalledWith(diagnostic, 'MCP dispatch refused');
+  }
+  const current = await readApproval(store, 'test', approvalId);
+  expect(current).toMatchObject({ state: 'outcome_unknown', canRetry: false });
+  expect(current.uses).toHaveLength(1);
+  expect((await approveCall(context, approvalId, 'retry')).status).toBe('conflict');
+  expect((await context.call(approvalId)).status).toBe(403);
+  expect(context.remote.received).toHaveLength(initialRequests);
+  expect(context.remote.connections()).toBe(initialConnections);
+  expect(setup.actor.state.dispatches).toHaveLength(0);
+  const saved = JSON.stringify(response.evidence);
+  expect(saved).not.toMatch(/PRIVATE_|adapter_dispatch_refused/u);
+  expect(JSON.stringify(warnings.mock.calls)).not.toContain('PRIVATE_');
+}
+it.each(missingProof)('keeps approval retry unavailable after %s', refusesIncompleteProof, 60_000);
 
 async function restoresGrant() {
   const context = await gatewayFixture();
