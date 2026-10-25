@@ -1,0 +1,1 @@
+- Owners and admins can read the current company account opt-in for a tool installation. Re-registering invalidates the earlier choice, and reads grant no tool access or expose credentials.

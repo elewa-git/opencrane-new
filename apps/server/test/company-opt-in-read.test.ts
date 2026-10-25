@@ -25,13 +25,13 @@ function write(line: string) {
 function memberId(_silo: string, _issuer: string, subject: string) {
   return Promise.resolve(subject === 'unmapped' ? undefined : subject);
 }
-function emptyCatalogue() {
+function emptyCatalogue(): never {
   throw new Error(canary);
 }
-function server() {
+function server(currentBinding = binding, lookup = memberId) {
   const catalogue = { rows: emptyCatalogue, tools: emptyCatalogue };
-  const integrations = { silo: 'test', store: nats.store, binding,
-    feed: { memberId }, catalogue };
+  const integrations = { silo: 'test', store: nats.store, binding: currentBinding,
+    feed: { memberId: lookup }, catalogue };
   return buildServer(config, { integrations, logDestination: { write } });
 }
 async function join(memberId: string, role: string) {
@@ -125,7 +125,7 @@ async function refused(kind: string) {
     member = randomUUID();
     await join(member, 'admin');
     const event = envelope('test', `member-${member}`, 'member.removed', {
-      memberId: member, removedBy: 'owner', reason: 'no longer a member',
+      memberId: member, removedBy: 'owner',
     });
     await nats.seed([event]);
   }
@@ -198,7 +198,7 @@ async function failedHistory(target: string, removed: boolean) {
     if (subject === failedSubject) {
       if (removed) {
         const event = envelope('test', `member-${member}`, 'member.removed', {
-          memberId: member, removedBy: 'owner', reason: 'removed during history',
+          memberId: member, removedBy: 'owner',
         });
         await nats.seed([event]);
       }
@@ -241,7 +241,7 @@ async function slowHistory(removed: boolean) {
       await nats.seed([chat]);
       if (removed) {
         const event = envelope('test', `member-${member}`, 'member.removed', {
-          memberId: member, removedBy: 'owner', reason: 'removed during history',
+          memberId: member, removedBy: 'owner',
         });
         await nats.seed([event]);
       }
@@ -276,7 +276,7 @@ async function unavailableAndMissing() {
     await unavailable.close();
   }
   const read = vi.spyOn(nats.store, 'readStream');
-  function failed() {
+  function failed(): never {
     throw new Error(canary);
   }
   read.mockImplementation(failed);
@@ -284,3 +284,33 @@ async function unavailableAndMissing() {
   expect(checked(failedRead, 503)).toEqual({ status: 'unavailable' });
 }
 it('keeps missing, unauthenticated and unavailable replies private and uncached', unavailableAndMissing);
+
+async function dependencyFailure(kind: string) {
+  function failedLookup(): ReturnType<typeof memberId> {
+    throw new Error(canary);
+  }
+  let currentBinding = binding;
+  let lookup = memberId;
+  if (kind === 'permissions') {
+    currentBinding = { ...binding, apiUrl: 'http://127.0.0.1:1' };
+  } else {
+    lookup = failedLookup;
+  }
+  const unavailable = server(currentBinding, lookup);
+  try {
+    const response = await unavailable.inject({
+      url: '/api/org/integrations/missing/company-opt-in', headers: headers(),
+    });
+    expect(checked(response, 503)).toEqual({ status: 'unavailable' });
+  } finally {
+    await unavailable.close();
+  }
+}
+it.each(['permissions', 'member lookup'])('sanitises unavailable %s', dependencyFailure);
+
+async function malformedBody() {
+  const response = await app.inject({ url: '/api/org/integrations/missing/company-opt-in',
+    headers: { ...headers(), 'content-type': 'application/json' }, payload: canary });
+  expect(checked(response, 400)).toEqual({ status: 'invalid_request' });
+}
+it('keeps parser errors fixed and uncached without logging the body', malformedBody);

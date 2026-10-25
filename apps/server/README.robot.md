@@ -5451,3 +5451,20 @@ missing evidence remains unknown and never permits a resend. Exact retries retai
 receipt after later choices and broker deduplication expiry. No provider, custody, release,
 wake, automatic selection or company fallback is added. HTTP tests use disposable services.
 Identity verification, credential use, company selection, UI and live qualification remain later.
+
+## Company opt-in read (Part of #49; P3-8 PR 7e)
+
+The [API contract](../../docs/api/company-opt-in.md) describes the GET-only company
+opt-in route. Existing integration session checks supply the member and silo.
+`integrations/company-opt-in-read.ts` loads exact event history with a shared
+10,000 ms deadline before one `readActiveMember` admin check. Failed preparation
+still checks membership. It reuses `foldCompanyOptIn` from PR #695 and returns only
+`enabled`, `sequence`, `connectionId` and `registrationRevision`. These names do
+not match the exact RISKY_FIELD_NAME expression in `security-rules.test.ts`.
+
+`test/company-opt-in-read.test.ts` uses disposable NATS, OpenFGA and PostgreSQL.
+It covers current roles, stale membership projections, actor/silo overrides,
+registration replacement, restart/replay, slow and failed reads, fixed errors,
+no-store replies and private canaries in logs. Reads use no write authority check,
+credential profile, selection, provider, release or dispatch path.
+Fresh-install qualification and live company account use remain NOT RUN.

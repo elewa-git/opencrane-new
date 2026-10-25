@@ -22,6 +22,9 @@ does not prove a business change succeeded. Reading history never sends a tool c
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.
 
+Owners and admins can read whether company accounts are opted in for a tool installation.
+Re-registering the server clears the effective choice. This read grants no tool access.
+
 Owners and admins can read safe admission, removal, role and ownership change details.
 The server checks receipts for the exact saved change before showing its progress, then checks current access.
 It still checks access when loading fails, so errors do not reveal protected records.
@@ -63,7 +66,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads own saved profiles and original change, publication and selection receipts; records personal account choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads company opt-in, own saved profiles and original change, publication and selection receipts; records personal account choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
