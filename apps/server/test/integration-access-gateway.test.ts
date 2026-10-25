@@ -209,6 +209,8 @@ async function gatewayCall(setup: Setup, approvalId?: string) {
   const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
     request);
   const responseText = await response.text();
+  const responseBody: unknown = JSON.parse(responseText);
+  const refused = z.object({ requestId: z.string() }).safeParse(responseBody);
   const events: StoredEvent[] = [];
   const last = await setup.nats.store.head();
   for (let sequence = before + 1; sequence <= last; sequence++) {
@@ -218,8 +220,11 @@ async function gatewayCall(setup: Setup, approvalId?: string) {
     if (row.event.type !== 'decision.recorded') {
       return false;
     }
-    const data = z.object({ callId: z.string().optional() }).parse(row.event.data);
-    return data.callId === callId;
+    const data = z.object({ callId: z.string().optional(), requestId: z.string() })
+      .parse(row.event.data);
+    // Use the refusal's own id when access ends before the body can be read.
+    return data.callId === callId ||
+      (refused.success && data.requestId === refused.data.requestId);
   }
   const admitted = events.find(decision);
   expect(admitted).toBeDefined();
