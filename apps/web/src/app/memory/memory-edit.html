@@ -1,5 +1,11 @@
 @if (enabled()) {
-  <button type="button" class="edit-open" [disabled]="refreshing()" (click)="open($event)">Edit</button>
+  <button type="button" class="edit-open" [disabled]="refreshing() || awaitingRevision()"
+    (click)="open($event)">Edit</button>
+}
+@if (state() === 'accepted' && refreshing()) { <p role="status">Saving...</p> }
+@if (state() === 'accepted' && error()) {
+  <p role="status">{{ error() }}</p>
+  <button type="button" (click)="refresh()">Refresh details</button>
 }
 @if (state() !== 'closed' && state() !== 'accepted') {
 <oc-modal-sheet [open]="state() !== 'closed' && state() !== 'accepted'" title="Edit fact"
@@ -17,6 +23,7 @@
     <p id="edit-error" role="alert">{{ validation() || error() }}</p>
   } @else if (state() === 'conflict') {
     <p role="status">This fact changed before your edit was saved</p>
+    @if (error()) { <p role="status">{{ error() }}</p> }
   } @else if (state() === 'unknown') {
     <p role="status">Outcome unknown</p>
   } @else if (state() === 'missing') {

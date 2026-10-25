@@ -691,9 +691,12 @@ Personal detail shows Edit only with `canCorrect: true`. The child editor keeps 
 per component. Only text changes; kind, pin and expiry come from the detail revision.
 `storeValidation` checks the 4,096-byte limit and controls. Cancel/Escape send nothing.
 Save locks dismissal and sends one `/correct` POST. Its text-free receipt shows accepted
-revision, UTC time and old-revision cleanup status, then one detail GET replaces row and detail.
-Edit stays disabled until that read finishes. Both editor revision labels and the saved date
-come from the same detail snapshot as the next Save command.
+revision, UTC time and old-revision cleanup status. Detail GETs repeat every 250 ms for
+at most five seconds, until the detail revision is at least the accepted revision.
+The screen shows “Saving...” during this wait. A temporary refusal or older revision
+keeps the last detail and controls. If the wait expires, Refresh details starts another
+bounded GET-only wait. Edit stays disabled until the saved revision is visible.
+Both editor revision labels and the saved date come from the same detail snapshot as the next Save command.
 A 409 or conflict status keeps the draft and offers one serial Refresh and review GET.
 The next save gets a new command id. Lost replies, 503 and unknown offer only serial status
 reads with the original id. A 422 returns to editing. Forgotten detail removes old text,
@@ -702,7 +705,8 @@ selected fact, editor draft and snapshot. The row shows only an unavailable mess
 list and detail reads are cancelled so they cannot restore the text. Other unavailable
 reasons keep the row and its text, while clearing the editor and saying the text is no
 longer available. These rules also apply to the detail read after acceptance. A temporary
-detail read failure keeps the last row; conflict recovery keeps its draft for another read. Refresh requires renewed `canCorrect: true`;
+detail read failure keeps the last row and controls; conflict recovery keeps its draft
+for another read. Refresh requires renewed `canCorrect: true`;
 false or absent rights never reopen editing. A receipt for another scope or fact stays unknown.
 401/403/404 use the existing access clearing. Scope/requester
 changes destroy the editor and ignore late replies. List announcements contain counts only.

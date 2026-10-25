@@ -492,15 +492,18 @@ Duplicate delivery and lost replies use saved completion without decrypting old 
 A failed verification or append leaves the fact hidden and the job available for retry.
 When retries run out, the dead-letter copy records `unavailable` with the fixed
 `retry_exhausted` code and logs only change, scope and original job ids. The failed
-original stays in place. Operator `replay('cleanup-memory', originalJobId)` can record
-`completed` after repair. Completion is terminal for the change; unavailable is not.
+original stays in place. On dispatcher restart, recovery retries that same job in its
+original order, with the normal retry allowance restored. An operator can also use
+`replay('cleanup-memory', originalJobId)` to retry it after repair. Completion is terminal for the change; unavailable is not.
 Before workers start, the dispatcher scans saved events in groups of 256 through its
-checkpoint and restores missing cleanup jobs for all three scopes. It skips completed
-changes and legacy tombstones. A retained failed original with no saved result
-gets an unavailable result and the same safe alert, even when its diagnostic copy
-has exhausted its own retries. A repeated scan records no second result. The failed
-original remains available for operator replay. This scan does not use keys, the
-projection or models.
+checkpoint and restores missing cleanup jobs for all three scopes. It skips legacy
+tombstones and does not create new jobs for completed changes. A retained failed original
+with no saved result gets an unavailable result and the same safe alert, even when its diagnostic copy
+has exhausted its own retries. Recovery then retries the failed original in place,
+including when its completion was saved before the queue commit failed. The handler
+reuses that completion and finishes its queue receipt without deleting keys again.
+A repeated scan records no second result and adds no duplicate job. This scan does not
+use keys, the projection or models.
 No model endpoint is used. Offline replay still runs no reaction and changes no keys.
 
 HTTP forget and status use current scope rights in `apps/server`.
@@ -751,13 +754,18 @@ is released only after preparation stops. `test/gateway-configuration.test.ts` c
 expiry while waiting and while holding the lock, with no saved generation after either.
 
 `DATABASE_URL` still owns HandlerRuntime, its manifest, checkpoint, queue and receipts.
-Nightly projection reads and configured connection cleanup also use the content pool.
+Nightly projection reads, memory cleanup verification and configured connection cleanup
+also use the content pool. Memory cleanup requires this separate connection; it never
+uses the jobs transaction to read projection checkpoints or saved facts.
 No projection tables are created in jobs. Connection cleanup and scans take the same
 content profile lock as staging, through separate clients. Custody stays optional;
 this binding does not configure or enable it.
 `test/worker-gateway.test.ts` starts the real dispatcher with two disposable databases
 and a content read role. It pauses real delivery and preparation in both orders, checks
 configuration refusal and connection loss, and checks that jobs stay separate.
+`test/worker-memory-cleanup.test.ts` retains correction and forget jobs across dispatcher
+restart with real NATS and separate databases. It checks one completion per change,
+key deletion, unchanged job ids and no second completion after another restart.
 Stage B owns fresh-install live proof; these fixture checks do not establish it.
 Legacy or stale intent completes
 without an append. Store failures retry. Enable it through the normal offline
@@ -854,8 +862,8 @@ per assistant, including shared group assistants.
 The [departure rules](#departure-cleanup), [connection cleanup rules](#personal-connection-cleanup)
 and [memory cleanup rules](#verified-memory-key-cleanup) hold the retry and recovery
 details moved out of the package overview. Memory cleanup keeps failed original
-jobs available for an operator to retry. Hidden facts stay hidden while physical
-key removal is pending.
+jobs and retries them in order on dispatcher restart. Operators can also retry them.
+Hidden facts stay hidden while physical key removal is pending.
 
 Hosted tools still cannot start through the application. The
 [admission rules](#hosted-mcp-admission) describe the separate Kubernetes checks.

@@ -75,9 +75,13 @@ change id, scope id and original job id. Duplicate copies cannot add another res
 The ops recovery pass checks the same retained failed original after restart. If the
 callback exhausted its retries while the event store was down, recovery records the
 missing result and logs the same safe alert. A saved completion or unavailable result
-prevents another report. The failed original stays available for operator replay.
+prevents another report. Before workers start, ops retries failed memory cleanup jobs
+in place with `{resetRetries: true}`. This restores the configured retry allowance
+and backoff count, so a briefly delayed projection does not exhaust recovery immediately.
+Job ids, stream order and saved completion receipts remain unchanged.
 Repair with `runtime.replay(name, originalJobId)`: it retries the original
-head once, preserving order. Never redrive the diagnostic copy. An operator can deliberately cancel a failed
+job once, preserving order. Other callers keep this single retry unless they explicitly
+request the reset. Never redrive the diagnostic copy. An operator can deliberately cancel a failed
 original with `npm run ops -- jobs --cancel <id>`. This records a cancelled job,
 keeps receipts and allows later jobs on that stream to run. There is no automatic skip.
 The pinned pg-boss adapter sets queued event jobs' `keep_until` to infinity

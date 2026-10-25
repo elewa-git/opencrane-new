@@ -111,7 +111,129 @@ function noPrivateAnnouncements(): void {
     expect(region.textContent).not.toMatch(/Private original text|New private text|My draft/);
   }
 }
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); TestBed.resetTestingModule(); });
+function cleanupTest(): void {
+  TestBed.resetTestingModule();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+}
+afterEach(cleanupTest);
+
+it.each([390, 1280])(
+  'waits for the accepted revision without losing controls at %i pixels', delayedProjection);
+
+async function delayedProjection(width: number): Promise<void> {
+  vi.stubGlobal('innerWidth', width);
+  await setup();
+  vi.useFakeTimers();
+  let reads = 0;
+  function catchingUp(): Promise<Response> {
+    reads += 1;
+    if (reads === 1) return Promise.resolve(response(503, {}));
+    if (reads === 2) return Promise.resolve(response(200, detail));
+    return Promise.resolve(response(200, { ...detail, fact: updated }));
+  }
+  latest = catchingUp;
+  saveDraft();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  expect(root.textContent).toContain('Saving...');
+  expect(buttons('Forget')).toHaveLength(1);
+  expect(buttons('Edit')[0]?.disabled).toBe(true);
+  await vi.advanceTimersByTimeAsync(250);
+  fixture.detectChanges();
+  expect(root.textContent).toContain('Saving...');
+  expect(buttons('Edit')[0]?.disabled).toBe(true);
+  await vi.advanceTimersByTimeAsync(250);
+  fixture.detectChanges();
+  expect(root.textContent).not.toContain('Saving...');
+  expect(root.querySelector('.detail-text')?.textContent).toBe(updated.text);
+  expect(buttons('Edit')[0]?.disabled).toBe(false);
+  expect(buttons('Forget')).toHaveLength(1);
+  expect(matching('/correct')).toHaveLength(1);
+  noPrivateAnnouncements();
+}
+
+it.each([390, 1280])(
+  'bounds revision polling and recovers with GET only at %i pixels', boundedRefresh);
+
+async function boundedRefresh(width: number): Promise<void> {
+  vi.stubGlobal('innerWidth', width);
+  await setup();
+  vi.useFakeTimers();
+  function staleDetail(): Promise<Response> {
+    return Promise.resolve(response(200, detail));
+  }
+  latest = staleDetail;
+  saveDraft();
+  await vi.advanceTimersByTimeAsync(5250);
+  fixture.detectChanges();
+  expect(root.textContent).not.toContain('Saving...');
+  expect(root.textContent).toContain('Details are unavailable right now.');
+  expect(buttons('Forget')).toHaveLength(1);
+  expect(buttons('Edit')[0]?.disabled).toBe(true);
+  const readCount = matching('/facts/one').length;
+  expect(readCount).toBeLessThanOrEqual(21);
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(matching('/facts/one')).toHaveLength(readCount);
+  function newerDetail(): Promise<Response> {
+    const newer = { ...detail, fact: { ...updated, revision: 9 } };
+    return Promise.resolve(response(200, newer));
+  }
+  latest = newerDetail;
+  const refresh = buttons('Refresh details')[0]!;
+  refresh.click();
+  refresh.click();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  expect(buttons('Edit')[0]?.disabled).toBe(false);
+  expect(root.querySelector('.detail-text')?.textContent).toBe(updated.text);
+  expect(matching('/facts/one')).toHaveLength(readCount + 1);
+  expect(matching('/correct')).toHaveLength(1);
+}
+
+it.each([401, 403, 404])('clears protected details when polling returns %i', deniedRefresh);
+
+async function deniedRefresh(code: number): Promise<void> {
+  await setup();
+  vi.useFakeTimers();
+  let reads = 0;
+  function deniedDetail(): Promise<Response> {
+    reads += 1;
+    return Promise.resolve(response(reads === 1 ? 503 : code, {}));
+  }
+  latest = deniedDetail;
+  saveDraft();
+  await vi.advanceTimersByTimeAsync(500);
+  fixture.detectChanges();
+  expect(root.textContent).toContain('Access changed');
+  expect(buttons('Forget')).toHaveLength(0);
+  noEditorText();
+  const readCount = calls.length;
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(calls).toHaveLength(readCount);
+}
+
+it.each(['scope', 'requester'])('stops revision polling after a %s change', cancelledRefresh);
+
+async function cancelledRefresh(change: string): Promise<void> {
+  await setup();
+  vi.useFakeTimers();
+  function unavailableDetail(): Promise<Response> {
+    return Promise.resolve(response(503, {}));
+  }
+  latest = unavailableDetail;
+  saveDraft();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  changeIdentity(change);
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  const count = calls.length;
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(calls).toHaveLength(count);
+  noEditorText();
+}
 
 it.each([
   ['person', { ...detail, canCorrect: false }], ['person', { ...detail, canCorrect: undefined }],
@@ -365,7 +487,10 @@ async function checkFailedDetail(outcome: string): Promise<void> {
   await setup();
   post = () => Promise.resolve(response(outcome === 'conflict' ? 409 : 200, accepted));
   latest = () => Promise.resolve(response(503, {}));
+  vi.useFakeTimers();
   saveDraft();
+  await vi.advanceTimersByTimeAsync(5250);
+  vi.useRealTimers();
   await settled();
   if (outcome === 'conflict') {
     click('Refresh and review');
@@ -377,7 +502,9 @@ async function checkFailedDetail(outcome: string): Promise<void> {
   expect(root.textContent).toContain('Details are unavailable right now.');
   expect(root.textContent).not.toMatch(/forgotten|no longer available/);
   expect(root.querySelector('button.fact')?.textContent).toContain(fact.text);
-  expect(buttons('Edit')).toHaveLength(0);
+  expect(buttons('Edit')).toHaveLength(1);
+  expect(buttons('Forget')).toHaveLength(1);
+  if (outcome === 'accepted') expect(buttons('Edit')[0]?.disabled).toBe(true);
   latest = () => Promise.resolve(response(200, { ...detail, fact: updated }));
   if (outcome === 'conflict') {
     click('Refresh and review');
@@ -385,8 +512,7 @@ async function checkFailedDetail(outcome: string): Promise<void> {
     expect(root.querySelector('textarea')?.value).toBe('My draft');
     expect(root.textContent).toContain('Current revision r8');
   } else {
-    click('‹ Back to memory');
-    root.querySelector<HTMLButtonElement>('button.fact')?.click();
+    click('Refresh details');
     await finishReplies();
     expect(root.querySelector('.detail-text')?.textContent).toBe(updated.text);
     expect(buttons('Edit')).toHaveLength(1);

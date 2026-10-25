@@ -11,7 +11,7 @@ import { onTestFinished, vi } from 'vitest';
 import { scheduleNightly } from '../../../../libs/handlers/src/queue.ts';
 import { scanNightlyMemory } from '../../src/nightly-memory.ts';
 
-export async function reactionWorker() {
+export async function reactionWorker(pauseHandlers = false) {
   const storage = await databases();
   const contentUrl = await storage.postgres();
   const content = projections.connectProjectionDb(contentUrl, connectionFailed);
@@ -67,6 +67,9 @@ export async function reactionWorker() {
   }
   // Replace the wall clock only; keep the real queue, callback and failed-trigger recovery.
   class Runtime extends handlers.HandlerRuntime {
+    override async work(concurrency = 4) {
+      if (!pauseHandlers) await super.work(concurrency);
+    }
     override async startNightly(callback: (occurrence: Date) => Promise<void>) {
       scan = callback;
       const options = { connectionString: storage.queue.options.connectionString!,
@@ -205,6 +208,9 @@ export async function reactionWorker() {
   }
   return { storage, content, reader, nats, logger, clock, custody, candidates, recover, remove,
     ordering, start, stop, grantReads,
+    resumeHandlers() {
+      pauseHandlers = false;
+    },
     scan(occurrence: Date) {
       return scan(occurrence);
     },

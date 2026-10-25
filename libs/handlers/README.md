@@ -25,7 +25,7 @@ flowchart LR
   handlers -->|runs work with cancellation and a deadline| reactions["libs/models and libs/authz<br/>registered reactions"]
   handlers -.-> store["libs/event-store<br/>connection and record checks"]
   handlers -.-> events["libs/events<br/>reaction subscriptions"]
-  handlers -->|stores the job list| pg["PostgreSQL<br/>database"]
+  handlers -->|stores jobs and completion notes| pg["PostgreSQL<br/>database"]
 ```
 
 ## What it is responsible for
@@ -49,6 +49,8 @@ flowchart LR
 2. **A reaction fails.** Later jobs for the same item wait while unrelated jobs
    continue. The failed job remains available for an operator to repair and retry.
    Memory cleanup also records when cleanup is unavailable after retries run out.
+   On restart, the dispatcher retries those original cleanup jobs in order with the
+   normal retry allowance. A saved completion prevents the work from happening twice.
 3. **A release changes subscriptions.** Startup can check subscriptions before admitting members. The dispatcher reports a
    change and waits for shutdown. The upgrade adds jobs for relevant older events only once
    every other program using the database has stopped. Completed work stays completed.

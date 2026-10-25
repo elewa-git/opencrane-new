@@ -170,8 +170,8 @@ async function verifySearchRemoval(db: Query, silo: string, scopeId: string,
   }
 }
 
-export function memoryCleanupHandler(store: EventStore, keys: Keys) {
-  async function cleanup(trigger: EventEnvelope, db: Query) {
+export function memoryCleanupHandler(store: EventStore, keys: Keys, contentDb: Query) {
+  async function cleanup(trigger: EventEnvelope) {
     const state = await cleanupHistory(store, trigger);
     if (state.completed) return;
     const erasure = await memoryErasureHistory(state.rows);
@@ -182,7 +182,7 @@ export function memoryCleanupHandler(store: EventStore, keys: Keys) {
     await destroyKeys(keys, targets.candidates, false);
     const sequence = state.rows.at(-1)?.sequence ?? 0;
     const data = state.data;
-    await verifySearchRemoval(db, state.saved.silo, data.scopeId, hidden, superseded, sequence);
+    await verifySearchRemoval(contentDb, state.saved.silo, data.scopeId, hidden, superseded, sequence);
     // Refuse completion if content moved after the checked history. Retry from events.
     await appendRecord(store, state.saved, 'completed', sequence);
   }
@@ -197,7 +197,7 @@ export function memoryCleanupHandler(store: EventStore, keys: Keys) {
 }
 
 async function restoreCleanupBatch(runtime: HandlerRuntime, handler: Handler,
-  batch: MemoryChange[]): Promise<number> {
+  batch: MemoryChange[], completed: Set<string>): Promise<number> {
   const failedOriginals: { event: MemoryChange; id: string }[] = [];
   let queued = 0;
   async function enqueuePending(tx: Query) {
@@ -216,20 +216,39 @@ async function restoreCleanupBatch(runtime: HandlerRuntime, handler: Handler,
         failedOriginals.push({ event, id: original.id });
         continue;
       }
-      if (receipt.rows.length || original) continue;
+      if (receipt.rows.length || original || completed.has(event.id)) continue;
       await runtime.enqueue(handler, event, tx);
       queued += 1;
     }
   }
   await runtime.options.db.transaction(enqueuePending);
+  const retryOptions = { resetRetries: true };
   for (const original of failedOriginals) {
     // Report after the SQL transaction, so the event store can append one outcome.
     await runtime.reportFailedOriginal(handler, original.event, original.id);
+    // Retry the original in place so later changes cannot pass it or stay blocked after repair.
+    // Let the handler reuse a saved completion if the earlier attempt lost its queue commit.
+    await runtime.replay(handler.name, original.id, retryOptions);
+    queued += 1;
   }
   return queued;
 }
 
-/** Rebuild missing queue work from events before the dispatcher starts its workers. */
+function rememberCompletion(event: EventEnvelope, changes: Map<string, MemoryChange>,
+  failedChanges: Set<string>, completed: Set<string>): void {
+  const result = memoryCleanupRecordedEventSchema.parse(event);
+  const changeId = result.data.changeId;
+  const original = changes.get(changeId);
+  if (!original || !recordedFor(event, original, 'completed')) return;
+  if (failedChanges.has(changeId)) {
+    // Keep the saved completion until the failed queue commit has been retried.
+    completed.add(changeId);
+  } else {
+    changes.delete(changeId);
+  }
+}
+
+/** Restore missing jobs and retry failed cleanup before the dispatcher starts its workers. */
 export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: EventSource,
   checkpoint: number): Promise<number> {
   function isCleanup(candidate: typeof runtime.options.handlers[number]) {
@@ -238,7 +257,13 @@ export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: Even
   const handler = runtime.options.handlers.find(isCleanup);
   if (!handler) return 0;
   const cleanupHandler = handler;
-  const pending = new Map<string, MemoryChange>();
+  const failedJobs = await runtime.options.db.query<{ event_id: string }>(
+    "SELECT data->>'id' AS event_id FROM pgboss.job WHERE name='cleanup-memory' AND state='failed'",
+  );
+  const failedChanges = new Set<string>();
+  for (const job of failedJobs.rows) failedChanges.add(job.event_id);
+  const changes = new Map<string, MemoryChange>();
+  const completed = new Set<string>();
   const head = await source.head();
   if (head < checkpoint) throw new Error('Cleanup recovery checkpoint exceeds history');
   for (let start = 1; start <= head; start += 256) {
@@ -250,23 +275,19 @@ export async function recoverMemoryCleanup(runtime: HandlerRuntime, source: Even
         const saved = parseChange(event);
         if (!('schemaVersion' in saved.data)) continue;
         if (row.sequence <= checkpoint) {
-          pending.set(event.id, saved);
+          changes.set(event.id, saved);
         }
       }
       if (event.type === 'memory.cleanup_recorded') {
-        const result = memoryCleanupRecordedEventSchema.parse(event);
-        const original = pending.get(result.data.changeId);
-        if (original && recordedFor(event, original, 'completed')) {
-          pending.delete(result.data.changeId);
-        }
+        rememberCompletion(event, changes, failedChanges, completed);
       }
     }
   }
-  const saved = [...pending.values()];
+  const saved = [...changes.values()];
   let queued = 0;
   for (let start = 0; start < saved.length; start += 256) {
     const batch = saved.slice(start, start + 256);
-    queued += await restoreCleanupBatch(runtime, cleanupHandler, batch);
+    queued += await restoreCleanupBatch(runtime, cleanupHandler, batch, completed);
   }
   return queued;
 }

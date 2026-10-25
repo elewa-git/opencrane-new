@@ -89,7 +89,7 @@ describe.each(['person', 'group', 'assistant_notes'] as const)(
     });
 
     function handler() {
-      return memoryCleanupHandler(nats.store, keys);
+      return memoryCleanupHandler(nats.store, keys, storage.db);
     }
 
     async function completions() {
@@ -187,7 +187,7 @@ describe.each(['person', 'group', 'assistant_notes'] as const)(
           remove(identity);
         }
         const failingKeys = { ...keys, delete: failChild };
-        const failing = memoryCleanupHandler(nats.store, failingKeys);
+        const failing = memoryCleanupHandler(nats.store, failingKeys, storage.db);
         await expect(failing.handle(forgotten, storage.db)).rejects.toThrow('Deletion unavailable');
         expect(keys.status(root)).toBe('destroyed');
         expect(keys.status(child)).toBe('available');
@@ -246,7 +246,7 @@ describe.each(['person', 'group', 'assistant_notes'] as const)(
           remove(identity);
         }
         const failingKeys = { ...keys, delete: failChild };
-        const reaction = memoryCleanupHandler(nats.store, failingKeys);
+        const reaction = memoryCleanupHandler(nats.store, failingKeys, storage.db);
         const logger = createLogger('cleanup-exhaustion-test');
         const errors = vi.spyOn(logger, 'error');
         const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
@@ -308,7 +308,7 @@ describe.each(['person', 'group', 'assistant_notes'] as const)(
         expect(await readMemoryFactIds(storage.db, independent.silo, independent.scopeId))
           .toEqual([{ memory_id: 'independent' }]);
         await runtime.stop();
-        const repaired = memoryCleanupHandler(nats.store, keys);
+        const repaired = memoryCleanupHandler(nats.store, keys, storage.db);
         const retry = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
           handlers: [repaired], retryLimit: 0 });
         await retry.start();
@@ -358,7 +358,7 @@ describe.each(['person', 'group', 'assistant_notes'] as const)(
           remove(identity);
         }
         const failingKeys = { ...keys, delete: failChild };
-        const reaction = memoryCleanupHandler(nats.store, failingKeys);
+        const reaction = memoryCleanupHandler(nats.store, failingKeys, storage.db);
         const logger = createLogger('lost-cleanup-report-test');
         const alerts = vi.spyOn(logger, 'error');
         const runtime = new HandlerRuntime({ db: storage.db, logger, silo: 'test',
@@ -394,14 +394,13 @@ describe.each(['person', 'group', 'assistant_notes'] as const)(
           handlers: [handler()], retryLimit: 0 });
         await restarted.start();
         const checkpoint = await nats.store.head();
-        expect(await recoverMemoryCleanup(restarted, nats.reader, checkpoint)).toBe(0);
+        expect(await recoverMemoryCleanup(restarted, nats.reader, checkpoint)).toBe(1);
         expect(await recoverMemoryCleanup(restarted, nats.reader, checkpoint)).toBe(0);
         expect((await completions()).map(resultOutcome)).toEqual(['unavailable']);
-        function jobId(job: { id: string }) {
-          return job.id;
-        }
-        expect((await restarted.deadLetters('cleanup-memory')).map(jobId))
-          .toContain(failed.id);
+        expect(await restarted.deadLetters('cleanup-memory')).toEqual([]);
+        const retried = await storage.db.query(
+          "SELECT id, state FROM pgboss.job WHERE name='cleanup-memory'");
+        expect(retried.rows).toEqual([{ id: failed.id, state: 'retry' }]);
         expect(alerts).toHaveBeenCalledTimes(1);
         expect(JSON.stringify(alerts.mock.calls)).toContain(failed.id);
         expect(JSON.stringify(alerts.mock.calls)).not.toContain('PRIVATE ERROR');
@@ -426,7 +425,7 @@ describe.each(['person', 'group', 'assistant_notes'] as const)(
         await runner.run(projection);
         await reaction.handle(forgotten, storage.db);
         expect((await completions()).map(resultOutcome)).toEqual(['completed']);
-        expect(await recoverMemoryCleanup(runtime, nats.reader, await nats.store.head())).toBe(0);
+        expect(await recoverMemoryCleanup(runtime, nats.reader, await nats.store.head())).toBe(1);
         expect((await completions()).map(resultOutcome)).toEqual(['completed']);
         await runtime.stop();
       }, 30_000);
