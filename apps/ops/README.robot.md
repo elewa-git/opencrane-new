@@ -560,6 +560,91 @@ the saved result visible while the original failed job still exists. It then wai
 for that exact job to disappear and checks there is one missed result for the
 original night. Seeing the event alone does not mean queue cleanup has finished.
 
+### Nightly recovery test evidence
+
+24–25 October 2026, part of #576. `recoverNightly` in
+[`libs/handlers/src/queue.ts`](../../libs/handlers/src/queue.ts) waits for the scan
+before deleting the failed job. The scan saves `memory.maintenance_recorded` first.
+The old test waited only for that event, then read the job table too early.
+Each case has its own databases and NATS server, so this is not a job left by another case.
+
+Test commit `1178294c8` holds deletion until the test first reads the queue. Both
+checkpoint cases then FAIL as expected: one result is saved but the failed job remains.
+The fix waits for that exact job to disappear. It still checks one missed result for
+the original night. It changes no product code, sleep or timeout.
+
+Environment: Node 22.23.3, dependencies installed with `npm ci`, disposable
+PostgreSQL 17.6-alpine on port 35536 and a separate NATS fixture for each case.
+This was not a fresh silo installation. The PostgreSQL container was removed with
+its volume after the tests. The NATS and Lychee tools use the requested shared symlinks.
+
+Runs 1–16 used source `7f36f74cf`; runs 17–30 used source `bffb63e88`.
+The only intervening change adds the query's result type to satisfy lint.
+It has no runtime effect. The final source also passed the ops package typecheck.
+
+Every test process ran under `nice -n 10` with `--maxWorkers=1` and `PG_TEST_URL`
+pointing to the disposable database. Target runs were sequential. A second process
+repeated `apps/ops/test/nightly-memory.test.ts` alongside them; all 22 companion runs
+PASS with 14/14 tests each. No test run was retried. Local logs and JSON reports are
+in `/tmp/ci-flakes-12-repeat/`, named `recovery-<run>` and `load-<run>`.
+
+The target command was:
+
+```sh
+nice -n 10 node node_modules/vitest/vitest.mjs run \
+  apps/ops/test/worker-reactions.test.ts --maxWorkers=1
+```
+
+Expected for every target run: all eight tests pass, including both checkpoint cases,
+with one original-night result and no retained failed job after recovery.
+
+| Run | Result | Tests passed | Seconds |
+| --- | --- | --- | --- |
+| 1 | PASS | 8/8 | 57.48 |
+| 2 | PASS | 8/8 | 62.32 |
+| 3 | PASS | 8/8 | 60.38 |
+| 4 | PASS | 8/8 | 60.80 |
+| 5 | PASS | 8/8 | 62.66 |
+| 6 | PASS | 8/8 | 71.86 |
+| 7 | PASS | 8/8 | 69.98 |
+| 8 | PASS | 8/8 | 77.02 |
+| 9 | PASS | 8/8 | 72.46 |
+| 10 | PASS | 8/8 | 63.13 |
+| 11 | PASS | 8/8 | 93.08 |
+| 12 | PASS | 8/8 | 75.55 |
+| 13 | PASS | 8/8 | 80.94 |
+| 14 | PASS | 8/8 | 96.84 |
+| 15 | PASS | 8/8 | 74.19 |
+| 16 | PASS | 8/8 | 63.08 |
+| 17 | PASS | 8/8 | 73.55 |
+| 18 | PASS | 8/8 | 75.78 |
+| 19 | PASS | 8/8 | 73.61 |
+| 20 | PASS | 8/8 | 59.74 |
+| 21 | PASS | 8/8 | 48.42 |
+| 22 | PASS | 8/8 | 47.62 |
+| 23 | PASS | 8/8 | 41.31 |
+| 24 | PASS | 8/8 | 41.18 |
+| 25 | PASS | 8/8 | 38.94 |
+| 26 | PASS | 8/8 | 36.59 |
+| 27 | PASS | 8/8 | 38.64 |
+| 28 | PASS | 8/8 | 37.16 |
+| 29 | PASS | 8/8 | 37.38 |
+| 30 | PASS | 8/8 | 37.80 |
+
+Other checks:
+
+| Check | Result |
+| --- | --- |
+| Initial full changed test file | PASS, 8/8 |
+| Event security rules | PASS, 438/438 |
+| Full lint | PASS after adding the query result type; initial run FAIL |
+| Full typecheck | PASS |
+| Final ops typecheck | PASS |
+| Event catalogue | PASS, 153 event types |
+| Knip | PASS |
+| Changelog lint | PASS |
+| Full root test suite and fresh-install journeys | NOT RUN; outside this test-only change |
+
 ## Departure cleanup
 
 `cleanup-departure` subscribes to `member.removed`. The saved removal must carry
