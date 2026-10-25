@@ -12,15 +12,16 @@ developers can check the product before the customer installer is built.
 This is infrastructure beside [infra/dev-stack](../dev-stack/README.md) and
 [infra/devbox](../devbox/README.md). It runs only in one of the two
 [spare dev stacks](../../GLOSSARY.md#slot-spare-dev-stack), never the owner's copy.
-Both install paths use the local [Kubernetes](../../GLOSSARY.md#kubernetes) cluster,
+Both install paths use local [Kubernetes](../../GLOSSARY.md#kubernetes),
 which runs programs in [Pods](../../GLOSSARY.md#container-and-pod).
+A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
   infra["infra<br/>infrastructure"] --> package["infra/package<br/>Helm, certificates and event copies"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|reserves test space| package
+  stack -->|reserves test space and checks cluster access| package
   package -->|uses local cluster| devbox
   package -->|starts| apps["Website, server and workers<br/>product requests and background jobs"]
   package -->|runs| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
@@ -85,7 +86,8 @@ infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 
 The optional event-log render describes three private NATS peers on separate Kubernetes
 nodes. A separate preparation command creates their private certificates and public trust.
-It checks ownership and preserves the same identities on retry. Installation still uses
+It checks ownership and uses the claimed cluster's private connection settings.
+It preserves the same identities on retry. Installation still uses
 one peer; the ordinary installer refuses three-peer mode. Live checks remain outstanding.
 
 The chart render test needs Helm and checks the installation files without starting

@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { directory, root } from '../dev-stack/config.ts';
 import { verifyPackageOwner } from '../dev-stack/packaged.ts';
+import { targetConnection } from '../dev-stack/target.ts';
 
 const execute = promisify(execFile);
 const routesDirectory = `${directory}/nats-routes`;
@@ -31,7 +32,11 @@ async function command(program: string, args: string[], cwd = root) {
 }
 
 async function kubectl(owner: Owner, args: string[]) {
-  return command('kubectl', [`--context=${owner.context}`, '-n', owner.namespace, ...args]);
+  const connection = await targetConnection();
+  assert.equal(connection.context, owner.context);
+  const options = [`--context=${connection.context}`];
+  if (connection.kubeconfig) options.push('--kubeconfig', connection.kubeconfig);
+  return command('kubectl', [...options, '-n', owner.namespace, ...args]);
 }
 
 async function privateDirectory(path: string) {

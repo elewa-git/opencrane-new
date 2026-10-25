@@ -283,8 +283,10 @@ P5-4 PR 3b adds `prepare-nats-routes.ts`. After ordinary private preparation, ru
 `DEV_STACK_ID="$DEV_STACK_ID" node --experimental-strip-types infra/package/prepare-nats-routes.ts /private/cluster-values.json`.
 The values include the cluster render settings above. The command checks the recorded
 package owner, uses its verified Kubernetes context, checks reviewed image pins and
-renders the real chart in that namespace. There is no caller context override.
-The claim-context change owned by p5-4-target1 can supply its verified record directly.
+renders the real chart in that namespace. Each Secret read and creation checks the
+target again and uses its private kubeconfig when a separate target is recorded.
+Without a separate target, it uses the existing `k3d-ocn` context. There is no caller
+context override. Offline chart rendering does not connect to Kubernetes.
 
 A separate 30-day route issuer signs three distinct keys and certificates. Each
 certificate has exactly its peer's private DNS name and both TLS usages. The command
