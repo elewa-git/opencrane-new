@@ -512,15 +512,35 @@ const program = path.basename(process.argv[1]);
 const args = process.argv.slice(2);
 state.calls.push([program, ...args]);
 const ownerFile = home + '/.config/opencrane/dev-stack-1/target-owner.json';
-const save = () => fs.writeFileSync(file, JSON.stringify(state));
-const output = value => process.stdout.write(JSON.stringify(value));
+function save() {
+  fs.writeFileSync(file, JSON.stringify(state));
+}
+function output(value) {
+  process.stdout.write(JSON.stringify(value));
+}
+function containerId(item) {
+  return item.Id;
+}
+function selected(item) {
+  return args.includes(item.Id);
+}
+function unselected(item) {
+  return !selected(item);
+}
+if (state.fail === 'hang-' + program) {
+  save(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30000);
+}
 if (state.fail === program) { save(); console.error('PRIVATE-UPSTREAM-MARKER'); process.exit(1); }
 if (program === 'docker') {
   if (args[0] === 'ps' && args.includes('status=running')) { save(); process.exit(0); }
-  if (args[0] === 'ps') process.stdout.write(state.containers.map(item => item.Id).join('\\n'));
-  if (args[0] === 'inspect') output(state.containers.filter(item => args.includes(item.Id)));
+  if (args[0] === 'ps') {
+    const listed = state.containers.map(containerId);
+    if (!args.includes('--filter')) listed.push(...state.otherContainers);
+    process.stdout.write(listed.join('\\n'));
+  }
+  if (args[0] === 'inspect') output(state.containers.filter(selected));
   if (args[0] === 'network' && args[1] === 'ls') {
-    process.stdout.write(state.networks.map(item => item.Id).join('\\n'));
+    process.stdout.write(state.networks.map(containerId).join('\\n'));
   }
   if (args[0] === 'network' && args[1] === 'inspect') output(state.networks);
   if (args[0] === 'network' && args[1] === 'create') {
@@ -530,20 +550,31 @@ if (program === 'docker') {
     process.stdout.write('network-original');
   }
   if (args[0] === 'rm' && !state.retain) {
-    state.containers = state.containers.filter(item => !args.includes(item.Id));
+    state.containers = state.containers.filter(unselected);
+    function keepOther(id) {
+      return !args.includes(id);
+    }
+    state.otherContainers = state.otherContainers.filter(keepOther);
   }
   if (args[0] === 'network' && args[1] === 'rm' && !state.retain) state.networks = [];
 }
 if (program === 'k3d' && args[1] === 'create') {
   const owner = JSON.parse(fs.readFileSync(ownerFile));
   state.recordBeforeCreate = owner;
-  state.containers = [0, 1, 2].map(index => ({ Id: 'container-' + index,
-    Config: { Labels: { 'opencrane.dev/target-id': owner.id } }, Mounts: [] }));
-  state.nodes = [0, 1, 2].map(index => ({ metadata: { name: 'node-' + index,
-    uid: 'node-uid-' + index, labels: { 'opencrane.dev/target-id': owner.id } } }));
+  function container(index) {
+    return { Id: 'container-' + index,
+      Config: { Labels: { 'opencrane.dev/target-id': owner.id } }, Mounts: [] };
+  }
+  function node(index) {
+    return { metadata: { name: 'node-' + index, uid: 'node-uid-' + index,
+      labels: { 'opencrane.dev/target-id': owner.id } } };
+  }
+  state.containers = [0, 1, 2].map(container);
+  state.nodes = [0, 1, 2].map(node);
   if (state.partial) { state.containers.pop(); save(); process.exit(1); }
 }
 if (program === 'k3d' && args[0] === 'kubeconfig') process.stdout.write('PRIVATE-KUBECONFIG');
+if (program === 'helm' && args.includes('list')) output([]);
 if (program === 'kubectl' && args.includes('nodes')) output({ items: state.nodes });
 if (program === 'kubectl' && args.includes('namespace') && state.namespace) output(state.namespace);
 save();
@@ -551,9 +582,11 @@ save();
 
 type TargetState = {
   calls: string[][];
+  otherContainers: string[];
   containers: Array<{ Id: string; Config: { Labels: Record<string, string> }; Mounts: unknown[] }>;
   networks: Array<{ Id: string; Name: string; Labels: Record<string, string> }>;
   nodes: Array<{ metadata: { name: string; uid: string; labels: Record<string, string> } }>;
+  namespace?: { metadata: { uid: string; annotations: Record<string, string> } };
   fail?: string;
   partial?: boolean;
   retain?: boolean;
@@ -563,8 +596,9 @@ async function targetFixture() {
   const fixture = await createClaimFixture();
   const owner = `worktree=${process.cwd()}\npid=2147483647\nstartedAt=2020-01-01T00:00:00Z\n`;
   await writeFile(`${fixture.slotDirectory}/stack-owner`, owner);
-  const state: TargetState = { calls: [], containers: [], networks: [], nodes: [] };
-  for (const program of ['docker', 'k3d', 'kubectl']) {
+  const state: TargetState = { calls: [], containers: [], networks: [], nodes: [],
+    otherContainers: ['owner-container', 'slot-2-container'] };
+  for (const program of ['docker', 'k3d', 'kubectl', 'helm']) {
     await writeFile(`${fixture.home}/bin/${program}`, targetCommands, { mode: 0o755 });
   }
   async function saveState() {
@@ -598,6 +632,7 @@ async function targetLifecycle() {
     assert.match(calls, /--timeout","120s/u);
     assert.match(calls, /--cpus","1/u);
     assert.ok(fixture.state.recordBeforeCreate?.id);
+
     const recordFile = `${fixture.slotDirectory}/target-owner.json`;
     assert.equal((await stat(recordFile)).mode & 0o777, 0o600);
     assert.equal((await stat(`${fixture.slotDirectory}/target.kubeconfig`)).mode & 0o777, 0o600);
@@ -605,10 +640,13 @@ async function targetLifecycle() {
     await writeDeadOwner(fixture.slotDirectory, 16);
     await assert.rejects(fixture.run('claim'));
     await writeFile(`${fixture.slotDirectory}/stack-owner`, `worktree=${process.cwd()}\n`);
+    fixture.state.calls = [];
+    await fixture.saveState();
     await fixture.run('target-down');
     await fixture.loadState();
     assert.equal(fixture.state.containers.length, 0);
     assert.equal(fixture.state.networks.length, 0);
+    assert.deepEqual(fixture.state.otherContainers, ['owner-container', 'slot-2-container']);
     assert.ok(fixture.state.calls.some(isExactContainerRemoval));
     assert.doesNotMatch(JSON.stringify(fixture.state.calls), /k3d-ocn|opencrane-target-2/u);
     await assert.rejects(stat(recordFile), { code: 'ENOENT' });
@@ -624,13 +662,16 @@ function isExactContainerRemoval(call: string[]) {
 }
 test('target records ownership before bounded creation; removal permits reclaim', targetLifecycle);
 
-for (const fault of ['docker', 'kubectl', 'container', 'node', 'network', 'worktree', 'retained']) {
+for (const fault of ['docker', 'kubectl', 'container', 'node', 'network', 'worktree', 'retained', 'hang-docker', 'label']) {
   async function refusesUnsafeTargetRemoval() {
     const fixture = await targetFixture();
     try {
       await fixture.run('target-up');
       await fixture.loadState();
-      if (fault === 'docker' || fault === 'kubectl') fixture.state.fail = fault;
+      if (['docker', 'kubectl', 'hang-docker'].includes(fault)) fixture.state.fail = fault;
+      if (fault === 'label') {
+        fixture.state.containers[0]!.Config.Labels['opencrane.dev/target-id'] = 'foreign';
+      }
       if (fault === 'container') fixture.state.containers[0]!.Id = 'replacement';
       if (fault === 'node') fixture.state.nodes[0]!.metadata.uid = 'replacement';
       if (fault === 'network') fixture.state.networks[0]!.Id = 'replacement';
@@ -638,7 +679,11 @@ for (const fault of ['docker', 'kubectl', 'container', 'node', 'network', 'workt
       if (fault === 'retained') fixture.state.retain = true;
       fixture.state.calls = [];
       await fixture.saveState();
+      const started = Date.now();
       await assert.rejects(fixture.run('target-down'));
+      if (fault === 'hang-docker') {
+        assert.ok(Date.now() - started < 25_000, 'command timeout must be bounded');
+      }
       await fixture.loadState();
       if (fault !== 'retained') assert.ok(!fixture.state.calls.some(isExactContainerRemoval));
       assert.ok((await stat(`${fixture.slotDirectory}/target-owner.json`)).isFile());
@@ -659,6 +704,13 @@ async function interruptedTarget() {
     await assert.rejects(fixture.run('target-up'));
     await fixture.loadState();
     assert.equal(fixture.state.containers.length, 2);
+    const labels = fixture.state.containers[0]!.Config.Labels;
+    const originalId = labels['opencrane.dev/target-id']!;
+    labels['opencrane.dev/target-id'] = 'foreign';
+    await fixture.saveState();
+    await assert.rejects(fixture.run('target-down'));
+    labels['opencrane.dev/target-id'] = originalId;
+    await fixture.saveState();
     await writeDeadOwner(fixture.slotDirectory, 16);
     await assert.rejects(fixture.run('claim'));
     await writeFile(`${fixture.slotDirectory}/stack-owner`, `worktree=${process.cwd()}\n`);
@@ -692,3 +744,36 @@ async function privateTargetFailure() {
   }
 }
 test('target dependency output stays private and failed creation keeps the record', privateTargetFailure);
+
+async function packageUsesCheckedTarget() {
+  const fixture = await targetFixture();
+  try {
+    await fixture.run('target-up');
+    await fixture.loadState();
+    const annotations = { 'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1' };
+    fixture.state.namespace = { metadata: { uid: 'package-uid', annotations } };
+    fixture.state.calls = [];
+    await fixture.saveState();
+    const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-opencrane-target-1',
+      namespace: 'opencrane-package-1', namespaceUid: 'package-uid',
+      release: 'opencrane-package-1' };
+    await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(owner));
+    const otherSlot = `${fixture.home}/.config/opencrane/dev-stack-2`;
+    await mkdir(otherSlot);
+    await writeFile(`${otherSlot}/sentinel`, 'other slot');
+    await fixture.run('package-check');
+    await fixture.run('package-down');
+    await fixture.loadState();
+    for (const call of fixture.state.calls) {
+      if (call[0] !== 'kubectl' && call[0] !== 'helm') continue;
+      assert.ok(call.includes('--kubeconfig'));
+      assert.ok(call.includes('k3d-opencrane-target-1') ||
+        call.includes('--context=k3d-opencrane-target-1'));
+    }
+    assert.ok((await stat(`${fixture.slotDirectory}/target-owner.json`)).isFile());
+    assert.equal(await readFile(`${otherSlot}/sentinel`, 'utf8'), 'other slot');
+  } finally {
+    await fixture.close();
+  }
+}
+test('package ownership and cleanup use only the checked target context', packageUsesCheckedTarget);

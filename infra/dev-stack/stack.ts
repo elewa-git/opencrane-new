@@ -24,7 +24,8 @@ import { setupDevProvider } from './provider-setup.ts';
 import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
 import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
-  verifyPackageOwner } from './packaged.ts';
+  requireOwner, verifyPackageOwner } from './packaged.ts';
+import { createTarget, removeTarget, targetConnection, targetRecorded } from './target.ts';
 
 const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
@@ -817,6 +818,25 @@ try {
     console.log(stackId);
     process.exit(0);
   }
+  if (action?.startsWith('target-')) {
+    await requireOwner();
+    if (action === 'target-up') {
+      if (await stackProcessIsRunning() ||
+          (!await targetRecorded() && await packagedSlotIsBusy())) {
+        throw new Error('This slot already runs a stack or package');
+      }
+      await createTarget();
+    } else if (action === 'target-check') {
+      if (!await targetRecorded()) throw new Error('No target is recorded');
+      await targetConnection();
+    } else if (action === 'target-down') {
+      await removePackage(false);
+      await removeTarget();
+    } else {
+      throw new Error('Unknown target action');
+    }
+    process.exit(0);
+  }
   if (action?.startsWith('package-')) {
     if (action === 'package-prepare') {
       if (await stackProcessIsRunning()) {
@@ -836,6 +856,7 @@ try {
     if (owner?.worktree !== root) throw new Error('This worktree does not own the slot');
     try {
       await removePackage(false);
+      await removeTarget();
     } catch {
       packageRemovalFailed = true;
     }

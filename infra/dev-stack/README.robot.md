@@ -507,6 +507,40 @@ with `NODE_OPTIONS=--max-old-space-size=6144`. The initial lint attempt exhauste
 default 4 GiB heap before reaching the later checks. CI already gives lint an 8 GiB heap.
 Full root suite: **NOT RUN**.
 
+## Owned local qualification target
+
+Part of #15, P5-4 PR 3a. `run.sh target-up --id 1` creates a dedicated k3d
+cluster only after this worktree obtains that slot through `claim.sh`.
+The fixed name is `opencrane-target-1` (or `-2`), with one server and two agents.
+The API binds loopback port 25113 (or 25213). There is no load balancer, registry,
+image volume or change to the default kubeconfig. The existing devbox k3s digest
+is reused. This helper installs no product services or computer prerequisites.
+
+Each node starts with a 768 MiB memory limit. After creation returns, each receives
+a one-CPU limit before readiness is checked. k3d does not offer a creation-time
+CPU limit. Startup, including an interrupted create, can remain uncapped for CPU. The slot cannot
+also run Compose or another package. The owner-plus-two limit is unchanged.
+All four k3s data directories bind into the slot's private `target-data` folder.
+No Docker volume may remain attached when ownership is accepted or cleanup starts.
+
+`target-owner.json` saves a random attempt ID before creation, then Docker network
+and container IDs and Kubernetes node UIDs. Labels carry the attempt ID. An
+interrupted create can be removed only when those labels and saved IDs agree.
+`target-check` verifies the recorded target. `target-down` removes its package
+first, checks identities, removes Docker resources by ID and confirms their absence
+before deleting storage and ownership. Ordinary secondary `down` also does this.
+A record keeps the claim busy even before a namespace exists or after the launcher
+and 15-minute grace period end. Uncertain Docker or Kubernetes state retains it.
+A partial target must be cleaned up before another creation attempt.
+
+Commands capture output in memory and discard dependency errors. The kubeconfig
+and ownership file are mode 0600. Inspection takes at most ten seconds per command;
+creation has a 150-second command limit and a 120-second k3d limit. Node registration
+and readiness each have a separate bounded wait. Package ownership and cleanup
+use the checked context and private kubeconfig; arbitrary contexts are not accepted.
+Preparation, bootstrap and browser integration remain PR 4 work. Live creation,
+three-node placement and failure drills are NOT RUN until `p5-4-live1`.
+
 ## Parallel journeys
 
 The default id, `owner`, keeps the existing directory, project, ports, data and
@@ -532,7 +566,7 @@ worktree that claims again gets its existing id. A claim stays reserved for 15 m
 from its `startedAt` timestamp, even after the claiming process has ended. This gives
 `up --fresh` time to start the stack. After that, a slot is stale when its claiming
 process has ended and no recorded host process, running Compose container or
-package namespace remains. The package owner record keeps the worktree, slot,
+package namespace or recorded qualification target remains. The package owner record keeps the worktree, slot,
 cluster, namespace UID, Helm release and heartbeat. Kubernetes errors count as
 busy. `package-down` checks those identities before removal; ordinary secondary
 `down` does the same first. Package preparation checks for running Compose host

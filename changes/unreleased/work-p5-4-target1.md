@@ -1,0 +1,1 @@
+- Spare test slots can own a separate three-node Kubernetes target. Saved resource identities protect interrupted creation and cleanup, and package commands use the checked target context. Live creation and placement remain NOT RUN.
