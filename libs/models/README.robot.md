@@ -3397,6 +3397,8 @@ The caller cannot choose another owner. Receipts contain status, sequence and ch
 broker deduplication expires. Concurrent identical commands recover the original receipt.
 
 The command reads profile, control and server facts before member/tool access checks.
+It keeps any history or conflicting-retry error until current access has been checked.
+A removed member receives the same refusal whether those reads succeed or fail.
 It checks applied grant and team receipts and watches their exact streams. The event store
 repeats the checks inside one conditional append and binds them to the global log position.
 An unrelated concurrent append can therefore refuse a save; callers may retry unchanged.
@@ -3734,5 +3736,6 @@ The selection POST calls the exported checked command separately.
 `SelectionInputInvalid` identifies invalid command input. `SelectionConflict` identifies
 stale facts or changed retry payloads. Tool permission denial uses `MemberAccessRefused`;
 unavailable permission checks remain dependency failures. HTTP maps types to fixed replies
-without matching error strings or returning causes. Existing command ordering, original
-receipts and clear-after-replacement behaviour are unchanged.
+without matching error strings or returning causes. History loads before the short write
+check, but access refusal takes precedence over history errors. Original receipts and
+clear-after-replacement behaviour are unchanged.

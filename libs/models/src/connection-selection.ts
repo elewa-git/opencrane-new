@@ -193,20 +193,37 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   const operationId = digest([binding.silo, subject, changeRef]);
   const event = { ...envelope(binding.silo, subject, 'connection.selected', selected, operationId),
     commandId: changeRef, source: 'opencrane-server', principal: { kind: 'human' as const, id: userId } };
-  const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
   function matches(row: StoredEvent) {
     return row.event.id === operationId || row.event.commandId === changeRef;
   }
-  const original = rows.find(matches);
-  if (original) {
-    sameReceipt(original, event);
+  async function loadSelectionHistory() {
+    try {
+      const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+      const original = rows.find(matches);
+      if (original) {
+        sameReceipt(original, event);
+      }
+      const checked = await facts(store, binding.silo, selected);
+      return { status: 'loaded' as const, rows, original, checked };
+    } catch (error) {
+      let failure = new Error('Selection history unavailable', { cause: error });
+      if (error instanceof Error) {
+        failure = error;
+      }
+      return { status: 'failed' as const, failure };
+    }
   }
-  const checked = await facts(store, binding.silo, selected);
+  const loaded = await loadSelectionHistory();
+  // Check current access before exposing history errors, even when a saved retry conflicts.
   const fresh = await access(store, binding, userId, input.serverId, true);
   if (!fresh) {
     throw new Error('Selection access unavailable');
   }
   await fresh();
+  if (loaded.status === 'failed') {
+    throw loaded.failure;
+  }
+  const { rows, original, checked } = loaded;
   if (original) {
     return sameReceipt(original, event);
   }

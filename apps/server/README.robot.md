@@ -5443,6 +5443,9 @@ No dependency cause is returned or logged. New field names pass RISKY_FIELD_NAME
 
 The exported `changeConnectionSelection` returns only the original `status` (selected or
 cleared), `sequence` and `changeRef`. It loads history before the two-second write check.
+Current access is checked once before returning a history error or retry conflict.
+A removed member receives 403 even when their session and membership projection still
+allow access. Tests cover conflicting retries and failed selection, server and profile reads.
 Unknown appends stay unavailable. The existing selection receipt GET recovers a lost reply;
 missing evidence remains unknown and never permits a resend. Exact retries retain the first
 receipt after later choices and broker deduplication expiry. No provider, custody, release,
