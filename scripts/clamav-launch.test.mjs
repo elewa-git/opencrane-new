@@ -2,9 +2,10 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 async function mockDocker(importOriginal) {
@@ -616,3 +617,68 @@ async function closesInterruptedScan(reason) {
 }
 test.each(['timeout', 'timeout-after-inspection', 'cancel', 'TERM', 'cleanup'])(
   '%s closes the request and prevents reuse after uncertain transport cleanup', closesInterruptedScan);
+
+function hangingScanProcess(command) {
+  expect(command).toBe('docker');
+  const child = new EventEmitter();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  function kill() {
+    // Keep the child open to prove that retirement does not wait for close.
+    return true;
+  }
+  child.kill = vi.fn(kill);
+  children.push(child);
+  return child;
+}
+
+async function completeScanProcess(child, output) {
+  child.stdout.emit('data', Buffer.from(output));
+  child.emit('close', 0);
+  await vi.advanceTimersByTimeAsync(0);
+}
+
+function scanError(error) {
+  return error;
+}
+
+async function retiresBeforeChildCloses(reason) {
+  session = await launchScanner(options);
+  spawn.mockImplementation(hangingScanProcess);
+  const controller = new AbortController();
+  const firstInput = { ...request(), signal: controller.signal };
+  const first = session.scan(firstInput).catch(scanError);
+  await vi.advanceTimersByTimeAsync(0);
+  await completeScanProcess(children[0], runningState);
+  const hangingChild = children[1];
+
+  // Give the second request a later deadline so only the first request times out.
+  now += 1000;
+  await vi.advanceTimersByTimeAsync(1000);
+  const second = session.scan(request()).catch(scanError);
+  await vi.advanceTimersByTimeAsync(0);
+  await completeScanProcess(children[2], runningState);
+  const secondTransfer = children[3];
+
+  if (reason === 'timeout') {
+    now += 59000;
+    await vi.advanceTimersByTimeAsync(59000);
+  } else if (reason === 'cancel') {
+    controller.abort();
+  } else {
+    hangingChild.stdout.emit('data', Buffer.alloc(4097));
+  }
+
+  const third = session.scan(request()).catch(scanError);
+  expect(spawn).toHaveBeenCalledTimes(4);
+  expect(hangingChild.kill).toHaveBeenCalledWith('SIGKILL');
+  expect(secondTransfer.kill).toHaveBeenCalledWith('SIGKILL');
+  await completeScanProcess(secondTransfer, 'stream: OK\0');
+  expect(await first).toEqual(new Error('Scanner scan refused'));
+  expect(await second).toEqual(new Error('Scanner scan refused'));
+  expect(await third).toEqual(new Error('Scanner scan refused'));
+  expect(await session.ready()).toBe(false);
+}
+test.each(['timeout', 'cancel', 'oversized output'])(
+  '%s retires the handle and refuses concurrent scans before child close', retiresBeforeChildCloses);
