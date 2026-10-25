@@ -75,6 +75,21 @@ export function docker(args, timeout = deadlineMs) {
   return execFileSync('docker', args, options);
 }
 
+export function dockerBeforeDeadline(startedAt, clock = Date.now) {
+  let previousTime = startedAt;
+
+  function runDocker(args, timeout = deadlineMs) {
+    const currentTime = clock();
+    const remaining = startedAt + deadlineMs - currentTime;
+    requireEvidence(currentTime >= previousTime && remaining > 0);
+    previousTime = currentTime;
+    // Share one allowance across Docker calls; keep shorter operation limits too.
+    return docker(args, Math.min(timeout, remaining));
+  }
+
+  return runDocker;
+}
+
 export function removeContainers(containers) {
   let stopped = true;
   for (const name of [...containers]) {
@@ -98,21 +113,23 @@ export async function reserveContainer(lock, containers) {
   return name;
 }
 
-async function inspectImage(image, lock, containers, manifest) {
-  const imageId = docker(['image', 'inspect', '--format', '{{.Id}}', image]).trim();
+async function inspectImage(image, lock, containers, manifest, runDocker) {
+  const output = runDocker(['image', 'inspect', '--format', '{{.Id}}', image]);
+  const imageId = output.trim();
   requireEvidence(/^sha256:[a-f0-9]{64}$/.test(imageId));
   const scanner = await reserveContainer(lock, containers);
-  docker(['create', '--pull', 'never', '--name', scanner, '--network', 'none', '--read-only',
+  runDocker(['create', '--pull', 'never', '--name', scanner, '--network', 'none', '--read-only',
     '--entrypoint', '/bin/false', image]);
-  const actualId = docker(['inspect', '--format', '{{.Image}}', scanner]).trim();
+  const inspected = runDocker(['inspect', '--format', '{{.Image}}', scanner]);
+  const actualId = inspected.trim();
   requireEvidence(actualId === imageId);
-  await inspectContainer(scanner, lock, containers, manifest);
+  await inspectContainer(scanner, lock, containers, manifest, Date.now, runDocker);
 }
 
-export async function inspectContainer(scanner, lock, containers, manifest, now = Date.now) {
+export async function inspectContainer(scanner, lock, containers, manifest, now, runDocker) {
   const directory = join(lock, 'databases');
   // Copy only from the created image container, never a caller's database directory.
-  docker(['cp', `${scanner}:/var/lib/clamav/.`, directory]);
+  runDocker(['cp', `${scanner}:/var/lib/clamav/.`, directory]);
   const files = await readdir(directory);
   requireEvidence(files.length === 3);
   for (const database of manifest.databases) {
@@ -120,7 +137,7 @@ export async function inspectContainer(scanner, lock, containers, manifest, now 
     requireEvidence(status.isFile() && status.size >= 512 && status.size <= 512 * 1024 * 1024);
   }
   const inspector = await reserveContainer(lock, containers);
-  const output = docker(['run', '--pull', 'never', '--name', inspector,
+  const output = runDocker(['run', '--pull', 'never', '--name', inspector,
     '--network', 'none', '--read-only', '--log-driver', 'none',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--entrypoint', 'sh',
     '--mount', `type=bind,src=${directory},dst=/signatures,readonly`,
@@ -136,6 +153,7 @@ async function release(manifestPath, approvedSha, image, destination) {
     !/[,\r\n]/.test(destination));
   const manifest = await readApprovedManifest(manifestPath, approvedSha);
   const startedAt = Date.now();
+  const runDocker = dockerBeforeDeadline(startedAt);
   validateManifest(manifest, startedAt);
   const lock = `${destination}.lock`;
   const directoryOptions = { mode: 0o700 };
@@ -148,7 +166,7 @@ async function release(manifestPath, approvedSha, image, destination) {
     const directory = join(lock, 'databases');
     await mkdir(directory);
     try {
-      await inspectImage(image, lock, containers, manifest);
+      await inspectImage(image, lock, containers, manifest, runDocker);
     } finally {
       reusable = removeContainers(containers);
       requireEvidence(reusable);
@@ -156,7 +174,7 @@ async function release(manifestPath, approvedSha, image, destination) {
     await rm(directory, removeOptions);
     await rm(join(lock, 'containers.json'));
     const inspectedAt = Date.now();
-    requireEvidence(inspectedAt >= startedAt && inspectedAt - startedAt <= deadlineMs);
+    requireEvidence(inspectedAt >= startedAt && inspectedAt - startedAt < deadlineMs);
     validateManifest(manifest, inspectedAt);
     const imageDigest = image.slice(image.indexOf('@') + 1);
     const record = { formatVersion: 1, imageDigest, manifestDigest: `sha256:${approvedSha}`,

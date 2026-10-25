@@ -1,7 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { docker, inspectContainer, readApprovedManifest, readBoundedBytes,
+import { docker, dockerBeforeDeadline, inspectContainer, readApprovedManifest, readBoundedBytes,
   removeContainers, reserveContainer, validateManifest } from './release.mjs';
 
 const refusal = 'Scanner launch refused';
@@ -51,24 +51,27 @@ async function approvedInputs(options, now) {
   return manifest;
 }
 
-function createScanner(image, scanner, manifest) {
-  const imageId = docker(['image', 'inspect', '--format', '{{.Id}}', image]).trim();
+function createScanner(image, scanner, manifest, runDocker) {
+  const output = runDocker(['image', 'inspect', '--format', '{{.Id}}', image]);
+  const imageId = output.trim();
   requireEvidence(/^sha256:[a-f0-9]{64}$/.test(imageId));
-  docker(['create', '--pull', 'never', '--name', scanner, '--network', 'none',
+  runDocker(['create', '--pull', 'never', '--name', scanner, '--network', 'none',
     '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
     '--user', 'clamav', '--log-driver', 'none', '--memory', '2g',
     '--cpus', '1', '--pids-limit', '64', '--entrypoint', 'sh', '--workdir', '/var/lib/clamav',
     image, '-c', startScript(manifest)]);
-  requireEvidence(docker(['inspect', '--format', '{{.Image}}', scanner]).trim() === imageId);
+  const inspected = runDocker(['inspect', '--format', '{{.Image}}', scanner]);
+  requireEvidence(inspected.trim() === imageId);
   // Reject image-declared volumes too: they would hide files behind writable storage.
-  const mounts = JSON.parse(docker(['inspect', '--format', '{{json .Mounts}}', scanner]));
+  const inspectedMounts = runDocker(['inspect', '--format', '{{json .Mounts}}', scanner]);
+  const mounts = JSON.parse(inspectedMounts);
   requireEvidence(Array.isArray(mounts) && mounts.length === 0);
 }
 
-function ping(scanner, attempts) {
+function ping(scanner, attempts, runDocker) {
   const command = "printf 'TCPSocket 3310\nTCPAddr 127.0.0.1\n' | " +
     `clamdscan --ping=${attempts}:1 --config-file=/dev/stdin`;
-  docker(['exec', scanner, 'sh', '-c', command], (attempts + 5) * 1000);
+  runDocker(['exec', scanner, 'sh', '-c', command], (attempts + 5) * 1000);
 }
 
 function reportFailure() {
@@ -88,6 +91,7 @@ export async function launchScanner(options) {
   let cleanup;
   let previousTime = clock();
   const startedAt = previousTime;
+  const runDocker = dockerBeforeDeadline(startedAt, clock);
   let manifest;
   let scanner;
 
@@ -97,7 +101,7 @@ export async function launchScanner(options) {
     validateManifest(manifest, currentTime);
     previousTime = currentTime;
     if (starting) {
-      requireEvidence(currentTime - startedAt <= maximumStartup);
+      requireEvidence(currentTime - startedAt < maximumStartup);
     }
   }
 
@@ -133,7 +137,7 @@ export async function launchScanner(options) {
   async function ready() {
     try {
       fresh();
-      ping(scanner, 1);
+      ping(scanner, 1, docker);
       fresh();
       return true;
     } catch {
@@ -152,12 +156,12 @@ export async function launchScanner(options) {
     manifest = await approvedInputs(options, startedAt);
     fresh();
     scanner = await reserveContainer(ownership, containers);
-    createScanner(options.image, scanner, manifest);
+    createScanner(options.image, scanner, manifest, runDocker);
     await mkdir(join(ownership, 'databases'));
-    await inspectContainer(scanner, ownership, containers, manifest, clock);
+    await inspectContainer(scanner, ownership, containers, manifest, clock, runDocker);
     fresh();
-    docker(['start', scanner]);
-    ping(scanner, 60);
+    runDocker(['start', scanner]);
+    ping(scanner, 60, runDocker);
     fresh();
     starting = false;
     const expiresIn = Date.parse(manifest.databaseUpdatedAt) + maximumAge - clock();

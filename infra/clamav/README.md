@@ -68,6 +68,8 @@ an image or refresh a running scanner. Commands and limits are in
 The separate launcher keeps ClamAV inside its own container, with no host port
 or database mount. It does not run FreshClam or offer a reload command. Its
 readiness check refuses expired databases; restarting never makes them newer.
+Startup shares one time limit across all Docker calls, so a slow Docker service
+cannot give each step a fresh allowance. Cleanup has its own limit.
 This launcher is not yet connected to uploads or the planned HTTPS service.
 
 If updater cleanup fails, the directory stays locked to prevent another updater

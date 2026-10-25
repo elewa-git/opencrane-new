@@ -104,9 +104,11 @@ the results with the approved manifest and requires successful upstream evidence
 for all three databases. It refuses future dates and update checks older than
 24 hours, including checks that expire during inspection. Old build dates are
 allowed. Copies, mtimes and restarts never change the approved update-check time.
-Each database is at most 512 MiB; the input manifest is at most 8 KiB, tool output
-at most 1 MiB and each Docker operation at most 15 minutes. The complete attempt
-must also finish within 15 minutes; each container removal has 30 seconds.
+Each database is at most 512 MiB; the input manifest is at most 8 KiB and tool output
+at most 1 MiB. Each Docker operation gets only the time remaining from one
+15-minute allowance. No inspection operation starts once that time runs out.
+The complete attempt must finish within 15 minutes; each container removal has
+its own 30-second limit, even after the inspection allowance runs out.
 
 After all checks and container removals succeed, the verifier atomically renames
 the private attempt directory into place. Its `release.json` is at most 1 KiB and
@@ -146,8 +148,11 @@ the launcher exposes no reload operation. FreshClam never runs. Limits are one C
 `launchScanner` returns `ready()`, `stop()` and the unchanged `databaseUpdatedAt`.
 Readiness checks freshness before and after a daemon ping. A timer also removes
 owned containers at 24 hours; backwards time refuses. Startup has a 15-minute
-limit, its initial ping has 65 seconds, later pings six seconds and each container
-removal 30 seconds. TERM/INT and failure remove only recorded container names.
+limit shared by image lookup, creation, inspection, start and the initial ping.
+Each Docker call gets only the time remaining; no call starts when none remains.
+The initial ping also has a 65-second limit, later pings six seconds and each
+container removal its own 30 seconds. Cleanup keeps that separate limit after
+startup time runs out. TERM/INT and failure remove only recorded container names.
 Unconfirmed removal retains the ownership directory and prevents another attempt;
 an operator must confirm those containers are gone before removing it.
 Errors contain only `Scanner launch refused`. No customer bytes or scan results
