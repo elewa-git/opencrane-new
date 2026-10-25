@@ -21,7 +21,14 @@ import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(process.env.CALLS, JSON.stringify(args) + '\\n');
-if (args[0] === 'rm') process.exit(0);
+if (args[0] === 'rm') {
+  if (process.env.MODE === 'cleanup-failure') process.exit(1);
+  process.exit(0);
+}
+if (process.env.MODE === 'client-failure' || process.env.MODE === 'cleanup-failure') {
+  console.error('private-canary Docker connection lost');
+  process.exit(1);
+}
 if (existsSync(process.env.CANDIDATE + '/signatures.json')) process.exit(1);
 const options = {
   cwd: process.env.CANDIDATE, env: process.env, stdio: 'inherit',
@@ -196,6 +203,43 @@ function refusesIncompleteEvidence(mode) {
   expect(existsSync(join(candidate, '.refresh-lock'))).toBe(false);
 }
 test.each(refusals)('refuses %s and removes the previous success', refusesIncompleteEvidence);
+
+function keepsLockAfterFailedCleanup() {
+  const result = run('cleanup-failure');
+  expect(result.status).toBe(1);
+  expect(result.stderr).toBe('Candidate refresh refused\n');
+  expect(result.stdout).toBe('');
+  expect(existsSync(manifest)).toBe(false);
+  const callsBeforeRetry = readFileSync(join(scratch, 'calls'), 'utf8');
+  const callLines = callsBeforeRetry.trim().split('\n');
+  expect(callLines).toHaveLength(2);
+  const runArgs = JSON.parse(callLines[0]);
+  const cleanupArgs = JSON.parse(callLines[1]);
+  const containerName = runArgs[runArgs.indexOf('--name') + 1];
+  expect(cleanupArgs).toEqual(['rm', '-f', '-v', containerName]);
+
+  const retry = run();
+  expect(retry.status).toBe(1);
+  expect(retry.stderr).toBe('Candidate refresh refused\n');
+  expect(retry.stdout).toBe('');
+  expect(readFileSync(join(scratch, 'calls'), 'utf8')).toBe(callsBeforeRetry);
+  expect(existsSync(join(candidate, '.refresh-lock'))).toBe(true);
+  expect(existsSync(manifest)).toBe(false);
+}
+test('keeps the lock and refuses another updater after failed cleanup', keepsLockAfterFailedCleanup);
+
+function allowsRetryAfterConfirmedCleanup() {
+  const result = run('client-failure');
+  expect(result.status).toBe(1);
+  expect(result.stderr).toBe('Candidate refresh refused\n');
+  expect(result.stdout).toBe('');
+  expect(existsSync(manifest)).toBe(false);
+  expect(existsSync(join(candidate, '.refresh-lock'))).toBe(false);
+  const retry = run();
+  expect(retry.status, retry.stderr).toBe(0);
+  expect(readManifest().databases).toHaveLength(3);
+}
+test('allows another updater after container cleanup succeeds', allowsRetryAfterConfirmedCleanup);
 
 function copyingDoesNotRefresh() {
   expect(run().status).toBe(0);
