@@ -444,3 +444,12 @@ subject, command id and principal on duplicate readback. NATS 2.15 uses errors
 See its [acknowledgement implementation](https://github.com/nats-io/nats-server/blob/v2.15.0/server/stream.go)
 and [error definitions](https://github.com/nats-io/nats-server/blob/v2.15.0/server/jetstream_errors_generated.go).
 `test/append-outcomes.test.ts` injects failures below the public append interface.
+
+## Operator event-copy tests
+
+`test/event-backup.test.ts` exercises the collector and executable in
+`infra/package/event-backup*` with disposable NATS, native restore and protocol
+faults. It shares the existing connection/fixture setup and changes no permissions.
+The older `test/backup.test.ts` remains a separate command-idempotency regression.
+The [operator contract](../../infra/package/README.robot.md#event-byte-export)
+records limits and the later coordinated-backup work.

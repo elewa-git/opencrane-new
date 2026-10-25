@@ -304,3 +304,44 @@ The helper does not start NATS, change client settings, bootstrap R3 or enable i
 runs disposable certificate and Kubernetes command fixtures, including pinned NATS parsing.
 The [receipt](../../docs/process/p5-4-pr3/receipt.md) records source checks.
 Live rotation and three-node installation remain NOT RUN.
+
+## Event-byte export
+
+`event-backup-run.ts SILO ATTEMPT DESTINATION` uses the existing `NATS_*`
+connection settings and TLS/NKey files. It is a local operator command, with no
+application endpoint. The existing administrative command identity can snapshot;
+projection, dispatcher, computer and gateway identities cannot. No account grants
+change. Operators supply the source silo id and a fresh attempt id. Every retained
+event must name that silo. Empty logs are refused because they cannot prove this binding.
+
+The destination must be absent, below a real, owned mode-0700 directory with no
+symlink ancestors. New directories use 0700; temporary and final files use 0600.
+A successful capture publishes `events.snapshot`, then `descriptor.json` last.
+Handled failures remove the owned destination. A killed process can leave partial
+files; a directory without its descriptor is unusable and is never overwritten.
+No archive is encrypted by this command. Both files remain private operator material.
+
+The strict descriptor records `kind=event-bytes-only`, silo, attempt, stream name,
+creation time, configuration, retained range, per-subject last global positions,
+event count, identity digest, archive byte count and SHA-256. NATS-generated metadata
+is omitted because INFO and SNAPSHOT annotate it differently. Free-form descriptions,
+customer metadata and unsupported configuration values refuse. The identity digest
+hashes UTF-8 JSON arrays `[globalSequence, natsSubject, eventId]`, each followed by a
+newline, in global order. Event bodies never enter the descriptor or command output.
+
+Limits are 64 MiB each for scanned event bytes and snapshot bytes, 100,000 events,
+1 MiB per management reply, two seconds per request and 60 seconds overall.
+Tests can tighten the byte/time bounds. Connection setup shares the command's
+60-second deadline; a 65-second process limit also bounds shutdown. SIGINT/SIGTERM
+cancel capture. Snapshot messages with failure status headers refuse, including
+empty final messages with status 500 (block read failure) or 408 (acknowledgement
+timeout). These failures remove partial output and publish no descriptor. Errors
+never include the server's status description.
+Lost connections, missing final chunks, malformed replies, holes,
+changed creation time, configuration or retained positions refuse. The command
+saves no consumer state and never changes admission or resumes work.
+
+P5-7 PR 1 covers event-byte proof only. Stable positions are not proof of quiescing.
+CNPG/WAL, objects, volumes, custody inventory and coordinated restore remain later
+work, with live P5-3/P5-5 still required. See the
+[receipt](../../docs/process/p5-7-pr1/receipt.md).

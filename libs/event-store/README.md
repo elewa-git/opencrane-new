@@ -75,6 +75,10 @@ the saved event log, checks that the other two can still save changes, then star
 the same server with its original files. It compares saved records, their order
 and the returning server’s copy.
 
+The operator backup tests restore native event bytes on a fresh NATS server.
+They compare saved event identities and positions, check private file permissions,
+and confirm that a repeated command still returns its earlier result.
+
 These commands run from the repository root. The test command fetches the required
 tools before running the tests. The helper `wireSubject` turns an event stream
 name into its NATS name:
