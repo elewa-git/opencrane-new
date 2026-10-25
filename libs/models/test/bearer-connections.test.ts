@@ -278,14 +278,15 @@ async function finalRevokeCheck(outcome: string) {
   const test = fixture();
   const created = await test.save();
   const input = controlInput(test, created.sequence);
-  const check = TupleClient.prototype.check;
+  const client = new TupleClient(binding);
+  const check = client.check.bind(client);
   const head = nats.store.head.bind(nats.store);
   let permitted = false;
   let finalReads = 0;
   let pendingReads = 0;
   let expired = false;
-  async function permission(this: TupleClient, tuple: Tuple) {
-    const result = await check.call(this, tuple);
+  async function permission(tuple: Tuple) {
+    const result = await check(tuple);
     if (tuple.relation === 'member' && result.allowed) {
       permitted = true;
     }

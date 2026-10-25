@@ -384,7 +384,8 @@ it('refuses a stale revision of an otherwise usable profile', staleSequence);
 async function onePermissionCheck(outcome: string) {
   const fixture = await saved();
   const read = nats.store.readStream.bind(nats.store);
-  const check = TupleClient.prototype.check;
+  const client = new TupleClient(binding);
+  const check = client.check.bind(client);
   let prepared = false;
   let checks = 0;
   let prematureChecks = 0;
@@ -401,7 +402,7 @@ async function onePermissionCheck(outcome: string) {
     }
     yield* read(subject, from, deadline);
   }
-  async function permission(this: TupleClient, tuple: Tuple) {
+  async function permission(tuple: Tuple) {
     if (tuple.relation === 'member') {
       checks += 1;
       if (!prepared) {
@@ -415,7 +416,7 @@ async function onePermissionCheck(outcome: string) {
         return { status: 'ok' as const, allowed: false };
       }
     }
-    return check.call(this, tuple);
+    return check(tuple);
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(prepare);
   vi.spyOn(TupleClient.prototype, 'check').mockImplementation(permission);
