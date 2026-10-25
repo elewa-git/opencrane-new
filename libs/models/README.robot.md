@@ -3762,6 +3762,11 @@ saved admission keeps the hold but grants no send. An already expired request ca
 publish a release either; existing later evidence checks can release an unsent hold. `requireCurrent` refuses while recovery
 is pending. Restart and replay preserve admissions, root allowances and integer-cent holds.
 
+A failed final check retains private evidence of its own newly saved admission on that
+error instance. Egress consumes this evidence once to record the existing refused outcome
+before relay registration. Generic errors and earlier admissions provide no such evidence;
+this does not restore consent or a send permission.
+
 This is the first part of #576's agreed correction, superseding #671. Approval retry
 restoration before budget admission, both new HTTP refusal races and their fixed private
 diagnostics remain for the second part. Existing approval evidence and binding checks stay.

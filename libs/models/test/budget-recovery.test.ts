@@ -4,6 +4,7 @@ import { EventStore } from '@opencrane/event-store';
 import { natsFixture, TimeoutError } from '@opencrane/event-store/testing';
 import { BudgetActor, envelope, history, priceTableId, totals } from '../src/index.ts';
 import { applyBudget } from '../src/state.ts';
+import { takeRefusedAdmission } from '../src/budget-writer.ts';
 import { CeilingReceiptRecovery } from '../src/ceiling-receipt-recovery.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -219,3 +220,26 @@ async function foreignSwitch(field: 'silo' | 'subject') {
   expect(totals(actor.state).reservedCents).toBe(0);
 }
 it.each(['silo', 'subject'] as const)('refuses recovery rows from another %s', foreignSwitch);
+
+async function savedRefusalEvidence() {
+  const reservationId = await actor.reserve(call, 10);
+  const admission = { reservationId, callId: 'call', decisionId: 'decision',
+    bodyDigest: '0'.repeat(64), modelCall: call };
+  const refused = new Error('Access changed after saving');
+  function checked() {
+    if (actor.state.dispatches.length > 0) return Promise.reject(refused);
+    return Promise.resolve();
+  }
+  await expect(actor.admitDispatch(admission, checked)).rejects.toBe(refused);
+  expect(takeRefusedAdmission(refused)).toMatchObject({
+    type: 'budget.call_dispatch_admitted', data: admission });
+  expect(takeRefusedAdmission(refused)).toBeUndefined();
+  expect(takeRefusedAdmission(new Error('Generic refusal'))).toBeUndefined();
+  function retainError(error: unknown) { return error; }
+  const duplicate = await actor.admitDispatch(admission, fresh).catch(retainError);
+  expect(duplicate).toBeInstanceOf(Error);
+  expect(takeRefusedAdmission(duplicate)).toBeUndefined();
+  expect(actor.state.dispatches).toHaveLength(1);
+  expect(totals(actor.state).reservedCents).toBe(10);
+}
+it('binds refused admission evidence to one failed invocation', savedRefusalEvidence);

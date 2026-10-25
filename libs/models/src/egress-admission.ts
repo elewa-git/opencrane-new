@@ -9,6 +9,7 @@ import { egressGrantStream } from '@opencrane/projections';
 import { egressHistory } from './egress-history.ts';
 import { BudgetRefused, requireBudget } from './budget-refusal.ts';
 import { BudgetActor, envelope } from './actor.ts';
+import { takeRefusedAdmission } from './budget-writer.ts';
 import { authorityFence, isAuthorityChanged } from './authority.ts';
 import { approvalActivity, requireActiveConversationTurn } from './decision-activity.ts';
 import { data, priceTableId } from './state.ts';
@@ -166,6 +167,15 @@ async function recordRefusedDispatch(actor: BudgetActor, claims: EgressCapabilit
   if (result.status !== 'appended') throw new Error('Egress refused');
 }
 
+async function recordRefusedAdmission(actor: BudgetActor, claims: EgressCapability,
+  decisionId: string, error: unknown) {
+  const saved = takeRefusedAdmission(error);
+  if (saved?.silo !== actor.silo || data(saved)['callId'] !== claims.jti ||
+      data(saved)['decisionId'] !== decisionId) return;
+  // Close only this invocation's saved admission, before any relay registration.
+  await recordRefusedDispatch(actor, claims);
+}
+
 export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding,
   registry?: EgressRelayRegistry) {
@@ -230,7 +240,12 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     const root = turnRootBinding(actor.state, checked.conversation, checked.turn);
     const dispatch = { callId: requestId, decisionId, bodyDigest: checked.operationDigest,
       modelCall, ...root };
-    await actor.admitDispatch(dispatch, confirm, work.admittedAt, undefined, fresh.deadline);
+    try {
+      await actor.admitDispatch(dispatch, confirm, work.admittedAt, undefined, fresh.deadline);
+    } catch (error) {
+      await recordRefusedAdmission(actor, checked, decisionId, error);
+      throw error;
+    }
     // Recheck after append retries, within the original deadline. This is the last
     // authority check before registration; the relay's 60-second cap applies afterwards.
     async function confirmRegistration() {

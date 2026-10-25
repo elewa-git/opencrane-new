@@ -2,6 +2,21 @@ import { sameCommand, type AppendCommand, type AppendOutcome, type AppendResult,
   type StoredEvent } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 
+// Keep the saved admission with this error. Preserve the error type for access refusals.
+const refusedAdmissions = new WeakMap<Error, EventEnvelope>();
+
+function retainRefusedAdmission(error: unknown, event: EventEnvelope, consumed: boolean) {
+  if (consumed || event.type !== 'budget.call_dispatch_admitted') return;
+  if (error instanceof Error) refusedAdmissions.set(error, event);
+}
+
+export function takeRefusedAdmission(error: unknown) {
+  if (!(error instanceof Error)) return undefined;
+  const admission = refusedAdmissions.get(error);
+  refusedAdmissions.delete(error);
+  return admission;
+}
+
 export class BudgetWriter {
   sequence = 0;
   private ownershipLost = false;
@@ -161,9 +176,14 @@ export class BudgetWriter {
     if (consumed && event.type === 'budget.call_dispatch_admitted') {
       throw new Error('Dispatch already admitted');
     }
-    await checkAccess?.();
-    if (performance.now() >= deadline) {
-      throw new Error('Budget append unavailable');
+    try {
+      await checkAccess?.();
+      if (performance.now() >= deadline) {
+        throw new Error('Budget append unavailable');
+      }
+    } catch (error) {
+      retainRefusedAdmission(error, saved.event, consumed);
+      throw error;
     }
   }
 }
