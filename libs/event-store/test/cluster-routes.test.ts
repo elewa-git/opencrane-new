@@ -143,7 +143,7 @@ async function startPeer(directory: string, env: NodeJS.ProcessEnv,
   }
 }
 
-async function peerNames(peer: Peer) {
+async function peerRoutes(peer: Peer) {
   const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`,
     { signal: AbortSignal.timeout(1000) });
   const result: unknown = await response.json();
@@ -151,8 +151,13 @@ async function peerNames(peer: Peer) {
     !Array.isArray(result.routes)) {
     throw new Error('Invalid route monitoring response');
   }
+  return result.routes as unknown[];
+}
+
+async function peerNames(peer: Peer) {
+  const routes = await peerRoutes(peer);
   const names = new Set<string>();
-  for (const route of result.routes as unknown[]) {
+  for (const route of routes) {
     if (!route || typeof route !== 'object' || !('remote_name' in route) ||
       typeof route.remote_name !== 'string') {
       throw new Error('Missing remote peer name');
@@ -242,6 +247,42 @@ async function closeCluster() {
 }
 beforeAll(prepareCluster);
 afterAll(closeCluster);
+
+function routeDescription(route: unknown) {
+  if (!route || typeof route !== 'object' || !('remote_name' in route) ||
+    typeof route.remote_name !== 'string') {
+    throw new Error('Missing remote peer name');
+  }
+  let account = 'pooled';
+  if ('account' in route) {
+    expect(typeof route.account).toBe('string');
+    account = String(route.account);
+  }
+  return `${route.remote_name}/${account}`;
+}
+
+async function completeRoutes(fixture: Awaited<ReturnType<typeof clusterFixture>>, peer: Peer) {
+  const expected: string[] = [];
+  for (const candidate of fixture.peers) {
+    if (candidate !== peer) {
+      // Count the three pooled connections and the separate system-account connection.
+      const pooledRoute = `${candidate.name}/pooled`;
+      expected.push(pooledRoute, pooledRoute, pooledRoute);
+      expected.push(`${candidate.name}/$SYS`);
+    }
+  }
+  const routes = await peerRoutes(peer);
+  const actual = routes.map(routeDescription);
+  expect(actual.sort()).toEqual(expected.sort());
+}
+
+async function startsWithCompleteRoutes() {
+  for (const peer of cluster.peers) {
+    await completeRoutes(cluster, peer);
+  }
+}
+it('connects every pooled and system route before declaring the cluster ready',
+  startsWithCompleteRoutes);
 
 async function refusesPlaintext() {
   expect(await routeAttempt(cluster, undefined, true)).toMatch(/closed|ECONNRESET/);
