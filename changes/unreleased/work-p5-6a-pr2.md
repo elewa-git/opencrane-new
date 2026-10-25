@@ -1,0 +1,1 @@
+- Scanner database refresh now records verified versions, build dates and hashes only after the complete upstream update check succeeds. Failed refreshes remove previous candidate evidence. This prepares candidates for review; it does not yet change scanner admission.
