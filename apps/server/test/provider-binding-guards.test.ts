@@ -591,6 +591,9 @@ async function pausedReplay() {
 it('preserves a paused default through reaction redelivery and provider rebuild', pausedReplay);
 async function historyLag() {
   await connection('primary');
+  const healthy = await request('GET', 'primary');
+  expect(healthy.statusCode).toBe(200);
+  expect(healthy.json()).toMatchObject({ routines: { status: 'absent', position: 0 } });
   const readOriginal = nats.store.readStream.bind(nats.store);
   async function* lag(subject: string, from?: number, deadline?: number) {
     if (subject !== 'assistant-*') {
@@ -604,6 +607,9 @@ async function historyLag() {
 it('refuses assistant history behind its checked position', historyLag);
 async function historyChanges(subjectToChange: string) {
   await connection('primary');
+  const healthy = await request('GET', 'primary');
+  expect(healthy.statusCode).toBe(200);
+  expect(healthy.json()).toMatchObject({ routines: { status: 'absent', position: 0 } });
   const readOriginal = nats.store.readStream.bind(nats.store);
   async function* change(subject: string, from?: number, deadline?: number) {
     yield* readOriginal(subject, from, deadline);
