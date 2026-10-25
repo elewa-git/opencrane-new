@@ -8,7 +8,7 @@ This folder lets admins register tools an assistant can use and review their acc
 - Requires an admin to review exact definitions, declared free use and approval details before enabling tools.
 - Requests publication, meaning delivery of reviewed tool settings to the [AI gateway](../../../../GLOSSARY.md#agentgateway-ai-gateway), the program that forwards AI and tool calls, and reports its saved status.
 - Gives or revokes tool access for people, groups and assistants, with explanations of saved rights.
-- Reads current company account opt-in for owners and admins without granting tool access.
+- Reads, saves and removes company account opt-in for owners and admins without granting tool access.
 - Reads safe saved personal profile metadata and saves explicit personal account choices.
 - Reads personal tool-instance status, records stop requests and accepts reports from a registered worker.
 - Serves model prices, spending limits and saved spending-change results.
@@ -73,6 +73,6 @@ The [server](../../README.md) registers these requests. [Models](../models/READM
 ```mermaid
 flowchart LR
   server[Server] --> integrations["integrations<br/>tool settings and account choices"]
-  integrations --> models[Tool rules and spending]
+  integrations -->|reads and saves opt-in and tool rules| models[Tool rules and spending]
   integrations -->|reads signed-in identity| members[Current membership]
 ```

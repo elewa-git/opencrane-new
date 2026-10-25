@@ -1,6 +1,7 @@
 import { readToolModeChange } from '@opencrane/models';
 import { readIntegrationFacts } from './facts.ts';
 import { readCompanyOptIn } from './company-opt-in-read.ts';
+import { writeCompanyOptIn } from './company-opt-in-write.ts';
 import { budgetChange } from '@opencrane/models';
 import { readPublication, publicationChange } from '@opencrane/projections';
 import { readHostedAdmission, requestHostedCheck } from '@opencrane/models';
@@ -54,7 +55,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
   ];
   for (const path of paths) {
     const readOnly = path.endsWith('/discovery') || path.endsWith('/:commandId') ||
-      path.endsWith('/admission') || path.endsWith('/facts') || path.endsWith('/company-opt-in');
+      path.endsWith('/admission') || path.endsWith('/facts');
     let method: ('GET' | 'POST')[] = ['GET', 'POST'];
     if (readOnly) {
       method = ['GET'];
@@ -87,7 +88,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
       reply.header('cache-control', 'no-store');
       done();
     }
-    function invalidRead(error: Error & { statusCode?: number },
+    function invalidCompanyRequest(error: Error & { statusCode?: number },
       _request: FastifyRequest, reply: FastifyReply): void {
       if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
         reply.code(400).send({ status: 'invalid_request' });
@@ -97,7 +98,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
     }
     if (path.endsWith('/company-opt-in')) {
       app.route({ method, url: path, handler: handleIntegration,
-        onRequest: privateReply, errorHandler: invalidRead });
+        bodyLimit: 4096, onRequest: privateReply, errorHandler: invalidCompanyRequest });
     } else {
       app.route({ method, url: path, handler: handleIntegration });
     }
@@ -108,6 +109,9 @@ async function checkedIntegrationRequest(path: string, request: FastifyRequest,
   reply: FastifyReply, config: AuthConfig, options: IntegrationOptions,
   memberId: string, now: Date) {
   if (path.endsWith('/company-opt-in')) {
+    if (request.method === 'POST') {
+      return writeCompanyOptIn(request, reply, config, options, memberId);
+    }
     return readCompanyOptIn(request, reply, options, memberId);
   }
   if (path === '/api/org/integrations/:serverId/changes/:commandId') {

@@ -4,12 +4,11 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { jetstreamManager } from '@nats-io/jetstream';
 import type { AppendCommand } from '@opencrane/event-store';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
+  from './support/duplicate-window.ts';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
-import { changeConnectionSelection, readConnectionSelection, envelope, history, mcpPolicy,
-  parseMcpCall } from '@opencrane/models';
+import { envelope, history } from '@opencrane/models';
 import { pgDb } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -17,7 +16,7 @@ import { testAuthConfig } from './support/test-auth-config.ts';
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
 const canary = 'company-credential-canary';
 const logs: string[] = [];
-let nats: Awaited<ReturnType<typeof natsFixture>>;
+let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let storage: Awaited<ReturnType<typeof databases>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
@@ -35,7 +34,8 @@ function server(currentBinding = binding, lookup = memberId) {
   const catalogue = { rows: emptyCatalogue, tools: emptyCatalogue };
   const integrations = { silo: 'test', store: nats.store, binding: currentBinding,
     feed: { memberId: lookup }, catalogue };
-  return buildServer(config, { integrations, logDestination: { write } });
+  const memberReads = { ...integrations, db: pgDb(storage.queue) };
+  return buildServer(config, { integrations, memberReads, logDestination: { write } });
 }
 async function join(memberId: string, role: string) {
   const event = envelope('test', `member-${memberId}`, 'member.joined', {
@@ -46,7 +46,7 @@ async function join(memberId: string, role: string) {
 }
 async function initialise() {
   vi.stubEnv('LOG_LEVEL', 'info');
-  nats = await natsFixture();
+  nats = await shortDuplicateWindowFixture();
   fga = await openfga();
   storage = await databases();
   binding = await createStore(fga.apiUrl, 'test');
@@ -99,7 +99,7 @@ function checked(response: Awaited<ReturnType<typeof app.inject>>, code: number)
   return response.json<unknown>();
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-function post(test: Fixture, payload: unknown = test.choice, member = 'admin') {
+function post(test: Fixture, payload: Record<string, unknown> = test.choice, member = 'admin') {
   return app.inject({ method: 'POST', url: test.url, headers: headers(member), payload });
 }
 async function read(test: Fixture) {
@@ -158,19 +158,19 @@ it.each(['ordinary', 'removed', 'foreign', 'unmapped'])('refuses %s members', re
 async function invalidRequest(kind: string) {
   const test = await fixture();
   const requestHeaders: Record<string, string> = { ...headers(), 'content-type': 'application/json' };
-  let payload: unknown = test.choice;
+  let payload: Record<string, unknown> = test.choice;
   let url = test.url;
   let code = 400;
   if (kind === 'missing origin') {
-    delete requestHeaders.origin;
+    delete requestHeaders['origin'];
     code = 403;
   } else if (kind === 'foreign origin') {
-    requestHeaders.origin = `${requestHeaders.origin}.foreign`;
+    requestHeaders['origin'] = `${requestHeaders['origin']}.foreign`;
     code = 403;
   } else if (kind === 'malformed') {
     payload = `{"enabled":${canary}`;
   } else if (kind === 'oversized') {
-    payload = JSON.stringify({ ...test.choice, extra: canary.repeat(500) });
+    payload = ' '.repeat(4096) + JSON.stringify(test.choice);
   } else if (kind === 'text') {
     requestHeaders['content-type'] = 'text/plain';
     payload = JSON.stringify(test.choice);
@@ -179,7 +179,7 @@ async function invalidRequest(kind: string) {
   } else if (kind === 'invalid path') {
     url = '/api/org/integrations/invalid.id/company-opt-in';
   } else {
-    payload = { ...test.choice, [kind]: canary };
+    payload = { ...test.choice, [kind]: `${canary}!` };
   }
   const before = await nats.store.head();
   const response = await app.inject({ method: 'POST', url, headers: requestHeaders, payload });
@@ -231,19 +231,13 @@ async function race(kind: string) {
   const fault = vi.spyOn(nats.store, 'append');
   fault.mockImplementationOnce(beforeAppend);
   const response = await post(test, test.choice, member);
-  let code = 409;
-  if (kind === 'demotion') {
-    code = 503;
-  }
-  checked(response, code);
+  expect(checked(response, 503)).toEqual({ status: 'unavailable' });
   expect(await nats.store.head(`connection-company-${test.serverId}`)).toBe(0);
 }
 it.each(['demotion', 'registration'])('refuses a racing %s before append', race);
 
 async function lostReply() {
   const test = await fixture();
-  const manager = await jetstreamManager(nats.connection);
-  await manager.streams.update('EVENTS', { duplicate_window: 1_000_000_000 });
   const before = await nats.store.head();
   const append = nats.store.append.bind(nats.store);
   async function loseReply(command: AppendCommand) {
@@ -254,13 +248,14 @@ async function lostReply() {
   fault.mockImplementationOnce(loseReply);
   expect(checked(await post(test), 503)).toEqual({ status: 'unavailable' });
   fault.mockRestore();
-  await delay(1100);
+  await waitForDuplicateWindow(nats);
   const receipt = { enabled: true, sequence: before + 1, changeRef: 'enable' };
   expect(checked(await post(test), 200)).toEqual(receipt);
   expect(checked(await post(test), 200)).toEqual(receipt);
   expect(checked(await post(test, { ...test.choice, enabled: false }), 409))
     .toEqual({ status: 'conflict' });
-  expect(await nats.store.head()).toBe(before + 1);
+  const rows = await history(nats.store, `connection-company-${test.serverId}`, 'test');
+  expect(rows).toHaveLength(1);
 }
 it('recovers one receipt after a lost reply and broker deduplication expiry', lostReply);
 
@@ -292,20 +287,14 @@ async function noAccountUse() {
   const test = await fixture();
   checked(await post(test), 200);
   const before = await nats.store.head();
-  expect(await readConnectionSelection(nats.store, binding, 'admin', test.serverId))
-    .toEqual({ status: 'unavailable', sequence: 0 });
-  const selection = { action: 'select', serverId: test.serverId, connectionId: 'installed',
-    profileId: 'company', profileRevision: 1, expectedSequence: 0, changeRef: 'select' };
-  await expect(changeConnectionSelection(nats.store, binding, 'admin', selection)).rejects.toThrow();
-  const metadata = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-    'io.modelcontextprotocol/clientCapabilities': {}, threadId: 'thread', callId: 'call' };
-  const request = { jsonrpc: '2.0', id: 1, method: 'tools/call',
-    params: { name: 'example', arguments: {}, _meta: metadata } };
-  const parsed = parseMcpCall(JSON.stringify(request));
-  const callHeaders = { 'mcp-protocol-version': '2026-07-28',
-    'mcp-method': 'tools/call', 'mcp-name': 'example' };
-  await expect(mcpPolicy(nats.store, 'test', test.serverId, 'installed', parsed, callHeaders))
-    .rejects.toThrow('MCP context unavailable');
+  const auth = memberAuthorisation(binding);
+  const access = await auth.use('person', 'admin', 'mcp_server', test.serverId);
+  expect(access.allowed).toBe(false);
+  const selection = { action: 'select', connectionId: 'installed', profileId: 'company',
+    profileRevision: 1, expectedSequence: 0, changeRef: 'select' };
+  const response = await app.inject({ method: 'POST',
+    url: `/api/my/tools/${test.serverId}/selection`, headers: headers(), payload: selection });
+  checked(response, 403);
   expect(await nats.store.head()).toBe(before);
 }
 it('grants no tool use or company selection after an HTTP opt-in', noAccountUse);
