@@ -22,11 +22,15 @@ function isMember(delivery: Delivery) {
 }
 
 export function checkClosure(messages: Delivery[], code: number,
-  expectedCode: number, terminal?: 'refused' | 'resync'): void {
+  expectedCode: number, terminal?: 'refused' | 'resync', generation?: number): void {
   assert.equal(code, expectedCode, 'Unexpected close outcome');
   // Inspect the whole refused attempt, including anything before its terminal reply.
   assert.equal(messages.length, terminal === undefined ? 0 : 1, 'Unexpected delivery');
   if (terminal !== undefined) {
     assert.equal(messages[0]?.type, terminal, 'Missing terminal reply');
+  }
+  if (generation !== undefined) {
+    assert.deepEqual(messages[0], { type: terminal, position: 0, generation },
+      'Unexpected reset metadata');
   }
 }

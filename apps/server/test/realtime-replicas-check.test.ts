@@ -72,3 +72,28 @@ function rejectsWrongClosure() {
   expect(check).toThrow();
 }
 it('rejects an incorrect close outcome', rejectsWrongClosure);
+
+const staleResets = [
+  [resync, bob], [bob, resync],
+  [{ ...resync, generation: 0 }],
+  [{ ...resync, position: 9 }],
+  [{ ...resync, memberId: 'foreign' }],
+  [{ type: 'ready' as const, position: 0, generation: 1 }],
+];
+function rejectsUnsafeReset(messages: Delivery[]) {
+  function check() {
+    checkClosure(messages, 1013, 1013, 'resync', 1);
+  }
+  expect(check).toThrow();
+}
+it.each(staleResets.map(asCase))(
+  'rejects a foreign record or stale generation during reset %#', rejectsUnsafeReset);
+
+function checksExactReset() {
+  checkClosure([resync], 1013, 1013, 'resync', 1);
+  function wrongCode() {
+    checkClosure([resync], 1008, 1013, 'resync', 1);
+  }
+  expect(wrongCode).toThrow();
+}
+it('requires the current generation and retry close code', checksExactReset);
