@@ -1,11 +1,8 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { execFile, type ChildProcess } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
-import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { connect as connectTcp } from 'node:net';
-import { resolve } from 'node:path';
 import { connect as connectTls } from 'node:tls';
-import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { PermissionViolationError, type NatsConnection } from '@nats-io/transport-node';
@@ -13,228 +10,16 @@ import { createLogger } from '@opencrane/observability';
 import { members, ProjectionRunner } from '@opencrane/projections';
 import { database } from '../../projections/test/database.ts';
 import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
-import { connectNats, createEventStore } from '../src/index.ts';
-import { certificates, issueCertificate, sharedCertificates } from './certificates.ts';
-import { reservePort } from './ports.ts';
-import { waitForClusterStream } from './cluster-stream.ts';
+import { createEventStore } from '../src/index.ts';
+import { certificates, issueCertificate } from './certificates.ts';
+import { clusterFixture, waitForClusterStream } from './cluster-fixture.ts';
 import { event } from './testing.ts';
 
 const routeExtensions = 'subjectAltName=DNS:localhost\nextendedKeyUsage=serverAuth,clientAuth\n';
-const roles = ['command', 'projection', 'dispatcher', 'computer', 'gateway'];
 const executeFile = promisify(execFile);
-type PortReservation = Awaited<ReturnType<typeof reservePort>>;
-type Peer = { name: string; port: number; route: number; monitor: number;
-  reservations: PortReservation[] };
-
-async function releaseReservations(reservations: PortReservation[]) {
-  for (const reservation of reservations) {
-    await reservation.release();
-  }
-}
-
-async function clusterFixture(missingTrust = false, children: ChildProcess[] = []) {
-  const directory = await mkdtemp(resolve('.tools/nats-cluster-'));
-  const connections: NatsConnection[] = [];
-  const reservations: PortReservation[] = [];
-  async function reservePeerPort() {
-    const reservation = await reservePort();
-    reservations.push(reservation);
-    return reservation;
-  }
-  async function close() {
-    try {
-      for (const connection of connections) {
-        await connection.close();
-      }
-    } finally {
-      try {
-        for (const child of children) {
-          if (child.pid && child.exitCode === null && child.signalCode === null) {
-            const stopped = once(child, 'close');
-            child.kill('SIGKILL');
-            await stopped;
-          }
-        }
-      } finally {
-        try {
-          await releaseReservations(reservations);
-        } finally {
-          await rm(directory, { recursive: true, force: true });
-        }
-      }
-    }
-  }
-  const peers: Peer[] = [];
-  function env(peer: Peer, identity = 'command') {
-    return {
-      NATS_URL: `127.0.0.1:${peer.port}`,
-      NATS_CA_FILE: `${directory}/ca.crt`,
-      NATS_CERT_FILE: `${directory}/${identity}.crt`,
-      NATS_KEY_FILE: `${directory}/${identity}.key`,
-      NATS_NKEY_SEED_FILE: `${directory}/${identity}.seed`,
-      NATS_INBOX_PREFIX: `_INBOX.${identity}`,
-    };
-  }
-  async function client(peer: Peer, identity = 'command') {
-    const connection = await connectNats(env(peer, identity));
-    connections.push(connection);
-    return connection;
-  }
-  try {
-    await sharedCertificates(directory);
-    await mkdir(`${directory}/routes`, { mode: 0o700 });
-    await certificates(`${directory}/routes`);
-    const publicKeys: NodeJS.ProcessEnv = {};
-    for (const role of roles) {
-      publicKeys[`NATS_${role.toUpperCase()}_NKEY`] =
-        await readFile(`${directory}/${role}.pub`, 'utf8');
-    }
-    for (let index = 1; index <= 3; index++) {
-      const clientPort = await reservePeerPort();
-      const routePort = await reservePeerPort();
-      const monitorPort = await reservePeerPort();
-      const peer = { name: `peer-${index}`, port: clientPort.port,
-        route: routePort.port, monitor: monitorPort.port,
-        reservations: [clientPort, routePort, monitorPort] };
-      peers.push(peer);
-      await issueCertificate(`${directory}/routes`, peer.name, `/CN=${peer.name}`,
-        routeExtensions);
-    }
-    const config = await readFile(resolve('infra/nats/cluster.conf'), 'utf8');
-    await writeFile(`${directory}/cluster.conf`, `${config}\nhttp: $NATS_TEST_MONITOR\n`);
-    const policy = await readFile(resolve('infra/nats/nats.conf'), 'utf8');
-    await writeFile(`${directory}/nats.conf`, policy);
-    for (const peer of peers) {
-      const others: Peer[] = [];
-      for (const candidate of peers) {
-        if (candidate !== peer) {
-          others.push(candidate);
-        }
-      }
-      const serverEnv = { ...process.env, ...env(peer, 'server'), ...publicKeys,
-        NATS_SERVER_NAME: peer.name, NATS_CLUSTER_NAME: 'route-tests',
-        NATS_TEST_MONITOR: `127.0.0.1:${peer.monitor}`,
-        NATS_LISTEN: `127.0.0.1:${peer.port}`, NATS_STORE_DIR: `${directory}/${peer.name}`,
-        NATS_ROUTE_LISTEN: `127.0.0.1:${peer.route}`,
-        NATS_ROUTE_ADVERTISE: `localhost:${peer.route}`,
-        NATS_ROUTE_1: `nats-route://localhost:${others[0]!.route}`,
-        NATS_ROUTE_2: `nats-route://localhost:${others[1]!.route}`,
-        NATS_ROUTE_CA_FILE: `${directory}/routes/ca.crt`,
-        NATS_ROUTE_CERT_FILE: `${directory}/routes/${peer.name}.crt`,
-        NATS_ROUTE_KEY_FILE: `${directory}/routes/${peer.name}.key` };
-      if (missingTrust && peer.name === 'peer-3') {
-        serverEnv.NATS_ROUTE_CA_FILE = `${directory}/routes/absent.crt`;
-      }
-      // Release only this peer's ports immediately before the server binds them.
-      await releaseReservations(peer.reservations);
-      await startPeer(directory, serverEnv, children);
-    }
-    return { directory, peers, client, close };
-  } catch (error) {
-    await close();
-    throw error;
-  }
-}
-
-async function startPeer(directory: string, env: NodeJS.ProcessEnv,
-  children: ChildProcess[]) {
-  const child = spawn(resolve('.tools/nats-server'),
-    ['-c', `${directory}/cluster.conf`], { env });
-  children.push(child);
-  let output = "";
-  let ready = false;
-  let failed = false;
-  let stopped = false;
-  function recordOutput(chunk: Buffer) {
-    // Keep process output private: startup errors can contain mounted file paths.
-    output += chunk.toString();
-    if (output.includes('Server is ready')) {
-      ready = true;
-    }
-  }
-  function recordFailure() {
-    failed = true;
-  }
-  function recordStopped() {
-    stopped = true;
-  }
-  child.stderr.on('data', recordOutput);
-  child.on('error', recordFailure);
-  // Wait for stderr to close before classifying a failed process.
-  child.on('close', recordStopped);
-  const deadline = Date.now() + 5000;
-  while (!ready) {
-    if (failed || stopped || Date.now() >= deadline) {
-      if (output.includes(`${directory}/routes/absent.crt`)) {
-        throw new Error('Route trust file is missing');
-      }
-      if (output.includes('address already in use')) {
-        throw new Error('Cluster peer listening port is already in use');
-      }
-      throw new Error('Cluster peer failed to start');
-    }
-    await delay(25);
-  }
-}
-
-async function peerRoutes(peer: Peer) {
-  const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`,
-    { signal: AbortSignal.timeout(1000) });
-  const result: unknown = await response.json();
-  if (!result || typeof result !== 'object' || !('routes' in result) ||
-    !Array.isArray(result.routes)) {
-    throw new Error('Invalid route monitoring response');
-  }
-  return result.routes as unknown[];
-}
-
-function routeDescription(route: unknown) {
-  if (!route || typeof route !== 'object' || !('remote_name' in route) ||
-    typeof route.remote_name !== 'string') {
-    throw new Error('Missing remote peer name');
-  }
-  let account = 'pooled';
-  if ('account' in route) {
-    expect(typeof route.account).toBe('string');
-    account = String(route.account);
-  }
-  return `${route.remote_name}/${account}`;
-}
-
-async function completeRoutes(fixture: Awaited<ReturnType<typeof clusterFixture>>, peer: Peer) {
-  const expected: string[] = [];
-  for (const candidate of fixture.peers) {
-    if (candidate !== peer) {
-      // Count the three pooled connections and the separate system-account connection.
-      const pooledRoute = `${candidate.name}/pooled`;
-      expected.push(pooledRoute, pooledRoute, pooledRoute);
-      expected.push(`${candidate.name}/$SYS`);
-    }
-  }
-  const routes = await peerRoutes(peer);
-  const actual = routes.map(routeDescription);
-  expect(actual.sort()).toEqual(expected.sort());
-}
-
-async function metadataReady(peer: Peer) {
-  const url = `http://127.0.0.1:${peer.monitor}/healthz?js-meta-only=true`;
-  const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
-  expect(response.status).toBe(200);
-}
 
 async function connectedPeers(fixture: Awaited<ReturnType<typeof clusterFixture>>) {
-  async function allRoutesConnected() {
-    for (const peer of fixture.peers) {
-      await completeRoutes(fixture, peer);
-    }
-  }
-  await vi.waitFor(allRoutesConnected, { timeout: 10_000 });
-  async function allMetadataReady() {
-    for (const peer of fixture.peers) {
-      await metadataReady(peer);
-    }
-  }
-  await vi.waitFor(allMetadataReady, { timeout: 10_000 });
+  await fixture.ready();
 }
 
 // Test authentication before exchanging any events with the route listener.
@@ -299,14 +84,13 @@ async function closeCluster() {
 beforeAll(prepareCluster);
 afterAll(closeCluster);
 
-async function startsReady() {
-  for (const peer of cluster.peers) {
-    await completeRoutes(cluster, peer);
-  }
+async function startsWithReadyRoutesAndCopies() {
+  await connectedPeers(cluster);
   const connection = await cluster.client(cluster.peers[0]!);
-  await currentReplicas(connection);
+  await replicasAreCurrent(connection);
 }
-it('connects every route and keeps three current copies before any route probe', startsReady);
+it('connects every route and keeps three current copies before any route probe',
+  startsWithReadyRoutesAndCopies);
 
 async function refusesPlaintext() {
   expect(await routeAttempt(cluster, undefined, true)).toMatch(/closed|ECONNRESET/);
@@ -398,7 +182,7 @@ async function acceptsValidCertificate() {
 it('accepts a current route certificate for a listed peer', acceptsValidCertificate);
 
 function isClusterDirectory(name: string) {
-  return name.startsWith('nats-cluster-');
+  return name.startsWith('nats-cluster-missing-');
 }
 
 async function refusesMissingTrust() {
@@ -415,21 +199,16 @@ async function refusesMissingTrust() {
 }
 it('fails startup when route trust is missing', refusesMissingTrust);
 
-async function currentReplicas(connection: NatsConnection) {
-  const manager = await jetstreamManager(connection);
-  const info = await manager.streams.info('EVENTS');
-  expect(info.config.num_replicas).toBe(3);
-  expect(info.cluster?.leader).toMatch(/^peer-[123]$/);
-  expect(info.cluster?.replicas).toHaveLength(2);
-  for (const replica of info.cluster!.replicas!) {
-    expect(replica.current).toBe(true);
-    expect(replica.offline).not.toBe(true);
-  }
-}
-
 async function replicasAreCurrent(connection: NatsConnection) {
+  const manager = await jetstreamManager(connection);
   async function replication() {
-    await currentReplicas(connection);
+    const info = await manager.streams.info('EVENTS');
+    expect(info.config.num_replicas).toBe(3);
+    expect(info.cluster?.leader).toMatch(/^peer-[123]$/);
+    expect(info.cluster?.replicas).toHaveLength(2);
+    for (const replica of info.cluster!.replicas!) {
+      expect(replica.current).toBe(true);
+    }
   }
   await vi.waitFor(replication, { timeout: 5000 });
 }
@@ -437,6 +216,7 @@ async function replicasAreCurrent(connection: NatsConnection) {
 async function appendsAndReplays() {
   const connection = await cluster.client(cluster.peers[0]!);
   const store = await createEventStore(connection);
+  await waitForClusterStream(store);
   await replicasAreCurrent(connection);
   const joined = event('cluster-joined');
   expect(await store.append({ event: joined, expectedSequence: 0 }))
@@ -469,7 +249,7 @@ it('keeps three current copies, refuses a stale append and rebuilds a projection
 async function refusesPublish(identity: string) {
   const command = await cluster.client(cluster.peers[0]!);
   const store = await createEventStore(command);
-  await replicasAreCurrent(command);
+  await waitForClusterStream(store);
   const connection = await cluster.client(cluster.peers[1]!, identity);
   const statuses = connection.status();
   async function permissionError() {

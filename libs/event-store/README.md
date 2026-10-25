@@ -25,7 +25,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.->|saves and reads| store
   ops["apps/ops<br/>background workers"] -->|saves and reads| store
   projections["libs/projections<br/>read tables"] -.->|reads the log| store
-  store -->|stores the log| nats["NATS JetStream<br/>saved event copies"]
+  store -->|stores the log| nats["NATS JetStream<br/>saved copies and recovery"]
   store -.->|checks event shapes| events["libs/events<br/>event definitions"]
 ```
 
@@ -67,8 +67,11 @@ reserved until each server is ready to start, so other tests cannot take them
 during certificate setup. Tests reuse certificates to reduce
 setup time. A separate cluster test checks authenticated connections between
 three NATS servers, conditional writes and rebuilding a PostgreSQL read table.
-It waits for every server connection and three current event copies before testing
-which connections and writes the cluster refuses.
+It waits for every route and three current event copies before checking which
+connections and writes the cluster refuses. Another test stops the server leading
+the saved event log, checks that the other two can still save changes, then starts
+the same server with its original files. It compares saved records, their order
+and the returning server’s copy.
 
 These commands run from the repository root. The test command fetches the required
 tools before running the tests. The helper `wireSubject` turns an event stream
