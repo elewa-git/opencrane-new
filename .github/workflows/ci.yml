@@ -160,6 +160,7 @@ jobs:
           infra/dev-stack/stage-b-local.test.ts infra/dev-stack/stage-b-model.test.ts
           infra/dev-stack/zitadel-setup.test.ts infra/package/fresh-twice.test.ts
           infra/package/browser-capture.test.ts infra/package/chart-render.test.mjs
+          infra/package/prepare-nats-routes.test.mjs
           infra/package/preflight.test.mjs infra/package/chart.test.mjs
 
       - name: Check the budget editor and ownership controls in Chromium

@@ -232,7 +232,8 @@ ordinary installer still rejects `natsCluster` as an unsupported package setting
 even with complete references. Preparation and bootstrap still request R1.
 The cluster render omits the R1 bootstrap Job. Other application templates are
 unchanged and are not ready for an R3 installation. Never apply this output as a
-working package. Provisioning, R3 runtime wiring and image promotion come later.
+working package. Route identity preparation is described below. R3 runtime wiring
+and image promotion come later.
 
 These chart-only settings are added to an otherwise complete values file:
 
@@ -258,8 +259,8 @@ Each certificate must cover that peer's full DNS name and have both `serverAuth`
 and `clientAuth` usages. Only that peer mounts its certificate Secret.
 Route trust must contain a separate route-only issuer, never the client CA.
 The chart rejects reused Secret names, but offline rendering cannot inspect
-certificate contents or prove which issuer signed them. Issuer custody and
-certificate issuance remain prerequisites for later provisioning.
+certificate contents or prove which issuer signed them. The separate preparation
+command below checks issuer custody and certificate contents.
 
 The ConfigMap uses a chart copy of `infra/nats/cluster.conf`; the render test
 requires byte-for-byte equality. It includes the existing `nats.conf` from
@@ -275,3 +276,31 @@ budget and unchanged default rendering. `preflight.test.mjs` checks the ordinary
 installer's refusal. Existing event-store cluster tests retain real TLS refusals.
 [The receipt](../../docs/process/p5-4-pr2/receipt.md) separates source checks from
 three-node placement, R3 bootstrap, rotation and P5-5, all still NOT RUN.
+
+## Private NATS route preparation
+
+P5-4 PR 3b adds `prepare-nats-routes.ts`. After ordinary private preparation, run
+`DEV_STACK_ID="$DEV_STACK_ID" node --experimental-strip-types infra/package/prepare-nats-routes.ts /private/cluster-values.json`.
+The values include the cluster render settings above. The command checks the recorded
+package owner, uses its verified Kubernetes context, checks reviewed image pins and
+renders the real chart in that namespace. There is no caller context override.
+The claim-context change owned by p5-4-target1 can supply its verified record directly.
+
+A separate 30-day route issuer signs three distinct keys and certificates. Each
+certificate has exactly its peer's private DNS name and both TLS usages. The command
+checks dates, signatures, key pairs and separation from the existing client issuer.
+Only public `ca.crt` reaches the trust Secret; each peer Secret contains only its own
+`tls.crt` and `tls.key`. All four Secrets are immutable and created without replacement.
+The signing key stays under the claimed directory in `nats-routes`, with directory
+mode 0700 and file mode 0600. No issuer key is mounted into a peer.
+
+A successful retry verifies the saved namespace, references, object UIDs and exact
+contents. Changed or foreign objects, missing objects and incomplete preparation
+refuse without overwriting anything. An interrupted attempt requires operator inspection;
+there is no automatic cleanup, renewal or recovery. Command output is withheld on failure.
+The helper does not start NATS, change client settings, bootstrap R3 or enable installation.
+
+`nice -n 10 node --experimental-strip-types --test infra/package/prepare-nats-routes.test.mjs`
+runs disposable certificate and Kubernetes command fixtures, including pinned NATS parsing.
+The [receipt](../../docs/process/p5-4-pr3/receipt.md) records source checks.
+Live rotation and three-node installation remain NOT RUN.

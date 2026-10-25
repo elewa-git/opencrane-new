@@ -1,0 +1,1 @@
+- Prepare separate private NATS route certificates for three named peers, with owned create-only Secrets and checks that preserve existing identities on retry. Three-peer installation remains disabled.
