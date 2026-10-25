@@ -285,3 +285,26 @@ async function exerciseRunner(home: string, scenario: RunnerCase) {
     assert.equal(recordedWrites, 'kubectl create secret fixture\nhelm install fixture\n');
   }
 }
+
+async function missingPackagedImport() {
+  const directory = await mkdtemp(join(tmpdir(), 'package-missing-import-'));
+  try {
+    await copyPackagedFixture(directory);
+    const missingFile = 'infra/dev-stack/missing-fixture.ts';
+    await writeFile(join(directory, missingFile), 'export const value = 1;\n');
+    await writeFile(join(directory, 'infra/dev-stack/cnpg.ts'),
+      "import './missing-fixture.ts';\n");
+    const helper = new URL('./packaged-fixture.ts', import.meta.url).href;
+    const script = `import { copyPackagedFixture } from ${JSON.stringify(helper)};
+      await copyPackagedFixture('destination');`;
+    const args = ['--experimental-strip-types', '--input-type=module', '-e', script];
+    async function copyWithMissingImport() {
+      await execute(process.execPath, args, { cwd: directory });
+    }
+    await assert.rejects(copyWithMissingImport,
+      /Add infra\/dev-stack\/missing-fixture\.ts to the packaged fixture files/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('packaged fixture refuses a local import missing from its file list', missingPackagedImport);

@@ -8,6 +8,7 @@ import { parseAllDocuments } from 'yaml';
 
 const source = resolve('.');
 const canary = 'private-canary:%/?@';
+const generatedPassword = 'a'.repeat(64);
 const refusal = 'CNPG installation inputs are incomplete or incompatible';
 const nextStep = 'A Helm release already uses this namespace';
 function encoded(value) {
@@ -19,8 +20,8 @@ function secret(fields, type = 'Opaque') {
   for (const [name, value] of Object.entries(fields)) data[name] = encoded(value);
   return { type, data };
 }
-function database(user, name) {
-  return `postgres://${user}:${encodeURIComponent(canary)}@postgres:5432/${name}`;
+function database(user, name, password = generatedPassword) {
+  return `postgres://${user}:${encodeURIComponent(password)}@postgres:5432/${name}`;
 }
 function validFixture() {
   const secrets = {};
@@ -53,10 +54,10 @@ function validFixture() {
   secrets.openfga = secret({ OPENFGA_DATASTORE_ENGINE: 'postgres',
     OPENFGA_DATASTORE_URI: database('openfga', 'openfga') });
   secrets.bootstrap = secret({ POSTGRES_ADMIN_URL: database('postgres', 'postgres'),
-    PROJECTION_PASSWORD: canary, SERVER_PASSWORD: canary,
-    DISPATCHER_PASSWORD: canary, OPENFGA_PASSWORD: canary });
-  secrets.superuser = secret({ username: 'postgres', password: canary }, 'kubernetes.io/basic-auth');
-  secrets.application = secret({ username: 'projection', password: canary }, 'kubernetes.io/basic-auth');
+    PROJECTION_PASSWORD: generatedPassword, SERVER_PASSWORD: generatedPassword,
+    DISPATCHER_PASSWORD: generatedPassword, OPENFGA_PASSWORD: generatedPassword });
+  secrets.superuser = secret({ username: 'postgres', password: generatedPassword }, 'kubernetes.io/basic-auth');
+  secrets.application = secret({ username: 'projection', password: generatedPassword }, 'kubernetes.io/basic-auth');
   const images = {};
   for (const role of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer']) {
     images[role] = `example.invalid/${role}:17.6@sha256:${'a'.repeat(64)}`;
@@ -101,10 +102,13 @@ async function runFixture(fixture, expected, renders = false) {
     const env = { ...process.env, DEV_STACK_ID: '1' };
     const result = spawnSync(process.execPath, args, { cwd: directory, env, encoding: 'utf8' });
     assert.equal(result.status, 1, result.stderr);
-    assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
     assert.ok(!result.stderr.includes(canary), 'Errors must discard private values and causes');
     assert.ok(!result.stdout.includes(canary), 'Standard output must discard private values');
+    assert.ok(!result.stderr.includes(generatedPassword), 'Errors must discard generated passwords');
+    assert.ok(!result.stdout.includes(generatedPassword), 'Output must discard generated passwords');
     const callText = await readFile(`${directory}/calls.jsonl`, 'utf8');
+    assert.ok(!callText.includes(canary), 'Arguments must not include private values');
+    assert.ok(!callText.includes(generatedPassword), 'Arguments must not include passwords');
     const trimmedCalls = callText.trim();
     const callLines = trimmedCalls.split('\n');
     const calls = callLines.map(JSON.parse);
@@ -114,6 +118,7 @@ async function runFixture(fixture, expected, renders = false) {
         assert.equal(call.args[0], 'template', 'Helm must never apply a refusal fixture');
       }
     }
+    assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
     if (renders) {
       const rendered = await readFile(`${directory}/rendered.yaml`, 'utf8');
       const resources = [];
@@ -160,6 +165,8 @@ const cases = [
   ['wrong bootstrap password', ['secrets', 'bootstrap', 'data', 'PROJECTION_PASSWORD'], encoded('other')],
   ['wrong runtime password', ['secrets', 'runtime', 'data', 'PROJECTION_DATABASE_URL'],
     encoded('postgres://projection:other@postgres:5432/projections')],
+  ['wrong server password', ['secrets', 'runtime', 'data', 'DATABASE_URL'],
+    encoded(database('server', 'projections', 'b'.repeat(64)))],
   ['wrong runtime role', ['secrets', 'runtime', 'data', 'DATABASE_URL'],
     encoded(database('postgres', 'projections'))],
   ['wrong jobs password', ['secrets', 'runtime', 'data', 'HANDLER_DATABASE_URL'],
@@ -169,6 +176,43 @@ const cases = [
   ['malformed private JSON', ['invalidJson'], 'application'],
   ['dependency output', ['dependencyFailure'], 'application'],
 ];
+const connections = [
+  ['bootstrap', 'POSTGRES_ADMIN_URL', 'postgres', 'postgres'],
+  ['runtime', 'PROJECTION_DATABASE_URL', 'projection', 'projections'],
+  ['runtime', 'DATABASE_URL', 'server', 'projections'],
+  ['runtime', 'HANDLER_DATABASE_URL', 'dispatcher', 'handlers'],
+  ['openfga', 'OPENFGA_DATASTORE_URI', 'openfga', 'openfga'],
+];
+for (const [secretName, key, user, databaseName] of connections) {
+  const validUrl = database(user, databaseName);
+  const invalidParts = [
+    ['protocol', 'mysql:'], ['hostname', 'foreign'], ['port', '5433'],
+    ['pathname', '/other'], ['username', 'other'],
+  ];
+  for (const [part, value] of invalidParts) {
+    const url = new URL(validUrl);
+    url[part] = value;
+    cases.push([`${key} ${part}`, ['secrets', secretName, 'data', key], encoded(url.href)]);
+  }
+  for (const parameter of ['user', 'password', 'host', 'port', 'dbname']) {
+    const url = new URL(validUrl);
+    url.searchParams.set(parameter, 'other');
+    cases.push([`${key} ${parameter} override`,
+      ['secrets', secretName, 'data', key], encoded(url.href)]);
+  }
+  const invalidFields = [
+    ['missing', undefined], ['non-string', 42], ['empty', ''],
+    ['non-canonical base64', `${encoded(validUrl)}\n`],
+  ];
+  for (const [reason, value] of invalidFields) {
+    cases.push([`${key} ${reason}`, ['secrets', secretName, 'data', key], value]);
+  }
+  if (secretName === 'runtime') {
+    cases.push([`bootstrap ${key} conflicting password`,
+      ['secrets', 'bootstrap', 'data', key],
+      encoded(database(user, databaseName, 'b'.repeat(64)))]);
+  }
+}
 for (const role of ['superuser', 'application']) {
   cases.push([`${role} missing username`, ['secrets', role, 'data', 'username'], undefined]);
   cases.push([`${role} missing password`, ['secrets', role, 'data', 'password'], undefined]);
@@ -231,3 +275,35 @@ async function wrongImageRole() {
   await runFixture(fixture, 'Rendered image is not reviewed', true);
 }
 test('imageName must use the reviewed PostgreSQL image, not another reviewed role', wrongImageRole);
+
+const roles = [
+  ['PROJECTION_PASSWORD', 'runtime', 'PROJECTION_DATABASE_URL', 'projection', 'projections'],
+  ['SERVER_PASSWORD', 'runtime', 'DATABASE_URL', 'server', 'projections'],
+  ['DISPATCHER_PASSWORD', 'runtime', 'HANDLER_DATABASE_URL', 'dispatcher', 'handlers'],
+  ['OPENFGA_PASSWORD', 'openfga', 'OPENFGA_DATASTORE_URI', 'openfga', 'openfga'],
+];
+const unsupportedPasswords = [
+  ['non-hex', 'g'.repeat(64)], ['uppercase', 'A'.repeat(64)],
+  ['short', 'a'.repeat(63)], ['long', 'a'.repeat(65)],
+];
+for (const [key, secretName, urlKey, user, databaseName] of roles) {
+  for (const [reason, password] of unsupportedPasswords) {
+    async function refusesUnsupportedPassword() {
+      const fixture = validFixture();
+      fixture.secrets.bootstrap.data[key] = encoded(password);
+      fixture.secrets[secretName].data[urlKey] = encoded(database(user, databaseName, password));
+      if (user === 'projection') fixture.secrets.application.data.password = encoded(password);
+      await runFixture(fixture, refusal);
+    }
+    test(`CNPG installer refuses matching ${key} ${reason} password before Helm`,
+      refusesUnsupportedPassword);
+  }
+}
+async function matchingBootstrapConnections() {
+  const fixture = validFixture();
+  for (const key of ['DATABASE_URL', 'PROJECTION_DATABASE_URL', 'HANDLER_DATABASE_URL']) {
+    fixture.secrets.bootstrap.data[key] = fixture.secrets.runtime.data[key];
+  }
+  await runFixture(fixture, nextStep, true);
+}
+test('matching bootstrap connection fields reach the release check', matchingBootstrapConnections);
