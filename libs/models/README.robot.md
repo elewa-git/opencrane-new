@@ -1336,6 +1336,8 @@ Explicit initial choices can use any eligible connection.
 actor reuse, the reserved reaction id, explicit initial defaults, independent source
 and target access checks, key references, registry support, access rechecks, history
 ordering and changing reads, pause preservation, replay and status reads after role loss.
+Its fixture initialises both provider and routine projections. Each history-fault test
+requires a successful dependency read before withholding or changing saved history.
 It uses disposable NATS and OpenFGA plus PostgreSQL with `PG_TEST_URL` set.
 
 The shared provider append helper reads the event at the returned position before

@@ -6,7 +6,7 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { AppendCommand, AppendResult } from '@opencrane/event-store';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
-import { applyProvider, pgDb, providers, ProjectionRunner,
+import { applyProvider, pgDb, providers, routines, ProjectionRunner,
   rebuildProviderProjection } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { providerDefaultHandler, providerHistory, providerSecretRef } from '@opencrane/models';
@@ -86,6 +86,7 @@ async function initialise() {
   const runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader,
     createLogger('binding-guards-setup', loggerOptions));
   await runner.initialise(providers);
+  await runner.initialise(routines);
 }
 beforeEach(initialise, 30_000);
 async function closeFixture() {
