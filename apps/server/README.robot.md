@@ -5485,8 +5485,8 @@ Identity verification, credential use, company selection, UI and live qualificat
 
 ## Company opt-in read (Part of #49; P3-8 PR 7e)
 
-The [API contract](../../docs/api/company-opt-in.md) describes the GET-only company
-opt-in route. Existing integration session checks supply the member and silo.
+The [API contract](../../docs/api/company-opt-in.md) describes the company
+opt-in GET and POST route. Existing integration session checks supply the member and silo.
 `integrations/company-opt-in-read.ts` loads exact event history with a shared
 10,000 ms deadline before one `readActiveMember` admin check. Failed preparation
 still checks membership. It reuses `foldCompanyOptIn` from PR #695 and returns only
@@ -5518,3 +5518,19 @@ uses, one budget admission and no later send. Free calls retain zero held and se
 cents. Missing/lost starts and incomplete observations keep retry unavailable.
 The [receipt](../../docs/process/budget-approval-retry/receipt.md) retains the earlier
 load failures separately from these checks. Fresh-install qualification is NOT RUN.
+
+## Company opt-in write (Part of #49; P3-8 PR 4c)
+
+`integrations/company-opt-in-write.ts` validates the exact Origin, path, empty query
+and strict body, then calls the unchanged `changeCompanyOptIn`. The shared route
+supplies the signed session member and configured silo. Its 4096-byte body limit,
+no-store hook and fixed parser errors cover both methods. The command loads history
+before its two-second write access check. No additional access deadline wraps preparation.
+
+The [API contract](../../docs/api/company-opt-in.md) owns the fields and status codes.
+No event or dependency was added. Existing API field names avoid RISKY_FIELD_NAME;
+security and authority tests are unchanged. The HTTP tests use disposable NATS,
+OpenFGA and PostgreSQL. They cover roles, invalid input, stale positions, demotion
+and registration races, slow history, private errors, restart and lost replies beyond
+broker deduplication. Opt-in grants no account use; company selection remains unavailable.
+Live company-account use and fresh-install qualification remain NOT RUN.
