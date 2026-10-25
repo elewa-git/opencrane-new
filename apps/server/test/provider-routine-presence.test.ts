@@ -217,6 +217,66 @@ async function providerRefusal() {
   expect(response.json()).toEqual({ status: 'refused' });
 }
 it('checks provider permission before disclosing a failed lookup', providerRefusal);
+function failInventory(fault: string) {
+  const originalRead = nats.store.readStream.bind(nats.store);
+  async function* unavailableInventory(subject: string, from?: number, deadline?: number) {
+    if (subject !== 'provider-*') {
+      yield* originalRead(subject, from, deadline);
+      return;
+    }
+    if (fault === 'failed') {
+      throw new Error('private-canary orders ciphertext');
+    }
+    if (fault === 'expired') {
+      expect(deadline).toBeGreaterThan(performance.now());
+      vi.spyOn(performance, 'now').mockReturnValue(deadline! + 1);
+      yield* originalRead(subject, from, deadline);
+      return;
+    }
+    for await (const row of originalRead(subject, from, deadline)) {
+      const malformed = { ...row.event, data: { name: 'private-canary orders ciphertext' } };
+      yield { ...row, event: malformed };
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(unavailableInventory);
+}
+async function inventoryAccess(fault: string, caller: string) {
+  await result('absent', 0);
+  let actor = 'admin';
+  let providerId = 'primary';
+  if (caller === 'removed admin') {
+    const removed = { ...event('removed', 'member-admin', 'member.removed'),
+      data: { memberId: 'admin', removedBy: 'admin' } };
+    await nats.seed([removed]);
+  } else if (caller === 'member') {
+    actor = 'alice';
+  } else if (caller === 'missing provider') {
+    providerId = 'missing';
+  }
+  const before = await nats.store.head();
+  const healthy = await request(actor, providerId);
+  const expectedCode = caller === 'allowed admin' ? 200 : 403;
+  expect(healthy.statusCode).toBe(expectedCode);
+  failInventory(fault);
+  const append = vi.spyOn(nats.store, 'append');
+  const response = await request(actor, providerId);
+  if (caller === 'allowed admin') {
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+  } else {
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual(healthy.json());
+  }
+  expect(response.body + logs.join('')).not.toMatch(/orders|ciphertext|private-canary/u);
+  expect(append).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(before);
+}
+it.each([
+  ['failed', 'removed admin'], ['expired', 'removed admin'], ['malformed', 'removed admin'],
+  ['failed', 'member'], ['expired', 'member'], ['malformed', 'member'],
+  ['failed', 'missing provider'], ['expired', 'missing provider'], ['malformed', 'missing provider'],
+  ['failed', 'allowed admin'], ['expired', 'allowed admin'], ['malformed', 'allowed admin'],
+])('checks access after %s provider inventory for %s', inventoryAccess);
 async function changed(kind: string) {
   const originalQuery = db.query.bind(db);
   let changed = false;
