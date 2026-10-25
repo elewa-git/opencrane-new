@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { checkFresh, checkOwner, checkInstallId } from './fresh-twice.ts';
+import { copyPackagedFixture } from './packaged-fixture.ts';
 
 const execute = promisify(execFile);
 
@@ -183,15 +184,11 @@ async function prepareRunnerFiles(home: string, scenario: RunnerCase) {
   const bin = join(home, 'bin');
   const writes = join(home, 'writes');
   await mkdir(join(worktree, 'infra/package'), { recursive: true });
-  await mkdir(join(worktree, 'infra/dev-stack'), { recursive: true });
-  await mkdir(join(worktree, 'libs/event-store/test'), { recursive: true });
   await mkdir(slot, { recursive: true });
   await mkdir(bin);
-  const files = ['infra/package/fresh-twice.ts', 'infra/package/browser-capture.ts', 'infra/dev-stack/config.ts',
-    'infra/dev-stack/identity.ts', 'infra/dev-stack/packaged.ts', 'infra/dev-stack/target.ts',
-    'infra/dev-stack/private-directories.ts',
-    'infra/package/fresh-twice-entry.ts', 'infra/dev-stack/journey-guard.ts',
-    'libs/event-store/test/certificates.ts'];
+  await copyPackagedFixture(worktree);
+  const files = ['infra/package/fresh-twice.ts', 'infra/package/browser-capture.ts',
+    'infra/package/fresh-twice-entry.ts', 'infra/dev-stack/journey-guard.ts'];
   for (const file of files) {
     await cp(file, join(worktree, file));
   }
@@ -288,3 +285,26 @@ async function exerciseRunner(home: string, scenario: RunnerCase) {
     assert.equal(recordedWrites, 'kubectl create secret fixture\nhelm install fixture\n');
   }
 }
+
+async function missingPackagedImport() {
+  const directory = await mkdtemp(join(tmpdir(), 'package-missing-import-'));
+  try {
+    await copyPackagedFixture(directory);
+    const missingFile = 'infra/dev-stack/missing-fixture.ts';
+    await writeFile(join(directory, missingFile), 'export const value = 1;\n');
+    await writeFile(join(directory, 'infra/dev-stack/cnpg.ts'),
+      "import './missing-fixture.ts';\n");
+    const helper = new URL('./packaged-fixture.ts', import.meta.url).href;
+    const script = `import { copyPackagedFixture } from ${JSON.stringify(helper)};
+      await copyPackagedFixture('destination');`;
+    const args = ['--experimental-strip-types', '--input-type=module', '-e', script];
+    async function copyWithMissingImport() {
+      await execute(process.execPath, args, { cwd: directory });
+    }
+    await assert.rejects(copyWithMissingImport,
+      /Add infra\/dev-stack\/missing-fixture\.ts to the packaged fixture files/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('packaged fixture refuses a local import missing from its file list', missingPackagedImport);

@@ -1,0 +1,63 @@
+Local checks, 25 October 2026
+Source: a0c33c81aa7e2f2474518ae3c6eec6553266a66f
+Failing-first source: 182dbfb80
+
+PASS npm ci and the two shared tool links.
+PASS failing-first baseline: 30 tests, 4 passed, 26 failed as expected.
+Initial combined run: 128 tests, 127 passed, 1 failed on fixture import resolution.
+The fixture import was corrected. Its final tests are included below.
+PASS package run 1 after correction: 93 tests, 93 passed, 0 failed, 0 skipped.
+PASS package run 2 after correction: 93 tests, 93 passed, 0 failed, 0 skipped.
+PASS ownership tests: 35 passed, 0 failed.
+PASS security-rules.test.ts: 438 passed.
+PASS typecheck: all workspaces plus package and development-stack scripts.
+PASS check:events: 154 event types agree.
+PASS lint: code (25 existing warnings, no errors), dependencies, Knip,
+Markdown, README rules, local links, fixtures, licences and changelog.
+PASS standalone path and the unchanged shipped CNPG image refusal.
+NOT RUN live standby, promotion, backup/WAL, restore and storage denial.
+NOT RUN full root suite, development stacks and model calls, as instructed.
+
+Fixture copy repair, 25 October 2026
+Source: 43562254b247cfb4ae375acfbe0221d559324d7d
+Failing-first test source: 9d37696a6
+
+PASS rebase completed; fetched origin/main 35e7e10e9 was already included.
+Expected baseline failure: 55 tests, 31 passed, 24 failed on missing cnpg.ts.
+Expected test-first failure: the same 24 cases named the missing shared-list entry.
+PASS focused fresh-install and NATS route tests: 55 passed, 0 failed, 0 skipped.
+PASS all 48 CI infrastructure files, run 1: 445 passed, 0 failed, 0 skipped.
+PASS all 48 CI infrastructure files, run 2: 445 passed, 0 failed, 0 skipped.
+PASS lint, including Knip and changelog: 0 errors, 25 existing code warnings.
+PASS typecheck: all workspaces, package and development-stack scripts.
+PASS check:events: 154 event types agree.
+PASS separate lint:changelog.
+All tests used the supplied PG_TEST_URL and nice -n 10; lint and typecheck also used nice.
+NOT RUN full root suite, live CNPG installation and fresh product journeys.
+PASS final rebase onto main 7235079d9; repair e4733c117, test-first commit d443a4e90.
+PASS infrastructure, workflow, dependencies and certificate fixture match tested source 43562254b.
+The full infrastructure runs preceded this final rebase; new server memory behaviour is not claimed.
+PASS after final rebase: targeted server ESLint and server workspace typecheck.
+PASS after final rebase: documentation, local links, Knip, changelog and event checks.
+
+Bootstrap credential refusal repair, 25 October 2026
+Implementation: 1a427bbda
+Final test source: f6c27cf47ab829314865eda8adcb84d27ab80781
+Failing-first test source: 8b9aee5e6
+
+PASS rebase completed onto fetched origin/main f85834091; no rebase state remains.
+PASS failing-first proof: 3 connection overrides and 16 password-format refusals failed before the fix.
+PASS final CNPG run 1: 126 passed, 0 failed, 0 skipped.
+PASS final CNPG run 2: 126 passed, 0 failed, 0 skipped.
+PASS all 48 CI infrastructure files, run 1: 528 + 9 = 537 passed, 0 failed, 0 skipped (693 s).
+PASS all 48 CI infrastructure files, run 2: 528 + 9 = 537 passed, 0 failed, 0 skipped (1066 s).
+Run 1 preceded the test-only password-mismatch strengthening; run 2 and both final CNPG runs include it.
+PASS 12 distinct guard-removal probes in temporary copies, including the fixture import-list assertion.
+PASS lint, including Knip and changelog: 0 errors, 25 existing code warnings.
+PASS typecheck: all workspaces, package and development-stack scripts.
+PASS check:events: 154 event types agree.
+PASS separate lint:changelog.
+All tests used the supplied PG_TEST_URL and nice -n 10; lint, typecheck and builds also used nice.
+PASS shipped CNPG image refusal; existing ownership and certificate assertions retained.
+NOT RUN full root suite, live CNPG installation, fresh product journeys, standby/promotion,
+backup/WAL, restore and storage denial.

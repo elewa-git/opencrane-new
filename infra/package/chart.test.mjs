@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync,
   writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
@@ -87,7 +87,7 @@ function loadPrivateFunction(file, name, replacements) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   });
   const moduleExports = {};
-  const nativeRequire = createRequire(import.meta.url);
+  const nativeRequire = createRequire(resolve(file));
   function fixtureRequire(specifier) {
     return replacements[specifier] ?? nativeRequire(specifier);
   }

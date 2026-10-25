@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { isDeepStrictEqual, promisify } from 'node:util';
 import { parseAllDocuments } from 'yaml';
 import { issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
+import { copyPackagedFixture } from './packaged-fixture.ts';
 
 const execute = promisify(execFile);
 const namespace = 'opencrane-package-1';
@@ -93,14 +94,7 @@ async function fixture(isolatedTarget = true) {
   await mkdir(join(home, 'bin'));
   await mkdir(join(home, 'objects'));
   await cp('infra/package', join(worktree, 'infra/package'), { recursive: true });
-  await mkdir(join(worktree, 'infra/dev-stack'), { recursive: true });
-  await mkdir(join(worktree, 'libs/event-store/test'), { recursive: true });
-  for (const file of ['config.ts', 'identity.ts', 'packaged.ts', 'private-directories.ts',
-    'target.ts']) {
-    await cp(`infra/dev-stack/${file}`, join(worktree, 'infra/dev-stack', file));
-  }
-  await cp('libs/event-store/test/certificates.ts',
-    join(worktree, 'libs/event-store/test/certificates.ts'));
+  await copyPackagedFixture(worktree);
   await symlink(join(process.cwd(), 'node_modules'), join(worktree, 'node_modules'));
   await writeFile(join(worktree, 'package.json'), '{"type":"module"}');
   await writeFile(join(home, 'bin/kubectl'), kubectl, { mode: 0o700 });

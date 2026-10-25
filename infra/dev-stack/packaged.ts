@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { directory, root } from './config.ts';
 import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
+import { checkCnpgInstallation } from './cnpg.ts';
 
 const execute = promisify(execFile);
 const namespace = `opencrane-package-${stackId}`;
@@ -64,7 +65,7 @@ type PackageOwner = {
   releaseSecretUid?: string;
   installId?: string;
 };
-type PackageValues = { secrets: Record<string, string> };
+type PackageValues = Parameters<typeof checkCnpgInstallation>[0];
 type PackageReview = {
   requiredSecrets: string[];
   chartVersion: string;
@@ -78,8 +79,13 @@ async function command(program: string, args: string[], timeoutMs = 120_000) {
     const connection = await targetConnection();
     if (connection.kubeconfig) args = ['--kubeconfig', connection.kubeconfig, ...args];
   }
-  const result = await execute(program, args, { cwd: root, timeout: timeoutMs });
-  return result.stdout.trim();
+  try {
+    const result = await execute(program, args, { cwd: root, timeout: timeoutMs });
+    return result.stdout.trim();
+  } catch {
+    // Discard dependency output because it may contain credentials.
+    throw new Error('Package command failed');
+  }
 }
 
 async function kubectl(args: string[], timeoutMs = 120_000) {
@@ -222,11 +228,14 @@ async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
   const rendered = await command('helm', ['template', release, 'infra/package/chart',
     '--namespace', namespace, '--values', valuesFile]);
   const reviewedImages = new Set(Object.values(review.images));
-  const renderedImages = rendered.matchAll(/^\s*(?:image:|"image":)\s*"?([^",\n]+)"?,?\s*$/gmu);
+  const renderedImages = rendered.matchAll(/^\s*"?(image|imageName)"?:\s*"?([^",\n]+)"?,?\s*$/gmu);
   let imageCount = 0;
   for (const image of renderedImages) {
     imageCount++;
-    if (!reviewedImages.has(image[1]!)) throw new Error('Rendered image is not reviewed');
+    if (!reviewedImages.has(image[2]!) ||
+        (image[1] === 'imageName' && image[2] !== review.images['postgres'])) {
+      throw new Error('Rendered image is not reviewed');
+    }
   }
   if (imageCount === 0) throw new Error('No pinned images rendered');
   if (/^kind: (Ingress|Gateway)\s*$/mu.test(rendered) ||
@@ -319,6 +328,7 @@ export async function installPackage(valuesFile: string) {
   const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
   const context = owner.context;
+  await checkCnpgInstallation(values, namespace, kubectl);
   await checkNamedSecrets(values, review);
   await checkRenderedPackage(valuesFile, review);
   if (await releaseSecret()) throw new Error('A Helm release already uses this namespace');

@@ -2013,3 +2013,13 @@ The operator supplies the file before an owner bootstrap or packaged install.
 The [package notes](../package/README.robot.md#private-owner-email) describe how
 the packaged bootstrap receives the same value. No real address belongs in this
 repository.
+
+## PostgreSQL installer checks
+
+`packaged.ts` calls `cnpg.ts` after checking package ownership and before Helm runs.
+The helper reads operator and credential objects through the claimed Kubernetes
+connection. The [package notes](../package/README.robot.md#optional-postgresql-primary-and-standby)
+define the accepted version, passwords and unchanged database roles. The helper
+requires bootstrap-compatible generated passwords and checks connection values
+after the bootstrap Secret overrides runtime settings. The shipped
+image review still refuses CNPG; this check does not enable a live installation.
