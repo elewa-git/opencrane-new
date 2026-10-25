@@ -77,7 +77,9 @@ and the returning server’s copy.
 
 The operator backup tests restore native event bytes on a fresh NATS server.
 They compare saved event identities and positions, check private file permissions,
-and confirm that a repeated command still returns its earlier result.
+and confirm that a repeated command still returns its earlier result. Restore tests
+also check that existing streams survive refusals and that uncertain transfers are
+never erased or retried automatically.
 
 These commands run from the repository root. The test command fetches the required
 tools before running the tests. The helper `wireSubject` turns an event stream

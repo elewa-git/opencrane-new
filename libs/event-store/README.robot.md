@@ -453,3 +453,9 @@ faults. It shares the existing connection/fixture setup and changes no permissio
 The older `test/backup.test.ts` remains a separate command-idempotency regression.
 The [operator contract](../../infra/package/README.robot.md#event-byte-export)
 records limits and the later coordinated-backup work.
+
+The operator restore tests in `test/event-restore.test.ts` use the package helper
+with an unprovisioned target. They check source and restored event proof, refusal
+without deletion, lost completion, client restart and command history after native
+deduplication loss. The [package contract](../../infra/package/README.robot.md#event-byte-restore)
+describes the standalone, reachable-source limit. The adapter contract is unchanged.

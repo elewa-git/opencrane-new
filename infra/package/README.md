@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>Helm, certificates and event copies"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and event recovery"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|reserves test space and checks cluster access| package
@@ -50,6 +50,7 @@ installation files only. Credential preparation and a running install still need
 - Renders an optional three-peer event log and prepares its separate private certificates.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log for an operator.
+- Restores checked events into an empty disposable NATS target.
 - Removes only this worktree's install, including after an interrupted launcher.
 
 ## Processes it handles
@@ -99,6 +100,12 @@ capture or a snapshot that NATS reports as failed, and removes partial output.
 Stable positions do not prove that writers stopped. This is only the
 event part of recovery; database, file and computer-volume backups still need work.
 The [operator notes](README.robot.md#event-byte-export) describe its limits.
+
+The event restore command checks that copy against its reachable source, then sends
+it to a separate disposable NATS server with no event stream. It checks the restored
+events and leaves uncertain results isolated for inspection. It starts no product
+processes. This does not restore or reopen a working installation.
+The [restore notes](README.robot.md#event-byte-restore) explain the requirements.
 
 ## Folders
 

@@ -1,0 +1,52 @@
+Run 1
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test/event-restore.test.ts libs/event-store/test/event-backup.test.ts libs/event-store/test/backup.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  3 passed (3)
+      Tests  47 passed (47)
+   Start at  18:53:21
+   Duration  53.07s (tests 93%, transform 4%, import 3%)
+
+
+Run 2
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test/event-restore.test.ts libs/event-store/test/event-backup.test.ts libs/event-store/test/backup.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  4 passed (4)
+      Tests  485 passed (485)
+   Start at  18:55:01
+   Duration  58.73s (tests 89%, transform 6%, import 5%)
+
+
+Run 3
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test/event-restore.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  19:00:56
+   Duration  28.20s (tests 92%, transform 6%, import 2%)
+
+
+Run 4
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test/event-restore.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  19:01:26
+   Duration  26.32s (tests 92%, transform 5%, import 2%)
+
+
