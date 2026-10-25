@@ -5299,3 +5299,25 @@ run reader, including the older-run terminal retry fix, landed in #661 as
 `c350940aac71e8851f9c076d176653737027e3f2`. Detail and run routes keep their access-first
 errors. Admin lists, attention, commands and execution remain later work.
 Fresh-install qualification: NOT RUN.
+
+## Original publication receipt HTTP contract (P4-27 PR 7c; Part of #109)
+
+GET `/api/org/integrations/:serverId/changes/:commandId` also recovers an original
+saved publication. The [models contract](../../libs/models/README.robot.md#original-saved-tool-publications-p4-27-pr-7c-part-of-109)
+lists its selected fields and exact identity checks. Only the original human actor,
+while still a current Owner/Admin, can read it. Another admin gets the same bare
+Unknown as a missing reference. Unknown never permits a resend.
+
+Successful publication POSTs add `receipt` and retain `status: appended` and the
+actual top-level `sequence`. Interleaved events do not change that sequence into a
+per-server count. The existing route already passes the helper's receipt through.
+Publication progress, generic registration and instance status routes stay unchanged.
+GET appends nothing and sends no discovery, configuration or provider request.
+Removal or demotion during successful or failed loading denies access. IAM failure
+returns a sanitised 503; responses and logs include no caught dependency errors.
+
+`test/integration-changes.test.ts` covers lost replies followed by withdrawal, changed
+tools, another review and publication, restart and projection rebuild. It checks
+original time and position, exact retry after the deduplication window, conflicting
+identities and evidence, private canaries, final access and bounded history reads.
+Fresh-install qualification: NOT RUN.

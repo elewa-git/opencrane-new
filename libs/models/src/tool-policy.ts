@@ -87,21 +87,8 @@ export async function publishToolPolicy(store: EventStore, binding: Binding, mem
   if (result.status !== 'appended' || !('sequence' in result)) {
     return result;
   }
-  // Check duplicate recovery against the event actually saved by the store.
-  const saved = await store.readEvent(result.sequence);
-  if (!matchesPublication(saved, binding.silo, serverId, memberId, payload)) {
-    return { status: 'conflict' };
-  }
-  return { status: 'appended', sequence: result.sequence };
-}
-
-function matchesPublication(row: StoredEvent, silo: string, serverId: string,
-  memberId: string, payload: { commandId: string }) {
-  const event = row.event;
-  return event.silo === silo && event.subject === `mcp-${serverId}` &&
-    event.principal?.kind === 'human' && event.principal.id === memberId &&
-    event.commandId === payload.commandId && event.type === 'mcp.server_published' &&
-    publicationDigest(event.data) === publicationDigest(payload);
+  return savedToolPolicyResult(store, binding.silo, memberId, serverId, command,
+    'mcp.server_published', payload, rows, result.sequence);
 }
 
 export async function setToolPolicy(store: EventStore, binding: Binding, memberId: string,
@@ -133,11 +120,16 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
 
 async function savedToolPolicyResult(store: EventStore, silo: string, memberId: string,
   serverId: string, command: { commandId: string; expectedSequence: number },
-  type: 'mcp.tool_mode_set' | 'mcp.server_reviewed', payload: Record<string, unknown>,
+  type: 'mcp.tool_mode_set' | 'mcp.server_reviewed' | 'mcp.server_published',
+  payload: Record<string, unknown>,
   rows: StoredEvent[], sequence: number) {
   // Read the stored event so broker deduplication cannot confirm a different save.
   const saved = await store.readEvent(sequence, performance.now() + 10_000);
   const receipt = toolChangeReceipt(saved, silo, serverId, memberId, command.commandId);
+  const prior = referencedToolChanges(rows, command.commandId);
+  if (prior.length > 1 || (prior[0] && publicationDigest(prior[0]) !== publicationDigest(saved))) {
+    return { status: 'conflict' };
+  }
   // Recover the original write position without adding fields to existing events.
   let originalSequence = 0;
   for (const row of rows) {
@@ -160,6 +152,9 @@ function toolChangeReceipt(row: StoredEvent, silo: string, serverId: string,
       event.source !== 'opencrane-server' ||
       event.principal?.kind !== 'human' || event.principal.id !== memberId) {
     return null;
+  }
+  if (event.type === 'mcp.server_published') {
+    return toolPublicationReceipt(row, serverId, memberId, changeRef);
   }
   if (event.type === 'mcp.server_reviewed') {
     return toolReviewReceipt(row, serverId, memberId, changeRef);
@@ -197,6 +192,27 @@ function toolReviewReceipt(row: StoredEvent, serverId: string, memberId: string,
     policyRevision: data.policyRevision, reviewRevision: row.sequence, reviewedBy: data.reviewedBy };
 }
 
+function toolPublicationReceipt(row: StoredEvent, serverId: string, memberId: string,
+  changeRef: string) {
+  const parsed = mcpPublicationIntentDataSchema.safeParse(row.event.data);
+  if (!parsed.success || parsed.data.serverId !== serverId ||
+      parsed.data.publishedBy !== memberId || parsed.data.commandId !== changeRef) {
+    return null;
+  }
+  const data = parsed.data;
+  // Confirm only the saved intent, without claiming gateway acceptance or granting access.
+  return { changeRef, eventId: row.event.id, recordedAt: row.event.time, sequence: row.sequence,
+    serverId, reviewRevision: data.reviewRevision, fragmentDigest: data.fragmentDigest,
+    publishedBy: data.publishedBy };
+}
+
+function referencedToolChanges(rows: StoredEvent[], changeRef: string) {
+  function matchesReference(row: StoredEvent) {
+    return row.event.id === changeRef || row.event.commandId === changeRef;
+  }
+  return rows.filter(matchesReference);
+}
+
 export async function readToolModeChange(store: EventStore, binding: Binding, memberId: string,
   serverId: string, changeRef: string) {
   try {
@@ -220,10 +236,11 @@ async function loadToolModeChange(store: EventStore, silo: string, memberId: str
   if (performance.now() > deadline) {
     throw new Error('Tool change unavailable');
   }
-  function matchesId(row: StoredEvent) {
-    return row.event.id === changeRef;
+  const matching = referencedToolChanges(rows, changeRef);
+  if (matching.length !== 1) {
+    return { status: 'unknown' };
   }
-  const saved = rows.find(matchesId);
+  const saved = matching[0];
   const receipt = saved && toolChangeReceipt(saved, silo, serverId, memberId, changeRef);
   if (!receipt) {
     return { status: 'unknown' };

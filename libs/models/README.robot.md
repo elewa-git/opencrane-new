@@ -3675,3 +3675,26 @@ Later changes do not replace the original receipt. Conflicting references, closu
 malformed records return unknown; missing evidence never permits a resend.
 Receipts describe local changes only. Current metadata has its own reader, and upstream
 identity remains unverified. No custody, provider, append, selection or release is involved.
+
+## Original saved tool publications (P4-27 PR 7c; Part of #109)
+
+`readToolModeChange` also recognises exactly `mcp.server_published` with the full
+publication intent schema. Legacy publication records cannot confirm a command.
+The silo, server stream, event id, command id, trusted source, human principal and
+`publishedBy` must agree. The payload's command id must match too. Conflicting
+records with the same event or command reference cannot confirm a receipt.
+
+The receipt selects only `changeRef`, `eventId`, `recordedAt`, `sequence`, `serverId`,
+`reviewRevision`, `fragmentDigest` and `publishedBy`. Time and sequence come from
+that original stored event. The review revision and digest come from its payload.
+Later withdrawal, discovery, review or publication cannot replace those facts.
+The existing separate availability object still grants no person or assistant access.
+A saved intent does not confirm gateway acknowledgement or current availability.
+
+`publishToolPolicy` uses the same saved-event verification as review and mode writes.
+After append or exact retry, it rereads the stored event within ten seconds and checks
+its identity, full payload and original preceding stream position. A changed actor,
+payload or original expected position conflicts, including beyond broker deduplication.
+Reads retain the ten-second history limit and one final current Owner/Admin check,
+including after failed loading. No read uses a write authority fence.
+Lifecycle receipts, screens and fresh-install qualification remain later work.

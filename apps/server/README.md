@@ -61,7 +61,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, own routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads own saved profiles and original change receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads own saved profiles and original change and publication receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, spending by month, history, current accounting and exact membership receipts| postgres
@@ -330,9 +330,10 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
    answer from the permissions service.
 7. **An admin adds a tool server.** The server checks the remote address, lists its
    tools and leaves them blocked until an admin reviews them. A lost reply to a tool-mode
-   change or review can be checked by its original reference, even after later changes.
+   change, review or publication can be checked by its original reference, even after later changes.
    Only the person who saved it can read that receipt, while still an owner or admin.
-   A saved review does not confirm publication or gateway acceptance. Remote discovery uses
+   A saved publication does not confirm gateway acceptance or grant permission to use tools.
+   A saved review does not confirm publication. Remote discovery uses
    the public address checks shared by `libs/models`.
    Published calls require permission for both the person and the assistant. Removing
    either grant stops new calls and calls waiting to be sent, even while IAM, the
