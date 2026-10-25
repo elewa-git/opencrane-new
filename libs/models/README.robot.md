@@ -3756,12 +3756,17 @@ earlier delayed publish. If it remains unresolved, the existing lease-controlled
 replacement and startup append must exclude that write before replay can serve requests.
 
 Saved duplicates apply their original payload once without moving the position backwards.
+Recovery checks every intervening event before accepting a duplicate. Another writer's
+change stops the old actor before it can overlook that writer's reserved money.
 Application failures restore the last good state before replay retries the saved row.
 Admin ceiling history is prepared outside the money queue, using its existing ten-second
 read limit. The access check then starts its two-second limit. Its exact deadline passes
 through queue waits, recovery, publishes and final checks. Callers with an existing access
-deadline keep that earlier limit during preparation too. The actor checks the requested
-revision again after queue waiting. A late
+deadline keep that earlier limit during preparation too. After queue waiting, the actor
+reads only events added since preparation to find a concurrent save of the same command.
+An identical payload returns that saved receipt before checking the requested revision;
+a changed payload or administrator still conflicts. The catch-up read and final access
+check share the original deadline. A late
 saved admission keeps the hold but grants no send. An already expired request cannot
 publish a release either; existing later evidence checks can release an unsent hold. `requireCurrent` refuses while recovery
 is pending. Restart and replay preserve admissions, root allowances and integer-cent holds.

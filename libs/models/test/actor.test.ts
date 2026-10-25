@@ -898,4 +898,3 @@ async function keepsWriterAfterDuplicateId(afterConflict: boolean) {
 it.each([false, true])(
   'keeps the writer usable after a duplicate id refusal (after conflict: %s)',
   keepsWriterAfterDuplicateId);
-

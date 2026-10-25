@@ -27,7 +27,7 @@ export function ceilingReceiptFromHistory(row: StoredEvent, rows: StoredEvent[])
 
 export async function prepareCeilingChange(
   actor: { store: EventStore; silo: string; state: BudgetState },
-  raw: unknown, commandId: string, expectedSequence?: number,
+  raw: unknown, commandId: string,
   fresh?: (newCommand?: boolean) => Promise<void>, deadline = performance.now() + 10_000,
 ) {
   const payload = budgetCeilingSetDataSchema.parse(raw);
@@ -47,9 +47,28 @@ export async function prepareCeilingChange(
   // Keep saved retries independent of choices that have since become unavailable.
   await fresh?.(!prior);
   if (prior) return receipt ?? { status: 'conflict' as const };
-  // Keep reservation changes in this revision; a conflict need not mean another edit.
-  if (expectedSequence !== undefined && expectedSequence !== actor.state.sequence) {
+  const sequence = rows.at(-1)?.sequence ?? 0;
+  return { status: 'ready' as const, payload, sequence };
+}
+
+export async function readQueuedCeilingReceipt(
+  actor: { store: EventStore; silo: string; state: BudgetState },
+  payload: unknown, commandId: string, preparedSequence: number, deadline: number,
+) {
+  if (preparedSequence >= actor.state.sequence) return undefined;
+  const subject = `budget-${actor.silo}`;
+  // Read only writes applied since preparation; keep full history outside the access deadline.
+  const rows = actor.store.readStream(subject, preparedSequence + 1, deadline);
+  for await (const row of rows) {
+    if (row.event.silo !== actor.silo || row.event.subject !== subject) {
+      throw new Error('Budget receipt mismatch');
+    }
+    if (row.sequence > actor.state.sequence) break;
+    if (row.event.commandId !== commandId) continue;
+    if (row.event.type === 'budget.ceiling_set' && isDeepStrictEqual(row.event.data, payload)) {
+      return ceilingReceipt(row, actor.state);
+    }
     return { status: 'conflict' as const };
   }
-  return { status: 'ready' as const, payload };
+  return undefined;
 }

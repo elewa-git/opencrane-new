@@ -44,7 +44,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, recovers budgets and reads spending| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, recovers budgets in order and reads spending| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -69,6 +69,9 @@ Budget writes retry unrelated activity within the original access time limit. A 
 reply keeps the exact pending event and all holds. New money decisions and releases
 wait until saved history resolves it. Recovering an admission never grants a second send.
 Only another budget writer's change stops this writer permanently.
+Recovery checks earlier writes before accepting a saved retry, so another writer's
+reserved money cannot be skipped. Identical spending-limit requests made together
+return the same saved receipt.
 
 Approval cards retain the saved decision, use and end times after a restart.
 They name a cancellation cause only when a saved event proves it. Retrying keeps

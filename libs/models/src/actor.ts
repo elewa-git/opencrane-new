@@ -1,5 +1,5 @@
 import { BudgetWriter, withinBudgetDeadline } from './budget-writer.ts';
-import { prepareCeilingChange } from './ceiling-command.ts';
+import { prepareCeilingChange, readQueuedCeilingReceipt } from './ceiling-command.ts';
 import { CeilingReceiptRecovery } from './ceiling-receipt-recovery.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -96,11 +96,17 @@ export class BudgetActor {
     fresh?: () => Promise<void>) {
     const originalDeadline = knownAccessDeadline(fresh);
     const preparationDeadline = Math.min(originalDeadline ?? Infinity, performance.now() + 10_000);
-    const preparing = prepareCeilingChange(this, raw, commandId, expectedSequence,
+    const preparing = prepareCeilingChange(this, raw, commandId,
       fresh, preparationDeadline);
     const prepared = await withinBudgetDeadline(preparing, preparationDeadline);
     const save = async () => {
       if (prepared.status !== 'ready') return prepared;
+      const saved = await readQueuedCeilingReceipt(this, prepared.payload, commandId,
+        prepared.sequence, this.commandDeadline);
+      if (saved) {
+        await fresh?.();
+        return saved;
+      }
       // Check again after queue waiting, because another command may have changed the revision.
       if (expectedSequence !== undefined && expectedSequence !== this.state.sequence) {
         return { status: 'conflict' as const };
