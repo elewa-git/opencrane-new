@@ -147,6 +147,8 @@ jobs:
           infra/dev-stack/browser-budgets.test.ts
           infra/dev-stack/browser-audit.test.ts
           infra/dev-stack/stage-b-capture.test.ts
+          infra/dev-stack/stage-b-collector.test.ts
+          infra/dev-stack/stage-b-launch.test.ts infra/dev-stack/stage-b-network.test.ts
           infra/dev-stack/demo-seed.test.ts infra/dev-stack/demo-up.test.ts
           infra/dev-stack/demo-seed-run.test.ts
           infra/dev-stack/stack-real-mode.test.ts infra/dev-stack/fleet-task.test.ts

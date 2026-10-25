@@ -7,6 +7,7 @@
     ".": {
       "entry": [
         "scripts/check-stage-b-polish.mjs",
+        "scripts/collect-stage-b-evidence.mjs",
         "scripts/ci/run-tests.mjs",
         "scripts/ci/refresh-timings.mjs",
         "scripts/ci/*.test.mjs"

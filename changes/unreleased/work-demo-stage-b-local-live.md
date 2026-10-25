@@ -8,3 +8,7 @@
 - Record a passing fresh local baseline, complete desktop and phone approval cards,
   and the drawer showing the tool replied. The receipt keeps the interrupted
   evidence collection and untested personal owner sign-in explicit.
+
+- Keep every local tool readback and original event as soon as it arrives. An
+  interrupted collector or closed browser keeps its saved evidence; complete
+  approval proof is still required.

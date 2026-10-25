@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts in Docker| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|starts apps; keeps keys private; checks journeys, tool evidence and approval pictures| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|starts apps; keeps keys private; checks journeys and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster| devbox
 ```
@@ -60,7 +60,9 @@ configuration changes. Its background jobs keep their own database.
   A guarded test launch keeps the full server and models processes and connects both
   to one local demo server. It shares only the slot claim and demo socket with models;
   personal and memory keys stay outside that container.
-  The saved receipt states which browser steps were checked.
+  The collector saves each reply from the demo quote checks and each original event
+  before continuing. Closing the browser keeps the saved evidence. The receipt states
+  which browser steps were checked.
 
 ## Processes it handles
 

@@ -134,6 +134,40 @@ The launcher stays running during the browser check. Stop it before running
 the owned Compose service and its generated override file. Never use this launch
 against the owner or another worktree's claim.
 
+The tracked collector is `scripts/collect-stage-b-evidence.mjs`. It replaces the
+untracked sixth-run probe. It uses the claimed slot's existing signed-in browser
+state and a new output directory containing the original `publication.json`.
+It refuses existing `live-probe.json` or `live-probe.jsonl` files rather than
+replacing an earlier run. A future authorised journey can run it with:
+
+```sh
+DEV_STACK_ID=1 STAGE_B_CLAIMED_ID=1 nice -n 10 node --experimental-strip-types \
+  scripts/collect-stage-b-evidence.mjs /path/to/new-evidence-directory
+```
+
+`stage-b-collector.ts` saves every observation synchronously to `live-probe.jsonl`
+and flushes it to disk before updating `live-probe.json` by an atomic rename.
+The journal keeps earlier values when a later observation replaces a summary field.
+Each original event is saved before reading the next one. The HTTP readback keeps
+its original response body and status before parsing or checking the quote.
+Quote checks refuse unexpected fields. The refused response is still saved.
+Approval commands and response status are saved before waiting for the body.
+An unfinished browser body never holds up saving other evidence. Both files redact
+email addresses and use mode `0600`. A collector interrupted during a summary write
+leaves the previous complete summary and the saved journal. `checkStageBApproval`
+is unchanged and still refuses an incomplete set of original proof.
+
+Offline checks use a disposable demo server, child process and browser. They stop
+the child immediately after its first readback, fail an event stream after one
+original record, and close the browser during an unfinished approval response.
+These are ordinary test fixtures; they do not run a live product journey.
+The existing CI Node test step selects this regression and the launch and network
+checks. The test-selection guard requires all three file paths.
+
+```sh
+nice -n 10 node --experimental-strip-types --test infra/dev-stack/stage-b-collector.test.ts
+```
+
 Results and remaining conditions are in
 [the local live receipt](../../docs/process/demo-stage-b-local-live/receipt.md).
 The latest run passes the fresh baseline, including budget checks, and captures
