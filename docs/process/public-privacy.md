@@ -32,7 +32,7 @@ describe how bootstrap and package checks read it.
 Historical logs retain their original lines, with private strings replaced.
 File hashes that identify changed text are refreshed to describe the public copy.
 Source commit ids and container image digests still identify the original run.
-Screenshots and Git history are unchanged by the text sweep.
+Git history is unchanged. Screenshot emails were masked in a separate follow-up.
 
-[The screenshot list](public-privacy-screenshots.md) records visible email text
-that remains in the unchanged images for a separate decision.
+[The screenshot list](public-privacy-screenshots.md) names the masked files and
+records the visual checks and text-recognition coverage.

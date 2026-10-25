@@ -1,3 +1,4 @@
+docs/design/chat/wireframes/01-1a-sign-in.png
 docs/design/chat/wireframes/01-1c-magic-link-sent.png
 docs/design/chat/wireframes/01-1d-sign-in-rejected.png
 docs/design/chat/wireframes/08-13a-account-settings.png
