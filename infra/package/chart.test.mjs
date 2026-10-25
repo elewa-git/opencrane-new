@@ -266,8 +266,13 @@ test('the installer sets the computer gateway from a validated Service IP', asyn
   assert.match(installSource, /await configureComputerGateway\(\);\s*await waitForBootstrap\(\);/u);
   let service = { spec: { type: 'ClusterIP', clusterIP: '10.43.0.27' } };
   const patches = [];
+  async function targetConnectionFixture() {
+    return { context: 'k3d-test-target', kubeconfig: '/tmp/package-test/target.kubeconfig' };
+  }
   function executeFixture(program, args, options, callback) {
     assert.equal(program, 'kubectl');
+    assert.ok(args.includes('--context=k3d-test-target'));
+    assert.equal(args[args.indexOf('--kubeconfig') + 1], '/tmp/package-test/target.kubeconfig');
     if (args.includes('get') && args.includes('service')) {
       callback(null, { stdout: JSON.stringify(service), stderr: '' });
       return;
@@ -281,6 +286,7 @@ test('the installer sets the computer gateway from a validated Service IP', asyn
       'node:child_process': { execFile: executeFixture },
       './config.ts': { directory: '/tmp/package-test', root: process.cwd() },
       './identity.ts': { secondary: true, stackId: 'test' },
+      './target.ts': { targetConnection: targetConnectionFixture },
     });
   await configureGateway();
   assert.deepEqual(patches, [{ data: { gateway: 'http://10.43.0.27:43000' } }]);
