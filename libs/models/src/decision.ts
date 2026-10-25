@@ -18,7 +18,7 @@ import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
+import { authorityFence, decisionAuthorityFence, currentAuthority, authorityHistoryReader } from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
   requireActiveConversationTurn }
@@ -70,14 +70,15 @@ async function context(actor: BudgetActor, binding: Binding,
   computer: z.infer<typeof computerSchema>, turnToken: z.infer<typeof legacyTurnSchema>,
   liveSequence: number, resourceType: string, resourceId: string,
   fresh: Awaited<ReturnType<typeof authorityFence>>, conversation: StoredEvent[],
-  turn: StoredEvent, grants?: DecisionGrants): Promise<ModelCall> {
+  turn: StoredEvent, grants?: DecisionGrants,
+  readAuthorityHistory?: ReturnType<typeof authorityHistoryReader>): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(turnToken.requester, 'member');
   if (!permission.allowed || binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
   const assistantRead = history(
     actor.store, `assistant-${computer.assistant}`, actor.silo, fresh.deadline);
   const authorityRead = currentAuthority(actor.store, binding, turnToken.requester,
     computer.assistant, turnToken.conversation, resourceType, resourceId, fresh, conversation,
-    grants);
+    grants, undefined, readAuthorityHistory);
   const [assistants, authority] = await Promise.all([assistantRead, authorityRead]);
   const assistant = assistants.find(r => r.event.type === 'assistant.created');
   if (!assistant) throw new Error('Assistant refused');
@@ -319,8 +320,9 @@ export async function startDecision(
           policy.name, policy.args.canonical, policy.revision]);
         toolFacts = { logicalRequestId, serverId: match[1]!, toolName: policy.name };
         needsApproval = policy.outcome === 'ask';
+        const readAuthorityHistory = authorityHistoryReader(actor.store, fresh);
         const call = await context(actor, binding, computer, turnToken, checked.sequence,
-          'mcp_server', match[1]!, fresh, conversation, turn);
+          'mcp_server', match[1]!, fresh, conversation, turn, undefined, readAuthorityHistory);
         contextDigest = digestContext([call.contextDigest, policy]);
         // Check stops before opening or consuming an approval. Zero-cost calls hold no money.
         const modelCall = { ...call, requestId, model: 'mcp-zero-cost' };
@@ -343,7 +345,7 @@ export async function startDecision(
           // cannot confirm that IAM is still available before the remote send.
           await currentAuthority(actor.store, binding, turnToken.requester,
             computer.assistant, turnToken.conversation, 'mcp_server', serverId,
-            fresh, conversation);
+            fresh, conversation, undefined, undefined, readAuthorityHistory);
         }
         await fresh();
         mcpSender.setPermit(res, outcome, policy, raw, requestId,

@@ -417,8 +417,20 @@ export async function approvalDecision(store: EventStore, silo: string, bound: B
   const approval = await askApproval(store, silo, bound, policy, keys, now(), deadline,
     prepared, conversationRows);
   const used = await consumeApproval(store, silo, approval, requestId, fresh, now);
-  return { outcome: used ? 'allow' as const : 'ask' as const,
-    reason: used ? 'approval_used' : `approval_${approval.state}`, approvalId: approval.request.approvalId };
+  if (used) {
+    return { outcome: 'allow' as const, reason: 'approval_used',
+      approvalId: approval.request.approvalId };
+  }
+  // Read the saved state after a competing use. A stale approved read grants nothing
+  // and must not tell the refused caller that the replacement use is still available.
+  let state = approval.state;
+  if (state === 'approved') {
+    const subject = `approval-${approval.request.approvalId}`;
+    const rows = await history(store, subject, silo, deadline);
+    state = approvalRecord(rows).state;
+  }
+  return { outcome: 'ask' as const, reason: `approval_${state}`,
+    approvalId: approval.request.approvalId };
 }
 
 function approvalLifetime(waitLimited: boolean) {

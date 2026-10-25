@@ -17,7 +17,8 @@ export const outputReportTypes: readonly string[] = [
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string,
   fresh?: Awaited<ReturnType<typeof authorityFence>>, conversationRows?: StoredEvent[],
-  grants?: DecisionGrants, applied?: (eventId: string) => Promise<boolean>) {
+  grants?: DecisionGrants, applied?: (eventId: string) => Promise<boolean>,
+  readHistory?: ReturnType<typeof authorityHistoryReader>) {
   fresh ??= await authorityFence(store, performance.now());
   const auth = memberAuthorisation(binding);
   const checkApplied = receiptReader(auth, applied);
@@ -31,6 +32,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   const snapshotHead = fresh.head;
   const deadline = fresh.deadline;
   function readSubject(subject: string) {
+    if (readHistory) return readHistory(subject);
     return readAt(store, subject, snapshotHead, deadline);
   }
   const histories = await readAuthorityHistories(subjects, readSubject, conversationRows, grants);
@@ -160,6 +162,23 @@ function relevantGrant(event: DecisionGrantRow['event'], resourceType: string, r
   if (fields['resourceType'] !== resourceType || fields['resourceId'] !== resourceId) return false;
   if (decisionGrantees && !matchesGrantKind(fields, decisionGrantees)) return false;
   return true;
+}
+
+// Reuse only immutable rows at this request's original position. Keep live IAM and
+// later-event checks in currentAuthority; saved history cannot prove current access.
+export function authorityHistoryReader(store: EventStore,
+  fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  const { head, deadline } = fresh;
+  const reads = new Map<string, Promise<StoredEvent[]>>();
+  function readSubject(subject: string) {
+    let rows = reads.get(subject);
+    if (!rows) {
+      rows = readAt(store, subject, head, deadline);
+      reads.set(subject, rows);
+    }
+    return rows;
+  }
+  return readSubject;
 }
 
 async function readAt(store: EventStore, subject: string, head: number, deadline: number) {
