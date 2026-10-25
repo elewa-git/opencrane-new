@@ -1006,3 +1006,13 @@ Run `npm run replay -- audit` after upgrading, then
 Replay runs no resolution, settlement or release reaction and makes no upstream call.
 The focused server and protocol `audit-resolution.test.ts` suites cover races,
 invalid records, zero, paging, replay and access loss.
+
+## Older memory snapshot recovery test
+
+`test/memory-restore.test.ts` exercises the package preflight and existing replay
+entrypoint with real NATS and PostgreSQL. It exports encrypted synthetic facts,
+forgets a root and its historical dependant, then restores older events separately.
+Current permanent markers keep those facts unsearchable while another scope remains
+readable. It checks repeated replay, unchanged markers and zero guarded effects.
+The [package contract](../../infra/package/README.robot.md#memory-restore-preflight)
+owns validation limits and the explicit remaining qualification.

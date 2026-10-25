@@ -1,0 +1,1 @@
+- Memory recovery refuses stale or damaged key folders and missing current deletion evidence before rebuilding search from older events. The bounded check validates only; it does not restore keys or reopen an installation.

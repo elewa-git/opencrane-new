@@ -304,6 +304,10 @@ await database.close();
 await eventStore.close();
 ```
 
+The [memory recovery check](../../infra/package/README.robot.md#memory-restore-preflight)
+checks current deletion records before rebuilding memory from older events.
+Its isolated test uses temporary keys and checks that forgotten text stays out of search.
+
 ## Where to read more
 
 - [README.robot.md](README.robot.md): table details, settings, recovery and tests.

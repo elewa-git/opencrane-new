@@ -1,0 +1,11 @@
+2026-10-25 — own checks only. All lint, typecheck and test commands use nice -n 10.
+PASS: npm ci; worktree tool symlinks installed.
+EXPECTED FAIL: test-only commit 6d7a23746, 11 cases, missing preflight executable.
+PASS: PG_TEST_URL=<disposable database> npx vitest run libs/projections/test/memory-restore.test.ts --maxWorkers=1 — 15 cases per run, three passing runs.
+PASS: libs/events/test/security-rules.test.ts — 438 cases, once with the recovery suite.
+PASS: npm run check:events — 154 registered and documented event types agree.
+PASS: npx knip; npm run lint:changelog; focused ESLint; git diff --check.
+PASS: npm run lint (25 existing size warnings, no errors).
+PASS: npm run typecheck, including package and dev-stack checks.
+Development fixes: explicit ProcessEnv typing; checked retention-limit truncation replaced refused fixture delete/purge requests.
+NOT RUN: full root test suite, browser qualification, full P5-8/P4-13–17, company/rights recovery, computer no-disk proof.

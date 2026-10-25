@@ -93,10 +93,19 @@ async function prepare() {
     env[`SOURCE_${name}`] = setting;
   }
   const guard = `import { mock } from 'node:test';
-import '../../apps/ops/test/support/routine-effects.ts';
+import { EventStore } from '@opencrane/event-store';
+import { HandlerRuntime } from '@opencrane/handlers';
+import { SandboxClient } from '../../apps/ops/src/kubernetes.ts';
+import * as auth from '@opencrane/auth';
 import * as projections from '@opencrane/projections';
 let effects = 0;
 function forbidden() { effects++; throw new Error('Forbidden recovery effect'); }
+mock.method(EventStore.prototype, 'append', forbidden);
+mock.method(HandlerRuntime.prototype, 'start', forbidden);
+mock.method(SandboxClient.prototype, 'mode', forbidden);
+mock.method(SandboxClient.prototype, 'credentials', forbidden);
+mock.method(globalThis, 'fetch', forbidden);
+mock.module('@opencrane/auth', { namedExports: { ...auth, tokenIssuer: forbidden } });
 function guardedKeys(path) {
   return { ...projections.memoryKeys(path), provision: forbidden, delete: forbidden,
     discardUnpublished: forbidden, encrypt: forbidden };
@@ -121,17 +130,18 @@ async function resetCandidate(from = sourceDirectory) {
   await rm(candidate, { recursive: true, force: true });
   await cp(from, candidate, { recursive: true });
 }
-function run(settings = env, flag = '--confirm-stopped') {
+function run(settings = env, flag = '--confirm-stopped', silo = 'test') {
   const args = ['--experimental-strip-types', '--experimental-test-module-mocks',
     '--import', `${directory}/guard.mjs`, 'infra/package/memory-restore-check-run.ts',
-    'test', flag];
+    silo, flag];
   return execute(process.execPath, args, { env: settings, timeout: 15_000 });
 }
 const faults = ['stale', 'missing-marker', 'missing-survivor', 'wrong-key', 'damaged',
-  'historical-child', 'source-missing', 'source-incomplete', 'unconfirmed', 'source-unreachable'] as const;
+  'historical-child', 'source-missing', 'source-incomplete', 'unconfirmed', 'source-unreachable',
+  'wrong-silo', 'pending-deletion', 'historical-unverified'] as const;
 it.each(faults)('refuses %s before opening the projection database', async function refusal(fault) {
   await resetCandidate(fault === 'stale' ? `${directory}/stale` : sourceDirectory);
-  const settings = { ...env, EXPECT_REFUSAL: '1' };
+  const settings: NodeJS.ProcessEnv = { ...env, EXPECT_REFUSAL: '1' };
   const rootPath = `${candidate}/${references.get('root-1')!}`;
   const survivorPath = `${candidate}/${references.get('neighbour-1')!}`;
   if (fault === 'missing-marker') await rm(rootPath);
@@ -142,20 +152,37 @@ it.each(faults)('refuses %s before opening the projection database', async funct
     const name = references.get('child-1')!;
     await cp(`${directory}/stale/${name}`, `${candidate}/${name}`);
   }
-  if (fault === 'source-missing') settings.SOURCE_MEMORY_KEY_DIRECTORY = `${directory}/absent`;
+  if (fault === 'source-missing') settings['SOURCE_MEMORY_KEY_DIRECTORY'] = `${directory}/absent`;
   if (fault === 'source-incomplete') {
     await cp(sourceDirectory, `${directory}/incomplete`, { recursive: true });
     await rm(`${directory}/incomplete/${references.get('root-1')!}`);
-    settings.SOURCE_MEMORY_KEY_DIRECTORY = `${directory}/incomplete`;
+    settings['SOURCE_MEMORY_KEY_DIRECTORY'] = `${directory}/incomplete`;
+    await rm(rootPath);
   }
   if (fault === 'source-unreachable') {
-    settings.SOURCE_NATS_URL = 'nats://127.0.0.1:1';
+    settings['SOURCE_NATS_URL'] = 'nats://127.0.0.1:1';
   }
+  if (fault === 'pending-deletion') {
+    await resetCandidate(`${directory}/stale`);
+    settings['SOURCE_MEMORY_KEY_DIRECTORY'] = `${directory}/stale`;
+  }
+  await historicalEvidence(fault, settings);
+  const silo = fault === 'wrong-silo' ? 'foreign' : 'test';
   const flag = fault === 'unconfirmed' ? '--unknown' : '--confirm-stopped';
-  await expect(run(settings, flag)).rejects.toMatchObject({ stdout: 'effects:0\n', stderr: refused });
+  await expect(run(settings, flag, silo)).rejects.toMatchObject({ stdout: 'effects:0\n', stderr: refused });
   const tables = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
   expect(tables.rows).toEqual([]);
 });
+
+async function historicalEvidence(fault: string, settings: NodeJS.ProcessEnv) {
+  if (fault !== 'historical-unverified') return;
+  const incomplete = `${directory}/historical`;
+  await cp(sourceDirectory, incomplete, { recursive: true });
+  const name = references.get('child-2')!;
+  await cp(`${directory}/stale/${name}`, `${incomplete}/${name}`);
+  await resetCandidate(incomplete);
+  settings['SOURCE_MEMORY_KEY_DIRECTORY'] = incomplete;
+}
 
 async function snapshot() {
   const facts = await storage.db.query('SELECT * FROM memory_facts ORDER BY scope_id, memory_id');
@@ -198,3 +225,17 @@ it('replays older events twice with current markers, scoped search and zero effe
       expect(memoryKeys(candidate).status(identity)).toBe('destroyed');
     }
   });
+
+it('refuses truncated current source history before opening the database', async function gap() {
+  await resetCandidate();
+  const before = await snapshot();
+  const info = await source.connection.request('$JS.API.STREAM.INFO.EVENTS', '{}');
+  const saved = info.json<{ config: Record<string, unknown> }>();
+  const config = { ...saved.config, max_msgs: 4 };
+  const changed = await source.connection.request('$JS.API.STREAM.UPDATE.EVENTS',
+    JSON.stringify(config));
+  expect(changed.json()).toMatchObject({ state: { first_seq: 2, messages: 4 } });
+  const settings: NodeJS.ProcessEnv = { ...env, EXPECT_REFUSAL: '1' };
+  await expect(run(settings)).rejects.toMatchObject({ stdout: 'effects:0\n', stderr: refused });
+  expect(await snapshot()).toEqual(before);
+});
