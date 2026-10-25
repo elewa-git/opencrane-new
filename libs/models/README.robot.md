@@ -3698,3 +3698,16 @@ payload or original expected position conflicts, including beyond broker dedupli
 Reads retain the ten-second history limit and one final current Owner/Admin check,
 including after failed loading. No read uses a write authority fence.
 Lifecycle receipts, screens and fresh-install qualification remain later work.
+
+## Original personal account selection receipts (Part of #49)
+
+`readOwnSelectionChange` takes the authenticated member separately from strict server/change
+input. It reads only `connection-selection-<member>-<server>` under a ten-second deadline,
+then checks current membership once, including after missing or failed history.
+It reuses selection payload and identity validation. Every record must match the exact
+silo, stream, source, human principal, user and server, with a derived event id and the
+preceding expected position. Repeated references and malformed history never confirm.
+The receipt describes the original select or clear, with its event id, time and position.
+Only select includes the original profile id and revision. Current tool access and profile
+usability are separate; rotation, revocation and admin blocks cannot rewrite the receipt.
+No custody, provider, append or release work occurs. Selection commands remain internal.

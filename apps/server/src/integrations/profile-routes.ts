@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { MemberAccessRefused, readOwnConnectionProfile, readOwnConnectionChange }
+import { MemberAccessRefused, readOwnConnectionProfile, readOwnConnectionChange,
+  readOwnSelectionChange }
   from '@opencrane/models';
 import { z } from 'zod';
 import type { GroupOptions } from '../members/group-routes.ts';
@@ -9,12 +10,17 @@ import { sessionFor } from '../members/routes.ts';
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const parameters = z.strictObject({ serverId: id, profileId: id });
 const changeParameters = parameters.extend({ changeRef: id });
+const selectionParameters = z.strictObject({ serverId: id, changeRef: id });
 const emptyQuery = z.strictObject({});
 
 export function registerConnectionProfileRead(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
   app.get('/api/my/tools/:serverId/profiles/:profileId', handler);
   app.get('/api/my/tools/:serverId/profiles/:profileId/changes/:changeRef', changeHandler);
+  app.get('/api/my/tools/:serverId/selection/changes/:changeRef', selectionHandler);
+  async function selectionHandler(request: FastifyRequest, reply: FastifyReply) {
+    return read(request, reply, selectionParameters, readOwnSelectionChange);
+  }
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     return read(request, reply, parameters, readOwnConnectionProfile);
   }
@@ -22,8 +28,9 @@ export function registerConnectionProfileRead(app: FastifyInstance, config: Auth
     return read(request, reply, changeParameters, readOwnConnectionChange);
   }
   async function read(request: FastifyRequest, reply: FastifyReply,
-    schema: typeof parameters | typeof changeParameters,
-    reader: typeof readOwnConnectionProfile | typeof readOwnConnectionChange) {
+    schema: typeof parameters | typeof changeParameters | typeof selectionParameters,
+    reader: typeof readOwnConnectionProfile | typeof readOwnConnectionChange |
+      typeof readOwnSelectionChange) {
     reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, new Date());
     if (!session) {

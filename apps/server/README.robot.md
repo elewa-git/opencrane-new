@@ -5361,3 +5361,20 @@ checks remain unchanged. `test/routine-list.test.ts` covers both views, role los
 filtering, continuation substitution, reassignment, unavailable projections, slow
 history, ordinary chat activity and replay. Attention, creation, execution and
 screens remain later work. Fresh-install qualification: NOT RUN.
+
+## Original personal selection receipt API (Part of #49)
+
+`GET /api/my/tools/:serverId/selection/changes/:changeRef` uses the profile reader's
+verified organisation session, strict input, fixed errors and no-store response rules.
+It accepts no owner, query fields or body. Bob and admins cannot read Alice's choice.
+Confirmed output contains only `status`, `changeRef`, `eventId`, `eventType`, `recordedAt`,
+`sequence` and `action`. Select also includes `profileId` and `profileRevision`; clear omits
+both. All names pass the unchanged substring-based RISKY_FIELD_NAME check.
+Missing or invalid evidence returns 404 unknown. History failures return 503 unavailable.
+Neither permits resending. Membership refusal overrides loaded, missing and failed results.
+
+`test/connection-selection-change-read.test.ts` checks lost replies, later choices, restart,
+deduplication expiry, later profile changes, grant loss, exact ownership, invalid history,
+slow loading, removal during loading, private canaries and no appended effects.
+Profile and instance recovery keep their existing contracts. Selection POST, company/admin
+reads, writes, broker and screens remain later work. Fresh-install qualification: NOT RUN.

@@ -61,7 +61,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads own saved profiles and original change and publication receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads own saved profiles and original change, publication and selection receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads conversations, spending by month, history, current accounting and exact membership receipts| postgres
@@ -139,6 +139,10 @@ can be used now is checked separately. Missing evidence never means it is safe t
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 ## Processes it handles
+
+Members can recover their own original account selection or clear receipt by its
+change reference. Later choices do not replace it. Reading requires current silo
+membership and changes nothing. Missing evidence stays unknown and never permits a resend.
 
 A person lists their own routines in small pages. Admins using this list also see only
 their own routines. Changes to another owner’s routines do not restart these pages.
