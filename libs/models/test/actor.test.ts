@@ -1,5 +1,7 @@
+import { EventStore } from '@opencrane/event-store';
+import { TimeoutError } from '@nats-io/transport-node';
 import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay.ts';
-import { jetstreamManager } from '@nats-io/jetstream';
+import { JetStreamApiError, jetstream, jetstreamManager } from '@nats-io/jetstream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import { countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
@@ -671,7 +673,7 @@ async function currentProofWaitsForAppend() {
     await release.promise;
     return result;
   }
-  const spy = vi.spyOn(nats.store, 'append').mockImplementation(holdReply);
+  const spy = vi.spyOn(nats.store, 'appendOutcome').mockImplementation(holdReply);
   function cleanup() {
     release.resolve();
     spy.mockRestore();
@@ -732,14 +734,9 @@ it('rechecks a position read that overlapped a money command without blocking th
   moneyDuringProofRead);
 
 async function failedWriterCannotProveCurrent() {
-  const cause = new Error('private-canary');
-  function unavailable() {
-    return Promise.resolve({ status: 'unavailable' as const, cause });
-  }
-  const spy = vi.spyOn(nats.store, 'append').mockImplementation(unavailable);
-  onTestFinished(spy.mockRestore.bind(spy));
+  const replacement = new BudgetActor(nats.store, 'test', now);
+  await replacement.start();
   await expect(reserve()).rejects.toThrow('Budget writer lost its fence');
-  spy.mockRestore();
   await expect(actor.requireCurrent(performance.now() + 2000))
     .rejects.toThrow('Budget writer unavailable');
 }
@@ -843,7 +840,7 @@ async function admitsAfterRepeatedConflicts(change: string) {
   }
   checkAccess.deadline = deadline;
   const reads = vi.spyOn(nats.store, 'readStream');
-  const writes = vi.spyOn(nats.store, 'append');
+  const writes = vi.spyOn(nats.store, 'appendOutcome');
   onTestFinished(reads.mockRestore.bind(reads));
   onTestFinished(writes.mockRestore.bind(writes));
   const admitted = actor.admitDispatch(admission, checkAccess);
@@ -1013,7 +1010,7 @@ async function refusesAfterLostRepeatedPublishReply(change: string) {
   }
   checkAccess.deadline = deadline;
   await expect(actor.admitDispatch(admission, checkAccess))
-    .rejects.toThrow('Budget writer lost its fence');
+    .rejects.toThrow('Budget append unavailable');
   decisionClock.mockRestore();
   expect(checks).toBe(7);
   expect(actor.state.dispatches).toHaveLength(0);
@@ -1022,6 +1019,7 @@ async function refusesAfterLostRepeatedPublishReply(change: string) {
     return row.event.type === 'budget.call_dispatch_admitted';
   }
   expect(rows.filter(isAdmission)).toHaveLength(1);
+  await expect(reserve()).rejects.toThrow('Budget writer lost its fence');
   await expect(reserve()).rejects.toThrow('Budget writer unavailable');
   await expect(actor.admitDispatch(admission, checkAccess))
     .rejects.toThrow('Budget writer unavailable');
@@ -1085,7 +1083,7 @@ it.each([false, true])(
 async function keepsWriterAfterStoreRejection() {
   const before = await nats.store.head('budget-test');
   const rejected = { status: 'rejected' as const, reason: 'invalid_event' as const };
-  const writes = vi.spyOn(nats.store, 'append').mockResolvedValueOnce(rejected);
+  const writes = vi.spyOn(nats.store, 'appendOutcome').mockResolvedValueOnce(rejected);
   onTestFinished(writes.mockRestore.bind(writes));
   await expect(reserve()).rejects.toThrow('Budget append rejected: invalid_event');
   expect(await nats.store.head('budget-test')).toBe(before);
@@ -1099,7 +1097,7 @@ it('keeps the writer usable after the store rejects an invalid event',
 
 async function keepsWriterAfterAppendException(boundary: string) {
   const before = await nats.store.head('budget-test');
-  const writes = vi.spyOn(nats.store, 'append');
+  const writes = vi.spyOn(nats.store, 'appendOutcome');
   const reads = vi.spyOn(nats.store, 'readStream');
   onTestFinished(writes.mockRestore.bind(writes));
   onTestFinished(reads.mockRestore.bind(reads));
@@ -1108,7 +1106,7 @@ async function keepsWriterAfterAppendException(boundary: string) {
     message = 'Event append failed';
     writes.mockRejectedValueOnce(new Error(message));
   } else {
-    writes.mockResolvedValueOnce({ status: 'conflict' });
+    writes.mockResolvedValueOnce({ status: 'conditional_rejection_unchanged' });
     if (boundary === 'read error') {
       message = 'Budget history unavailable';
       function failedRead(): ReturnType<typeof nats.store.readStream> {
@@ -1143,3 +1141,97 @@ async function keepsWriterAfterExactDuplicate() {
 }
 it('returns the earlier result for an exact duplicate and keeps the writer usable',
   keepsWriterAfterExactDuplicate);
+
+async function survivesKnownConflictReadTimeout() {
+  const client = jetstream(nats.connection);
+  const manager = await jetstreamManager(nats.connection);
+  const probeStore = new EventStore(client, manager);
+  const publish = client.publish.bind(client);
+  const conflicts: number[] = [];
+  async function recordConflict(...parameters: Parameters<typeof publish>) {
+    try {
+      return await publish(...parameters);
+    } catch (error) {
+      if (error instanceof JetStreamApiError) conflicts.push(error.code);
+      throw error;
+    }
+  }
+  client.publish = recordConflict;
+  actor = new BudgetActor(probeStore, 'test', now);
+  await actor.start();
+  const reservationId = await reserve(false, 'known-conflict');
+  const reservation = actor.state.reservations[0]!;
+  const admission = { callId: 'known-conflict', decisionId: 'known-decision',
+    bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
+  const before = await nats.store.head('budget-test');
+  const originalRead = probeStore.readStream.bind(probeStore);
+  let refuseRead = false;
+  let failedReads = 0;
+  function readAfterConflict(...parameters: Parameters<typeof originalRead>) {
+    if (refuseRead && parameters[0] === 'budget-test') {
+      refuseRead = false;
+      failedReads += 1;
+      throw new TimeoutError();
+    }
+    return originalRead(...parameters);
+  }
+  const reader = vi.spyOn(probeStore, 'readStream');
+  reader.mockImplementation(readAfterConflict);
+  onTestFinished(reader.mockRestore.bind(reader));
+  let checks = 0;
+  async function checkAccess() {
+    checks += 1;
+    if (checks === 2) {
+      const joined = { memberId: 'read-overlap', email: 'overlap@example.test',
+        displayName: 'Unrelated member', role: 'member' };
+      const event = envelope('test', 'member-read-overlap', 'member.joined', joined);
+      const saved = await nats.store.append({ event, expectedSequence: 0 });
+      expect(saved.status).toBe('appended');
+      refuseRead = true;
+    }
+    if (checks === 3) {
+      throw new Error('Authority changed');
+    }
+  }
+  checkAccess.deadline = performance.now() + 2000;
+  await expect(actor.admitDispatch(admission, checkAccess)).rejects.toThrow('Budget append unavailable');
+  expect(conflicts).toHaveLength(1);
+  expect([10071, 10164]).toContain(conflicts[0]);
+  expect(failedReads).toBe(1);
+  expect(checks).toBe(2);
+  reader.mockRestore();
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.dispatches).toHaveLength(0);
+  const recoveryReads = vi.spyOn(probeStore, 'readStream');
+  onTestFinished(recoveryReads.mockRestore.bind(recoveryReads));
+  await reserve();
+  expect(recoveryReads).toHaveBeenCalledWith('budget-test', before + 1, expect.any(Number));
+  expect(actor.state.reservations).toHaveLength(2);
+}
+it('keeps writer after confirmed conflict read timeout and access refusal',
+  survivesKnownConflictReadTimeout);
+
+async function keepsWriterAfterTransportFailure() {
+  const before = await nats.store.head('budget-test');
+  const cause = new TimeoutError();
+  const result = { status: 'transport_failure' as const, cause, mayHavePublished: true };
+  const writes = vi.spyOn(nats.store, 'appendOutcome').mockResolvedValueOnce(result);
+  onTestFinished(writes.mockRestore.bind(writes));
+  await expect(reserve()).rejects.toThrow('Budget append unavailable');
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.reservations).toHaveLength(0);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  onTestFinished(reads.mockRestore.bind(reads));
+  function failRead(): ReturnType<typeof nats.store.readStream> {
+    throw new TimeoutError();
+  }
+  reads.mockImplementationOnce(failRead);
+  await expect(reserve()).rejects.toThrow('TIMEOUT');
+  expect(writes).toHaveBeenCalledTimes(1);
+  await reserve();
+  expect(reads).toHaveBeenCalledWith('budget-test', before + 1, expect.any(Number));
+  expect(actor.state.reservations).toHaveLength(1);
+  await actor.requireCurrent(performance.now() + 2000);
+}
+it('rechecks unknown transport state before the next request and keeps failed reads retryable',
+  keepsWriterAfterTransportFailure);
