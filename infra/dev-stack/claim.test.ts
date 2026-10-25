@@ -500,3 +500,195 @@ async function oldOwnerFormatIsReclaimed() {
   }
 }
 test('an old one-line owner file can be reclaimed without live processes', oldOwnerFormatIsReclaimed);
+
+// Run the real launcher against disposable command fixtures, never the host cluster.
+const targetCommands = `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const home = process.env.HOME;
+const file = home + '/target-state.json';
+const state = JSON.parse(fs.readFileSync(file));
+const program = path.basename(process.argv[1]);
+const args = process.argv.slice(2);
+state.calls.push([program, ...args]);
+const ownerFile = home + '/.config/opencrane/dev-stack-1/target-owner.json';
+const save = () => fs.writeFileSync(file, JSON.stringify(state));
+const output = value => process.stdout.write(JSON.stringify(value));
+if (state.fail === program) { save(); console.error('PRIVATE-UPSTREAM-MARKER'); process.exit(1); }
+if (program === 'docker') {
+  if (args[0] === 'ps' && args.includes('status=running')) { save(); process.exit(0); }
+  if (args[0] === 'ps') process.stdout.write(state.containers.map(item => item.Id).join('\\n'));
+  if (args[0] === 'inspect') output(state.containers.filter(item => args.includes(item.Id)));
+  if (args[0] === 'network' && args[1] === 'ls') {
+    process.stdout.write(state.networks.map(item => item.Id).join('\\n'));
+  }
+  if (args[0] === 'network' && args[1] === 'inspect') output(state.networks);
+  if (args[0] === 'network' && args[1] === 'create') {
+    const owner = JSON.parse(fs.readFileSync(ownerFile));
+    state.networks = [{ Id: 'network-original', Name: owner.name,
+      Labels: { 'opencrane.dev/target-id': owner.id } }];
+    process.stdout.write('network-original');
+  }
+  if (args[0] === 'rm' && !state.retain) {
+    state.containers = state.containers.filter(item => !args.includes(item.Id));
+  }
+  if (args[0] === 'network' && args[1] === 'rm' && !state.retain) state.networks = [];
+}
+if (program === 'k3d' && args[1] === 'create') {
+  const owner = JSON.parse(fs.readFileSync(ownerFile));
+  state.recordBeforeCreate = owner;
+  state.containers = [0, 1, 2].map(index => ({ Id: 'container-' + index,
+    Config: { Labels: { 'opencrane.dev/target-id': owner.id } }, Mounts: [] }));
+  state.nodes = [0, 1, 2].map(index => ({ metadata: { name: 'node-' + index,
+    uid: 'node-uid-' + index, labels: { 'opencrane.dev/target-id': owner.id } } }));
+  if (state.partial) { state.containers.pop(); save(); process.exit(1); }
+}
+if (program === 'k3d' && args[0] === 'kubeconfig') process.stdout.write('PRIVATE-KUBECONFIG');
+if (program === 'kubectl' && args.includes('nodes')) output({ items: state.nodes });
+if (program === 'kubectl' && args.includes('namespace') && state.namespace) output(state.namespace);
+save();
+`;
+
+type TargetState = {
+  calls: string[][];
+  containers: Array<{ Id: string; Config: { Labels: Record<string, string> }; Mounts: unknown[] }>;
+  networks: Array<{ Id: string; Name: string; Labels: Record<string, string> }>;
+  nodes: Array<{ metadata: { name: string; uid: string; labels: Record<string, string> } }>;
+  fail?: string;
+  partial?: boolean;
+  retain?: boolean;
+  recordBeforeCreate?: { id: string };
+};
+async function targetFixture() {
+  const fixture = await createClaimFixture();
+  const owner = `worktree=${process.cwd()}\npid=2147483647\nstartedAt=2020-01-01T00:00:00Z\n`;
+  await writeFile(`${fixture.slotDirectory}/stack-owner`, owner);
+  const state: TargetState = { calls: [], containers: [], networks: [], nodes: [] };
+  for (const program of ['docker', 'k3d', 'kubectl']) {
+    await writeFile(`${fixture.home}/bin/${program}`, targetCommands, { mode: 0o755 });
+  }
+  async function saveState() {
+    await writeFile(`${fixture.home}/target-state.json`, JSON.stringify(state));
+  }
+  async function loadState() {
+    Object.assign(state, JSON.parse(await readFile(`${fixture.home}/target-state.json`, 'utf8')));
+  }
+  async function run(action: string) {
+    return exec('infra/dev-stack/run.sh', [action, '--id', '1'], { env: fixture.env });
+  }
+  async function close() {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+  await saveState();
+  return { ...fixture, state, saveState, loadState, run, close };
+}
+
+async function targetLifecycle() {
+  const fixture = await targetFixture();
+  try {
+    await fixture.run('target-up');
+    await fixture.loadState();
+    const calls = JSON.stringify(fixture.state.calls);
+    assert.match(calls, /--agents","2/u);
+    assert.match(calls, /--servers-memory","768m/u);
+    assert.match(calls, /--agents-memory","768m/u);
+    assert.match(calls, /--api-port","127.0.0.1:25113/u);
+    assert.match(calls, /--no-image-volume/u);
+    assert.match(calls, /--no-rollback/u);
+    assert.match(calls, /--timeout","120s/u);
+    assert.match(calls, /--cpus","1/u);
+    assert.ok(fixture.state.recordBeforeCreate?.id);
+    const recordFile = `${fixture.slotDirectory}/target-owner.json`;
+    assert.equal((await stat(recordFile)).mode & 0o777, 0o600);
+    assert.equal((await stat(`${fixture.slotDirectory}/target.kubeconfig`)).mode & 0o777, 0o600);
+    await fixture.run('target-check');
+    await writeDeadOwner(fixture.slotDirectory, 16);
+    await assert.rejects(fixture.run('claim'));
+    await writeFile(`${fixture.slotDirectory}/stack-owner`, `worktree=${process.cwd()}\n`);
+    await fixture.run('target-down');
+    await fixture.loadState();
+    assert.equal(fixture.state.containers.length, 0);
+    assert.equal(fixture.state.networks.length, 0);
+    assert.ok(fixture.state.calls.some(isExactContainerRemoval));
+    assert.doesNotMatch(JSON.stringify(fixture.state.calls), /k3d-ocn|opencrane-target-2/u);
+    await assert.rejects(stat(recordFile), { code: 'ENOENT' });
+    await writeDeadOwner(fixture.slotDirectory, 16);
+    await fixture.run('claim');
+  } finally {
+    await fixture.close();
+  }
+}
+function isExactContainerRemoval(call: string[]) {
+  return call[0] === 'docker' && call[1] === 'rm' && call.includes('-v') &&
+    call.includes('container-0');
+}
+test('target records ownership before bounded creation; removal permits reclaim', targetLifecycle);
+
+for (const fault of ['docker', 'kubectl', 'container', 'node', 'network', 'worktree', 'retained']) {
+  async function refusesUnsafeTargetRemoval() {
+    const fixture = await targetFixture();
+    try {
+      await fixture.run('target-up');
+      await fixture.loadState();
+      if (fault === 'docker' || fault === 'kubectl') fixture.state.fail = fault;
+      if (fault === 'container') fixture.state.containers[0]!.Id = 'replacement';
+      if (fault === 'node') fixture.state.nodes[0]!.metadata.uid = 'replacement';
+      if (fault === 'network') fixture.state.networks[0]!.Id = 'replacement';
+      if (fault === 'worktree') await writeDeadOwner(fixture.slotDirectory, 16);
+      if (fault === 'retained') fixture.state.retain = true;
+      fixture.state.calls = [];
+      await fixture.saveState();
+      await assert.rejects(fixture.run('target-down'));
+      await fixture.loadState();
+      if (fault !== 'retained') assert.ok(!fixture.state.calls.some(isExactContainerRemoval));
+      assert.ok((await stat(`${fixture.slotDirectory}/target-owner.json`)).isFile());
+      await writeDeadOwner(fixture.slotDirectory, 16);
+      await assert.rejects(fixture.run('claim'));
+    } finally {
+      await fixture.close();
+    }
+  }
+  test(`target keeps its claim and refuses unsafe cleanup: ${fault}`, refusesUnsafeTargetRemoval);
+}
+
+async function interruptedTarget() {
+  const fixture = await targetFixture();
+  try {
+    fixture.state.partial = true;
+    await fixture.saveState();
+    await assert.rejects(fixture.run('target-up'));
+    await fixture.loadState();
+    assert.equal(fixture.state.containers.length, 2);
+    await writeDeadOwner(fixture.slotDirectory, 16);
+    await assert.rejects(fixture.run('claim'));
+    await writeFile(`${fixture.slotDirectory}/stack-owner`, `worktree=${process.cwd()}\n`);
+    await fixture.run('target-down');
+    await fixture.loadState();
+    assert.equal(fixture.state.containers.length, 0);
+  } finally {
+    await fixture.close();
+  }
+}
+test('interrupted creation retains ownership and recovers only matching labelled resources',
+  interruptedTarget);
+
+async function privateTargetFailure() {
+  const fixture = await targetFixture();
+  try {
+    fixture.state.fail = 'k3d';
+    await fixture.saveState();
+    let diagnostic = '';
+    try {
+      await fixture.run('target-up');
+      assert.fail('creation must fail');
+    } catch (error) {
+      const failure = error as Error & { stdout?: string; stderr?: string };
+      diagnostic = `${failure.message}${failure.stdout}${failure.stderr}`;
+    }
+    assert.doesNotMatch(diagnostic, /PRIVATE-UPSTREAM-MARKER/u);
+    assert.ok((await stat(`${fixture.slotDirectory}/target-owner.json`)).isFile());
+  } finally {
+    await fixture.close();
+  }
+}
+test('target dependency output stays private and failed creation keeps the record', privateTargetFailure);
