@@ -8,7 +8,7 @@ For people, read [README.md](README.md) first.
 the first scopes reply status before reading its body. That body read stops after
 ten seconds and records an unavailable body separately. An applying reply can wait
 for the browser to recover through its own GET retries; the collector sends no retry.
-The rest of the journey stays on its draft branch.
+The browser journey below uses the same response collector.
 
 `nice -n 10 node --experimental-strip-types --test
 infra/dev-stack/memory-personal-browser.test.ts` checks a stalled body and a complete
@@ -31,23 +31,22 @@ nice -n 10 node --experimental-strip-types --test infra/dev-stack/memory-persona
 The collector signs in, claims the empty silo and records the first scopes reply.
 It then saves, searches, opens, corrects and forgets a synthetic personal fact through
 browser controls. Once the response body is available, it saves the write receipt
-before checking the outcome. The body read has no timeout; the latest failed run
-needed manual termination. After stack startup, configure the test contact email privately in
+before checking the outcome. Write-response body collection still has no timeout.
+After stack startup, configure the test contact email privately in
 `memory-owner-email` inside the claimed slot directory. The collector reads that file;
 the browser session stays in that directory too.
-New evidence goes into `docs/process/memory-fresh-personal/forget-fixed-rerun/`; the launcher
+New evidence goes into `docs/process/memory-fresh-personal/permissions-fixed-rerun/`; the launcher
 refuses an existing observations file. Earlier attempts remain separate.
 The acceptance checker additionally requires original receipts, GET-only lost-reply
 recovery, retained correction, completed cleanup and absence of forgotten text after
 reload, restart and replay. Its unit tests use synthetic evidence.
 The runs use temporary collectors for those additional checks. They are not yet part
 of the tracked launcher. The receipt distinguishes their results and failures.
-The latest run stops on the first Memory read while ownership permissions are still
-being applied. The collector also stalls reading the first scopes response body.
-Its debugger recovered a desktop error capture and the private browser session;
-resizing triggered fresh reads. Later read-only captures show an empty list, but
-no writes, isolation, restart or rebuild were qualified in that installation.
-The earlier stale Forget action was fixed on main before this run.
+The latest fresh run passes desktop and phone save, search, correction and forgetting.
+The browser recovers from applying permissions through its own GET retries. Lost-reply
+recovery sends one status GET without repeating the write. Another member cannot read
+the owner's facts. Reload and server restart retain the corrected fact and exclude
+both forgotten facts. The receipt records the offline rebuild and final acceptance.
 Memory replay refuses `--verify`; the operator compares HTTP readbacks instead.
 The checker requires unchanged event counts and zero local model requests during replay.
 No helper inspects private memory key files. Native memory remains off and NOT RUN.

@@ -1,159 +1,148 @@
 # Personal memory qualification
 
-25 October 2026. Part of #94. Part of #95. Both remain PARTIAL.
+25 October 2026. Part of #94. Part of #95. Both remain PARTIAL because governed
+MCP recall and native memory are NOT RUN.
 
-The latest fresh journey **FAILS on the first Memory load**. Ownership setup was
-still reaching the permissions service when the browser requested Memory. The
-server returned 503 and the desktop page kept saying Memory is unavailable.
-No personal fact was saved. The merged Forget fix was therefore NOT RUN in this
-installation. No memory write was retried, and no product check was bypassed.
+The fresh personal browser journey passes saving, finding, correcting and forgetting
+at 1280 and 390 pixels. Another member cannot read the owner's facts. Both forgotten
+facts stay absent after reload and server restart. A separate corrected fact remains
+at revision 2 after a stopped-worker rebuild too. The complete acceptance checker
+passes. No product failure occurred and no product workaround was used.
 
 ## Source and installation
 
-PASS: `git fetch origin` and rebase finished on `e718e3e90`. Main is an ancestor
-of the branch and no rebase remains in progress. This includes the first-load fix
-in #688 `f01ee18f7`, cleanup and correction refresh in #697 `88a436e44`, and the
-Forget revision fix in #699 `e718e3e90`. The rebased journey source was `11af2155e`;
-only its output directory changed before execution. Earlier prerequisites are
-PR #646 `59a81b70f` and PR #641 `105071aaa`.
+PASS: `git fetch origin` and rebase completed on `7b0f48cc8`. Main is an ancestor
+of this branch and no rebase remains in progress. This includes #688 `f01ee18f7`,
+PR #697 `88a436e44`, #699 `e718e3e90` and the first-load permission fix #704
+`7b0f48cc8`. The rebased journey source was `9ddb2b47e`; its output directory
+changed before execution. Earlier prerequisites are #646 `59a81b70f` and
+PR #641 `105071aaa`.
 
 One secondary slot, number 1, was claimed through `infra/dev-stack/claim.sh` and
-started with `--fresh` and `DEV_OWNER_BOOTSTRAP=0`. The collector confirmed that
-there were no members before the browser claimed ownership through real SSO.
-The run used only the local model stub. `ZITADEL_KEY_FILE` held a credential file
-path. The configured owner contact and browser session stayed in private slot
-files. Memory and personal key directories belonged to the slot; no private
-memory custody files were inspected. The owner stack was not used.
+started with `--fresh` and `DEV_OWNER_BOOTSTRAP=0`. The collector found no members
+before the browser claimed ownership through real SSO. The owner test user was
+configured privately. `ZITADEL_KEY_FILE` contained only a credential file path.
+The run used the local model stub, with native memory off and no paid calls.
+Personal and memory key folders belonged to the slot. Their contents were not
+inspected. The owner stack was not used.
+
+The first claim command ran before `npm ci` had finished and could not import a
+package. It claimed no slot. The claim succeeded after installation. The fresh
+startup command later exited with signal status 143 while the web build continued.
+A retained `up.sh` completed readiness and listener checks before the browser ran.
+No member had been created, so this remained the same empty installation.
+The phone collector also exited with 143 after saving its final reload observation
+and picture. Later read-only checks independently confirmed its saved outcomes.
+The signal sources were not established; neither interruption is a product pass.
+
+The main collector command was:
+
+```sh
+DEV_STACK_ID=1 MEMORY_CLAIMED_ID=1 nice -n 10 node \
+  --experimental-strip-types infra/dev-stack/memory-personal-live.ts
+```
+
+Temporary follow-up collectors reused the existing browser, sign-in and evidence
+helpers for phone operations, isolation, restart, rebuild and final status reads.
+They are not yet part of the tracked launcher. No business events were seeded
+outside the normal stack setup, owner claim, invitation and memory commands.
 
 ## Results from this installation
 
-The [original observations](forget-fixed-rerun/observations.jsonl),
-[request timing](forget-fixed-rerun/request-timing.json),
-[setup timing](forget-fixed-rerun/setup-timing.json) and
-[read-only diagnosis](forget-fixed-rerun/diagnosis.json) belong to this run only.
-Timing records contain fixed log fields and identifiers, without request bodies.
+The [observations](permissions-fixed-rerun/observations.jsonl) contain the original
+write replies, command ids, status reads and persistence snapshots.
+The [request timings](permissions-fixed-rerun/request-timing.json) contain only
+fixed log fields and memory request paths. Earlier runs supply no missing results
+for this installation. The [acceptance input](permissions-fixed-rerun/acceptance.json)
+passed the unchanged `checkPersonalMemory` function.
+
+The rebuild used `npm run replay -- memory --confirm-memory-stopped` under
+`nice -n 10`, with the slot's projection settings. The collector verified process
+identities and stopped the server, dispatcher and memory worker first. It compared
+event and local model counts before restarting services and reading the rebuilt data.
+No key files were inspected or replaced. Final status reads confirm cleanup for the
+phone fact and retained correction as well as the original desktop commands.
+
+Two final read-only capture attempts stopped because the text locator matched both
+a list row and the open detail. Selecting the detail paragraph fixed the collector;
+no product setting, response, permission or business state changed.
 
 | Step | Result | Observed outcome |
 | --- | --- | --- |
 | Empty install, SSO and owner claim | PASS | No members before claim; browser confirmed ownership. |
-| First Memory load | FAIL | Scopes returned 503; desktop showed Memory is unavailable. |
-| Save a personal fact | NOT RUN | The journey stopped at its first read. |
-| Find and open the saved fact | NOT RUN | No personal fact was saved. |
-| Correct the fact | NOT RUN | No personal fact was saved. |
-| Forget after correction | NOT RUN | The merged revision fix was not exercised. |
-| Original save, correction and forget receipts | NOT RUN | No memory write was submitted. |
-| Correction and forget cleanup | NOT RUN | No memory write was submitted. |
-| Drop an accepted reply and recover through GET only | NOT RUN | No memory write was submitted. |
-| Phone save, correction and forgetting | NOT RUN | No writes followed the first-read failure. |
-| Another member's HTTP and browser isolation | NOT RUN | No saved fact existed to test. |
-| Forgotten fact absent after reload | NOT RUN | This installation never saved or forgot a fact. |
-| Forgotten fact absent after server restart | NOT RUN | Restart qualification was not attempted. |
-| Stopped-worker rebuild and retained correction | NOT RUN | Rebuild qualification was not attempted. |
-| Forgotten fact absent after rebuild | NOT RUN | This installation never saved or forgot a fact. |
-| Complete live acceptance checker | NOT RUN | Required write and persistence evidence is absent. |
-| Later read-only Memory load | PASS | Scopes returned 200; both widths showed an empty list. |
-| Public captures of the original failure | PARTIAL | Desktop shows the error; phone resizing caused new reads. |
-| Governed MCP recall and native memory | NOT RUN | Native memory stayed off; browser search does not qualify it. |
-
-The later empty list is diagnostic evidence only. It does not replace the failed
-first load or qualify any write. The event log contains no memory events, and the
-local model stub recorded zero requests.
-
-## Cause of the first-load failure
-
-The saved events and worker logs show this order, in UTC:
-
-1. The owner claim was saved at 13:12:28.272. OpenFGA applied it by 13:12:28.935.
-2. The background ownership handler saved `ownership.seeded` at 13:12:29.102.
-3. The failing scopes request began at 13:12:29.980 and returned 503 about
-   481 ms later, at 13:12:30.461.
-4. OpenFGA started applying the ownership seed at 13:12:33.161 and finished at
-   13:12:33.433, after the failed read.
-
-`currentMembership` includes the ownership seed among the facts that grant the
-owner access. `readActiveMember` requires each fact's OpenFGA receipt. Until that
-seed is applied, it throws `AuthorityApplying`; the Memory route returns 503.
-The memory worker had already handled the bootstrap event, and this request
-specified neither an assistant nor a group. This is a different setup race from
-the assistant-notes failure fixed in #688.
-
-The root cause is the gap between confirming ownership to the person and applying
-its follow-up permission event. The browser's `loadScopes` makes one read and
-leaves any unavailable reply on an error screen. It does not recover when those
-permissions finish applying. The access check itself must remain in place.
-
-PASS: an isolated diagnostic test reproduced the same 503 with real NATS,
-PostgreSQL, OpenFGA, the memory worker and server entrypoint. It used the existing
-`memory-main.test.ts` fixture, leaving only the ownership seed unapplied. Applying
-that seed through the ordinary permission handler changed the next scopes read to
-200. The existing first-load test applies both ownership events before its first
-read, so it does not cover this interval. The temporary test was removed after
-execution; it made no request to a live development stack.
-
-This diagnosis follows the saved event order, worker timing and code; the route
-does not log its caught exception, so there is no original exception record.
-
-The collector also stalled while reading the first scopes response body. Its
-body read has no timeout and it records the reply only after that read finishes.
-The collector's own debugger was used to capture its existing desktop error page
-and preserve its private browser session. Resizing then caused fresh product reads;
-the collector recorded failure and exited with status 1. No original scopes body
-was recovered. No product process was debugged or changed.
+| First Memory load | PASS | Scopes returned 200 and the empty personal list opened. |
+| Permission delay on a later load | PASS | Two 503 replies were followed by 200 through the browser's own GET retries. |
+| Save, find and open a personal fact | PASS | Desktop and phone each saved revision 1 and found the synthetic fact. |
+| Correct the fact | PASS | Both accepted revision 2 and showed a correction receipt. |
+| Forget immediately after correction | PASS | Both accepted revision 3 and hid the fact; no conflict or repeated POST. |
+| Original receipts and cleanup | PASS | Status reads preserve command identity; correction completed and forgetting has a completion time. |
+| Lose an accepted reply and recover | PASS | Phone showed Outcome unknown; Check status used GET only and recovered the saved receipt. |
+| Another member's HTTP access | PASS | Owner list, live corrected fact and forgotten fact each returned 404 without text. |
+| Another member's browser | PASS | Own personal list was empty at both widths. |
+| Forgotten facts absent after reload | PASS | Both detail reads say forgotten; the list contains only the retained revision 2 fact. |
+| Forgotten facts absent after server restart | PASS | Same HTTP results and empty garden search at both widths. |
+| Stopped-worker memory rebuild | PASS | Event count stayed 58; model-request count stayed zero. Both forgotten facts remain absent. |
+| Corrected fact retained after rebuild | PASS | HTTP and both browser widths show the Tuesday fact at revision 2. |
+| Complete acceptance checker | PASS | Original receipts, cleanup, GET-only recovery and all three persistence snapshots satisfy the unchanged checker. |
+| Governed MCP recall and native memory | NOT RUN | Browser search does not qualify these paths. |
+| Other memory scopes | NOT RUN | This journey covers personal memory only. |
+| Physical phone keyboard and assistive technology | NOT RUN | Chromium viewport captures do not qualify these conditions. |
 
 ## Pictures and privacy
 
-All six new pictures and all ten MEM-30/33/34/40/41 reference frames were inspected
-by eye. No new picture contains an email address, home directory or private path.
+All 36 new captures were inspected by eye before publication. The pictures contain only
+synthetic facts and safe display names. No email address, home directory or private
+path belongs in this evidence. The ten MEM-30/33/34/40/41 reference frames were
+also inspected.
 
-- [First desktop failure](forget-fixed-rerun/first-read-failure-1280.png) shows
-  Memory is unavailable before the collector was released from its stalled read.
-- [First phone capture](forget-fixed-rerun/first-read-failure-390.png) and
-  [collector desktop capture](forget-fixed-rerun/failure-1280.png) show the workspace
-  with the Memory panel closed. They do not prove a Memory outcome.
-- [Collector phone capture](forget-fixed-rerun/failure-390.png) shows the empty list
-  after resizing triggered fresh reads. It does not show the original failure.
-- [Later desktop](forget-fixed-rerun/later-read-only-1280.png) and
-  [later phone](forget-fixed-rerun/later-read-only-390.png) show a settled empty list
-  during a separate read-only diagnosis.
+Representative pictures show the [desktop store form](permissions-fixed-rerun/store-form-1280.png),
+[phone correction](permissions-fixed-rerun/phone-correction-form-390.png),
+[desktop Forget review](permissions-fixed-rerun/forget-form-1280.png),
+[phone Forget review](permissions-fixed-rerun/phone-forget-form-390.png),
+[unknown outcome](permissions-fixed-rerun/outcome-unknown-390.png) and
+[GET recovery](permissions-fixed-rerun/recovered-390.png).
+Restart searches show absence at [1280](permissions-fixed-rerun/restart-absent-1280.png)
+and [390](permissions-fixed-rerun/restart-absent-390.png).
+The rebuilt correction is visible at [1280](permissions-fixed-rerun/rebuilt-correction-1280.png)
+and [390](permissions-fixed-rerun/rebuilt-correction-390.png).
 
-The first diagnostic script stopped before saving evidence because it read the
-OpenFGA binding from the wrong settings file. Reading the existing binding file
-fixed that collector setup mistake. It made no product writes.
+Three captures show loading rather than a settled result: `empty-memory-390`,
+`after-reload-390` and `detail-390`. They do not prove an empty list or loaded detail.
+Separate phone operations and settled reload captures supply that evidence.
+The immediate correction pictures show the old detail while Saving remains visible,
+alongside the accepted revision 2 receipt. Forget then uses the new revision.
+These pictures do not claim that the detail had already refreshed.
+
+The desktop editor uses a centred sheet rather than the reference side drawer.
+The Forget consequences use plain bullets rather than the reference alert card.
+Phone edit and Forget actions fit the viewport without the reference footer clipping.
+This records functional behaviour and visual differences, not full design conformity.
 
 ## Earlier attempts
 
-Earlier evidence remains unchanged. The [first observations](observations.jsonl)
-record a first-load 503 before #688. The separate setup and input attempts failed
-during sign-in and contact validation. Those were setup failures.
-
-The [earlier rerun](rerun/observations.jsonl) passed desktop operations, lost-reply
-recovery, HTTP isolation and absence after reload, restart and rebuild. Its cleanup
-query used the wrong database, and phone correction hit a read-after-write delay.
-Both causes were fixed in #697. Its acceptance input failed; it is not current
-qualification evidence.
-
-The [previous fixed rerun](fixed-rerun/observations.jsonl) passed saving, correction,
-cleanup, isolation and correction persistence. Forget submitted revision 1 while
-revision 2 was still refreshing and received 409. That cause was fixed in #699.
-Its forgotten-fact persistence and recovery checks remained NOT RUN. Neither
-previous run supplies missing evidence for this installation.
+The [previous receipt](https://github.com/elewa-git/opencrane-new/blob/9ddb2b47ef0cb84e66bcdea6ce1c19bf4baa5c2e/docs/process/memory-fresh-personal/receipt.md) records the first-load failure
+before #704. Its captures and diagnosis remain unchanged.
+The [first observations](observations.jsonl), [earlier rerun](rerun/observations.jsonl)
+and [fixed rerun](fixed-rerun/observations.jsonl) remain separate. Their earlier
+cleanup, phone refresh and stale Forget failures were fixed on main before this run.
 
 ## Local checks and release
 
-PASS: clean `npm ci`, existing NATS and Lychee links, eight acceptance tests twice,
-and `check:events` with all 153 event types matching. All build, lint, typecheck
-and test commands ran under `nice -n 10`. The full root suite is NOT RUN, as required
-by the build prompt. Product files, Stage B, authority tests, event contracts and
-the acceptance checker are unchanged.
+PASS: clean `npm ci`, existing NATS and Lychee links, ten acceptance and response
+collector tests twice, and the CI test-selection guard. Tests, builds, lint and
+typecheck run under `nice -n 10`.
 
-PASS: 438 event security tests and the isolated ownership diagnostic test, using
-a disposable PostgreSQL 17.6 database with `PG_TEST_URL` set. Its container and
-volume were removed with `docker rm -f -v`.
-
-PASS: `down.sh --id 1` released the slot. Its owner marker and Compose containers
-are absent. Only claimed resources were removed.
+PASS: 438 event security tests with `PG_TEST_URL` set to a disposable PostgreSQL
+17.6 database. Its container and volume were removed with `docker rm -f -v`.
+PASS: event catalogue, with all 154 event types matching.
 
 PASS: full workspace typecheck, including package and development-stack checks.
-PASS: documentation/privacy and changelog checks. Full lint also passed, including
-Knip, dependency boundaries, documentation/privacy, links, fixtures and licences.
-ESLint reported 25 function-length warnings and no errors.
+PASS: documentation/privacy and changelog checks.
+PASS: full lint, including Knip, dependency boundaries, documentation/privacy, links,
+fixtures and licences. ESLint reported 25 existing function-length warnings and no errors.
+The full root suite is NOT RUN, as required by the build prompt.
+Product files, Stage B, authority tests, event contracts and the acceptance checker
+are unchanged. No dependency was added.
+
+PASS: `down.sh --id 1` released the slot. Its owner marker and Compose containers
+are absent. Only claimed resources were removed. CI is not awaited after the push.

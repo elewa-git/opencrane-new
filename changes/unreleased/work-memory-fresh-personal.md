@@ -1,3 +1,3 @@
-- Check fresh personal memory saves, correction, forgetting and reload through the browser.
-  Keep each attempt separate, record the first-load ownership delay and mark untested
-  writes and persistence checks explicitly.
+- Qualify personal memory saves, correction and forgetting on a fresh installation at
+  desktop and phone widths. Check member isolation, recovery without repeated writes,
+  and persistence through restart and rebuild; native memory remains unqualified.
