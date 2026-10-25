@@ -188,7 +188,7 @@ async function prepareRunnerFiles(home: string, scenario: RunnerCase) {
   await mkdir(slot, { recursive: true });
   await mkdir(bin);
   const files = ['infra/package/fresh-twice.ts', 'infra/package/browser-capture.ts', 'infra/dev-stack/config.ts',
-    'infra/dev-stack/identity.ts', 'infra/dev-stack/packaged.ts',
+    'infra/dev-stack/identity.ts', 'infra/dev-stack/packaged.ts', 'infra/dev-stack/target.ts',
     'infra/dev-stack/private-directories.ts',
     'infra/package/fresh-twice-entry.ts', 'infra/dev-stack/journey-guard.ts',
     'libs/event-store/test/certificates.ts'];

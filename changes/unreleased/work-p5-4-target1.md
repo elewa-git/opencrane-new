@@ -1,0 +1,1 @@
+- Spare test slots can own a separate three-node Kubernetes target. Failed starts remove their nodes before returning, saved resource identities protect cleanup, and package commands use the checked target context. Private NATS route preparation uses that target's private kubeconfig and keeps three distinct peer identities. Live creation and placement remain NOT RUN.

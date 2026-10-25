@@ -17,8 +17,16 @@ const fs = require('node:fs');
 const home = process.env.HOME;
 const args = process.argv.slice(2);
 fs.appendFileSync(home + '/argv', JSON.stringify(args) + '\\n');
-if (!args.includes('--context=k3d-ocn')) process.exit(30);
-if (args.includes('namespace')) {
+const slot = home + '/.config/opencrane/dev-stack-1';
+if (fs.existsSync(slot + '/target-owner.json')) {
+  const context = args.includes('--context=k3d-opencrane-target-1') ||
+    args[args.indexOf('--context') + 1] === 'k3d-opencrane-target-1';
+  if (!context) process.exit(30);
+  if (args[args.indexOf('--kubeconfig') + 1] !== slot + '/target.kubeconfig') process.exit(30);
+} else if (!args.includes('--context=k3d-ocn')) process.exit(30);
+if (args.includes('nodes')) {
+  process.stdout.write(fs.readFileSync(home + '/nodes.json'));
+} else if (args.includes('namespace')) {
   process.stdout.write(fs.readFileSync(home + '/namespace.json'));
 } else if (args.includes('get')) {
   const name = args[args.indexOf('secret') + 1];
@@ -37,7 +45,47 @@ if (args.includes('namespace')) {
 } else process.exit(32);
 `;
 
-async function fixture() {
+const docker = `#!/usr/bin/env node
+const fs = require('node:fs');
+const home = process.env.HOME;
+const args = process.argv.slice(2);
+const record = JSON.parse(fs.readFileSync(
+  home + '/.config/opencrane/dev-stack-1/target-owner.json'));
+const labels = { 'opencrane.dev/target-id': record.id };
+if (args[0] === 'ps') {
+  process.stdout.write(record.containers.join('\\n'));
+} else if (args[0] === 'network' && args[1] === 'ls') {
+  process.stdout.write(record.network);
+} else if (args[0] === 'network' && args[1] === 'inspect') {
+  process.stdout.write(JSON.stringify([{ Id: record.network, Labels: labels }]));
+} else if (args[0] === 'inspect') {
+  const containers = [];
+  for (const container of record.containers) {
+    containers.push({ Id: container, Config: { Labels: labels }, Mounts: [] });
+  }
+  process.stdout.write(JSON.stringify(containers));
+} else process.exit(33);
+`;
+
+async function recordTarget(prepared) {
+  const { home, slot, worktree, owner } = prepared;
+  owner.context = 'k3d-opencrane-target-1';
+  const target = { worktree, slot: '1', name: 'opencrane-target-1', context: owner.context,
+    id: '12345678-1234-1234-1234-123456789abc',
+    containers: ['container-zero', 'container-one', 'container-two'], network: 'network-one',
+    nodes: { 'node-zero': 'uid-zero', 'node-one': 'uid-one', 'node-two': 'uid-two' } };
+  const nodes = [];
+  for (const [name, uid] of Object.entries(target.nodes)) {
+    nodes.push({ metadata: { name, uid, labels: { 'opencrane.dev/target-id': target.id } } });
+  }
+  await writeFile(join(home, 'nodes.json'), JSON.stringify({ items: nodes }));
+  await writeFile(join(slot, 'target-owner.json'), JSON.stringify(target));
+  await writeFile(join(slot, 'target.kubeconfig'), 'private-test-kubeconfig', { mode: 0o600 });
+  await writeFile(join(slot, 'package-owner.json'), JSON.stringify(owner));
+  await writeFile(join(home, 'bin/docker'), docker, { mode: 0o700 });
+}
+
+async function fixture(isolatedTarget = true) {
   const home = await mkdtemp(join(tmpdir(), 'prepare-routes-'));
   const worktree = join(home, 'worktree');
   const slot = join(home, '.config/opencrane/dev-stack-1');
@@ -47,7 +95,8 @@ async function fixture() {
   await cp('infra/package', join(worktree, 'infra/package'), { recursive: true });
   await mkdir(join(worktree, 'infra/dev-stack'), { recursive: true });
   await mkdir(join(worktree, 'libs/event-store/test'), { recursive: true });
-  for (const file of ['config.ts', 'identity.ts', 'packaged.ts', 'private-directories.ts']) {
+  for (const file of ['config.ts', 'identity.ts', 'packaged.ts', 'private-directories.ts',
+    'target.ts']) {
     await cp(`infra/dev-stack/${file}`, join(worktree, 'infra/dev-stack', file));
   }
   await cp('libs/event-store/test/certificates.ts',
@@ -76,7 +125,9 @@ exec /usr/bin/openssl "$@"
     natsCluster: { enabled: true, renderOnly: true, routeCASecret: references[0],
       peerCertificateSecrets: references.slice(1) } };
   await sharedCertificates(slot);
-  return { home, worktree, slot, owner, values };
+  const prepared = { home, worktree, slot, owner, values };
+  if (isolatedTarget) await recordTarget(prepared);
+  return prepared;
 }
 
 async function run(prepared, fails = false) {
@@ -180,8 +231,8 @@ async function parseWithNats(prepared) {
   }
 }
 
-async function preparesDistinctIdentities() {
-  const prepared = await fixture();
+async function preparesDistinctIdentities(isolatedTarget = true) {
+  const prepared = await fixture(isolatedTarget);
   try {
     await run(prepared);
     const saved = await checkPrepared(prepared);
@@ -192,8 +243,17 @@ async function preparesDistinctIdentities() {
     await rm(prepared.home, { recursive: true, force: true });
   }
 }
+async function preparesTargetIdentities() {
+  await preparesDistinctIdentities();
+}
 test('prepares three private identities accepted by pinned NATS and preserves them on retry',
-  preparesDistinctIdentities);
+  preparesTargetIdentities);
+
+async function preparesExistingClusterIdentities() {
+  await preparesDistinctIdentities(false);
+}
+test('prepares route identities in the existing local cluster when no target is recorded',
+  preparesExistingClusterIdentities);
 
 async function expireCertificate(directory) {
   const config = `[ca]

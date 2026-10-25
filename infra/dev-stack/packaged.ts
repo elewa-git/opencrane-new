@@ -6,9 +6,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { directory, root } from './config.ts';
 import { secondary, stackId } from './identity.ts';
+import { targetConnection, targetRecorded } from './target.ts';
 
 const execute = promisify(execFile);
-const context = 'k3d-ocn';
 const namespace = `opencrane-package-${stackId}`;
 const release = `opencrane-package-${stackId}`;
 const recordFile = `${directory}/package-owner.json`;
@@ -74,12 +74,19 @@ type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
 
 async function command(program: string, args: string[], timeoutMs = 120_000) {
+  if (program === 'helm' && args.includes('--kube-context')) {
+    const connection = await targetConnection();
+    if (connection.kubeconfig) args = ['--kubeconfig', connection.kubeconfig, ...args];
+  }
   const result = await execute(program, args, { cwd: root, timeout: timeoutMs });
   return result.stdout.trim();
 }
 
 async function kubectl(args: string[], timeoutMs = 120_000) {
-  return command('kubectl', [`--context=${context}`, ...args], timeoutMs);
+  const connection = await targetConnection();
+  const options = [`--context=${connection.context}`];
+  if (connection.kubeconfig) options.push('--kubeconfig', connection.kubeconfig);
+  return command('kubectl', [...options, ...args], timeoutMs);
 }
 
 async function readOwner() {
@@ -111,6 +118,7 @@ async function saveOwner(owner: PackageOwner) {
 export async function packagedSlotIsBusy() {
   if (!secondary) return false;
   try {
+    if (await targetRecorded()) return true;
     const found = await getNamespace();
     if (!found) return false;
     const owner = await readOwner();
@@ -130,6 +138,7 @@ export async function requireOwner() {
 
 export async function preparePackage() {
   await requireOwner();
+  const { context } = await targetConnection();
   if (await getNamespace()) throw new Error('Package namespace already exists');
   await kubectl(['create', 'namespace', namespace]);
   const found = await getNamespace();
@@ -146,6 +155,7 @@ export async function preparePackage() {
 export async function verifyPackageOwner() {
   await requireOwner();
   const owner = await readOwner();
+  const { context } = await targetConnection();
   const found = await getNamespace();
   if (!owner || owner.worktree !== root || owner.slot !== stackId ||
       owner.context !== context || owner.namespace !== namespace ||
@@ -308,6 +318,7 @@ async function configureComputerGateway() {
 export async function installPackage(valuesFile: string) {
   const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
+  const context = owner.context;
   await checkNamedSecrets(values, review);
   await checkRenderedPackage(valuesFile, review);
   if (await releaseSecret()) throw new Error('A Helm release already uses this namespace');
@@ -355,6 +366,11 @@ export async function removePackage(checkUnrecordedNamespace = true) {
     return;
   }
   await requireOwner();
+  const { context } = await targetConnection();
+  if (owner.worktree !== root || owner.slot !== stackId || owner.context !== context ||
+      owner.namespace !== namespace || owner.release !== release) {
+    throw new Error('Package ownership differs from the recorded target');
+  }
   if (!await getNamespace()) {
     await rm(recordFile, { force: true });
     return;
