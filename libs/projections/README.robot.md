@@ -29,6 +29,9 @@ the same checked-out connection.
 A failed unlock destroys the connection. The shared connection helper limits ordinary
 pool connection waits to one second. Memory keys expose `status(identity)` without creating
 a key: it distinguishes missing custody, an available key and a destroyed-key marker.
+`checkIdentity(identity, value)` checks the saved key reference against its owner,
+scope, fact and revision without reading a key or decrypting text. Restore validation
+uses it for every value, including destroyed revisions, before authentication starts.
 
 `delegations` fills `delegations` and `computer_delegations` using the ordinary
 checkpoint runner. The tables keep the full checked start data, original event ids,
@@ -1014,5 +1017,7 @@ entrypoint with real NATS and PostgreSQL. It exports encrypted synthetic facts,
 forgets a root and its historical dependant, then restores older events separately.
 Current permanent markers keep those facts unsearchable while another scope remains
 readable. It checks repeated replay, unchanged markers and zero guarded effects.
+It refuses matching damaged custody in both folders. A decryption guard also checks
+that later deletion, identity and stability refusals never read an earlier live fact.
 The [package contract](../../infra/package/README.robot.md#memory-restore-preflight)
 owns validation limits and the explicit remaining qualification.

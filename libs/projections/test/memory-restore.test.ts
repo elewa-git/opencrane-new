@@ -96,6 +96,10 @@ async function prepare() {
   for (const [name, setting] of Object.entries(source.env('projection'))) {
     env[`SOURCE_${name}`] = setting;
   }
+  await writeGuard();
+}
+
+async function writeGuard() {
   const guard = `import { mock } from 'node:test';
 import { EventStore } from '@opencrane/event-store';
 import * as eventStore from '@opencrane/event-store';
@@ -158,9 +162,8 @@ async function guardedConnection(settings) {
   mock.method(connection, 'request', checkedRequest);
   return connection;
 }
-mock.module('@opencrane/event-store', {
-  namedExports: { ...eventStore, connectNats: guardedConnection },
-});
+const eventStoreExports = { ...eventStore, connectNats: guardedConnection };
+mock.module('@opencrane/event-store', { namedExports: eventStoreExports });
 const namedExports = { ...projections, memoryKeys: guardedKeys };
 if (process.env.EXPECT_REFUSAL) namedExports.connectProjectionDb = forbidden;
 mock.module('@opencrane/projections', { namedExports });

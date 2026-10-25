@@ -11,6 +11,10 @@ import { z } from 'zod';
 import { captureBounds, infoSchema } from './event-backup.ts';
 
 type Bounds = ReturnType<typeof captureBounds>;
+interface SurvivingValue {
+  identity: MemoryIdentity;
+  data: { ciphertext: string; keyId: string };
+}
 interface Options {
   silo: string;
   sourceDirectory: string;
@@ -106,6 +110,7 @@ async function checkRevisions(events: StoredEvent[], options: Options, bounds: B
   const current = memoryKeys(options.sourceDirectory);
   const candidate = memoryKeys(options.candidateDirectory);
   const latest = new Map<string, MemoryIdentity>();
+  const surviving: SurvivingValue[] = [];
   for (const stored of events) {
     bounds.check();
     if (stored.event.type !== 'memory.written' && stored.event.type !== 'memory.corrected') {
@@ -126,10 +131,9 @@ async function checkRevisions(events: StoredEvent[], options: Options, bounds: B
       throw refusal();
     }
     const data = memoryValueEventSchema.parse(stored.event).data;
-    // Authenticate surviving material. Destroyed markers return null without reading old text.
-    const text = candidate.decrypt(identity, data);
-    if (!destroyed && text === null) {
-      throw refusal();
+    candidate.checkIdentity(identity, data);
+    if (!destroyed) {
+      surviving.push({ identity, data });
     }
     const reference = JSON.stringify([identity.scopeId, identity.memoryId]);
     const previous = latest.get(reference);
@@ -145,6 +149,18 @@ async function checkRevisions(events: StoredEvent[], options: Options, bounds: B
     // Require the marker for an unpublished correction that could have raced the forget.
     const next = { ...identity, revision: identity.revision + 1 };
     if (current.status(next) !== 'destroyed' || candidate.status(next) !== 'destroyed') {
+      throw refusal();
+    }
+  }
+  return surviving;
+}
+
+function authenticateSurvivingValues(values: SurvivingValue[], directory: string, bounds: Bounds) {
+  const candidate = memoryKeys(directory);
+  for (const value of values) {
+    bounds.check();
+    const text = candidate.decrypt(value.identity, value.data);
+    if (text === null) {
       throw refusal();
     }
   }
@@ -178,7 +194,7 @@ export async function checkMemoryRestore(source: NatsConnection, target: NatsCon
     if (!isDeepStrictEqual(sourceInventory, candidateInventory)) {
       throw refusal();
     }
-    await checkRevisions(current.events, options, sourceBounds);
+    const surviving = await checkRevisions(current.events, options, sourceBounds);
     if (!isDeepStrictEqual(sourceInventory, inventory(options.sourceDirectory, sourceBounds)) ||
         !isDeepStrictEqual(candidateInventory, inventory(options.candidateDirectory, targetBounds)) ||
         !isDeepStrictEqual(current.info, await streamInfo(sourceBounds)) ||
@@ -187,6 +203,8 @@ export async function checkMemoryRestore(source: NatsConnection, target: NatsCon
     }
     sourceBounds.check();
     targetBounds.check();
+    // Finish deletion, identity and stability checks before authenticating any surviving text.
+    authenticateSurvivingValues(surviving, options.candidateDirectory, targetBounds);
   } catch {
     throw refusal();
   } finally {

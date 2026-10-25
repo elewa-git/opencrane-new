@@ -469,7 +469,11 @@ exactly, including markers for identities absent from the archive. No keys are c
 `memoryErasureHistory` supplies historical dependants and superseded revisions.
 Their source and candidate keys must be destroyed, including the next candidate
 revision of a forgotten fact. `memoryKeys` checks identities and authenticates
-surviving ciphertext. Destroyed material is never decrypted or reconstructed.
+surviving ciphertext. Every live, unreplaced revision must have an available key
+in both folders. Matching empty files cannot prove valid custody for a live fact.
+All deletion markers, key identities and final folder/history stability checks
+finish before any surviving value is decrypted. Authentication must return a value;
+a null result refuses. Destroyed material is never decrypted or reconstructed.
 Missing, unverified, changing or damaged evidence produces only a fixed refusal.
 
 The isolated test uses the unchanged P5-8 byte restore helper. A separate frozen
@@ -481,6 +485,10 @@ checkpoints and markers; the normal rebuild generation increases.
 Run `PG_TEST_URL=… nice -n 10 npx vitest run libs/projections/test/memory-restore.test.ts`.
 It uses synthetic temporary keys, three disposable NATS servers and a disposable
 PostgreSQL database. Guarded child processes count effects and refuse any database
-connection on failed preflight. Full P5-8, P4-13–17, company/rights recovery, browser
+connection on failed preflight. Late-refusal tests also forbid decryption, with a
+live fact before a missing deletion marker or a mismatched key identity. They cover
+next-revision markers and changes during folder/history validation. Matching empty,
+missing and wrong surviving keys are tested in both folders.
+Full P5-8, P4-13–17, company/rights recovery, browser
 qualification and computer no-disk proof remain NOT RUN. This command cannot approve
 reopening an installation. See the [receipt](../../docs/process/p5-12-pr1/receipt.md).

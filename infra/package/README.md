@@ -119,8 +119,9 @@ stopped. This checks event recovery only. It does not qualify a package upgrade.
 The [recovery notes](README.robot.md#interrupted-handler-upgrade-check) explain the proof.
 The memory recovery command compares a proposed key folder with the stopped, trusted
 source and its current events. It refuses stale keys, missing deletion markers and
-damaged files before opening the read-table database. It then runs the existing
-memory replay. It changes no keys and does not reopen the installation.
+missing or damaged keys for live facts, even when both folders match. It completes
+all deletion, identity and stability checks before decrypting any surviving value.
+It then runs the existing memory replay. It changes no keys and does not reopen the installation.
 The [memory recovery notes](README.robot.md#memory-restore-preflight) explain its limits.
 
 ## Folders
