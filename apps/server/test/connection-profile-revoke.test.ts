@@ -116,6 +116,15 @@ async function get(url: string) {
   privateOutput(response);
   return response;
 }
+function requestUrl(input: Parameters<typeof fetch>[0]) {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input.url;
+}
 async function recover(lost: boolean) {
   const fixture = await saved();
   const input = revoke(fixture);
@@ -144,7 +153,8 @@ async function recover(lost: boolean) {
     expect(receipt.statusCode).toBe(200);
     expect(receipt.json()).toMatchObject({ status: 'confirmed', action: 'revoke',
       changeRef: 'revoke', eventType: 'connection.revoked', generation: null });
-    const original = { status: 'revoked', sequence: receipt.json().sequence, changeRef: 'revoke' };
+    const confirmed = receipt.json<{ sequence: number }>();
+    const original = { status: 'revoked', sequence: confirmed.sequence, changeRef: 'revoke' };
     if (!lost) {
       expect(response.json()).toEqual(original);
     }
@@ -169,7 +179,8 @@ async function recover(lost: boolean) {
     expect(noCustody).not.toHaveBeenCalled();
     // Allow only the existing permission service calls.
     for (const [url] of provider.mock.calls) {
-      expect(String(url).startsWith(fga.apiUrl)).toBe(true);
+      const address = requestUrl(url);
+      expect(address.startsWith(fga.apiUrl)).toBe(true);
     }
     expect(await nats.store.head()).toBe(position);
   } finally {
