@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts services; creates the configured test owner| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|starts apps; keeps keys private; checks journeys and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster| devbox
 ```
@@ -35,6 +35,10 @@ The dispatcher uses the server's read-only content connection to coordinate gate
 configuration changes. Its background jobs keep their own database.
 
 ## What it is responsible for
+
+The personal Memory browser helper records the first reply status before reading
+its body. A body that does not finish fails after ten seconds, leaving that status
+available for diagnosis.
 
 - Starts and stops local services and apps with private local credentials.
 - Waits for the website to answer before starting browser checks.

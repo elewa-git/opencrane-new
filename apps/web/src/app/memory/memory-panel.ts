@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, input, signal, viewChild,
   type OnDestroy, type OnInit, type SimpleChanges } from '@angular/core';
 import { MemoryEdit } from './memory-edit';
-import type { DetailRead } from './memory-panel-reads';
 import { Overlay } from '../ui/overlay';
 import { canReadScope, isObject, isPage, isScopes,
   type Fact,
   type PageFact, type Scope, type Source } from './memory-panel-data';
-import { detailResult, detailUrl, isCurrentDetailRead, isCurrentListRead,
-  isCurrentScopeRead, readJson, scopeHasId }
+import { detailResult, detailUrl, firstTrustedSource, isCurrentDetailRead, isCurrentListRead,
+  isCurrentScopeRead, readJson, savedDate, scopeAudience, scopeHasId, scopeKeydown, scopeName,
+  scopeUrl, selectedScopeAudience, sourceLink, waitForRetry, type DetailRead }
   from './memory-panel-reads';
 import { readStoreReply } from './memory-panel-store-reply';
 import { storeBytes, storeKindFromEvent, storePayload, storeSourceLabel, storeValidation } from
@@ -15,11 +15,7 @@ import { storeBytes, storeKindFromEvent, storePayload, storeSourceLabel, storeVa
 import { MemoryForget, type ForgetTarget } from './memory-forget';
 import { factIndex, focusAfterForget, withoutForgetTarget, withoutHiddenFactText } from
   './memory-panel-forget';
-import { firstTrustedSource, scopeUrl, waitForRetry } from
-  './memory-panel-reads';
-import { savedDate, scopeAudience, scopeKeydown, scopeName, selectedScopeAudience, sourceLink } from
-  './memory-panel-reads';
-type ScreenState = 'loading' | 'ready' | 'unavailable' | 'access';
+type ScreenState = 'applying' | 'loading' | 'ready' | 'unavailable' | 'access';
 type StoreState = 'editing' | 'saving' | 'saved' | 'failed' | 'busy' | 'unknown';
 type StoreCommand = { generation: number; scopeId: string; commandId: string;
   payload: Record<string, unknown> };
@@ -47,11 +43,11 @@ export class MemoryPanel implements OnInit, OnDestroy {
   protected readonly forgetTargets = signal<ForgetTarget[]>([]);
   protected readonly state = signal<ScreenState>('loading');
   protected readonly listState = signal<
-    'loading' | 'ready' | 'empty' | 'unavailable' | 'invalid' | 'conflict'>('loading');
+    'loading' | 'applying' | 'ready' | 'empty' | 'unavailable' | 'invalid' | 'conflict'>('loading');
   protected readonly query = signal('');
   protected readonly cursor = signal<string | null>(null);
   protected readonly nextCursor = signal<string | null>(null);
-  protected readonly detailState = signal<'ready' | 'unavailable' | 'missing' | ''>('');
+  protected readonly detailState = signal<'applying' | 'ready' | 'unavailable' | 'missing' | ''>('');
   protected readonly storeOpen = signal(false);
   protected readonly storeText = signal('');
   protected readonly storeKind = signal<'fact' | 'preference'>('fact');
@@ -172,7 +168,8 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.sources.set([]);
     this.detailState.set('');
     const url = detailUrl(this.selectedScope(), fact.memoryId);
-    const reply = await readJson(url, controller.signal);
+    const waiting = this.detailState.set.bind(this.detailState, 'applying');
+    const reply = await readJson(url, controller.signal, waiting);
     if (!isCurrentDetailRead(controller, generation, this.generation)) return;
     const result = detailResult(reply);
     this.detailLoaded(result);
@@ -444,7 +441,8 @@ export class MemoryPanel implements OnInit, OnDestroy {
     this.scopeRequestId += 1;
     const requestId = this.scopeRequestId;
     const url = scopeUrl(this.groupId(), this.assistantId());
-    const result = await readJson(url, controller.signal);
+    const waiting = this.state.set.bind(this.state, 'applying');
+    const result = await readJson(url, controller.signal, waiting);
     if (!isCurrentScopeRead(controller, requestId, this.scopeRequestId)) return;
     if (result.kind === 'access') { this.revoke(); return; }
     if (result.kind !== 'ok' || !isScopes(result.body)) {
@@ -473,7 +471,8 @@ export class MemoryPanel implements OnInit, OnDestroy {
     const cursor = this.cursor();
     if (cursor) params.set('cursor', cursor);
     const url = `/api/memory/${encodeURIComponent(scopeId)}/facts?${params}`;
-    const result = await readJson(url, controller.signal);
+    const waiting = this.listState.set.bind(this.listState, 'applying');
+    const result = await readJson(url, controller.signal, waiting);
     if (!isCurrentListRead(controller, generation, this.generation, requestId,
       this.listRequestId)) return;
     if (result.kind === 'access') { this.revoke(); return; }

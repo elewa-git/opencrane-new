@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { history, memoryReferences, readActiveMember, MemberAccessRefused, PayingGroupRefused } from '@opencrane/models';
+import { AuthorityApplying, history, memoryReferences, readActiveMember,
+  MemberAccessRefused, PayingGroupRefused } from '@opencrane/models';
 import { memoryKeys } from '@opencrane/projections';
 import { sessionFor } from '../members/routes.ts';
 import { scopeAccess, scopeFor, resolveScope, memoryAccessChecks, MemoryRefused,
@@ -44,6 +45,12 @@ export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
       }
       return await readContent(request, options, requester, checks, config.cookieSecret);
     } catch (error) {
+      if (error instanceof AuthorityApplying) {
+        const applying = { status: 'unavailable', reason: 'permissions_applying' };
+        reply.header('retry-after', '1');
+        reply.code(503);
+        return reply.send(applying);
+      }
       let status = 503;
       if (error instanceof z.ZodError) {
         status = 422;

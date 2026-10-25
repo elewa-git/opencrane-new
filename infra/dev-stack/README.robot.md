@@ -2,6 +2,18 @@
 
 For people, read [README.md](README.md) first.
 
+## Personal Memory response collection
+
+`memory-personal-browser.ts` comes from the draft personal Memory journey. It records
+the first scopes reply status before reading its body. That body read stops after
+ten seconds and records an unavailable body separately. An applying reply can wait
+for the browser to recover through its own GET retries; the collector sends no retry.
+The rest of the journey stays on its draft branch.
+
+`nice -n 10 node --experimental-strip-types --test
+infra/dev-stack/memory-personal-browser.test.ts` checks a stalled body and a complete
+reply without starting a development stack.
+
 ## First demo read turn
 
 The local reply fixture understands both direct MCP namespaces and Codex's

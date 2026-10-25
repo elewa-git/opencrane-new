@@ -23,7 +23,7 @@ flowchart LR
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|shows saved Stop, takeover cancellation and tool reply status| capture["Reply and screenshot status<br/>workspace and viewer"]
-  web -->|manages settings and waits for saved memory changes| admin["Admin pages<br/>provider, tool, people and saved memory"]
+  web -->|manages settings and waits for memory setup and saved changes| admin["Admin pages<br/>provider, tool, people and saved memory"]
 ```
 
 Sign-in goes through the server to [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service).
@@ -43,6 +43,8 @@ For everyone, the website:
 - Uploads and previews files, saves screenshots and opens the assistant's read-only
   [computer](../../GLOSSARY.md#computer) view when permitted.
 - Shows permitted memory facts and supports saving, correcting and forgetting personal facts.
+  While saved membership permissions are still being applied, Memory shows a setup
+  message and retries its reads for up to 30 seconds. Refused reads show access loss straight away.
   After a correction, Edit and Forget stay visible but disabled until the saved revision appears.
   Temporary read failures offer another refresh.
 - Supports phones, keyboard navigation and clear messages when access changes.

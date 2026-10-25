@@ -1,0 +1,1 @@
+- Memory shows a setup message and retries reads for up to 30 seconds while saved membership permissions are being applied. Refusals and other failures still appear straight away. The personal Memory journey records the first reply status before reading its body and times out a stalled body read.

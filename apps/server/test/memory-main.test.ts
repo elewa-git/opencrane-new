@@ -32,7 +32,7 @@ afterEach(async function cleanup() {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-async function setup() {
+async function setup(applyOwnershipSeed = true) {
   workerOutput = '';
   nats = await natsFixture();
   storage = await databases();
@@ -67,9 +67,12 @@ async function setup() {
   await seedOwnership(nats.store, 'acme');
   const auth = memberAuthorisation(binding);
   await auth.handler.handle(owner, db);
-  for await (const row of nats.store.readStream('ownership-acme')) {
-    await auth.handler.handle(row.event, db);
+  async function applyOwnership() {
+    for await (const row of nats.store.readStream('ownership-acme')) {
+      await auth.handler.handle(row.event, db);
+    }
   }
+  if (applyOwnershipSeed) await applyOwnership();
   await runner.run(members);
   // Leave the new assistant awaiting its permission worker, as during account setup.
   const assistant = { ...event('new-assistant', 'assistant-personal', 'assistant.created'),
@@ -82,7 +85,7 @@ async function setup() {
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
     origin: 'https://app.example.test', 'content-type': 'application/json' };
   const origin = `http://127.0.0.1:${server.port}`;
-  return { headers, origin, env, assistant, auth, db };
+  return { headers, origin, env, assistant, auth, db, applyOwnership };
 }
 
 function startMemoryWorker(env: NodeJS.ProcessEnv) {
@@ -161,4 +164,29 @@ it('keeps granted notes unavailable until the assistant permissions are applied'
       { scopeKind: 'person', ownerId: 'bootstrap-owner' },
       { scopeKind: 'assistant_notes', ownerId: 'personal', canRead: true, canWrite: false },
     ] });
+  }, 60_000);
+
+it('identifies pending ownership permissions and loads personal memory after they apply',
+  async function pendingOwnershipPermissions() {
+    const { origin, headers, applyOwnership } = await setup(false);
+    const scopeId = memoryScopeId('acme', 'person', 'bootstrap-owner');
+    const paths = ['/api/memory/scopes', `/api/memory/${scopeId}/facts`,
+      `/api/memory/${scopeId}/maintenance`, `/api/memory/${scopeId}/facts/not-yet-saved`];
+    for (const path of paths) {
+      const pending = await fetch(`${origin}${path}`, { headers });
+      expect(pending.status).toBe(503);
+      expect(pending.headers.get('retry-after')).toBe('1');
+      expect(pending.headers.get('cache-control')).toBe('no-store');
+      expect(await pending.json()).toEqual({ status: 'unavailable',
+        reason: 'permissions_applying' });
+    }
+    await applyOwnership();
+    const available = await fetch(`${origin}/api/memory/scopes`, { headers });
+    expect(available.status).toBe(200);
+    expect(await available.json()).toMatchObject({ scopes: [
+      { scopeKind: 'person', ownerId: 'bootstrap-owner', canRead: true, canWrite: true },
+    ] });
+    const facts = await fetch(`${origin}/api/memory/${scopeId}/facts`, { headers });
+    expect(facts.status).toBe(200);
+    expect(await facts.json()).toMatchObject({ facts: [], returnedCount: 0 });
   }, 60_000);

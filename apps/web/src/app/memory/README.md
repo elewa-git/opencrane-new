@@ -6,6 +6,10 @@ own facts.
 
 ## What it is responsible for
 
+Memory shows “Setting up your memory...” while saved membership permissions are
+still being applied. It retries reads for up to 30 seconds, then shows the usual
+unavailable message. Refused access and other errors appear straight away.
+
 - Lists permitted memory scopes, meaning whose saved facts are shown, with search and more pages.
 - Reads a fact and its source status separately, and links to a source conversation when permitted.
 - Checks text before saving, offers preferences only in personal memory and confirms a saved fact with the server's result.

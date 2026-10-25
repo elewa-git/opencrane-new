@@ -1,11 +1,55 @@
-import { isDetail, type Detail, type Scope, type Source } from './memory-panel-data';
+import { isObject, isDetail, type Detail, type Scope, type Source } from './memory-panel-data';
 
 export type DetailRead = { kind: 'ok'; detail: Exclude<Detail, { status: 'unavailable' }> } |
   { kind: 'access' } | { kind: 'missing'; reason: string } | { kind: 'unavailable' };
 export type JsonRead = { kind: 'ok'; body: unknown } | { kind: 'access' } |
   { kind: 'invalid' } | { kind: 'conflict' } | { kind: 'missing' } | { kind: 'unavailable' };
 
-export async function readJson(url: string, signal: AbortSignal): Promise<JsonRead> {
+type ApplyingRead = { kind: 'applying'; retryAfterMs: number };
+
+export async function readJson(url: string, signal: AbortSignal,
+  onApplying?: () => void): Promise<JsonRead> {
+  const timeout = new AbortController();
+  const requestSignal = AbortSignal.any([signal, timeout.signal]);
+  function stopReading() {
+    timeout.abort();
+  }
+  const timer = window.setTimeout(stopReading, 30_000);
+  let backoffMs = 1000;
+  try {
+    while (!requestSignal.aborted) {
+      const reply = await readOnce(url, requestSignal);
+      if (requestSignal.aborted) break;
+      if (reply.kind !== 'applying') return reply;
+      onApplying?.();
+      const delayMs = Math.max(backoffMs, reply.retryAfterMs);
+      await waitForPermissions(delayMs, requestSignal);
+      backoffMs = Math.min(backoffMs * 2, 5000);
+    }
+    return { kind: 'unavailable' };
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function waitForPermissions(delayMs: number, signal: AbortSignal): Promise<void> {
+  function wait(resolve: () => void) {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    function finish() {
+      window.clearTimeout(timer);
+      signal.removeEventListener('abort', finish);
+      resolve();
+    }
+    const timer = window.setTimeout(finish, delayMs);
+    signal.addEventListener('abort', finish, { once: true });
+  }
+  await new Promise<void>(wait);
+}
+
+async function readOnce(url: string, signal: AbortSignal): Promise<JsonRead | ApplyingRead> {
   try {
     const response = await fetch(url, {
       signal, headers: { accept: 'application/json' },
@@ -15,6 +59,16 @@ export async function readJson(url: string, signal: AbortSignal): Promise<JsonRe
     }
     if (response.status === 409) return { kind: 'conflict' };
     if (response.status === 422) return { kind: 'invalid' };
+    if (response.status === 503) {
+      const body: unknown = await response.json();
+      if (isObject(body) && body['status'] === 'unavailable' &&
+          body['reason'] === 'permissions_applying') {
+        const seconds = Number(response.headers.get('retry-after'));
+        let retryAfterMs = 1000;
+        if (Number.isFinite(seconds) && seconds > 0) retryAfterMs = Math.min(seconds * 1000, 30_000);
+        return { kind: 'applying', retryAfterMs };
+      }
+    }
     if (!response.ok) return { kind: 'unavailable' };
     const body: unknown = await response.json();
     return { kind: 'ok', body };

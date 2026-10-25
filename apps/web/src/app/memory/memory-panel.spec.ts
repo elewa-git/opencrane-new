@@ -35,6 +35,7 @@ function requestUrl(input: RequestInfo | URL | undefined): string {
 afterEach(resetTestEnvironment);
 
 function resetTestEnvironment(): void {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   TestBed.resetTestingModule();
@@ -476,3 +477,127 @@ it('waits for Retry-After and retries only a definitely busy command', async () 
   expect(calls[3]?.[1]?.method).toBe('POST');
   expect(calls[2]?.[1]?.body).toBe(calls[3]?.[1]?.body);
 });
+
+function applyingResponse(): Response {
+  const body = { status: 'unavailable', reason: 'permissions_applying' };
+  return new Response(JSON.stringify(body), { status: 503, headers: { 'retry-after': '1' } });
+}
+
+it('shows setup while scopes permissions apply, then loads without another action',
+  async function scopesApplying() {
+    vi.useFakeTimers();
+    stubReplies(applyingResponse(), response(200, { scopes: [personalScope()] }),
+      response(200, { scopeId: 'scope', facts: [], returnedCount: 0, nextCursor: null }));
+    const fixture = createPanel();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+    expect(visibleText(fixture)).toContain('Setting up your memory...');
+    expect(visibleText(fixture)).not.toContain('Memory is unavailable');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    fixture.detectChanges();
+    expect(visibleText(fixture)).toContain('No facts have been saved');
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+it.each([401, 403, 404])('shows refusal %s at once without retrying it',
+  async function refusalWithoutRetry(status) {
+    vi.useFakeTimers();
+    stubReplies(response(status, { status: 'refused', reason: 'permissions_applying' }));
+    const fixture = createPanel();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+    expect(visibleText(fixture)).toContain('Access changed');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+it('shows a real outage at once without retrying it', async function outageWithoutRetry() {
+  vi.useFakeTimers();
+  stubReplies(response(503, { status: 'unavailable', reason: 'memory_unavailable' }));
+  const fixture = createPanel();
+  fixture.detectChanges();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  expect(visibleText(fixture)).toContain('Memory is unavailable');
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('stops waiting after thirty seconds with bounded backoff', async function setupDeadline() {
+  vi.useFakeTimers();
+  function stillApplying(): Promise<Response> {
+    return Promise.resolve(applyingResponse());
+  }
+  vi.stubGlobal('fetch', vi.fn(stillApplying));
+  const fixture = createPanel();
+  fixture.detectChanges();
+  await vi.advanceTimersByTimeAsync(999);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  await vi.advanceTimersByTimeAsync(26_999);
+  fixture.detectChanges();
+  expect(visibleText(fixture)).toContain('Setting up your memory...');
+  await vi.advanceTimersByTimeAsync(1);
+  fixture.detectChanges();
+  expect(visibleText(fixture)).toContain('Memory is unavailable');
+  const requestsAtDeadline = vi.mocked(fetch).mock.calls.length;
+  expect(requestsAtDeadline).toBeLessThanOrEqual(9);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(fetch).toHaveBeenCalledTimes(requestsAtDeadline);
+});
+
+it('cancels setup retries when the panel is destroyed', async function cancelSetup() {
+  vi.useFakeTimers();
+  stubReplies(applyingResponse());
+  const fixture = createPanel();
+  fixture.detectChanges();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.destroy();
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('waits for the first facts read when permissions are still applying',
+  async function firstFactsApplying() {
+    vi.useFakeTimers();
+    stubReplies(response(200, { scopes: [personalScope()] }), applyingResponse(),
+      response(200, { scopeId: 'scope', facts: [fact('A saved personal fact')],
+        returnedCount: 1, nextCursor: null }));
+    const fixture = createPanel();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+    expect(visibleText(fixture)).toContain('Setting up your memory...');
+    await vi.advanceTimersByTimeAsync(1000);
+    fixture.detectChanges();
+    expect(visibleText(fixture)).toContain('A saved personal fact');
+  });
+
+it('waits for the first detail read when permissions are still applying',
+  async function firstDetailApplying() {
+    stubReplies(response(200, { scopes: [personalScope()] }),
+      response(200, { scopeId: 'scope', facts: [fact('A saved personal fact')],
+        returnedCount: 1, nextCursor: null }), applyingResponse(),
+      response(200, { scopeId: 'scope', fact: fact('A saved personal fact'), sources: [],
+        canForget: false, canCorrect: false }));
+    const fixture = await loadPanel();
+    vi.useFakeTimers();
+    const button = pageElement(fixture).querySelector<HTMLButtonElement>('button.fact');
+    if (!button) throw new Error('Missing saved fact');
+    button.click();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+    expect(visibleText(fixture)).toContain('Setting up your memory...');
+    await vi.advanceTimersByTimeAsync(1000);
+    fixture.detectChanges();
+    expect(visibleText(fixture)).not.toContain('Setting up your memory...');
+    expect(visibleText(fixture)).toContain('No source was recorded');
+  });
