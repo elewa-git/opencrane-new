@@ -188,7 +188,11 @@ copies; changing them cannot renew or alter the loaded facts.
 
 Concurrent successful requests use separate buffers and processes. Any failed or
 cancelled request retires the whole handle and stops its containers, also refusing
-other pending requests. Killing the Docker client alone cannot prove its remote
+other pending requests. Transport failures retire it when detected, without waiting
+for the Docker client's close event. The failed request waits for container cleanup
+before rejecting and gives the killed client up to 30 seconds to close. It still
+rejects after cleanup finishes if the client never closes.
+Killing the Docker client alone cannot prove its remote
 process stopped. Cleanup retains its separate limits and ownership record until
 removal succeeds. Failed cleanup blocks reuse, including another launch at that
 ownership path. Per-request recovery without retiring the daemon is not provided.

@@ -648,7 +648,8 @@ async function retiresBeforeChildCloses(reason) {
   spawn.mockImplementation(hangingScanProcess);
   const controller = new AbortController();
   const firstInput = { ...request(), signal: controller.signal };
-  const first = session.scan(firstInput).catch(scanError);
+  const firstPending = session.scan(firstInput);
+  const first = firstPending.catch(scanError);
   let firstSettled = false;
   function markFirstSettled() {
     firstSettled = true;
@@ -661,7 +662,8 @@ async function retiresBeforeChildCloses(reason) {
   // Give the second request a later deadline so only the first request times out.
   now += 1000;
   await vi.advanceTimersByTimeAsync(1000);
-  const second = session.scan(request()).catch(scanError);
+  const secondPending = session.scan(request());
+  const second = secondPending.catch(scanError);
   await vi.advanceTimersByTimeAsync(0);
   await completeScanProcess(children[2], runningState);
   const secondTransfer = children[3];
@@ -675,7 +677,8 @@ async function retiresBeforeChildCloses(reason) {
     hangingChild.stdout.emit('data', Buffer.alloc(4097));
   }
 
-  const third = session.scan(request()).catch(scanError);
+  const thirdPending = session.scan(request());
+  const third = thirdPending.catch(scanError);
   expect(spawn).toHaveBeenCalledTimes(4);
   expect(hangingChild.kill).toHaveBeenCalledWith('SIGKILL');
   expect(secondTransfer.kill).toHaveBeenCalledWith('SIGKILL');

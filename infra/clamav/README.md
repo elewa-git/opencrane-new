@@ -76,7 +76,8 @@ readiness check refuses expired databases; restarting never makes them newer.
 Startup shares one time limit across all Docker calls, so a slow Docker service
 cannot give each step a fresh allowance. Cleanup has its own limit.
 Each scan shares one minute across its checks and byte transfer. Failed or cancelled
-scans retire the handle and stop its containers, including other pending scans.
+scans immediately retire the handle and stop its containers, including other pending scans.
+The failed request waits for container cleanup, even if its Docker client never closes.
 This confirms that a remote scan has stopped before the ownership record is removed.
 Failed removal keeps that record and blocks reuse. No file bytes or raw scanner
 replies are saved or returned.

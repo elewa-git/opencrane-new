@@ -31,7 +31,7 @@ function frameBytes(bytes) {
   return { framed: Buffer.concat(frames), sha256: digest.digest('hex'), byteCount };
 }
 
-function runRequest(args, bytes, remaining, signal) {
+function runRequest(args, bytes, remaining, signal, stop) {
   function execute(resolve, reject) {
     const options = { stdio: ['pipe', 'pipe', 'pipe'] };
     const child = spawn('docker', args, options);
@@ -39,13 +39,33 @@ function runRequest(args, bytes, remaining, signal) {
     let size = 0;
     let failed = false;
     let supplied = false;
+    let finishCleanup;
+    let cleanupTimer;
 
+    function refuse() {
+      reject(new Error(refusal));
+    }
+    function waitForChild(resolve) {
+      finishCleanup = resolve;
+      cleanupTimer = setTimeout(resolve, 30000);
+    }
     function fail() {
+      if (failed) {
+        return;
+      }
       failed = true;
+      clearTimeout(timer);
+      signal.removeEventListener('abort', fail);
+      const clientClosed = new Promise(waitForChild);
+      // Refuse all scans now, even if this Docker client never reports close.
+      const cleanup = stop();
       child.stdin.destroy();
       child.stdout.destroy();
       child.stderr.destroy();
       child.kill('SIGKILL');
+      // Wait for container removal and give the killed client at most 30 seconds to close.
+      const completed = Promise.allSettled([clientClosed, cleanup]);
+      void completed.then(refuse);
     }
     function read(chunk) {
       size += chunk.length;
@@ -64,8 +84,13 @@ function runRequest(args, bytes, remaining, signal) {
     function closed(code) {
       clearTimeout(timer);
       signal.removeEventListener('abort', fail);
-      if (failed || code !== 0 || !supplied) {
-        reject(new Error(refusal));
+      if (failed) {
+        clearTimeout(cleanupTimer);
+        finishCleanup();
+        return;
+      }
+      if (code !== 0 || !supplied) {
+        refuse();
         return;
       }
       resolve(Buffer.concat(chunks).toString('utf8'));
@@ -112,14 +137,14 @@ export function createScanOperation(context) {
       }
       async function inspect() {
         const args = ['inspect', '--format', stateFormat, scanner];
-        const observed = await runRequest(args, undefined, remaining(), cancelled);
+        const observed = await runRequest(args, undefined, remaining(), cancelled, stop);
         remaining();
         requireScan(observed.trim() === state);
       }
 
       await inspect();
       const args = ['exec', '-i', scanner, 'nc', '127.0.0.1', '3310'];
-      const reply = await runRequest(args, supplied.framed, remaining(), cancelled);
+      const reply = await runRequest(args, supplied.framed, remaining(), cancelled, stop);
       remaining();
       let verdict;
       if (reply === 'stream: OK\0') {
