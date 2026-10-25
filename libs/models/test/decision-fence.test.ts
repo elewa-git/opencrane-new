@@ -386,7 +386,7 @@ async function callGatewayRoute(setup: Fixture, route: 'model' | 'mcp') {
 async function refusesAfterGatewayTimeout(route: 'model' | 'mcp') {
   const setup = await fixture();
   const read = setup.nats.store.readStream.bind(setup.nats.store);
-  const append = setup.nats.store.append.bind(setup.nats.store);
+  const append = setup.nats.store.appendOutcome.bind(setup.nats.store);
   const recorded = Promise.withResolvers<unknown>();
   const savedEventTypes: string[] = [];
   let historyDelayed = false;
@@ -417,7 +417,7 @@ async function refusesAfterGatewayTimeout(route: 'model' | 'mcp') {
     await prepareRoute(setup, route);
     const reads = vi.spyOn(setup.nats.store, 'readStream');
     reads.mockImplementation(delayDecisionPastGatewayTimeout);
-    const writes = vi.spyOn(setup.nats.store, 'append');
+    const writes = vi.spyOn(setup.nats.store, 'appendOutcome');
     writes.mockImplementation(recordDecision);
     try {
       const response = await callGatewayRoute(setup, route);

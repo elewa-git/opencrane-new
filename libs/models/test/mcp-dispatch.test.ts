@@ -633,7 +633,7 @@ async function checksAdmissionOrder(stopped: boolean) {
   try {
     const headers = await prepare(setup);
     const value = await permit(setup, headers);
-    const append = setup.nats.store.append.bind(setup.nats.store);
+    const append = setup.nats.store.appendOutcome.bind(setup.nats.store);
     const order: string[] = [];
     async function stopAfterBudgetAdmission(command: AppendCommand) {
       const result = await append(command);
@@ -650,7 +650,7 @@ async function checksAdmissionOrder(stopped: boolean) {
       }
       return result;
     }
-    const writer = vi.spyOn(setup.nats.store, 'append');
+    const writer = vi.spyOn(setup.nats.store, 'appendOutcome');
     writer.mockImplementation(stopAfterBudgetAdmission);
     try {
       const response = await send(setup, value);
@@ -3278,7 +3278,7 @@ async function logsPrivateAdmissionRefusal(known: boolean) {
     port, setup.keys, undefined, setup.dispatchOptions, undefined, logger);
   onTestFinished(decision.close);
   const value = await permit(setup, headers);
-  const append = setup.nats.store.append.bind(setup.nats.store);
+  const append = setup.nats.store.appendOutcome.bind(setup.nats.store);
   const canary = 'PRIVATE_ADMISSION_CANARY';
   async function refuseAdmission(command: AppendCommand) {
     const event = z.object({ type: z.string() }).parse(command.event);
@@ -3288,7 +3288,7 @@ async function logsPrivateAdmissionRefusal(known: boolean) {
     }
     return append(command);
   }
-  const writer = vi.spyOn(setup.nats.store, 'append').mockImplementation(refuseAdmission);
+  const writer = vi.spyOn(setup.nats.store, 'appendOutcome').mockImplementation(refuseAdmission);
   onTestFinished(writer.mockRestore.bind(writer));
   const response = await send(setup, value);
   expect(response.status).toBe(403);
@@ -3308,3 +3308,36 @@ async function logsPrivateAdmissionRefusal(known: boolean) {
 }
 it.each([false, true])('logs only fixed private dispatch refusal details, known: %s',
   logsPrivateAdmissionRefusal);
+
+async function transfersExactDispatchDeadline() {
+  const setup = await fixture();
+  try {
+    const headers = await prepare(setup);
+    const value = await permit(setup, headers);
+    const reads = vi.spyOn(setup.nats.store, 'head');
+    const admissions = vi.spyOn(setup.actor, 'admitDispatch');
+    onTestFinished(reads.mockRestore.bind(reads));
+    onTestFinished(admissions.mockRestore.bind(admissions));
+    const started = performance.now();
+    const response = await send(setup, value);
+    expect(response.status, await response.text()).toBe(200);
+    expect(admissions).toHaveBeenCalledTimes(1);
+    const checkAccess = admissions.mock.calls[0]![1];
+    const deadline = Reflect.get(checkAccess, 'deadline') as unknown;
+    expect(deadline).toBeGreaterThan(started);
+    expect(deadline).toBeLessThanOrEqual(started + 2000);
+    function isDispatchRead(parameters: Parameters<typeof setup.nats.store.head>) {
+      return parameters[0] === 'mcp-fixture';
+    }
+    const dispatchReads = reads.mock.calls.filter(isDispatchRead);
+    expect(dispatchReads.length).toBeGreaterThan(0);
+    for (const parameters of dispatchReads) {
+      expect(parameters[1]).toBe(deadline);
+    }
+    expect(setup.received()).toBe(1);
+  } finally {
+    await setup.close();
+  }
+}
+it('transfers the exact dispatch deadline to the budget access callback',
+  transfersExactDispatchDeadline);

@@ -107,9 +107,9 @@ it('keeps an earlier lost reply uncertain after a later rejection and read timeo
 async function reportsTransportFailure(sent: boolean) {
   const cause = new TimeoutError();
   const controller = new AbortController();
-  async function loseTransport(): Promise<never> {
+  function loseTransport(): Promise<never> {
     controller.abort(cause);
-    throw cause;
+    return Promise.reject(cause);
   }
   vi.spyOn(client, 'publish').mockImplementation(loseTransport);
   if (!sent) controller.abort(cause);

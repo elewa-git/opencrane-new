@@ -664,7 +664,7 @@ it('refuses current-writer proof whose matching position arrives at the deadline
   currentProofDeadline);
 
 async function currentProofWaitsForAppend() {
-  const append = nats.store.append.bind(nats.store);
+  const append = nats.store.appendOutcome.bind(nats.store);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   async function holdReply(command: Parameters<typeof append>[0]) {
@@ -1226,7 +1226,7 @@ async function keepsWriterAfterTransportFailure() {
     throw new TimeoutError();
   }
   reads.mockImplementationOnce(failRead);
-  await expect(reserve()).rejects.toThrow('TIMEOUT');
+  await expect(reserve()).rejects.toThrow(TimeoutError);
   expect(writes).toHaveBeenCalledTimes(1);
   await reserve();
   expect(reads).toHaveBeenCalledWith('budget-test', before + 1, expect.any(Number));
@@ -1235,3 +1235,55 @@ async function keepsWriterAfterTransportFailure() {
 }
 it('rechecks unknown transport state before the next request and keeps failed reads retryable',
   keepsWriterAfterTransportFailure);
+
+async function keepsFallbackDeadline() {
+  const reservationId = await reserve(false, 'fallback-deadline');
+  const reservation = actor.state.reservations[0]!;
+  const admission = { callId: 'fallback-deadline', decisionId: 'fallback-decision',
+    bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
+  const started = performance.now();
+  const decisionClock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  onTestFinished(decisionClock.mockRestore.bind(decisionClock));
+  const writes = vi.spyOn(nats.store, 'appendOutcome');
+  onTestFinished(writes.mockRestore.bind(writes));
+  writes.mockResolvedValueOnce({ status: 'conditional_rejection_unchanged' });
+  let checks = 0;
+  function checkAccess() {
+    checks += 1;
+    if (checks === 2) decisionClock.mockReturnValue(started + 2000);
+    return Promise.resolve();
+  }
+  await expect(actor.admitDispatch(admission, checkAccess))
+    .rejects.toThrow('Authority snapshot expired');
+  expect(checks).toBe(2);
+  expect(writes).toHaveBeenCalledTimes(1);
+  expect(writes.mock.calls[0]![0].deadline).toBe(started + 2000);
+  expect(actor.state.dispatches).toHaveLength(0);
+  decisionClock.mockRestore();
+  await reserve();
+  expect(actor.state.reservations).toHaveLength(2);
+}
+it('keeps the fallback two-second deadline and checks expiry after the callback returns',
+  keepsFallbackDeadline);
+
+async function refusesForeignSwitchOn(field: 'silo' | 'subject') {
+  const before = await nats.store.head('budget-test');
+  const payload = { providerId: 'primary', revision: 1, changedBy: 'alice',
+    expectedProviderSequence: 0 };
+  const original = envelope('test', 'budget-test', 'provider.managed_calls_enabled', payload);
+  const event = { ...original, [field]: field === 'silo' ? 'foreign' : 'budget-foreign' };
+  async function* foreignRow() {
+    yield { sequence: before + 1, event };
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementationOnce(foreignRow);
+  const writes = vi.spyOn(nats.store, 'appendOutcome');
+  writes.mockResolvedValueOnce({ status: 'conditional_rejection_changed' });
+  onTestFinished(reads.mockRestore.bind(reads));
+  onTestFinished(writes.mockRestore.bind(writes));
+  await expect(reserve()).rejects.toThrow('Budget writer lost its fence');
+  await expect(reserve()).rejects.toThrow('Budget writer unavailable');
+  expect(await nats.store.head('budget-test')).toBe(before);
+  expect(actor.state.reservations).toHaveLength(0);
+}
+it.each(['silo', 'subject'] as const)(
+  'stops a writer when switch-on recovery returns a foreign %s', refusesForeignSwitchOn);
