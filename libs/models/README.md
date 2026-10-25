@@ -528,6 +528,8 @@ The stream keeps only references and exact storage identities. Saved profiles re
 unavailable for tool calls until their upstream account identity can be checked.
 Owners can revoke their own profiles through the server. The command returns the
 original receipt for an exact retry, without revoking anything at the provider.
+It checks current permission once after preparing the saved history, including when
+that history could not be loaded. A permission refusal takes precedence over a history error.
 Admins can block a member's personal connections to one server, including later
 reconnects with a new profile. Both changes keep the
 stored token until cleanup can prove deletion is safe.

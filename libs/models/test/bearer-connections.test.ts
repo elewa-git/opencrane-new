@@ -282,6 +282,8 @@ async function finalRevokeCheck(outcome: string) {
   const head = nats.store.head.bind(nats.store);
   let permitted = false;
   let finalReads = 0;
+  let pendingReads = 0;
+  let expired = false;
   async function permission(this: TupleClient, tuple: Tuple) {
     const result = await check.call(this, tuple);
     if (tuple.relation === 'member' && result.allowed) {
@@ -290,16 +292,22 @@ async function finalRevokeCheck(outcome: string) {
     return result;
   }
   async function changedHead(subject?: string, deadline?: number) {
+    pendingReads += 1;
     const sequence = await head(subject, deadline);
+    pendingReads -= 1;
     if (permitted && subject === 'member-alice') {
       finalReads += 1;
       if (finalReads === 2) {
         if (outcome === 'expired') {
-          vi.spyOn(performance, 'now').mockReturnValue(deadline! + 1);
+          expired = true;
         } else {
-          return sequence + 1;
+          return created.sequence + 1;
         }
       }
+    }
+    // Finish concurrent position reads before advancing the access check's clock.
+    if (expired && pendingReads === 0) {
+      vi.spyOn(performance, 'now').mockReturnValue(deadline! + 1);
     }
     return sequence;
   }
@@ -331,7 +339,7 @@ async function invalidRevokeReadback(field: string) {
           return;
         }
         if (field === 'principal kind') {
-          row.event.principal = { kind: 'service', id: 'alice' };
+          row.event.principal = { kind: 'system', id: 'alice' };
         } else if (field === 'principal id') {
           row.event.principal = { kind: 'human', id: 'bob' };
         } else if (field === 'data') {

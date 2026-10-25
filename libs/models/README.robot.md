@@ -2014,7 +2014,10 @@ Only a later explicit admin enable could remove it; no enable command exists her
 
 Each command makes one conditional append. The original change reference recovers its
 confirmed receipt after a lost reply, but changed retry details conflict. Membership is
-checked again on retries. No token is read or returned, and neither command deletes one.
+checked once after preparation on both new requests and retries. Saved-history and
+target failures wait for that permission decision, so a refusal takes precedence.
+The final freshness and deadline checks still guard the conditional append.
+No token is read or returned, and neither command deletes one.
 Save checks the control stream before staging and again in its short access check.
 It captures the `connection-*` category position before the final control and profile
 revision checks. Its one native conditional append requires that category position to

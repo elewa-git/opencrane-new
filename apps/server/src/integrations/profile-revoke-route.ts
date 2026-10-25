@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { changePersonalConnection, readActiveMember, MemberAccessRefused }
+import { changePersonalConnection, MemberAccessRefused }
   from '@opencrane/models';
 import { z } from 'zod';
 import type { GroupOptions } from '../members/group-routes.ts';
@@ -45,10 +45,11 @@ export function registerConnectionProfileRevoke(app: FastifyInstance, config: Au
         const receipt = await changePersonalConnection(options.store, options.binding,
           memberId, input);
         return reply.send(receipt);
-      } catch {
-        // Check removal during preparation before returning any command failure.
-        await readActiveMember(options.store, options.binding, memberId);
-        // Keep uncertain appends and dependency failures private; recover through the receipt GET.
+      } catch (error) {
+        if (error instanceof MemberAccessRefused) {
+          throw error;
+        }
+        // Keep command failures private without repeating its permission decision.
         return reply.code(503).send({ status: 'unavailable' });
       }
     } catch (error) {

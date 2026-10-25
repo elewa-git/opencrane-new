@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import type { FastifyRequest } from 'fastify';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { TupleClient, type Tuple } from '../../../libs/authz/src/client.ts';
@@ -257,6 +258,12 @@ async function invalidHistory(kind: string) {
             profile: fixture.profileId, secretRef: data.secretRef };
         } else if (kind === 'silo') {
           row.event.silo = 'foreign';
+        } else if (['userId', 'serverId', 'profile'].includes(kind)) {
+          Object.assign(data, { [kind]: 'different' });
+          data.activation.changedBy = data.userId;
+          row.event.principal = { kind: 'human', id: data.userId };
+          row.event.subject = `connection-${data.userId}-${data.serverId}-${data.profile}`;
+          row.event.data = data;
         } else {
           data.activation.ownerKind = kind;
           data.activation.purpose = kind;
@@ -267,17 +274,19 @@ async function invalidHistory(kind: string) {
     }
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(replace);
+  const writes = vi.spyOn(nats.store, 'append');
   const position = await nats.store.head();
   try {
     const response = await post(fixture.url, revoke(fixture));
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(writes).not.toHaveBeenCalled();
     expect(await nats.store.head()).toBe(position);
   } finally {
     vi.restoreAllMocks();
   }
 }
-it.each(['legacy', 'company', 'validation', 'silo'])(
+it.each(['legacy', 'company', 'validation', 'silo', 'userId', 'serverId', 'profile'])(
   'refuses %s records without an append', invalidHistory);
 
 async function loading(outcome: string) {
@@ -378,6 +387,7 @@ async function onePermissionCheck(outcome: string) {
   const check = TupleClient.prototype.check;
   let prepared = false;
   let checks = 0;
+  let prematureChecks = 0;
   let denied = false;
   async function* prepare(subject: string, from?: number, deadline?: number) {
     if (subject === fixture.subject) {
@@ -394,6 +404,9 @@ async function onePermissionCheck(outcome: string) {
   async function permission(this: TupleClient, tuple: Tuple) {
     if (tuple.relation === 'member') {
       checks += 1;
+      if (!prepared) {
+        prematureChecks += 1;
+      }
       if (denied) {
         throw new Error(privateCanary);
       }
@@ -426,6 +439,7 @@ async function onePermissionCheck(outcome: string) {
       expect(denied).toBe(true);
     }
     expect(prepared).toBe(true);
+    expect(prematureChecks).toBe(0);
     expect(checks).toBe(1);
     expect(writes).toHaveBeenCalledTimes(expectedWrites);
   } finally {
@@ -457,3 +471,62 @@ async function missingSetup(knownMember: boolean) {
   }
 }
 it.each([false, true])('refuses missing configuration or member lookup (member: %s)', missingSetup);
+
+async function strictRouteParameters(patch: object) {
+  const fixture = await saved();
+  const position = await nats.store.head();
+  await app.close();
+  app = startApp();
+  function replaceParameters(request: FastifyRequest) {
+    // Reach the handler's validation independently of the router's path limit.
+    request.params = { serverId: fixture.serverId, profileId: fixture.profileId, ...patch };
+    return Promise.resolve();
+  }
+  app.addHook('onRequest', replaceParameters);
+  const writes = vi.spyOn(nats.store, 'append');
+  try {
+    const response = await post(fixture.url, revoke(fixture));
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(writes).not.toHaveBeenCalled();
+    expect(await nats.store.head()).toBe(position);
+  } finally {
+    vi.restoreAllMocks();
+    await app.close();
+    app = startApp();
+  }
+}
+it.each([{ serverId: 'x'.repeat(201) }, { profileId: 'x'.repeat(201) }, { extra: 'value' }])(
+  'refuses invalid handler parameters %j before appending', strictRouteParameters);
+
+async function simultaneousRevokes() {
+  const fixture = await saved();
+  const input = revoke(fixture);
+  const append = nats.store.append.bind(nats.store);
+  const ready = Promise.withResolvers<void>();
+  let attempts = 0;
+  async function together(command: Parameters<typeof append>[0]) {
+    attempts += 1;
+    if (attempts === 2) {
+      ready.resolve();
+    }
+    await ready.promise;
+    return append(command);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(together);
+  try {
+    const requests = [post(fixture.url, input), post(fixture.url, input)];
+    const [first, second] = await Promise.all(requests);
+    expect(first!.statusCode).toBe(200);
+    expect(second!.statusCode).toBe(200);
+    expect(second!.json()).toEqual(first!.json());
+    expect(attempts).toBe(2);
+  } finally {
+    vi.restoreAllMocks();
+  }
+  const rows = await history(nats.store, fixture.subject, 'test');
+  expect(rows).toHaveLength(2);
+  expect(rows[1]!.event.type).toBe('connection.revoked');
+  expect(foldConnection(rows).status).toBe('unavailable');
+}
+it('recovers one saved receipt when two HTTP revokes reach append together', simultaneousRevokes);

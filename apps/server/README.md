@@ -132,6 +132,8 @@ credentials does not verify an upstream identity or enable calls.
 Members can revoke their own saved personal account. This stops its local use; it does
 not prove that the provider revoked its token. Retrying the same change returns the
 original receipt without saving another event.
+The server checks current permission once after loading the saved account. A refusal
+stays refused even if the permissions service later fails.
 
 Members can recover the original receipt for a personal account save, rotation or revocation.
 Later changes do not replace that receipt. It confirms a local change; whether the profile
