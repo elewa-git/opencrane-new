@@ -1,0 +1,1 @@
+- NATS servers can use a separate cluster configuration that authenticates peer routes with mutual TLS and a route-only certificate issuer, while retaining existing client permissions. Disposable three-server checks cover three event copies, conditional writes and projection replay; live installation and failure drills remain unqualified.

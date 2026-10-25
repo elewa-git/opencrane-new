@@ -25,7 +25,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.->|saves and reads| store
   ops["apps/ops<br/>background workers"] -->|saves and reads| store
   projections["libs/projections<br/>read tables"] -.->|reads the log| store
-  store -->|stores the log| nats["NATS JetStream<br/>event service"]
+  store -->|stores the log| nats["NATS JetStream<br/>saved event copies"]
   store -.->|checks event shapes| events["libs/events<br/>event definitions"]
 ```
 
@@ -63,7 +63,8 @@ flowchart LR
 Tests share a helper that chooses unused listening ports outside the ranges used
 by outgoing connections and the secondary dev stacks. Each fixture starts its own
 NATS server and keeps its own event history, while reusing certificates to reduce
-setup time.
+setup time. A separate cluster test checks authenticated connections between
+three NATS servers, conditional writes and rebuilding a PostgreSQL read table.
 
 These commands run from the repository root. The test command fetches the required
 tools before running the tests. The helper `wireSubject` turns an event stream
