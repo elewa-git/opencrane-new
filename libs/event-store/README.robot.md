@@ -454,7 +454,6 @@ The older `test/backup.test.ts` remains a separate command-idempotency regressio
 The [operator contract](../../infra/package/README.robot.md#event-byte-export)
 records limits and the later coordinated-backup work.
 
-
 The operator restore tests in `test/event-restore.test.ts` use the package helper
 with an unprovisioned target. They check source and restored event proof, refusal
 without deletion, lost completion, client restart and command history after native

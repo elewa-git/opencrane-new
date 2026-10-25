@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expect, it, vi } from 'vitest';
 import { jetstream, jetstreamManager } from '@nats-io/jetstream';
-import { createEventStore } from '../src/index.ts';
+import { createEventStore, decodeEvent } from '../src/index.ts';
 import { collectEventBackup, descriptorSchema } from '../../../infra/package/event-backup.ts';
 import { restoreEventBackup } from '../../../infra/package/event-restore.ts';
 import { event, natsFixture } from './testing.ts';
@@ -20,8 +20,8 @@ async function fixture() {
   const target = await natsFixture({ provision: false });
   const directory = await mkdtemp(join(tmpdir(), 'event-restore-'));
   const destination = join(directory, 'backup');
-  const original = event('original');
-  original.data['displayName'] = canary;
+  const example = event('original');
+  const original = { ...example, data: { ...example.data, displayName: canary } };
   await source.store.append({ event: original, expectedSequence: 0 });
   await source.store.append({ event: event('other', 'member-bob'), expectedSequence: 0 });
   await source.store.append({ event: event('later'), expectedSequence: 1 });
@@ -143,8 +143,8 @@ async function refusesUncertainTransfer(fault: typeof transferFaults[number]) {
       delivery = reply.json<{ deliver_subject?: string }>().deliver_subject ?? '';
     }
     if (subject === '$JS.API.STREAM.MSG.GET.EVENTS' && fault === 'wrong-order') {
-      const data = reply.json<{ message: { data: string } }>();
-      const body = JSON.parse(Buffer.from(data.message.data, 'base64').toString()) as object;
+      const data = reply.json<{ message: { data: string; subject: string } }>();
+      const body = decodeEvent(Buffer.from(data.message.data, 'base64'), data.message.subject);
       const changed = { ...body, id: 'changed-restored-id' };
       data.message.data = Buffer.from(JSON.stringify(changed)).toString('base64');
       reply.data = Buffer.from(JSON.stringify(data));
