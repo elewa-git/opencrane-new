@@ -39,7 +39,8 @@ change the saved approval state or allow another use.
 
 A requester can choose one retry when trusted saved evidence proves a remote tool
 was refused before connecting. Current permissions and the reviewed request must
-still match. An ordinary error reply cannot restore approval.
+still match. An ordinary error reply cannot restore approval. If two calls try to
+use the retry, the refused call reports that the approval has already been used.
 
 Approval decisions check ownership and current write access before saving a cancellation.
 Approval polling saves cancellation when a saved takeover covers an unused approval.

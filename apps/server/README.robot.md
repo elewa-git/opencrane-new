@@ -5509,6 +5509,10 @@ The [models contract](../../libs/models/README.robot.md#approval-retry-after-an-
 describes the exact bindings and one-second evidence limit.
 
 `integration-access-gateway.test.ts` races two explicit retry calls after each refusal.
+Both read the restored approval before either can consume it. Each HTTP response is
+matched to its own saved decision by call id, including during a concurrent request.
+A second pair of cases charges 300 ms per full member-history read. These reproduce
+two 403 responses before the request-scoped history reuse and saved-state readback.
 It checks one successful call, one refused call, one upstream send, two saved consent
 uses, one budget admission and no later send. Free calls retain zero held and settled
 cents. Missing/lost starts and incomplete observations keep retry unavailable.

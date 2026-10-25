@@ -32,7 +32,9 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   const snapshotHead = fresh.head;
   const deadline = fresh.deadline;
   function readSubject(subject: string) {
-    if (readHistory) return readHistory(subject);
+    if (readHistory) {
+      return readHistory(subject);
+    }
     return readAt(store, subject, snapshotHead, deadline);
   }
   const histories = await readAuthorityHistories(subjects, readSubject, conversationRows, grants);

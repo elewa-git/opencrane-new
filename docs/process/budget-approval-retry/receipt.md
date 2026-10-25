@@ -4,7 +4,12 @@ Part of #576. Local source work on 25 October 2026. Initial checks used `c2115e9
 on main `170bc4d4a`. The branch then rebased onto main `90ec96bc6`, after #695 merged.
 Dispatch code and HTTP tests were unchanged by that rebase. The models documentation
 keeps the company opt-in contract and adds this retry behaviour.
-Fresh-install qualification: **NOT RUN**. This receipt does not clear earlier load failures.
+Fresh-install qualification: **NOT RUN**. Historical failures are retained below.
+The [follow-up diagnosis](diagnosis.md) records the failing-first reproduction and correction.
+The follow-up rebased cleanly onto `11ed0475a`; `origin/main` is an ancestor and no rebase
+state remains. Tests were committed as `3fb8584f1`, then the fix as `0c0b02438`.
+The [real-clock follow-up](follow-up-races.md) passed all 60 races, including the
+saved refusal outcome and exact consent-use, budget-admission and upstream-send counts.
 
 ## Behaviour
 
@@ -24,7 +29,7 @@ exactly two saved approval uses and one saved budget admission. Later retries se
 nothing. Paid lost-reply holds and root recovery beyond deduplication retain their
 unchanged regressions.
 
-## Local checks
+## Earlier local checks
 
 Only isolated fixtures run. No owner stack or real model is used. Tests use a disposable
 PostgreSQL 17.6 container, NATS, OpenFGA and the pinned gateway. Tests, lint and typecheck
@@ -56,7 +61,7 @@ run under `nice -n 10`. No full root suite is run.
   catalogue now has 154 matching types after #695.
 - **PASS:** full post-rebase typecheck and all 438 event-security cases.
 
-Overall local source validation is **PARTIAL**, because both failed full-file runs
+At that point, local source validation was **PARTIAL**, because both failed full-file runs
 remain recorded above. Their focused passes do not clear those failures. The
 throwaway database and its volume were removed after the checks.
 
@@ -67,7 +72,7 @@ rejects that value. Optional deadlines are now omitted unless finite. The initia
 no-connection assertion also overlooked the fixture's two discovery connections;
 it now checks that the refusal adds none. The subsequent six-case run passed.
 
-## Retained unresolved failures
+## Retained failures
 
 The earlier 29/30 saved-start run included `access_deadline_expired` at `final_access`,
 675 ms into dispatch. That explains why it refused, but not why the shared allowance
@@ -80,8 +85,10 @@ reached the original access deadline. They do not establish the cause of all sev
 failures. These remain **FAIL**, not proven timing issues. A passing local repetition
 cannot explain or erase those historical results.
 
-Fresh-install and load qualification remain **PARTIAL/FAIL** until their unresolved
-conditions are addressed. The current change supplies source checks only.
+These historical reports contain no per-request trace. The follow-up records a
+reproducible cause of the same two-403 result and checks its correction; it cannot
+recover which original request consumed consent in each of those seven runs.
+Fresh-install qualification remains **NOT RUN**. No capability-done claim is made.
 
 ## Reproduction
 

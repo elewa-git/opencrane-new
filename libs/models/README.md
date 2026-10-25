@@ -30,6 +30,9 @@ A reply does not change retry permission or prove that an outside business chang
 A remote tool start is saved before its budget check. If the call is refused before
 connecting, matching saved proof can let the requester choose one retry. Missing
 proof keeps the approval used. A retry checks current access and cannot reuse the old pass.
+Competing calls share no permission: one consumes the approval, and the other reads
+that saved outcome. Each call reuses its earlier saved history while checking live
+permissions again before sending.
 
 ## Where it fits
 

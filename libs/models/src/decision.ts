@@ -18,7 +18,8 @@ import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { authorityFence, decisionAuthorityFence, currentAuthority, authorityHistoryReader } from './authority.ts';
+import { authorityFence, decisionAuthorityFence, currentAuthority, authorityHistoryReader }
+  from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
   requireActiveConversationTurn }
