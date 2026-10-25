@@ -282,7 +282,7 @@ async function isolation() {
   expect(foreign.statusCode).toBe(403);
   expect(foreign.headers['cache-control']).toBe('no-store');
   const post = await app.inject({ method: 'POST', url: fixture.url, headers: headers() });
-  expect(post.statusCode).toBe(404);
+  expect(post.statusCode).toBe(403);
 }
 it('keeps choices private, treats missing as unknown and refuses extra input', isolation);
 

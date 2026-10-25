@@ -1,0 +1,2 @@
+- Members can explicitly save or clear their own personal tool account choice through HTTP and recover the original receipt after a lost reply. Saving a choice does not verify the account or enable credential use.
+- Removed members receive the same refusal when saving a personal account choice, including when a retry conflicts or saved history cannot be read.

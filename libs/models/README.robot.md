@@ -3385,7 +3385,7 @@ A decision-history read that crosses the expiry refuses before saving a missing 
 ## Explicit personal account selection (P3-8 PR 4a; Part of #49)
 
 Base dependency #523 landed as `e3f593bf6d41ae465e3c49cb43f7444c4120c968`.
-`connection-selection.ts` exposes internal commands and reads, with no HTTP route.
+`connection-selection.ts` exports the checked command used by the own-selection HTTP route.
 `changeConnectionSelection(store, binding, userId, input)` takes the authenticated user
 separately. Strict input has action (select/clear), serverId, connectionId, changeRef and
 expectedSequence. Select also requires profileId and the checked profileRevision.
@@ -3397,6 +3397,8 @@ The caller cannot choose another owner. Receipts contain status, sequence and ch
 broker deduplication expires. Concurrent identical commands recover the original receipt.
 
 The command reads profile, control and server facts before member/tool access checks.
+It keeps any history or conflicting-retry error until current access has been checked.
+A removed member receives the same refusal whether those reads succeed or fail.
 It checks applied grant and team receipts and watches their exact streams. The event store
 repeats the checks inside one conditional append and binds them to the global log position.
 An unrelated concurrent append can therefore refuse a save; callers may retry unchanged.
@@ -3409,7 +3411,7 @@ a cleared choice. Missing, cleared, rotated, revoked, disabled, incomplete and r
 profiles choose nothing. Selection preserves saved_unverified and never grants access,
 reads custody, calls a provider or falls back to another profile. Connecting never selects.
 Tests use bearer fixtures with real NATS, PostgreSQL and OpenFGA. Company opt-in, company
-profiles, HTTP/UI, release, dispatch and fresh-install qualification remain outside this PR.
+profiles, UI, release, dispatch and fresh-install qualification remain later work.
 
 The expired-catalogue fixture derives both dates from one timestamp. Its five-minute
 lifetime must remain valid even when the clock advances between reads. A regression
@@ -3726,4 +3728,14 @@ preceding expected position. Repeated references and malformed history never con
 The receipt describes the original select or clear, with its event id, time and position.
 Only select includes the original profile id and revision. Current tool access and profile
 usability are separate; rotation, revocation and admin blocks cannot rewrite the receipt.
-No custody, provider, append or release work occurs. Selection commands remain internal.
+No custody, provider, append or release work occurs in this reader.
+The selection POST calls the exported checked command separately.
+
+## Typed selection command refusals
+
+`SelectionInputInvalid` identifies invalid command input. `SelectionConflict` identifies
+stale facts or changed retry payloads. Tool permission denial uses `MemberAccessRefused`;
+unavailable permission checks remain dependency failures. HTTP maps types to fixed replies
+without matching error strings or returning causes. History loads before the short write
+check, but access refusal takes precedence over history errors. Original receipts and
+clear-after-replacement behaviour are unchanged.

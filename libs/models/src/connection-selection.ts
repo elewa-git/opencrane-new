@@ -6,9 +6,12 @@ import { connectionSelectedDataSchema, type EventEnvelope } from '@opencrane/eve
 import { envelope, history } from './actor.ts';
 import { authorityFence } from './authority.ts';
 import { foldConnection } from './bearer-connections.ts';
-import { activeMember, readActiveMember } from './member-authority.ts';
+import { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';
 import { connectionServer } from './connection-server.ts';
 import { data } from './state.ts';
+
+export class SelectionInputInvalid extends Error {}
+export class SelectionConflict extends Error {}
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const fields = { serverId: id, connectionId: id, changeRef: id,
@@ -130,15 +133,18 @@ async function access(store: EventStore, binding: Binding, userId: string, serve
     }
   }
   const permission = await auth.use('person', userId, 'mcp_server', serverId);
-  if (!permission.allowed) {
+  if (permission.status === 'unavailable') {
     throw new Error('Selection access unavailable');
+  }
+  if (!permission.allowed) {
+    throw new MemberAccessRefused('Selection access unavailable');
   }
   return fresh;
 }
 async function confirmPositions(store: EventStore, positions: Map<string, number>, deadline: number) {
   for (const [subject, sequence] of positions) {
     if (await store.head(subject, deadline) !== sequence) {
-      throw new Error('Selection conflict');
+      throw new SelectionConflict('Selection conflict');
     }
   }
 }
@@ -153,7 +159,7 @@ function sameReceipt(row: StoredEvent, attempted: EventEnvelope) {
       row.event.id !== attempted.id || row.event.silo !== attempted.silo ||
       row.event.subject !== attempted.subject || row.event.commandId !== attempted.commandId ||
       digest(parsed.data) !== digest(attempted.data)) {
-    throw new Error('Selection conflict');
+    throw new SelectionConflict('Selection conflict');
   }
   return receipt(row);
 }
@@ -169,7 +175,7 @@ function requireCurrentSelection(selection: Selection, rows: StoredEvent[],
   if (selection.expectedSequence !== (rows.at(-1)?.sequence ?? 0) ||
       selection.connectionId !== connectionId ||
       (selection.action === 'select' && !checked.available)) {
-    throw new Error('Selection conflict');
+    throw new SelectionConflict('Selection conflict');
   }
 }
 
@@ -178,7 +184,7 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   userId: string, raw: unknown) {
   const parsed = inputSchema.safeParse(raw);
   if (!parsed.success || !id.safeParse(userId).success) {
-    throw new Error('Selection input invalid');
+    throw new SelectionInputInvalid('Selection input invalid');
   }
   const { changeRef, ...input } = parsed.data;
   const payload = { ...input, userId };
@@ -187,20 +193,37 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   const operationId = digest([binding.silo, subject, changeRef]);
   const event = { ...envelope(binding.silo, subject, 'connection.selected', selected, operationId),
     commandId: changeRef, source: 'opencrane-server', principal: { kind: 'human' as const, id: userId } };
-  const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
   function matches(row: StoredEvent) {
     return row.event.id === operationId || row.event.commandId === changeRef;
   }
-  const original = rows.find(matches);
-  if (original) {
-    sameReceipt(original, event);
+  async function loadSelectionHistory() {
+    try {
+      const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+      const original = rows.find(matches);
+      if (original) {
+        sameReceipt(original, event);
+      }
+      const checked = await facts(store, binding.silo, selected);
+      return { status: 'loaded' as const, rows, original, checked };
+    } catch (error) {
+      let failure = new Error('Selection history unavailable', { cause: error });
+      if (error instanceof Error) {
+        failure = error;
+      }
+      return { status: 'failed' as const, failure };
+    }
   }
-  const checked = await facts(store, binding.silo, selected);
+  const loaded = await loadSelectionHistory();
+  // Check current access before exposing history errors, even when a saved retry conflicts.
   const fresh = await access(store, binding, userId, input.serverId, true);
   if (!fresh) {
     throw new Error('Selection access unavailable');
   }
   await fresh();
+  if (loaded.status === 'failed') {
+    throw loaded.failure;
+  }
+  const { rows, original, checked } = loaded;
   if (original) {
     return sameReceipt(original, event);
   }
@@ -228,7 +251,7 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   const savedRows = await history(store, subject, binding.silo, performance.now() + 10_000);
   const saved = savedRows.find(matches);
   if (!saved) {
-    throw new Error('Selection conflict');
+    throw new SelectionConflict('Selection conflict');
   }
   return sameReceipt(saved, event);
 }
@@ -236,7 +259,7 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
 export async function readConnectionSelection(store: EventStore, binding: Binding,
   userId: string, serverId: string) {
   if (!id.safeParse(userId).success || !id.safeParse(serverId).success) {
-    throw new Error('Selection input invalid');
+    throw new SelectionInputInvalid('Selection input invalid');
   }
   const subject = selectionSubject(userId, serverId);
   const rows = await history(store, subject, binding.silo, performance.now() + 10_000);

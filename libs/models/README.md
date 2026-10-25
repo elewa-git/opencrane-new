@@ -37,7 +37,7 @@ to handle AI calls.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending and current effect pages, own saved profiles and original change receipts, personal account choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending and current effect pages, own saved profiles and original change receipts, personal account choices from HTTP, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
@@ -409,7 +409,7 @@ The choice grants no access and does not verify the account. A changed or blocke
 becomes unavailable; connecting another account never selects it automatically.
 A person can clear the saved choice while replacement discovery is unavailable.
 Replaying older records cannot restore a cleared choice.
-The server does not expose these commands yet.
+The server accepts these commands for the signed-in member and returns the original receipt.
 
 Saved spending Stops include the calls for that conversation and turn, in saved
 order. Rebuilding from events keeps uncertain sends separate from released money.

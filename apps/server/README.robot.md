@@ -5428,5 +5428,26 @@ Neither permits resending. Membership refusal overrides loaded, missing and fail
 `test/connection-selection-change-read.test.ts` checks lost replies, later choices, restart,
 deduplication expiry, later profile changes, grant loss, exact ownership, invalid history,
 slow loading, removal during loading, private canaries and no appended effects.
-Profile and instance recovery keep their existing contracts. Selection POST, company/admin
+Profile and instance recovery keep their existing contracts. Company/admin connection
 reads, writes, broker and screens remain later work. Fresh-install qualification: NOT RUN.
+
+## Explicit personal account choice through HTTP (Part of #49)
+
+`POST /api/my/tools/:serverId/selection` uses the verified session member and exact Origin.
+The body accepts only `action`, `connectionId`, `changeRef`, `expectedSequence`, and,
+for select only, `profileId` and `profileRevision`. Queries and owner/silo/server overrides
+are refused. The 4096-byte limit and fixed parsing errors reuse the instance POST pattern.
+All replies use no-store. Invalid input returns 400, oversized input 413, no session 401,
+refused access 403, stale or conflicting choices 409, and dependency failures 503.
+No dependency cause is returned or logged. New field names pass RISKY_FIELD_NAME unchanged.
+
+The exported `changeConnectionSelection` returns only the original `status` (selected or
+cleared), `sequence` and `changeRef`. It loads history before the two-second write check.
+Current access is checked once before returning a history error or retry conflict.
+A removed member receives 403 even when their session and membership projection still
+allow access. Tests cover conflicting retries and failed selection, server and profile reads.
+Unknown appends stay unavailable. The existing selection receipt GET recovers a lost reply;
+missing evidence remains unknown and never permits a resend. Exact retries retain the first
+receipt after later choices and broker deduplication expiry. No provider, custody, release,
+wake, automatic selection or company fallback is added. HTTP tests use disposable services.
+Identity verification, credential use, company selection, UI and live qualification remain later.

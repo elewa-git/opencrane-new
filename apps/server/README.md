@@ -63,7 +63,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads own saved profiles and original change, publication and selection receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads own saved profiles and original change, publication and selection receipts; records personal account choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
@@ -142,6 +142,8 @@ can be used now is checked separately. Missing evidence never means it is safe t
 
 ## Processes it handles
 
+Members can explicitly save or clear their own personal account choice through the server.
+The reply confirms the saved choice without claiming the account can be used.
 Members can recover their own original account selection or clear receipt by its
 change reference. Later choices do not replace it. Reading requires current silo
 membership and changes nothing. Missing evidence stays unknown and never permits a resend.

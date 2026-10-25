@@ -8,7 +8,7 @@ This folder lets admins register tools an assistant can use and review their acc
 - Requires an admin to review exact definitions, declared free use and approval details before enabling tools.
 - Requests publication, meaning delivery of reviewed tool settings to the [AI gateway](../../../../GLOSSARY.md#agentgateway-ai-gateway), the program that forwards AI and tool calls, and reports its saved status.
 - Gives or revokes tool access for people, groups and assistants, with explanations of saved rights.
-- Reads safe saved personal profile metadata without accessing credentials.
+- Reads safe saved personal profile metadata and saves explicit personal account choices.
 - Reads personal tool-instance status, records stop requests and accepts reports from a registered worker.
 - Serves model prices, spending limits and saved spending-change results.
 - Keeps remote checks fresh and supplies the models process with the information needed to refuse changed tools.
@@ -37,6 +37,9 @@ The reply does not claim permission for an assistant without a selected person a
 Published calls require permission for both the person and the assistant. Removing either grant stops new calls and calls waiting to be sent, even while the permissions service is still applying the change. Giving the grant again allows calls once the saved content and permission updates are current.
 
 Members can read explanations for their own accessible servers; owners and admins can read others. Explanations show why the person and assistant have access. Guessed private tools and servers get the same refusal. Missing grants return permission reasons only. Missing account support and unavailable checks have distinct reasons. These reads approve or start no calls.
+
+Members can explicitly select or clear their own account choice. The receipt confirms only
+the saved choice. Connecting never selects an account, and no company account replaces it.
 
 **Saved personal profiles.** A member can read only their own profile, including a disabled one. The reply says whether it was saved, its revision and generation, and whether an admin block or unavailable server prevents use. It never claims a verified identity or enables calls.
 
@@ -68,7 +71,7 @@ The [server](../../README.md) registers these requests. [Models](../models/READM
 
 ```mermaid
 flowchart LR
-  server[Server] --> integrations["integrations<br/>tool settings and receipts"]
+  server[Server] --> integrations["integrations<br/>tool settings, account choices and receipts"]
   integrations --> models[Tool rules and spending]
   integrations -->|reads signed-in identity| members[Current membership]
 ```
