@@ -70,3 +70,29 @@ The full root suite and live target qualification remain NOT RUN.
 The local logs are `/tmp/p5-4-target1-infra-pass-1.log`,
 `/tmp/p5-4-target1-infra-pass-2.log`, `/tmp/p5-4-target1-typecheck.log` and
 `/tmp/p5-4-target1-lint.log`.
+
+## Failed target startup cleanup, 25 October 2026
+
+The installed k3d has no option to set a CPU limit when it creates a node.
+The launcher now removes the nodes and network from a failed start before it
+returns an error. It checks the saved attempt ID and Docker resource IDs before
+removal. If cleanup cannot be confirmed, it keeps the owner record for a later
+retry. An abruptly killed launcher cannot run this cleanup; the recorded owner
+still prevents another worktree from taking the slot.
+
+The first new test failed before the fix: two running nodes remained after the
+fake k3d created them and exited with an error. The corrected fixture also
+checks that a failed CPU update removes all three nodes.
+
+| Check | Result | Observed result |
+| --- | --- | --- |
+| Failed creation before the fix | PASS | The new test failed with two nodes left running. |
+| Claim tests, twice after the fix | PASS | All 35 tests passed in both runs. |
+| Typecheck and event catalogue | PASS | Both commands exited successfully; 154 event types matched. |
+| Repository lint, including Knip and changelog | PASS | All lint steps exited successfully. |
+| Live target creation and three-node placement | NOT RUN | Still awaits a fresh installation. |
+
+The checks used `nice -n 10`. The repeated claim logs are
+`/tmp/p5-4-target1-claim-review-pass1.log` and
+`/tmp/p5-4-target1-claim-review-pass2.log`. The repository lint log is
+`/tmp/p5-4-target1-review-lint.log`. The full root suite was NOT RUN.

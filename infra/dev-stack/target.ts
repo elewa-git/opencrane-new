@@ -150,17 +150,7 @@ export async function targetConnection() {
   return { context, kubeconfig };
 }
 
-export async function createTarget() {
-  if (await targetRecorded()) {
-    await targetConnection();
-    return;
-  }
-  const found = await resources();
-  if (found.containers.length || found.networks.length) throw new Error('Target name is occupied');
-  const record: Target = { worktree: root, slot: stackId, name, context,
-    id: randomUUID(), containers: [], nodes: {} };
-  // Reserve the attempt before Docker can create even its first resource.
-  await saveTarget(record);
+async function startTarget(record: Target) {
   record.network = await command('docker', ['network', 'create', '--label',
     `${label}=${record.id}`, name]);
   await saveTarget(record);
@@ -207,11 +197,7 @@ export async function createTarget() {
   await saveTarget(record);
 }
 
-export async function removeTarget() {
-  if (!await targetRecorded()) return;
-  const record = await readTarget();
-  const found = await inspect(record);
-  if (found.containers.length && Object.keys(record.nodes).length) await readNodes(record);
+async function removeTargetResources(record: Target, found: Awaited<ReturnType<typeof resources>>) {
   record.containers = found.containers;
   await saveTarget(record);
   // Use immutable container and network IDs, including recovery of a labelled partial create.
@@ -228,4 +214,38 @@ export async function removeTarget() {
   await rm(storage, { recursive: true, force: true });
   await rm(kubeconfig, { force: true });
   await rm(recordFile);
+}
+
+export async function createTarget() {
+  if (await targetRecorded()) {
+    await targetConnection();
+    return;
+  }
+  const found = await resources();
+  if (found.containers.length || found.networks.length) throw new Error('Target name is occupied');
+  const record: Target = { worktree: root, slot: stackId, name, context,
+    id: randomUUID(), containers: [], nodes: {} };
+  // Reserve the attempt before Docker can create even its first resource.
+  await saveTarget(record);
+  try {
+    await startTarget(record);
+  } catch (error) {
+    try {
+      // Remove nodes from this failed attempt before an uncapped node can keep running.
+      const created = await inspect(record);
+      await removeTargetResources(record, created);
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError],
+        'Target startup failed and cleanup is incomplete');
+    }
+    throw error;
+  }
+}
+
+export async function removeTarget() {
+  if (!await targetRecorded()) return;
+  const record = await readTarget();
+  const found = await inspect(record);
+  if (found.containers.length && Object.keys(record.nodes).length) await readNodes(record);
+  await removeTargetResources(record, found);
 }

@@ -530,6 +530,9 @@ function unselected(item) {
 if (state.fail === 'hang-' + program) {
   save(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30000);
 }
+if (state.fail === 'docker-update' && program === 'docker' && args[0] === 'update') {
+  save(); process.exit(1);
+}
 if (state.fail === program) { save(); console.error('PRIVATE-UPSTREAM-MARKER'); process.exit(1); }
 if (program === 'docker') {
   if (args[0] === 'ps' && args.includes('status=running')) { save(); process.exit(0); }
@@ -711,6 +714,7 @@ async function interruptedTarget() {
     await fixture.saveState();
     await assert.rejects(fixture.run('target-down'));
     labels['opencrane.dev/target-id'] = originalId;
+    fixture.state.retain = false;
     await fixture.saveState();
     await writeDeadOwner(fixture.slotDirectory, 16);
     await assert.rejects(fixture.run('claim'));
@@ -743,6 +747,23 @@ async function failedCreationRemovesRunningNodes() {
 }
 test('failed k3d creation removes the running nodes it created', failedCreationRemovesRunningNodes);
 
+async function failedCpuUpdateRemovesRemainingNodes() {
+  const fixture = await targetFixture();
+  try {
+    fixture.state.fail = 'docker-update';
+    await fixture.saveState();
+    await assert.rejects(fixture.run('target-up'));
+    await fixture.loadState();
+    assert.equal(fixture.state.containers.length, 0);
+    assert.equal(fixture.state.networks.length, 0);
+    assert.ok(fixture.state.calls.some(isExactContainerRemoval));
+    await assert.rejects(stat(`${fixture.slotDirectory}/target-owner.json`), { code: 'ENOENT' });
+  } finally {
+    await fixture.close();
+  }
+}
+test('a failed CPU update removes every target node', failedCpuUpdateRemovesRemainingNodes);
+
 async function privateTargetFailure() {
   const fixture = await targetFixture();
   try {
@@ -757,12 +778,13 @@ async function privateTargetFailure() {
       diagnostic = `${failure.message}${failure.stdout}${failure.stderr}`;
     }
     assert.doesNotMatch(diagnostic, /PRIVATE-UPSTREAM-MARKER/u);
-    assert.ok((await stat(`${fixture.slotDirectory}/target-owner.json`)).isFile());
+    await assert.rejects(stat(`${fixture.slotDirectory}/target-owner.json`), { code: 'ENOENT' });
   } finally {
     await fixture.close();
   }
 }
-test('target dependency output stays private and failed creation keeps the record', privateTargetFailure);
+test('target dependency output stays private after failed creation is cleaned up',
+  privateTargetFailure);
 
 async function packageUsesCheckedTarget() {
   const fixture = await targetFixture();

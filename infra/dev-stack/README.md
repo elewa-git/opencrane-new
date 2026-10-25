@@ -22,7 +22,7 @@ flowchart LR
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|can install instead| package["infra/package<br/>Helm install"]
-  stack -->|uses local cluster; can own a separate three-node test cluster| devbox
+  stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
 The services include [PostgreSQL](../../GLOSSARY.md#postgresql-database) for read
@@ -62,6 +62,7 @@ available for diagnosis.
   memory.
 - Lets a spare slot own a three-node Kubernetes test cluster. Saved ownership
   keeps the slot reserved until the cluster and its data are removed.
+- Removes the nodes it created before reporting a failed start.
 - Provides demo preparation and screen measurements, while refusing automated coding
   jobs that try to run the owner's commands.
 - Checks the demo tool server through local TLS. Requires saved tool definitions and

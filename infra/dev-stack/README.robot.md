@@ -518,7 +518,10 @@ is reused. This helper installs no product services or computer prerequisites.
 
 Each node starts with a 768 MiB memory limit. After creation returns, each receives
 a one-CPU limit before readiness is checked. k3d does not offer a creation-time
-CPU limit. Startup, including an interrupted create, can remain uncapped for CPU. The slot cannot
+CPU limit. A failed create or later startup error removes the attempt's checked Docker
+nodes and network before returning. If cleanup fails, the owner record stays for a
+later retry. An abruptly killed launcher can still leave nodes awaiting cleanup.
+The slot cannot
 also run Compose or another package. The owner-plus-two limit is unchanged.
 All four k3s data directories bind into the slot's private `target-data` folder.
 No Docker volume may remain attached when ownership is accepted or cleanup starts.
