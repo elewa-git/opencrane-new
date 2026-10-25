@@ -27,6 +27,10 @@ by the turn. Current permissions are still checked before use. Correct and Forge
 Approval reads report whether the tool replied to the last consumed permit.
 A reply does not change retry permission or prove that an outside business change succeeded.
 
+A remote tool start is saved before its budget check. If the call is refused before
+connecting, matching saved proof can let the requester choose one retry. Missing
+proof keeps the approval used. A retry checks current access and cannot reuse the old pass.
+
 ## Where it fits
 
 This shared library is used by the server, background workers and personal computers.
@@ -44,7 +48,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, recovers budgets in order and reads spending| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, remote starts and unsent proof; recovers budgets in order and reads spending| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also

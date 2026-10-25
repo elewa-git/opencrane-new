@@ -5499,3 +5499,18 @@ registration replacement, restart/replay, slow and failed reads, fixed errors,
 no-store replies and private canaries in logs. Reads use no write authority check,
 credential profile, selection, provider, release or dispatch path.
 Fresh-install qualification and live company account use remain NOT RUN.
+
+## Approval retry after an unsent refusal
+
+The models process can now record trusted unsent evidence when HTTPS dispatch is
+refused after its saved start or during budget admission. The existing approval
+commands consume that evidence; HTTP approval schemas and access checks are unchanged.
+The [models contract](../../libs/models/README.robot.md#approval-retry-after-an-unsent-refusal)
+describes the exact bindings and one-second evidence limit.
+
+`integration-access-gateway.test.ts` races two explicit retry calls after each refusal.
+It checks one successful call, one refused call, one upstream send, two saved consent
+uses, one budget admission and no later send. Free calls retain zero held and settled
+cents. Missing/lost starts and incomplete observations keep retry unavailable.
+The [receipt](../../docs/process/budget-approval-retry/receipt.md) retains the earlier
+load failures separately from these checks. Fresh-install qualification is NOT RUN.

@@ -3777,9 +3777,8 @@ error instance. Egress consumes this evidence once to record the existing refuse
 before relay registration. Generic errors and earlier admissions provide no such evidence;
 this does not restore consent or a send permission.
 
-This is the first part of #576's agreed correction, superseding #671. Approval retry
-restoration before budget admission, both new HTTP refusal races and their fixed private
-diagnostics remain for the second part. Existing approval evidence and binding checks stay.
+Budget writer recovery is the first part of #576's correction, superseding #671.
+The approval retry behaviour is described below. Existing evidence and binding checks stay.
 The retained 53/60 approval-load result is unresolved until the replacement path is qualified.
 `test/budget-recovery.test.ts` covers delayed publication, failed recovery reads, saved
 payloads and failed application. The two named call-retry and root-budget money tests stay unchanged.
@@ -3806,3 +3805,29 @@ even if discovery reuses the connection id. Old duplicate rows cannot restore re
 Replay starts no work. The command grants nothing and touches no custody or provider.
 Personal `connectionServer` eligibility is unchanged. Company profiles, selection,
 release, dispatch, HTTP, UI and OAuth remain later work. Fresh-company qualification: NOT RUN.
+
+## Approval retry after an unsent refusal
+
+HTTPS `mcp-dispatch.ts` saves a confirmed `tool.dispatch_started` before budget
+admission. Both steps share refusal handling. Before opening the upstream connection,
+a refusal can close that exact start with `tool.dispatch_recorded`, `not_dispatched`
+and trusted `adapter_dispatch_refused` evidence. Decision, start, connection,
+generation, record digest and review revision must still match.
+
+The existing `approvals.ts` retry path checks requester, reviewed arguments, expiry,
+turn, grants and current access. It saves an explicit replacement use; it never
+reuses the consumed permit or resends automatically. Missing or uncertain starts,
+missing observations, generic 403 replies and budget non-publication alone grant nothing.
+
+Refusal evidence history, append and readback share one extra second solely for
+recording proof. Sending keeps the original access deadline. Incomplete proof leaves
+retry unavailable until recovered. Optional recorder deadlines preserve existing
+callers; only finite deadlines enter append commands. Private diagnostics contain
+fixed stage/reason labels, elapsed milliseconds and remaining access milliseconds.
+They contain no exceptions, arguments or permits. No event or HTTP schema is added.
+
+The HTTP tests cover both refusal races, missing/lost starts, incomplete evidence,
+exact saved counts and zero held/settled cents for the free tool. Existing forged
+proof, changed binding, lost reply, revocation and paid hold tests are retained.
+The [receipt](../../docs/process/budget-approval-retry/receipt.md) records own checks
+and unresolved failures. Fresh-install qualification remains NOT RUN.

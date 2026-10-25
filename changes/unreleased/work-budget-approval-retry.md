@@ -1,0 +1,1 @@
+A remote tool approval can offer one explicit retry when a saved start is closed with trusted proof that a refusal sent nothing. Budget admission now follows that start. Missing or uncertain evidence keeps retry unavailable, and the original access deadline stays unchanged.
