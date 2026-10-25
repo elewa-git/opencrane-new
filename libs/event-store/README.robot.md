@@ -422,6 +422,37 @@ P5-5 PR 1 provides process evidence only. Packaged node/PVC loss, placement and
 rotation remain NOT RUN. Later k3d proof requires `infra/dev-stack/claim.sh` and
 completed P5-4. See [the receipt](../../docs/process/p5-5-pr1/receipt.md).
 
+`cluster-quorum.test.ts` covers P5-5 PR 2 with the same fixture API. It records
+acknowledged events, starts an append and stops the owned EVENTS leader and a
+second owned peer. It cancels retries after publication starts and arranges to
+drop any saved reply with the existing helper. That racing result stays unresolved.
+The sole live peer receives a conditional append with a 750 ms deadline and must
+return unavailable within two seconds. Its client must fail the same check for
+three current stream copies that passed before the loss.
+
+Both peers restart with their original settings and storage. The test compares
+all earlier acknowledged receipts and subject positions before resolving either
+uncertain request. It repeats each request with its original command identity and
+expected position, checks the saved event and position, and refuses a stale write.
+A further lost-reply check must save exactly one event. Each returning peer must
+report the complete local message count and sequence range through its own NATS
+monitor, and client reads must agree with the final history and subject positions.
+The test rejects copied, unowned peer objects before stop or restart. Cleanup
+targets the fixture and preserves an earlier test failure if cleanup also fails.
+
+`failover-check.test.ts` isolates contiguous duplicate events and commands,
+repeated acknowledgements, changed or missing acknowledgement metadata and a
+missing final event. It also rejects claimed success without quorum and an
+unavailable request labelled absent. An unavailable result proves no absence.
+Annotations contain only fixture identities, positions, counts and statuses.
+No event or API fields, access rules, adapter behaviour or account permissions
+change. The exact `RISKY_FIELD_NAME` rule in `security-rules.test.ts` was checked;
+the existing `commandId` field is approved and no secret values enter annotations.
+
+This is local process evidence. Zones, Kubernetes node loss, backup survival and
+packaged recovery remain NOT RUN. Packaged node/PVC proof waits for p5-4-pr4/live1.
+See [the quorum-loss receipt](../../docs/process/p5-5-pr2/receipt.md).
+
 ## Budget append evidence
 
 `append` remains the single public write interface. Its existing statuses now include

@@ -7,6 +7,11 @@ export interface Receipt {
   sequence: number;
 }
 
+export function checkQuorumLoss(status: string, resolution: string) {
+  assert.equal(status, 'unavailable', 'Write reported success without quorum');
+  assert.equal(resolution, 'unresolved', 'Unavailable work must stay unresolved');
+}
+
 export function checkSurvival(retained: Receipt[], acknowledged: Receipt[],
   subjectPositions: Record<string, number>, unresolved: string[]) {
   const byId = new Map<string, Receipt>();

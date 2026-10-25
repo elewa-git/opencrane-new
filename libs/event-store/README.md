@@ -74,6 +74,11 @@ connections and writes the cluster refuses. Another test stops the server leadin
 the saved event log, checks that the other two can still save changes, then starts
 the same server with its original files. It compares saved records, their order
 and the returning server’s copy.
+A further test stops two servers. The remaining server must refuse writes and
+cannot pass the check for three current copies. After both servers return with
+their original files, the test repeats requests whose result was uncertain,
+keeping each request’s original id. It checks each returning server’s stored copy.
+A lost reply must not save a second event.
 
 The operator backup tests restore native event bytes on a fresh NATS server.
 They compare saved event identities and positions, check private file permissions,

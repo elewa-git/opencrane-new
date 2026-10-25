@@ -106,14 +106,15 @@ function refusesRepeatedAcknowledgement() {
 it('refuses a repeated acknowledgement', refusesRepeatedAcknowledgement);
 
 function refusesChangedAcknowledgement(field: string) {
-  const changed: Record<string, unknown> = { ...third };
+  const changed = { ...third };
   if (field === 'missing commandId') {
-    delete changed.commandId;
+    Reflect.deleteProperty(changed, 'commandId');
   } else {
-    changed[field] = field === 'sequence' ? 2 : 'changed';
+    const value = field === 'sequence' ? 2 : 'changed';
+    Reflect.set(changed, field, value);
   }
   function check() {
-    checkSurvival(acknowledged, [changed as unknown as Receipt], positions, []);
+    checkSurvival(acknowledged, [changed], positions, []);
   }
   expect(check).toThrow('Acknowledged event changed or missing');
 }
