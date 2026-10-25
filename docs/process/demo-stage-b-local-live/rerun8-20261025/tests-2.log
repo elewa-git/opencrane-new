@@ -1,0 +1,383 @@
+TAP version 13
+# Subtest: checks the same call’s integer money amounts only in admin Change history
+ok 1 - checks the same call’s integer money amounts only in admin Change history
+  ---
+  duration_ms: 18.854545
+  type: 'test'
+  ...
+# Subtest: finds a publication behind newer grants and still refuses a missing publication
+ok 2 - finds a publication behind newer grants and still refuses a missing publication
+  ---
+  duration_ms: 122.766262
+  type: 'test'
+  ...
+# Subtest: waits for history to load before checking publication and older pages
+ok 3 - waits for history to load before checking publication and older pages
+  ---
+  duration_ms: 104.46231
+  type: 'test'
+  ...
+# Subtest: restores every changed ceiling using the chosen group, not the personal default
+ok 4 - restores every changed ceiling using the chosen group, not the personal default
+  ---
+  duration_ms: 166.719167
+  type: 'test'
+  ...
+# Subtest: waits for saved membership and assistant access before opening both budget sessions
+ok 5 - waits for saved membership and assistant access before opening both budget sessions
+  ---
+  duration_ms: 282.897961
+  type: 'test'
+  ...
+# Subtest: refuses a personal assistant before starting the budget browser journey
+ok 6 - refuses a personal assistant before starting the budget browser journey
+  ---
+  duration_ms: 22.443295
+  type: 'test'
+  ...
+# PASS fresh: default paying group migration is idempotent; one installation event, existing ceilings preserved
+# Subtest: keeps failed budget read statuses, fixed page states and a private picture
+ok 7 - keeps failed budget read statuses, fixed page states and a private picture
+  ---
+  duration_ms: 78.98018
+  type: 'test'
+  ...
+# PASS fresh: default paying group migration is idempotent; one installation event, existing ceilings preserved
+# Subtest: records an access refusal and fails without refreshing or resubmitting a save
+ok 8 - records an access refusal and fails without refreshing or resubmitting a save
+  ---
+  duration_ms: 38.998624
+  type: 'test'
+  ...
+# PASS fresh: default paying group migration is idempotent; one installation event, existing ceilings preserved
+# Subtest: keeps HTTP statuses when the failed page cannot be inspected
+ok 9 - keeps HTTP statuses when the failed page cannot be inspected
+  ---
+  duration_ms: 40.979877
+  type: 'test'
+  ...
+# PASS fresh: default paying group migration is idempotent; one installation event, existing ceilings preserved
+# Subtest: excludes non-GET responses from both status lists
+ok 10 - excludes non-GET responses from both status lists
+  ---
+  duration_ms: 82.202314
+  type: 'test'
+  ...
+# PASS fresh: default paying group migration is idempotent; one installation event, existing ceilings preserved
+# Subtest: records only the exact budget and effects URLs on the chosen origin
+ok 11 - records only the exact budget and effects URLs on the chosen origin
+  ---
+  duration_ms: 36.782315
+  type: 'test'
+  ...
+# PASS fresh: default paying group migration is idempotent; one installation event, existing ceilings preserved
+# Subtest: keeps effects GET statuses separately and in arrival order
+ok 12 - keeps effects GET statuses separately and in arrival order
+  ---
+  duration_ms: 25.195014
+  type: 'test'
+  ...
+# PASS fresh: default paying group migration is idempotent; one installation event, existing ceilings preserved
+# Subtest: keeps the original failure and HTTP evidence when taking its picture fails
+ok 13 - keeps the original failure and HTTP evidence when taking its picture fails
+  ---
+  duration_ms: 38.923889
+  type: 'test'
+  ...
+# Subtest: the approval stub checks revision and generation before recording any effect
+ok 14 - the approval stub checks revision and generation before recording any effect
+  ---
+  duration_ms: 484.483269
+  type: 'test'
+  ...
+# Subtest: the approval stub refuses startup without its instance generation
+ok 15 - the approval stub refuses startup without its instance generation
+  ---
+  duration_ms: 262.115578
+  type: 'test'
+  ...
+# Subtest: the approval stub refuses startup without its catalogue revision
+ok 16 - the approval stub refuses startup without its catalogue revision
+  ---
+  duration_ms: 294.180359
+  type: 'test'
+  ...
+# Subtest: the wake Pod fixture starts the stub with only its packaged files
+ok 17 - the wake Pod fixture starts the stub with only its packaged files
+  ---
+  duration_ms: 1848.827973
+  type: 'test'
+  ...
+# Subtest: the stub verifies managed calls, counts credentials and keeps streaming
+ok 18 - the stub verifies managed calls, counts credentials and keeps streaming
+  ---
+  duration_ms: 1943.845546
+  type: 'test'
+  ...
+# Subtest: missing and empty credential files never match or disclose a bearer or file location
+ok 19 - missing and empty credential files never match or disclose a bearer or file location
+  ---
+  duration_ms: 590.607435
+  type: 'test'
+  ...
+# Subtest: the PDF stand-in reads the converted file when inline text is unavailable or empty
+ok 20 - the PDF stand-in reads the converted file when inline text is unavailable or empty
+  ---
+  duration_ms: 2358.095784
+  type: 'test'
+  ...
+# Subtest: scrolls the whole waiting approval into both captures, including a tall phone card
+ok 21 - scrolls the whole waiting approval into both captures, including a tall phone card
+  ---
+  duration_ms: 1528.770638
+  type: 'test'
+  ...
+# Subtest: saves the first demo-server readback even when the collector is terminated
+ok 22 - saves the first demo-server readback even when the collector is terminated
+  ---
+  duration_ms: 717.869262
+  type: 'test'
+  ...
+# Subtest: keeps each original event when the following event read fails
+ok 23 - keeps each original event when the following event read fails
+  ---
+  duration_ms: 47.543495
+  type: 'test'
+  ...
+# Subtest: keeps evidence when the browser closes during an unfinished approval response
+ok 24 - keeps evidence when the browser closes during an unfinished approval response
+  ---
+  duration_ms: 1482.912355
+  type: 'test'
+  ...
+# Subtest: keeps earlier observations private and refuses to overwrite an existing run
+ok 25 - keeps earlier observations private and refuses to overwrite an existing run
+  ---
+  duration_ms: 21.449169
+  type: 'test'
+  ...
+# Subtest: refuses unexpected readback fields and still saves the original response
+ok 26 - refuses unexpected readback fields and still saves the original response
+  ---
+  duration_ms: 34.020966
+  type: 'test'
+  ...
+# Subtest: the launch entry refuses the owner before loading settings or services
+ok 27 - the launch entry refuses the owner before loading settings or services
+  ---
+  duration_ms: 564.79212
+  type: 'test'
+  ...
+# Subtest: only discovery, watch and dispatch change in the complete entrypoints
+ok 28 - only discovery, watch and dispatch change in the complete entrypoints
+  ---
+  duration_ms: 10.673035
+  type: 'test'
+  ...
+# Subtest: the complete models entrypoint supplies the dispatch service transport
+ok 29 - the complete models entrypoint supplies the dispatch service transport
+  ---
+  duration_ms: 7.997031
+  type: 'test'
+  ...
+# Subtest: models reads its claim and reaches the demo without mounting private keys
+ok 30 - models reads its claim and reaches the demo without mounting private keys
+  ---
+  duration_ms: 957.509741
+  type: 'test'
+  ...
+# Subtest: missing or ambiguous network injection refuses the whole launch
+ok 31 - missing or ambiguous network injection refuses the whole launch
+  ---
+  duration_ms: 3.498345
+  type: 'test'
+  ...
+# Subtest: one fixture effect without approval records or before approval never qualifies
+ok 32 - one fixture effect without approval records or before approval never qualifies
+  ---
+  duration_ms: 77.700885
+  type: 'test'
+  ...
+# Subtest: the free model calls only an offered demo tool and never repeats after its result
+ok 33 - the free model calls only an offered demo tool and never repeats after its result
+  ---
+  duration_ms: 12.069326
+  type: 'test'
+  ...
+# Subtest: wrong, owner and foreign slots refuse before settings
+ok 34 - wrong, owner and foreign slots refuse before settings
+  ---
+  duration_ms: 45.116116
+  type: 'test'
+  ...
+# Subtest: an invalid slot refuses even when its claim and owner match
+ok 35 - an invalid slot refuses even when its claim and owner match
+  ---
+  duration_ms: 20.258656
+  type: 'test'
+  ...
+# Subtest: a symlink refuses even when the redirected owner matches
+ok 36 - a symlink refuses even when the redirected owner matches
+  ---
+  duration_ms: 40.109153
+  type: 'test'
+  ...
+# Subtest: real demo discovery and TLS calls retain zero costs and read back one effect
+ok 37 - real demo discovery and TLS calls retain zero costs and read back one effect
+  ---
+  duration_ms: 1075.084849
+  type: 'test'
+  ...
+# Subtest: private and mixed DNS and other hosts never open a socket
+ok 38 - private and mixed DNS and other hosts never open a socket
+  ---
+  duration_ms: 450.583188
+  type: 'test'
+  ...
+# Subtest: bad certificates and redirects refuse without another connection
+ok 39 - bad certificates and redirects refuse without another connection
+  ---
+  duration_ms: 1083.122168
+  type: 'test'
+  ...
+# Subtest: the adapter requires TLS verification, SNI, no pooling and the checked public pin
+ok 40 - the adapter requires TLS verification, SNI, no pooling and the checked public pin
+  ---
+  duration_ms: 627.437302
+  type: 'test'
+  ...
+# Subtest: incomplete publication, grants, approval, effects or spending cannot pass
+ok 41 - incomplete publication, grants, approval, effects or spending cannot pass
+  ---
+  duration_ms: 157.802923
+  type: 'test'
+  ...
+# Subtest: invalid evidence errors contain no supplied values
+ok 42 - invalid evidence errors contain no supplied values
+  ---
+  duration_ms: 1.728377
+  type: 'test'
+  ...
+# Subtest: a policy without a saved catalogue refuses
+ok 43 - a policy without a saved catalogue refuses
+  ---
+  duration_ms: 3.721409
+  type: 'test'
+  ...
+# Subtest: a policy whose freshness expired at rehearsal time refuses
+ok 44 - a policy whose freshness expired at rehearsal time refuses
+  ---
+  duration_ms: 2.822344
+  type: 'test'
+  ...
+# Subtest: a policy awaiting startup review refuses
+ok 45 - a policy awaiting startup review refuses
+  ---
+  duration_ms: 2.82111
+  type: 'test'
+  ...
+# Subtest: a policy without either freshness date refuses
+ok 46 - a policy without either freshness date refuses
+  ---
+  duration_ms: 10.479039
+  type: 'test'
+  ...
+# Subtest: a catalogue without its saved definition refuses
+ok 47 - a catalogue without its saved definition refuses
+  ---
+  duration_ms: 4.355234
+  type: 'test'
+  ...
+# Subtest: a reviewed choice for a different saved definition refuses
+ok 48 - a reviewed choice for a different saved definition refuses
+  ---
+  duration_ms: 3.534527
+  type: 'test'
+  ...
+# Subtest: freshness checked after the rehearsal refuses
+ok 49 - freshness checked after the rehearsal refuses
+  ---
+  duration_ms: 2.838678
+  type: 'test'
+  ...
+# Subtest: a direct write without original approval and dispatch records refuses
+ok 50 - a direct write without original approval and dispatch records refuses
+  ---
+  duration_ms: 2.177144
+  type: 'test'
+  ...
+# Subtest: a write dispatched before its approval refuses
+ok 51 - a write dispatched before its approval refuses
+  ---
+  duration_ms: 6.551665
+  type: 'test'
+  ...
+# Subtest: an approval decision for another call refuses
+ok 52 - an approval decision for another call refuses
+  ---
+  duration_ms: 3.476307
+  type: 'test'
+  ...
+# Subtest: each original approval and dispatch record is required
+ok 53 - each original approval and dispatch record is required
+  ---
+  duration_ms: 11.26688
+  type: 'test'
+  ...
+# Subtest: unrelated approval or dispatch records refuse
+ok 54 - unrelated approval or dispatch records refuse
+  ---
+  duration_ms: 28.448149
+  type: 'test'
+  ...
+# Subtest: the first response calls the published deferred read once and answers its result
+ok 55 - the first response calls the published deferred read once and answers its result
+  ---
+  duration_ms: 14.076273
+  type: 'test'
+  ...
+# Subtest: missing and ambiguous deferred tools refuse without a guessed call
+ok 56 - missing and ambiguous deferred tools refuse without a guessed call
+  ---
+  duration_ms: 4.658373
+  type: 'test'
+  ...
+# Subtest: direct namespaces in either request location still complete the read
+ok 57 - direct namespaces in either request location still complete the read
+  ---
+  duration_ms: 3.172223
+  type: 'test'
+  ...
+# Subtest: only this turn and call result can answer, and a failed tool is not repeated
+ok 58 - only this turn and call result can answer, and a failed tool is not repeated
+  ---
+  duration_ms: 0.801762
+  type: 'test'
+  ...
+# Subtest: ordinary prompts stay unchanged and the write uses the same deferred interface
+ok 59 - ordinary prompts stay unchanged and the write uses the same deferred interface
+  ---
+  duration_ms: 1.113321
+  type: 'test'
+  ...
+# Subtest: separate guarded transports reach one demo server and read back its actual effect
+ok 60 - separate guarded transports reach one demo server and read back its actual effect
+  ---
+  duration_ms: 1409.405159
+  type: 'test'
+  ...
+# Subtest: missing local transport refuses before services start
+ok 61 - missing local transport refuses before services start
+  ---
+  duration_ms: 6.864719
+  type: 'test'
+  ...
+1..61
+# tests 61
+# suites 0
+# pass 61
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 36056.21642

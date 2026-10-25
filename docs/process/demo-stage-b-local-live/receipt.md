@@ -1,13 +1,13 @@
 # Local tools rehearsal
 
-Part of #574. Latest run date: 25 October 2026. Current result: **FAIL**.
+Part of #574. Latest run date: 25 October 2026. Current result: **PARTIAL**.
 
-The [latest fresh attempt](#fresh-start-stopped-by-unrelated-computer-readiness-25-october-2026)
-stopped during provider setup, before the website or tool journey started.
-A computer becoming ready conflicted with the provider drain command.
-The previous run passed the product journey but lost its initial readbacks.
-Complete live approval proof and the owner's personal sign-in remain unqualified.
-Earlier attempts are retained below. Paid calls: **0**; the owner stack was untouched.
+The [latest fresh run](#fresh-run-with-complete-approval-proof-25-october-2026)
+passed the complete baseline and local tools journey. `checkStageBApproval`
+accepted the original before/waiting/after readbacks and ordered approval records.
+Every requested automated step passed. Only the separate owner's personal sign-in
+remains **NOT RUN** and needs the owner. Earlier failures remain recorded below.
+Paid calls: **0**; the owner stack was untouched.
 
 ## Source
 
@@ -1031,3 +1031,185 @@ The owner stack on port 44200 was untouched. The separate owner account remains
 intact. Native consent 12b is excluded. Public deployment, twice-fresh qualification,
 long approval waits, expiry, reconnect/Pod loss and the full refusal matrix remain
 **NOT RUN**. This attempt does not complete #45, #46 or #63. Paid calls: **0**.
+
+## Fresh run with complete approval proof, 25 October 2026
+
+Part of #574, draft PR #641. The fresh baseline and local tools journey are **PASS**.
+`checkStageBApproval` accepted the complete original proof. Every requested automated
+step passed. The separate owner's personal browser sign-in is **NOT RUN** and needs
+the owner. Overall qualification remains **PARTIAL** only for that sign-in.
+Earlier failures and incomplete attempts remain recorded above.
+
+### Eighth-run source and setup
+
+Fetch and rebase completed without conflicts. The live source is
+`f801d5b6b71ac37adea5e072d66c2baaa7cd7337`, based on fetched main
+`d674ca2e55394a45afd9e661886e62181df52485`. Main was an ancestor, and both rebase
+state directories were absent. This includes approval fix #672 (`9aa2a7d72`) and
+provider drain fix #682 (`d674ca2e5`). [Source](rerun8-20261025/source.json) and
+[runtime](rerun8-20261025/runtime.json) retain the exact references and images.
+
+`npm ci` passed. The NATS and Lychee tool links point to the requested installation.
+One secondary slot, slot 1, was claimed through `infra/dev-stack/claim.sh`.
+One `up.sh --fresh` attempt passed provider setup and the complete baseline.
+The guarded launcher then started the full server and models processes against the
+LOCAL demo tool server on that same install. It passed on its first attempt.
+Codex was 0.159.2; agentgateway was 1.5.0, revision
+`fe6732474a96a0363dfb9822859af4e9bab360fa`. The model replies were local and free.
+`ZITADEL_KEY_FILE` was supplied only as a path. Paid calls: **0**.
+The owner stack on port 44200 was untouched.
+
+### Eighth-run results
+
+| Step | Result | Evidence |
+| --- | --- | --- |
+| Fetch and completed rebase | PASS | Fetched main is an ancestor; no rebase remains. |
+| Fresh provider setup | PASS | The drain command completed and managed calls switched on. |
+| Fresh baseline | PASS | [Original log](rerun8-20261025/baseline.log), exit 0. |
+| Audit privacy at both widths | PASS | Admin history retains money; member action history omits it. |
+| Budget refusal, reload and restoration | PASS | Paying-group and assistant cases pass at both widths; final saves complete. |
+| Projection replay | PASS | Members and tool catalogue rebuilds match their live projections. |
+| Separate owner membership and access | PASS | [Owner record](rerun8-20261025/ownership.json) confirms a distinct joined owner with OpenFGA access. |
+| Separate owner's personal sign-in | NOT RUN | Needs the owner. The generated Admin's real SSO session does not substitute for it. |
+| Guarded LOCAL demo launch | PASS | Both complete services became ready with the restricted mounts. |
+| Browser registration and discovery | PASS | Both real demo tool definitions appeared. |
+| Exact zero costs, read Allow and write Ask | PASS | Browser review and saved policy agree. |
+| Person and assistant grants | PASS | Original receipts at positions 372 and 373 show content and IAM current. |
+| Publication and gateway acknowledgement | PASS | Review 374, publication 375, gateway request 376, acknowledgement 377 and tool observation 378 agree on generation 1. |
+| Bridge acceptance and real chat read | PASS | Read dispatch 393 records the guarded adapter response; the reply shows the returned quote. |
+| Read reply after reload | PASS | Both widths retain DEMO-001, 12500 cents, morning delivery and zero effects. |
+| Waiting approval and reload | PASS | All four captures show the whole card, its details and both decision buttons. |
+| Zero effects before approval | PASS | Original before and waiting response bodies both report morning delivery and effect count 0. |
+| Requester approval and exactly one write | PASS | One approval POST; decision 416, use 417, allowed gateway decision 418 and one write dispatch 422. |
+| Same-turn reply and reload | PASS | The write turn completes and both widths retain afternoon delivery and one effect. |
+| Separate final demo readback | PASS | The demo server independently reports afternoon delivery and effect count 1. |
+| Complete original approval proof | PASS | [Checker result](rerun8-20261025/evidence-check.json) accepts the [saved input](rerun8-20261025/approval-proof.json). |
+| Approval drawer | PASS | Both widths show “Done: the tool replied” and that the approval cannot be reused. |
+| Spending and both histories | PASS | Model spending rises by four cents; tools cost zero; the original approval and dispatch are visible. |
+| Complete evidence retention | PASS | Collector exits 0; original readback bodies and events remain in the journal and summary. |
+| Captures and visual inspection | PASS | All 46 public pictures were inspected; no email address is visible. |
+
+The baseline also passed chat, uploads, live view, sign-out and credential-required
+reauthentication. Its upload helper used one existing transport retry at 1280 pixels
+and confirmed no duplicate file. Live-view revocation cleared the screen in 239 ms
+at 390 pixels and 403 ms at 1280 pixels. The original log records these details.
+The baseline's skipped approval journey is covered by the separate tool run below;
+native consent 12b remains excluded.
+
+### Original proof and accounting
+
+[Publication records](rerun8-20261025/publication.json) retain the original browser
+commands, both grant receipts, policy and gateway records. The publication command
+is `53aa9157-8844-4563-b1de-17a20d554b7e`. Each grant, review and publication was
+submitted once. The live gateway process is `855fc256-369c-4e77-b733-f0777d7667dc`.
+
+[Live records](rerun8-20261025/live-probe.json) and the
+[flushed journal](rerun8-20261025/live-probe.jsonl) retain the original before,
+waiting and after response bodies, approval HTTP status and command, and ordered events.
+The tracked `scripts/collect-stage-b-evidence.mjs` ran without modification.
+It saved observations as they arrived and exited normally. No recovery, replacement
+readback or invented proof value was needed. The unchanged checker accepted the
+proof during collection and again from the saved file.
+
+The approval POST returned HTTP 200. Its browser response body did not finish before
+the browser closed, so the collector records that read error alongside the original
+status and command. The original saved approval decision, use and dispatch events
+are complete. They supply the proof required by the checker; no HTTP response body
+was substituted or invented.
+
+The conversation is `eda4983c-44ec-4119-b5c0-ece71b073b6e`; its write turn is
+`b8634a8d-d061-4676-91b5-a0389a0397f4`. The successful write request is
+`baaff523-5ccd-4c8c-9948-03b1ba97f294`.
+
+| Original record | Position | UTC time |
+| --- | --- | --- |
+| Approval requested | 413 | 02:27:50.129 |
+| Requester approved | 416 | 02:28:00.316 |
+| Approval used | 417 | 02:28:04.561 |
+| Gateway decision allowed | 418 | 02:28:04.614 |
+| Write dispatch recorded | 422 | 02:28:05.407 |
+
+The separate before read at 02:27:18.080 and waiting read at 02:27:53.173 both
+report effect count 0. The after read at 02:28:12.206 reports one effect and the
+afternoon slot. There are exactly two successful tool dispatches: one read and
+one write. The initial Ask refusal remains in the unfiltered history; it dispatched
+no write. No direct demo write was made.
+
+Four model calls reserved **69 euro cents** and settled **4 euro cents**. Every
+new reservation and settlement belongs to those model calls. The tools reserved
+and charged **0 euro cents**. Spending rose from **11** to **15 cents settled**;
+reserved money stayed at **32 cents**. Those two existing 16-cent holds came from
+the baseline's computer-loss checks. These are local accounting amounts; no paid
+provider was contacted.
+
+The integration page still says its connection and audience facts are not available.
+Those labels do not prove usability. The original grants, matching publication and
+successful bridge dispatches prove it for this run. The drawer confirms that the
+tool replied; the independent demo readbacks prove the one business effect.
+No product failure occurred in the requested sequence, and no harness workaround
+or product code change was made.
+
+### Eighth-run captures
+
+The browser masks email addresses, and saved public text removes them. All 46
+captures were inspected by eye. [The inspection list](rerun8-20261025/visual-inspection.json)
+names every picture. Mobile waiting-card captures retain the 390-pixel width and
+use enough height to show the whole card above the composer. The completed-card,
+drawer and filtered-history views are read-only observations of the same run.
+
+| View | Desktop, 1280 pixels | Mobile, 390 pixels |
+| --- | --- | --- |
+| Baseline paying-group limit | [1280](rerun8-20261025/baseline-paying_group-1280.png) | [390](rerun8-20261025/baseline-paying_group-390.png) |
+| Baseline paying-group refusal | [1280](rerun8-20261025/baseline-paying_group-refusal-1280.png) | [390](rerun8-20261025/baseline-paying_group-refusal-390.png) |
+| Baseline assistant limit | [1280](rerun8-20261025/baseline-assistant-1280.png) | [390](rerun8-20261025/baseline-assistant-390.png) |
+| Baseline assistant refusal | [1280](rerun8-20261025/baseline-assistant-refusal-1280.png) | [390](rerun8-20261025/baseline-assistant-refusal-390.png) |
+| Restored budget limits | [1280](rerun8-20261025/baseline-restored-1280.png) | [390](rerun8-20261025/baseline-restored-390.png) |
+| Discovered tools | [1280](rerun8-20261025/tools-1280.png) | [390](rerun8-20261025/tools-390.png) |
+| Chosen modes | [1280](rerun8-20261025/chosen-modes-1280.png) | [390](rerun8-20261025/chosen-modes-390.png) |
+| Saved audience | [1280](rerun8-20261025/saved-audience-1280.png) | [390](rerun8-20261025/saved-audience-390.png) |
+| Exact zero costs | [1280](rerun8-20261025/review-1280.png) | [390](rerun8-20261025/review-390.png) |
+| Published integration | [1280](rerun8-20261025/published-1280.png) | [390](rerun8-20261025/published-390.png) |
+| Read reply | [1280](rerun8-20261025/read-chat-1280.png) | [390](rerun8-20261025/read-chat-390.png) |
+| Read reply after reload | [1280](rerun8-20261025/read-chat-reloaded-1280.png) | [390](rerun8-20261025/read-chat-reloaded-390.png) |
+| Complete waiting card | [1280](rerun8-20261025/write-waiting-1280.png) | [390](rerun8-20261025/write-waiting-390.png) |
+| Waiting card after reload | [1280](rerun8-20261025/write-waiting-reloaded-1280.png) | [390](rerun8-20261025/write-waiting-reloaded-390.png) |
+| Approved write reply | [1280](rerun8-20261025/write-approved-1280.png) | [390](rerun8-20261025/write-approved-390.png) |
+| Write reply after reload | [1280](rerun8-20261025/write-approved-reloaded-1280.png) | [390](rerun8-20261025/write-approved-reloaded-390.png) |
+| Completed approval in view | [1280](rerun8-20261025/approved-scrolled-1280.png) | [390](rerun8-20261025/approved-scrolled-390.png) |
+| Drawer showing the tool replied | [1280](rerun8-20261025/approval-details-1280.png) | [390](rerun8-20261025/approval-details-390.png) |
+| Spending | [1280](rerun8-20261025/spending-1280.png) | [390](rerun8-20261025/spending-390.png) |
+| Change history | [1280](rerun8-20261025/change-history-1280.png) | [390](rerun8-20261025/change-history-390.png) |
+| Change history for the write | [1280](rerun8-20261025/change-history-write-1280.png) | [390](rerun8-20261025/change-history-write-390.png) |
+| Action history | [1280](rerun8-20261025/action-history-1280.png) | [390](rerun8-20261025/action-history-390.png) |
+| Action history for the write | [1280](rerun8-20261025/action-history-write-1280.png) | [390](rerun8-20261025/action-history-write-390.png) |
+
+### Eighth-run checks, cleanup and limits
+
+All source checks ran under `nice -n 10` and passed:
+
+| Check | Result |
+| --- | --- |
+| Full lint, including documentation, links and licences | PASS |
+| Workspace, package and dev-stack typecheck | PASS |
+| Event catalogue | PASS |
+| Knip | PASS |
+| Changelog | PASS |
+| Related helper tests, including durable collection | PASS twice, 61 tests each |
+| Real Codex read integration | PASS twice, 2 tests each |
+| Security rules | PASS, 438 tests |
+| Full root suite | NOT RUN, excluded by the build prompt |
+
+[Recorded exit codes](rerun8-20261025/check-exits.txt) and individual logs retain
+the results. A throwaway PostgreSQL database was ready before tests ran and was
+supplied through `PG_TEST_URL`. It was removed with its volume afterwards.
+No product or collector code, protected test or `CHANGELOG.md` change was made.
+[The run record](rerun8-20261025/run.json) records checks and evidence hashes.
+
+[Cleanup](rerun8-20261025/cleanup.json) is **PASS**. The owned launcher exited 0.
+Slot 1 was released; its directory, containers and namespaces are absent. The
+rehearsal models image was removed. The owner stack was untouched.
+
+Native consent 12b remains excluded. Public deployment, twice-fresh qualification,
+long approval waits, expiry, approval reconnect/Pod-loss checks and the full refusal
+matrix remain **NOT RUN**. The separate owner's personal sign-in needs the owner.
+This run does not complete #45, #46 or #63. Paid calls: **0**.

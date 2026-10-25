@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "slot": 1,
+  "launcherExited": 0,
+  "directoryRemoved": true,
+  "composeContainersRemoved": true,
+  "namespacesRemoved": true,
+  "testModelsImageRemoved": true,
+  "ownerStackTouched": false,
+  "testDatabase": "PASS: ready before checks, supplied through PG_TEST_URL, removed with volume"
+}

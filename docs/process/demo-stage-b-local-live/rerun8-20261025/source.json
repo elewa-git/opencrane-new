@@ -1,0 +1,9 @@
+{
+  "liveSource": "f801d5b6b71ac37adea5e072d66c2baaa7cd7337",
+  "base": "d674ca2e55394a45afd9e661886e62181df52485",
+  "rebase": "PASS; completed and fetched main is an ancestor",
+  "providerFix": "d674ca2e55394a45afd9e661886e62181df52485",
+  "approvalFix": "9aa2a7d72",
+  "paidCalls": 0,
+  "slot": "1"
+}

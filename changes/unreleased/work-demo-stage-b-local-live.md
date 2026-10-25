@@ -15,3 +15,7 @@
 
 - Record a fresh-start failure where computer readiness conflicts with provider
   setup. Keep the original events and mark the unstarted tool journey explicitly.
+
+- Record a fresh local tools run with complete original approval proof, one approved
+  write and checked desktop and phone captures. Keep the owner's personal sign-in
+  explicitly untested.

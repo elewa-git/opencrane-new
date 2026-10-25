@@ -1,0 +1,26 @@
+{
+  "source": "f801d5b6b71ac37adea5e072d66c2baaa7cd7337",
+  "rebasedOnto": "d674ca2e55394a45afd9e661886e62181df52485",
+  "slot": "1",
+  "computerImages": [
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    }
+  ],
+  "versions": {
+    "codex": {
+      "exit": 0,
+      "output": "codex-cli 0.159.2"
+    },
+    "gateway": {
+      "version": "1.5.0",
+      "git_revision": "fe6732474a96a0363dfb9822859af4e9bab360fa",
+      "rust_version": "1.98.0",
+      "build_profile": "release",
+      "build_target": "x86_64-unknown-linux-musl"
+    }
+  },
+  "testModelsImage": "sha256:d663d768e495cc487113512fb54ff583a8fbf1e1a3c03ce33852445423486855"
+}

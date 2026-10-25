@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "freshStartExit": 0,
+  "budgetChecks": "PASS at 1280 and 390",
+  "auditChecks": "PASS at 1280 and 390",
+  "headroomSaveAndRestoration": "PASS",
+  "replays": [
+    "members",
+    "mcp-catalogue"
+  ],
+  "source": "f801d5b6b71ac37adea5e072d66c2baaa7cd7337",
+  "paidCalls": 0
+}

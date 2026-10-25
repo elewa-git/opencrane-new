@@ -170,12 +170,13 @@ nice -n 10 node --experimental-strip-types --test infra/dev-stack/stage-b-collec
 
 Results and remaining conditions are in
 [the local live receipt](../../docs/process/demo-stage-b-local-live/receipt.md).
-The sixth run passed the fresh baseline and tool journey but lost its initial
-readbacks when collection stopped. The next fresh attempt stopped earlier: unrelated
-computer readiness conflicted with provider setup's drain command. Its website and
-tool collector never started. The receipt retains both attempts, the original
-startup records and the untested personal owner login. Complete live approval proof
-remains outstanding.
+The latest fresh run passed the baseline, publication, read, requester approval,
+exactly one write, reload, drawer and spending/history checks. The tracked collector
+saved the original demo readback bodies and events and exited normally. The unchanged
+`checkStageBApproval` accepted the complete proof during collection and from disk.
+All 46 public captures were inspected. The separate owner's personal browser login
+remains NOT RUN and needs the owner. Earlier failed and incomplete runs remain in
+the receipt. No product or collector code changed during this rerun.
 Native consent, public deployment and the later repeated or long-wait journeys
 remain excluded from this launch.
 
