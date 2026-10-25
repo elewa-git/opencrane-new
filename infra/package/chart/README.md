@@ -7,6 +7,7 @@ saved data on a spare test stack. It is part of the work towards a customer inst
 ## What it is responsible for
 
 - Describes the package that Helm installs into Kubernetes.
+- Can describe a PostgreSQL primary and standby with separate storage and nodes.
 - Lists the required program images and names of private settings.
 - Keeps public network access switched off in the default settings.
 - Groups the templates that start apps, services, workers and assistant computers.
@@ -28,7 +29,7 @@ combines those settings with the templates.
 
 ```mermaid
 flowchart LR
-  package["Local installation tools"] --> chart["chart<br/>installation description"]
+  package["Local installation tools"] --> chart["chart<br/>installation and optional database standby"]
   package --> prepare["Preparation and checks"]
   chart --> templates["templates<br/>programs and settings"]
 ```
@@ -36,4 +37,6 @@ flowchart LR
 ## Not done here
 
 Private credentials are prepared outside this folder. The chart refers to them by
-name. File storage and virus scanning are outside this installation package.
+name. The optional database standby needs separately prepared credentials and a
+CloudNativePG controller. It has been checked by rendering the chart, which does
+not prove a running standby. File storage and virus scanning are outside this package.
