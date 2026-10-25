@@ -133,7 +133,8 @@ async function checkRevisions(events: StoredEvent[], options: Options, bounds: B
     const data = memoryValueEventSchema.parse(stored.event).data;
     candidate.checkIdentity(identity, data);
     if (!destroyed) {
-      surviving.push({ identity, data });
+      const value = { identity, data };
+      surviving.push(value);
     }
     const reference = JSON.stringify([identity.scopeId, identity.memoryId]);
     const previous = latest.get(reference);

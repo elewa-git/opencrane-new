@@ -244,55 +244,55 @@ async function historicalEvidence(fault: string, settings: NodeJS.ProcessEnv) {
 }
 
 const matchingDamage = ['empty', 'missing', 'wrong-key'] as const;
-it.each(matchingDamage)('refuses matching %s surviving custody in both folders',
-  async function damagedSurvivor(fault) {
-    const damagedSource = `${directory}/survivor-${fault}`;
-    await cp(sourceDirectory, damagedSource, { recursive: true });
-    const path = `${damagedSource}/${references.get('neighbour-1')!}`;
-    if (fault === 'missing') {
-      await rm(path);
-    } else if (fault === 'empty') {
-      await writeFile(path, Buffer.alloc(0));
-    } else {
-      await writeFile(path, Buffer.alloc(32, 7));
-    }
-    await resetCandidate(damagedSource);
-    const settings = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: damagedSource, EXPECT_REFUSAL: '1' };
-    await expect(run(settings)).rejects.toMatchObject({
-      stdout: 'effects:0\n', stderr: refused,
-    });
-    const tables = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
-    expect(tables.rows).toEqual([]);
+async function damagedSurvivor(fault: typeof matchingDamage[number]) {
+  const damagedSource = `${directory}/survivor-${fault}`;
+  await cp(sourceDirectory, damagedSource, { recursive: true });
+  const path = `${damagedSource}/${references.get('neighbour-1')!}`;
+  if (fault === 'missing') {
+    await rm(path);
+  } else if (fault === 'empty') {
+    await writeFile(path, Buffer.alloc(0));
+  } else {
+    await writeFile(path, Buffer.alloc(32, 7));
+  }
+  await resetCandidate(damagedSource);
+  const settings = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: damagedSource, EXPECT_REFUSAL: '1' };
+  await expect(run(settings)).rejects.toMatchObject({
+    stdout: 'effects:0\n', stderr: refused,
   });
+  const tables = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
+  expect(tables.rows).toEqual([]);
+}
+it.each(matchingDamage)('refuses matching %s surviving custody in both folders', damagedSurvivor);
 
 const lateRefusals = ['root-1', 'root-2', 'child-3', 'key-identity', 'source-history', 'target-history',
   'source-inventory', 'candidate-inventory'] as const;
-it.each(lateRefusals)('refuses %s before decrypting an earlier surviving fact',
-  async function refuseBeforeDecryption(fault) {
-    const changedSource = `${directory}/late-${fault}`;
-    await cp(sourceDirectory, changedSource, { recursive: true });
-    const settings: NodeJS.ProcessEnv = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: changedSource,
-      EXPECT_REFUSAL: '1', EXPECT_NO_DECRYPT: '1' };
-    if (fault === 'key-identity') {
-      settings['CHANGE_IDENTITY'] = '1';
-    } else if (fault === 'source-history') {
-      settings['CHANGE_HISTORY'] = 'source';
-    } else if (fault === 'target-history') {
-      settings['CHANGE_HISTORY'] = 'target';
-    } else if (fault === 'source-inventory') {
-      settings['CHANGE_INVENTORY'] = changedSource;
-    } else if (fault === 'candidate-inventory') {
-      settings['CHANGE_INVENTORY'] = candidate;
-    } else {
-      await rm(`${changedSource}/${references.get(fault)!}`);
-    }
-    await resetCandidate(changedSource);
-    await expect(run(settings)).rejects.toMatchObject({
-      stdout: 'effects:0\n', stderr: refused,
-    });
-    const tables = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
-    expect(tables.rows).toEqual([]);
+async function refuseBeforeDecryption(fault: typeof lateRefusals[number]) {
+  const changedSource = `${directory}/late-${fault}`;
+  await cp(sourceDirectory, changedSource, { recursive: true });
+  const settings: NodeJS.ProcessEnv = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: changedSource,
+    EXPECT_REFUSAL: '1', EXPECT_NO_DECRYPT: '1' };
+  if (fault === 'key-identity') {
+    settings['CHANGE_IDENTITY'] = '1';
+  } else if (fault === 'source-history') {
+    settings['CHANGE_HISTORY'] = 'source';
+  } else if (fault === 'target-history') {
+    settings['CHANGE_HISTORY'] = 'target';
+  } else if (fault === 'source-inventory') {
+    settings['CHANGE_INVENTORY'] = changedSource;
+  } else if (fault === 'candidate-inventory') {
+    settings['CHANGE_INVENTORY'] = candidate;
+  } else {
+    await rm(`${changedSource}/${references.get(fault)!}`);
+  }
+  await resetCandidate(changedSource);
+  await expect(run(settings)).rejects.toMatchObject({
+    stdout: 'effects:0\n', stderr: refused,
   });
+  const tables = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
+  expect(tables.rows).toEqual([]);
+}
+it.each(lateRefusals)('refuses %s before decrypting an earlier surviving fact', refuseBeforeDecryption);
 
 async function snapshot() {
   const facts = await storage.db.query('SELECT * FROM memory_facts ORDER BY scope_id, memory_id');
