@@ -1,0 +1,19 @@
+Local checks, 25 October 2026
+Source: a0c33c81aa7e2f2474518ae3c6eec6553266a66f
+Failing-first source: 182dbfb80
+
+PASS npm ci and the two shared tool links.
+PASS failing-first baseline: 30 tests, 4 passed, 26 failed as expected.
+Initial combined run: 128 tests, 127 passed, 1 failed on fixture import resolution.
+The fixture import was corrected. Its final tests are included below.
+PASS package run 1 after correction: 93 tests, 93 passed, 0 failed, 0 skipped.
+PASS package run 2 after correction: 93 tests, 93 passed, 0 failed, 0 skipped.
+PASS ownership tests: 35 passed, 0 failed.
+PASS security-rules.test.ts: 438 passed.
+PASS typecheck: all workspaces plus package and development-stack scripts.
+PASS check:events: 154 event types agree.
+PASS lint: code (25 existing warnings, no errors), dependencies, Knip,
+Markdown, README rules, local links, fixtures, licences and changelog.
+PASS standalone path and the unchanged shipped CNPG image refusal.
+NOT RUN live standby, promotion, backup/WAL, restore and storage denial.
+NOT RUN full root suite, development stacks and model calls, as instructed.
