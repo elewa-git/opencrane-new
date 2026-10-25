@@ -154,40 +154,72 @@ async function peerRoutes(peer: Peer) {
   return result.routes as unknown[];
 }
 
-async function peerNames(peer: Peer) {
-  const routes = await peerRoutes(peer);
-  const names = new Set<string>();
-  for (const route of routes) {
-    if (!route || typeof route !== 'object' || !('remote_name' in route) ||
-      typeof route.remote_name !== 'string') {
-      throw new Error('Missing remote peer name');
-    }
-    names.add(route.remote_name);
+function routeDescription(route: unknown) {
+  if (!route || typeof route !== 'object' || !('remote_name' in route) ||
+    typeof route.remote_name !== 'string') {
+    throw new Error('Missing remote peer name');
   }
-  return [...names].sort();
+  let account = 'pooled';
+  if ('account' in route) {
+    expect(typeof route.account).toBe('string');
+    account = String(route.account);
+  }
+  return `${route.remote_name}/${account}`;
+}
+
+async function completeRoutes(fixture: Awaited<ReturnType<typeof clusterFixture>>, peer: Peer) {
+  const expected: string[] = [];
+  for (const candidate of fixture.peers) {
+    if (candidate !== peer) {
+      // Count the three pooled connections and the separate system-account connection.
+      const pooledRoute = `${candidate.name}/pooled`;
+      expected.push(pooledRoute, pooledRoute, pooledRoute);
+      expected.push(`${candidate.name}/$SYS`);
+    }
+  }
+  const routes = await peerRoutes(peer);
+  const actual = routes.map(routeDescription);
+  expect(actual.sort()).toEqual(expected.sort());
+}
+
+async function metadataReady(fixture: Awaited<ReturnType<typeof clusterFixture>>, peer: Peer) {
+  const response = await fetch(`http://127.0.0.1:${peer.monitor}/jsz`,
+    { signal: AbortSignal.timeout(1000) });
+  const info: unknown = await response.json();
+  const leader: unknown = expect.stringMatching(/^peer-[123]$/);
+  expect(info).toMatchObject({ meta_cluster: { cluster_size: 3, leader } });
+  if (!info || typeof info !== 'object' || !('meta_cluster' in info)) {
+    throw new Error('Missing metadata cluster');
+  }
+  const metadata = info.meta_cluster;
+  if (!metadata || typeof metadata !== 'object' || !('leader' in metadata)) {
+    throw new Error('Missing metadata leader');
+  }
+  if (metadata.leader === peer.name) {
+    const replicas: unknown[] = [];
+    for (const candidate of fixture.peers) {
+      if (candidate !== peer) {
+        replicas.push({ name: candidate.name, current: true });
+      }
+    }
+    // Check follower progress on the leader; followers do not track each other.
+    expect(metadata).toMatchObject({ replicas });
+  }
 }
 
 async function connectedPeers(fixture: Awaited<ReturnType<typeof clusterFixture>>) {
-  for (const peer of fixture.peers) {
-    const expected: string[] = [];
-    for (const candidate of fixture.peers) {
-      if (candidate !== peer) {
-        expected.push(candidate.name);
-      }
+  async function allRoutesConnected() {
+    for (const peer of fixture.peers) {
+      await completeRoutes(fixture, peer);
     }
-    async function namesMatch() {
-      expect(await peerNames(peer)).toEqual(expected);
-    }
-    await vi.waitFor(namesMatch, { timeout: 5000 });
-    async function metadataReady() {
-      const response = await fetch(`http://127.0.0.1:${peer.monitor}/jsz`,
-        { signal: AbortSignal.timeout(1000) });
-      const info: unknown = await response.json();
-      const leader: unknown = expect.stringMatching(/^peer-[123]$/);
-      expect(info).toMatchObject({ meta_cluster: { cluster_size: 3, leader } });
-    }
-    await vi.waitFor(metadataReady, { timeout: 10_000 });
   }
+  await vi.waitFor(allRoutesConnected, { timeout: 5000 });
+  async function allMetadataReady() {
+    for (const peer of fixture.peers) {
+      await metadataReady(fixture, peer);
+    }
+  }
+  await vi.waitFor(allMetadataReady, { timeout: 10_000 });
 }
 
 // Test authentication before exchanging any events with the route listener.
@@ -241,6 +273,10 @@ let cluster: Awaited<ReturnType<typeof clusterFixture>>;
 async function prepareCluster() {
   cluster = await clusterFixture();
   await connectedPeers(cluster);
+  const connection = await cluster.client(cluster.peers[0]!);
+  const store = await createEventStore(connection);
+  await store.ensureStream({ replicas: 3 });
+  await replicasAreCurrent(connection);
 }
 async function closeCluster() {
   await cluster?.close();
@@ -248,41 +284,14 @@ async function closeCluster() {
 beforeAll(prepareCluster);
 afterAll(closeCluster);
 
-function routeDescription(route: unknown) {
-  if (!route || typeof route !== 'object' || !('remote_name' in route) ||
-    typeof route.remote_name !== 'string') {
-    throw new Error('Missing remote peer name');
-  }
-  let account = 'pooled';
-  if ('account' in route) {
-    expect(typeof route.account).toBe('string');
-    account = String(route.account);
-  }
-  return `${route.remote_name}/${account}`;
-}
-
-async function completeRoutes(fixture: Awaited<ReturnType<typeof clusterFixture>>, peer: Peer) {
-  const expected: string[] = [];
-  for (const candidate of fixture.peers) {
-    if (candidate !== peer) {
-      // Count the three pooled connections and the separate system-account connection.
-      const pooledRoute = `${candidate.name}/pooled`;
-      expected.push(pooledRoute, pooledRoute, pooledRoute);
-      expected.push(`${candidate.name}/$SYS`);
-    }
-  }
-  const routes = await peerRoutes(peer);
-  const actual = routes.map(routeDescription);
-  expect(actual.sort()).toEqual(expected.sort());
-}
-
-async function startsWithCompleteRoutes() {
+async function startsReady() {
   for (const peer of cluster.peers) {
     await completeRoutes(cluster, peer);
   }
+  const connection = await cluster.client(cluster.peers[0]!);
+  await currentReplicas(connection);
 }
-it('connects every pooled and system route before declaring the cluster ready',
-  startsWithCompleteRoutes);
+it('connects every route and keeps three current copies before any route probe', startsReady);
 
 async function refusesPlaintext() {
   expect(await routeAttempt(cluster, undefined, true)).toMatch(/closed|ECONNRESET/);
@@ -391,16 +400,21 @@ async function refusesMissingTrust() {
 }
 it('fails startup when route trust is missing', refusesMissingTrust);
 
-async function replicasAreCurrent(connection: NatsConnection) {
+async function currentReplicas(connection: NatsConnection) {
   const manager = await jetstreamManager(connection);
+  const info = await manager.streams.info('EVENTS');
+  expect(info.config.num_replicas).toBe(3);
+  expect(info.cluster?.leader).toMatch(/^peer-[123]$/);
+  expect(info.cluster?.replicas).toHaveLength(2);
+  for (const replica of info.cluster!.replicas!) {
+    expect(replica.current).toBe(true);
+    expect(replica.offline).not.toBe(true);
+  }
+}
+
+async function replicasAreCurrent(connection: NatsConnection) {
   async function replication() {
-    const info = await manager.streams.info('EVENTS');
-    expect(info.config.num_replicas).toBe(3);
-    expect(info.cluster?.leader).toMatch(/^peer-[123]$/);
-    expect(info.cluster?.replicas).toHaveLength(2);
-    for (const replica of info.cluster!.replicas!) {
-      expect(replica.current).toBe(true);
-    }
+    await currentReplicas(connection);
   }
   await vi.waitFor(replication, { timeout: 5000 });
 }
@@ -408,7 +422,6 @@ async function replicasAreCurrent(connection: NatsConnection) {
 async function appendsAndReplays() {
   const connection = await cluster.client(cluster.peers[0]!);
   const store = await createEventStore(connection);
-  await store.ensureStream({ replicas: 3 });
   await replicasAreCurrent(connection);
   const joined = event('cluster-joined');
   expect(await store.append({ event: joined, expectedSequence: 0 }))
@@ -441,7 +454,7 @@ it('keeps three current copies, refuses a stale append and rebuilds a projection
 async function refusesPublish(identity: string) {
   const command = await cluster.client(cluster.peers[0]!);
   const store = await createEventStore(command);
-  await store.ensureStream({ replicas: 3 });
+  await replicasAreCurrent(command);
   const connection = await cluster.client(cluster.peers[1]!, identity);
   const statuses = connection.status();
   async function permissionError() {

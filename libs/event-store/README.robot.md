@@ -286,7 +286,14 @@ See the [event catalogue](../../docs/architecture/events.md) and
 configuration and a fresh silo installation remain unqualified.
 
 `test/cluster-routes.test.ts` uses the production cluster configuration with three
-disposable pinned servers. It checks route authentication, a leader with two current
+disposable pinned servers. Setup waits for all three pooled routes and the dedicated
+`$SYS` route between each pair of servers. Seeing both peer names is not enough:
+the system route carries cluster information and the pooled routes carry requests.
+It checks metadata follower progress on the leader, creates `EVENTS` once without
+retrying, then waits for its leader and two current replicas before any route probe.
+The first test checks these conditions without polling. Setup retains the existing
+five-second route and stream-copy limits and ten-second metadata limit.
+It checks route authentication, a leader with two current
 replicas, conditional append, stale-position refusal and PostgreSQL member replay
 through the projection identity. It also checks publish refusals and rejects R3
 verification of an existing R1 stream without changing it. It requires
