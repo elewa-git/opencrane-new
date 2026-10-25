@@ -21,7 +21,7 @@ flowchart LR
   server["apps/server<br/>file uploads"] -->|sends file bytes| clamav
   clamav -->|candidate updater checks| updates["ClamAV update service"]
   packaging["packaging job"] -->|checks image databases| clamav
-  launcher["separate launcher"] -->|starts verified databases| clamav
+  launcher["separate launcher"] -->|starts and scans with verified databases| clamav
 ```
 
 ## What it is responsible for
@@ -33,6 +33,7 @@ flowchart LR
 - Prepares updated virus definitions separately for review, with hashes and verified dates.
 - Checks that a packaged image contains exactly the reviewed virus definitions.
 - Offers a separate launcher that keeps those files read-only and stops at database expiry.
+- Scans bounded file bytes through that launcher and returns the loaded database facts.
 - Keeps the original scanner code from the earlier version of OpenCrane, with its licence, for reference.
 
 ## Processes it handles
@@ -47,6 +48,9 @@ flowchart LR
    definitions without network access and records the image and manifest hashes.
 5. **The separate launcher starts a scanner.** It checks the approved files again,
    starts only that set, and stops it 24 hours after its verified update check.
+6. **A trusted process requests a scan.** The launcher copies the bounded bytes, checks
+   their hash and size, and sends them to its own daemon. It checks database age
+   and the running container before and after the scan. Results last at most two minutes.
 
 ## How to run or test it
 
@@ -66,10 +70,16 @@ an image or refresh a running scanner. Commands and limits are in
 [README.robot.md](README.robot.md#packaging-evidence).
 
 The separate launcher keeps ClamAV inside its own container, with no host port
-or database mount. It does not run FreshClam or offer a reload command. Its
+or database mount. ClamAV uses a bounded, memory-only temporary directory for
+scan work. It does not run FreshClam or offer a reload command. Its
 readiness check refuses expired databases; restarting never makes them newer.
 Startup shares one time limit across all Docker calls, so a slow Docker service
 cannot give each step a fresh allowance. Cleanup has its own limit.
+Each scan shares one minute across its checks and byte transfer. Failed or cancelled
+scans retire the handle and stop its containers, including other pending scans.
+This confirms that a remote scan has stopped before the ownership record is removed.
+Failed removal keeps that record and blocks reuse. No file bytes or raw scanner
+replies are saved or returned.
 This launcher is not yet connected to uploads or the planned HTTPS service.
 
 If updater cleanup fails, the directory stays locked to prevent another updater

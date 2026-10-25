@@ -1,0 +1,1 @@
+The separate scanner launcher can now scan bounded file bytes through its verified daemon. It checks the byte hash, running container and database age, limits results to two minutes, and stops safely on failed or cancelled requests. Upload and image consumers remain unchanged.

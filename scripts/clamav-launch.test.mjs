@@ -66,6 +66,9 @@ function docker(command, args, options) {
       throw new Error('private-canary Docker timeout');
     }
   }
+  if (args[0] === 'create') {
+    return containerId;
+  }
   if (args[0] === 'image') {
     return imageId;
   }
@@ -169,7 +172,10 @@ async function cleanup() {
     socket.destroy();
   }
   if (daemon) {
-    await new Promise(function close(resolve) { daemon.close(resolve); });
+    function closeDaemon(resolve) {
+      daemon.close(resolve);
+    }
+    await new Promise(closeDaemon);
     daemon = undefined;
   }
   vi.useRealTimers();
@@ -222,6 +228,8 @@ async function startsImmutableSet() {
   const create = commands.find(creates);
   expect(create).toEqual(expect.arrayContaining(['--network', 'none', '--read-only',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'clamav']));
+  expect(create).toEqual(expect.arrayContaining(
+    ['--tmpfs', '/tmp:rw,noexec,nosuid,size=64m,mode=1777']));
   expect(create).not.toContain('--publish');
   expect(create).not.toContain('--mount');
   const script = create.at(-1);
@@ -284,7 +292,7 @@ async function stopsOnTerm() {
   await session.stop();
   const removals = commands.filter(removes);
   for (const args of removals) {
-    expect(args).toEqual(['rm', '-f', '-v', expect.stringMatching(/^clamav-/)]);
+    expect(args).toEqual(['rm', '-f', '-v', expect.stringMatching(/^(clamav-|c{64}$)/)]);
   }
 }
 test('TERM removes only owned containers', stopsOnTerm);
@@ -385,18 +393,33 @@ function scanProcess(command, args, options) {
   const realSpawn = realChildProcess.spawn;
   let script;
   if (args[0] === 'inspect') {
-    const state = scanMode === 'replaced' ? runningState.replace(containerId, 'd'.repeat(64))
-      : runningState;
+    expect(args.at(-1)).toBe(containerId);
+    let state = runningState;
+    if (scanMode === 'replaced') {
+      state = runningState.replace(containerId, 'd'.repeat(64));
+    }
+    if (scanMode === 'restarted') {
+      state = runningState.replace('12:00:00', '12:00:01');
+    }
+    if (scanMode === 'daemon-stopped') {
+      state = runningState.replace('true', 'false');
+    }
     script = `process.stdout.write(${JSON.stringify(state)})`;
     if (scanMode === 'slow-inspect') {
       now += 40_000;
     }
+    if (scanMode === 'timeout-after-inspection') {
+      now += 45000;
+    }
   } else {
-    expect(args).toEqual(['exec', '-i', containerId, 'nc', '-N', '127.0.0.1', '3310']);
+    expect(args).toEqual(['exec', '-i', containerId, 'nc', '127.0.0.1', '3310']);
     const port = daemon.address().port;
     script = `const socket = require('node:net').connect(${port}, '127.0.0.1');
       process.stdin.pipe(socket); socket.pipe(process.stdout);
       socket.on('error', () => process.exit(1));`;
+  }
+  if (scanMode === 'tool-error') {
+    script = "process.stderr.write('private-canary'); process.exit(1);";
   }
   const child = realSpawn(process.execPath, ['-e', script], options);
   children.push(child);
@@ -425,7 +448,8 @@ function acceptStream(socket) {
         expect(offset).toBe(framed.length);
         const bytes = Buffer.concat(parts);
         supplied.push(bytes);
-        if (scanMode === 'hang') {
+        daemon.emit('supplied');
+        if (scanMode === 'hang' || scanMode === 'timeout-after-inspection') {
           return;
         }
         if (scanMode === 'expiry') {
@@ -486,9 +510,15 @@ test.each(['clean', 'infected'])('maps %s with exact bytes and loaded facts', ma
 async function refusesBytes(change) {
   await scannerForRequests();
   const input = request();
-  if (change === 'changed') input.bytes[0] ^= 1;
-  if (change === 'truncated') input.bytes = input.bytes.subarray(1);
-  if (change === 'oversized') input.bytes = Buffer.alloc(20 * 1024 * 1024 + 1);
+  if (change === 'changed') {
+    input.bytes[0] ^= 1;
+  }
+  if (change === 'truncated') {
+    input.bytes = input.bytes.subarray(1);
+  }
+  if (change === 'oversized') {
+    input.bytes = Buffer.alloc(20 * 1024 * 1024 + 1);
+  }
   await expect(session.scan(input)).rejects.toEqual(new Error('Scanner scan refused'));
   expect(supplied).toHaveLength(0);
 }
@@ -506,12 +536,19 @@ test.each(['stream: OK', 'stream: OK\0private-canary', 'private-canary',
 async function refusesChangedDaemon(reason) {
   await scannerForRequests();
   scanMode = reason;
-  if (reason === 'stopped') await session.stop();
-  if (reason === 'future') now = Date.parse(manifest.databaseUpdatedAt) - 1;
-  if (reason === 'stale') now = Date.parse(manifest.databaseUpdatedAt) + 86400000;
+  if (reason === 'stopped') {
+    await session.stop();
+  }
+  if (reason === 'future') {
+    now = Date.parse(manifest.databaseUpdatedAt) - 1;
+  }
+  if (reason === 'stale') {
+    now = Date.parse(manifest.databaseUpdatedAt) + 86400000;
+  }
   await expect(session.scan(request())).rejects.toEqual(new Error('Scanner scan refused'));
 }
-test.each(['replaced', 'replace-after', 'stopped', 'future', 'stale', 'expiry', 'slow-inspect'])(
+test.each(['replaced', 'replace-after', 'restarted', 'daemon-stopped', 'stopped',
+  'future', 'stale', 'expiry', 'slow-inspect', 'tool-error'])(
   'refuses %s daemon or dates with one deadline', refusesChangedDaemon);
 
 async function isolatesBuffers() {
@@ -543,17 +580,30 @@ test('caps result expiry at the unchanged loaded database expiry', limitsExpiry)
 async function closesInterruptedScan(reason) {
   await scannerForRequests();
   scanMode = 'hang';
+  if (reason === 'timeout-after-inspection') {
+    scanMode = reason;
+  }
   const controller = new AbortController();
   const input = { ...request(), signal: controller.signal };
+  const received = once(daemon, 'supplied');
   const pending = session.scan(input);
   const rejected = expect(pending).rejects.toEqual(new Error('Scanner scan refused'));
-  while (supplied.length === 0) {
-    await new Promise(setImmediate);
+  await received;
+  if (reason === 'timeout-after-inspection') {
+    await vi.advanceTimersByTimeAsync(15000);
   }
-  if (reason === 'timeout') await vi.advanceTimersByTimeAsync(60000);
-  if (reason === 'cancel' || reason === 'cleanup') controller.abort();
-  if (reason === 'cleanup') mode = 'cleanup';
-  if (reason === 'TERM') process.emit('SIGTERM');
+  if (reason === 'timeout') {
+    await vi.advanceTimersByTimeAsync(60000);
+  }
+  if (reason === 'cleanup') {
+    mode = 'cleanup';
+  }
+  if (reason === 'cancel' || reason === 'cleanup') {
+    controller.abort();
+  }
+  if (reason === 'TERM') {
+    process.emit('SIGTERM');
+  }
   await rejected;
   await expect(session.scan(request())).rejects.toEqual(new Error('Scanner scan refused'));
   if (reason === 'cleanup') {
@@ -564,5 +614,5 @@ async function closesInterruptedScan(reason) {
     expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
   }
 }
-test.each(['timeout', 'cancel', 'TERM', 'cleanup'])(
+test.each(['timeout', 'timeout-after-inspection', 'cancel', 'TERM', 'cleanup'])(
   '%s closes the request and prevents reuse after uncertain transport cleanup', closesInterruptedScan);
