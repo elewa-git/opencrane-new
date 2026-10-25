@@ -38,3 +38,32 @@ PASS: final ESLint on corrected and rebased source files (zero errors).
 PASS: dependency rules, Knip, documentation, READMEs, links, fixtures and licences.
 PASS: changelog lint. No dependencies were added.
 NOT RUN: full root suite and fresh live use.
+
+Permission check correction, 25 October 2026.
+Source: 47390aa5084aa247720668c99e1d9547d385d6f1.
+Base: 35e7e10e97854a706f69cebf22eee4e2c049e149; rebase finished.
+Test-first: 8c5464604; five regressions failed before the implementation.
+All checks used nice -n 10. Tests used one worker and the supplied PG_TEST_URL.
+
+Final suite command:
+npx vitest run apps/server/test/connection-profile-revoke.test.ts libs/models/test/bearer-connections.test.ts apps/server/test/connection-profile-read.test.ts apps/server/test/connection-change-read.test.ts --maxWorkers=1
+
+p3-8-pr7f-fix-final-5.log
+Test Files  4 passed (4)
+Tests  127 passed (127)
+Duration  85.79s
+
+p3-8-pr7f-fix-final-6.log
+Test Files  4 passed (4)
+Tests  127 passed (127)
+Duration  73.78s
+
+PASS: 438 security-rule tests in the first broader run; protected files unchanged.
+PASS: full workspace typecheck and final server/models typechecks.
+FAIL (corrected): initial full ESLint scan found two unbound fixture methods.
+PASS: final changed-file ESLint checks; 25 existing full-scan warnings remain.
+FAIL (corrected): a fixture imported the private authz client.
+PASS: final dependency checks use the existing public OpenFGA SDK.
+PASS: Knip, docs, READMEs, links, fixtures, package licences and changelog lint.
+PASS: event catalogue; 154 event types agree.
+NOT RUN: full root suite, mutation tests, fresh-install credential use and HTTP-to-custody deletion.
