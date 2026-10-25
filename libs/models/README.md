@@ -44,7 +44,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, child allowances and payer limits; rechecks access on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
+  models -->|checks spending choices, child allowances and payer limits; rechecks state and access when unrelated activity interrupts startup saves; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -303,6 +303,9 @@ Retrying an unchanged model call can recover its original unsent hold and saved 
   Reads the personal paying group and switch-on state together, once per new spending event.
 - Pause new model turns with a saved drain command while running turns finish.
   An administrator can cancel the drain with another saved command.
+  Drain, switch-on and gateway receipt saves can retry when unrelated activity interrupts
+  them. Each retry checks the state it relies on again and keeps the original deadline.
+  A changed provider, spending state or gateway configuration still refuses the relevant save.
 - Choose an AI model from a fixed task table before switch-on.
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.

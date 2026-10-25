@@ -1624,10 +1624,14 @@ Logs: `/tmp/p4-22-pr4d-final-pass-{1,2}.log` and `/tmp/p4-22-pr4d-*.log`.
 NOT RUN: full root suite, fresh-install journey, paid calls and independent review.
 
 Drain writes also check `expectedGlobalSequence`, captured before reading history.
-This keeps switch-on on the budget stream from racing the drain append. Other new
-events cause a conflict and require a new status read. Draining remains on provider
-streams, so already running legacy calls can still hold and settle money. Switch-on
-on the spending stream always ends draining.
+This keeps switch-on on the budget stream from racing the drain append. A definite
+conflict retries only while the original access deadline remains valid. Each attempt
+checks the original provider position, switch-on state and caller access again.
+Unrelated activity, such as `computer.ready`, can therefore finish without refusing
+the drain. A provider change or switch-on still refuses it. Unavailable append results
+are not retried by this command. Draining remains on provider streams, so already
+running legacy calls can still hold and settle money. Switch-on on the spending
+stream always ends draining.
 
 ## Restack checks after the exact-stream correction
 
@@ -2094,7 +2098,11 @@ The personal-payer summary and both authority test limits remain unchanged.
 It captures the global position, then reads incremental provider, budget and computer
 summaries before starting the short authority check. It validates all active bindings
 outside that check. One conditional budget append uses `historyChecked` and
-`expectedGlobalSequence`. Any intervening event conflicts, including a reservation.
+`expectedGlobalSequence`. A definite conflict retries within the original access
+deadline after checking access and the original state again. Provider and budget
+changes, including reservations and settlements, still refuse switch-on. Computer
+changes that affect legacy turns also refuse it. Readiness and work reports do not.
+Only computer events after the original position are read during those checks.
 The budget summary also keeps unresolved reservation and dispatch identities.
 Computer loss, turn closure and reservation expiry do not clear them.
 Only a confirmed settlement or zero-cost release clears a hold or send; an unknown
@@ -2413,7 +2421,11 @@ After an exact live observation, `observe` saves `mcp.configuration_observed` on
 member's MCP stream. Its fixed id hashes all receipt fields, including the exact gateway
 observation. Each append requires that stream's read position and the global position
 from before the checks. This also refuses a newer preparation saved during the receipt
-append. A lost reply is recovered on the next probe without another receipt.
+append. A definite conflict retries within the original ten-second receipt deadline
+only if the member stream, gateway configuration, live process and leadership are
+still current. Every configuration read shares that deadline. Unrelated computer
+activity does not prevent the receipt. A lost reply is recovered on the next probe
+without another receipt.
 A restarted child requires delivery and a new probe. Its receipt replaces the saved
 acknowledgement for the same reviewed publication. A publication carried into another
 generation also receives a receipt for that generation. Repeated probes add no events.

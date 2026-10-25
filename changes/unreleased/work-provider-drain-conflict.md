@@ -1,0 +1,1 @@
+- Fresh startup no longer stops when unrelated computer activity interrupts provider draining, switching on managed calls or saving gateway publication receipts. Retries keep the original deadline and still refuse concurrent changes to the state each operation relies on.
