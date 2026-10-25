@@ -14,6 +14,33 @@ The rest of the journey stays on its draft branch.
 infra/dev-stack/memory-personal-browser.test.ts` checks a stalled body and a complete
 reply without starting a development stack.
 
+## Personal memory qualification
+
+Part of #94 and #95. `memory-personal-live.ts` uses an empty secondary installation,
+real SSO and the free model stub. Start with `DEV_OWNER_BOOTSTRAP=0` and `--fresh`.
+Supply the id returned by `claim.sh` as both `DEV_STACK_ID` and `MEMORY_CLAIMED_ID`.
+Set `ZITADEL_KEY_FILE` to the existing setup credential path for stack startup.
+The launcher refuses an existing observations file. Preserve earlier evidence before
+starting a separate attempt; do not combine attempts into a passing result.
+
+```sh
+nice -n 10 node --experimental-strip-types infra/dev-stack/memory-personal-live.ts
+nice -n 10 node --experimental-strip-types --test infra/dev-stack/memory-personal.test.ts
+```
+
+This first split signs in, claims the empty silo and records the first scopes reply.
+It stops on a refused or unavailable read. The separate acceptance checker requires
+original receipts, GET-only lost-reply recovery, retained correction and absence of
+forgotten text after reload, restart and replay. Its tests use synthetic evidence;
+they do not qualify live memory operations. The remaining browser write and replay
+collector belongs in the next split after the recorded first-load failure is resolved.
+Memory replay refuses `--verify`; the follow-up must compare HTTP readbacks instead.
+The checker requires unchanged event counts and zero local model requests during replay.
+No helper inspects private memory key files. Native memory remains off and NOT RUN.
+Resizing recreates the panel; the next collector must keep submitted forms at one width.
+Release the claimed slot with `down.sh --id` after inspecting the saved pictures.
+See [the qualification receipt](../../docs/process/memory-fresh-personal/receipt.md).
+
 ## First demo read turn
 
 The local reply fixture understands both direct MCP namespaces and Codex's

@@ -1,0 +1,44 @@
+[
+  {
+    "requestId": "req-a",
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "status": 503
+  },
+  {
+    "requestId": "req-b",
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "status": 200
+  },
+  {
+    "requestId": "req-d",
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "status": null
+  },
+  {
+    "requestId": "req-l",
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "status": 200
+  },
+  {
+    "requestId": "req-t",
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "status": 200
+  },
+  {
+    "requestId": "req-v",
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "status": 200
+  },
+  {
+    "requestId": "req-x",
+    "method": "GET",
+    "path": "/api/memory/scopes",
+    "status": null
+  }
+]

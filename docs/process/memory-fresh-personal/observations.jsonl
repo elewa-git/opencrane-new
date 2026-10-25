@@ -1,0 +1,4 @@
+{"name":"bootstrap","value":{"result":"PASS","empty":true,"realSso":true},"at":"2026-10-25T05:23:48.086Z"}
+{"name":"failure","value":{"result":"FAIL","stage":"personal browser journey"},"at":"2026-10-25T05:24:19.707Z"}
+{"name":"scopes","value":{"status":200,"body":{"scopes":[{"scopeId":"613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf","scopeKind":"person","ownerId":"bootstrap-owner","audience":{"kind":"person","ownerId":"bootstrap-owner"},"canRead":true,"canWrite":true,"canForget":true,"canCorrect":true}],"limits":{"textBytes":4096,"pageFacts":20,"pageBytes":16384,"queryBytes":256,"queryTerms":8,"sources":8,"dependencies":32,"commandBytes":16384}}},"at":"2026-10-25T05:28:14.944Z"}
+{"name":"model-counts","value":{"modelRequests":0},"at":"2026-10-25T05:28:16.549Z"}

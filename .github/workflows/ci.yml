@@ -148,6 +148,7 @@ jobs:
           infra/dev-stack/browser-audit.test.ts
           infra/dev-stack/memory-personal-browser.test.ts
           infra/dev-stack/stage-b-capture.test.ts
+          infra/dev-stack/memory-personal.test.ts
           infra/dev-stack/stage-b-collector.test.ts
           infra/dev-stack/stage-b-launch.test.ts infra/dev-stack/stage-b-network.test.ts
           infra/dev-stack/demo-seed.test.ts infra/dev-stack/demo-up.test.ts

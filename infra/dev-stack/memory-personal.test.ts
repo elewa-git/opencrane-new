@@ -27,6 +27,13 @@ function evidence(): MemoryEvidence {
   };
 }
 
+function refuses(proof: MemoryEvidence) {
+  function check() {
+    checkPersonalMemory(proof);
+  }
+  assert.throws(check);
+}
+
 function acceptsCompleteProof() {
   checkPersonalMemory(evidence());
 }
@@ -35,14 +42,14 @@ test('accepts complete personal HTTP evidence', acceptsCompleteProof);
 function refusesMissingSavedReceipt() {
   const proof = evidence();
   proof.receipts.shift();
-  assert.throws(() => checkPersonalMemory(proof));
+  refuses(proof);
 }
 test('refuses a missing saved receipt', refusesMissingSavedReceipt);
 
 function refusesStaleRevision() {
   const proof = evidence();
   proof.snapshots[2]!.facts[0]!.revision = 1;
-  assert.throws(() => checkPersonalMemory(proof));
+  refuses(proof);
 }
 test('refuses a stale corrected revision after replay', refusesStaleRevision);
 
@@ -51,7 +58,7 @@ function refusesForgottenText() {
     const proof = evidence();
     proof.snapshots[snapshotIndex]!.facts.push({ memoryId: 'fact', revision: 2,
       text: proof.forgottenText });
-    assert.throws(() => checkPersonalMemory(proof));
+    refuses(proof);
   }
 }
 test('refuses forgotten text after reload, restart or replay', refusesForgottenText);
@@ -59,7 +66,7 @@ test('refuses forgotten text after reload, restart or replay', refusesForgottenT
 function refusesResend() {
   const proof = evidence();
   proof.recovery.push('POST');
-  assert.throws(() => checkPersonalMemory(proof));
+  refuses(proof);
 }
 test('refuses a repeated POST during Check status', refusesResend);
 
@@ -67,14 +74,22 @@ function refusesReplayEffects() {
   for (const field of ['eventsAfter', 'callsAfter'] as const) {
     const proof = evidence();
     proof.replay[field] += 1;
-    assert.throws(() => checkPersonalMemory(proof));
+    refuses(proof);
   }
 }
 test('refuses replay event or model effects', refusesReplayEffects);
 
+function refusesUnobservedReplayCounts() {
+  const proof = evidence();
+  proof.replay.eventsBefore = NaN;
+  proof.replay.eventsAfter = NaN;
+  refuses(proof);
+}
+test('refuses unobserved replay counts', refusesUnobservedReplayCounts);
+
 function refusesChangedOriginal() {
   const proof = evidence();
   proof.originals[1] = { ...proof.originals[1]!, changeId: 'another-edit' };
-  assert.throws(() => checkPersonalMemory(proof));
+  refuses(proof);
 }
 test('refuses an unrelated original receipt', refusesChangedOriginal);
