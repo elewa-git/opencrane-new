@@ -2,6 +2,8 @@
 
 Own checks on 25 October 2026, after rebasing onto `11ed0475a`. The failing tests
 were committed as `3fb8584f1` before the implementation in `0c0b02438`.
+After the final rebase onto `e063b98f1`, the equivalent test and fix commits are
+`f076abbbd` and `cda88344d`. The retry production and test files did not change.
 The test boundary is the real HTTP gateway and the saved event log. No owner stack,
 real model or secondary development stack is used.
 

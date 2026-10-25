@@ -1,7 +1,10 @@
 # Follow-up approval races
 
 Own checks on 25 October 2026. Implementation `0c0b02438`; final test helpers
-`f4c675f81`. The later source edits only expand braces and wrap an import.
+`f4c675f81`. The later production edits only expand braces and wrap an import.
+After rebasing onto `e063b98f1`, the equivalent implementation and test commits are
+`cda88344d` and `5d05f7b92`. A later test-helper fix matches early refusals by their
+own response id; the race assertions and production behaviour are unchanged.
 The run uses real time and 60 fresh gateway/event-store fixtures, with separate
 OpenFGA stores. One OpenFGA fixture service serves the file. PostgreSQL uses the
 supplied test service at port 55432. No owner stack or real model is used.

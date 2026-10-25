@@ -6,8 +6,11 @@ Dispatch code and HTTP tests were unchanged by that rebase. The models documenta
 keeps the company opt-in contract and adds this retry behaviour.
 Fresh-install qualification: **NOT RUN**. Historical failures are retained below.
 The [follow-up diagnosis](diagnosis.md) records the failing-first reproduction and correction.
-The follow-up rebased cleanly onto `11ed0475a`; `origin/main` is an ancestor and no rebase
-state remains. Tests were committed as `3fb8584f1`, then the fix as `0c0b02438`.
+The follow-up first rebased onto `11ed0475a`, then onto `e063b98f1` after main advanced.
+The final rebase kept both company opt-in documentation and approval retry documentation.
+The retry production and test files are byte-for-byte unchanged by that final rebase.
+The base is an ancestor and the rebase finished. The test-first and fix commits are now
+`f076abbbd` and `cda88344d` (originally `3fb8584f1` and `0c0b02438`).
 The [real-clock follow-up](follow-up-races.md) passed all 60 races, including the
 saved refusal outcome and exact consent-use, budget-admission and upstream-send counts.
 
@@ -28,6 +31,53 @@ Each checks one upstream send, one successful retry and one competing refusal,
 exactly two saved approval uses and one saved budget admission. Later retries send
 nothing. Paid lost-reply holds and root recovery beyond deduplication retain their
 unchanged regressions.
+
+## Follow-up local checks
+
+These checks use the supplied PostgreSQL test service at port 55432 and disposable
+NATS, gateway and OpenFGA fixtures. The test service remains running; each fixture
+creates and removes its own databases and processes. All suites, lint and typecheck
+run under `nice -n 10`. No full root suite or live stack is started.
+
+| Check | Result |
+| --- | --- |
+| Full lint, including knip and changelog | PASS; final receipt formatting corrected separately |
+| Full typecheck | PASS before and after the final rebase |
+| Event catalogue | PASS, 154 matching types |
+| Separate knip and changelog commands | PASS |
+| Real-clock approval races | PASS, 60/60 |
+| Complete changed HTTP file | PASS twice, 23/23 each |
+| Unchanged call-retry and root-budget files | PASS, 21 and 22 cases |
+| Complete MCP dispatch file | PASS, 180 cases |
+| Complete memory dispatch file | PASS, 94 cases |
+| Both authority files | PASS, 6 cases |
+| Unchanged event security rules | PASS, 438 cases |
+| Nine-file broader batch | FAIL: 857 passed, one failed, one opt-in browser skip |
+| Isolated approval-renewal reproduction | PASS unchanged |
+| Post-rebase approval and HTTP files | FAIL: 96 passed, one failed, one opt-in browser skip |
+| Post-rebase complete changed HTTP file | PASS, 23/23 |
+| Isolated post-rebase audit refusal | PASS unchanged |
+| Fresh-install qualification | NOT RUN |
+
+The broader failure was the first call in “checks waiting approval after failed
+and renewal”, before a card was created or the renewal was attempted. It returned
+`Request refused or decision service unavailable` instead of an approval id.
+The same case then passed unchanged on its own. Its underlying cause is unproven;
+the focused pass does not clear that failed batch or establish a host-load cause.
+The [diagnosis](diagnosis.md) separately retains the earlier mixed-clock probe and
+the evidence-helper failure, with their follow-up checks.
+
+The post-rebase failure was “refuses audit approval with zero upstream effects”,
+which exceeded its existing 40-second test limit. The log does not identify which
+await stopped progressing. The approval-renewal case passed in this run. Neither
+the timeout nor the earlier initial-call refusal is attributed to host load.
+The audit-refusal case then passed unchanged on its own. Both failed batches
+remain recorded, and source validation is **PARTIAL**.
+
+The two passing changed-file runs are the HTTP file within `targeted-1.json` and
+`changed-final.json` in `/tmp/budget-approval-fix/`. The earlier `changed-2.json`
+run had 22 passes and the evidence-helper failure; it is not counted as a pass.
+The money-safety test files and `CHANGELOG.md` have no diff from main.
 
 ## Earlier local checks
 
