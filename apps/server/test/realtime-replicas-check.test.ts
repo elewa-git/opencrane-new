@@ -19,12 +19,16 @@ it('accepts distinct processes, ordered delivery with numeric gaps and safe clos
   acceptsValidEvidence);
 
 function rejectsRepeatedProcess() {
-  function check() { checkReplicas(first, { ...second, pid: first.pid }); }
+  function check() {
+    checkReplicas(first, { ...second, pid: first.pid });
+  }
   expect(check).toThrow();
 }
 it('rejects one process presented as two servers', rejectsRepeatedProcess);
 function rejectsRepeatedPort() {
-  function check() { checkReplicas(first, { ...second, port: first.port }); }
+  function check() {
+    checkReplicas(first, { ...second, port: first.port });
+  }
   expect(check).toThrow();
 }
 it('rejects two identities using one port', rejectsRepeatedPort);
@@ -35,26 +39,36 @@ const corruptDeliveries = [
   [alice, { ...bob, memberId: 'other' }],
 ];
 function rejectsBadDelivery(actual: Delivery[]) {
-  function check() { checkDelivery(actual, expected); }
+  function check() {
+    checkDelivery(actual, expected);
+  }
   expect(check).toThrow();
 }
 it.each(corruptDeliveries.map(asCase))('rejects missing, duplicate or changed delivery %#',
   rejectsBadDelivery);
-function asCase(delivery: Delivery[]): [Delivery[]] { return [delivery]; }
+function asCase(delivery: Delivery[]): [Delivery[]] {
+  return [delivery];
+}
 
 function rejectsStaleGeneration() {
-  function check() { checkClosure([bob], 1013, 1013, 'resync'); }
+  function check() {
+    checkClosure([bob], 1013, 1013, 'resync');
+  }
   expect(check).toThrow();
 }
 it('rejects protected delivery instead of a stale-generation reset', rejectsStaleGeneration);
 function rejectsLeak(messages: Delivery[]) {
-  function check() { checkClosure(messages, 1008, 1008, 'refused'); }
+  function check() {
+    checkClosure(messages, 1008, 1008, 'refused');
+  }
   expect(check).toThrow();
 }
 it.each([[refused, bob], [bob, refused]].map(asCase))(
   'rejects protected records around refusal %#', rejectsLeak);
 function rejectsWrongClosure() {
-  function check() { checkClosure([refused], 1000, 1008, 'refused'); }
+  function check() {
+    checkClosure([refused], 1000, 1008, 'refused');
+  }
   expect(check).toThrow();
 }
 it('rejects an incorrect close outcome', rejectsWrongClosure);
