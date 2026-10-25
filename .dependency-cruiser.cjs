@@ -26,7 +26,7 @@ module.exports = {
     { name: 'web-only-uses-browser-contracts', severity: 'error', from: { path: '^apps/web/' }, to: { path: '^(apps/server/|libs/(auth|events|observability|event-store|projections|handlers|authz)/)' } },
     { name: 'server-does-not-import-web', severity: 'error', from: { path: '^apps/server/' }, to: { path: '^apps/web/' } },
     ...libraries.map(libraryEntrypointRule),
-    { name: 'nats-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/(event-store/src/(jetstream|nats-connection)|handlers/src/dispatcher)\\.ts$' }, to: { path: 'node_modules/@nats-io/' } },
+    { name: 'nats-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/(event-store/src/(jetstream|nats-connection|stream-config)|handlers/src/dispatcher)\\.ts$' }, to: { path: 'node_modules/@nats-io/' } },
     { name: 'openfga-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/authz/src/client\\.ts$' }, to: { path: 'node_modules/@openfga/sdk/' } },
     { name: 'queue-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/handlers/src/queue\\.ts$' }, to: { path: 'node_modules/pg-boss/' } },
     { name: 'postgres-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/projections/src/(pg|pglite)\\.ts$' }, to: { path: 'node_modules/(pg/|@electric-sql/pglite/)' } },
