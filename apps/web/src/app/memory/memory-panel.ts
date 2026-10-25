@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, signal,
+import { ChangeDetectionStrategy, Component, input, signal, viewChild,
   type OnDestroy, type OnInit, type SimpleChanges } from '@angular/core';
 import { MemoryEdit } from './memory-edit';
 import type { DetailRead } from './memory-panel-reads';
@@ -32,6 +32,7 @@ type StoreCommand = { generation: number; scopeId: string; commandId: string;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MemoryPanel implements OnInit, OnDestroy {
+  protected readonly editor = viewChild(MemoryEdit);
   readonly groupId = input<string | undefined>();
   readonly assistantId = input<string | undefined>();
   readonly requesterId = input<string | undefined>();
@@ -184,6 +185,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   }
 
   protected openForget(event: Event): void {
+    if (this.editor()?.changePending()) return;
     const fact = this.selectedFact();
     const opener = event.currentTarget;
     if (!fact || !this.detailCanForget() || !(opener instanceof HTMLElement)) return;

@@ -55,8 +55,12 @@ export class MemoryEdit implements OnDestroy {
     this.viewportHeight.set(`${this.viewport?.height ?? window.innerHeight}px`);
   }
 
+  changePending(): boolean {
+    return this.refreshing() || this.awaitingRevision();
+  }
+
   protected open(event: Event): void {
-    if (this.refreshing() || this.awaitingRevision() || !this.enabled()) return;
+    if (this.changePending() || !this.enabled()) return;
     if (this.state() !== 'closed' && this.state() !== 'accepted') return;
     if (event.currentTarget instanceof HTMLElement) this.opener = event.currentTarget;
     this.revision = this.fact();

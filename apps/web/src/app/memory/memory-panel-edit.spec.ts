@@ -14,6 +14,12 @@ const accepted = { operation: 'correct', outcome: 'accepted', scopeId: 'scope', 
 function response(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status });
 }
+function requestPayload(init?: RequestInit): unknown {
+  const body = init?.body;
+  if (typeof body !== 'string') throw new Error('Missing request body');
+  const payload: unknown = JSON.parse(body);
+  return payload;
+}
 function deferred() {
   let resolve!: (value: Response) => void;
   function rememberResolver(finish: (value: Response) => void): void { resolve = finish; }
@@ -79,6 +85,16 @@ async function setup(kind = 'person', body: unknown = detail): Promise<void> {
       returnedCount: 1,
       nextCursor: null });
     if (url.endsWith('/correct')) return post();
+    if (url.endsWith('/forget')) {
+      const payload = requestPayload(init);
+      if (!isObject(payload) || payload['expectedRevision'] !== updated.revision) {
+        const conflict = { outcome: 'conflict' };
+        return response(409, conflict);
+      }
+      const forgotten = { operation: 'forget', outcome: 'accepted', hidden: true,
+        scopeId: 'scope', memoryId: 'one', cleanupStatus: 'pending' };
+      return response(200, forgotten);
+    }
     if (url.includes('/changes/')) return status();
     reads += 1;
     if (reads > 1) return latest();
@@ -118,6 +134,87 @@ function cleanupTest(): void {
   vi.restoreAllMocks();
 }
 afterEach(cleanupTest);
+
+it.each([390, 1280])(
+  'blocks Forget during the saved correction refresh at %i pixels', forgetDuringRefresh);
+
+async function forgetDuringRefresh(width: number): Promise<void> {
+  vi.stubGlobal('innerWidth', width);
+  await setup();
+  vi.useFakeTimers();
+  function staleDetail(): Promise<Response> {
+    return Promise.resolve(response(200, detail));
+  }
+  latest = staleDetail;
+  saveDraft();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  expect(root.textContent).toContain('Saving...');
+  click('Forget');
+  expect(root.querySelector('oc-memory-forget')).toBeNull();
+  expect(buttons('Forget')).toHaveLength(1);
+  expect(buttons('Forget')[0]?.disabled).toBe(true);
+  expect(buttons('Edit')[0]?.disabled).toBe(true);
+  const forgetButton = fixture.debugElement.query(By.css('.forget-open'));
+  const event = { currentTarget: buttons('Forget')[0] };
+  forgetButton.triggerEventHandler('click', event);
+  fixture.detectChanges();
+  expect(root.querySelector('oc-memory-forget')).toBeNull();
+  expect(matching('/forget')).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(5250);
+  fixture.detectChanges();
+  expect(root.textContent).toContain('Details are unavailable right now.');
+  click('Forget');
+  expect(root.querySelector('oc-memory-forget')).toBeNull();
+  expect(buttons('Forget')[0]?.disabled).toBe(true);
+  expect(buttons('Edit')[0]?.disabled).toBe(true);
+  expect(matching('/forget')).toHaveLength(0);
+  latest = refreshedDetail;
+  click('Refresh details');
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  await forgetSavedRevision();
+}
+
+it.each([390, 1280])(
+  'forgets the latest revision after the correction refresh at %i pixels', forgetAfterRefresh);
+
+async function forgetAfterRefresh(width: number): Promise<void> {
+  vi.stubGlobal('innerWidth', width);
+  await setup();
+  vi.useFakeTimers();
+  saveDraft();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  await forgetSavedRevision();
+}
+
+function refreshedDetail(): Promise<Response> {
+  const currentDetail = { ...detail, fact: updated };
+  const reply = response(200, currentDetail);
+  return Promise.resolve(reply);
+}
+
+async function forgetSavedRevision(): Promise<void> {
+  expect(root.textContent).not.toContain('Saving...');
+  expect(root.querySelector('.detail-text')?.textContent).toBe(updated.text);
+  expect(buttons('Forget')[0]?.disabled).toBe(false);
+  expect(buttons('Edit')[0]?.disabled).toBe(false);
+  click('Forget');
+  click('Forget from your memory');
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  const requests = matching('/forget');
+  expect(requests).toHaveLength(1);
+  const payload = requestPayload(requests[0]?.init);
+  const expectedPayload = { expectedRevision: updated.revision };
+  expect(payload).toMatchObject(expectedPayload);
+  expect(root.textContent).toContain('Hidden · cleanup pending');
+  expect(root.textContent).not.toContain('Changed before you forgot it');
+  expect(root.querySelector('button.fact')).toBeNull();
+  expect(matching('/correct')).toHaveLength(1);
+  noPrivateAnnouncements();
+}
 
 it.each([390, 1280])(
   'waits for the accepted revision without losing controls at %i pixels', delayedProjection);

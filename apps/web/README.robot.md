@@ -695,7 +695,11 @@ revision, UTC time and old-revision cleanup status. Detail GETs repeat every 250
 at most five seconds, until the detail revision is at least the accepted revision.
 The screen shows “Saving...” during this wait. A temporary refusal or older revision
 keeps the last detail and controls. If the wait expires, Refresh details starts another
-bounded GET-only wait. Edit stays disabled until the saved revision is visible.
+bounded GET-only wait. Edit and Forget stay visible but disabled until the saved revision
+is visible, including after a timeout. Forget also checks that wait in its click handler
+before taking the detail revision for its request. The server's revision check is unchanged.
+`memory-panel-edit.spec.ts` presses Forget during that wait and after it at 390 and
+1280 pixels. It checks timeout recovery, the submitted revision and the hidden fact.
 Both editor revision labels and the saved date come from the same detail snapshot as the next Save command.
 A 409 or conflict status keeps the draft and offers one serial Refresh and review GET.
 The next save gets a new command id. Lost replies, 503 and unknown offer only serial status
