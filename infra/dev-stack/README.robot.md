@@ -170,11 +170,12 @@ nice -n 10 node --experimental-strip-types --test infra/dev-stack/stage-b-collec
 
 Results and remaining conditions are in
 [the local live receipt](../../docs/process/demo-stage-b-local-live/receipt.md).
-The latest run passes the fresh baseline, including budget checks, and captures
-the complete waiting approval and tool-reply drawer at both widths. Its event
-records show one approved write. The collector was terminated before saving its
-initial readbacks, so the complete evidence check remains failed; the receipt
-records that collection limit and the untested personal owner login.
+The sixth run passed the fresh baseline and tool journey but lost its initial
+readbacks when collection stopped. The next fresh attempt stopped earlier: unrelated
+computer readiness conflicted with provider setup's drain command. Its website and
+tool collector never started. The receipt retains both attempts, the original
+startup records and the untested personal owner login. Complete live approval proof
+remains outstanding.
 Native consent, public deployment and the later repeated or long-wait journeys
 remain excluded from this launch.
 

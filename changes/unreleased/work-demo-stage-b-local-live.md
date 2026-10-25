@@ -12,3 +12,6 @@
 - Keep every local tool readback and original event as soon as it arrives. An
   interrupted collector or closed browser keeps its saved evidence; complete
   approval proof is still required.
+
+- Record a fresh-start failure where computer readiness conflicts with provider
+  setup. Keep the original events and mark the unstarted tool journey explicitly.

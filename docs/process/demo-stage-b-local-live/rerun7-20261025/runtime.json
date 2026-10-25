@@ -1,0 +1,14 @@
+{
+  "slot": 1,
+  "computerImages": [
+    {
+      "name": "computer",
+      "image": "sha256:e0a2f0c69fc3eeb484c80f32f8de3b4e3a7d67666d692ed59fdc6f3eb95d8b64",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:ddbd61e7b3efd8d78a46e53611e332a11cfe110d844a6bd5a277f9bd3a8b6e21"
+    }
+  ],
+  "modelsImage": "sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
+  "localDemoServer": "NOT RUN: startup stopped first",
+  "modelMode": "local stand-in",
+  "ownerStackTouched": false
+}

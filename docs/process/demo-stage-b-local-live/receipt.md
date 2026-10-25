@@ -1,11 +1,12 @@
 # Local tools rehearsal
 
-Part of #574. Run date: 24 October 2026. Current result: **PARTIAL**.
+Part of #574. Latest run date: 25 October 2026. Current result: **FAIL**.
 
-The [latest rerun](#rerun-after-the-chat-display-fix-24-october-2026) passes the
-core local tools journey: published tools, read reply, requester approval, one write
-effect, reload, spending and history. The full fresh-install qualification remains
-PARTIAL because its baseline audit check failed and external owner sign-in is untested.
+The [latest fresh attempt](#fresh-start-stopped-by-unrelated-computer-readiness-25-october-2026)
+stopped during provider setup, before the website or tool journey started.
+A computer becoming ready conflicted with the provider drain command.
+The previous run passed the product journey but lost its initial readbacks.
+Complete live approval proof and the owner's personal sign-in remain unqualified.
 Earlier attempts are retained below. Paid calls: **0**; the owner stack was untouched.
 
 ## Source
@@ -915,3 +916,118 @@ through `PG_TEST_URL` before tests ran. It was removed afterwards with its volum
 slot 1 was released, its containers and namespaces were removed, and the temporary
 models image was deleted. The owner stack was untouched. The protected authority
 and security tests and `CHANGELOG.md` are unchanged. Paid calls: **0**.
+
+## Fresh start stopped by unrelated computer readiness, 25 October 2026
+
+Part of #574, draft PR #641. This fresh attempt is **FAIL**. Provider setup stopped
+with HTTP 409 before starting the website. Publication, the real chat, approval,
+spending views and captures are **NOT RUN**. The collector never started, so this
+attempt does not supply the missing complete approval proof. The earlier sixth
+run's product passes and lost readbacks remain recorded above.
+
+### Seventh-run source and setup
+
+Fetch and rebase completed on `work/demo-stage-b-local-live` without conflicts.
+The live source is `80242cfea2c731ac54360599314aac0b462d9d43`, based on
+`origin/main` at `3b623f52a841601a62c99629790cf4f2d08e0839`. Main is an ancestor,
+and neither rebase state directory remains. This includes the approval display
+and accounting fix #672 at `9aa2a7d72`.
+[Source](rerun7-20261025/source.json) and [runtime](rerun7-20261025/runtime.json)
+records retain the exact references.
+
+`npm ci` passed. An initial claim attempt ran before installation had finished
+and failed to import a package; it claimed nothing and started no services.
+After installation completed, `infra/dev-stack/claim.sh` claimed slot 1.
+One `up.sh --fresh` attempt then used the free local model and the ordinary
+product services. `ZITADEL_KEY_FILE` was supplied only as a path. No real provider
+was contacted. The LOCAL demo tool launcher was not reached.
+The local provider verification reserved and settled **1 euro cent** in the
+event ledger. This is stand-in accounting, with **0** paid calls and no demo-tool call.
+
+### Seventh-run results
+
+| Step | Result | Evidence |
+| --- | --- | --- |
+| Fetch and completed rebase | PASS | Latest fetched main is an ancestor; working branch restored. |
+| Dependency installation and tool links | PASS | Worktree install completed; existing NATS and Lychee links target the requested tools. |
+| One claimed secondary slot | PASS | Slot 1 was claimed through the required script. |
+| Separate owner membership and access | PASS | [Owner check](rerun7-20261025/ownership.json) confirms the separate joined owner and OpenFGA access. |
+| Separate owner's personal sign-in | NOT RUN | Requires the owner; the generated Admin account was not substituted. |
+| Fresh provider setup | FAIL | [Startup log](rerun7-20261025/up.log): `Provider setup drain: 409`. |
+| Website and baseline browser journeys | NOT RUN | Startup stopped before launching the website. |
+| LOCAL demo discovery, zero-cost review and grants | NOT RUN | Fresh startup prerequisite failed. |
+| Publication and bridge acceptance | NOT RUN | No demo publication was attempted. |
+| Real chat read | NOT RUN | No chat was started. |
+| Waiting card, requester approval and exactly one write | NOT RUN | No approval or demo write was attempted. |
+| Original before, waiting and after readbacks | NOT RUN | Collector and demo server never started. |
+| Complete `checkStageBApproval` proof | NOT RUN | No proof exists for this attempt; no replacement values were invented. |
+| Reload, Spending and Change history views | NOT RUN | Website was not running. |
+| 1280- and 390-pixel captures and visual inspection | NOT RUN | No browser capture was produced. |
+| Release owned slot | PASS | [Cleanup](rerun7-20261025/cleanup.json) confirms directory, containers and namespaces removed. |
+
+### Why the fresh start failed
+
+[Original event records](rerun7-20261025/startup-events.json) and the
+[server request log](rerun7-20261025/server.log) retain this order:
+
+| UTC time | Observation |
+| --- | --- |
+| 00:43:21.239 | Provider binding saved at event position 47. |
+| 00:43:21.466–21.729 | GET provider drain status returned 200. |
+| 00:43:21.733 | POST provider drain started. |
+| 00:43:21.799 | `computer.ready` saved at event position 48. |
+| 00:43:21.977 | POST provider drain returned 409. |
+
+`readDrain` in `libs/models/src/provider-drain.ts` reads the global event position.
+`providerDrainCommand` passes it to the append as `expectedGlobalSequence`.
+The event store requires that position to remain unchanged. This protects against
+a concurrent provider switch-on, which is saved on the budget stream, but it also
+refuses unrelated computer activity. No provider or budget change followed position
+47 in the saved history. The only concurrent event was computer readiness.
+The startup helper stops on that conflict, so the website and all later journeys
+never start. [Failure details](rerun7-20261025/failure.json) retain the request times
+and the original computer event.
+
+An isolated diagnostic reproduced this exact conflict through the real server and
+NATS append. It inserted only `computer.ready` immediately before the drain append.
+The response was 409; the provider position stayed unchanged; draining and managed
+calls stayed off. The [diagnostic log](rerun7-20261025/drain-diagnostic.log) reports
+one passing reproduction, with 16 unrelated cases skipped. The
+[added diagnostic case](rerun7-20261025/drain-diagnostic-addition.txt) was run in a
+temporary copy of `apps/server/test/provider-drain.test.ts`, then removed.
+This confirms the defect; it is not a passing fresh installation.
+No product or harness code was changed.
+The live drain was not retried, and no event was inserted to continue startup.
+A product fix must retain protection against concurrent switch-on while handling
+unrelated event-log movement. Changing only the rehearsal retry would hide this
+failure.
+
+### Seventh-run checks and limits
+
+All source checks passed under `nice -n 10`:
+
+| Check | Result |
+| --- | --- |
+| Full lint, including documentation, links and licences | PASS |
+| Workspace, package and dev-stack typecheck | PASS |
+| Event catalogue | PASS |
+| Knip | PASS |
+| Changelog | PASS |
+| Related helper tests, including durable collection | PASS twice, 61 tests each |
+| Real Codex read integration | PASS twice, 2 tests each |
+| Security rules | PASS, 438 tests |
+| Isolated startup-conflict diagnostic | PASS, reproduced HTTP 409 |
+| Full root suite | NOT RUN, excluded by the build prompt |
+
+[Recorded exit codes](rerun7-20261025/check-exits.txt) and individual logs remain
+with the evidence. These checks do not change the failed live result. The focused
+integration tests used a ready throwaway PostgreSQL database through `PG_TEST_URL`.
+It was removed with its volume after the checks. No product code, protected test
+or `CHANGELOG.md` change was made. [Run record](rerun7-20261025/run.json) retains
+check results and evidence hashes.
+
+Saved public text removes email addresses. There are no new pictures to inspect.
+The owner stack on port 44200 was untouched. The separate owner account remains
+intact. Native consent 12b is excluded. Public deployment, twice-fresh qualification,
+long approval waits, expiry, reconnect/Pod loss and the full refusal matrix remain
+**NOT RUN**. This attempt does not complete #45, #46 or #63. Paid calls: **0**.

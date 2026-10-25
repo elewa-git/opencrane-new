@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "at": "2026-10-25T00:44:56.985Z",
+  "members": [
+    {
+      "member_id": "jente-rosseel",
+      "role": "owner",
+      "status": "joined"
+    }
+  ],
+  "separateOwnerAllowed": true,
+  "externalOwnerSignIn": "NOT RUN",
+  "reason": "No existing owner sign-in credential or session was available."
+}

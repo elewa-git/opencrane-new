@@ -1,0 +1,119 @@
+npm notice run lint
+npm notice run npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:readmes && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog
+npm notice run lint:code
+npm notice run eslint .
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/approval-holds.ts
+  23:8  warning  Function 'approvalHolds' has too many lines (113). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/bridge-socket.ts
+  243:8  warning  Function 'bridgeSocket' has too many lines (94). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/mcp-proxy.ts
+  30:8  warning  Function 'mcpProxy' has too many lines (146). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/proxy.ts
+  25:8  warning  Async function 'proxy' has too many lines (100). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/thread-loads.ts
+  27:8  warning  Function 'threadLoads' has too many lines (136). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/auth/routes.ts
+  58:8  warning  Function 'registerAuthRoutes' has too many lines (119). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/bridge-approvals.ts
+  34:8  warning  Function 'bridgeApprovals' has too many lines (124). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/bridge-control.ts
+  97:8  warning  Function 'bridgeControl' has too many lines (87). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/bridge-poll.ts
+  59:8  warning  Function 'assistantProcessor' has too many lines (221). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/bridge.ts
+  284:8  warning  Async function 'watchBridges' has too many lines (127). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/routes.ts
+  43:8  warning  Function 'registerChatRoutes' has too many lines (99). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/computers/view.ts
+  68:8  warning  Function 'registerLiveView' has too many lines (374). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/integrations/remote-catalogue-watch.ts
+  14:8  warning  Function 'remoteCatalogueWatch' has too many lines (128). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/memory/mcp.ts
+  23:8  warning  Function 'registerMemoryMcp' has too many lines (88). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/models-main.ts
+  51:59  warning  Async arrow function has too many lines (144). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/realtime.ts
+  21:8  warning  Function 'memberSubscription' has too many lines (117). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/websocket.ts
+  67:8  warning  Function 'attachWebSocketServer' has too many lines (127). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/libs/authz/src/members.ts
+  67:1  warning  Function 'createMemberAuthorisation' has too many lines (351). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/decision.ts
+  164:8   warning  Async function 'startDecision' has too many lines (237). Maximum allowed is 80  max-lines-per-function
+  173:42  warning  Arrow function has too many lines (222). Maximum allowed is 80                  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/egress-admission.ts
+  169:8  warning  Async function 'authoriseEgress' has too many lines (123). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/egress-startup.ts
+  9:8  warning  Async function 'startEgress' has too many lines (81). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/gateway-delivery.ts
+  33:8  warning  Function 'gatewayDelivery' has too many lines (165). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/mcp-catalogue-watch.ts
+  16:8  warning  Function 'mcpCatalogueWatch' has too many lines (215). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/mcp-dispatch.ts
+  71:8  warning  Function 'mcpDispatch' has too many lines (274). Maximum allowed is 80  max-lines-per-function
+
+✖ 25 problems (0 errors, 25 warnings)
+
+npm notice run lint:deps
+npm notice run depcruise apps/demo-mcp/src apps/odoo-mcp/src apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs && depcruise apps --config .dependency-cruiser-tests.mjs
+
+✔ no dependency violations found (955 modules, 4765 dependencies cruised)
+
+
+✔ no dependency violations found (1050 modules, 6305 dependencies cruised)
+
+npm notice run lint:unused
+npm notice run knip
+Configuration hints (2)
+**/.tools/**                 knip.json  Remove from ignore
+setpriv       apps/computer  knip.json  Remove from ignoreBinaries
+npm notice run lint:docs
+npm notice run markdownlint-cli2
+markdownlint-cli2 v0.23.3 (markdownlint v0.41.1)
+Finding: *.md docs/**/*.md spikes/README.md spikes/*/README.md apps/*/README*.md libs/*/README*.md infra/*/README*.md tools/*/README*.md !docs/design/chat/README.robot.md !docs/design/handoff-v2/[0-9]*/README.robot.md
+Linting: 303 files
+Summary: 0 issues in 0 files
+npm notice run lint:readmes
+npm notice run node scripts/check-folder-readmes.mjs
+Every checked folder has a README.md without ticket or phase references.
+npm notice run lint:links
+npm notice run sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'spikes/README.md' 'spikes/*/README.md' 'apps/*/README*.md' 'libs/*/README*.md' 'infra/*/README*.md' 'tools/*/README*.md'
+🔍 2847 Total (in 0s) ✅ 2542 OK 🚫 0 Errors 👻 305 Excluded
+
+npm notice run lint:fixtures
+npm notice run python3 infra/odoo/boundary.py
+PASS fixture images and build files have no external direct dependencies
+npm notice run check:package-licences
+npm notice run python3 infra/package/check-licences.py
+PASS server: 454 reviewed components
+PASS web: 454 reviewed components
+PASS postgres: 146 reviewed components
+PASS nats: 11 reviewed components
+PASS openfga: 143 reviewed components
+PASS computer: 385 reviewed components
+npm notice run lint:changelog
+npm notice run node scripts/changelog-gather.mjs --check

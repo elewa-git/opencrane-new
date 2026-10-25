@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "slot": 1,
+  "directoryRemoved": true,
+  "composeContainersRemoved": true,
+  "namespacesRemoved": true,
+  "testDatabase": "PASS: removed with volume",
+  "ownerStackTouched": false,
+  "paidCalls": 0
+}

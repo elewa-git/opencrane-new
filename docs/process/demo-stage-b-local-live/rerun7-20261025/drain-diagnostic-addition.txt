@@ -1,0 +1,35 @@
+
+async function reproduceUnrelatedComputerConflict() {
+  const command = await input();
+  const before = await nats.store.head();
+  const providerPosition = await nats.store.head('provider-*');
+  const originalAppend = nats.store.append.bind(nats.store);
+  let injected = false;
+  let expectedPosition: number | undefined;
+  async function makeComputerReady(change: Parameters<typeof originalAppend>[0]) {
+    if (change.event.type === 'provider.managed_calls_drain_set' && !injected) {
+      injected = true;
+      expectedPosition = change.expectedGlobalSequence;
+      const data = {
+        assistantId: 'one', computerId: 'computer-one', generation: 1,
+        podUid: 'diagnostic-pod', sandboxUid: 'diagnostic-sandbox',
+      };
+      await append('computer-one', 'computer.ready', data, false);
+    }
+    return originalAppend(change);
+  }
+  const fault = vi.spyOn(nats.store, 'append').mockImplementation(makeComputerReady);
+  try {
+    const response = await request('POST', 'primary', command);
+    expect(injected).toBe(true);
+    expect(expectedPosition).toBe(before);
+    expect(response.statusCode).toBe(409);
+    expect(await nats.store.head()).toBe(before + 1);
+    expect(await nats.store.head('provider-*')).toBe(providerPosition);
+    expect((await request('GET')).json()).toMatchObject({ draining: false, enabled: false });
+  } finally {
+    fault.mockRestore();
+  }
+}
+it('reproduces a drain conflict caused only by computer readiness',
+  reproduceUnrelatedComputerConflict, 60_000);
