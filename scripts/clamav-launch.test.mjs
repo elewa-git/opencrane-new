@@ -23,6 +23,8 @@ let commands;
 let session;
 let realExec;
 let launchScanner;
+let delays;
+let timings;
 
 function hash(bytes) {
   const digest = createHash('sha256');
@@ -40,11 +42,20 @@ function approve() {
   writeFileSync(options.releasePath, JSON.stringify(record));
 }
 
-function docker(command, args) {
+function docker(command, args, options) {
   if (command !== 'docker') {
     throw new Error('private-canary');
   }
   commands.push(args);
+  const timing = { operation: args[0], startedAt: now, timeout: options.timeout };
+  timings.push(timing);
+  if (args[0] !== 'rm') {
+    const delay = delays.shift() ?? 0;
+    now += Math.min(delay, options.timeout);
+    if (delay > options.timeout) {
+      throw new Error('private-canary Docker timeout');
+    }
+  }
   if (args[0] === 'image') {
     return imageId;
   }
@@ -121,6 +132,8 @@ async function setup() {
   }
   approve();
   commands = [];
+  delays = [];
+  timings = [];
   mode = '';
   session = undefined;
   realExec = (await vi.importActual('node:child_process')).execFileSync;
@@ -276,3 +289,64 @@ async function rejectsReleaseMismatch(field) {
 }
 test.each(['imageDigest', 'manifestDigest', 'databaseUpdatedAt', 'inspectedAt'])(
   'rejects changed release %s before Docker runs', rejectsReleaseMismatch);
+
+async function startSession() {
+  session = await launchScanner(options);
+}
+
+function isStartup(timing) {
+  return timing.operation !== 'rm';
+}
+
+function isCleanup(timing) {
+  return timing.operation === 'rm';
+}
+
+function expectDeadlineAndCleanup(startedAt, operationCount) {
+  expect(now - startedAt).toBe(900_000);
+  const startup = timings.filter(isStartup);
+  expect(startup).toHaveLength(operationCount);
+  for (const timing of startup) {
+    expect(timing.timeout).toBeGreaterThan(0);
+    expect(timing.startedAt - startedAt + timing.timeout).toBeLessThanOrEqual(900_000);
+  }
+  const cleanup = timings.filter(isCleanup);
+  expect(cleanup.length).toBeGreaterThan(0);
+  for (const timing of cleanup) {
+    expect(timing.timeout).toBe(30_000);
+  }
+}
+
+async function stopsCumulativeDelay() {
+  const startedAt = now;
+  delays = Array(8).fill(840_000);
+  await expect(startSession()).rejects.toEqual(new Error('Scanner launch refused'));
+  expectDeadlineAndCleanup(startedAt, 2);
+  expect(commands.filter(starts)).toHaveLength(0);
+}
+test('stops cumulative slow Docker calls at the overall startup deadline', stopsCumulativeDelay);
+
+const startupOperations = ['image lookup', 'create', 'image identity', 'mount inspection',
+  'database copy', 'database inspection', 'start', 'initial ping'];
+
+async function boundsSlowOperation(operation) {
+  const index = startupOperations.indexOf(operation);
+  const startedAt = now;
+  delays = Array(index).fill(1000);
+  if (index > 0) {
+    delays[0] = 840_000;
+  }
+  delays.push(960_000);
+  await expect(startSession()).rejects.toEqual(new Error('Scanner launch refused'));
+  expectDeadlineAndCleanup(startedAt, index + 1);
+}
+test.each(startupOperations)('bounds slow %s by the remaining startup time', boundsSlowOperation);
+
+async function stopsAtExactDeadline() {
+  const startedAt = now;
+  delays = [900_000];
+  await expect(startSession()).rejects.toEqual(new Error('Scanner launch refused'));
+  expectDeadlineAndCleanup(startedAt, 1);
+  expect(commands.filter(creates)).toHaveLength(0);
+}
+test('starts no further Docker work when the startup allowance is exhausted', stopsAtExactDeadline);
