@@ -1,5 +1,5 @@
 @if (enabled()) {
-  <button type="button" class="edit-open" [disabled]="refreshing() || awaitingRevision()"
+  <button type="button" class="edit-open" [disabled]="changePending()"
     (click)="open($event)">Edit</button>
 }
 @if (state() === 'accepted' && refreshing()) { <p role="status">Saving...</p> }

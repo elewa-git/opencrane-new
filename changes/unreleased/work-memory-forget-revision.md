@@ -1,0 +1,1 @@
+- After a memory correction, Forget waits for the saved revision before it can send a request. Edit and Forget stay visible during the wait, and temporary read failures offer another refresh.

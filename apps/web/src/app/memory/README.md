@@ -9,8 +9,8 @@ own facts.
 - Lists permitted memory scopes, meaning whose saved facts are shown, with search and more pages.
 - Reads a fact and its source status separately, and links to a source conversation when permitted.
 - Checks text before saving, offers preferences only in personal memory and confirms a saved fact with the server's result.
-- Waits briefly for a saved correction to appear. Temporary read failures keep the detail controls
-  and offer another refresh without repeating the correction.
+- Waits briefly for a saved correction to appear. Edit and Forget stay visible but disabled
+  during this wait. Temporary read failures offer another refresh without repeating the correction.
 - Reviews a forget request, hides the fact when confirmed and shows whether cleanup is pending, complete or unavailable.
 - Keeps unresolved requests available for status checks, including when another fact is opened.
 - Clears drafts and protected details when access, the selected scope or the person asking changes. Memory content is not kept in browser storage.

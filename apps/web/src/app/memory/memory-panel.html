@@ -100,7 +100,8 @@
           @if (!sources().length) { <p>No source was recorded.</p> }
           <button class="store-open" type="button" (click)="openStore($event)">Remember a fact</button>
           @if (detailCanForget()) {
-            <button class="forget-open" type="button" (click)="openForget($event)">Forget</button>
+            <button class="forget-open" type="button" [disabled]="editor()?.changePending()"
+              (click)="openForget($event)">Forget</button>
           }
         }
         @for (fact of [selectedFact()]; track fact?.memoryId) {
