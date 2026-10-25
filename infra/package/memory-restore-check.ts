@@ -120,13 +120,17 @@ async function checkRevisions(events: StoredEvent[], options: Options, bounds: B
     const superseded = erased.superseded(identity.silo, identity.scopeId);
     const replaced = superseded.get(identity.memoryId) ?? 0;
     const status = current.status(identity);
-    if (status === 'missing' || ((hidden || identity.revision <= replaced) && status !== 'destroyed') ||
-        candidate.status(identity) !== status) {
+    const destroyed = hidden || identity.revision <= replaced;
+    const requiredStatus = destroyed ? 'destroyed' : 'available';
+    if (status !== requiredStatus || candidate.status(identity) !== requiredStatus) {
       throw refusal();
     }
     const data = memoryValueEventSchema.parse(stored.event).data;
     // Authenticate surviving material. Destroyed markers return null without reading old text.
-    candidate.decrypt(identity, data);
+    const text = candidate.decrypt(identity, data);
+    if (!destroyed && text === null) {
+      throw refusal();
+    }
     const reference = JSON.stringify([identity.scopeId, identity.memoryId]);
     const previous = latest.get(reference);
     if (!previous || identity.revision > previous.revision) {
