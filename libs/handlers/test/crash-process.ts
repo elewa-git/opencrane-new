@@ -112,8 +112,15 @@ if (mode.startsWith("upgrade")) {
   const names = ['update-openfga', 'seed-ownership', 'confirm-ownership', 'seed-model-grants',
     'seed-provider-default', 'create-assistant', 'claim-computer', 'cleanup-departure',
     'stop-budget-turns', 'prepare-gateway-configuration', 'settle-budget'] as const;
+  async function guardedEffect(...args: Parameters<typeof effect>) {
+    const effectUrl = process.env['CRASH_EFFECT_URL'];
+    if (effectUrl) {
+      await fetch(effectUrl);
+    }
+    await effect(...args);
+  }
   function subscription(name: typeof names[number]) {
-    return registerHandler(name, effect);
+    return registerHandler(name, guardedEffect);
   }
   const handlers = names.map(subscription);
   const upgradeDb = upgradeCrashDb(base);

@@ -6,6 +6,7 @@
   "workspaces": {
     ".": {
       "entry": [
+        "infra/package/upgrade-recovery*.test.ts",
         "scripts/check-stage-b-polish.mjs",
         "scripts/check-memory-scopes-applying.mjs",
         "scripts/collect-stage-b-evidence.mjs",

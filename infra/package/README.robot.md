@@ -381,3 +381,32 @@ See the [receipt](../../docs/process/p5-8-pr1/receipt.md). P5-8 remains partial:
 all databases/CNPG, object and volume ownership, current custody/deletion state,
 rights/cents comparisons, outbound-effect suppression and reopening are NOT RUN.
 A partial event archive cannot authorise a full restore; full P5-8 needs live P5-7.
+
+## Interrupted handler upgrade check
+
+`upgrade-recovery.ts` collects ordered ids, positions and event SHA-256 values,
+plus the members checkpoint and a digest of all six tables owned by that projection.
+It stores no event bodies or row values in the comparison result. Writers and
+reactions must already be stopped. The checker requires matching event order,
+unique ids, complete positions from one, rows and checkpoints. The export descriptor
+must agree with those event identities and per-subject positions. The existing
+restore helper checks archive bytes; the comparison does not authenticate an archive.
+
+`upgrade-recovery.test.ts` uses the existing SIGKILL fixture after a committed
+256-event scan chunk. It retains the failed attempt's previous/target manifests,
+refuses a different manifest without changing parked jobs, then restores the earlier
+export into empty standalone NATS. It rebuilds only a disposable members projection.
+No dispatcher, reaction worker or scheduler starts during recovery. A tested local
+recording endpoint guards reaction callbacks in both processes and receives zero calls.
+A lost restore completion remains uncertain; that target gets no projection, retry
+or stream deletion. Truncated bytes refuse before transfer. The source stays reachable
+and unchanged, as required by the event restore contract.
+
+Run the two `infra/package/upgrade-recovery*.test.ts` files with Vitest and
+`PG_TEST_URL` pointing to a throwaway PostgreSQL admin database, under `nice -n 10`.
+The root Vitest file list includes them in CI. Safe fixture results go to
+`.tools/upgrade-recovery-proof.json` and `.tools/upgrade-recovery-uncertain.json`.
+See the [receipt](../../docs/process/p5-9-pr1/receipt.md). Handler manifests describe
+subscriptions only; they cannot establish package/schema rollback compatibility.
+Coordinated databases/WAL, objects, volumes, custody, rights/cents, pinned-release
+upgrade and full P5-9 remain NOT RUN.

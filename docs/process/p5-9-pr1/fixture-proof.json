@@ -1,0 +1,143 @@
+{
+  "scope": "Local event-only fixture; full upgrade NOT RUN",
+  "interruptedAttempt": {
+    "outcome": "SIGKILL after committed chunk; source attempt remains parked",
+    "previousManifest": [
+      {
+        "name": "update-openfga",
+        "eventTypes": [
+          "member.joined"
+        ]
+      }
+    ],
+    "targetManifest": [
+      {
+        "name": "claim-computer",
+        "eventTypes": [
+          "assistant.created",
+          "computer.lost"
+        ]
+      },
+      {
+        "name": "cleanup-departure",
+        "eventTypes": [
+          "member.removed"
+        ]
+      },
+      {
+        "name": "confirm-ownership",
+        "eventTypes": [
+          "ownership.transferred"
+        ]
+      },
+      {
+        "name": "create-assistant",
+        "eventTypes": [
+          "member.joined",
+          "silo.owner_bootstrapped"
+        ]
+      },
+      {
+        "name": "prepare-gateway-configuration",
+        "eventTypes": [
+          "mcp.server_published"
+        ]
+      },
+      {
+        "name": "seed-model-grants",
+        "eventTypes": [
+          "member.joined",
+          "silo.owner_bootstrapped",
+          "assistant.created"
+        ]
+      },
+      {
+        "name": "seed-ownership",
+        "eventTypes": [
+          "silo.owner_bootstrapped"
+        ]
+      },
+      {
+        "name": "seed-provider-default",
+        "eventTypes": [
+          "provider.verification_recorded",
+          "provider.models_selected"
+        ]
+      },
+      {
+        "name": "settle-budget",
+        "eventTypes": [
+          "effect.observed",
+          "effect.resolved",
+          "computer.lost"
+        ]
+      },
+      {
+        "name": "stop-budget-turns",
+        "eventTypes": [
+          "budget.ceiling_set",
+          "budget.exhausted"
+        ]
+      },
+      {
+        "name": "update-openfga",
+        "eventTypes": [
+          "routine.created",
+          "routine.reassigned",
+          "routine.retired",
+          "provider.created",
+          "member.joined",
+          "silo.owner_bootstrapped",
+          "member.role_changed",
+          "member.removed",
+          "member.ownership_confirmed",
+          "ownership.seeded",
+          "ownership.transferred",
+          "ownership.stepped_down",
+          "team.created",
+          "team.member_added",
+          "team.member_removed",
+          "assistant.created",
+          "conversation.created",
+          "participant.added",
+          "participant.removed",
+          "grant.given",
+          "grant.revoked"
+        ]
+      }
+    ],
+    "targetPosition": 260,
+    "committedPosition": 256,
+    "parkedJobs": 258,
+    "incompatibleResume": "refused; parked jobs unchanged"
+  },
+  "export": {
+    "created": "2026-10-25T22:02:05.57134283Z",
+    "firstSequence": 1,
+    "lastSequence": 260,
+    "eventCount": 260,
+    "subjectPositions": {
+      "ev.member.alice": 260,
+      "ev.member.bob": 2
+    },
+    "identityDigest": "d0e713b1c69b6deb9b9762597171f704423d6df27b061cfcf01c04a36606bab6",
+    "byteCount": 7708,
+    "sha256": "147854bf8323fe20eb6720887d73c3580f9fae39a69e3f44f3fc1a681f7377f2"
+  },
+  "comparison": {
+    "beforeEventsDigest": "aae1da98634987465934b8a917b526639df52da4a4b5349fa289f2f8c4419aef",
+    "afterEventsDigest": "aae1da98634987465934b8a917b526639df52da4a4b5349fa289f2f8c4419aef",
+    "beforeCheckpoint": 260,
+    "afterCheckpoint": 260,
+    "beforeRowsDigest": "7d4a9c2f629937c2249f22673387e7c14b94b7afde74fa376c0287a502b45938",
+    "afterRowsDigest": "7d4a9c2f629937c2249f22673387e7c14b94b7afde74fa376c0287a502b45938",
+    "externalCalls": 0
+  },
+  "lostCompletion": {
+    "outcome": "uncertain; target isolated",
+    "transfers": 1,
+    "targetEvents": 260,
+    "projectionStarted": false,
+    "externalCalls": 0
+  }
+}
