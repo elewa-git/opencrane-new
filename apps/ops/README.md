@@ -168,6 +168,8 @@ unavailable report was lost, the dispatcher records it after the event store rec
 Workers need the service connections and permissions described in the operator notes.
 These commands run from the repository root; dry-run checks history without changing data.
 Server integration tests use `test/server.ts` to exercise computer lifecycle work.
+The nightly recovery test waits for both the saved result and removal of the failed
+job, because saving the result happens first.
 
 ```sh
 npm run worker -w apps/ops -- members

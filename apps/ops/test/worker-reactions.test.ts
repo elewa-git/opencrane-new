@@ -1,7 +1,7 @@
 import { withConnectionStage } from '../../../libs/models/src/connection-stage-lock.ts';
 import { event as fixtureEvent } from '@opencrane/event-store/testing';
 import { createHash } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { memoryWrittenExample } from '../../../libs/events/src/memory.ts';
 import { memoryProjection, memoryScopeId, ProjectionRunner } from '@opencrane/projections';
 import { envelope, history } from '@opencrane/models';
@@ -118,15 +118,42 @@ async function unavailableCheckpoint(missing: boolean) {
     'ON CONFLICT (name) DO UPDATE SET sequence=EXCLUDED.sequence', [await setup.nats.store.head()]);
   await setup.clock.setTime('2026-10-13T03:00:00Z');
   await setup.start();
-  await setup.boss().send('dream-nightly', payload);
-  async function recovered() {
-    await setup.clock.tick(1000);
-    return (await setup.records()).length === 1;
+  const boss = setup.boss();
+  const deleteJob = boss.deleteJob.bind(boss);
+  const inspected = Promise.withResolvers<void>();
+  // Keep deletion behind the first queue read to reproduce a result arriving before cleanup.
+  async function deleteAfterInspection(...args: Parameters<typeof boss.deleteJob>) {
+    if (args[0] === 'dream-nightly' && args[1] === id) {
+      await inspected.promise;
+    }
+    return deleteJob(...args);
   }
-  await until(recovered);
-  expect(await setup.records()).toMatchObject([{ action: 'missed', date: '2026-10-12' }]);
-  const remaining = await setup.storage.queue.query('SELECT id FROM pgboss.job WHERE id=$1', [id]);
-  expect(remaining.rows).toEqual([]);
+  const deletion = vi.spyOn(boss, 'deleteJob');
+  deletion.mockImplementation(deleteAfterInspection);
+  async function remainingTrigger() {
+    const remaining = await setup.storage.queue.query<{ id: string }>(
+      'SELECT id FROM pgboss.job WHERE id=$1', [id]);
+    inspected.resolve();
+    return remaining.rows;
+  }
+  async function triggerRemoved() {
+    const remaining = await remainingTrigger();
+    return remaining.length === 0;
+  }
+  try {
+    await boss.send('dream-nightly', payload);
+    async function recovered() {
+      await setup.clock.tick(1000);
+      return (await setup.records()).length === 1;
+    }
+    await until(recovered);
+    await until(triggerRemoved);
+    expect(await setup.records()).toMatchObject([{ action: 'missed', date: '2026-10-12' }]);
+    expect(await remainingTrigger()).toEqual([]);
+  } finally {
+    inspected.resolve();
+    deletion.mockRestore();
+  }
 }
 it.each([true, false])('retains failed trigger recovery with missing checkpoint: %s',
   unavailableCheckpoint);
