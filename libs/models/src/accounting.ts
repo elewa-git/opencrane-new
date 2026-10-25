@@ -2,8 +2,10 @@ import { z } from 'zod';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 import { applyBudget, data, emptyBudget, stateSchema, totals, type BudgetState } from './state.ts';
+import { createCurrentEffects, currentEffectFields, currentEffectSchema,
+  currentEffectBudget, updateCurrentEffectEvidence } from './current-effects.ts';
 
-export const budgetProjectionVersion = 5;
+export const budgetProjectionVersion = 6;
 type Reservation = BudgetState['reservations'][number];
 const pageSchema = z.object({
   after: z.int().nonnegative().default(0),
@@ -185,34 +187,62 @@ export async function readSpendingCalls(db: Query, silo: string,
   return { rows, next, sequence: Number(saved.sequence), generation: Number(saved.generation) };
 }
 
+async function saveBudgetState(db: Query, table: string, currentTable: string,
+  silo: string, state: BudgetState, current: ReturnType<typeof currentEffectBudget> | undefined) {
+  const savedState = JSON.stringify(state);
+  if (!current) {
+    await db.query(`INSERT INTO ${table} VALUES ($1, $2)
+      ON CONFLICT (silo) DO UPDATE SET state = $2`, [silo, savedState]);
+    return;
+  }
+  // Save both validated records in one round trip; keep all money rules in TypeScript.
+  await db.query(`WITH saved_budget AS (
+    INSERT INTO ${table} VALUES ($1, $2)
+    ON CONFLICT (silo) DO UPDATE SET state = $2
+  ) INSERT INTO ${currentTable} VALUES ($1, $3, $4, $5)
+    ON CONFLICT (silo, permit_id) DO UPDATE SET position = $4, data = $5`,
+  [silo, savedState, current.permitId, current.position, JSON.stringify(current)]);
+}
+
 // Keep call reads separate while retaining the existing budget summary fold.
 function budgetProjection(name: string, table: string): Projection {
   const callsTable = table.replace('model_budgets', 'model_budget_calls');
   const effectsTable = table.replace('model_budgets', 'model_budget_effects');
+  const currentTable = table.replace('model_budgets', 'model_current_effects');
   async function create(db: Query) {
     await db.query(`CREATE TABLE IF NOT EXISTS ${table}
       (silo TEXT PRIMARY KEY, state JSONB NOT NULL)`);
     await createBudgetCalls(db, callsTable);
     await createBudgetEffects(db, effectsTable);
+    await createCurrentEffects(db, currentTable);
   }
   async function drop(db: Query) {
-    await db.query(`DROP TABLE IF EXISTS ${table}, ${callsTable}, ${effectsTable}`);
+    await db.query(`DROP TABLE IF EXISTS ${table}, ${callsTable}, ${effectsTable}, ${currentTable}`);
   }
   async function apply(db: Query, event: EventEnvelope,
     position: number) {
     if (event.type === 'effect.observed' || event.type === 'effect.uncertain' ||
         event.type === 'effect.resolved') {
       await saveBudgetEffect(db, effectsTable, event, position);
+      await updateCurrentEffectEvidence(db, currentTable, event, position);
       return;
     }
     if (!event.type.startsWith('budget.')) return;
     if (!parseEventByType(event).success) throw new Error('Invalid budget event');
-    const rows = await db.query<{ state: unknown }>(
-      `SELECT state FROM ${table} WHERE silo = $1`, [event.silo]);
-    const state = rows.rows[0] ? stateSchema.parse(rows.rows[0].state) : emptyBudget();
+    const payload = data(event);
+    const rows = await db.query<{ state: unknown; current: unknown;
+      budgetSilo: string | null; effectPermitId: string | null }>(
+      `SELECT budget.state, budget.silo AS "budgetSilo", effect.data AS current,
+        effect.permit_id AS "effectPermitId" FROM (SELECT $1::text AS silo) requested
+        LEFT JOIN ${table} budget ON budget.silo = requested.silo
+        LEFT JOIN ${currentTable} effect
+          ON effect.silo = requested.silo AND effect.permit_id = $2`,
+    [event.silo, payload['reservationId'] ?? null]);
+    const saved = rows.rows[0]!;
+    const state = saved.budgetSilo === null ? emptyBudget() : stateSchema.parse(saved.state);
     applyBudget(state, event, position);
+    let current: ReturnType<typeof currentEffectBudget> | undefined;
     if (event.type === 'budget.reserved' || event.type === 'budget.settled') {
-      const payload = data(event);
       function matches(reservation: BudgetState['reservations'][number]) {
         return reservation.id === payload['reservationId'];
       }
@@ -221,11 +251,47 @@ function budgetProjection(name: string, table: string): Projection {
       const heldCents = totals(singleCall).reservedCents;
       const permitId = z.string().parse(payload['permitId']);
       await saveBudgetCall(db, callsTable, event.silo, position, permitId, reservation, heldCents);
+      const previous = saved.effectPermitId === null ? undefined : saved.current;
+      current = currentEffectBudget(previous, event.silo, position, reservation, heldCents);
     }
-    await db.query(`INSERT INTO ${table} VALUES ($1, $2)
-      ON CONFLICT (silo) DO UPDATE SET state = $2`, [event.silo, JSON.stringify(state)]);
+    await saveBudgetState(db, table, currentTable, event.silo, state, current);
   }
   return { name, create, drop, apply };
 }
 export const budgets = budgetProjection('model-budgets', 'model_budgets');
 export const replayBudgets = budgetProjection('model-budgets-replay', 'model_budgets_replay');
+
+const currentPageSchema = pageSchema.pick({ after: true, limit: true });
+async function currentEffectProgress(db: Query, sequence: number, deadline: number) {
+  const result = await db.query<{ version: number; sequence: string; generation: string }>(
+    `SELECT version, sequence, generation FROM projection_versions
+      JOIN projection_checkpoints USING (name) JOIN projection_generations USING (name)
+      WHERE name = $1`, [budgets.name], { deadline });
+  const saved = result.rows[0];
+  if (!saved || saved.version < budgetProjectionVersion || Number(saved.sequence) < sequence) {
+    throw new Error('Current effects unavailable');
+  }
+  return { sequence: Number(saved.sequence), generation: Number(saved.generation) };
+}
+function currentEffect(row: Record<string, unknown>) {
+  return currentEffectSchema.parse(row);
+}
+/** Capture the required log position first; check finance access after loading, even on failure. */
+export async function readCurrentEffects(db: Query, silo: string, requiredSequence: number,
+  input: z.input<typeof currentPageSchema> = {}, deadline = performance.now() + 2000) {
+  z.int().nonnegative().parse(requiredSequence);
+  const page = currentPageSchema.parse(input);
+  const progress = await currentEffectProgress(db, requiredSequence, deadline);
+  const result = await db.query(`SELECT ${currentEffectFields} FROM model_current_effects
+    WHERE silo = $1 AND position > $2 ORDER BY position LIMIT $3`,
+  [silo, page.after, page.limit + 1], { deadline });
+  const selected = result.rows.slice(0, page.limit);
+  const rows = selected.map(currentEffect);
+  const after = await currentEffectProgress(db, requiredSequence, deadline);
+  if (progress.generation !== after.generation) {
+    throw new Error('Current effects unavailable');
+  }
+  let next: number | null = null;
+  if (result.rows.length > page.limit) next = rows.at(-1)!.position;
+  return { rows, next, ...progress };
+}

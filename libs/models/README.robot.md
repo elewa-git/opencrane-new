@@ -3427,10 +3427,10 @@ A null settlement means no recorded settlement; zero is a recorded amount. Unkno
 outcomes retain the safety hold alongside the maximum saved settlement. These are
 accounting states, not proof of dispatch or completion. No private call text is copied.
 
-Version 5 adds saved effect records alongside the call rows and their month indexes.
-It replays installed data and replaces all three tables in one transaction,
+Version 6 adds current effect rows beside saved effects, calls and budget totals.
+It replays installed data and replaces all four tables in one transaction,
 retaining reader grants, event receipts and the checkpoint. Verification compares all
-three tables, reading call and effect rows in batches of 200. An incomplete legacy
+four tables, reading call and effect rows in batches of 200. An incomplete legacy
 call that the shared budget fold cannot read makes the upgrade and reader unavailable;
 it does not invent attribution or claim an empty result. Missing upgrades also refuse.
 The existing actor remains the only money writer. Replay receives only an event
@@ -3559,6 +3559,55 @@ then reports Ready for the new process, before and after catalogue replay.
 
 `mcp-dispatch.test.ts` checks watch replacement, failed capture recovery, refused changed
 tools and PostgreSQL replay with real NATS, PostgreSQL, OpenFGA and agentgateway fixtures.
+
+## Current effect accounting (P4-26 PR 8f; Part of #108)
+
+`readCurrentEffects` in `accounting.ts` is internal. It takes a required global log
+position, captured by its caller under the same data deadline, then reads 20 rows
+by default or at most 50. One extra row determines `next`, the last returned original
+reservation position. It selects explicit safe fields from `model_current_effects`,
+ordered by silo and position. No event history, saved-effect scan or budget JSON is
+loaded by a page. Missing tables or metadata, old versions, a checkpoint behind the
+required position, a changed generation and expired reads refuse. All three queries
+share one deadline, defaulting to two seconds. Callers must check current finance
+access once after successful or failed loading. This helper grants no access.
+
+Each permit has a fixed-size JSON record with safe accounting fields, two observed
+amount extremes and the latest resolution outcome/amount. Evidence arriving before
+a reservation is retained at position zero and omitted from pages. The projection
+uses the effect stream identity, as `readEffect` does. It loads and updates only that
+permit. Reservation order, payer, assistant and UTC date remain unchanged; budget and
+effect positions report the latest applied records for that permit. Usage, private
+work, evidence payloads and resolver details are absent. Page selection omits the
+internal amount extremes and resolution fields too.
+
+`currentEffectState` shares the existing detail read's rules. A saved resolution
+without accounting settlement stays pending and keeps its hold. Conflicting amounts
+remain unknown; accounting supplies the full safety hold and maximum settled cents.
+Uncertainty records do not by themselves undo a recorded settlement. These states
+never prove an outside action succeeded. Checkpoint and generation describe progress,
+not an immutable snapshot across pages; later evidence can update the same row.
+
+The budget projection's apply function uses three database queries per reservation
+or settlement. The runner still records receipts and checkpoints separately. One
+indexed join reads the budget and the permit's earlier evidence. A second query saves the call.
+The third saves the budget and current effect together, inside the runner's existing
+transaction. TypeScript still validates the records and calculates all money and state.
+Missing joined rows are distinguished from malformed saved JSON, which still refuses.
+The query-count regression retains early evidence and checks both the call and budget.
+It failed with five queries before this change. The 213-call paging/replay test keeps
+all its assertions, two-row pages and its original 30-second limit.
+
+Upgrade and shadow replay compare every 200-row batch and replace all four tables,
+receipts and checkpoint together, retaining table objects and reader grants. Failed
+replacement rolls back. Tests compare detail reads, two payers/assistants, old-month
+holds, zero releases, late/conflicting settlement, duplicate delivery, paging, bounded
+reads, missing/lagging/locked indexes, corruption after 200 rows and replacement failure.
+Saved-effect volume checks separate verification from repair and upgrade, with a
+60-second fixture limit for each case. Production reads still have two seconds.
+Replay has only an event reader and starts no reactions or appends. Existing HTTP and
+list contracts, money writers, impact, joins and screens are unchanged.
+Fresh-install qualification: NOT RUN.
 
 ## Approval reply evidence
 

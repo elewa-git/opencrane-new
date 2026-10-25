@@ -44,7 +44,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|checks spending choices, child allowances and payer limits; rechecks access on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
+  models -->|checks spending choices, child allowances and payer limits; rechecks access on retries; records catalogue interruptions, tool starts, outcomes and spending; reads calls, current effects and resolution receipts in pages; recovers closure evidence after restart| store["libs/event-store + libs/projections<br/>event log, call and effect rows and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -54,6 +54,11 @@ A lost resolution reply can be checked against the original saved event. The rec
 names the original event, date, resolver, outcome and recorded amount. It stays separate
 from current spending and any retained hold. It proves only that the resolution was
 saved; reading it never charges money, releases a hold or repeats an outside action.
+
+An internal current-effect index keeps each call's state, original payer and held or
+settled cents. Small pages retain the original reservation order. A saved resolution
+stays pending until accounting records settlement. Missing or delayed data is unavailable.
+Rebuilding these rows never sends a call or changes money.
 
 The budget actor keeps a child's original access check while allocation waits in
 its queue. Each attempt to save the allowance checks access again and keeps the
