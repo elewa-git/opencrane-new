@@ -42,3 +42,11 @@ export async function freePort() {
   }
   throw new Error('All test ports for this Vitest worker are in use');
 }
+
+export async function reservePort() {
+  const port = await freePort();
+  function release() {
+    return Promise.resolve();
+  }
+  return { port, release };
+}
