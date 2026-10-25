@@ -77,13 +77,13 @@ for (const [name, change, expected] of refusals) {
 
 function cnpgFixture() {
   const setup = fixture();
-  setup.values.images.postgres = `registry.local/cnpg-postgres@${digest}`;
+  setup.values.images.postgres = `registry.local/cnpg-postgres:17.6@${digest}`;
   setup.review.images.postgres = setup.values.images.postgres;
   setup.values.postgres = {
-    mode: 'cnpg', operatorContract: '1.28',
+    mode: 'cnpg', operatorContract: '1.30',
     superuserSecret: 'cnpg-superuser', applicationSecret: 'cnpg-projection',
   };
-  setup.review.cnpg = { operatorContract: '1.28', image: setup.values.images.postgres };
+  setup.review.cnpg = { operatorContract: '1.30', image: setup.values.images.postgres };
   return setup;
 }
 
@@ -98,23 +98,44 @@ function reviewedCnpgPasses() {
 }
 test('CNPG needs its own reviewed image compatibility contract', reviewedCnpgPasses);
 
-function removeCnpgReview(values, review) { delete review.cnpg; }
-function changeCnpgReview(values, review) { review.cnpg.image = reviewedImage; }
-function changeCnpgContract(values, review) { review.cnpg.operatorContract = 'unknown'; }
-function removeCnpgContract(values) { delete values.postgres.operatorContract; }
-function removeCnpgSuperuser(values) { delete values.postgres.superuserSecret; }
-function removeCnpgApplication(values) { delete values.postgres.applicationSecret; }
-function wrongCnpgCredentialShape(values) { values.postgres.POSTGRES_PASSWORD = 'test-only'; }
+function removeCnpgReview(values, review) {
+  delete review.cnpg;
+}
+function changeCnpgReview(values, review) {
+  review.cnpg.image = reviewedImage;
+}
+function changeCnpgContract(values, review) {
+  review.cnpg.operatorContract = 'unknown';
+}
+function useRetiredCnpgContract(values, review) {
+  values.postgres.operatorContract = '1.28';
+  review.cnpg.operatorContract = '1.28';
+}
+function removeCnpgContract(values) {
+  delete values.postgres.operatorContract;
+}
+function removeCnpgSuperuser(values) {
+  delete values.postgres.superuserSecret;
+}
+function removeCnpgApplication(values) {
+  delete values.postgres.applicationSecret;
+}
+function wrongCnpgCredentialShape(values) {
+  values.postgres.POSTGRES_PASSWORD = 'test-only';
+}
 function reuseCnpgCredentials(values) {
   values.postgres.applicationSecret = values.postgres.superuserSecret;
 }
-function mutableCnpgImage(values) { values.images.postgres = 'registry.local/postgres:latest'; }
+function mutableCnpgImage(values) {
+  values.images.postgres = 'registry.local/postgres:latest';
+}
 
 const cnpgRefusals = [
   ['missing CNPG image review', removeCnpgReview, /CNPG image compatibility is not reviewed/u],
   ['wrong CNPG image review', changeCnpgReview, /CNPG image compatibility is not reviewed/u],
   ['wrong reviewed operator', changeCnpgContract, /CNPG image compatibility is not reviewed/u],
   ['missing operator contract', removeCnpgContract, /Unsupported CNPG operator contract/u],
+  ['retired operator contract', useRetiredCnpgContract, /Unsupported CNPG operator contract/u],
   ['missing superuser reference', removeCnpgSuperuser, /Missing Kubernetes secret name/u],
   ['missing application reference', removeCnpgApplication, /Missing Kubernetes secret name/u],
   ['legacy credential shape', wrongCnpgCredentialShape, /Unsupported PostgreSQL setting/u],

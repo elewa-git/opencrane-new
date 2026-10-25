@@ -3,10 +3,14 @@
 This folder describes what the local OpenCrane installation runs and how its parts
 reach each other. It includes the website, back end, background workers and the
 services they need. Helm fills in the chosen settings before installation.
+The database normally runs as one container. The optional primary and standby description needs CloudNativePG,
+a PostgreSQL controller installed separately. Rendering checks this description;
+a running standby has not yet been tested.
 
 ## What it is responsible for
 
 - Starts the apps, database, saved event log and permissions service.
+- Describes an optional database standby with its own storage on another node.
 - Gives background workers the settings and access needed for their jobs.
 - Prepares storage, database setup and the first owner.
 - Describes assistant computers and limits their network connections.
@@ -34,7 +38,7 @@ images first. The setup job runs [bootstrap.ts](../../bootstrap.ts); workers run
 
 ```mermaid
 flowchart LR
-  chart["Local installation chart"] --> templates["templates<br/>program descriptions"]
+  chart["Local installation chart"] --> templates["templates<br/>programs and optional database standby"]
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```

@@ -11,3 +11,28 @@
 {{- fail (printf "Missing secret reference: %s" $name) -}}
 {{- end -}}
 {{- end -}}
+{{- range $name, $value := .Values.postgres -}}
+{{- if not (has $name (list "mode" "operatorContract" "superuserSecret" "applicationSecret")) -}}
+{{- fail "Unsupported PostgreSQL setting" -}}
+{{- end -}}
+{{- end -}}
+{{- if not (has .Values.postgres.mode (list "standalone" "cnpg")) -}}
+{{- fail "Unsupported PostgreSQL mode" -}}
+{{- end -}}
+{{- if eq .Values.postgres.mode "cnpg" -}}
+{{- if ne .Values.postgres.operatorContract "1.30" -}}
+{{- fail "Unsupported CNPG operator contract" -}}
+{{- end -}}
+{{- range $name := list "superuserSecret" "applicationSecret" -}}
+{{- $secret := index $.Values.postgres $name -}}
+{{- if not (and (kindIs "string" $secret) (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $secret)) -}}
+{{- fail "Missing CNPG credential reference" -}}
+{{- end -}}
+{{- if eq $secret $.Values.secrets.postgres -}}
+{{- fail "Separate CNPG credential references are required" -}}
+{{- end -}}
+{{- end -}}
+{{- if eq .Values.postgres.superuserSecret .Values.postgres.applicationSecret -}}
+{{- fail "Separate CNPG credential references are required" -}}
+{{- end -}}
+{{- end -}}

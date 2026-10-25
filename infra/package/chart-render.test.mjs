@@ -56,10 +56,10 @@ test('the real package chart renders only Kubernetes manifests', rendersOnlyMani
 function cnpgValues() {
   const values = chartValues();
   values.postgres = {
-    mode: 'cnpg', operatorContract: '1.28',
+    mode: 'cnpg', operatorContract: '1.30',
     superuserSecret: 'cnpg-superuser', applicationSecret: 'cnpg-projection',
   };
-  values.images.postgres = `example.invalid/cnpg-postgres@sha256:${'b'.repeat(64)}`;
+  values.images.postgres = `example.invalid/cnpg-postgres:17.6@sha256:${'b'.repeat(64)}`;
   return values;
 }
 
@@ -134,7 +134,9 @@ function twoInstanceCluster() {
   assert.equal(matchesSelector(writer.spec.selector, standby), false);
   assert.equal(matchesSelector(writer.spec.selector, foreign), false);
   for (const resource of resources) {
-    if (resource.kind === 'Service') assert.equal(resource.spec.type, 'ClusterIP');
+    if (resource.kind === 'Service') {
+      assert.equal(resource.spec.type, 'ClusterIP');
+    }
     assert.notEqual(resource.kind, 'Secret');
   }
 }
@@ -145,7 +147,9 @@ function postgresService(resource) {
 
 function matchesSelector(selector, labels) {
   for (const [name, value] of Object.entries(selector)) {
-    if (labels[name] !== value) return false;
+    if (labels[name] !== value) {
+      return false;
+    }
   }
   return true;
 }
@@ -154,6 +158,7 @@ test('CNPG requires separate claims and nodes and sends writers only to primary'
 const renderRefusals = [
   ['operatorContract', '', /Unsupported CNPG operator contract/u],
   ['operatorContract', 'unknown', /Unsupported CNPG operator contract/u],
+  ['operatorContract', '1.28', /Unsupported CNPG operator contract/u],
   ['superuserSecret', '', /Missing CNPG credential reference/u],
   ['applicationSecret', '', /Missing CNPG credential reference/u],
   ['superuserSecret', 'chart-test-postgres', /Separate CNPG credential references/u],

@@ -4,7 +4,13 @@ metadata:
   name: postgres
 spec:
   type: ClusterIP
+{{- if eq .Values.postgres.mode "cnpg" }}
+  selector:
+    cnpg.io/cluster: postgres
+    cnpg.io/instanceRole: primary
+{{- else }}
   selector: { app: postgres }
+{{- end }}
   ports: [{ port: 5432, targetPort: 5432 }]
 ---
 apiVersion: v1

@@ -17,3 +17,8 @@ exposure:
   ingress: false
   loadBalancer: false
   funnel: false
+postgres:
+  mode: standalone
+  operatorContract: ""
+  superuserSecret: ""
+  applicationSecret: ""

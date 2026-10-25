@@ -7,6 +7,33 @@ spec:
   resources:
     requests: { storage: 1Gi }
 ---
+{{- if eq .Values.postgres.mode "cnpg" }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+spec:
+  instances: 2
+  imageName: {{ .Values.images.postgres | quote }}
+  enableSuperuserAccess: true
+  superuserSecret: { name: {{ .Values.postgres.superuserSecret | quote }} }
+  bootstrap:
+    initdb:
+      database: projections
+      owner: projection
+      secret: { name: {{ .Values.postgres.applicationSecret | quote }} }
+  storage:
+    size: 1Gi
+    pvcTemplate:
+      accessModes: [ReadWriteOnce]
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+{{- else }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -40,6 +67,7 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests: { storage: 1Gi }
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet

@@ -154,3 +154,73 @@ shared by development stacks. Preparation reads it before creating credentials,
 then copies its value into the private runtime Secret as `DEV_OWNER_EMAIL`.
 The packaged bootstrap receives that environment setting. The twice-fresh check
 compares the member and both events against the private file's address.
+
+## Optional PostgreSQL primary and standby
+
+P5-3 PR 1 adds an offline render/refusal path only. The default remains the existing
+one-instance PostgreSQL StatefulSet. `postgres.mode: cnpg` replaces that StatefulSet
+with one `postgresql.cnpg.io/v1` Cluster named `postgres`, with two instances.
+CNPG creates a separate ReadWriteOnce 1Gi data claim for each instance. Required
+anti-affinity on `kubernetes.io/hostname` keeps them on different Kubernetes nodes;
+a one-node cluster leaves the second instance pending. Each instance requests
+50m CPU/64Mi memory and is limited to 500m CPU/384Mi memory. These settings are
+fixed in the template; storage and placement overrides are refused.
+
+The supported API contract is CNPG 1.30, listed in the upstream
+[support table](https://cloudnative-pg.io/docs/1.30/supported_releases/). Older
+contracts, including the retired 1.28 release, are refused. Values must include this reference-only block:
+
+```yaml
+postgres:
+  mode: cnpg
+  operatorContract: "1.30"
+  superuserSecret: cnpg-superuser
+  applicationSecret: cnpg-projection
+```
+
+The two names must differ from each other and from `secrets.postgres`. Both refer
+to existing `kubernetes.io/basic-auth` Secrets containing `username` and `password`.
+The usernames must be `postgres` and `projection`, respectively. No credential values
+belong in Helm. Current preparation supplies `POSTGRES_*` fields, which are not
+CNPG credentials. Missing references refuse; this change does not convert those
+fields or check live Secret contents. Preparation remains unchanged.
+
+`images.postgres` must pass the existing exact-digest review. In addition, the
+trusted review file needs `cnpg.operatorContract: "1.30"` and `cnpg.image` equal to
+that exact image. This records compatibility with CNPG's [image requirements](https://cloudnative-pg.io/docs/1.30/container_images/),
+including a PostgreSQL version tag alongside the digest.
+The shipped review has no CNPG approval, so preflight refuses CNPG with today's
+images. Test reviews use made-up images only. A direct Helm render checks the
+contract, references, immutable pins and private exposure; it does not perform
+image review. Preflight remains required before installation. Operator installation,
+its version/digest and licence review, and PostgreSQL image promotion remain later work.
+
+The private `postgres` Service keeps the current hostname and selects only
+`cnpg.io/cluster: postgres` plus `cnpg.io/instanceRole: primary`. Standby Pods have
+`replica` as their instance role and cannot match this selector. CNPG's own default
+Services are also ClusterIP. Render checks do not prove live routing or promotion.
+
+CNPG initdb prepares `projections` for owner `projection`. Existing bootstrap still
+creates the `server`, `dispatcher` and `openfga` roles and remaining databases.
+The current database names map to the design's logical names as follows:
+
+| Existing name | Logical name | Purpose |
+| --- | --- | --- |
+| `projections` | `opencrane` | Content projections and checkpoints |
+| `handlers` | `jobs` | Dispatcher delivery state |
+| `openfga` | `openfga` | Access projections |
+
+No database is renamed. Remaining bootstrap wiring must check live Secret types,
+fields and usernames, align CNPG passwords with bootstrap/runtime references, check
+the installed operator API/version, and include `imageName` in the installer's
+rendered-image check. The existing check recognises container `image` fields only.
+These steps must happen before enabling an install; the current reviewed-image
+refusal keeps that path closed. No bootstrap or event-store behaviour changes here.
+
+[Bootstrap](https://cloudnative-pg.io/docs/1.30/bootstrap/),
+[storage](https://cloudnative-pg.io/docs/1.30/storage/),
+[scheduling](https://cloudnative-pg.io/docs/1.30/scheduling/) and
+[labels](https://cloudnative-pg.io/docs/1.30/labels_annotations/) describe the CNPG contracts.
+The [receipt](../../docs/process/p5-3-pr1/receipt.md) records checks and limits.
+Backup/WAL, all-database restore, storage denial, live standby and promotion remain
+NOT RUN under #15. Rendering is not live k3d proof.

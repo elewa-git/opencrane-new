@@ -23,7 +23,7 @@ flowchart LR
   stack -->|reserves test space| package
   package -->|uses local cluster| devbox
   package -->|starts| apps["Website, server and workers<br/>product requests and background jobs"]
-  package -->|runs| services["Core services<br/>jobs, content and access"]
+  package -->|runs| services["Core services<br/>jobs, content, access and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
 ```
 
@@ -34,6 +34,11 @@ and remain the same across chats. File storage and virus scanning are outside th
 
 The dispatcher keeps its jobs in a separate database. It uses the server's read-only
 content connection to coordinate gateway configuration changes with delivery.
+
+The default database still runs as one container. An optional chart setting describes
+PostgreSQL with a standby, a second copy ready to take over. CloudNativePG, a Kubernetes
+controller for PostgreSQL, must be installed separately. This option currently checks
+installation files only. Credential preparation and a running install still need work.
 
 ## What it is responsible for
 
