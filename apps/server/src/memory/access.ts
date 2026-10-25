@@ -142,6 +142,18 @@ async function notesAccess(options: MemoryOptions, requester: string, scope: Sco
   } else if (assistant.ownerId !== requester) {
     throw new MemoryRefused();
   }
+  let canRead = false;
+  if (!writeOnly) {
+    canRead = await operationAllowed(options, requester, scope, 'memory_read', checks);
+  }
+  let canWrite = false;
+  if (describeRights || writeOnly) {
+    canWrite = await operationAllowed(options, requester, scope, 'memory_write', checks);
+  }
+  // Omit notes without grants so their pending permissions cannot block personal memory.
+  if (!canRead && !canWrite) {
+    throw new MemoryRefused();
+  }
   const auth = memberAuthorisation(options.binding);
   if (!await checks.applied(created.id)) {
     throw new Error('Assistant permissions unavailable');
@@ -151,17 +163,6 @@ async function notesAccess(options: MemoryOptions, requester: string, scope: Sco
     throw new Error('Permissions unavailable');
   }
   if (!acting.allowed) {
-    throw new MemoryRefused();
-  }
-  let canRead = false;
-  if (!writeOnly) {
-    canRead = await operationAllowed(options, requester, scope, 'memory_read', checks);
-  }
-  let canWrite = false;
-  if (describeRights || writeOnly) {
-    canWrite = await operationAllowed(options, requester, scope, 'memory_write', checks);
-  }
-  if (!canRead && !canWrite) {
     throw new MemoryRefused();
   }
   let audienceKind = 'person';

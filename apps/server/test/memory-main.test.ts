@@ -121,7 +121,8 @@ it('loads empty personal memory, saves a fact and recalls it through the dev-sta
     const input = { commandId: 'first-fact', text: 'I prefer jasmine tea', kind: 'preference',
       pinned: false, expiresAt: null, sources: [], dependsOn: [] };
     const saved = await fetch(path, { method: 'POST', headers, body: JSON.stringify(input) });
-    expect({ status: saved.status, body: await saved.json() }).toMatchObject({ status: 200,
+    const savedBody: unknown = await saved.json();
+    expect({ status: saved.status, body: savedBody }).toMatchObject({ status: 200,
       body: { outcome: 'saved', revision: 1 } });
     await until(memoryReady);
     const recalled = await fetch(`${path}?q=jasmine`, { headers });

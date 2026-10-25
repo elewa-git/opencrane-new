@@ -750,6 +750,22 @@ Memory passes still last at most two seconds.
 
 ## Memory scope and search reads
 
+Scope discovery checks explicit note grants before the assistant's OpenFGA receipt
+and `actsFor` permission. With no applicable grant it omits the notes. This prevents
+a newly created assistant whose permission work is pending from blocking the
+requester's personal scope. Granted notes still require all existing checks;
+missing receipts remain HTTP 503. No access result is reused between requests.
+
+`test/memory-main.test.ts` starts `src/main.ts`, the dev-stack server entrypoint,
+with an empty event store and fresh PostgreSQL databases. It uses real NATS,
+OpenFGA and the live memory projection worker. It then supplies account events
+and a test session, leaving a new assistant's permission receipt unapplied.
+The first scopes request includes that assistant, as the workspace does.
+It must load personal memory, save and search a fact, and retain it after server
+restart. A second case grants note access and requires HTTP 503 until the
+assistant permission handler finishes. Key directories stay private (0700).
+These are service integration tests; they do not qualify governed MCP recall.
+
 `GET /api/memory/scopes?assistantId=...&groupId=...` returns the requester's own
 scope and permitted selected scopes, their audiences, separate operation rights and limits.
 `GET /api/memory/:scopeId/facts?q=...&cursor=...` returns current, unexpired facts.
