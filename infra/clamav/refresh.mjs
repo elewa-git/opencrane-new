@@ -3,8 +3,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { lstat, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const toolImage = 'clamav/clamav-debian:1.5.2@' +
+export const toolImage = 'clamav/clamav-debian:1.5.2@' +
   'sha256:14e2e0805c6a5ff6728ea591c05565e0f0954d93e8701919012c3a8c44e20674';
 const databaseNames = ['main', 'daily', 'bytecode'];
 const deadlineMs = 15 * 60 * 1000;
@@ -29,6 +30,10 @@ ConnectTimeout 30
 ReceiveTimeout 60
 CONFIG
 freshclam --config-file=.refresh-lock/freshclam.conf --datadir=/signatures --stdout
+`;
+
+export const inspectionScript = `set -eu
+export LC_ALL=C TZ=UTC
 for name in main daily bytecode; do
   set -- "$name".cvd "$name".cld
   if [ -e "$1" ] && [ -e "$2" ]; then
@@ -57,7 +62,7 @@ function runUpdater(candidate) {
   const args = [
     'run', '--rm', '--name', containerName, '--entrypoint', 'sh',
     '--mount', `type=bind,src=${candidate},dst=/signatures`, '--workdir', '/signatures',
-    toolImage, '-c', containerScript,
+    toolImage, '-c', containerScript + inspectionScript,
   ];
   const options = {
     encoding: 'utf8', timeout: deadlineMs, maxBuffer: 1024 * 1024,
@@ -190,9 +195,17 @@ async function readDatabase(candidate, block, evidence, checkedAt) {
 }
 
 async function buildManifest(candidate, output, checkedAt) {
+  const updaterEvidence = parseUpdaterEvidence(output.split('\nOPENCRANE_DATABASE ')[0]);
+  const databases = await verifyDatabases(candidate, output, checkedAt, updaterEvidence);
+  return {
+    formatVersion: 1, toolImage, databaseUpdatedAt: new Date(checkedAt).toISOString(),
+    updaterEvidence, databases,
+  };
+}
+
+export async function verifyDatabases(candidate, output, checkedAt, updaterEvidence) {
   const sections = output.split('\nOPENCRANE_DATABASE ');
   requireEvidence(sections.length === 4);
-  const updaterEvidence = parseUpdaterEvidence(sections[0]);
   const files = await readdir(candidate);
   const databaseFiles = files.filter(isDatabase);
   requireEvidence(databaseFiles.length === 3);
@@ -202,10 +215,7 @@ async function buildManifest(candidate, output, checkedAt) {
     const database = await readDatabase(candidate, sections[index + 1], evidence, checkedAt);
     databases.push(database);
   }
-  return {
-    formatVersion: 1, toolImage, databaseUpdatedAt: new Date(checkedAt).toISOString(),
-    updaterEvidence, databases,
-  };
+  return databases;
 }
 
 function isDatabase(file) {
@@ -259,12 +269,14 @@ async function refresh(candidate) {
   }
 }
 
-try {
-  requireEvidence(process.argv.length === 3);
-  await refresh(process.argv[2]);
-  process.stdout.write('Candidate verified. Review and package it before deployment.\n');
-} catch {
-  // Discard tool output and filesystem errors: they can contain paths or private data.
-  process.stderr.write(`${refusal}\n`);
-  process.exitCode = 1;
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    requireEvidence(process.argv.length === 3);
+    await refresh(process.argv[2]);
+    process.stdout.write('Candidate verified. Review and package it before deployment.\n');
+  } catch {
+    // Discard tool output and filesystem errors: they can contain paths or private data.
+    process.stderr.write(`${refusal}\n`);
+    process.exitCode = 1;
+  }
 }
