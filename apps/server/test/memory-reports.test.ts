@@ -331,7 +331,7 @@ async function permanentlyRefusesContent() {
   socket.on('message', receive);
   try {
     const closed = once(socket, 'close');
-    socket.send(JSON.stringify(report()));
+    socket.send(JSON.stringify(report('agent.turn_completed')));
     const result: unknown[] = await Promise.race([closed, acknowledged.promise]);
     expect(result[0]).toBe(1008);
     expect(bridge.rejection).toBe(refusal);
@@ -344,4 +344,4 @@ async function permanentlyRefusesContent() {
     sockets.close();
   }
 }
-it('uses the permanent bridge refusal so persistence retry cannot loop', permanentlyRefusesContent);
+it('permanently refuses text hidden on a bridge completion report', permanentlyRefusesContent);
