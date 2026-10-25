@@ -87,6 +87,8 @@ function nativeRetryAccess(actor: BudgetActor, retryDigest: string, native: Nati
     await fresh();
     requireOriginalExpiry();
   }
+  const deadline: unknown = Reflect.get(fresh, 'deadline');
+  Object.assign(confirmAccess, { deadline });
   return { confirmAccess, requireOriginalExpiry };
 }
 

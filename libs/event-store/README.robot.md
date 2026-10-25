@@ -62,8 +62,8 @@ An optional append `signal` stops retry backoff and prevents further publishes a
 cancellation, including when cancellation arrives during a history read or failed publish.
 Cancellation returns unavailable. It cannot withdraw a publish already sent to NATS.
 It preserves the original expectation: callers reload and revalidate on
-conflict. Unexpected configuration/permission/corruption errors throw with
-the original cause. The `unavailable.cause` is internal diagnostic data;
+conflict. Unexpected append exceptions return unavailable with the original cause.
+Read and provisioning exceptions still throw. The `unavailable.cause` is internal diagnostic data;
 HTTP callers must expose only the status. An unavailable result can be
 ambiguous: retry with the same command key.
 
@@ -102,7 +102,7 @@ event's own subject or category is accepted. Bootstrap uses zero across all
 member streams, which also contain identity bindings, to require a fresh silo.
 
 By default, command identity is checked in entity history before every attempt
-and again after a conflict. It is scoped to commandId, principal kind/id and
+and again after a conflict. It is scoped to silo, commandId, principal kind/id and
 subject. Reusing a key returns the earlier sequence even if the caller supplies
 new event data. These default history searches grow with the entity's history.
 
@@ -421,3 +421,26 @@ These tests use one principal; duplicate-command checks are scoped to each subje
 P5-5 PR 1 provides process evidence only. Packaged node/PVC loss, placement and
 rotation remain NOT RUN. Later k3d proof requires `infra/dev-stack/claim.sh` and
 completed P5-4. See [the receipt](../../docs/process/p5-5-pr1/receipt.md).
+
+## Budget append evidence
+
+`append` remains the single public write interface. Its existing statuses now include
+`outcome` details: `appended`, `duplicate_saved`, `conditional_rejection_unchanged`,
+`conditional_rejection_changed`, `conditional_rejection_unknown`, `transport_failure`
+and `rejected`. A saved duplicate includes the validated original event and position.
+Conditional results include complete later subject history where available.
+`possiblyPublished` retains evidence from earlier attempts in the same operation.
+An unresolved earlier publish returns unavailable even after a definite later rejection.
+Failed duplicate readback is unavailable, not a proven command collision.
+
+The field is non-enumerable so existing JSON receipts cannot expose recovery history.
+It is optional for existing adapters and fault injectors. Budget callers treat
+missing evidence conservatively and read saved events before accepting bare success.
+No new public append method bypasses fault injection.
+
+The implementation checks the acknowledgement stream and position and validates silo,
+subject, command id and principal on duplicate readback. NATS 2.15 uses errors
+10071 and 10164 for conditional refusals; neither identifies which condition failed.
+See its [acknowledgement implementation](https://github.com/nats-io/nats-server/blob/v2.15.0/server/stream.go)
+and [error definitions](https://github.com/nats-io/nats-server/blob/v2.15.0/server/jetstream_errors_generated.go).
+`test/append-outcomes.test.ts` injects failures below the public append interface.

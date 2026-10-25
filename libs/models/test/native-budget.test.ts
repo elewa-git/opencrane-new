@@ -800,6 +800,10 @@ async function refusesNativeDispatchAfterDecision(change: string) {
     await expect(nativeGrant(context, binding, 110, 'verified-call', saveThenChange))
       .rejects.toThrow(/^Model call retry refused$/u);
     vi.restoreAllMocks();
+    if (change === 'deadline') {
+      // Keep the saved wall-clock expiry elapsed when the restarted actor checks it.
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 2001);
+    }
     await context.restartActor();
     const saved = context.actor.state.reservations[0]!;
     const position = await context.store.head();
@@ -811,8 +815,15 @@ async function refusesNativeDispatchAfterDecision(change: string) {
       expect(context.actor.state.dispatches).toHaveLength(1);
       expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(110);
     } else {
-      expect(saved.settledCents).toBe(0);
       expect(context.actor.state.dispatches).toHaveLength(0);
+      if (change === 'deadline') {
+        expect(saved.settledCents).toBeUndefined();
+        expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(110);
+        // Release only in a later operation that checks the existing unsent evidence.
+        await context.actor.releaseUndispatched(saved.id);
+      }
+      expect(saved.settledCents).toBe(0);
+      expect(rootTotals(context.actor.state, context.root.rootId).heldCents).toBe(0);
     }
     expect(context.received()).toBe(0);
   } finally {

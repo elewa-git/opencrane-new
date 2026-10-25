@@ -524,8 +524,8 @@ No stack or paid provider call proves this route yet.
 - `BudgetActor` loads the NATS budget stream and serialises reserve/settle
   commands. Each command does one conditional append. The process entrypoint
   uses the existing PostgreSQL session lease adapter to elect one actor;
-  an append on acquisition fences the previous writer. Unknown append outcomes
-  stop the actor. SQL holds no budget rules or authoritative state.
+  an append on acquisition excludes the previous writer. Unknown append outcomes
+  block money decisions until recovery resolves them. SQL holds no budget rules or authoritative state.
 - Defaults are **2,000 cents/day and 20,000 cents/month**, UTC. Pending
   reservations count against both periods until settled, including after
   midnight or a restart. Completed calls belong to their reservation date.
@@ -3136,7 +3136,7 @@ store, IAM and current budget-writer failures. `BudgetActor.requireCurrent` chec
 budget stream position outside the money queue, without writing or replaying history.
 It waits for unfinished commands first and repeats a read if a command overlaps it.
 Slow proof reads cannot hold up reservations, settlements or stops.
-A replacement writer or a failed actor invalidates proof. Process leader-lock loss also
+A replacement writer or an actor awaiting recovery invalidates proof. Process leader-lock loss also
 uses the existing shutdown path.
 
 Startup retries pending receipts every second. Each receipt joins its existing save;
@@ -3739,3 +3739,46 @@ unavailable permission checks remain dependency failures. HTTP maps types to fix
 without matching error strings or returning causes. History loads before the short write
 check, but access refusal takes precedence over history errors. Original receipts and
 clear-after-replacement behaviour are unchanged.
+
+## Budget writer recovery
+
+`budget-writer.ts` retains the exact pending event, expected position and publication
+evidence before calling `store.append`. It tracks ready, recovering and ownership-lost
+states. Recovery reads after the last successfully applied position and recognises its
+own pending command before checking for another writer. Only managed-provider switch-on
+may otherwise advance history without stopping the actor. Its reservation restriction stays.
+
+Unchanged conditional refusals retry with both subject and global conditions and the
+original access callback. Without that callback, unchanged contention is refused. Definite
+non-publication and input collisions refuse one request. Unknown results block decisions
+and releases until a complete recovery read succeeds. An empty read never disproves an
+earlier delayed publish. If it remains unresolved, the existing lease-controlled writer
+replacement and startup append must exclude that write before replay can serve requests.
+
+Saved duplicates apply their original payload once without moving the position backwards.
+Recovery checks every intervening event before accepting a duplicate. Another writer's
+change stops the old actor before it can overlook that writer's reserved money.
+Application failures restore the last good state before replay retries the saved row.
+Admin ceiling history is prepared outside the money queue, using its existing ten-second
+read limit. The access check then starts its two-second limit. Its exact deadline passes
+through queue waits, recovery, publishes and final checks. Callers with an existing access
+deadline keep that earlier limit during preparation too. After queue waiting, the actor
+reads only events added since preparation to find a concurrent save of the same command.
+An identical payload returns that saved receipt before checking the requested revision;
+a changed payload or administrator still conflicts. The catch-up read and final access
+check share the original deadline. A late
+saved admission keeps the hold but grants no send. An already expired request cannot
+publish a release either; existing later evidence checks can release an unsent hold. `requireCurrent` refuses while recovery
+is pending. Restart and replay preserve admissions, root allowances and integer-cent holds.
+
+A failed final check retains private evidence of its own newly saved admission on that
+error instance. Egress consumes this evidence once to record the existing refused outcome
+before relay registration. Generic errors and earlier admissions provide no such evidence;
+this does not restore consent or a send permission.
+
+This is the first part of #576's agreed correction, superseding #671. Approval retry
+restoration before budget admission, both new HTTP refusal races and their fixed private
+diagnostics remain for the second part. Existing approval evidence and binding checks stay.
+The retained 53/60 approval-load result is unresolved until the replacement path is qualified.
+`test/budget-recovery.test.ts` covers delayed publication, failed recovery reads, saved
+payloads and failed application. The two named call-retry and root-budget money tests stay unchanged.

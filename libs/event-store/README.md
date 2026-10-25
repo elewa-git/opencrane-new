@@ -22,7 +22,7 @@ The [back end](../../apps/server/README.md),
 flowchart LR
   parent["libs/<br/>shared libraries"] --> store["libs/event-store<br/>saved event log"]
   server["apps/server<br/>back end"] -->|saves changes| store
-  models["libs/models<br/>AI access and spending"] -.->|saves and reads| store
+  models["libs/models<br/>AI access and spending"] <-->|saves changes and checks their outcome| store
   ops["apps/ops<br/>background workers"] -->|saves and reads| store
   projections["libs/projections<br/>read tables"] -.->|reads the log| store
   store -->|stores the log| nats["NATS JetStream<br/>saved copies and recovery"]
@@ -37,6 +37,8 @@ flowchart LR
 - Check that saved memory facts belong to the right person or group before saving them.
 - Stop retrying when the caller cancels or its access time limit runs out.
   Repeat the caller's access check before saving when requested.
+- Distinguish a saved change, a definite refusal and an uncertain reply. Keep earlier
+  uncertainty when a later attempt is refused.
 - Return the earlier result when the same request is repeated, rather than save it twice.
 - Read one record, one item's history or the whole log in order.
 - Keep [stream summaries](../../GLOSSARY.md#stream-summary), small sets of facts

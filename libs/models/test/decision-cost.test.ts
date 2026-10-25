@@ -201,10 +201,16 @@ async function refusesTimeoutAfterAllowRecord() {
       expect(setup.actor.state.reservations).toHaveLength(2);
       expect(setup.actor.state.reservations[0]).toEqual(existingReservation);
       expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+      const refusedReservation = setup.actor.state.reservations[1]!;
+      expect(refusedReservation.settledCents).toBeUndefined();
+      expect(totals(setup.actor.state, setup.actor.now()).reservedCents)
+        .toBe(existingReservation.amountCents + refusedReservation.amountCents);
+      // Keep the hold after the request expires. Release it only through a later evidence check.
+      await setup.actor.releaseUndispatched(refusedReservation.id);
+      expect(refusedReservation.settledCents).toBe(0);
+      expect(setup.actor.state.reservations[0]).toEqual(existingReservation);
       expect(totals(setup.actor.state, setup.actor.now()).reservedCents)
         .toBe(existingReservation.amountCents);
-      const refusedReservation = setup.actor.state.reservations[1];
-      expect(refusedReservation?.settledCents).toBe(0);
       const budgetHistory = await history(setup.nats.store, 'budget-test', 'test');
       expect(budgetHistory.at(-1)?.event).toMatchObject({
         type: 'budget.settled', data: { reservationId: refusedReservation?.id,

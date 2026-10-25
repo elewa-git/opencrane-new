@@ -256,7 +256,9 @@ async function recoversLostReply() {
     return { status: 'unavailable' as const, cause: new Error('Reply lost') };
   }
   nats.store.append = loseReply;
-  await expect(stop(source, saved.position)).rejects.toThrow('Budget writer lost its fence');
+  await expect(stop(source, saved.position)).rejects.toThrow('Budget append unavailable');
+  expect(await nats.store.head()).toBe(before + 1);
+  expect(await stop(source, saved.position)).toMatchObject({ sourceEventId: saved.event.id });
   expect(await nats.store.head()).toBe(before + 1);
   await delay(1100);
   actor = new BudgetActor(nats.store, 'test', now);

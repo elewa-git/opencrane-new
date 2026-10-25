@@ -273,7 +273,11 @@ async function queueChange(kind: string) {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const queued = Promise.withResolvers<void>();
+  let accessChecks = 0;
   async function pause() {
+    accessChecks += 1;
+    // Wait inside the append, after the history preparation outside the money queue.
+    if (accessChecks === 1) return;
     entered.resolve();
     await release.promise;
   }
@@ -308,7 +312,11 @@ async function queueChange(kind: string) {
         { conversationId, closedBy: 'alice' }, false);
     }
     release.resolve();
-    await blocking;
+    if (kind === 'deadline') {
+      await expect(blocking).rejects.toThrow('Budget append unavailable');
+    } else {
+      await blocking;
+    }
     const before = await context.nats.store.head();
     await refused;
     expect(await context.nats.store.head()).toBe(before);
