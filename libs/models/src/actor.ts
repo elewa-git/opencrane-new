@@ -1,4 +1,5 @@
-import { savedBudgetEvent, unchangedBudgetPosition, BudgetWriterChanged } from './budget-append.ts';
+import { budgetAppendCommand, savedBudgetEvent, unchangedBudgetPosition,
+  BudgetWriterChanged } from './budget-append.ts';
 import { prepareCeilingChange } from './ceiling-command.ts';
 import { CeilingReceiptRecovery } from './ceiling-receipt-recovery.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -52,24 +53,24 @@ export class BudgetActor {
     await this.append('budget.period_started', { periodStart: this.monthStart() });
   }
   private serial<T>(work: () => Promise<T>): Promise<T> {
-    const run = (this.runCommand<T>).bind(this, work);
+    async function runCommand(this: BudgetActor) {
+      if (this.failed) throw new Error('Budget writer unavailable');
+      if (this.refreshBeforeNextCommand) {
+        // Read before making another money decision after an unknown append outcome.
+        await this.canRepeatAppend(false, performance.now() + 2000);
+        this.refreshBeforeNextCommand = false;
+      }
+      try {
+        return await work();
+      } catch (error) {
+        if (error instanceof BudgetWriterChanged) this.failed = true;
+        throw error;
+      }
+    }
+    const run = runCommand.bind(this);
     const result = this.queue.then(run);
     this.queue = result.then(() => undefined, () => undefined);
     return result;
-  }
-  private async runCommand<T>(work: () => Promise<T>): Promise<T> {
-    if (this.failed) throw new Error('Budget writer unavailable');
-    if (this.refreshBeforeNextCommand) {
-      // Read before making another money decision after an unknown append outcome.
-      await this.canRepeatAppend(false, performance.now() + 2000);
-      this.refreshBeforeNextCommand = false;
-    }
-    try {
-      return await work();
-    } catch (error) {
-      if (error instanceof BudgetWriterChanged) this.failed = true;
-      throw error;
-    }
   }
   private async append(type: string, payload: unknown, id: string = randomUUID(),
     confirmAccess?: AccessCheck, deadline = confirmAccess?.deadline) {
@@ -80,10 +81,7 @@ export class BudgetActor {
     }
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
     requireReservationWrites(event, this.reservationsStopped, confirmAccess);
-    // Reuse replayed history; configure checks its caller's command id before this append.
-    const command = { event, expectedSequence: this.sequence, historyChecked: true as const,
-      ...(confirmAccess ? { checkAccess: confirmAccess } : {}),
-      ...(deadline === undefined ? {} : { deadline }) };
+    const command = budgetAppendCommand(event, this.sequence, confirmAccess, deadline);
     let result = await this.store.appendOutcome(command);
     while (result.status === 'conditional_rejection_changed' ||
         result.status === 'conditional_rejection_unchanged') {

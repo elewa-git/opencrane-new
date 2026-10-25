@@ -1,5 +1,13 @@
-import type { AppendOutcome, EventStore, StoredEvent } from '@opencrane/event-store';
+import type { AppendCommand, AppendOutcome, EventStore, StoredEvent } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
+
+export function budgetAppendCommand(event: EventEnvelope, expectedSequence: number,
+  checkAccess: (() => Promise<void>) | undefined, deadline: number | undefined): AppendCommand {
+  // Reuse replayed history; configure checks its caller's command id before this append.
+  return { event, expectedSequence, historyChecked: true,
+    ...(checkAccess ? { checkAccess } : {}),
+    ...(deadline === undefined ? {} : { deadline }) };
+}
 
 export class BudgetWriterChanged extends Error {
   constructor() {

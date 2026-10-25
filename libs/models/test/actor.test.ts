@@ -1273,7 +1273,8 @@ async function refusesForeignSwitchOn(field: 'silo' | 'subject') {
   const original = envelope('test', 'budget-test', 'provider.managed_calls_enabled', payload);
   const event = { ...original, [field]: field === 'silo' ? 'foreign' : 'budget-foreign' };
   async function* foreignRow() {
-    yield { sequence: before + 1, event };
+    const row = { sequence: before + 1, event };
+    yield await Promise.resolve(row);
   }
   const reads = vi.spyOn(nats.store, 'readStream').mockImplementationOnce(foreignRow);
   const writes = vi.spyOn(nats.store, 'appendOutcome');
