@@ -162,6 +162,51 @@ async function filteredPages(view: string, actor: string) {
 }
 it.each([['mine', 'alice'], ['all', 'admin']])(
   'retains continuation on an empty filtered %s intermediate page', filteredPages);
+async function mixedLegacyPages() {
+  await save(record('first'));
+  expect((await page('', 'admin', 'all')).rows.map(identity)).toEqual(['first']);
+  const legacyData = { routineId: 'legacy-private-canary', assistantId: 'private-canary',
+    schedule: '* * * * *', createdBy: 'alice' };
+  const legacy = { ...record('legacy-private-canary'), data: legacyData };
+  await save(legacy);
+  await save(record('last', 'bob'));
+  const session = { sub: 'admin', orgId: 'org-test', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const detailRequest = { method: 'GET' as const,
+    url: '/api/routines/legacy-private-canary', headers };
+  const detail = await app.inject(detailRequest);
+  expect(detail.statusCode).toBe(403);
+  expect(detail.json()).toEqual({ status: 'refused' });
+  const position = await nats.store.head();
+  const append = vi.spyOn(nats.store, 'append');
+  for (const replay of [false, true]) {
+    if (replay) await rebuildRoutineProjection(db, nats.reader, logger, { verify: true });
+    const first = await page('limit=2', 'admin', 'all');
+    expect(first.rows.map(identity)).toEqual(['first']);
+    expect(first.complete).toBe(false);
+    expect(first.next).not.toBeNull();
+    const last = await page(`limit=2&continuation=${first.next}`, 'admin', 'all');
+    expect(last.rows.map(identity)).toEqual(['last']);
+    expect(last.next).toBeNull();
+    expect(last.complete).toBe(true);
+    const single = await page('limit=1', 'admin', 'all');
+    const filtered = await page(`limit=1&continuation=${single.next}`, 'admin', 'all');
+    expect(filtered.rows).toEqual([]);
+    expect(filtered.complete).toBe(false);
+    expect(filtered.next).not.toBeNull();
+    const afterFiltered = await page(`limit=1&continuation=${filtered.next}`, 'admin', 'all');
+    expect(afterFiltered.rows.map(identity)).toEqual(['last']);
+    const all = await page('', 'admin', 'all');
+    expect(all.rows.map(identity)).toEqual(['first', 'last']);
+    expect(all.next).toBeNull();
+    expect(all.complete).toBe(false);
+  }
+  expect(append).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(position);
+}
+it('keeps mixed modern and denied legacy admin pages readable before and after replay',
+  mixedLegacyPages);
 async function continuations(view: string, actor: string) {
   await save(record('first'));
   await save(record('last'));
