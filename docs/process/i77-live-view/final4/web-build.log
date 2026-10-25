@@ -33,4 +33,4 @@ Application bundle generation complete. [9.373 seconds] - 2026-10-06T07:12:36.43
   For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
 
 
-Output location: /home/jente/dev/wt/i77-batch4/apps/web/dist/web
+Output location: <worktree>/apps/web/dist/web

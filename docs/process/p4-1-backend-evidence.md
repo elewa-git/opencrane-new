@@ -27,7 +27,7 @@ this change; the new design handoff is available for its separate UI work.
 
 ## Independent review pass 1 corrections
 
-The review at `/home/jente/.fleet/p4-1-review1/last.md` found two blockers and two
+The review at `<home>/.fleet/p4-1-review1/last.md` found two blockers and two
 readability findings. These corrections are awaiting independent pass 2.
 
 - Approval HTTP requests capture their fence before identity and IAM reads, using

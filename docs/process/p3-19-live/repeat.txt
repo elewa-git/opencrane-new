@@ -6,8 +6,8 @@ PASS wrong organisation: real Zitadel token refused by a different server org pi
 PASS expired session: real two-second login cookie refused by session and protected API routes
 PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
 PASS new member and assistant model grants reach OpenFGA before chat
-PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 9680 ms, completion 11505 ms, browser journey 26093 ms; screenshot /home/jente/.config/opencrane/dev-stack-1/workspace-390.png
-PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 6563 ms, completion 8941 ms, browser journey 24797 ms; screenshot /home/jente/.config/opencrane/dev-stack-1/workspace-1280.png
+PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 9680 ms, completion 11505 ms, browser journey 26093 ms; screenshot <stack-dir-1>/workspace-390.png
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 6563 ms, completion 8941 ms, browser journey 24797 ms; screenshot <stack-dir-1>/workspace-1280.png
 PASS joined member HTTP message → streamed Codex/stub reply → projection; 9956 ms (first token 7437 ms); browser reconnect no duplicates
 PASS suspended computer wakes on HTTP message and completes Codex reply; 41712 ms; wake-to-first-token 39404 ms
 PASS assistant/computer lifecycle: join→Ready 274 ms; resume 41752 ms; Pod replacement kept disk

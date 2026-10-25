@@ -123,8 +123,8 @@
   "artifacts": [
     {
       "path": "baseline.log",
-      "bytes": 4603,
-      "sha256": "ecd957dffcd5123bf84a01d1fb8bb6e77ae1aa7299bed1e7338d4da7a8a01dcb"
+      "bytes": 4547,
+      "sha256": "14de4ddb5784ff58c994b285fd017b303c83020184d4f665190323ba8c0315d8"
     },
     {
       "path": "bridge-inputs.json",
@@ -307,8 +307,8 @@
     },
     {
       "path": "failure-analysis.json",
-      "bytes": 3786,
-      "sha256": "7e356046f018f67b2e992cc221d3917ba30ff90a974f65c8a6bcda61379a1aa5"
+      "bytes": 3782,
+      "sha256": "762c964208a98ffb01d1f4835410c2b3022d8ba7b53b527f8fa7b6f7484adea2"
     },
     {
       "path": "knip.log",
@@ -317,8 +317,8 @@
     },
     {
       "path": "lint.log",
-      "bytes": 7137,
-      "sha256": "5ad427041eb5b3472af62f2e45bf237e2cfb85e74c82bfee4118496b77a6c62f"
+      "bytes": 6369,
+      "sha256": "bd35fd50f094aeaddf11aaae410e86be7382b2cfa7aa1c06f2766fc52b167b1e"
     },
     {
       "path": "live-probe.json",
@@ -478,8 +478,8 @@
     },
     {
       "path": "security.log",
-      "bytes": 308,
-      "sha256": "67ee7a99bdd7be0306b3a3770eb1cf709d107018aac046d349fe020cb6374c42"
+      "bytes": 276,
+      "sha256": "049f15c9b389ad42bbd60a96bfcffe8d6196eaa34a8c188e94d8612270fd33eb"
     },
     {
       "path": "sign-in.json",

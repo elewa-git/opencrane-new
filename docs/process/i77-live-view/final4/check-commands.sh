@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -u
-cd /home/jente/dev/wt/i77-batch4
+cd <worktree>
 output=docs/process/i77-live-view/final4
 fixture=i77-batch4-postgres
 fixture_started=0

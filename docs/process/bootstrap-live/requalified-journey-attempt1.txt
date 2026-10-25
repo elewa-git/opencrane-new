@@ -3,11 +3,11 @@ PASS real secondary CI owner sign-in through Zitadel at 1280px
 PASS claimant is the sole joined owner, bound to the real CI subject; OpenFGA owner=true
 Upload transport: net::ERR_FAILED
 PASS down.sh --id 1; secondary stack removed
-file:///home/jente/dev/wt/bootstrap-token/infra/dev-stack/bootstrap-journey.ts:187
+file://<worktree>/infra/dev-stack/bootstrap-journey.ts:187
   throw new Error(`Bootstrap live qualification failed at ${stage}; secret output suppressed`);
         ^
 
 Error: Bootstrap live qualification failed at stub chat; secret output suppressed
-    at file:///home/jente/dev/wt/bootstrap-token/infra/dev-stack/bootstrap-journey.ts:187:9
+    at file://<worktree>/infra/dev-stack/bootstrap-journey.ts:187:9
 
 Node.js v22.23.3

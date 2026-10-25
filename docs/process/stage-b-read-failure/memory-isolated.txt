@@ -1,7 +1,7 @@
 npm notice run npx
 npm notice run 'vitest' run apps/server/test/memory-dispatch.test.ts -t consumes the memory pass and captured backend context once --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/stage-b-read-failure
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  1 passed (1)

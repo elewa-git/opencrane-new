@@ -140,7 +140,7 @@ and the 100,000-event guard passes. PASS: root lint, typecheck, event catalogue
 The final focused ESLint check also passed.
 
 The one authorised narrow money verification returned LAND for this correction.
-Its report is `/home/jente/.fleet/reviews/p4-22-pr4c-money-final.md`.
+Its report is `<home>/.fleet/reviews/p4-22-pr4c-money-final.md`.
 Existing MINOR follow-ups remain with #302. No new findings were raised.
 
 Logs: `/tmp/fix-307c-red.log`, `/tmp/fix-307c-green.log`,
@@ -179,7 +179,7 @@ validation. Root lint includes Knip and `npm run lint:changelog`; it reports
 15 existing warnings and no errors.
 
 The one authorised narrow money verification returned LAND with no new findings.
-Its report is `/home/jente/.fleet/reviews/p4-22-pr4c-budget-money.md`.
+Its report is `<home>/.fleet/reviews/p4-22-pr4c-budget-money.md`.
 Existing MINOR coverage follow-ups stay with #302.
 
 Logs: `/tmp/p4-22-pr4c-budget-before.log`,

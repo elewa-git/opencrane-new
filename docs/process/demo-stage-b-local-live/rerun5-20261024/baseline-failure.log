@@ -7,8 +7,8 @@ AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
 
   assert(Number.isSafeInteger(row.reservedCents) && Number.isSafeInteger(row.settledCents))
 
-    at browserAuditJourney (file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/browser-audit.ts:46:9)
-    at async file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/journey.ts:649:5 {
+    at browserAuditJourney (file://<worktree>/infra/dev-stack/browser-audit.ts:46:9)
+    at async file://<worktree>/infra/dev-stack/journey.ts:649:5 {
   generatedMessage: true,
   code: 'ERR_ASSERTION',
   actual: false,

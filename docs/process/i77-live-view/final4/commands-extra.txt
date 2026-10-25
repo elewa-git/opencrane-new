@@ -1,6 +1,6 @@
 Read issue 77 with gh issue view 77 --comments. The default command failed on GitHub's removed Projects (classic) field; used gh issue view 77 --comments --json number,title,body,comments.
-Read the Final qualification 3 section from /home/jente/dev/wt/i77-batch3/docs/process/i77-live-view.md because PR #205 had not reached main.
-Read /home/jente/.fleet/reviews/turn-stall-diagnosis.md.
+Read the Final qualification 3 section from <worktree>/docs/process/i77-live-view.md because PR #205 had not reached main.
+Read <home>/.fleet/reviews/turn-stall-diagnosis.md.
 Run nice -n 10 npm ci first.
 Run nice -n 10 npx tsc -p infra/dev-stack/tsconfig.json --noEmit before the measurement commit.
 Smoke-check the sampler on claimed id 1 with timeout --signal=TERM 6 python3 infra/dev-stack/live-view-resources.py /tmp/i77-batch4-sampler-corrected.jsonl.

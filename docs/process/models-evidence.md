@@ -260,7 +260,7 @@ with low reasoning, streaming, `store: false` and standard service tier.
 Total settled charge: **3 euro cents**, rounded up independently per call.
 The isolated live fixture had 20,000-cent daily/monthly ceilings so that its
 conservative reservations fit; it did not change the shared silo's ceilings.
-The gateway read `/home/jente/dev/opencrane-new/.keys/.openai-key` by path;
+The gateway read `<worktree>/.keys/.openai-key` by path;
 the builder never read its contents. No provider key or raw gateway diagnostics
 were persisted or printed. Attempt receipts were written before sending, and
 an existing receipt prevents accidental reruns. There were no retries or other

@@ -1,7 +1,7 @@
 npm notice run npx
 npm notice run 'vitest' run scripts/stage-b-read.test.mjs --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/demo-stage-b-local-live
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  1 passed (1)

@@ -286,7 +286,7 @@
     }
   },
   "privateLogs": {
-    "directory": "/home/jente/.fleet/demo-stage-b-local-live/evidence/rerun-20261024",
+    "directory": "<home>/.fleet/demo-stage-b-local-live/evidence/rerun-20261024",
     "sha256": {
       "stage-b-npm-ci.log": "ac9c800b0aa586fd08e21e18ddfa03eda5a5e09097a04de855d5d70bd61230de",
       "stage-b-packaged-red.log": "904e6c962fef4a14edd84094764e8473321021016846e497336c6a8c7803c9e1",

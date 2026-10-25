@@ -19,3 +19,5 @@
 - Record a fresh local tools run with complete original approval proof, one approved
   write and checked desktop and phone captures. Keep the owner's personal sign-in
   explicitly untested.
+- Public process evidence hides local paths and email addresses; documentation lint
+  rejects new exposures.

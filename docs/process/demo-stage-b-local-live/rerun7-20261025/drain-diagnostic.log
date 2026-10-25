@@ -1,7 +1,7 @@
 npm notice run npx
 npm notice run 'vitest' run apps/server/test/provider-drain-diagnostic.test.ts --maxWorkers=2 -t reproduces a drain conflict caused only by computer readiness
 
- RUN  v5.0.3 /home/jente/dev/wt/demo-stage-b-local-live
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  1 passed (1)

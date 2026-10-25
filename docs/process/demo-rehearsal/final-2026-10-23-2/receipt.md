@@ -8,7 +8,7 @@ steps 1–6 passed. Step 7 failed, and steps 8–10 are **NOT RUN** on phone.
 
 The [failure picture](07-failure-owner-390.png) says: “This email already has an
 invitation. Renewing it isn't available yet. Nothing was created.” The checker uses
-`rehearsal@example.invalid` at both widths. The desktop invitation succeeded; the
+`<email>` at both widths. The desktop invitation succeeded; the
 phone attempt was refused. The checker then timed out after 120,000 ms waiting for
 “Link created. No email was sent.” No product defect is established by this refusal.
 The checker was not changed or retried. The orchestrator owns the next correction.

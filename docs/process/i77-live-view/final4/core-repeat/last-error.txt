@@ -7,9 +7,9 @@ locator.waitFor: Timeout 30000ms exceeded.
 Call log:
   - waiting for getByText('Spending loaded', { exact: true }) to be visible
 
-    at save (/home/jente/dev/wt/i77-batch4/infra/dev-stack/browser-budgets.ts:39:63)
-    at async browserBudgetJourney (/home/jente/dev/wt/i77-batch4/infra/dev-stack/browser-budgets.ts:66:7)
-    at async file:///home/jente/dev/wt/i77-batch4/infra/dev-stack/journey.ts:289:5 {
+    at save (<worktree>/infra/dev-stack/browser-budgets.ts:39:63)
+    at async browserBudgetJourney (<worktree>/infra/dev-stack/browser-budgets.ts:66:7)
+    at async file://<worktree>/infra/dev-stack/journey.ts:289:5 {
   log: [
     "  - waiting for getByText('Spending loaded', { exact: true }) to be visible"
   ],

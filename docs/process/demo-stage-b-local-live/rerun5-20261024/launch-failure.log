@@ -2,15 +2,15 @@ node:internal/fs/promises:639
   return new FileHandle(await PromisePrototypeThen(
                         ^
 
-Error: ENOENT: no such file or directory, open '/home/jente/.config/opencrane/dev-stack-1/stack-owner'
+Error: ENOENT: no such file or directory, open '<stack-dir-1>/stack-owner'
     at async open (node:internal/fs/promises:639:25)
     at async readFile (node:internal/fs/promises:1252:14)
-    at async requireStageBStack (file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/stage-b-guard.ts:10:18)
-    at async file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/stage-b-entry.ts:9:19 {
+    at async requireStageBStack (file://<worktree>/infra/dev-stack/stage-b-guard.ts:10:18)
+    at async file://<worktree>/infra/dev-stack/stage-b-entry.ts:9:19 {
   errno: -2,
   code: 'ENOENT',
   syscall: 'open',
-  path: '/home/jente/.config/opencrane/dev-stack-1/stack-owner'
+  path: '<stack-dir-1>/stack-owner'
 }
 
 Node.js v22.23.1

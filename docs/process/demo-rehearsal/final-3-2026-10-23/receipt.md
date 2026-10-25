@@ -9,7 +9,7 @@ separate ten-step script was not started. This is evidence for board card #569.
 Pinned `origin/main`: **`62c404b3a072dfe9c0e3fe838f5d4ffd3860641e`**.
 This includes the required fixes through `53e6326a6` and the repeated-width checker
 correction in #608. The source was not changed or updated during the live run.
-The worktree was `/home/jente/dev/wt/demo-final-rehearsal-3`, branch
+The worktree was `<worktree>`, branch
 `work/demo-final-rehearsal-3`. `npm ci` passed on Node 22.23.3. Both requested tool
 symlinks pointed to the existing NATS and Lychee binaries.
 

@@ -4,7 +4,7 @@ import pathlib
 import subprocess
 import time
 
-root = pathlib.Path('/home/jente/.config/opencrane/dev-stack-2')
+root = pathlib.Path('<stack-dir-2>')
 server_pid = (root / 'server.pid').read_text().split()[0]
 nats_pid = subprocess.check_output(['docker', 'inspect', '--format', '{{.State.Pid}}',
                                     'opencrane-dev-2-nats-1'], text=True).strip()

@@ -4,7 +4,7 @@ not ok 1 - the complete models entrypoint supplies the dispatch service transpor
   ---
   duration_ms: 22.95769
   type: 'test'
-  location: '/home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/stage-b-launch.test.ts:66:1'
+  location: '<worktree>/infra/dev-stack/stage-b-launch.test.ts:66:1'
   failureType: 'testCodeFailure'
   error: |-
     Expected values to be strictly equal:
@@ -16,7 +16,7 @@ not ok 1 - the complete models entrypoint supplies the dispatch service transpor
   expected:
   operator: 'strictEqual'
   stack: |-
-    TestContext.suppliesDispatchNetwork (file:///home/jente/dev/wt/demo-stage-b-local-live/infra/dev-stack/stage-b-launch.test.ts:64:10)
+    TestContext.suppliesDispatchNetwork (file://<worktree>/infra/dev-stack/stage-b-launch.test.ts:64:10)
     async Test.run (node:internal/test_runner/test:1054:7)
     async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
   ...

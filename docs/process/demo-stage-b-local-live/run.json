@@ -76,7 +76,7 @@
     "testImageTagRemoved": true
   },
   "privateLogs": {
-    "directory": "/home/jente/.fleet/demo-stage-b-local-live/evidence",
+    "directory": "<home>/.fleet/demo-stage-b-local-live/evidence",
     "sha256": {
       "demo-stage-b-local-live-tests-final-5.log": "874306bac6d8053fd818ad617b0c2d0755f1b01f1c2039b4ee0b5387cb981b01",
       "demo-stage-b-local-live-security.log": "af680133619390c2e1bd33deef3f5855fb38b90e0096dc5e871cb0e0b50a02f9",

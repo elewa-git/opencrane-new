@@ -29,7 +29,7 @@
     "lint:code": "eslint .",
     "lint:deps": "depcruise apps/demo-mcp/src apps/odoo-mcp/src apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs && depcruise apps --config .dependency-cruiser-tests.mjs",
     "lint:unused": "knip",
-    "lint:docs": "markdownlint-cli2",
+    "lint:docs": "node scripts/check-process-evidence.mjs && markdownlint-cli2",
     "lint:readmes": "node scripts/check-folder-readmes.mjs",
     "lint:links": "sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'spikes/README.md' 'spikes/*/README.md' 'apps/*/README*.md' 'libs/*/README*.md' 'infra/*/README*.md' 'tools/*/README*.md'",
     "provision": "node --experimental-strip-types libs/handlers/src/provision.ts",

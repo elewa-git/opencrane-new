@@ -35,7 +35,7 @@
       "ts": 1792827164,
       "level": "WARN",
       "target": "codex_core::session::mcp_runtime",
-      "feedback_log_body": "app_server.request{otel.kind=\"server\" otel.name=\"thread/resume\" rpc.system=\"jsonrpc\" rpc.method=\"thread/resume\" rpc.transport=\"stdio\" rpc.request_id=bridge-7 app_server.connection_id=0 app_server.api_version=\"v2\" app_server.client_name=\"opencrane-computer\" app_server.client_version=\"1\"}:resume_thread_with_history:thread_spawn{otel.name=\"thread_spawn\"}:session_init:session_init.mcp_manager_init{otel.name=\"session_init.mcp_manager_init\"}:mcp.runtime.refresh: failed to discover executor-local MCP servers environment_id=\"tools\" error=exec-server rejected request (-32603): failed to find Codex home: CODEX_HOME points to \"/home/tool/.codex\", but that path does not exist"
+      "feedback_log_body": "app_server.request{otel.kind=\"server\" otel.name=\"thread/resume\" rpc.system=\"jsonrpc\" rpc.method=\"thread/resume\" rpc.transport=\"stdio\" rpc.request_id=bridge-7 app_server.connection_id=0 app_server.api_version=\"v2\" app_server.client_name=\"opencrane-computer\" app_server.client_version=\"1\"}:resume_thread_with_history:thread_spawn{otel.name=\"thread_spawn\"}:session_init:session_init.mcp_manager_init{otel.name=\"session_init.mcp_manager_init\"}:mcp.runtime.refresh: failed to discover executor-local MCP servers environment_id=\"tools\" error=exec-server rejected request (-32603): failed to find Codex home: CODEX_HOME points to \"<home>/.codex\", but that path does not exist"
     }
   ],
   "diagnosticModelNamespaces": [

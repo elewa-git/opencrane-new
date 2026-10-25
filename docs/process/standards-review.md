@@ -4,7 +4,7 @@
 
 ## Evidence and limits
 
-Read-only source snapshot: OpenCrane 1 at `/Users/jenterosseel/Documents/GitHub/opencrane-2`, commit [`468742b97`](https://github.com/elewa-git/opencrane/commit/468742b97d6ce728a8d85d55e7fc3d1d69ca25e2). Its latest develop product merge is `10abd0ef6`; the two later commits preserve design/research. Unless labelled OC2, `file:line` references below belong to this OC1 snapshot. GitHub PR/run links identify the historical evidence separately.
+Read-only source snapshot: OpenCrane 1 at `<home>/Documents/GitHub/opencrane-2`, commit [`468742b97`](https://github.com/elewa-git/opencrane/commit/468742b97d6ce728a8d85d55e7fc3d1d69ca25e2). Its latest develop product merge is `10abd0ef6`; the two later commits preserve design/research. Unless labelled OC2, `file:line` references below belong to this OC1 snapshot. GitHub PR/run links identify the historical evidence separately.
 
 Read all 14 agents, ten skills, four commands, review policy, hook, settings hooks/permissions, AGENTS/CLAUDE, all agent rule documents, five workflows and every scripts gate family, including helpers and negative fixtures. Skimmed the deploy ledger. Reviewed the documentation surfaces and the explicit ten-plus-ten sample below. Read all requested owner-memory files as background evidence, not as current executable instructions. No deployments, product tests, site builds or runtime claims were requalified during this review.
 

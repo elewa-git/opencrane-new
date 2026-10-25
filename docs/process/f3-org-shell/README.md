@@ -63,7 +63,7 @@ coherent feature. No new dependencies or future feature implementations were add
 [Shell results and captures](visual.json) exercise 1280px and 390px, normal and
 reduced motion. [Carry-over results](carry-overs/visual.json) cover the existing
 workspace/overlay consumers with the same widths and motion variants.
-Reference root: `/home/jente/dev/design-handoffs/v2/`.
+Reference root: `<home>/dev/design-handoffs/v2/`.
 
 | Frames, at both widths | Captures, normal and reduced copies | Comparison |
 | --- | --- | --- |
@@ -79,7 +79,7 @@ focus, a 2px `#0a8497` ring, 44px phone targets and no horizontal page overflow.
 Session selection waits for both loading and modal dismissal before composer focus.
 Reduced-motion entrances appear immediately using the shared F1/F2 styles.
 
-Independent review pass 1 is recorded in `/home/jente/.fleet/reviews/f3-review1.md`.
+Independent review pass 1 is recorded in `<home>/.fleet/reviews/f3-review1.md`.
 It found the stale notice regression and conflicts with main, plus routing,
 accessibility, wording, dev-stack caller and readability fixes. This revision
 addresses those findings. Independent pass 2 / fix verification: **NOT RUN**.

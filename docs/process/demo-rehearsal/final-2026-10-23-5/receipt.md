@@ -10,7 +10,7 @@ The owner refresh itself remains **NOT RUN**.
 
 The pinned source was the starting `origin/main`. It includes `53e6326a6`, the Stop
 correction in #611 and the checker-3 correction in #615. Every live check used that
-commit. The worktree is `/home/jente/dev/wt/demo-final-rehearsal-5`, on branch
+commit. The worktree is `<worktree>`, on branch
 `work/demo-final-rehearsal-5`. `npm ci` passed. Both requested tools were symlinked
 from the main checkout's `.tools/`. No product, checker, event, dependency or protected
 test changed. The documentation commit is a receipt for this source, not a new live-tested source.

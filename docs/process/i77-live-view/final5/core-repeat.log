@@ -10,11 +10,11 @@ PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
 PASS new member and assistant model grants reach OpenFGA before chat
 Upload transport: net::ERR_FAILED
 PASS browser upload 390px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; 1 upload retries, 0 preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots
-PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 5452 ms, completion 6931 ms, browser journey 72029 ms; screenshot /home/jente/.config/opencrane/dev-stack-1/workspace-390.png
+PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 5452 ms, completion 6931 ms, browser journey 72029 ms; screenshot <stack-dir-1>/workspace-390.png
 PASS browser live view 390px: conversation panel → no grant refused → granted real desktop + Codex/stub turn → revoked in 305 ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets
 Upload transport: net::ERR_FAILED
 PASS browser upload 1280px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; 1 upload retries, 0 preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots
-PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 3902 ms, completion 5497 ms, browser journey 65853 ms; screenshot /home/jente/.config/opencrane/dev-stack-1/workspace-1280.png
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 3902 ms, completion 5497 ms, browser journey 65853 ms; screenshot <stack-dir-1>/workspace-1280.png
 PASS browser live view 1280px: conversation panel → no grant refused → granted real desktop + Codex/stub turn → revoked in 347 ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets
 PASS approvals 390px: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=1, deny=1
 PASS approvals 1280px: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=1, deny=1

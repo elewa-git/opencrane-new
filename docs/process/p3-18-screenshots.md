@@ -94,7 +94,7 @@ screenshot runtime code needed no correction.
 
 Secondary stack **1** was reserved with `infra/dev-stack/claim.sh`, then all
 stack operations used `DEV_STACK_ID=1` and
-`ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key`. The browser
+`ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key`. The browser
 origin is `http://127.0.0.1:25106`, namespace `opencrane-dev-1`, using the existing
 Docker daemon and k3d cluster. Only this claim's resources are managed. No daemon
 or host-network change, new dependency or paid call is used. Core assistant

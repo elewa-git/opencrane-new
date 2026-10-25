@@ -8,8 +8,8 @@ locator.waitFor: Timeout 20000ms exceeded.
 Call log:
   - waiting for getByRole('dialog', { name: 'Computer view', exact: true }).getByText('Viewing', { exact: true }) to be visible
 
-    at browserLiveViewJourney (/home/jente/dev/wt/journey-selectors/infra/dev-stack/browser-live-view.ts:95:54)
-    at async file:///home/jente/dev/wt/journey-selectors/infra/dev-stack/journey.ts:179:7 {
+    at browserLiveViewJourney (<worktree>/infra/dev-stack/browser-live-view.ts:95:54)
+    at async file://<worktree>/infra/dev-stack/journey.ts:179:7 {
   log: [
     "  - waiting for getByRole('dialog', { name: 'Computer view', exact: true }).getByText('Viewing', { exact: true }) to be visible"
   ],

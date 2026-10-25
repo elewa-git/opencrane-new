@@ -213,7 +213,7 @@ Failed-case reruns
 npm notice run npx
 npm notice run 'vitest' run apps/server/test/approvals.test.ts libs/models/test/gateway.test.ts libs/models/test/authority-volume.test.ts -t refuses hidden or ambiguous|daily 2000 / monthly 1 cents|100,000 unrelated --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  3 passed (3)
@@ -231,7 +231,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  89 passed | 4 skipped (93)
@@ -251,7 +251,7 @@ Initial integration batch — FAIL
 npm notice run npx
 npm notice run 'vitest' run libs/event-store/test apps/server/test/live-view-delays.test.ts apps/server/test/live-view-k3d.test.ts apps/server/test/live-view-proxy.test.ts apps/server/test/live-view-timings.test.ts apps/server/test/live-view-unavailable.test.ts apps/server/test/live-view.test.ts apps/server/test/approvals.test.ts apps/server/test/bridge-channel.test.ts libs/models/test/authority-standalone.test.ts libs/models/test/authority-volume.test.ts libs/models/test/authority.test.ts libs/models/test/approvals.test.ts --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+ RUN  v5.0.3 <worktree>
 
 stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
 {"seeded":0,"route":"model","samples":30,"p50Ms":193.5589230000005,"p95Ms":303.93082100000083,"authorityEvents":15,"authorityStreamReads":8}
@@ -301,7 +301,7 @@ Authority-volume isolated rerun — PASS
 npm notice run npx
 npm notice run 'vitest' run libs/models/test/authority-volume.test.ts --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  1 passed (1)
@@ -314,7 +314,7 @@ Final integration batch — PASS
 npm notice run npx
 npm notice run 'vitest' run libs/event-store/test apps/server/test/live-view-delays.test.ts apps/server/test/live-view-k3d.test.ts apps/server/test/live-view-proxy.test.ts apps/server/test/live-view-timings.test.ts apps/server/test/live-view-unavailable.test.ts apps/server/test/live-view.test.ts apps/server/test/approvals.test.ts apps/server/test/bridge-channel.test.ts libs/models/test/authority-standalone.test.ts libs/models/test/authority-volume.test.ts libs/models/test/authority.test.ts --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  14 passed | 1 skipped (15)
@@ -331,7 +331,7 @@ lint: PASS; typecheck: PASS; check:events: PASS (86 types).
 npm notice run npx
 npm notice run 'vitest' run apps/server/test/live-view-proxy.test.ts --maxWorkers=1
 
- RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  1 passed (1)

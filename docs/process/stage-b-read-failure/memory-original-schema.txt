@@ -1,4 +1,4 @@
-RUN  v5.0.3 /home/jente/dev/wt/stage-b-read-failure
+RUN  v5.0.3 <worktree>
 
  ❯ apps/server/test/memory-dispatch.test.ts (92 tests | 1 failed | 91 skipped) 14351ms
    × serialises evidence for concurrent memory calls on the same tool 12682ms

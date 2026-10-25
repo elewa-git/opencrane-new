@@ -3,77 +3,77 @@ npm notice run npm run lint:code && npm run lint:deps && npm run lint:unused && 
 npm notice run lint:code
 npm notice run eslint .
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/approval-holds.ts
+<worktree>/apps/computer/src/approval-holds.ts
   23:8  warning  Function 'approvalHolds' has too many lines (113). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/bridge-socket.ts
+<worktree>/apps/computer/src/bridge-socket.ts
   243:8  warning  Function 'bridgeSocket' has too many lines (94). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/mcp-proxy.ts
+<worktree>/apps/computer/src/mcp-proxy.ts
   30:8  warning  Function 'mcpProxy' has too many lines (146). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/proxy.ts
+<worktree>/apps/computer/src/proxy.ts
   25:8  warning  Async function 'proxy' has too many lines (100). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/computer/src/thread-loads.ts
+<worktree>/apps/computer/src/thread-loads.ts
   27:8  warning  Function 'threadLoads' has too many lines (136). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/auth/routes.ts
+<worktree>/apps/server/src/auth/routes.ts
   58:8  warning  Function 'registerAuthRoutes' has too many lines (119). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/bridge-approvals.ts
+<worktree>/apps/server/src/chat/bridge-approvals.ts
   34:8  warning  Function 'bridgeApprovals' has too many lines (124). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/bridge-control.ts
+<worktree>/apps/server/src/chat/bridge-control.ts
   97:8  warning  Function 'bridgeControl' has too many lines (87). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/bridge-poll.ts
+<worktree>/apps/server/src/chat/bridge-poll.ts
   59:8  warning  Function 'assistantProcessor' has too many lines (221). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/bridge.ts
+<worktree>/apps/server/src/chat/bridge.ts
   284:8  warning  Async function 'watchBridges' has too many lines (127). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/chat/routes.ts
+<worktree>/apps/server/src/chat/routes.ts
   43:8  warning  Function 'registerChatRoutes' has too many lines (99). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/computers/view.ts
+<worktree>/apps/server/src/computers/view.ts
   68:8  warning  Function 'registerLiveView' has too many lines (374). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/integrations/remote-catalogue-watch.ts
+<worktree>/apps/server/src/integrations/remote-catalogue-watch.ts
   14:8  warning  Function 'remoteCatalogueWatch' has too many lines (128). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/models-main.ts
+<worktree>/apps/server/src/models-main.ts
   51:59  warning  Async arrow function has too many lines (144). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/realtime.ts
+<worktree>/apps/server/src/realtime.ts
   21:8  warning  Function 'memberSubscription' has too many lines (117). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/apps/server/src/websocket.ts
+<worktree>/apps/server/src/websocket.ts
   67:8  warning  Function 'attachWebSocketServer' has too many lines (127). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/libs/authz/src/members.ts
+<worktree>/libs/authz/src/members.ts
   67:1  warning  Function 'createMemberAuthorisation' has too many lines (351). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/libs/handlers/src/dispatcher.ts
+<worktree>/libs/handlers/src/dispatcher.ts
   64:1  warning  Async function 'dispatchLocked' has too many lines (85). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/decision.ts
+<worktree>/libs/models/src/decision.ts
   163:8   warning  Async function 'startDecision' has too many lines (229). Maximum allowed is 80  max-lines-per-function
   172:42  warning  Arrow function has too many lines (214). Maximum allowed is 80                  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/egress-admission.ts
+<worktree>/libs/models/src/egress-admission.ts
   169:8  warning  Async function 'authoriseEgress' has too many lines (123). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/egress-startup.ts
+<worktree>/libs/models/src/egress-startup.ts
   9:8  warning  Async function 'startEgress' has too many lines (81). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/gateway-delivery.ts
+<worktree>/libs/models/src/gateway-delivery.ts
   33:8  warning  Function 'gatewayDelivery' has too many lines (165). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/mcp-catalogue-watch.ts
+<worktree>/libs/models/src/mcp-catalogue-watch.ts
   16:8  warning  Function 'mcpCatalogueWatch' has too many lines (199). Maximum allowed is 80  max-lines-per-function
 
-/home/jente/dev/wt/demo-stage-b-local-live/libs/models/src/mcp-dispatch.ts
+<worktree>/libs/models/src/mcp-dispatch.ts
   71:8  warning  Function 'mcpDispatch' has too many lines (274). Maximum allowed is 80  max-lines-per-function
 
 ✖ 25 problems (0 errors, 25 warnings)

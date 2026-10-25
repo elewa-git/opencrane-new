@@ -4,7 +4,7 @@
   "stackId": 1,
   "startedAt": "2026-10-22T04:28:14.186405+00:00",
   "finishedAt": "2026-10-22T04:39:50.164873+00:00",
-  "command": "ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key nice -n 10 infra/dev-stack/daily-fresh.sh",
+  "command": "ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key nice -n 10 infra/dev-stack/daily-fresh.sh",
   "fresh": true,
   "modelMode": "stand-in",
   "paidCalls": 0,
@@ -202,7 +202,7 @@
     "transcriptEmpty": true,
     "measurementLimit": "The observer starts after waiting for the Owner participant list."
   },
-  "privateEvidence": "/home/jente/.opencrane/daily-fresh/nightly-20261022T042814-0c8d0d01-6162-4ec5-abe3-52a2ee5c21af",
+  "privateEvidence": "<home>/.opencrane/daily-fresh/nightly-20261022T042814-0c8d0d01-6162-4ec5-abe3-52a2ee5c21af",
   "sourceChecks": {
     "failingFirstCommit": "338ee8f39",
     "lint": "PASS",

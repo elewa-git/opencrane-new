@@ -32,7 +32,7 @@ restored versus new completion creases.
 
 ## Comparison with the handoff
 
-References: `/home/jente/dev/design-handoffs/v2/` and the corresponding
+References: `<home>/dev/design-handoffs/v2/` and the corresponding
 [checked-in design package](../../design/handoff-v2/PLAN.md).
 
 - **INT-02/03/07, both widths: PARTIAL screen match.** The register now has one

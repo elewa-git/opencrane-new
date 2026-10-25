@@ -6,8 +6,8 @@ onto `ed21e0b` resolved four conflicts by retaining both chat and policy UI, CSS
 protocol exports and documentation. Final source: `b63234c` plus the journey
 ordering and login harness adjustments in this receipt's commit.
 Linux x86-64, Node 22.23.3, local Compose services and k3d `ocn` gVisor computers.
-The shared stack was stopped from `/home/jente/dev/opencrane-new` before its
-ownership marker was transferred to `/home/jente/dev/wt/p3-1-policy`.
+The shared stack was stopped from `<worktree>` before its
+ownership marker was transferred to `<worktree>`.
 `npm ci` passed in this worktree before startup. Qualification added no
 application changes or dependencies. The newly merged browser chat probe was moved after the existing model-grant wait; fresh and repeat journeys
 check those grants before either browser or HTTP chat begins.
@@ -60,7 +60,7 @@ use; the listener had gone before inspection. Another fresh attempt found NATS
 port 44222 occupied; that listener also disappeared before inspection. The stack
 was stopped before the next ownership transfer. Only completed final runs listed here qualify the result.
 
-The ownership marker is restored to `/home/jente/dev/opencrane-new`. The server,
+The ownership marker is restored to `<worktree>`. The server,
 web and model process working directories point there. Its unmodified `ed21e0b`
 startup passed the full fresh journey, all [service checks](restored-status.txt)
 passed, and the stack answers at

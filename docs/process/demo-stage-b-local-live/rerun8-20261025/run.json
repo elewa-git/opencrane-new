@@ -226,8 +226,8 @@
     },
     {
       "name": "baseline.log",
-      "bytes": 4568,
-      "sha256": "77de2a7129b6a2e60e16e8efd0b7726663a53de6190b99e32af344d6fdea4e15"
+      "bytes": 4512,
+      "sha256": "a069a5ba00dd6c8116eaf1b43d01dac9c44eba7e7551aa42e20b8a6270187dcb"
     },
     {
       "name": "browser-first.json",
@@ -331,8 +331,8 @@
     },
     {
       "name": "lint.log",
-      "bytes": 7132,
-      "sha256": "55ad6485451adcdb15cfc1674299c5aea6a8dbb5b3658a0dbdff89c2b5bde0f9"
+      "bytes": 6364,
+      "sha256": "a0728a3d4af7a1b0d204dde27a66de68c77b45fd689980ffb976ba2fc64e932a"
     },
     {
       "name": "live-probe.json",
@@ -401,13 +401,13 @@
     },
     {
       "name": "read-integration-1.log",
-      "bytes": 283,
-      "sha256": "ca143f8cf4000ca660f8afeb4e0e6b97c08bd302f5182978bb2f345f40d80852"
+      "bytes": 251,
+      "sha256": "033d161f0bf429fcc618ad1f317bbebf93f2b202c09540ceba210084d0923445"
     },
     {
       "name": "read-integration-2.log",
-      "bytes": 283,
-      "sha256": "83e303e1cb6798023d0098b7190e44bd76a37447d6c18a5f8073dc578e4d5bc9"
+      "bytes": 251,
+      "sha256": "a389f374120d1b6de29c3e959855248bbc8657ab52d5afe61aea2ed11ac2e5d3"
     },
     {
       "name": "review-1280.png",
@@ -436,8 +436,8 @@
     },
     {
       "name": "security.log",
-      "bytes": 297,
-      "sha256": "dc83bcdb1b68b2b012507ffd64a45584cb016f74c7edd5129cb1c875663b3f6c"
+      "bytes": 265,
+      "sha256": "95e25a6dac3fb77675c56acb986f25c8eb495bc93c0ffe9cec7725b99700ebf2"
     },
     {
       "name": "sign-in.json",

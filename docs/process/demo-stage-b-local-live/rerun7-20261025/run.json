@@ -60,8 +60,8 @@
     },
     {
       "name": "drain-diagnostic.log",
-      "bytes": 639,
-      "sha256": "4e9983246e870fd36a9036898f9d469b0eb8c2443d23babb7a8d6e3e97300e02"
+      "bytes": 607,
+      "sha256": "3befa67d1e1250b557c8052b9dc2b01be1fe09971571384adaefc0709f0d2fdd"
     },
     {
       "name": "events.log",
@@ -80,8 +80,8 @@
     },
     {
       "name": "lint.log",
-      "bytes": 7132,
-      "sha256": "be04eb5f8abb45c0547db4d8c8ed98d09ba6ea7acf238fe86f8d8db05ff77ac6"
+      "bytes": 6364,
+      "sha256": "310420e19ccbe2757657b503e6b93a25bfabeeadcc180c6507fb5502dffee35c"
     },
     {
       "name": "ownership.json",
@@ -90,13 +90,13 @@
     },
     {
       "name": "read-integration-1.log",
-      "bytes": 283,
-      "sha256": "beaa44d20f1053f816441213357588f22ae14619165159f2b87211a9bb2d07cb"
+      "bytes": 251,
+      "sha256": "985855d2c151596d3c151a029d157620719b4881be2d0bf01b501865f8e7c228"
     },
     {
       "name": "read-integration-2.log",
-      "bytes": 283,
-      "sha256": "d1afcffd2e1d73d8590f4ae985126669c1ef8de6f1f43fafb793b90be36faa41"
+      "bytes": 251,
+      "sha256": "32ae2ebe949bec1fc61eeff9b0f0398a9ea47a4d5c28fb7e79480106f8512093"
     },
     {
       "name": "runtime.json",
@@ -105,8 +105,8 @@
     },
     {
       "name": "security.log",
-      "bytes": 297,
-      "sha256": "611ac071f4295b1a3bc70dd76059dd55cddba81e01c947754d251f76de972673"
+      "bytes": 265,
+      "sha256": "fa55f5d2b57de29f97a9255611e4856d4a0aebaf61cecf29a44f210afcbdf366"
     },
     {
       "name": "server.log",

@@ -4,7 +4,7 @@ not ok 1 - claim skips a slot with a held port and leaves it unclaimed
   ---
   duration_ms: 81.948033
   type: 'test'
-  location: '/home/jente/dev/wt/journey-approval/infra/dev-stack/claim.test.ts:11:1'
+  location: '<worktree>/infra/dev-stack/claim.test.ts:11:1'
   failureType: 'testCodeFailure'
   error: 'listen EADDRINUSE: address already in use 127.0.0.1:25110'
   code: 'EADDRINUSE'

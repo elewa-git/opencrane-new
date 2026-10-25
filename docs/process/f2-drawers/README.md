@@ -8,7 +8,7 @@ rebased F2 `c097606`.
 Linux, Node 22.23.3, Chromium, locally installed dependencies. This qualifies
 source with disposable test fixtures; the environment is not a fresh silo.
 
-The full independent review at `/home/jente/.fleet/reviews/f2-review1.md` was read.
+The full independent review at `<home>/.fleet/reviews/f2-review1.md` was read.
 All four blockers and every FIX item are addressed. Independent verification of
 these fixes is **NOT RUN**; this receipt does not claim a second review passed.
 The larger feature diff keeps the requested regression proof and clarity changes
@@ -61,7 +61,7 @@ responses are intercepted fixtures; no development stack or computer grant is us
 Playwright's WebSocket subclass exposes its inherited methods for noVNC 1.5's
 single-prototype check. The fixture waits for viewer attachment before handshaking.
 
-Reference root: `/home/jente/dev/design-handoffs/v2/` (`01-int/png`, `02-wrk/png`).
+Reference root: `<home>/dev/design-handoffs/v2/` (`01-int/png`, `02-wrk/png`).
 These comparisons qualify shared geometry, colour, close controls and motion;
 fixture bodies and workspace destinations differ from the organisation journeys.
 

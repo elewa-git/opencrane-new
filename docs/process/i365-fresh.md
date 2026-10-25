@@ -1,10 +1,10 @@
 # Fresh-install repair
 
 Date: 12 October 2026. These checks use secondary slot 1 in
-`/home/jente/dev/wt/i365-fresh`, with the local model stub. Each fresh start
+`<worktree>`, with the local model stub. Each fresh start
 replaces the stack's databases, events, computers and generated credentials.
 The existing Zitadel test identities remain, as they do in the nightly run.
-The stack keeps `jente@elewa.ke` as its seeded owner.
+The stack keeps `<email>` as its seeded owner.
 
 ## What failed
 

@@ -3,7 +3,7 @@ RED: before the authority-result ordering fix
 npm notice run npx
 npm notice run 'vitest' run apps/server/test/live-view-unavailable.test.ts -t an unavailable read --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+ RUN  v5.0.3 <worktree>
 
  ❯ apps/server/test/live-view-unavailable.test.ts (11 tests | 2 failed | 7 skipped) 19332ms
    × closes a viewer with conversation denied and an unavailable read when desktop replies last 6292ms
@@ -47,7 +47,7 @@ GREEN: after the fix
 npm notice run npx
 npm notice run 'vitest' run apps/server/test/live-view-unavailable.test.ts -t an unavailable read --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  1 passed (1)
@@ -61,7 +61,7 @@ Requested live-view and bootstrap files
 npm notice run npx
 npm notice run 'vitest' run apps/server/test/live-view.test.ts apps/server/test/live-view-delays.test.ts apps/server/test/live-view-unavailable.test.ts apps/server/test/bootstrap-token.test.ts apps/server/test/bootstrap-claim.test.ts apps/server/test/bootstrap-browser.test.ts --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  6 passed (6)
@@ -77,7 +77,7 @@ npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/sc
 npm notice run test
 npm notice run vitest run --maxWorkers=2
 
- RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+ RUN  v5.0.3 <worktree>
 
 
  Test Files  88 passed | 4 skipped (92)

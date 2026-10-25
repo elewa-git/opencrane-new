@@ -15,8 +15,8 @@ in `.tools/`. `claim.sh` returned slot 1. Each run used these kit commands:
 
 ```sh
 export DEV_STACK_ID=1
-export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
-export DEV_REAL_PROVIDER_FILE=/home/jente/dev/opencrane-new/.keys/.openai-key
+export ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key
+export DEV_REAL_PROVIDER_FILE=<worktree>/.keys/.openai-key
 export DEMO_ALLOWANCE_CENTS=500
 export COMPUTER_IDLE_MS=14400000
 export P4_JOURNEY_ATTEMPT=demo-rehearsal-verified-a
@@ -128,10 +128,10 @@ Checked `unopened-invite-1280.png` and `unopened-invite-390.png` in each folder 
 | `prior-d89186d28-a/pages/` | Desktop: the chosen owner test user and synthetic users. Mobile: synthetic invite address only. |
 | `failed-abacbe417/` | Desktop: the chosen owner test user and synthetic users. Mobile: synthetic invite address only. |
 
-The desktop people tables show `jente@elewa.ke`, `audit-other-member@example.test`,
-`p4-5-later-participant@example.test`, `opencrane2-dev-ci-1-member@example.test` and
-`opencrane2-dev-ci-1-owner@example.test`. Every invitation uses
-`rehearsal@example.invalid`; its link is already covered. The owner's decision of
+The desktop people tables show `<email>`, `<email>`,
+`<email>`, `<email>` and
+`<email>`. Every invitation uses
+`<email>`; its link is already covered. The owner's decision of
 22 October permits the chosen owner test address in these private test pictures.
 No other real address appears, so no picture or masking change was needed.
 
@@ -233,7 +233,7 @@ The product and its access rules are unchanged. No changelog fragment was added.
 
 On 22 October 2026, all three commands used the same claimed secondary slot, `1`,
 with website `http://127.0.0.1:25106`. Each command was
-`ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key nice -n 10 infra/dev-stack/daily-fresh.sh`.
+`ZITADEL_KEY_FILE=<worktree>/.keys/.zitadel-key nice -n 10 infra/dev-stack/daily-fresh.sh`.
 Each requested a fresh install. The nightly script cleared paid-provider settings;
 paid calls and paid euro cents were zero. Cleanup passed after every attempt.
 The owner stack and port 44200 were not used. The secondary directory and its

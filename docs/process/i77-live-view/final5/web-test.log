@@ -87,7 +87,7 @@ chunk-7ONZXKUC.js                              | viewer                         
 Application bundle generation complete. [14.363 seconds] - 2026-10-06T12:07:22.185Z
 
 
- RUN  v4.1.11 /home/jente/dev/wt/i77-batch5/apps/web
+ RUN  v4.1.11 <worktree>/apps/web
 
 
  Test Files  34 passed (34)

@@ -110,7 +110,7 @@
     },
     {
       "path": "baseline-failure.log",
-      "sha256": "b9d53220979763e5454722ea2c32edebb7cc9f92dbc071f28aaaba3b805c243d"
+      "sha256": "76741f3c84a796c7b2216f44ef8bab23e10e8475909c9ce95ea0ffbe10c79907"
     },
     {
       "path": "browser-first.json",
@@ -254,7 +254,7 @@
     },
     {
       "path": "dispatch-injection-before.log",
-      "sha256": "ad895f53d9d0acddcd3e53bb538b3680595d3309a8eb9b3bd8fd6c084cf2566b"
+      "sha256": "42dcd52f070d70d8627cade80b30b2bfaedec91b0033c244e9c8ddf00cf797b4"
     },
     {
       "path": "events.log",
@@ -296,7 +296,7 @@
     },
     {
       "path": "lint.log",
-      "sha256": "4fb504eec94ef61d88d4af847cfdbd09fb09c8c7e5ac122b09f0f62d1ae5e0ae"
+      "sha256": "03e94f6de55cf88c84297286d822d059cc752497aeacf43017e1b1570435b449"
     },
     {
       "path": "live-probe.json",
@@ -364,11 +364,11 @@
     },
     {
       "path": "read-integration-1.log",
-      "sha256": "dbb4db2a5f93f5043e56e9bd390646628790f7fe753aa9ad4f0227ef0ad875b7"
+      "sha256": "14c5722a0a79874973360b7b5b42124f110b042e3cf5f17158f66b81179b7507"
     },
     {
       "path": "read-integration-2.log",
-      "sha256": "c10b3793b12617822e4d4e0899a04913134267a131d20c313b147063dcf67cfc"
+      "sha256": "516120096db4995106c08514a0d381b87e990c69b5e7ece73ffcf810e640c5c3"
     },
     {
       "path": "restart-policy.json",
@@ -400,7 +400,7 @@
     },
     {
       "path": "security.log",
-      "sha256": "b065a8e159273389f41eb572051780428d535f3aa0809a3f82e67ecfb90aa290"
+      "sha256": "cf45e91cdad0ec90d9e7294a6fc1555510aa9d3c3d15c20792b58c5bc3bc21b1"
     },
     {
       "path": "sign-in.json",

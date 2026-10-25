@@ -84,7 +84,7 @@ Takeover logs: `/tmp/upload-final-round-{main-down,owner-npm-ci,owner-up,owner-s
 
 ### Fresh handback
 
-Stopped this stack successfully, restored `/home/jente/dev/opencrane-new` with
+Stopped this stack successfully, restored `<worktree>` with
 `printf '%s'` and verified the no-newline marker. The shared main checkout had
 advanced to `291dc69` (#76) at 03:22 UTC; this first handback ran that revision.
 Its noVNC dependency was missing locally, so `npm ci` installed its lockfile;
@@ -423,7 +423,7 @@ provisioned main successfully but its browser journey **FAIL**ed at
 `browser-chat.ts:42`: waiting for **Stopped · partial reply kept** exceeded
 30 seconds. This is a partial handback, not a fresh-install qualification pass.
 Main is clean at `3972492d9eb556587bfa443b26e154b33e84f83b`; the marker contains
-`/home/jente/dev/opencrane-new`. All eleven managed processes and the server,
+`<worktree>`. All eleven managed processes and the server,
 OpenFGA, MinIO and tailnet HTTPS health checks are **PASS**. The restored provider
 is the local stub. No further paid turn was sent.
 
@@ -480,7 +480,7 @@ Private local receipt: `.tools/upload-settled-receipt.json`; log:
 
 ### Owner-stack takeover and runtime preparation
 
-Stopped `/home/jente/dev/opencrane-new`, wrote the upload path to `stack-owner`
+Stopped `<worktree>`, wrote the upload path to `stack-owner`
 using `printf '%s'` with no newline, and ran `npm ci`: **PASS**. Started with
 `ZITADEL_KEY_FILE` pointing to the original checkout’s existing key; no secret
 was copied or printed.
@@ -511,7 +511,7 @@ Logs: `/tmp/upload-settled-main-down.log`, `/tmp/upload-settled-npm-ci.log`,
 ### Fresh handback to main
 
 Stopped the upload stack successfully and restored
-`/home/jente/dev/opencrane-new` in `stack-owner` using `printf '%s'`; the exact
+`<worktree>` in `stack-owner` using `printf '%s'`; the exact
 bytes were verified. Main source: `b8aee57`. Its first `up.sh --fresh` **FAILED**
 in the logout probe at `login for response body`: the SSO button was absent.
 An anonymous browser check found main’s generated Vite cache missing
@@ -588,7 +588,7 @@ Local logs: `/tmp/upload-rebased-focused.log`,
 `/tmp/upload-rebased-upload-fixed.log`, `/tmp/upload-rebased-lint-final.log`,
 `/tmp/upload-rebased-typecheck-final.log` and `/tmp/upload-rebased-events.log`.
 
-Owner-stack takeover: stopped `/home/jente/dev/opencrane-new` successfully,
+Owner-stack takeover: stopped `<worktree>` successfully,
 wrote the upload worktree path to `stack-owner` with `printf '%s'` (verified no
 trailing newline), and completed `npm ci`. The first `up.sh` launch failed before
 the journey because this worktree has no `.keys/.zitadel-key`. The configured
@@ -603,7 +603,7 @@ Logs: `/tmp/upload-owner-main-down.log`, `/tmp/upload-owner-npm-ci.log`,
 
 Handback: stopped the upload stack successfully and restored the original
 checkout's owner marker with `printf '%s'`, again verifying the exact bytes.
-The first `up.sh --fresh` in `/home/jente/dev/opencrane-new` **FAILED** at the same
+The first `up.sh --fresh` in `<worktree>` **FAILED** at the same
 initial SSO-button check, while the HTTPS endpoint returned 200. An anonymous
 browser diagnostic found the concrete rendering fault: the generated Vite cache
 for `@opencrane/protocol` lacked main's `auditResponseSchema` export. Stopped the
@@ -921,7 +921,7 @@ not relaxed. This failed run is not a handback qualification PASS.
 
 The next fresh main run passes in `/tmp/upload-main-handback-repeat.log`, including
 both browser chat paths, suspended-computer wake, replay, sign-out and listener
-checks. The ownership marker is back at `/home/jente/dev/opencrane-new` (`f5e3068`).
+checks. The ownership marker is back at `<worktree>` (`f5e3068`).
 Both temporary fixture files and the generated workspace screenshots were restored;
 `git status --porcelain` is empty there. Main remains running with the stub's Stop
 pause enabled. `/tmp/upload-main-restored-status.log` confirms healthy server,

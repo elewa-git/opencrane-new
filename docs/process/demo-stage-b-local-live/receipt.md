@@ -1213,3 +1213,43 @@ Native consent 12b remains excluded. Public deployment, twice-fresh qualificatio
 long approval waits, expiry, approval reconnect/Pod-loss checks and the full refusal
 matrix remain **NOT RUN**. The separate owner's personal sign-in needs the owner.
 This run does not complete #45, #46 or #63. Paid calls: **0**.
+
+## Public evidence cleanup, 25 October 2026
+
+The branch was rebased onto `6ddd5bef191ee0490b0e315085575cdf955d3312`.
+The rebase completed, and that main commit is an ancestor of the resulting branch.
+No new live journey ran for this cleanup. The qualification result remains **PARTIAL**.
+
+Public text now uses `<home>`, `<worktree>`, `<stack-dir-1>`, `<stack-dir-2>` and
+`<email>` in place of local paths and email addresses. Private originals are retained
+outside Git. The cleanup also covers older text elsewhere under `docs/process/`,
+so the new folder-wide check can reject future exposures without an exception list.
+
+PASS: redacted logs and records retain their original line counts. Only private
+values and public file hashes and byte counts changed in those records. All 436 listed public
+artefact entries across the retained runs match their files. Hashes of private
+originals remain unchanged. All 244 screenshots are unchanged; none was masked in
+this cleanup. No additional full screenshot inspection is claimed here.
+
+`lint:docs` now runs `scripts/check-process-evidence.mjs` before Markdown lint.
+It checks tracked text, including older attempts and JSONL files. It rejects Linux,
+macOS and Windows home paths, numbered private dev-stack paths and email addresses.
+Errors name the file and line without repeating the private value. Screenshots
+still need visual inspection before publication.
+
+PASS twice: the 17 privacy-check tests and 21 changed dev-stack tests. The latter
+include the disposable-container mount test. Documentation lint and changelog lint
+also passed twice. The event catalogue check passed with 153 event types.
+All lint, typecheck and test commands ran under `nice -n 10`. The temporary
+PostgreSQL database was removed with its volume afterwards.
+The full root suite and a new live journey were **NOT RUN** for this text cleanup.
+
+PASS twice: full workspace, package and dev-stack typecheck.
+An initial full lint run was **FAIL** because the cleanup had replaced `root`
+in six relative log links. Those links and unrelated process-root paths were
+restored. A regression test now checks that these public paths remain valid while
+actual root-user home paths are refused.
+
+The second full lint run is **PASS**, with zero errors and 25 existing warnings.
+It includes the corrected privacy check, fixture checks, reviewed package licences
+and the changelog check. The link check passed 2,605 links and excluded 305.
