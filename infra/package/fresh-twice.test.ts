@@ -184,8 +184,6 @@ async function prepareRunnerFiles(home: string, scenario: RunnerCase) {
   const bin = join(home, 'bin');
   const writes = join(home, 'writes');
   await mkdir(join(worktree, 'infra/package'), { recursive: true });
-  await mkdir(join(worktree, 'infra/dev-stack'), { recursive: true });
-  await mkdir(join(worktree, 'libs/event-store/test'), { recursive: true });
   await mkdir(slot, { recursive: true });
   await mkdir(bin);
   await copyPackagedFixture(worktree);

@@ -94,8 +94,6 @@ async function fixture(isolatedTarget = true) {
   await mkdir(join(home, 'bin'));
   await mkdir(join(home, 'objects'));
   await cp('infra/package', join(worktree, 'infra/package'), { recursive: true });
-  await mkdir(join(worktree, 'infra/dev-stack'), { recursive: true });
-  await mkdir(join(worktree, 'libs/event-store/test'), { recursive: true });
   await copyPackagedFixture(worktree);
   await symlink(join(process.cwd(), 'node_modules'), join(worktree, 'node_modules'));
   await writeFile(join(worktree, 'package.json'), '{"type":"module"}');

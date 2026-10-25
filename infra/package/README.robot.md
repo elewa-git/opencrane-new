@@ -232,6 +232,12 @@ Helm; image refusals allow rendering but never installation. Complete CNPG and
 standalone fixtures reach the release check. These fixtures do not qualify live CNPG.
 The [installer receipt](../../docs/process/p5-3-pr2/receipt.md) records local checks.
 
+The fresh-install runner and NATS route preparation tests use `packaged-fixture.ts`
+to copy the installer and its local imports into temporary worktrees. The helper
+checks imports with the installed TypeScript parser. A new local import must join
+the shared file list before either fixture can run. These checks do not change
+installation behaviour or replace the existing ownership and certificate assertions.
+
 [Bootstrap](https://cloudnative-pg.io/docs/1.30/bootstrap/),
 [storage](https://cloudnative-pg.io/docs/1.30/storage/),
 [scheduling](https://cloudnative-pg.io/docs/1.30/scheduling/) and
