@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:https';
+import { connect } from 'node:net';
 import { EventEmitter, once } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { spawn } from 'node:child_process';
@@ -21,6 +22,7 @@ const state = `${'c'.repeat(64)} sha256:${'a'.repeat(64)} 2026-10-25T12:00:00Z t
 let directory, server, scanner, now, updated, tokens, key, ca, mode, supplied, shutdown;
 let continued, lastRequest, logs, output;
 const requests = [];
+const sockets = [];
 function clock() {
   return now;
 }
@@ -68,12 +70,22 @@ function scanProcess(_command, args) {
       const bytes = Buffer.concat(parts);
       supplied.push(bytes);
       server.emit('scanned');
-      if (mode === 'hang') return;
-      if (mode === 'pass-expiry') now += 2000;
-      if (mode === 'database-expiry') now = updated + 86400000;
+      if (mode === 'hang') {
+        return;
+      }
+      if (mode === 'pass-expiry') {
+        now += 2000;
+      }
+      if (mode === 'database-expiry') {
+        now = updated + 86400000;
+      }
       let reply = 'stream: OK\0';
-      if (mode === 'forged') reply += 'private-canary';
-      if (bytes.toString() === 'infected') reply = 'stream: fixture FOUND\0';
+      if (mode === 'forged') {
+        reply += 'private-canary';
+      }
+      if (bytes.toString() === 'infected') {
+        reply = 'stream: fixture FOUND\0';
+      }
       child.stderr.write('private-canary');
       child.stdout.write(reply);
     }
@@ -118,7 +130,13 @@ async function setup() {
 }
 async function cleanup() {
   await stop();
-  for (const client of requests) client.destroy();
+  for (const client of requests) {
+    client.destroy();
+  }
+  for (const socket of sockets) {
+    socket.destroy();
+  }
+  sockets.length = 0;
   if (server) {
     server.closeAllConnections();
     function close(resolve) {
@@ -126,11 +144,15 @@ async function cleanup() {
     }
     await new Promise(close);
   }
-  for (const log of logs ?? []) expect(log).not.toHaveBeenCalled();
+  for (const log of logs ?? []) {
+    expect(log).not.toHaveBeenCalled();
+  }
   for (const stream of output ?? []) {
     const written = JSON.stringify(stream.mock.calls);
     expect(written).not.toContain('private-canary');
-    for (const client of requests) expect(written).not.toContain(client.getHeader('authorization'));
+    for (const client of requests) {
+      expect(written).not.toContain(client.getHeader('authorization'));
+    }
   }
   requests.length = 0;
   vi.restoreAllMocks();
@@ -175,8 +197,11 @@ function send(value, overrides = {}, transfer) {
     requests.push(client);
     function proceed() {
       continued = true;
-      if (transfer) transfer(client);
-      else client.end(value.bytes);
+      if (transfer) {
+        transfer(client);
+      } else {
+        client.end(value.bytes);
+      }
     }
     client.on('continue', proceed);
     client.on('error', reject);
@@ -232,8 +257,9 @@ async function wrongIdentity(kind) {
     silo: ['silo', 'silo-two'], purpose: ['purpose', 'image'], request: ['requestId', randomUUID()],
     expired: ['exp', seconds()], browser: ['typ', 'browser'], computer: ['typ', 'computer'],
     turn: ['typ', 'turn'] };
-  if (kind === 'missing') value.pass = '';
-  else if (kind === 'computer') {
+  if (kind === 'missing') {
+    value.pass = '';
+  } else if (kind === 'computer') {
     const identity = { silo: 'silo-one', computerId: 'computer',
       assistantId: 'assistant', generation: 1 };
     value.pass = (await tokens.computer(identity)).value;
@@ -254,18 +280,40 @@ async function wrongIdentity(kind) {
 test.each(['missing', 'expired', 'issuer', 'service', 'silo', 'purpose', 'request',
   'browser', 'computer', 'turn'])('%s identity cannot reach the scan', wrongIdentity);
 async function badInput(kind) {
-  if (kind === 'database-expiry') now = updated + 86400000 - 500;
-  if (kind === 'pass-expiry') now -= 119000;
+  if (kind === 'database-expiry') {
+    now = updated + 86400000 - 500;
+  }
+  if (kind === 'pass-expiry') {
+    now -= 119000;
+  }
   const value = await input();
-  if (kind === 'pass-expiry') now += 119000;
-  if (kind === 'changed') value.bytes[0] ^= 1;
-  if (kind === 'truncated') value.byteCount += 1;
-  if (kind === 'oversized') value.byteCount = 20 * 1024 * 1024 + 1;
-  if (kind === 'silo') value.silo = 'silo-two';
-  if (kind === 'purpose') value.purpose = 'image';
-  if (kind === 'request') value.requestId = randomUUID();
-  if (kind === 'forged') mode = 'forged';
-  if (kind === 'pass-expiry' || kind === 'database-expiry') mode = kind;
+  if (kind === 'pass-expiry') {
+    now += 119000;
+  }
+  if (kind === 'changed') {
+    value.bytes[0] ^= 1;
+  }
+  if (kind === 'truncated') {
+    value.byteCount += 1;
+  }
+  if (kind === 'oversized') {
+    value.byteCount = 20 * 1024 * 1024 + 1;
+  }
+  if (kind === 'silo') {
+    value.silo = 'silo-two';
+  }
+  if (kind === 'purpose') {
+    value.purpose = 'image';
+  }
+  if (kind === 'request') {
+    value.requestId = randomUUID();
+  }
+  if (kind === 'forged') {
+    mode = 'forged';
+  }
+  if (kind === 'pass-expiry' || kind === 'database-expiry') {
+    mode = kind;
+  }
   if (kind === 'truncated') {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     function incomplete(client) {
@@ -275,16 +323,26 @@ async function badInput(kind) {
     await once(lastRequest, 'continue');
     await vi.advanceTimersByTimeAsync(60000);
     refused(await pending);
-  } else refused(await send(value));
-  if (kind !== 'forged' && !kind.endsWith('expiry')) expect(supplied).toHaveLength(0);
+  } else {
+    refused(await send(value));
+  }
+  if (kind !== 'forged' && !kind.endsWith('expiry')) {
+    expect(supplied).toHaveLength(0);
+  }
 }
 test.each(['changed', 'truncated', 'oversized', 'silo', 'purpose', 'request', 'forged',
   'pass-expiry', 'database-expiry'])('refuses %s bytes, bindings or results', badInput);
 async function transferExpiry(kind) {
-  if (kind === 'database') now = updated + 86400000 - 500;
-  if (kind === 'pass') now -= 119000;
+  if (kind === 'database') {
+    now = updated + 86400000 - 500;
+  }
+  if (kind === 'pass') {
+    now -= 119000;
+  }
   const value = await input();
-  if (kind === 'pass') now += 119000;
+  if (kind === 'pass') {
+    now += 119000;
+  }
   function transfer(client) {
     now += kind === 'pass' ? 2000 : 500;
     client.end(value.bytes);
@@ -296,7 +354,9 @@ test.each(['pass', 'database'])('refuses %s expiry during transfer', transferExp
 async function cancelWork(kind) {
   mode = 'hang';
   const value = await input();
-  if (kind === 'timeout') vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  if (kind === 'timeout') {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  }
   const scanned = once(server, 'scanned');
   const pending = send(value);
   function disconnected() {
@@ -305,9 +365,15 @@ async function cancelWork(kind) {
   const settled = pending.catch(disconnected);
   const retired = once(shutdown.signal, 'abort');
   await scanned;
-  if (kind === 'timeout') await vi.advanceTimersByTimeAsync(60000);
-  if (kind === 'disconnect') lastRequest.destroy();
-  if (kind === 'retire') await scanner.stop();
+  if (kind === 'timeout') {
+    await vi.advanceTimersByTimeAsync(60000);
+  }
+  if (kind === 'disconnect') {
+    lastRequest.destroy();
+  }
+  if (kind === 'retire') {
+    await scanner.stop();
+  }
   await settled;
   await retired;
   expect(shutdown.signal.aborted).toBe(true);
@@ -344,8 +410,12 @@ async function sharesDeadline(stage) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const scanned = once(server, 'scanned');
   const value = await input();
-  function delayedHeaders() { now += 59000; }
-  if (stage === 'headers') server.once('secureConnection', delayedHeaders);
+  function delayedHeaders() {
+    now += 59000;
+  }
+  if (stage === 'headers') {
+    server.once('secureConnection', delayedHeaders);
+  }
   let client;
   function holdTransfer(request) {
     client = request;
@@ -379,3 +449,156 @@ async function immutableResponse() {
 }
 test('caps expiry at the pass and refuses copied success without changing database facts',
   immutableResponse);
+
+function disconnectedResult() {
+  return 'disconnected';
+}
+function holdTransfer() {
+  // Leave the body pending after the server has accepted this request.
+}
+async function occupyCapacity(stage = 'transfer') {
+  const held = [];
+  for (let index = 0; index < 2; index += 1) {
+    const value = await input();
+    let scanned;
+    let pending;
+    if (stage === 'scan') {
+      scanned = once(server, 'scanned');
+      pending = send(value);
+    } else {
+      pending = send(value, {}, holdTransfer);
+    }
+    const result = pending.catch(disconnectedResult);
+    const client = lastRequest;
+    await once(client, 'continue');
+    if (stage === 'scan') {
+      await scanned;
+    }
+    const entry = { value, client, result };
+    held.push(entry);
+  }
+  return held;
+}
+async function saturatedRequests(stage) {
+  mode = 'hang';
+  await occupyCapacity(stage);
+  const value = await input();
+  value.byteCount = 20 * 1024 * 1024;
+  let incoming;
+  function observeRequest(request) {
+    incoming = request;
+  }
+  server.once('checkContinue', observeRequest);
+  const pending = send(value, {}, holdTransfer).catch(disconnectedResult);
+  function responseOrContinue(resolve) {
+    lastRequest.once('response', resolve);
+    lastRequest.once('continue', resolve);
+  }
+  const answered = new Promise(responseOrContinue);
+  // Send bytes before Continue to check that saturation cannot start body collection.
+  lastRequest.write(value.bytes);
+  await answered;
+  expect(continued).toBe(false);
+  const result = await pending;
+  refused(result);
+  expect(continued).toBe(false);
+  expect(incoming.listenerCount('data')).toBe(0);
+  expect(supplied).toHaveLength(stage === 'scan' ? 2 : 0);
+}
+test.each(['transfer', 'scan'])('refuses excess requests during %s without collecting bytes',
+  saturatedRequests);
+
+async function releaseCapacity(kind) {
+  if (kind === 'timeout') {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  }
+  const held = await occupyCapacity();
+  refused(await send(await input()));
+  if (kind === 'success') {
+    for (const entry of held) {
+      entry.client.end(entry.value.bytes);
+      const result = await entry.result;
+      expect(result.status).toBe(200);
+    }
+  } else if (kind === 'abort') {
+    for (const entry of held) {
+      entry.client.destroy();
+      expect(await entry.result).toBe('disconnected');
+    }
+  } else {
+    await vi.advanceTimersByTimeAsync(60000);
+    for (const entry of held) {
+      refused(await entry.result);
+    }
+  }
+  expect(shutdown.signal.aborted).toBe(false);
+  const replacements = await occupyCapacity();
+  refused(await send(await input()));
+  for (const entry of replacements) {
+    entry.client.end(entry.value.bytes);
+    const result = await entry.result;
+    expect(result.status).toBe(200);
+    expect(result.value.verdict).toBe('clean');
+  }
+}
+test.each(['success', 'abort', 'timeout'])('releases all request capacity after transfer %s',
+  releaseCapacity);
+
+async function recoverAfterRefusal() {
+  for (let index = 0; index < 3; index += 1) {
+    const value = await input();
+    value.pass = '';
+    refused(await send(value));
+    expect(continued).toBe(false);
+  }
+  const held = await occupyCapacity();
+  refused(await send(await input()));
+  for (const entry of held) {
+    entry.client.end(entry.value.bytes);
+    const result = await entry.result;
+    expect(result.status).toBe(200);
+  }
+}
+test('releases request capacity after authentication errors', recoverAfterRefusal);
+
+async function openConnection() {
+  const accepted = once(server, 'connection');
+  const options = { host: '127.0.0.1', port: server.address().port };
+  const client = connect(options);
+  sockets.push(client);
+  await once(client, 'connect');
+  const [acceptedSocket] = await accepted;
+  return { client, acceptedSocket };
+}
+async function boundedConnections() {
+  const held = [];
+  for (let index = 0; index < 8; index += 1) {
+    held.push(await openConnection());
+  }
+  const options = { host: '127.0.0.1', port: server.address().port };
+  const excess = connect(options);
+  sockets.push(excess);
+  function ignoreReset() {
+    // A refused TCP connection may end with a reset instead of an orderly close.
+  }
+  excess.on('error', ignoreReset);
+  function observeClose(resolve) {
+    function closed() {
+      clearTimeout(timer);
+      resolve(true);
+    }
+    function stillOpen() {
+      resolve(false);
+    }
+    const timer = setTimeout(stillOpen, 1000);
+    excess.once('close', closed);
+  }
+  expect(await new Promise(observeClose)).toBe(true);
+  const closed = once(held[0].acceptedSocket, 'close');
+  held[0].client.destroy();
+  await closed;
+  const replacement = await openConnection();
+  expect(replacement.client.destroyed).toBe(false);
+  expect(spawn).not.toHaveBeenCalled();
+}
+test('bounds TCP connections before TLS and admits a replacement after close', boundedConnections);
