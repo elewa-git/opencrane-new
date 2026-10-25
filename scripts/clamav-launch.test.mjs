@@ -649,6 +649,11 @@ async function retiresBeforeChildCloses(reason) {
   const controller = new AbortController();
   const firstInput = { ...request(), signal: controller.signal };
   const first = session.scan(firstInput).catch(scanError);
+  let firstSettled = false;
+  function markFirstSettled() {
+    firstSettled = true;
+  }
+  void first.then(markFirstSettled);
   await vi.advanceTimersByTimeAsync(0);
   await completeScanProcess(children[0], runningState);
   const hangingChild = children[1];
@@ -675,6 +680,11 @@ async function retiresBeforeChildCloses(reason) {
   expect(hangingChild.kill).toHaveBeenCalledWith('SIGKILL');
   expect(secondTransfer.kill).toHaveBeenCalledWith('SIGKILL');
   await completeScanProcess(secondTransfer, 'stream: OK\0');
+  await session.stop();
+  expect(firstSettled).toBe(false);
+  await vi.advanceTimersByTimeAsync(29999);
+  expect(firstSettled).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
   expect(await first).toEqual(new Error('Scanner scan refused'));
   expect(await second).toEqual(new Error('Scanner scan refused'));
   expect(await third).toEqual(new Error('Scanner scan refused'));
