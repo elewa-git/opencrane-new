@@ -1,0 +1,1 @@
+- Members can recover an original account selection or clear receipt after a lost reply. Later choices and profile changes leave the receipt unchanged; reading it never restores a choice or permits resending an unknown change.

@@ -62,6 +62,7 @@ export { mcpInstanceWorkerRegistration, mcpInstanceObservation }
   from './mcp-instance-observation.ts';
 
 export { readOwnConnectionChange } from './connection-change-read.ts';
+export { readOwnSelectionChange } from './connection-selection-change-read.ts';
 export { readOwnConnectionProfile } from './connection-profile-read.ts';
 export { saveBearerConnection, foldConnection } from './bearer-connections.ts';
 

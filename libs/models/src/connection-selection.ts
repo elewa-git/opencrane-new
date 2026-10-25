@@ -27,7 +27,7 @@ function digest(value: unknown) {
 function selectionSubject(userId: string, serverId: string) {
   return `connection-selection-${userId}-${serverId}`;
 }
-function validIdentity(row: StoredEvent, selected: Selection) {
+export function validSelectionIdentity(row: StoredEvent, selected: Selection) {
   const event = row.event;
   const subject = selectionSubject(selected.userId, selected.serverId);
   return event.type === 'connection.selected' && event.subject === subject &&
@@ -43,7 +43,7 @@ export function foldConnectionSelection(rows: StoredEvent[]) {
   for (const row of rows) {
     const parsed = connectionSelectedDataSchema.safeParse(row.event.data);
     selected = null;
-    if (parsed.success && validIdentity(row, parsed.data) &&
+    if (parsed.success && validSelectionIdentity(row, parsed.data) &&
         row.event.silo === rows[0]?.event.silo && row.event.subject === rows[0]?.event.subject &&
         parsed.data.expectedSequence === sequence && row.sequence > sequence &&
         parsed.data.action === 'select') {
@@ -149,7 +149,7 @@ function receipt(row: StoredEvent) {
 }
 function sameReceipt(row: StoredEvent, attempted: EventEnvelope) {
   const parsed = connectionSelectedDataSchema.safeParse(row.event.data);
-  if (!parsed.success || !validIdentity(row, parsed.data) ||
+  if (!parsed.success || !validSelectionIdentity(row, parsed.data) ||
       row.event.id !== attempted.id || row.event.silo !== attempted.silo ||
       row.event.subject !== attempted.subject || row.event.commandId !== attempted.commandId ||
       digest(parsed.data) !== digest(attempted.data)) {
