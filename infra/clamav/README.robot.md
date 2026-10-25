@@ -120,8 +120,7 @@ attempt can reuse it while it remains. Other failures leave no new release recor
 
 The release tests use Docker and tool fixtures, including publication and cleanup
 failures and private canaries. These are not real image or live scanner qualification.
-HTTPS, scan expiry, consumers and fresh-install clean/EICAR/two-silo checks remain
-later work. This record admits no upload.
+HTTPS, consumers and fresh-install clean/EICAR/two-silo checks remain later work. This record admits no upload.
 
 ## Verified database launch
 
@@ -143,9 +142,11 @@ before starting clamd. No database mount is accepted, including image-declared
 volumes. The daemon runs as `clamav`, with no capabilities, network access or host
 port. Its TCP listener is container-local loopback. Automatic reload is disabled;
 the launcher exposes no reload operation. FreshClam never runs. Limits are one CPU,
-2 GiB memory and 64 processes. Container logs are disabled.
+2 GiB memory and 64 processes. A 64 MiB tmpfs at `/tmp` holds ClamAV's temporary
+scan files in memory, with no execution or host storage. The root and databases
+remain read-only. Container logs are disabled.
 
-`launchScanner` returns `ready()`, `stop()` and the unchanged `databaseUpdatedAt`.
+`launchScanner` returns `ready()`, `stop()`, `scan(input)` and the unchanged `databaseUpdatedAt`.
 Readiness checks freshness before and after a daemon ping. A timer also removes
 owned containers at 24 hours; backwards time refuses. Startup has a 15-minute
 limit shared by image lookup, creation, inspection, start and the initial ping.
@@ -155,6 +156,45 @@ container removal its own 30 seconds. Cleanup keeps that separate limit after
 startup time runs out. TERM/INT and failure remove only recorded container names.
 Unconfirmed removal retains the ownership directory and prevents another attempt;
 an operator must confirm those containers are gone before removing it.
-Errors contain only `Scanner launch refused`. No customer bytes or scan results
+Launch errors contain only `Scanner launch refused`. No customer bytes or scan results
 are recorded. Fixture evidence cannot qualify live scanning. Fresh reviewed inputs,
-HTTPS, issuance, per-scan expiry, consumers and two-silo qualification remain later.
+HTTPS, issuance, consumers and two-silo qualification remain later.
+
+## Owned scan requests
+
+P5-6a PR 5 adds `scan({ bytes, sha256, byteCount, signal? })`. Bytes must be a Buffer
+of at most 20 MiB and match the expected hash and count. The method copies them
+before awaiting anything, then hashes and counts the chunks placed in INSTREAM
+frames: `zINSTREAM`, 64 KiB chunks with four-byte lengths, and the zero terminator.
+Only a fixed `docker exec -i <verified-id> nc 127.0.0.1 3310` sends those frames.
+The existing Debian image supplies netcat. No host listener, bind mount, fetch URL or
+caller-selected command is added.
+
+Startup records the container ID, image ID, start time and restart count. Every
+scan compares that state before and after transfer. The immutable ID also targets
+readiness and removal, so replacing a container name cannot redirect a scan.
+One 60-second deadline covers both checks and transfer; each wait receives only
+its remaining time. Replies are bounded to 4 KiB and must end with exactly one
+recognised clean or infected reply. Other replies and process errors refuse with
+`Scanner scan refused`; diagnostic output is discarded.
+
+Results contain `verdict`, `sha256`, `byteCount`, `imageDigest`, `manifestDigest`,
+`databaseUpdatedAt`, `databases` (file, hash, version and build date), `checkedAt`
+and `expiresAt`. All database facts come from startup's verified manifest.
+Freshness is checked before and after each process call. Backwards or future time
+and a complete update check aged 24 hours refuse. Result expiry is the earlier
+of two minutes after checking and database expiry. Returned facts are separate
+copies; changing them cannot renew or alter the loaded facts.
+
+Concurrent successful requests use separate buffers and processes. Any failed or
+cancelled request retires the whole handle and stops its containers, also refusing
+other pending requests. Transport failures retire it when detected, without waiting
+for the Docker client's close event. The failed request waits for container cleanup
+before rejecting and gives the killed client up to 30 seconds to close. It still
+rejects after cleanup finishes if the client never closes.
+Killing the Docker client alone cannot prove its remote
+process stopped. Cleanup retains its separate limits and ownership record until
+removal succeeds. Failed cleanup blocks reuse, including another launch at that
+ownership path. Per-request recovery without retiring the daemon is not provided.
+These are internal process results, not authenticated HTTP responses or admission
+proof. Upload/image consumers and fresh-database qualification remain NOT RUN.

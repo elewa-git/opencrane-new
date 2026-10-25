@@ -1,13 +1,17 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { EventEmitter, once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 async function mockDocker(importOriginal) {
   const original = await importOriginal();
-  return { ...original, execFileSync: vi.fn(original.execFileSync) };
+  return { ...original, execFileSync: vi.fn(original.execFileSync),
+    spawn: vi.fn(original.spawn) };
 }
 vi.mock('node:child_process', mockDocker);
 
@@ -25,6 +29,13 @@ let realExec;
 let launchScanner;
 let delays;
 let timings;
+let daemon;
+let sockets;
+let supplied;
+let children;
+let scanMode;
+const containerId = 'c'.repeat(64);
+const runningState = `${containerId} ${imageId} 2026-10-25T12:00:00Z true 0`;
 
 function hash(bytes) {
   const digest = createHash('sha256');
@@ -56,10 +67,16 @@ function docker(command, args, options) {
       throw new Error('private-canary Docker timeout');
     }
   }
+  if (args[0] === 'create') {
+    return containerId;
+  }
   if (args[0] === 'image') {
     return imageId;
   }
   if (args[0] === 'inspect') {
+    if (args[2].includes('.State.StartedAt')) {
+      return runningState;
+    }
     if (args.includes('{{.Image}}')) {
       return mode === 'image' ? 'wrong' : imageId;
     }
@@ -135,15 +152,33 @@ async function setup() {
   delays = [];
   timings = [];
   mode = '';
+  scanMode = '';
+  sockets = [];
+  supplied = [];
+  children = [];
   session = undefined;
   realExec = (await vi.importActual('node:child_process')).execFileSync;
   execFileSync.mockImplementation(docker);
+  spawn.mockImplementation(scanProcess);
   ({ launchScanner } = await import('../infra/clamav/launch.mjs'));
 }
 
 async function cleanup() {
   mode = '';
   await session?.stop();
+  for (const child of children) {
+    child.kill('SIGKILL');
+  }
+  for (const socket of sockets) {
+    socket.destroy();
+  }
+  if (daemon) {
+    function closeDaemon(resolve) {
+      daemon.close(resolve);
+    }
+    await new Promise(closeDaemon);
+    daemon = undefined;
+  }
   vi.useRealTimers();
   const removeOptions = { recursive: true, force: true };
   rmSync(scratch, removeOptions);
@@ -194,6 +229,8 @@ async function startsImmutableSet() {
   const create = commands.find(creates);
   expect(create).toEqual(expect.arrayContaining(['--network', 'none', '--read-only',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', 'clamav']));
+  expect(create).toEqual(expect.arrayContaining(
+    ['--tmpfs', '/tmp:rw,noexec,nosuid,size=64m,mode=1777']));
   expect(create).not.toContain('--publish');
   expect(create).not.toContain('--mount');
   const script = create.at(-1);
@@ -256,7 +293,7 @@ async function stopsOnTerm() {
   await session.stop();
   const removals = commands.filter(removes);
   for (const args of removals) {
-    expect(args).toEqual(['rm', '-f', '-v', expect.stringMatching(/^clamav-/)]);
+    expect(args).toEqual(['rm', '-f', '-v', expect.stringMatching(/^(clamav-|c{64}$)/)]);
   }
 }
 test('TERM removes only owned containers', stopsOnTerm);
@@ -350,3 +387,311 @@ async function stopsAtExactDeadline() {
   expect(commands.filter(creates)).toHaveLength(0);
 }
 test('starts no further Docker work when the startup allowance is exhausted', stopsAtExactDeadline);
+
+
+function scanProcess(command, args, options) {
+  expect(command).toBe('docker');
+  const realSpawn = realChildProcess.spawn;
+  let script;
+  if (args[0] === 'inspect') {
+    expect(args.at(-1)).toBe(containerId);
+    let state = runningState;
+    if (scanMode === 'replaced') {
+      state = runningState.replace(containerId, 'd'.repeat(64));
+    }
+    if (scanMode === 'restarted') {
+      state = runningState.replace('12:00:00', '12:00:01');
+    }
+    if (scanMode === 'daemon-stopped') {
+      state = runningState.replace('true', 'false');
+    }
+    script = `process.stdout.write(${JSON.stringify(state)})`;
+    if (scanMode === 'slow-inspect') {
+      now += 40_000;
+    }
+    if (scanMode === 'timeout-after-inspection') {
+      now += 45000;
+    }
+  } else {
+    expect(args).toEqual(['exec', '-i', containerId, 'nc', '127.0.0.1', '3310']);
+    const port = daemon.address().port;
+    script = `const socket = require('node:net').connect(${port}, '127.0.0.1');
+      process.stdin.pipe(socket); socket.pipe(process.stdout);
+      socket.on('error', () => process.exit(1));`;
+  }
+  if (scanMode === 'tool-error') {
+    script = "process.stderr.write('private-canary'); process.exit(1);";
+  }
+  const child = realSpawn(process.execPath, ['-e', script], options);
+  children.push(child);
+  return child;
+}
+let realChildProcess;
+
+function acceptStream(socket) {
+  sockets.push(socket);
+  let framed = Buffer.alloc(0);
+  function receive(chunk) {
+    framed = Buffer.concat([framed, chunk]);
+    if (framed.length < 10) {
+      return;
+    }
+    expect(framed.subarray(0, 10).toString()).toBe('zINSTREAM\0');
+    let offset = 10;
+    const parts = [];
+    while (offset + 4 <= framed.length) {
+      const length = framed.readUInt32BE(offset);
+      offset += 4;
+      if (offset + length > framed.length) {
+        return;
+      }
+      if (length === 0) {
+        expect(offset).toBe(framed.length);
+        const bytes = Buffer.concat(parts);
+        supplied.push(bytes);
+        daemon.emit('supplied');
+        if (scanMode === 'hang' || scanMode === 'timeout-after-inspection') {
+          return;
+        }
+        if (scanMode === 'expiry') {
+          now = Date.parse(manifest.databaseUpdatedAt) + 86400000;
+        }
+        if (scanMode === 'slow-inspect') {
+          now += 10_000;
+        }
+        if (scanMode === 'replace-after') {
+          scanMode = 'replaced';
+        }
+        let reply = 'stream: OK\0';
+        if (bytes.toString() === 'infected') {
+          reply = 'stream: private-canary FOUND\0';
+        }
+        if (scanMode.startsWith('reply:')) {
+          reply = scanMode.slice(6);
+        }
+        socket.end(reply);
+        return;
+      }
+      expect(length).toBeLessThanOrEqual(65536);
+      parts.push(framed.subarray(offset, offset + length));
+      offset += length;
+    }
+  }
+  socket.on('data', receive);
+}
+
+async function scannerForRequests() {
+  realChildProcess = await vi.importActual('node:child_process');
+  daemon = createServer(acceptStream);
+  daemon.listen(0, '127.0.0.1');
+  await once(daemon, 'listening');
+  session = await launchScanner(options);
+  expect(session.scan).toBeTypeOf('function');
+}
+
+function request(bytes = Buffer.from('private-canary')) {
+  return { bytes, sha256: hash(bytes), byteCount: bytes.length };
+}
+
+async function mapsVerdict(value) {
+  await scannerForRequests();
+  const input = request(Buffer.from(value));
+  const result = await session.scan(input);
+  expect(result).toEqual({ verdict: value, sha256: input.sha256, byteCount: input.byteCount,
+    imageDigest: image.slice(image.indexOf('@') + 1), manifestDigest: `sha256:${options.approvedSha}`,
+    databaseUpdatedAt: manifest.databaseUpdatedAt, databases: manifest.databases,
+    checkedAt: new Date(now).toISOString(), expiresAt: new Date(now + 120000).toISOString() });
+  expect(supplied).toEqual([input.bytes]);
+  expect(JSON.stringify(result)).not.toContain('private-canary');
+  result.databases[0].version = 999;
+  expect((await session.scan(input)).databases).toEqual(manifest.databases);
+}
+test.each(['clean', 'infected'])('maps %s with exact bytes and loaded facts', mapsVerdict);
+
+async function refusesBytes(change) {
+  await scannerForRequests();
+  const input = request();
+  if (change === 'changed') {
+    input.bytes[0] ^= 1;
+  }
+  if (change === 'truncated') {
+    input.bytes = input.bytes.subarray(1);
+  }
+  if (change === 'oversized') {
+    input.bytes = Buffer.alloc(20 * 1024 * 1024 + 1);
+  }
+  await expect(session.scan(input)).rejects.toEqual(new Error('Scanner scan refused'));
+  expect(supplied).toHaveLength(0);
+}
+test.each(['changed', 'truncated', 'oversized'])('refuses %s bytes', refusesBytes);
+
+async function refusesReply(reply) {
+  await scannerForRequests();
+  scanMode = `reply:${reply}`;
+  await expect(session.scan(request())).rejects.toEqual(new Error('Scanner scan refused'));
+}
+test.each(['stream: OK', 'stream: OK\0private-canary', 'private-canary',
+  'stream: OK\0stream: OK\0', 'x'.repeat(4097), 'stream: private-canary ERROR\0'])(
+  'refuses malformed daemon reply %# without leaking it', refusesReply);
+
+async function refusesChangedDaemon(reason) {
+  await scannerForRequests();
+  scanMode = reason;
+  if (reason === 'stopped') {
+    await session.stop();
+  }
+  if (reason === 'future') {
+    now = Date.parse(manifest.databaseUpdatedAt) - 1;
+  }
+  if (reason === 'stale') {
+    now = Date.parse(manifest.databaseUpdatedAt) + 86400000;
+  }
+  await expect(session.scan(request())).rejects.toEqual(new Error('Scanner scan refused'));
+}
+test.each(['replaced', 'replace-after', 'restarted', 'daemon-stopped', 'stopped',
+  'future', 'stale', 'expiry', 'slow-inspect', 'tool-error'])(
+  'refuses %s daemon or dates with one deadline', refusesChangedDaemon);
+
+async function isolatesBuffers() {
+  await scannerForRequests();
+  const first = request(Buffer.alloc(131073, 7));
+  const second = request(Buffer.from('infected'));
+  const firstPending = session.scan(first);
+  first.bytes.fill(8);
+  const results = await Promise.all([firstPending, session.scan(second)]);
+  expect(results[0].sha256).toBe(first.sha256);
+  expect(results[1].verdict).toBe('infected');
+  expect(supplied).toContainEqual(Buffer.alloc(131073, 7));
+  expect(supplied).toContainEqual(second.bytes);
+}
+test('isolates concurrent buffers and snapshots before awaiting Docker', isolatesBuffers);
+
+async function limitsExpiry() {
+  await scannerForRequests();
+  now = Date.parse(manifest.databaseUpdatedAt) + 86400000 - 500;
+  session.databaseUpdatedAt = new Date(now).toISOString();
+  options.image = 'forged';
+  const result = await session.scan(request());
+  expect(Date.parse(result.expiresAt)).toBe(now + 500);
+  expect(result.databaseUpdatedAt).toBe(manifest.databaseUpdatedAt);
+  expect(result.imageDigest).toBe(image.slice(image.indexOf('@') + 1));
+}
+test('caps result expiry at the unchanged loaded database expiry', limitsExpiry);
+
+async function closesInterruptedScan(reason) {
+  await scannerForRequests();
+  scanMode = 'hang';
+  if (reason === 'timeout-after-inspection') {
+    scanMode = reason;
+  }
+  const controller = new AbortController();
+  const input = { ...request(), signal: controller.signal };
+  const received = once(daemon, 'supplied');
+  const pending = session.scan(input);
+  const rejected = expect(pending).rejects.toEqual(new Error('Scanner scan refused'));
+  await received;
+  if (reason === 'timeout-after-inspection') {
+    await vi.advanceTimersByTimeAsync(15000);
+  }
+  if (reason === 'timeout') {
+    await vi.advanceTimersByTimeAsync(60000);
+  }
+  if (reason === 'cleanup') {
+    mode = 'cleanup';
+  }
+  if (reason === 'cancel' || reason === 'cleanup') {
+    controller.abort();
+  }
+  if (reason === 'TERM') {
+    process.emit('SIGTERM');
+  }
+  await rejected;
+  await expect(session.scan(request())).rejects.toEqual(new Error('Scanner scan refused'));
+  if (reason === 'cleanup') {
+    expect(readFileSync(join(options.ownership, 'containers.json'), 'utf8')).toContain('clamav-');
+    await expect(launchScanner(options)).rejects.toThrow('Scanner launch refused');
+  }
+  for (const child of children) {
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+  }
+}
+test.each(['timeout', 'timeout-after-inspection', 'cancel', 'TERM', 'cleanup'])(
+  '%s closes the request and prevents reuse after uncertain transport cleanup', closesInterruptedScan);
+
+function hangingScanProcess(command) {
+  expect(command).toBe('docker');
+  const child = new EventEmitter();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  function kill() {
+    // Keep the child open to prove that retirement does not wait for close.
+    return true;
+  }
+  child.kill = vi.fn(kill);
+  children.push(child);
+  return child;
+}
+
+async function completeScanProcess(child, output) {
+  child.stdout.emit('data', Buffer.from(output));
+  child.emit('close', 0);
+  await vi.advanceTimersByTimeAsync(0);
+}
+
+function scanError(error) {
+  return error;
+}
+
+async function retiresBeforeChildCloses(reason) {
+  session = await launchScanner(options);
+  spawn.mockImplementation(hangingScanProcess);
+  const controller = new AbortController();
+  const firstInput = { ...request(), signal: controller.signal };
+  const firstPending = session.scan(firstInput);
+  const first = firstPending.catch(scanError);
+  let firstSettled = false;
+  function markFirstSettled() {
+    firstSettled = true;
+  }
+  void first.then(markFirstSettled);
+  await vi.advanceTimersByTimeAsync(0);
+  await completeScanProcess(children[0], runningState);
+  const hangingChild = children[1];
+
+  // Give the second request a later deadline so only the first request times out.
+  now += 1000;
+  await vi.advanceTimersByTimeAsync(1000);
+  const secondPending = session.scan(request());
+  const second = secondPending.catch(scanError);
+  await vi.advanceTimersByTimeAsync(0);
+  await completeScanProcess(children[2], runningState);
+  const secondTransfer = children[3];
+
+  if (reason === 'timeout') {
+    now += 59000;
+    await vi.advanceTimersByTimeAsync(59000);
+  } else if (reason === 'cancel') {
+    controller.abort();
+  } else {
+    hangingChild.stdout.emit('data', Buffer.alloc(4097));
+  }
+
+  const thirdPending = session.scan(request());
+  const third = thirdPending.catch(scanError);
+  expect(spawn).toHaveBeenCalledTimes(4);
+  expect(hangingChild.kill).toHaveBeenCalledWith('SIGKILL');
+  expect(secondTransfer.kill).toHaveBeenCalledWith('SIGKILL');
+  await completeScanProcess(secondTransfer, 'stream: OK\0');
+  await session.stop();
+  expect(firstSettled).toBe(false);
+  await vi.advanceTimersByTimeAsync(29999);
+  expect(firstSettled).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await first).toEqual(new Error('Scanner scan refused'));
+  expect(await second).toEqual(new Error('Scanner scan refused'));
+  expect(await third).toEqual(new Error('Scanner scan refused'));
+  expect(await session.ready()).toBe(false);
+}
+test.each(['timeout', 'cancel', 'oversized output'])(
+  '%s retires the handle and refuses concurrent scans before child close', retiresBeforeChildCloses);

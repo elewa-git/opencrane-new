@@ -1,8 +1,9 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { docker, dockerBeforeDeadline, inspectContainer, readApprovedManifest, readBoundedBytes,
   removeContainers, reserveContainer, validateManifest } from './release.mjs';
+import { createScanOperation, stateFormat } from './scan.mjs';
 
 const refusal = 'Scanner launch refused';
 const maximumAge = 86_400_000;
@@ -27,7 +28,8 @@ function startScript(manifest) {
   }
   lines.push("exec /usr/sbin/clamd --config-file=/dev/stdin <<'CONFIG'",
     'Foreground yes', 'TCPSocket 3310', 'TCPAddr 127.0.0.1',
-    'DatabaseDirectory /var/lib/clamav', 'SelfCheck 0', 'ConcurrentDatabaseReload no',
+    'DatabaseDirectory /var/lib/clamav', 'TemporaryDirectory /tmp',
+    'SelfCheck 0', 'ConcurrentDatabaseReload no',
     'StreamMaxLength 21M', 'MaxFileSize 21M', 'MaxScanSize 80M', 'MaxRecursion 16',
     'MaxFiles 2000', 'AlertExceedsMax yes', 'AlertEncrypted yes', 'ReadTimeout 60',
     'CommandReadTimeout 10', 'CONFIG');
@@ -55,17 +57,21 @@ function createScanner(image, scanner, manifest, runDocker) {
   const output = runDocker(['image', 'inspect', '--format', '{{.Id}}', image]);
   const imageId = output.trim();
   requireEvidence(/^sha256:[a-f0-9]{64}$/.test(imageId));
-  runDocker(['create', '--pull', 'never', '--name', scanner, '--network', 'none',
-    '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+  const created = runDocker(['create', '--pull', 'never', '--name', scanner, '--network', 'none',
+    '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m,mode=1777',
+    '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
     '--user', 'clamav', '--log-driver', 'none', '--memory', '2g',
     '--cpus', '1', '--pids-limit', '64', '--entrypoint', 'sh', '--workdir', '/var/lib/clamav',
     image, '-c', startScript(manifest)]);
-  const inspected = runDocker(['inspect', '--format', '{{.Image}}', scanner]);
+  const containerId = created.trim();
+  requireEvidence(/^[a-f0-9]{64}$/.test(containerId));
+  const inspected = runDocker(['inspect', '--format', '{{.Image}}', containerId]);
   requireEvidence(inspected.trim() === imageId);
   // Reject image-declared volumes too: they would hide files behind writable storage.
-  const inspectedMounts = runDocker(['inspect', '--format', '{{json .Mounts}}', scanner]);
+  const inspectedMounts = runDocker(['inspect', '--format', '{{json .Mounts}}', containerId]);
   const mounts = JSON.parse(inspectedMounts);
   requireEvidence(Array.isArray(mounts) && mounts.length === 0);
+  return { imageId, containerId };
 }
 
 function ping(scanner, attempts, runDocker) {
@@ -94,6 +100,7 @@ export async function launchScanner(options) {
   const runDocker = dockerBeforeDeadline(startedAt, clock);
   let manifest;
   let scanner;
+  const shutdown = new AbortController();
 
   function fresh() {
     const currentTime = clock();
@@ -103,6 +110,7 @@ export async function launchScanner(options) {
     if (starting) {
       requireEvidence(currentTime - startedAt < maximumStartup);
     }
+    return currentTime;
   }
 
   async function removeOwned() {
@@ -113,6 +121,7 @@ export async function launchScanner(options) {
 
   async function stop() {
     stopped = true;
+    shutdown.abort();
     clearTimeout(timer);
     process.removeListener('SIGTERM', terminate);
     process.removeListener('SIGINT', terminate);
@@ -156,17 +165,34 @@ export async function launchScanner(options) {
     manifest = await approvedInputs(options, startedAt);
     fresh();
     scanner = await reserveContainer(ownership, containers);
-    createScanner(options.image, scanner, manifest, runDocker);
+    const imageDigest = options.image.slice(options.image.indexOf('@') + 1);
+    const manifestDigest = `sha256:${options.approvedSha}`;
+    const { imageId, containerId } = createScanner(options.image, scanner, manifest, runDocker);
+    // Keep using the immutable ID if another process replaces the reserved name.
+    containers[containers.indexOf(scanner)] = containerId;
+    scanner = containerId;
+    const recordOptions = { mode: 0o600 };
+    await writeFile(join(ownership, 'containers.json'), JSON.stringify(containers), recordOptions);
+    fresh();
     await mkdir(join(ownership, 'databases'));
     await inspectContainer(scanner, ownership, containers, manifest, clock, runDocker);
     fresh();
     runDocker(['start', scanner]);
     ping(scanner, 60, runDocker);
     fresh();
+    const inspected = runDocker(['inspect', '--format', stateFormat, scanner]);
+    const state = inspected.trim();
+    const [observedId, loadedImage, started, running, restarts] = state.split(' ');
+    requireEvidence(observedId === containerId && loadedImage === imageId &&
+      Number.isFinite(Date.parse(started)) && running === 'true' && restarts === '0');
+    fresh();
+    const context = { state, manifest, imageDigest, manifestDigest, clock, fresh, stop,
+      signal: shutdown.signal };
+    const scan = createScanOperation(context);
     starting = false;
     const expiresIn = Date.parse(manifest.databaseUpdatedAt) + maximumAge - clock();
     timer = setTimeout(terminate, Math.max(0, expiresIn));
-    return { databaseUpdatedAt: manifest.databaseUpdatedAt, ready, stop };
+    return { databaseUpdatedAt: manifest.databaseUpdatedAt, ready, stop, scan };
   } catch {
     if (owned) {
       await stop();
