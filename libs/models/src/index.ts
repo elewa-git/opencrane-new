@@ -95,3 +95,6 @@ export { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-http
 export { startEgress } from './egress-startup.ts';
 
 export { prepareMemoryReads } from './memory-preparation.ts';
+
+export { changeConnectionSelection, SelectionInputInvalid, SelectionConflict }
+  from './connection-selection.ts';

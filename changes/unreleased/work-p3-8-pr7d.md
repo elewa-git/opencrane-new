@@ -1,0 +1,1 @@
+- Members can explicitly save or clear their own personal tool account choice through HTTP and recover the original receipt after a lost reply. Saving a choice does not verify the account or enable credential use.
