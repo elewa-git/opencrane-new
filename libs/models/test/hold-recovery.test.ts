@@ -236,7 +236,7 @@ it('refuses an ordinary call when expiry released the hold before its allow deci
 
 const lastAccessFailures = ['read_outage', 'time_limit'] as const;
 
-async function releasesAfterLastAccessCheckFails(failure: (typeof lastAccessFailures)[number]) {
+async function recoversAfterLastAccessCheckFails(failure: (typeof lastAccessFailures)[number]) {
   const current = await fixture();
   await current.stopDispatch();
   const append = current.nats.store.append.bind(current.nats.store);
@@ -283,8 +283,15 @@ async function releasesAfterLastAccessCheckFails(failure: (typeof lastAccessFail
     expect(checksAfterAllow).toBe(1);
     expect(response.status).toBe(503);
     expect(current.received()).toBe(0);
+    expect(current.actor.state.dispatches).toHaveLength(0);
+    let reservedCents = 0;
+    if (failure === 'time_limit') {
+      reservedCents = 1;
+      expect(current.actor.state.reservations[0]?.amountCents).toBe(1);
+      expect(current.actor.state.reservations[0]?.settledCents).toBeUndefined();
+    }
     expect(totals(current.actor.state, current.actor.now())).toMatchObject({
-      reservedCents: 0, monthCents: 0,
+      reservedCents, monthCents: 0,
     });
     writer.mockRestore();
     reader.mockRestore();
@@ -303,8 +310,8 @@ async function releasesAfterLastAccessCheckFails(failure: (typeof lastAccessFail
 }
 
 it.each(lastAccessFailures)(
-  'releases an unsent hold when the access check inside the budget queue fails (%s)',
-  releasesAfterLastAccessCheckFails, 60_000);
+  'recovers an unsent hold after the access check inside the budget queue fails (%s)',
+  recoversAfterLastAccessCheckFails, 60_000);
 
 async function waitsForRequestWithoutReservationToAge() {
   const current = await fixture();
