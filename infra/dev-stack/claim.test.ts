@@ -700,6 +700,7 @@ async function interruptedTarget() {
   const fixture = await targetFixture();
   try {
     fixture.state.partial = true;
+    fixture.state.retain = true;
     await fixture.saveState();
     await assert.rejects(fixture.run('target-up'));
     await fixture.loadState();
@@ -723,6 +724,24 @@ async function interruptedTarget() {
 }
 test('interrupted creation retains ownership and recovers only matching labelled resources',
   interruptedTarget);
+
+async function failedCreationRemovesRunningNodes() {
+  const fixture = await targetFixture();
+  try {
+    fixture.state.partial = true;
+    await fixture.saveState();
+    await assert.rejects(fixture.run('target-up'));
+    await fixture.loadState();
+    assert.equal(fixture.state.containers.length, 0);
+    assert.equal(fixture.state.networks.length, 0);
+    assert.deepEqual(fixture.state.otherContainers, ['owner-container', 'slot-2-container']);
+    assert.ok(fixture.state.calls.some(isExactContainerRemoval));
+    await assert.rejects(stat(`${fixture.slotDirectory}/target-owner.json`), { code: 'ENOENT' });
+  } finally {
+    await fixture.close();
+  }
+}
+test('failed k3d creation removes the running nodes it created', failedCreationRemovesRunningNodes);
 
 async function privateTargetFailure() {
   const fixture = await targetFixture();
