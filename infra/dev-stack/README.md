@@ -57,6 +57,7 @@ available for diagnosis.
 - Keeps two spare test stacks separate from the owner's copy and from each other.
 - Checks sign-in, personal memory reads, saves, correction and forgetting on an empty installation.
   Checks supplied memory receipts and records incomplete journeys honestly.
+  Keeps failed attempts separate from later read-only checks.
 - Provides demo preparation and screen measurements, while refusing automated coding
   jobs that try to run the owner's commands.
 - Checks the demo tool server through local TLS. Requires saved tool definitions and

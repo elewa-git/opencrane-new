@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { Page, Response } from 'playwright';
-import { captureMemory, openMemory, recordMemory } from './memory-personal-browser.ts';
+import { captureMemory, memoryOutput, openMemory, recordMemory } from './memory-personal-browser.ts';
 
 const originalText = 'The synthetic garden gate is blue.';
 const correctedText = 'The synthetic garden gate is green.';
@@ -24,7 +24,7 @@ async function submitMemory(page: Page, button: string, step: string) {
 async function captureDesktop(page: Page, name: string) {
   // Keep the submitted dialog at its original width until its receipt is read.
   const addresses = page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu);
-  await page.screenshot({ path: `docs/process/memory-fresh-personal/rerun/${name}-1280.png`,
+  await page.screenshot({ path: `${memoryOutput}/${name}-1280.png`,
     fullPage: true, animations: 'disabled', mask: [addresses] });
 }
 

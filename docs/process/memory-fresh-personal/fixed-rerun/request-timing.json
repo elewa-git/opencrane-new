@@ -1,0 +1,163 @@
+[
+  {
+    "requestId": "req-9",
+    "at": 1792926760906,
+    "method": "GET",
+    "path": "/api/memory/scopes"
+  },
+  {
+    "requestId": "req-b",
+    "at": 1792926760929,
+    "method": "GET",
+    "path": "/api/memory/scopes"
+  },
+  {
+    "requestId": "req-b",
+    "at": 1792926761347,
+    "status": 200
+  },
+  {
+    "requestId": "req-c",
+    "at": 1792926761388,
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts"
+  },
+  {
+    "requestId": "req-c",
+    "at": 1792926761659,
+    "status": 200
+  },
+  {
+    "requestId": "req-d",
+    "at": 1792926761906,
+    "method": "GET",
+    "path": "/api/memory/scopes"
+  },
+  {
+    "requestId": "req-d",
+    "at": 1792926762157,
+    "status": 200
+  },
+  {
+    "requestId": "req-e",
+    "at": 1792926762241,
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts"
+  },
+  {
+    "requestId": "req-f",
+    "at": 1792926762413,
+    "method": "GET",
+    "path": "/api/memory/scopes"
+  },
+  {
+    "requestId": "req-j",
+    "at": 1792926763277,
+    "method": "GET",
+    "path": "/api/memory/scopes"
+  },
+  {
+    "requestId": "req-j",
+    "at": 1792926763519,
+    "status": 200
+  },
+  {
+    "requestId": "req-k",
+    "at": 1792926763555,
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts"
+  },
+  {
+    "requestId": "req-k",
+    "at": 1792926763746,
+    "status": 200
+  },
+  {
+    "requestId": "req-l",
+    "at": 1792926764431,
+    "method": "POST",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts"
+  },
+  {
+    "requestId": "req-l",
+    "at": 1792926764741,
+    "status": 200
+  },
+  {
+    "requestId": "req-m",
+    "at": 1792926765235,
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts"
+  },
+  {
+    "requestId": "req-m",
+    "at": 1792926765464,
+    "status": 200
+  },
+  {
+    "requestId": "req-n",
+    "at": 1792926765706,
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts/95b75fe7f7c043863565a3c7ff0bf04c26c503af6c830e6181c70e29812892af"
+  },
+  {
+    "requestId": "req-n",
+    "at": 1792926765970,
+    "status": 200
+  },
+  {
+    "requestId": "req-o",
+    "at": 1792926767101,
+    "method": "POST",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts/95b75fe7f7c043863565a3c7ff0bf04c26c503af6c830e6181c70e29812892af/correct"
+  },
+  {
+    "requestId": "req-o",
+    "at": 1792926767449,
+    "status": 200
+  },
+  {
+    "requestId": "req-p",
+    "at": 1792926767461,
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts/95b75fe7f7c043863565a3c7ff0bf04c26c503af6c830e6181c70e29812892af"
+  },
+  {
+    "requestId": "req-p",
+    "at": 1792926767569,
+    "status": 503
+  },
+  {
+    "requestId": "req-q",
+    "at": 1792926767834,
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts/95b75fe7f7c043863565a3c7ff0bf04c26c503af6c830e6181c70e29812892af"
+  },
+  {
+    "requestId": "req-q",
+    "at": 1792926767959,
+    "status": 503
+  },
+  {
+    "requestId": "req-r",
+    "at": 1792926768174,
+    "method": "POST",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts/95b75fe7f7c043863565a3c7ff0bf04c26c503af6c830e6181c70e29812892af/forget"
+  },
+  {
+    "requestId": "req-s",
+    "at": 1792926768230,
+    "method": "GET",
+    "path": "/api/memory/613f98283fabfce352c2b9a68b1d494070bae17ca2dc3c393c02c814ab899bbf/facts/95b75fe7f7c043863565a3c7ff0bf04c26c503af6c830e6181c70e29812892af"
+  },
+  {
+    "requestId": "req-r",
+    "at": 1792926768385,
+    "status": 409
+  },
+  {
+    "requestId": "req-s",
+    "at": 1792926768418,
+    "status": 200
+  }
+]
