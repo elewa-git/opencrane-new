@@ -1,0 +1,122 @@
+[
+  {
+    "time": 1792933948455,
+    "handler": "seed-model-grants",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.started"
+  },
+  {
+    "time": 1792933948508,
+    "handler": "update-openfga",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.started"
+  },
+  {
+    "time": 1792933948525,
+    "handler": "create-assistant",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.started"
+  },
+  {
+    "time": 1792933948738,
+    "handler": "seed-ownership",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.started"
+  },
+  {
+    "time": 1792933948740,
+    "handler": "create-assistant",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.completed",
+    "duration_ms": 214
+  },
+  {
+    "time": 1792933948743,
+    "handler": "prepare-personal-key",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.started"
+  },
+  {
+    "time": 1792933948935,
+    "handler": "update-openfga",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.completed",
+    "duration_ms": 427
+  },
+  {
+    "time": 1792933948987,
+    "handler": "seed-model-grants",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.completed",
+    "duration_ms": 532
+  },
+  {
+    "time": 1792933949115,
+    "handler": "prepare-personal-key",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.completed",
+    "duration_ms": 373
+  },
+  {
+    "time": 1792933949151,
+    "handler": "seed-ownership",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.completed",
+    "duration_ms": 413
+  },
+  {
+    "time": 1792933953161,
+    "handler": "update-openfga",
+    "event_id": "ownership-seed-dev",
+    "event_type": "ownership.seeded",
+    "msg": "handler.started"
+  },
+  {
+    "time": 1792933953433,
+    "handler": "update-openfga",
+    "event_id": "ownership-seed-dev",
+    "event_type": "ownership.seeded",
+    "msg": "handler.completed",
+    "duration_ms": 272
+  },
+  {
+    "time": 1792933948399,
+    "handler": "memory",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.started"
+  },
+  {
+    "time": 1792933948412,
+    "handler": "memory",
+    "event_id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+    "event_type": "silo.owner_bootstrapped",
+    "msg": "handler.completed",
+    "duration_ms": 13
+  },
+  {
+    "time": 1792933950639,
+    "handler": "memory",
+    "event_id": "ownership-seed-dev",
+    "event_type": "ownership.seeded",
+    "msg": "handler.started"
+  },
+  {
+    "time": 1792933950738,
+    "handler": "memory",
+    "event_id": "ownership-seed-dev",
+    "event_type": "ownership.seeded",
+    "msg": "handler.completed",
+    "duration_ms": 99
+  }
+]

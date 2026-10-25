@@ -1,0 +1,66 @@
+{
+  "membership": {
+    "role": "owner",
+    "facts": [
+      {
+        "id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+        "type": "silo.owner_bootstrapped",
+        "time": "2026-10-25T13:12:28.272Z",
+        "sequence": 4
+      },
+      {
+        "id": "ownership-seed-dev",
+        "type": "ownership.seeded",
+        "time": "2026-10-25T13:12:29.102Z",
+        "sequence": 17
+      }
+    ],
+    "appliedNow": [
+      {
+        "id": "c1720adb-38d4-46e5-9107-f5ae7f2a0b15",
+        "applied": true
+      },
+      {
+        "id": "ownership-seed-dev",
+        "applied": true
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "name": "memory",
+      "sequence": "30"
+    }
+  ],
+  "memoryEvents": [],
+  "modelCounts": {
+    "modelRequests": 0
+  },
+  "privateDirectories": [
+    {
+      "role": "server",
+      "name": "MEMORY_KEY_DIRECTORY",
+      "ownedBySlot": true
+    },
+    {
+      "role": "server",
+      "name": "PERSONAL_KEY_DIRECTORY",
+      "ownedBySlot": true
+    },
+    {
+      "role": "dispatcher",
+      "name": "MEMORY_KEY_DIRECTORY",
+      "ownedBySlot": true
+    },
+    {
+      "role": "dispatcher",
+      "name": "PERSONAL_KEY_DIRECTORY",
+      "ownedBySlot": true
+    },
+    {
+      "role": "projection",
+      "name": "MEMORY_KEY_DIRECTORY",
+      "ownedBySlot": true
+    }
+  ]
+}

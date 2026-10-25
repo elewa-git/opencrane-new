@@ -35,16 +35,19 @@ before checking the outcome. The body read has no timeout; the latest failed run
 needed manual termination. After stack startup, configure the test contact email privately in
 `memory-owner-email` inside the claimed slot directory. The collector reads that file;
 the browser session stays in that directory too.
-New evidence goes into `docs/process/memory-fresh-personal/fixed-rerun/`; the launcher
+New evidence goes into `docs/process/memory-fresh-personal/forget-fixed-rerun/`; the launcher
 refuses an existing observations file. Earlier attempts remain separate.
 The acceptance checker additionally requires original receipts, GET-only lost-reply
 recovery, retained correction, completed cleanup and absence of forgotten text after
 reload, restart and replay. Its unit tests use synthetic evidence.
 The runs use temporary collectors for those additional checks. They are not yet part
 of the tracked launcher. The receipt distinguishes their results and failures.
-The latest run stops when Forget submits an old revision during correction refresh.
-Later reads establish correction persistence
-and isolation only; forgotten-fact persistence and recovery remain NOT RUN for that run.
+The latest run stops on the first Memory read while ownership permissions are still
+being applied. The collector also stalls reading the first scopes response body.
+Its debugger recovered a desktop error capture and the private browser session;
+resizing triggered fresh reads. Later read-only captures show an empty list, but
+no writes, isolation, restart or rebuild were qualified in that installation.
+The earlier stale Forget action was fixed on main before this run.
 Memory replay refuses `--verify`; the operator compares HTTP readbacks instead.
 The checker requires unchanged event counts and zero local model requests during replay.
 No helper inspects private memory key files. Native memory remains off and NOT RUN.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { appendFile } from 'node:fs/promises';
 import type { Page, Response } from 'playwright';
 
-export const memoryOutput = 'docs/process/memory-fresh-personal/fixed-rerun';
+export const memoryOutput = 'docs/process/memory-fresh-personal/forget-fixed-rerun';
 export async function recordMemory(name: string, value: unknown) {
   const record = JSON.stringify({ name, value, at: new Date().toISOString() });
   await appendFile(`${memoryOutput}/observations.jsonl`, record + '\n', { mode: 0o600 });
