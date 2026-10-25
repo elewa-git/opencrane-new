@@ -5,7 +5,7 @@ import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { conversations, members, computers, pgDb, ProjectionRunner,
+import { conversations, members, routines, computers, pgDb, ProjectionRunner,
   type Query } from '@opencrane/projections';
 import { memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
@@ -31,7 +31,7 @@ async function append(subject: string, type: string, data: unknown) {
 }
 
 async function project() {
-  for (const projection of [members, conversations, computers]) {
+  for (const projection of [members, routines, conversations, computers]) {
     await runner.run(projection);
   }
 }
@@ -58,7 +58,7 @@ async function initialise() {
   auth = memberAuthorisation(binding);
   const db = pgDb(dbs.queue);
   runner = new ProjectionRunner(db, nats.reader, createLogger('inventory-volume-test'));
-  for (const projection of [members, conversations, computers]) {
+  for (const projection of [members, routines, conversations, computers]) {
     await runner.initialise(projection);
   }
   for (const [memberId, role] of [['owner', 'owner'], ['bob', 'member']]) {
@@ -90,7 +90,7 @@ async function projectVolumeFixtures(records: EventEnvelope[], firstPosition: nu
   }
   const eventIds = records.map(eventId);
   const lastPosition = firstPosition + records.length - 1;
-  for (const projection of [members, conversations, computers]) {
+  for (const projection of [members, routines, conversations, computers]) {
     async function applyRecords(transaction: Query) {
       const checkpoint = await transaction.query<{ sequence: string }>(
         'SELECT sequence FROM projection_checkpoints WHERE name = $1', [projection.name]);

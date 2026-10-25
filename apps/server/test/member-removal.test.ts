@@ -9,7 +9,7 @@ import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { currentMembership, currentOwnershipMembership, history,
   ownershipConfirmationHandler, seedOwnership } from '@opencrane/models';
-import { computers, conversations, members, pgDb, ProjectionRunner,
+import { computers, conversations, members, routines, pgDb, ProjectionRunner,
   readEvents } from '@opencrane/projections';
 import { memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
@@ -45,7 +45,7 @@ async function project() {
       await auth.handler.handle(row.event, pgDb(dbs.queue));
     }
   }
-  for (const projection of [members, conversations, computers]) await runner.run(projection);
+  for (const projection of [members, routines, conversations, computers]) await runner.run(projection);
 }
 function request(memberId: string, section: string, payload?: unknown, actor = 'owner') {
   const session = { sub: actor, orgId: 'org-test', roles: ['owner'],
@@ -81,7 +81,7 @@ async function initialise() {
   auth = memberAuthorisation(binding, nats.reader);
   db = pgDb(dbs.queue);
   runner = new ProjectionRunner(db, nats.reader, createLogger('removal-test'));
-  for (const projection of [members, conversations, computers]) await runner.initialise(projection);
+  for (const projection of [members, routines, conversations, computers]) await runner.initialise(projection);
   await append('member-owner', 'member.joined', {
     memberId: 'owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
   });

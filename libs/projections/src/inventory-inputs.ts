@@ -160,7 +160,8 @@ async function expandedPeopleWithinLimit(db: Query, silo: string, subjects: stri
 }
 
 /** Keep removed memberships and revoked grants discoverable when the visible list is empty. */
-export async function readInventoryReferences(db: Query, silo: string, memberId: string) {
+export async function readInventoryReferences(db: Query, silo: string, memberId: string,
+  options: { excludeRoutines?: boolean } = {}) {
   const empty: Reference[] = [];
   const teams = await linkedSubjects(db, silo, 'team', memberId, [], []);
   if (teams.length > 100) {
@@ -187,10 +188,12 @@ export async function readInventoryReferences(db: Query, silo: string, memberId:
     return { references: empty, complete: false };
   }
   const subjects = [...teams, ...assistants, ...grants, ...computers];
+  const unsupportedCategories = ['connection'];
+  if (!options.excludeRoutines) unsupportedCategories.push('routine');
   const result = await db.query<Reference & { category: string }>(`SELECT subject, position, category
     FROM inventory_inputs WHERE silo = $1 AND link_kind = 'stream'
-      AND (subject = ANY($2::text[]) OR category IN ('routine', 'connection'))
-    ORDER BY subject LIMIT 10001`, [silo, subjects]);
+      AND (subject = ANY($2::text[]) OR category = ANY($3::text[]))
+    ORDER BY subject LIMIT 10001`, [silo, subjects, unsupportedCategories]);
   if (result.rows.length > 10_000) {
     return { references: empty, complete: false };
   }
@@ -224,12 +227,17 @@ export async function inventoryIndexState(db: Query) {
     participationPosition: Number(metadata.participation_position) };
 }
 
-export async function inventoryCategoryPositions(db: Query, silo: string) {
+export async function inventoryCategoryPositions(db: Query, silo: string,
+  options: { excludeRoutines?: boolean } = {}) {
   const metadata = await inventoryIndexState(db);
+  function included(category: string) {
+    return category !== 'routine' || !options.excludeRoutines;
+  }
+  const categories = inventoryCategories.filter(included);
   const result = await db.query<{ category: string; position: string }>(`SELECT category,
     max(position) AS position FROM inventory_inputs WHERE silo = $1 AND link_kind = 'stream'
       AND category = ANY($2::text[])
-    GROUP BY category ORDER BY category`, [silo, inventoryCategories]);
+    GROUP BY category ORDER BY category`, [silo, categories]);
   const positions: Record<string, number> = {};
   for (const row of result.rows) {
     positions[`${row.category}-*`] = Number(row.position);

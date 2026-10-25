@@ -2,10 +2,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
+import { type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { ProjectionRunner, rebuildRoutineProjection, readInventoryReferences, routines, members, conversations, computers,
-  type Db } from '@opencrane/projections';
+  type Db, type Query } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { database } from '../../../libs/projections/test/database.ts';
@@ -81,11 +81,26 @@ function legacy(index = 0): EventEnvelope {
   return { ...event(`paused-${index}`, `routine-${routineId}`, 'routine.paused'),
     data: { routineId, pausedBy: 'admin' } };
 }
+async function projectVolume() {
+  async function applyBatch(transaction: Query) {
+    async function inBatch<Result>(work: (db: Query) => Promise<Result>) {
+      return work(transaction);
+    }
+    // Commit this fixture together instead of committing every unrelated receipt separately.
+    const batchDb = { query: transaction.query.bind(transaction), transaction: inBatch };
+    const batchRunner = new ProjectionRunner(batchDb, nats.reader, logger);
+    for (const projection of [members, conversations, computers, routines]) {
+      await batchRunner.run(projection);
+    }
+  }
+  await db.transaction(applyBatch);
+}
+
 async function volume(count: number) {
   const records: EventEnvelope[] = [];
   for (let index = 0; index < count; index++) records.push(legacy(index));
   await nats.seed(records);
-  await project();
+  await projectVolume();
   const originalRead = nats.store.readStream.bind(nats.store);
   async function* boundedRead(subject: string, from?: number, deadline?: number) {
     expect(subject.startsWith('routine-')).toBe(false);
@@ -110,6 +125,9 @@ async function volume(count: number) {
   const response = await result('unsupported_history');
   expect(response.json()).toMatchObject({ unavailableSections: ['routine'] });
   expect(lookups).toBe(1);
+  const cleanup = await readInventoryReferences(db, 'test', 'alice');
+  expect(cleanup.complete).toBe(false);
+  expect(cleanup.references[0]?.subject).toMatch(/^routine-/u);
   for (const [subject] of reads.mock.calls) expect(subject.startsWith('routine-')).toBe(false);
 }
 it.each([101, 2001])('prepares a bounded departure review for %i routine streams', volume, 120_000);
@@ -164,14 +182,23 @@ async function uncertainty(kind: string) {
 }
 it.each(['lag', 'checkpoint', 'lookup'])('never proves absence with %s uncertainty', uncertainty);
 
-async function racing(kind: string, failure = false) {
+async function racing(kind: string, failure = '') {
+  if (kind === 'chat') {
+    const data = { conversationId: 'unrelated', assistantId: 'helper', createdBy: 'someone-else' };
+    const created = { ...event('created-chat', 'conversation-unrelated', 'conversation.created'),
+      data };
+    await nats.seed([created]);
+    await project();
+  }
   await result('absent_on_version');
   const query = db.query.bind(db);
   let changed = false;
   async function race<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
     options?: { deadline: number }) {
     const read = await query<Row>(sql, values, options);
-    if (!changed && /FROM routines\b/u.test(sql)) {
+    let preparationQuery = /FROM routines\b/u.test(sql);
+    if (failure === 'inventory') preparationQuery = /FROM inventory_inputs\b/u.test(sql);
+    if (!changed && preparationQuery) {
       changed = true;
       if (kind === 'rebuild') {
         await rebuildRoutineProjection(db, nats.reader, logger, { verify: true });
@@ -182,15 +209,21 @@ async function racing(kind: string, failure = false) {
           type = 'member.role_changed';
           data = { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'admin' };
         }
-        await nats.seed([{ ...event('access-changed', 'member-admin', type), data }]);
+        const changedAccess = { ...event('access-changed', 'member-admin', type), data };
+        await nats.seed([changedAccess]);
       } else if (kind === 'chat') {
         const message = { ...event('chat', 'conversation-unrelated', 'message.posted'),
-          data: getEventDefinition('message.posted')?.example };
+          data: { conversationId: 'unrelated', authorId: 'someone-else', authorKind: 'human',
+            ciphertext: Buffer.from('Unrelated test message').toString('base64'),
+            keyId: 'key:unrelated', contentType: 'text' } };
         await nats.seed([message]);
         await project();
       } else {
         await nats.seed([legacy()]);
         if (kind === 'projected insertion') await project();
+      }
+      if (failure === 'expired') {
+        vi.spyOn(performance, 'now').mockReturnValue(options!.deadline + 1);
       }
       if (failure) throw new Error('private-canary ciphertext orders');
     }
@@ -207,10 +240,17 @@ async function racing(kind: string, failure = false) {
   }
   expect(changed).toBe(true);
 }
+async function changedDuringRead(kind: string) {
+  await racing(kind);
+}
 it.each(['rebuild', 'insertion', 'projected insertion', 'chat', 'removed', 'demoted'])(
-  'checks %s during preparation before revealing metadata', racing);
-async function refusedFailure(kind: string) { await racing(kind, true); }
-it.each(['removed', 'demoted'])('refuses a %s caller even when preparation fails', refusedFailure);
+  'checks %s during preparation before revealing metadata', changedDuringRead);
+async function refusedFailure(kind: string, failure: string) {
+  await racing(kind, failure);
+}
+it.each([['removed', 'lookup'], ['demoted', 'lookup'], ['removed', 'expired'],
+  ['demoted', 'expired'], ['removed', 'inventory'], ['demoted', 'inventory']])(
+  'refuses a %s caller even with %s preparation failure', refusedFailure);
 
 async function laterChange(kind: string) {
   const inventory = await memberInventory(memberReads, 'alice', performance.now() + 10_000);
@@ -233,3 +273,30 @@ async function laterChange(kind: string) {
   expect(await nats.store.head()).toBe(before);
 }
 it.each(['routine', 'rebuild'])('refuses an old review after a later %s change', laterChange);
+
+async function latePreparation(kind: string) {
+  await result('absent_on_version');
+  const query = db.query.bind(db);
+  let contentChecks = 0;
+  async function race<Row extends Record<string, unknown>>(sql: string, values?: unknown[],
+    options?: { deadline: number }) {
+    const read = await query<Row>(sql, values, options);
+    if (sql.includes('COALESCE(max(position), 0) FROM computers')) {
+      contentChecks++;
+      if (contentChecks === 3) {
+        if (kind === 'rebuild') {
+          await rebuildRoutineProjection(db, nats.reader, logger, { verify: true });
+        } else {
+          await nats.seed([legacy()]);
+          await project();
+        }
+      }
+    }
+    return read;
+  }
+  vi.spyOn(db, 'query').mockImplementation(race);
+  await result('unavailable');
+  expect(contentChecks).toBe(3);
+}
+it.each(['routine', 'rebuild'])(
+  'refuses absence after a %s change during the final content check', latePreparation);

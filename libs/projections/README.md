@@ -39,11 +39,10 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
-<<<<<<< HEAD
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves admission, removal, role, ownership, control and spending history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
-  server -.->|reads tool readiness, nightly memory inputs and child requests awaiting activation| projections
+  server -.->|reads member references, tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|stores and reads wrapped chat keys; repairs unfinished correction keys| keys["Server files<br/>private key store and package Secret"]
 ```
@@ -196,6 +195,10 @@ Closing a chat keeps that message position. Later reports and repeated closes ca
 these details. The reports remain in the feed so their saved evidence is available.
 
 ## Processes it handles
+
+Member departure reads can leave routine references out of their inventory query.
+They use a separate bounded presence check. Departure cleanup keeps reading those
+references, so this read optimisation cannot remove its blockers.
 
 A matching gateway confirmation makes a reviewed tool policy available, including
 its first publication. The tool list and publication status use the same availability

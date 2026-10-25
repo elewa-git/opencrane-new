@@ -214,6 +214,14 @@ The members worker also maintains the flat-group view (`groups`, `group_members`
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
 without reactions. See the [group contract](../../docs/api/groups.md).
 
+## Member reads without routine references
+
+`readInventoryReferences` and `inventoryCategoryPositions` accept
+`{ excludeRoutines: true }` for member reads using the shared routine presence check.
+The exclusion happens in SQL before selecting or aggregating rows. All other bounds
+and completeness checks stay in place. Defaults include routines, so
+`apps/ops/src/departure-cleanup.ts` keeps its routine references and blockers.
+
 ## Test dependencies
 
 `@opencrane/projections/testing` exports the existing `database` test helper. It creates

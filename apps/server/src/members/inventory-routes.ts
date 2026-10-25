@@ -23,19 +23,16 @@ export function registerMemberInventory(app: FastifyInstance, config: AuthConfig
     }
     const parsed = parameters.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send({ status: 'refused' });
-    function expire() {
-      if (!reply.sent) void reply.code(503).send({ status: 'unavailable' });
-    }
-    const watchdog = setTimeout(expire, 10_000);
     try {
       const caller = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!caller) throw new MemberAccessRefused('Active membership required');
-      await readActiveMember(options.store, options.binding, caller, 'admin');
       const memberId = parsed.data.memberId;
-      const memberSequence = await options.store.head(`member-${memberId}`);
-      const target = await currentMembership(options.store, options.silo, memberId);
+      const loading = prepareInventory(options, memberId);
+      const [prepared] = await Promise.allSettled([loading]);
+      await readActiveMember(options.store, options.binding, caller, 'admin');
+      if (prepared.status === 'rejected') throw new Error('Inventory unavailable');
+      const { target, inventory, memberSequence } = prepared.value;
       if (!target.role) return reply.code(404).send({ status: 'not_found' });
-      const inventory = await memberInventory(options, memberId, performance.now() + 10_000);
       if (reply.sent) return reply;
       return await sendInventory(reply, request, options, memberId, target, inventory, memberSequence);
     } catch (error) {
@@ -43,10 +40,28 @@ export function registerMemberInventory(app: FastifyInstance, config: AuthConfig
       let code = 503;
       if (error instanceof MemberAccessRefused) code = 403;
       return reply.code(code).send({ status: code === 503 ? 'unavailable' : 'refused' });
-    } finally {
-      clearTimeout(watchdog);
     }
   }
+}
+
+async function prepareInventory(options: GroupOptions, memberId: string) {
+  const expired = Promise.withResolvers<never>();
+  function expire() { expired.reject(new Error('Inventory unavailable')); }
+  const watchdog = setTimeout(expire, 10_000);
+  try {
+    const loading = loadInventory(options, memberId);
+    return await Promise.race([loading, expired.promise]);
+  } finally {
+    clearTimeout(watchdog);
+  }
+}
+
+async function loadInventory(options: GroupOptions, memberId: string) {
+  const deadline = performance.now() + 10_000;
+  const memberSequence = await options.store.head(`member-${memberId}`, deadline);
+  const target = await currentMembership(options.store, options.silo, memberId, undefined, deadline);
+  const inventory = await memberInventory(options, memberId, deadline);
+  return { target, inventory, memberSequence };
 }
 
 async function sendInventory(reply: FastifyReply, request: FastifyRequest, options: GroupOptions,
