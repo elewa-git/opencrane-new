@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { X509Certificate } from 'node:crypto';
+import { createPrivateKey, X509Certificate } from 'node:crypto';
 import { cp, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
 import { parseAllDocuments } from 'yaml';
 import { issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
 
@@ -27,7 +27,7 @@ if (args.includes('namespace')) {
 } else if (args.includes('create')) {
   const object = JSON.parse(fs.readFileSync(args[args.indexOf('-f') + 1]));
   if (fs.existsSync(home + '/fail')) {
-    process.stdout.write('CREDENTIAL-CANARY');
+    process.stdout.write(fs.readFileSync(home + '/.config/opencrane/dev-stack-1/nats-routes/ca.key'));
     process.stderr.write('CREDENTIAL-CANARY');
     process.exit(31);
   }
@@ -55,6 +55,11 @@ async function fixture() {
   await symlink(join(process.cwd(), 'node_modules'), join(worktree, 'node_modules'));
   await writeFile(join(worktree, 'package.json'), '{"type":"module"}');
   await writeFile(join(home, 'bin/kubectl'), kubectl, { mode: 0o700 });
+  const openssl = `#!/bin/sh
+printf '%s\\n' "$*" >> "$HOME/argv"
+exec /usr/bin/openssl "$@"
+`;
+  await writeFile(join(home, 'bin/openssl'), openssl, { mode: 0o700 });
   await writeFile(join(slot, 'stack-owner'), `worktree=${worktree}\n`);
   const owner = { worktree, slot: '1', context: 'k3d-ocn', namespace,
     namespaceUid: 'namespace-uid', release: namespace };
@@ -89,8 +94,10 @@ async function run(prepared, fails = false) {
   }
   // Compare fixed output without printing a captured command error or credentials on failure.
   assert.equal(Boolean(result.code), fails, 'Unexpected preparation exit status');
-  assert.equal(result.stdout, fails ? '' : 'PASS private NATS route identities prepared\n');
-  assert.equal(result.stderr, fails ? 'FAIL private NATS route preparation\n' : '');
+  const expectedOutput = fails ? '' : 'PASS private NATS route identities prepared\n';
+  const expectedError = fails ? 'FAIL private NATS route preparation\n' : '';
+  assert(result.stdout === expectedOutput, 'Unexpected preparation output; contents withheld');
+  assert(result.stderr === expectedError, 'Unexpected preparation error; contents withheld');
   return result;
 }
 
@@ -115,12 +122,14 @@ async function checkPrepared(prepared) {
     assert.equal(object.metadata.namespace, namespace);
     assert.deepEqual(Object.keys(object.data), ['tls.crt', 'tls.key']);
     const certificate = new X509Certificate(Buffer.from(object.data['tls.crt'], 'base64'));
+    const key = createPrivateKey(Buffer.from(object.data['tls.key'], 'base64'));
+    assert(certificate.checkPrivateKey(key));
     assert.equal(certificate.subjectAltName,
       `DNS:nats-${index}-0.nats-routes.opencrane-package-1.svc.cluster.local`);
     assert.deepEqual(certificate.keyUsage, ['1.3.6.1.5.5.7.3.1', '1.3.6.1.5.5.7.3.2']);
     assert(certificate.verify(ca.publicKey));
     assert(!certificate.verify(client.publicKey));
-    identities.add(certificate.fingerprint256);
+    identities.add(certificate.publicKey.export({ type: 'spki', format: 'pem' }));
   }
   assert.equal(identities.size, 3);
   assert.equal((await stat(join(prepared.slot, 'nats-routes'))).mode & 0o777, 0o700);
@@ -134,6 +143,7 @@ async function checkPrepared(prepared) {
 }
 
 async function parseWithNats(prepared) {
+  await execute('sh', ['scripts/fetch-nats.sh']);
   const rendered = await execute('helm', ['template', namespace, 'infra/package/chart',
     '--namespace', namespace, '-f', join(prepared.home, 'values.json')]);
   const resources = new Map();
@@ -148,6 +158,11 @@ async function parseWithNats(prepared) {
   await cp('infra/nats/nats.conf', join(prepared.slot, 'nats.conf'));
   for (let index = 0; index < 3; index++) {
     const peer = resources.get(`nats-${index}`).spec.template.spec;
+    const routeVolumes = peer.volumes.slice(-2);
+    assert.deepEqual(routeVolumes[0].secret, { secretName: references[0],
+      items: [{ key: 'ca.crt', path: 'ca.crt' }] });
+    assert.deepEqual(routeVolumes[1].secret, { secretName: references[index + 1],
+      items: [{ key: 'tls.crt', path: 'tls.crt' }, { key: 'tls.key', path: 'tls.key' }] });
     const env = { ...process.env, NATS_LISTEN: '127.0.0.1:4222',
       NATS_CA_FILE: `${prepared.slot}/ca.crt`, NATS_CERT_FILE: `${prepared.slot}/server.crt`,
       NATS_KEY_FILE: `${prepared.slot}/server.key` };
@@ -172,7 +187,7 @@ async function preparesDistinctIdentities() {
     const saved = await checkPrepared(prepared);
     await parseWithNats(prepared);
     await run(prepared);
-    assert.deepEqual(await objects(prepared), saved);
+    assert(isDeepStrictEqual(await objects(prepared), saved), 'Prepared objects changed on retry');
   } finally {
     await rm(prepared.home, { recursive: true, force: true });
   }
@@ -180,9 +195,35 @@ async function preparesDistinctIdentities() {
 test('prepares three private identities accepted by pinned NATS and preserves them on retry',
   preparesDistinctIdentities);
 
+async function expireCertificate(directory) {
+  const config = `[ca]
+default_ca = issuer
+[issuer]
+database = index.txt
+serial = serial.txt
+new_certs_dir = .
+certificate = ca.crt
+private_key = ca.key
+default_md = sha256
+policy = subject
+[subject]
+commonName = supplied
+`;
+  await writeFile(`${directory}/expired.conf`, config);
+  await writeFile(`${directory}/index.txt`, '');
+  await writeFile(`${directory}/serial.txt`, '01\n');
+  await execute('openssl', ['ca', '-batch', '-notext', '-config', 'expired.conf',
+    '-in', 'peer-0.csr', '-out', 'peer-0.crt', '-extfile', 'peer-0.ext',
+    '-startdate', '20200101000000Z', '-enddate', '20200102000000Z'], { cwd: directory });
+  const expired = new X509Certificate(await readFile(`${directory}/peer-0.crt`));
+  assert(Date.parse(expired.validFrom) < Date.parse(expired.validTo));
+  assert(Date.parse(expired.validTo) < Date.now());
+}
+
 const refusals = ['missing reference', 'duplicate reference', 'client reference', 'wrong namespace',
   'foreign owner', 'wrong pin', 'partial preparation', 'expired certificate', 'client issuer',
-  'changed object', 'foreign object', 'changed reference', 'command failure'];
+  'changed object', 'foreign object', 'changed reference', 'command failure', 'partial objects',
+  'replaced object', 'wrong SAN'];
 for (const reason of refusals) {
   async function refusesSafely() {
     const prepared = await fixture();
@@ -199,22 +240,37 @@ for (const reason of refusals) {
         await writeFile(`${prepared.slot}/package-owner.json`, JSON.stringify(prepared.owner));
       }
       if (reason === 'partial preparation') await mkdir(routes, { mode: 0o700 });
-      if (['expired certificate', 'client issuer', 'changed object', 'changed reference'].includes(reason)) {
+      if (['expired certificate', 'client issuer', 'changed object', 'changed reference',
+        'partial objects', 'replaced object', 'wrong SAN'].includes(reason)) {
         await run(prepared);
-        if (reason === 'expired certificate' || reason === 'client issuer') {
+        if (reason === 'expired certificate' || reason === 'client issuer' || reason === 'wrong SAN') {
           if (reason === 'client issuer') {
             await cp(`${prepared.slot}/ca.crt`, `${routes}/ca.crt`);
             await cp(`${prepared.slot}/ca.key`, `${routes}/ca.key`);
           }
-          const extensions = 'subjectAltName=DNS:nats-0-0.nats-routes.' + namespace +
+          const certificateNamespace = reason === 'wrong SAN' ? 'foreign' : namespace;
+          const extensions = 'subjectAltName=DNS:nats-0-0.nats-routes.' + certificateNamespace +
             '.svc.cluster.local\nextendedKeyUsage=serverAuth,clientAuth\n';
-          await issueCertificate(routes, 'peer-0', '/CN=peer', extensions,
-            reason === 'expired certificate' ? -1 : 1);
+          await issueCertificate(routes, 'peer-0', '/CN=peer', extensions);
+          if (reason === 'expired certificate') await expireCertificate(routes);
+          // Match Kubernetes bytes so certificate checks alone must refuse the bad certificate.
+          const path = `${prepared.home}/objects/route-zero`;
+          const object = JSON.parse(await readFile(path, 'utf8'));
+          object.data['tls.crt'] = (await readFile(`${routes}/peer-0.crt`)).toString('base64');
+          object.data['tls.key'] = (await readFile(`${routes}/peer-0.key`)).toString('base64');
+          await writeFile(path, JSON.stringify(object));
         }
         if (reason === 'changed reference') cluster.peerCertificateSecrets[0] = 'replacement';
       }
       if (reason === 'changed object' || reason === 'foreign object') {
         await writeFile(`${prepared.home}/objects/route-zero`, '{"data":{"tls.key":"CANARY"}}');
+      }
+      if (reason === 'partial objects') await rm(`${prepared.home}/objects/route-one`);
+      if (reason === 'replaced object') {
+        const path = `${prepared.home}/objects/route-one`;
+        const object = JSON.parse(await readFile(path, 'utf8'));
+        object.metadata.uid = 'replacement';
+        await writeFile(path, JSON.stringify(object));
       }
       if (reason === 'command failure') await writeFile(`${prepared.home}/fail`, '1');
       await run(prepared, true);
@@ -222,8 +278,8 @@ for (const reason of refusals) {
       const argv = await readFile(`${prepared.home}/argv`, 'utf8');
       assert(!argv.includes('CANARY'));
       if (['foreign object', 'changed object'].includes(reason)) {
-        assert.equal(await readFile(`${prepared.home}/objects/route-zero`, 'utf8'),
-          '{"data":{"tls.key":"CANARY"}}');
+        const contents = await readFile(`${prepared.home}/objects/route-zero`, 'utf8');
+        assert(contents === '{"data":{"tls.key":"CANARY"}}', 'Existing object changed');
       }
     } finally {
       await rm(prepared.home, { recursive: true, force: true });

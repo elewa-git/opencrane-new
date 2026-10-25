@@ -17,7 +17,7 @@ which runs programs in [Pods](../../GLOSSARY.md#container-and-pod).
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>Helm install"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>Helm and private certificates"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|reserves test space| package
@@ -46,7 +46,7 @@ installation files only. Credential preparation and a running install still need
 - Uses fixed, reviewed images and checks their licences before installation.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
 - Refuses missing private settings and public network access.
-- Renders an optional three-peer event log for inspection, with separate storage and certificates.
+- Renders an optional three-peer event log and prepares its separate private certificates.
 - Gives computers the private gateway address and short-lived access passes.
 - Removes only this worktree's install, including after an interrupted launcher.
 
@@ -83,8 +83,9 @@ infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 ```
 
 The optional event-log render describes three private NATS peers on separate Kubernetes
-nodes. Installation still uses one peer. Three-peer setup and live checks are not built yet;
-the ordinary installer refuses that mode.
+nodes. A separate preparation command creates their private certificates and public trust.
+It checks ownership and preserves the same identities on retry. Installation still uses
+one peer; the ordinary installer refuses three-peer mode. Live checks remain outstanding.
 
 The chart render test needs Helm and checks the installation files without starting
 an install. It uses made-up settings. The [operator notes](README.robot.md) give the command.
