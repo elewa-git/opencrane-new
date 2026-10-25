@@ -2,6 +2,8 @@
   <h2 id="memory-title" class="sr-only" tabindex="-1">Saved facts</h2>
   @if (state() === 'loading') {
     <p role="status">Loading memory…</p>
+  } @else if (state() === 'applying') {
+    <p role="status">Setting up your memory...</p>
   } @else if (state() === 'access') {
     <div role="alert" tabindex="-1"><h2>Access changed</h2><p>Your memory is hidden.</p></div>
   } @else if (state() === 'unavailable') {
@@ -34,6 +36,9 @@
     <div class="results">
       <span class="sr-only" aria-live="polite">{{ facts().length }} facts on this page</span>
       @if (listState() === 'loading') { <p role="status">Searching memory…</p> }
+      @else if (listState() === 'applying') {
+        <p role="status">Setting up your memory...</p>
+      }
       @else if (listState() === 'unavailable') {
         <p role="alert">Memory could not be loaded. Try again later.</p>
       } @else if (listState() === 'conflict') {
@@ -72,6 +77,9 @@
           (click)="closeDetail()">‹ Back to memory</button>
         <h2 [id]="detailOverlay.titleId" tabindex="-1">Fact details</h2>
         @if (detailState() === '') { <p role="status">Loading fact…</p> }
+        @else if (detailState() === 'applying') {
+          <p role="status">Setting up your memory...</p>
+        }
         @else if (detailState() === 'unavailable') {
           <p role="alert">Details are unavailable right now.</p>
         } @else if (detailState() === 'missing') {

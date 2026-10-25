@@ -655,6 +655,21 @@ turn and model requests and do not qualify a fresh installation. See the
 
 ## Memory reads
 
+Memory scopes, fact lists and detail reads retry only HTTP 503 with
+`{status: "unavailable", reason: "permissions_applying"}`. They show
+“Setting up your memory...” during the wait. Reads back off from one second to
+five seconds and honour a longer `Retry-After` within a 30-second deadline.
+The deadline also cancels a pending request or body read. Closing the panel,
+changing scope or losing access cancels the relevant retries. Refusals and other
+errors keep their messages without retrying. Writes keep their existing behaviour.
+
+`memory-panel.spec.ts` covers recovery, fact and detail waits, the deadline,
+cancellation and immediate refusals or outages. After a web build,
+`nice -n 10 node scripts/check-memory-scopes-applying.mjs` checks the setup message,
+its width and automatic recovery in Chromium at 390 and 1280 pixels. Pictures go
+to `/tmp/memory-scopes-applying-captures`. These use browser fixtures and do not
+qualify a fresh installation.
+
 The workspace session panel reads `/api/memory/scopes`,
 `/api/memory/:scopeId/facts` and the selected fact detail route. It passes the selected
 session's group and assistant ids to scope discovery. It keeps results only in component

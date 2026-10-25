@@ -50,6 +50,8 @@ After a restart, memory recovery uses the existing private keys and saved comman
 Overlapping recovery calls wait for the same scan to finish before reporting completion.
 A new assistant with no access to notes does not block personal memory.
 Notes with access grants still need the assistant's permissions to be ready.
+Memory reads give the website a safe setup reply while saved membership permissions
+are still being applied. Every later read checks access again.
 
 ## Where it fits
 
@@ -61,7 +63,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads own saved profiles and original change, publication and selection receipts; records personal account choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]

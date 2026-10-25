@@ -750,6 +750,15 @@ Memory passes still last at most two seconds.
 
 ## Memory scope and search reads
 
+Memory GET routes return HTTP 503 with
+`{status: "unavailable", reason: "permissions_applying"}` and `Retry-After: 1`
+when the existing access check throws `AuthorityApplying`. No exception text or
+private identifiers leave the server. Other failures keep `memory_unavailable`;
+refusals keep their existing status. Each retry checks current access again.
+`memory-main.test.ts` leaves the ownership seed unapplied, checks this reply for
+scopes, facts, maintenance and detail, then applies the seed through the ordinary
+permission handler and requires successful personal scopes and facts reads.
+
 Scope discovery checks explicit note grants before the assistant's OpenFGA receipt
 and `actsFor` permission. With no applicable grant it omits the notes. This prevents
 a newly created assistant whose permission work is pending from blocking the
