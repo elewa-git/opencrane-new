@@ -158,7 +158,7 @@ it.each(['ordinary', 'removed', 'foreign', 'unmapped'])('refuses %s members', re
 async function invalidRequest(kind: string) {
   const test = await fixture();
   const requestHeaders: Record<string, string> = { ...headers(), 'content-type': 'application/json' };
-  let payload: Record<string, unknown> = test.choice;
+  let payload: Record<string, unknown> | string = test.choice;
   let url = test.url;
   let code = 400;
   if (kind === 'missing origin') {
