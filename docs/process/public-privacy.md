@@ -18,11 +18,11 @@ showing an address. Executable fixtures use reserved example addresses.
 Relative paths such as `.tools/home/<id>` are tool directories within the checkout.
 They do not name an absolute host home directory.
 
-The only allowed absolute home names are the five fixed container accounts
-`/home/agent`, `/home/codex`, `/home/desktop`, `/home/private` and `/home/tool`,
-and paths beneath them. These names are runtime paths in the computer image and
-its isolation tests. They stand for container users and private turn directories,
-not people or host installations. Other user names fail the check.
+The computer image and its isolation tests use five fixed container accounts:
+`<home>/agent`, `<home>/codex`, `<home>/desktop`, `<home>/private` and
+`<home>/tool`, with paths beneath them. The `<home>` placeholder stands for the
+container's home directory. These paths name container users and private turn
+directories, not people or host installations.
 
 The real development owner email belongs in a private file outside the checkout
 and disposable stack directories. The [stack operator notes](../../infra/dev-stack/README.robot.md#private-owner-email)
