@@ -148,6 +148,49 @@ async function savedPayload() {
 }
 it('applies the exact saved payload after a duplicate acknowledgement', savedPayload);
 
+async function duplicateAfterReplacement() {
+  const payload = { scope: 'global', ceilingCents: 100, setBy: 'alice' };
+  const revision = actor.state.sequence;
+  const replacementCall = { ...call, requestId: 'replacement-call' };
+  let checks = 0;
+  async function checked() {
+    checks += 1;
+    if (checks !== 2) return;
+    const replacement = new BudgetActor(nats.store, 'test');
+    await replacement.start();
+    const reservationId = await replacement.reserve(replacementCall, 90);
+    const admission = { reservationId, callId: 'replacement-call',
+      decisionId: 'replacement-decision', bodyDigest: '0'.repeat(64),
+      modelCall: replacementCall };
+    await replacement.admitDispatch(admission, fresh);
+    const saved = await replacement.configure(payload, 'overlapping-configuration');
+    expect(saved.status).toBe('appended');
+  }
+  checked.deadline = performance.now() + 2000;
+  const configuring = actor.configure(payload, 'overlapping-configuration', revision, checked);
+  await expect(configuring).rejects.toThrow('Budget writer lost its fence');
+  expect(checks).toBe(2);
+  expect(actor.state.sequence).toBe(revision);
+  const staleCall = { ...call, requestId: 'stale-call' };
+  await expect(actor.reserve(staleCall, 20)).rejects.toThrow('Budget writer unavailable');
+  await expect(actor.requireCurrent(performance.now() + 2000))
+    .rejects.toThrow('Budget writer unavailable');
+  const rows = await history(store, 'budget-test', 'test');
+  function isReservation(row: typeof rows[number]) {
+    return row.event.type === 'budget.reserved';
+  }
+  expect(rows.filter(isReservation)).toHaveLength(1);
+  const replay = new BudgetActor(nats.store, 'test');
+  await replay.start();
+  expect(replay.state.reservations).toHaveLength(1);
+  expect(replay.state.dispatches).toHaveLength(1);
+  expect(totals(replay.state)).toMatchObject({ reservedCents: 90, monthCents: 0 });
+  await expect(replay.reserve(staleCall, 20)).rejects.toThrow();
+  expect(totals(replay.state).reservedCents).toBe(90);
+}
+it('stops on replacement writes before accepting their duplicate receipt',
+  duplicateAfterReplacement);
+
 async function queuedExpiry() {
   const entered = Promise.withResolvers<void>();
   const released = Promise.withResolvers<void>();
