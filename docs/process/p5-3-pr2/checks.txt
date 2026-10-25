@@ -17,3 +17,25 @@ Markdown, README rules, local links, fixtures, licences and changelog.
 PASS standalone path and the unchanged shipped CNPG image refusal.
 NOT RUN live standby, promotion, backup/WAL, restore and storage denial.
 NOT RUN full root suite, development stacks and model calls, as instructed.
+
+Fixture copy repair, 25 October 2026
+Source: 43562254b247cfb4ae375acfbe0221d559324d7d
+Failing-first test source: 9d37696a6
+
+PASS rebase completed; fetched origin/main 35e7e10e9 was already included.
+Expected baseline failure: 55 tests, 31 passed, 24 failed on missing cnpg.ts.
+Expected test-first failure: the same 24 cases named the missing shared-list entry.
+PASS focused fresh-install and NATS route tests: 55 passed, 0 failed, 0 skipped.
+PASS all 48 CI infrastructure files, run 1: 445 passed, 0 failed, 0 skipped.
+PASS all 48 CI infrastructure files, run 2: 445 passed, 0 failed, 0 skipped.
+PASS lint, including Knip and changelog: 0 errors, 25 existing code warnings.
+PASS typecheck: all workspaces, package and development-stack scripts.
+PASS check:events: 154 event types agree.
+PASS separate lint:changelog.
+All tests used the supplied PG_TEST_URL and nice -n 10; lint and typecheck also used nice.
+NOT RUN full root suite, live CNPG installation and fresh product journeys.
+PASS final rebase onto main 7235079d9; repair e4733c117, test-first commit d443a4e90.
+PASS infrastructure, workflow, dependencies and certificate fixture match tested source 43562254b.
+The full infrastructure runs preceded this final rebase; new server memory behaviour is not claimed.
+PASS after final rebase: targeted server ESLint and server workspace typecheck.
+PASS after final rebase: documentation, local links, Knip, changelog and event checks.
