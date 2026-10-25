@@ -7,6 +7,7 @@ import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event
 import { applyProvider, type ProviderState } from '@opencrane/projections';
 import { readActiveMember } from './member-authority.ts';
 import { history } from './actor.ts';
+import { appendCheckedState } from './append-checked-state.ts';
 import { managedProviderCallsEnabled } from './provider-turns.ts';
 import {
   ProviderConflict, ProviderRefused, providerAuthority, providerPermission, providerReceipt,
@@ -101,8 +102,13 @@ export async function providerDrainCommand(store: EventStore, binding: Binding,
     expectedGlobalSequence: current.globalSequence,
     historyChecked: true as const, deadline: fresh.deadline,
   };
-  await fresh();
-  const result = await store.append(command);
+  async function unchanged() {
+    const position = await store.head('provider-*', fresh.deadline);
+    const enabled = await managedProviderCallsEnabled(store, binding.silo, fresh.deadline);
+    await fresh();
+    return position === current.position && !enabled;
+  }
+  const result = await appendCheckedState(store, command, unchanged);
   if (result.status === 'conflict') {
     throw new ProviderConflict();
   }

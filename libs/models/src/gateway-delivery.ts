@@ -7,6 +7,7 @@ import { gatewayConfigurationSchema, gatewayObservationSchema } from '@opencrane
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import { envelope, history } from './actor.ts';
+import { appendCheckedState } from './append-checked-state.ts';
 import { publicationDigest } from './publication.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
 import { gatewayConfigurationCurrent, gatewayMemberCurrent } from './gateway-generation.ts';
@@ -153,13 +154,20 @@ export function gatewayDelivery(options: {
           publicationDigest(state.configurationObservation) === publicationDigest(data);
       }
     }
-    const current = await gatewayConfigurationCurrent(options.store, options.silo, delivered.record);
+    const current = await gatewayConfigurationCurrent(options.store, options.silo,
+      delivered.record, deadline);
     if (!current || !usable(delivered)) return false;
     const event = envelope(options.silo, subject, 'mcp.configuration_observed', data, id);
     // Refuse withdrawal on this server and newer preparations on the gateway stream.
     const command = { event, expectedSequence: state.sequence, expectedGlobalSequence, deadline };
-    await requireLeader();
-    const result = await options.store.append(command);
+    async function unchanged() {
+      const position = await options.store.head(subject, deadline);
+      const current = await gatewayConfigurationCurrent(options.store, options.silo,
+        delivered.record, deadline);
+      await requireLeader();
+      return position === state.sequence && current && usable(delivered);
+    }
+    const result = await appendCheckedState(options.store, command, unchanged);
     return result.status === 'appended';
   }
 

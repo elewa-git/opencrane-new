@@ -1115,3 +1115,34 @@ async function waitsForGatewayLockRelease() {
 }
 it('waits for the old gateway lock to be released before continuing the test',
   waitsForGatewayLockRelease);
+
+async function savesReceiptAfterComputerReadiness() {
+  const setup = await fixture();
+  let injected = false;
+  async function append(command: Parameters<typeof setup.options.store.append>[0]) {
+    const eventType = appendEventSchema.parse(command.event).type;
+    if (eventType === 'mcp.configuration_observed' && !injected) {
+      injected = true;
+      const data = { assistantId: 'assistant', computerId: 'computer', generation: 1,
+        podUid: 'ready-pod', sandboxUid: 'ready-sandbox' };
+      const ready = envelope('test', 'computer-computer', 'computer.ready', data);
+      await setup.nats.seed([ready]);
+    }
+    return setup.options.store.append(command);
+  }
+  const store = { append, head: setup.options.store.head.bind(setup.options.store),
+    readStream: setup.options.store.readStream.bind(setup.options.store),
+    readEvent: setup.options.store.readEvent.bind(setup.options.store) };
+  const delivery = gatewayDelivery({ ...setup.options, store });
+  await delivery.deliver(setup.record);
+  await waitForDeliveredWitness(setup);
+  expect(await delivery.observe()).not.toBeNull();
+  expect(injected).toBe(true);
+  const receipts = await memberReceipts(setup);
+  expect(receipts).toHaveLength(1);
+  expect(await publicationStatus(setup)).toMatchObject({ status: 'ready', generation: 1 });
+  expect(await delivery.observe()).not.toBeNull();
+  expect(await memberReceipts(setup)).toEqual(receipts);
+}
+it('saves one gateway member receipt despite concurrent computer readiness',
+  savesReceiptAfterComputerReadiness);

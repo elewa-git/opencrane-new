@@ -97,22 +97,22 @@ export function gatewayMemberCurrent(rows: StoredEvent[], member: Configuration[
 }
 
 export async function gatewayConfigurationCurrent(store: ConfigurationStore, silo: string,
-  record: Configuration) {
+  record: Configuration, deadline = performance.now() + 10_000) {
   const configurationSubject = `gateway-config-${silo}`;
   wireSubject(configurationSubject);
   for (const member of record.members) {
     const subject = exactMcpSubject(member.entry.serverId);
-    const rows = await history(store, subject, silo, performance.now() + 10_000);
+    const rows = await history(store, subject, silo, deadline);
     if (!gatewayMemberCurrent(rows, member)) {
       return false;
     }
   }
   const { recordDigest, ...saved } = record;
-  const position = await store.head(configurationSubject);
+  const position = await store.head(configurationSubject, deadline);
   if (position === 0 || recordDigest !== publicationDigest(saved)) {
     return false;
   }
-  const rows = await history(store, configurationSubject, silo);
+  const rows = await history(store, configurationSubject, silo, deadline);
   const requests = rows.filter(requested);
   const latest = requests.at(-1);
   return latest !== undefined && configurationFromRow(latest).recordDigest === recordDigest;

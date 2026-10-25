@@ -869,3 +869,31 @@ async function reservedReachabilityStillBlocks() {
   expect((await request(await input())).statusCode).toBe(200);
 }
 it('never exempts a reachability dispatch that carries a reservation', reservedReachabilityStillBlocks);
+
+async function switchOnAfterComputerReadiness() {
+  const command = await input();
+  const before = await setup.nats.store.head();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let injected = false;
+  async function readyBeforeAppend(change: Parameters<typeof append>[0]) {
+    const parsed = parseEventByType(change.event);
+    if (parsed.success && parsed.event.type === 'provider.managed_calls_enabled' && !injected) {
+      injected = true;
+      const data = { assistantId: 'assistant', computerId: 'computer', generation: 1,
+        podUid: 'ready-pod', sandboxUid: 'ready-sandbox' };
+      await setup.append('computer-computer', 'computer.ready', data);
+    }
+    return append(change);
+  }
+  vi.spyOn(setup.nats.store, 'append').mockImplementation(readyBeforeAppend);
+  const response = await request(command);
+  expect(injected).toBe(true);
+  expect(response.statusCode).toBe(200);
+  expect(await managedProviderCallsEnabled(setup.nats.store, 'test',
+    performance.now() + 10_000)).toBe(true);
+  expect(await setup.nats.store.head()).toBe(before + 2);
+  expect((await request(command)).json()).toEqual(response.json());
+  expect(await setup.nats.store.head()).toBe(before + 2);
+}
+it('switches on once when computer readiness arrives immediately before append',
+  switchOnAfterComputerReadiness);

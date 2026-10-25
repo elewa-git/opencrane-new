@@ -8,6 +8,7 @@ import { readEventAt, readStreamSummary, type EventStore, type StoredEvent,
   type SummaryKind } from '@opencrane/event-store';
 import { applyProvider, type ProviderState } from '@opencrane/projections';
 import { data, models } from './state.ts';
+import { appendCheckedState } from './append-checked-state.ts';
 import { ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
   providerReceipt, reconcileProvider } from './providers.ts';
 
@@ -183,12 +184,33 @@ function requirePositions(current: Configuration & { sequence: number },
   }
 }
 
+async function switchStateUnchanged(store: EventStore, silo: string,
+  globalSequence: number, deadline: number) {
+  const providerSequence = await store.head('provider-*', deadline);
+  const budgetSequence = await store.head(`budget-${silo}`, deadline);
+  if (providerSequence > globalSequence || budgetSequence > globalSequence) {
+    return false;
+  }
+  // Ignore readiness and work reports. Only these events can change legacy turn activity.
+  const legacyChanges = ['computer.turn_started', 'computer.turn_closed',
+    'computer.lost', 'computer.retired', 'computer.claimed'];
+  for await (const row of store.readStream('computer-*', globalSequence + 1, deadline)) {
+    if (row.event.silo !== silo) {
+      throw new Error('Computer silo mismatch');
+    }
+    if (legacyChanges.includes(row.event.type)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function providerSwitchOn(store: EventStore, binding: Binding,
   memberId: string, providerId: string, raw: unknown) {
   providerIdSchema.parse(providerId);
   const input = inputSchema.parse(raw);
   const deadline = performance.now() + 10_000;
-  // Capture all activity before history reads. Any later event refuses this migration append.
+  // Capture the position before history reads so later state changes refuse switch-on.
   const globalSequence = await store.head(undefined, deadline);
   const current = await readStreamSummary(store, binding.silo, 'provider-*',
     configuration, deadline, takeConfiguration);
@@ -215,7 +237,12 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
     time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human', id: memberId },
   };
-  if (await store.head(undefined, fresh.deadline) !== globalSequence) {
+  async function unchanged() {
+    const current = await switchStateUnchanged(store, binding.silo, globalSequence, fresh.deadline);
+    await fresh();
+    return current;
+  }
+  if (!await unchanged()) {
     throw new ProviderConflict();
   }
   if (spending.duplicate) {
@@ -241,8 +268,7 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
   }
   const command = { event, expectedSequence: spending.sequence,
     expectedGlobalSequence: globalSequence, historyChecked: true as const, deadline: fresh.deadline };
-  await fresh();
-  const result = await store.append(command);
+  const result = await appendCheckedState(store, command, unchanged);
   if (result.status === 'conflict') {
     throw new ProviderConflict();
   }

@@ -204,6 +204,108 @@ async function concurrentStarts() {
 }
 it('orders concurrent drain starts across different provider connections', concurrentStarts);
 
+async function toleratesComputerReadiness() {
+  const command = await input();
+  const before = await nats.store.head();
+  const originalAppend = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function makeComputerReady(change: Parameters<typeof originalAppend>[0]) {
+    const parsed = parseEventByType(change.event);
+    if (parsed.success && parsed.event.type === 'provider.managed_calls_drain_set' && !injected) {
+      injected = true;
+      const data = { assistantId: 'one', computerId: 'computer-one', generation: 1,
+        podUid: 'readiness-pod', sandboxUid: 'readiness-sandbox' };
+      await append('computer-one', 'computer.ready', data, false);
+    }
+    return originalAppend(change);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(makeComputerReady);
+  const response = await request('POST', 'primary', command);
+  expect(injected).toBe(true);
+  expect(response.statusCode).toBe(200);
+  expect(await nats.store.head()).toBe(before + 2);
+  expect((await request('GET')).json()).toMatchObject({ draining: true, enabled: false });
+  expect((await request('POST', 'primary', command)).json()).toEqual(response.json());
+  expect(await nats.store.head()).toBe(before + 2);
+  const cancel = await input('cancel');
+  expect((await request('POST', 'primary', cancel)).statusCode).toBe(200);
+}
+it('drains once when computer readiness arrives immediately before the append',
+  toleratesComputerReadiness);
+
+async function refusesProviderChange() {
+  const command = await input();
+  const before = await nats.store.head();
+  const originalAppend = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function changeProvider(change: Parameters<typeof originalAppend>[0]) {
+    const parsed = parseEventByType(change.event);
+    if (parsed.success && parsed.event.type === 'provider.managed_calls_drain_set' && !injected) {
+      injected = true;
+      const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
+        kind: 'reachability', attemptId: 'concurrent-check', outcome: 'pass' };
+      await append('provider-primary', 'provider.verification_recorded', data);
+    }
+    return originalAppend(change);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeProvider);
+  expect((await request('POST', 'primary', command)).statusCode).toBe(409);
+  expect(injected).toBe(true);
+  expect(await nats.store.head()).toBe(before + 1);
+  expect((await request('GET')).json()).toMatchObject({ draining: false, enabled: false });
+}
+it('refuses a provider change immediately before the drain append', refusesProviderChange);
+
+async function keepsOriginalDeadline() {
+  const command = await input();
+  const before = await nats.store.head();
+  const originalAppend = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function expireAfterConflict(change: Parameters<typeof originalAppend>[0]) {
+    const parsed = parseEventByType(change.event);
+    if (parsed.success && parsed.event.type === 'provider.managed_calls_drain_set' && !injected) {
+      injected = true;
+      const data = { assistantId: 'one', computerId: 'computer-one', generation: 1,
+        podUid: 'deadline-pod', sandboxUid: 'deadline-sandbox' };
+      await append('computer-one', 'computer.ready', data, false);
+      const result = await originalAppend(change);
+      expect(result.status).toBe('conflict');
+      vi.spyOn(performance, 'now').mockReturnValue(change.deadline! + 1);
+      return result;
+    }
+    return originalAppend(change);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(expireAfterConflict);
+  expect((await request('POST', 'primary', command)).statusCode).toBe(503);
+  vi.restoreAllMocks();
+  expect(injected).toBe(true);
+  expect(await nats.store.head()).toBe(before + 1);
+  expect((await request('GET')).json()).toMatchObject({ draining: false, enabled: false });
+}
+it('does not renew the drain deadline after an unrelated conflict', keepsOriginalDeadline);
+
+async function refusesRemovedCallerOnRetry() {
+  const command = await input();
+  const before = await nats.store.head();
+  const originalAppend = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function removeCaller(change: Parameters<typeof originalAppend>[0]) {
+    const parsed = parseEventByType(change.event);
+    if (parsed.success && parsed.event.type === 'provider.managed_calls_drain_set' && !injected) {
+      injected = true;
+      const data = { memberId: 'admin', removedBy: 'owner' };
+      await append('member-admin', 'member.removed', data, false);
+    }
+    return originalAppend(change);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(removeCaller);
+  expect((await request('POST', 'primary', command, 'admin')).statusCode).toBe(503);
+  expect(injected).toBe(true);
+  expect(await nats.store.head()).toBe(before + 1);
+  expect((await request('GET')).json()).toMatchObject({ draining: false, enabled: false });
+}
+it('rechecks the original caller access before retrying a drain', refusesRemovedCallerOnRetry);
+
 async function refusesSilentRollback() {
   const start = await input();
   expect((await request('POST', 'primary', start)).statusCode).toBe(200);
