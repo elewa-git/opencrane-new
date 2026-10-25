@@ -17,13 +17,20 @@ function load(url, context, nextLoad) {
   `;
   return { format: 'module', source, shortCircuit: true };
 }
-registerHooks({ load });
+const hooks = { load };
+registerHooks(hooks);
 const original = childProcess.execFile;
 function kubernetes(args) {
   assert.equal(args[0], '--context=k3d-ocn');
   if (args.includes('namespace')) return fixture.namespace;
-  if (args.includes('--raw')) return fixture.api;
-  if (args.includes('deployments')) return fixture.operators;
+  if (args.includes('--raw')) {
+    if (fixture.dependencyFailure === 'api') throw new Error(fixture.canary);
+    return fixture.api;
+  }
+  if (args.includes('deployments')) {
+    if (fixture.dependencyFailure === 'operator') throw new Error(fixture.canary);
+    return fixture.operators;
+  }
   assert.equal(args[args.indexOf('-n') + 1], 'opencrane-package-1');
   const name = args[args.indexOf('secret') + 1];
   if (name.startsWith('sh.helm.')) return { metadata: { uid: 'next-step' } };

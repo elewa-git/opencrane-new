@@ -1,0 +1,1 @@
+The installer refuses incomplete CloudNativePG operator and credential settings before Helm runs. It checks the rendered PostgreSQL image against the exact reviewed digest and keeps private values out of dependency errors. The shipped image review still refuses CNPG installation.

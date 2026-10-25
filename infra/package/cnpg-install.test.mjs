@@ -11,7 +11,8 @@ const canary = 'private-canary:%/?@';
 const refusal = 'CNPG installation inputs are incomplete or incompatible';
 const nextStep = 'A Helm release already uses this namespace';
 function encoded(value) {
-  return Buffer.from(value).toString('base64');
+  const bytes = Buffer.from(value);
+  return bytes.toString('base64');
 }
 function secret(fields, type = 'Opaque') {
   const data = {};
@@ -104,7 +105,9 @@ async function runFixture(fixture, expected, renders = false) {
     assert.ok(!result.stderr.includes(canary), 'Errors must discard private values and causes');
     assert.ok(!result.stdout.includes(canary), 'Standard output must discard private values');
     const callText = await readFile(`${directory}/calls.jsonl`, 'utf8');
-    const calls = callText.trim().split('\n').map(JSON.parse);
+    const trimmedCalls = callText.trim();
+    const callLines = trimmedCalls.split('\n');
+    const calls = callLines.map(JSON.parse);
     for (const call of calls) {
       if (call.program === 'helm') {
         assert.equal(renders, true, 'Helm must not run with incomplete inputs');
@@ -118,13 +121,19 @@ async function runFixture(fixture, expected, renders = false) {
         assert.deepEqual(document.errors, []);
         resources.push(document.toJS());
       }
-      function postgres(resource) { return resource.metadata.name === 'postgres'; }
+      function postgres(resource) {
+        return resource.metadata.name === 'postgres';
+      }
       const databaseResources = resources.filter(postgres);
       if (fixture.values.postgres.mode === 'cnpg') {
-        function cluster(resource) { return resource.kind === 'Cluster'; }
+        function cluster(resource) {
+          return resource.kind === 'Cluster';
+        }
         assert.equal(databaseResources.find(cluster).spec.imageName, fixture.review.images.postgres);
       } else {
-        function statefulSet(resource) { return resource.kind === 'StatefulSet'; }
+        function statefulSet(resource) {
+          return resource.kind === 'StatefulSet';
+        }
         assert.equal(databaseResources.find(statefulSet).spec.replicas, 1);
         assert.ok(!callText.includes('postgresql.cnpg.io'));
         assert.ok(!callText.includes('deployments'));
@@ -138,6 +147,10 @@ const cases = [
   ['missing API', ['api'], {}],
   ['wrong API', ['api', 'groupVersion'], 'postgresql.cnpg.io/v2'],
   ['missing Cluster API', ['api', 'resources'], []],
+  ['API dependency output', ['dependencyFailure'], 'api'],
+  ['operator dependency output', ['dependencyFailure'], 'operator'],
+  ['invalid base64', ['secrets', 'application', 'data', 'password'], canary],
+  ['empty password', ['secrets', 'application', 'data', 'password'], ''],
   ['absent operator', ['operators', 'items'], []],
   ['wrong operator', ['operators', 'items', 0, 'spec', 'template', 'spec', 'containers', 0, 'image'],
     'ghcr.io/cloudnative-pg/cloudnative-pg:1.29.0'],
@@ -157,8 +170,8 @@ const cases = [
   ['dependency output', ['dependencyFailure'], 'application'],
 ];
 for (const role of ['superuser', 'application']) {
-  cases.push([`${role} missing username`, ['secrets', role, 'data', 'username'], '']);
-  cases.push([`${role} missing password`, ['secrets', role, 'data', 'password'], '']);
+  cases.push([`${role} missing username`, ['secrets', role, 'data', 'username'], undefined]);
+  cases.push([`${role} missing password`, ['secrets', role, 'data', 'password'], undefined]);
   cases.push([`${role} wrong type`, ['secrets', role, 'type'], 'Opaque']);
   cases.push([`${role} wrong username`, ['secrets', role, 'data', 'username'], encoded(canary)]);
 }
@@ -172,7 +185,9 @@ for (const [name, path, value] of cases) {
   }
   test(`CNPG installer refuses ${name} before Helm`, refusesInput);
 }
-async function completeInputs() { await runFixture(validFixture(), nextStep, true); }
+async function completeInputs() {
+  await runFixture(validFixture(), nextStep, true);
+}
 test('complete synthetic CNPG inputs reach the release check', completeInputs);
 async function standalone() {
   const fixture = validFixture();
@@ -209,3 +224,10 @@ async function shippedReview() {
   await runFixture(fixture, 'Package command failed');
 }
 test('shipped image review still refuses CNPG before Helm', shippedReview);
+
+async function wrongImageRole() {
+  const fixture = validFixture();
+  fixture.hiddenImage = fixture.review.images.server;
+  await runFixture(fixture, 'Rendered image is not reviewed', true);
+}
+test('imageName must use the reviewed PostgreSQL image, not another reviewed role', wrongImageRole);

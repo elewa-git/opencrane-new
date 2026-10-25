@@ -157,8 +157,8 @@ compares the member and both events against the private file's address.
 
 ## Optional PostgreSQL primary and standby
 
-P5-3 PR 1 adds an offline render/refusal path only. The default remains the existing
-one-instance PostgreSQL StatefulSet. `postgres.mode: cnpg` replaces that StatefulSet
+P5-3 adds rendering and installer refusal checks. Live installation is not yet tested.
+The default remains the existing one-instance PostgreSQL StatefulSet. `postgres.mode: cnpg` replaces that StatefulSet
 with one `postgresql.cnpg.io/v1` Cluster named `postgres`, with two instances.
 CNPG creates a separate ReadWriteOnce 1Gi data claim for each instance. Required
 anti-affinity on `kubernetes.io/hostname` keeps them on different Kubernetes nodes;
@@ -183,7 +183,8 @@ to existing `kubernetes.io/basic-auth` Secrets containing `username` and `passwo
 The usernames must be `postgres` and `projection`, respectively. No credential values
 belong in Helm. Current preparation supplies `POSTGRES_*` fields, which are not
 CNPG credentials. Missing references refuse; this change does not convert those
-fields or check live Secret contents. Preparation remains unchanged.
+fields. The installer checks live Secret contents before calling Helm.
+Preparation remains unchanged.
 
 `images.postgres` must pass the existing exact-digest review. In addition, the
 trusted review file needs `cnpg.operatorContract: "1.30"` and `cnpg.image` equal to
@@ -210,12 +211,26 @@ The current database names map to the design's logical names as follows:
 | `handlers` | `jobs` | Dispatcher delivery state |
 | `openfga` | `openfga` | Access projections |
 
-No database is renamed. Remaining bootstrap wiring must check live Secret types,
-fields and usernames, align CNPG passwords with bootstrap/runtime references, check
-the installed operator API/version, and include `imageName` in the installer's
-rendered-image check. The existing check recognises container `image` fields only.
-These steps must happen before enabling an install; the current reviewed-image
-refusal keeps that path closed. No bootstrap or event-store behaviour changes here.
+No database is renamed. `infra/dev-stack/cnpg.ts` checks the advertised
+`postgresql.cnpg.io/v1` Cluster API and requires exactly one operator Deployment
+selected by `app.kubernetes.io/name=cloudnative-pg`. Its `manager` container must
+use `ghcr.io/cloudnative-pg/cloudnative-pg:1.30.<patch>`, optionally with a digest.
+This checks the declared version; it does not approve the operator image or prove
+that its running binary is healthy. Digest/licence promotion remains later work.
+
+Before Helm runs, the installer reads both basic-auth Secrets in the owned namespace.
+It compares their passwords with bootstrap and runtime connections in memory,
+including the existing server, dispatcher and OpenFGA roles and database names.
+It refuses connection query parameters that override checked fields. Errors discard
+private values and dependency output. Rendered `imageName` fields must match the
+exact reviewed PostgreSQL image; container `image` fields retain their existing check.
+The shipped review still refuses CNPG. Preparation and bootstrap remain unchanged.
+
+`cnpg-install.test.mjs` runs the installer with synthetic Kubernetes replies and a
+synthetic review, then inspects real Helm resources. Incomplete inputs never reach
+Helm; image refusals allow rendering but never installation. Complete CNPG and
+standalone fixtures reach the release check. These fixtures do not qualify live CNPG.
+The [installer receipt](../../docs/process/p5-3-pr2/receipt.md) records local checks.
 
 [Bootstrap](https://cloudnative-pg.io/docs/1.30/bootstrap/),
 [storage](https://cloudnative-pg.io/docs/1.30/storage/),
