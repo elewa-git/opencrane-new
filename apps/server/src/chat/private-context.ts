@@ -15,6 +15,12 @@ function eventData(row: StoredEvent) {
   return z.record(z.string(), z.unknown()).parse(data);
 }
 
+function recordMemoryTurn(row: StoredEvent, turnIds: Set<string>) {
+  if (row.event.type !== 'agent.memory_context_recorded') return;
+  const turnId = eventData(row)['turnId'];
+  if (typeof turnId === 'string') turnIds.add(turnId);
+}
+
 // Read replies across the stream. An earlier turn can finish after the next message is posted.
 export function privateContext(rows: StoredEvent[], message: StoredEvent, requesterId: string,
   decrypt: (data: unknown) => string): PrivateContext | undefined {
@@ -25,15 +31,11 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
   const replies = new Map<string, StoredEvent[]>();
   for (const row of rows) {
     const type = row.event.type;
+    recordMemoryTurn(row, memoryTurns);
     if (type === 'message.posted') {
       if (isEarlierMessage(row, message, requesterId)) {
         messages.push(row);
       }
-      continue;
-    }
-    if (type === 'agent.memory_context_recorded') {
-      const turnId = eventData(row)['turnId'];
-      if (typeof turnId === 'string') memoryTurns.add(turnId);
       continue;
     }
     if (!['agent.turn_completed', 'agent.output_lost', 'agent.message_completed'].includes(type)) {

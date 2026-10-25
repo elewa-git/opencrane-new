@@ -322,6 +322,7 @@ async function permanentlyRefusesContent() {
   const socket = [...sockets.clients][0]!;
   const acknowledged = Promise.withResolvers<unknown[]>();
   function receive(raw: RawData) {
+    if (!Buffer.isBuffer(raw)) throw new Error('Unexpected test frame');
     const value: unknown = JSON.parse(raw.toString());
     if (value && typeof value === 'object' && 'type' in value && value.type === 'ack') {
       acknowledged.resolve(['ack']);
