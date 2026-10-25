@@ -626,7 +626,7 @@ it('does not duplicate exhaustion after its append succeeds but the acknowledgem
       return result;
     });
     try { expect((await f.call()).status).toBe(403); } finally { fault.mockRestore(); }
-    expect((await f.call()).status).toBe(403); // The uncertain writer stops admitting commands.
+    expect((await f.call()).status).toBe(402); // Recovery retains the saved spending cap.
     const recovered = new BudgetActor(f.nats.store, 'test'); await recovered.start();
     await expect(recovered.reserve(f.actor.state.reservations[0]!.call, 25)).rejects.toThrow('spending cap');
     expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))

@@ -1218,12 +1218,12 @@ async function refusesUnsettledMemoryAtDeadline() {
   try {
     const response = await setup.call();
     expect(rounds).toBe(3);
-    expect(response.status, response.text).toBe(403);
-    expect(response.text).toContain('memory_context_unavailable');
+    expect(response.status, response.text).toBe(503);
+    expect(response.text).toContain('Decision audit unavailable');
     expect(setup.received()).toBe(0);
     expect(setup.actor.state.dispatches).toHaveLength(dispatches);
     expect(setup.actor.state.reservations).toHaveLength(1);
-    expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
   } finally {
     clock.mockRestore();
     admission.mockRestore();

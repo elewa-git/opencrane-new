@@ -391,7 +391,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   expect(projected.sequence).toBe(returned.sequence);
   const retry = await actor.configure(payload, 'configure-switch', projected.sequence, checkAccess);
   expect(retry).toMatchObject({ status: 'appended' });
-  expect(checks).toBe(5);
+  expect(checks).toBe(6);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   expect(actor.state.sequence).toBe(before + 1);
   expect(actor.state.ceilingCents).toBe(200);
@@ -399,7 +399,7 @@ async function rechecksAccessBeforeRetryingConfiguration(withHold: boolean) {
   expect(after).toEqual(budgetSummary(actor.state, clock));
   const stale = await actor.configure(payload, 'configure-stale', expectedSequence, checkAccess);
   expect(stale).toEqual({ status: 'conflict' });
-  expect(checks).toBe(6);
+  expect(checks).toBe(7);
   expect(await nats.store.head('budget-test')).toBe(before + 1);
   let reservedCents = 0;
   if (withHold) {
@@ -539,7 +539,7 @@ async function admitsOnlyCheckedManagedHolds(restart: boolean) {
     return Promise.resolve();
   }
   const reservationId = await actor.reserve(call, 1, confirm);
-  expect(checks).toBe(restart ? 2 : 4);
+  expect(checks).toBe(restart ? 3 : 5);
   await expect(actor.reserve(call, 1)).rejects.toThrow('Provider setup changed');
   const incomplete = { ...call, bindingSequence: undefined };
   await expect(actor.reserve(incomplete, 1, confirm)).rejects.toThrow();
@@ -738,12 +738,12 @@ async function failedWriterCannotProveCurrent() {
   }
   const spy = vi.spyOn(nats.store, 'append').mockImplementation(unavailable);
   onTestFinished(spy.mockRestore.bind(spy));
-  await expect(reserve()).rejects.toThrow('Budget writer lost its fence');
+  await expect(reserve()).rejects.toThrow('Budget append unavailable');
   spy.mockRestore();
   await expect(actor.requireCurrent(performance.now() + 2000))
     .rejects.toThrow('Budget writer unavailable');
 }
-it('refuses proof from a failed writer even when its saved position still matches',
+it('refuses proof from a recovering writer even when its saved position still matches',
   failedWriterCannotProveCurrent);
 
 async function admitsAfterRepeatedConflicts(change: string) {
@@ -782,7 +782,7 @@ async function admitsAfterRepeatedConflicts(change: string) {
   const admitted = actor.admitDispatch(admission, checkAccess);
   if (change === 'unchanged') {
     await admitted;
-    expect(checks).toBe(6);
+    expect(checks).toBe(7);
     expect(actor.state.dispatches).toEqual([admission]);
     await expect(actor.admitDispatch(admission, checkAccess)).rejects.toThrow();
     expect(actor.state.dispatches).toHaveLength(1);

@@ -1,3 +1,5 @@
+import { appendResult, savedAppend, unavailableAppend, rejectedAppend,
+  recoverAppend, previousAppend } from './append-result.ts';
 import { connectNats, isEventStoreUnavailable } from "./nats-connection.ts";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -238,24 +240,26 @@ export class EventStore {
   async append(command: AppendCommand): Promise<AppendResult> {
     const event = validateCommand(command);
     if (!event) {
-      return { status: "rejected", reason: "invalid_event" };
+      return rejectedAppend('invalid_event');
     }
     const deadline = Math.min(performance.now() + appendMs, command.deadline ?? Infinity);
     let cause: unknown;
+    const publication = { possible: false };
     let backoff = 25;
     while (performance.now() < deadline) {
       if (command.signal?.aborted) {
-        return { status: "unavailable", cause: command.signal.reason };
+        return unavailableAppend(command.signal.reason, publication.possible);
       }
       try {
         return await this.attempt(event, command.expectedSequence, deadline, command.expectedSubject,
-          command.expectedGlobalSequence, command.historyChecked, command.signal, command.checkAccess);
+          command.expectedGlobalSequence, command.historyChecked, command.signal,
+          command.checkAccess, publication);
       } catch (error) {
         if (command.signal?.aborted) {
-          return { status: "unavailable", cause: command.signal.reason };
+          return unavailableAppend(command.signal.reason, publication.possible);
         }
         if (!isEventStoreUnavailable(error)) {
-          throw new Error("Event append failed", { cause: error });
+          return unavailableAppend(error, publication.possible);
         }
         cause = error;
         const options = command.signal ? { signal: command.signal } : undefined;
@@ -271,25 +275,12 @@ export class EventStore {
           if (!command.signal?.aborted) {
             throw error;
           }
-          return { status: "unavailable", cause: command.signal.reason };
+          return unavailableAppend(command.signal.reason, publication.possible);
         }
         backoff = Math.min(backoff * 2, 500);
       }
     }
-    return { status: "unavailable", cause };
-  }
-
-  private async previous(
-    event: EventEnvelope,
-    deadline: number,
-    fromSequence = 1,
-  ): Promise<AppendResult | undefined> {
-    for await (const stored of this.readStream(event.subject, fromSequence, deadline)) {
-      if (sameCommand(stored.event, event)) {
-        return { status: "appended", sequence: stored.sequence };
-      }
-    }
-    return undefined;
+    return unavailableAppend(cause, publication.possible);
   }
 
   private async attempt(
@@ -301,9 +292,11 @@ export class EventStore {
     historyChecked?: true,
     signal?: AbortSignal,
     checkAccess?: () => Promise<unknown>,
+    publication = { possible: false },
   ): Promise<AppendResult> {
     if (!historyChecked) {
-      const previous = await this.previous(event, deadline);
+      const rows = this.readStream(event.subject, 1, deadline);
+      const previous = await previousAppend(rows, event);
       if (previous) {
         return previous;
       }
@@ -329,7 +322,7 @@ export class EventStore {
         await checkAccess();
       } catch (cause) {
         // Keep an earlier publish with a lost reply uncertain until the caller reconciles it.
-        return { status: 'unavailable', cause };
+        return unavailableAppend(cause, publication.possible);
       }
     }
     // Recheck after awaited reads, immediately before starting a new publish.
@@ -338,7 +331,7 @@ export class EventStore {
       throw new TimeoutError();
     }
     return this.publishConditional(event, expectedSequence, deadline, expectedSubject,
-      expectedGlobalSequence, historyChecked);
+      expectedGlobalSequence, historyChecked, publication);
   }
 
   private async publishConditional(
@@ -348,9 +341,13 @@ export class EventStore {
     expectedSubject?: string,
     expectedGlobalSequence?: number,
     historyChecked?: true,
+    publication = { possible: false },
   ): Promise<AppendResult> {
     const subject = wireSubject(event.subject);
+    const earlierPublication = publication.possible;
+    let acknowledged = false;
     try {
+      publication.possible = true;
       const ack = await this.client.publish(subject, JSON.stringify(event), {
         msgID: event.id,
         expect: { streamName, lastSubjectSequence: expectedSequence,
@@ -359,26 +356,30 @@ export class EventStore {
         timeout: Math.min(requestMs, deadline - performance.now()),
         retries: 1,
       });
-      if (ack.duplicate) {
-        const stored = await this.manager.streams.getMessage(streamName, {
-          seq: ack.seq,
-        });
-        if (
-          !stored ||
-          stored.subject !== subject ||
-          !sameCommand(decodeEvent(stored.data, subject), event)
-        ) {
-          return { status: "rejected", reason: "duplicate_id" };
-        }
+      acknowledged = true;
+      if (ack.stream !== streamName || !Number.isSafeInteger(ack.seq) || ack.seq <= 0) {
+        throw new Error('Invalid append acknowledgement');
       }
-      return { status: "appended", sequence: ack.seq };
+      if (ack.duplicate) {
+        const stored = await this.readEvent(ack.seq, deadline);
+        if (!sameCommand(stored.event, event)) {
+          publication.possible = earlierPublication;
+          return rejectedAppend('duplicate_id', earlierPublication);
+        }
+        return savedAppend(stored);
+      }
+      const result = { status: 'appended' as const, sequence: ack.seq };
+      const outcome = { kind: 'appended' as const };
+      return appendResult(result, outcome);
     } catch (error) {
       if (
-        error instanceof JetStreamApiError &&
+        !acknowledged && error instanceof JetStreamApiError &&
         [10071, 10164].includes(error.code)
       ) {
         const fromSequence = historyChecked ? expectedSequence + 1 : 1;
-        return (await this.previous(event, deadline, fromSequence)) ?? { status: "conflict" };
+        publication.possible = earlierPublication;
+        const rows = this.readStream(event.subject, fromSequence, deadline);
+        return recoverAppend(rows, event, expectedSequence, earlierPublication);
       }
       throw error;
     }
@@ -388,7 +389,7 @@ export class EventStore {
     // Check one event for a lost creation reply, even when the category has moved.
     for await (const stored of this.readStream(event.subject, 1, deadline)) {
       if (sameCommand(stored.event, event)) {
-        return { status: 'appended' as const, sequence: stored.sequence };
+        return savedAppend(stored);
       }
       break;
     }

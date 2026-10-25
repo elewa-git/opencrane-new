@@ -32,11 +32,21 @@ export interface AppendCommand {
   /** Check the whole log position for selected changes that read several streams. */
   expectedGlobalSequence?: number;
 }
-export type AppendResult =
+export type AppendOutcome =
+  | { kind: 'appended' }
+  | { kind: 'duplicate_saved'; saved: StoredEvent }
+  | { kind: 'conditional_rejection_unchanged' | 'conditional_rejection_changed';
+      rows: StoredEvent[]; possiblyPublished: boolean }
+  | { kind: 'conditional_rejection_unknown' | 'transport_failure';
+      possiblyPublished: boolean }
+  | { kind: 'rejected'; reason: 'invalid_event' | 'duplicate_id'; possiblyPublished: boolean };
+
+export type AppendResult = (
   | { status: "appended"; sequence: number }
   | { status: "conflict" }
   | { status: "unavailable"; cause: unknown }
-  | { status: "rejected"; reason: "invalid_event" | "duplicate_id" };
+  | { status: "rejected"; reason: "invalid_event" | "duplicate_id" }
+) & { outcome?: AppendOutcome };
 
 /** Events use names like member-alice; NATS changes that to ev.member.alice. */
 export function wireSubject(subject: string): string {
@@ -201,6 +211,7 @@ function validGlobalPosition(command: AppendCommand, event: EventEnvelope) {
 
 export function sameCommand(a: EventEnvelope, b: EventEnvelope): boolean {
   return (
+    a.silo === b.silo &&
     a.commandId === b.commandId &&
     a.subject === b.subject &&
     a.principal?.id === b.principal?.id &&

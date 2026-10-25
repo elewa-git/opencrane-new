@@ -230,7 +230,7 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     const root = turnRootBinding(actor.state, checked.conversation, checked.turn);
     const dispatch = { callId: requestId, decisionId, bodyDigest: checked.operationDigest,
       modelCall, ...root };
-    await actor.admitDispatch(dispatch, confirm, work.admittedAt);
+    await actor.admitDispatch(dispatch, confirm, work.admittedAt, undefined, fresh.deadline);
     // Recheck after append retries, within the original deadline. This is the last
     // authority check before registration; the relay's 60-second cap applies afterwards.
     async function confirmRegistration() {

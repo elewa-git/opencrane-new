@@ -1,8 +1,9 @@
+import { BudgetWriter, withinBudgetDeadline } from './budget-writer.ts';
 import { prepareCeilingChange } from './ceiling-command.ts';
 import { CeilingReceiptRecovery } from './ceiling-receipt-recovery.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { budgetCallDispatchAdmittedDataSchema,
   effectResolvedDataSchema, effectUncertainDataSchema,
   effectObservedDataSchema, providerDispatchedSchema,
@@ -27,56 +28,48 @@ const SETTLE_TIMEOUT_MS = 180_000;
 
 export class BudgetActor {
   readonly state = emptyBudget();
-  private sequence = 0;
+  private readonly writer: BudgetWriter;
+  private commandDeadline = Infinity;
   private readonly ceilingReceipts = new CeilingReceiptRecovery();
   private queue = Promise.resolve();
-  private failed = false;
   private reservationsStopped = false;
   private readonly timedOut = new Set<string>();
   readonly store: EventStore;
   readonly silo: string;
   readonly now: () => Date;
-  constructor(store: EventStore, silo: string, now = () => new Date()) { this.store = store; this.silo = silo; this.now = now; }
+  constructor(store: EventStore, silo: string, now = () => new Date()) {
+    this.store = store;
+    this.silo = silo;
+    this.now = now;
+    this.writer = new BudgetWriter(store, silo, this.apply.bind(this));
+  }
   // Call only after winning the process leadership lease. A new append fences the old leader.
   async start(dailyCeilingCents = 2000, ceilingCents = 20000, defaultPayingGroupId?: string) {
     if (defaultPayingGroupId) await migrateBudgetDefault(this.store, this.silo, defaultPayingGroupId);
     for (const row of await history(this.store, `budget-${this.silo}`, this.silo)) {
-      this.sequence = row.sequence; this.apply(row.event);
+      this.writer.accept(row);
     }
-    if (!this.sequence) await this.append('budget.ceiling_set', { scope: 'global', dailyCeilingCents, ceilingCents, setBy: 'installation', ...(defaultPayingGroupId ? { defaultPayingGroupId } : {}) });
+    if (!this.writer.sequence) await this.append('budget.ceiling_set', { scope: 'global', dailyCeilingCents, ceilingCents, setBy: 'installation', ...(defaultPayingGroupId ? { defaultPayingGroupId } : {}) });
     await this.append('budget.period_started', { periodStart: this.monthStart() });
   }
-  private serial<T>(work: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(() => {
-      if (this.failed) throw new Error('Budget writer unavailable');
+  private serial<T>(work: () => Promise<T>, deadline = performance.now() + 2000): Promise<T> {
+    const run = async () => {
+      if (performance.now() >= deadline) throw new Error('Budget append unavailable');
+      await this.writer.recover(deadline);
+      this.commandDeadline = deadline;
       return work();
-    });
-    this.queue = result.then(() => undefined, () => undefined);
-    return result;
+    };
+    const result = this.queue.then(run);
+    function finished() {}
+    this.queue = result.then(finished, finished);
+    return withinBudgetDeadline(result, deadline);
   }
   private async append(type: string, payload: unknown, id: string = randomUUID(),
     confirmAccess?: () => Promise<void>, deadline?: number) {
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
-    this.requireReservationWrites(event, confirmAccess);
-    // Reuse replayed history; configure checks its caller's command id before this append.
-    const command = { event, expectedSequence: this.sequence, historyChecked: true as const,
-      ...(confirmAccess ? { checkAccess: confirmAccess } : {}),
-      ...(deadline === undefined ? {} : { deadline }) };
-    let result = await this.store.append(command);
-    if (result.status === 'conflict' && await this.advancePastSwitchOn()) {
-      this.requireReservationWrites(event, confirmAccess);
-      // Keep the caller's original access deadline when a spending-limit write retries.
-      await confirmAccess?.();
-      // Retry this saved hold's progress once, using the position after switch-on.
-      command.expectedSequence = this.sequence;
-      result = await this.store.append(command);
-    }
-    if (result.status !== 'appended') {
-      this.failed = true;
-      throw new Error('Budget writer lost its fence');
-    }
-    this.sequence = result.sequence;
-    this.apply(event);
+    const expires = Math.min(this.commandDeadline, accessDeadline(confirmAccess, deadline));
+    const validate = this.requireReservationWrites.bind(this, event, confirmAccess);
+    await this.writer.append(event, expires, validate, confirmAccess);
   }
   private requireReservationWrites(event: EventEnvelope, confirmAccess?: () => Promise<void>) {
     if (event.type !== 'budget.reserved' || !this.reservationsStopped) return;
@@ -85,29 +78,18 @@ export class BudgetActor {
       throw new Error('Provider setup changed');
     }
   }
-  private async advancePastSwitchOn() {
-    const subject = `budget-${this.silo}`;
-    let position = this.sequence;
-    for await (const row of this.store.readStream(subject, this.sequence + 1)) {
-      // Refuse another budget writer's changes. Only switch-on leaves money untouched.
-      if (row.event.silo !== this.silo || row.event.subject !== subject ||
-          row.event.type !== 'provider.managed_calls_enabled') {
-        return false;
-      }
-      position = row.sequence;
+  private apply(row: StoredEvent) {
+    // Restore the last applied state if a fold fails partway through changing money.
+    const previous = structuredClone(this.state);
+    try {
+      this.ceilingReceipts.apply(row.event, row.sequence, this.state);
+    } catch (error) {
+      Object.assign(this.state, previous);
+      throw error;
     }
-    if (position === this.sequence) {
-      return false;
-    }
-    this.sequence = position;
-    this.reservationsStopped = true;
-    return true;
-  }
-  private apply(event: EventEnvelope) {
-    if (event.type === 'provider.managed_calls_enabled') {
+    if (row.event.type === 'provider.managed_calls_enabled') {
       this.reservationsStopped = true;
     }
-    this.ceilingReceipts.apply(event, this.sequence, this.state);
   }
 
   configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number,
@@ -118,7 +100,7 @@ export class BudgetActor {
       await this.append('budget.ceiling_set', prepared.payload, commandId, fresh);
       return this.ceilingReceipts.receipt(this.state);
     };
-    return this.serial(save);
+    return this.serial(save, accessDeadline(fresh));
   }
   setRootAllowance(raw: unknown, firstCallBoundCents: number, fresh?: () => Promise<void>,
     deadline?: number) {
@@ -131,7 +113,7 @@ export class BudgetActor {
       await fresh?.();
       return setRootAllowance(this.state, this.silo, this.now(), raw, firstCallBoundCents, append);
     };
-    return this.serial(save);
+    return this.serial(save, accessDeadline(fresh, deadline));
   }
   async stopRoot(rootId: string, reason: RootStopReason, subject: string, position: number) {
     const source = await readRootStopEvidence(this.store, subject, position);
@@ -178,18 +160,18 @@ export class BudgetActor {
         payingGroupId: call.payingGroupId, assistantId: call.assistantId, modelCall: call,
         dispatchGate: 1, ...retry, ...(rootId === undefined ? {} : { rootId }) }, undefined, fresh);
       return id;
-    });
+    }, accessDeadline(fresh));
   }
   checkBudget(call: ModelCall, fresh: () => Promise<void>, admittedAt: number, rootId?: string) {
     const check = () => checkBudgetRefusal(this.state, call, fresh, admittedAt,
       rootId, this.now, this.append.bind(this));
-    return this.serial(check);
+    return this.serial(check, accessDeadline(fresh));
   }
   async requireCurrent(deadline: number) {
     for (;;) {
       const commands = this.queue;
-      await commands;
-      if (this.failed || performance.now() >= deadline) {
+      await withinBudgetDeadline(commands, deadline);
+      if (this.writer.status !== 'ready' || performance.now() >= deadline) {
         throw new Error('Budget writer unavailable');
       }
       // Read outside the money queue so slow proof reads cannot delay a reservation or Stop.
@@ -197,14 +179,14 @@ export class BudgetActor {
       if (performance.now() >= deadline) throw new Error('Budget writer unavailable');
       // Wait for and recheck any local command that overlapped this read, including lost replies.
       if (commands !== this.queue) continue;
-      if (this.failed || position !== this.sequence) {
+      if (this.writer.status !== 'ready' || position !== this.writer.sequence) {
         throw new Error('Budget writer unavailable');
       }
       return;
     }
   }
   admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number,
-    rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>) {
+    rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>, deadline?: number) {
     const parsed = budgetCallDispatchAdmittedDataSchema.parse(raw);
     const admit = async () => {
       const input = checkDispatchBinding(this.state, parsed);
@@ -230,9 +212,9 @@ export class BudgetActor {
       }
       // Treat even a lost reply as a possible send. Never return this permission twice.
       const dispatchId = randomUUID();
-      await this.append('budget.call_dispatch_admitted', input, dispatchId, fresh);
+      await this.append('budget.call_dispatch_admitted', input, dispatchId, fresh, deadline);
     };
-    return this.serial(admit);
+    return this.serial(admit, accessDeadline(fresh, deadline));
   }
   releaseUndispatched(id: string) {
     return this.serial(async () => {
@@ -513,4 +495,11 @@ export class BudgetActor {
 
 function redundantTimeout(type: string, reason: string, rows: Awaited<ReturnType<typeof history>>) {
   return type === 'effect.uncertain' && reason === 'settle_timeout' && rows.some(row => row.event.type === type);
+}
+
+function accessDeadline(checkAccess?: () => Promise<void>, deadline?: number) {
+  const original: unknown = deadline ?? Reflect.get(checkAccess ?? {}, 'deadline');
+  const fallback = performance.now() + 2000;
+  if (typeof original === 'number') return Math.min(original, fallback);
+  return fallback;
 }

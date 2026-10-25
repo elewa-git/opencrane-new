@@ -7,10 +7,10 @@ export class CeilingReceiptRecovery {
   private lastCeiling: StoredEvent | undefined;
 
   apply(event: EventEnvelope, sequence: number, state: BudgetState) {
+    applyBudget(state, event, sequence);
     if (event.type === 'budget.ceiling_set') {
       this.lastCeiling = { event, sequence };
     }
-    applyBudget(state, event, sequence);
   }
 
   receipt(state: BudgetState) {

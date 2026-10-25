@@ -215,7 +215,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     }
-    await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt);
+    await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt, undefined, deadline);
     const admittedPosition = await admit(req, res, permit, route, position, deadline);
     if (permit.gatewayBinding) {
       // Refuse changes found after admission before recording a start.
