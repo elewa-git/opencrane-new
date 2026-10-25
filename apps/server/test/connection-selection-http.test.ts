@@ -430,3 +430,68 @@ async function anotherMemberWithToolAccess(member: string) {
 }
 it.each(['bob', 'admin'])('tool access does not let %s select Alice’s profile',
   anotherMemberWithToolAccess);
+
+async function historyFailureAfterRemoval(kind: string, removed: boolean) {
+  const fixture = await saved();
+  const input = selection(fixture);
+  const requestHeaders = headers();
+  expect((await post(fixture.url, input, requestHeaders)).statusCode).toBe(200);
+  const removal = envelope('test', 'member-alice', 'member.removed',
+    { memberId: 'alice', removedBy: 'admin' });
+  if (removed) {
+    // Keep the session and access projection unchanged while recording the removal.
+    await nats.seed([removal]);
+  }
+  const position = await nats.store.head();
+  const selectionSubject = `connection-selection-alice-${fixture.serverId}`;
+  const failedSubjects: Record<string, string> = {
+    selection: selectionSubject,
+    server: `mcp-${fixture.serverId}`,
+    profile: fixture.subject,
+  };
+  const subjects: string[] = [];
+  const read = nats.store.readStream.bind(nats.store);
+  async function* failHistory(subject: string, from?: number, deadline?: number) {
+    subjects.push(subject);
+    if (subject === failedSubjects[kind]) {
+      throw new Error(privateCanary);
+    }
+    yield* read(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(failHistory);
+  try {
+    let retry = input;
+    let expectedStatus = 503;
+    let expectedBody = { status: 'unavailable' };
+    if (kind === 'conflict') {
+      retry = { ...input, profileId: 'other' };
+      expectedStatus = 409;
+      expectedBody = { status: 'refused' };
+    }
+    if (removed) {
+      expectedStatus = 403;
+      expectedBody = { status: 'refused' };
+    }
+    const response = await post(fixture.url, retry, requestHeaders);
+    expect(response.statusCode).toBe(expectedStatus);
+    expect(response.json()).toEqual(expectedBody);
+    expect(await nats.store.head()).toBe(position);
+    function isMembership(subject: string) {
+      return subject === 'member-alice';
+    }
+    const membershipReads = subjects.filter(isMembership);
+    expect(membershipReads).toEqual(['member-alice']);
+    expect(subjects[0]).toBe(selectionSubject);
+  } finally {
+    vi.restoreAllMocks();
+    if (removed) {
+      await memberAuthorisation(binding).handler.handle(removal, pgDb(storage.queue));
+      await join('alice');
+    }
+  }
+}
+it.each([
+  ['conflict', true], ['selection', true], ['server', true], ['profile', true],
+  ['conflict', false], ['selection', false], ['server', false], ['profile', false],
+])('checks current access before exposing %s history errors (removed: %s)',
+  historyFailureAfterRemoval);
