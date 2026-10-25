@@ -5,6 +5,7 @@ export {
   decodeEvent,
   type AppendCommand,
   type AppendResult,
+  type AppendOutcome,
   type StoredEvent,
 } from "./contract.ts";
 export { readEventAt } from './read-event-at.ts';

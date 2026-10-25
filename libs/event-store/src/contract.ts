@@ -32,6 +32,15 @@ export interface AppendCommand {
   /** Check the whole log position for selected changes that read several streams. */
   expectedGlobalSequence?: number;
 }
+export type AppendOutcome =
+  | { status: 'appended'; sequence: number }
+  | { status: 'duplicate_saved'; sequence: number }
+  | { status: 'conditional_rejection_changed' }
+  | { status: 'conditional_rejection_unchanged' }
+  | { status: 'conditional_rejection_unknown'; cause: unknown; mayHavePublished: boolean }
+  | { status: 'transport_failure'; cause: unknown; mayHavePublished: boolean }
+  | { status: 'rejected'; reason: 'invalid_event' | 'duplicate_id' };
+
 export type AppendResult =
   | { status: "appended"; sequence: number }
   | { status: "conflict" }

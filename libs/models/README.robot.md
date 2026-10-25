@@ -14,24 +14,31 @@ conflicts cannot extend that deadline or permanently stop an unchanged writer.
 A real budget change still stops the old writer. Managed-provider switch-on keeps
 its existing special handling.
 
-If the store reports `unavailable` with `notPublished: true`, the actor refuses that
-append without stopping the writer. The store sets this flag only if no publish
-started in that invocation. This also covers expiry before the first attempt and
-access refusal inside the store. An unavailable result without the flag still stops
-the actor, because a lost reply may hide a saved budget change.
-The actor checks this result after both initial and repeated appends. Invalid event
-input, conflict-read failure, contention, switch-on refusal and access expiry outside
-the store already throw without setting `failed`. Another budget event, a foreign
-row or an uncertain append result still stops the writer.
+`BudgetActor` uses `EventStore.appendOutcome`, whose `AppendOutcome` union separates
+new appends, saved duplicates, changed and unchanged conditional rejections,
+unknown conditional rejections and transport failures. Other command callers keep
+using `append`, which maps these outcomes to its existing command result.
+
+A definite NATS rejection followed by a failed recovery read returns
+`conditional_rejection_unknown`. The store ends that request immediately, including
+when the recovery read times out. It does not retry the access callback. This means
+the reproduced callback-two rejection ends after two checks, before the old third
+callback could refuse access. Earlier lost replies remain uncertain in the result's
+`mayHavePublished` field. A later definite rejection cannot erase that uncertainty.
+
+Unknown results and transport failures refuse only the current request. Before
+running the next queued command, the actor reads the budget after its last applied
+position. A failed read refuses that request too and leaves recovery pending.
+A confirmed money change or foreign row stops the writer. Only managed-provider
+switch-on can advance its position without stopping it; the reservation restriction
+still applies. Saved duplicates are read at their exact position and apply the saved
+payload, so a retry's changed input cannot overwrite the original result.
 
 A definite `rejected` result refuses only that command, for both `invalid_event`
-and `duplicate_id`, after either the first append or a conflict retry. Exact
-duplicates return the earlier saved result. The store returns `duplicate_id` only
-when the id belongs to a different command; it never applies that command as a
-budget change. Tests cover collisions with member events before the first append
-and during a repeated append, followed by a successful reservation. They also
-cover store validation refusal, conflict-read errors, thrown append errors and
-contention without an access callback. None permanently stops the writer.
+and `duplicate_id`, after either the first append or a conflict retry. A duplicate
+id belonging to another command never counts as this command's success.
+Invalid input, thrown append errors, conflict-read errors, contention without an
+access callback and expired access checks retain their refusal behaviour.
 
 The HTTPS tool dispatcher saves its attempt before budget admission. If admission
 refuses, it closes that confirmed attempt with `adapter_dispatch_refused` before
@@ -47,11 +54,14 @@ permits and credentials are excluded. Public replies remain unchanged.
 member events interrupt consecutive publishes. The test requires one admission,
 continued writer use and the same two-second deadline on conflict reads and writes.
 It also checks revocation, expiry and another budget writer during the second conflict.
+Retained tests check the fallback two-second deadline, expiry after a callback,
+foreign silo and subject rows, and the exact deadline passed by MCP dispatch.
 The late-expiry case saves unrelated member events in access callbacks two and four.
 Callback six passes just before the original deadline; the store then sees expiry
 before publishing. No admission is saved and a later reservation succeeds.
 Lost-reply cases save that third publish but hide its reply, then expire or revoke
-access on the store's retry. They require one saved admission and a stopped writer.
+access on the store's retry. They require one saved admission. The next request confirms the changed budget
+and stops the writer before making another money decision.
 `apps/server/test/integration-access-gateway.test.ts` checks approval recovery after
 refusal at budget admission and after a saved start. Competing retries must yield
 one send, one refusal and exactly two approval uses including the unsent attempt.

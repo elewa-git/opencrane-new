@@ -50,6 +50,33 @@ memory events so their unknown ownership can stay quarantined during replay.
 `apps/ops/test/memory-correction.test.ts` checks real append refusals for wrong
 owners and key references, unchanged history after refusal, and a valid correction.
 
+`appendOutcome` returns the discriminated `AppendOutcome` union used by the budget
+writer. All outcomes come from the same conditional append implementation:
+
+| Result type | Evidence |
+| --- | --- |
+| `appended` | NATS acknowledged this new event at `sequence`. |
+| `duplicate_saved` | History or the duplicate acknowledgement identifies this same command at `sequence`. |
+| `conditional_rejection_changed` | NATS refused the expectation and a recovery read confirmed the expected subject changed. |
+| `conditional_rejection_unchanged` | NATS refused the global expectation and the subject read found no later change. |
+| `conditional_rejection_unknown` | NATS definitely rejected this publish, but its recovery read failed or timed out. |
+| `transport_failure` | The request could not complete, including transport loss, cancellation, access refusal or expiry. |
+| `rejected` | Input is invalid or the event id belongs to another command. |
+
+Unknown and transport results contain `cause` and a required `mayHavePublished`
+boolean. A definite rejection clears only that attempt's uncertainty. An earlier
+lost reply keeps `mayHavePublished: true`. Recovery-read failure ends the request
+immediately, without another access callback or publish. Every read and retry
+keeps the original deadline. Stream configuration checks live in `stream-config.ts`;
+their settings and refusal rules are unchanged.
+
+`append` remains the command-facing adapter. It maps new appends and saved
+duplicates to `appended`, confirmed rejections to `conflict`, and unknown and
+transport outcomes to `unavailable`. `notPublished: true` means no publish in this
+invocation remains uncertain, including a definite rejection before a failed
+recovery read. It cannot prove what happened in an earlier invocation.
+Unexpected configuration, permission and corrupt-event errors still throw.
+
 `append` returns `appended` with the global sequence, `conflict` for a stale
 expected subject sequence, `rejected` for invalid input or an unrelated
 duplicate id, or `unavailable` after bounded backoff. Timeouts and server
@@ -66,12 +93,12 @@ conflict. Unexpected configuration/permission/corruption errors throw with
 the original cause. The `unavailable.cause` is internal diagnostic data;
 HTTP callers must expose only the status. An unavailable result can be
 ambiguous: retry with the same command key.
-An unavailable result includes `notPublished: true` only when this invocation never
-started a NATS publish. The flag covers expiry, cancellation and access failures
-before publication. Once any publish starts, the flag stays absent through all
-internal retries, even if a later access check fails. It says nothing about earlier
-invocations using the same command key. Callers must not infer non-publication
-from elapsed time or the error cause.
+An unavailable result includes `notPublished: true` only when no publish in this
+invocation remains uncertain. This covers failures before publication and definite
+conditional rejections whose recovery reads fail. An earlier lost reply keeps the
+flag absent through later retries, even when NATS definitely rejects a later
+publish. It says nothing about earlier invocations using the same command key.
+Callers must not infer non-publication from elapsed time or the error cause.
 
 An optional `checkAccess` runs the caller's existing access check inside each append
 attempt. The store samples the global log position before this check and uses the

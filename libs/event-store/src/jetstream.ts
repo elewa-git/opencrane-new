@@ -1,3 +1,4 @@
+import { eventsConfig, verifyEventsConfig } from "./stream-config.ts";
 import { connectNats, isEventStoreUnavailable } from "./nats-connection.ts";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -7,7 +8,6 @@ import {
   type JetStreamClient,
   type JetStreamManager,
   type MsgRequest,
-  type StreamConfig,
 } from "@nats-io/jetstream";
 import {
   TimeoutError,
@@ -22,6 +22,7 @@ import {
   wireSubject,
   type AppendCommand,
   type AppendResult,
+  type AppendOutcome,
   type StoredEvent,
 } from "./contract.ts";
 
@@ -46,85 +47,27 @@ const requestMs = 250;
 const readMs = 1_000;
 const appendMs = 10_000;
 
-function unavailableAppend(cause: unknown, publishAttempted: boolean): AppendResult {
-  if (publishAttempted) {
-    return { status: 'unavailable', cause };
-  }
-  return { status: 'unavailable', cause, notPublished: true };
+function unavailableAppend(cause: unknown, mayHavePublished: boolean): AppendOutcome {
+  return { status: 'transport_failure', cause, mayHavePublished };
 }
 
-// StreamInfo leaves out some default settings. Treat a missing setting as its default.
-const defaults = {
-  sealed: false,
-  no_ack: false,
-  discard_new_per_subject: false,
-  allow_rollup_hdrs: false,
-  allow_msg_ttl: false,
-  allow_msg_counter: false,
-  allow_msg_schedules: false,
-  allow_atomic: false,
-  allow_batched: false,
-  mirror_direct: false,
-  subject_delete_marker_ttl: 0,
-  persist_mode: "default",
-} satisfies Partial<StreamConfig>;
-
-function eventsConfig(replicas: number) {
-  return {
-    name: "EVENTS",
-    subjects: ["ev.>"],
-    storage: "file",
-    retention: "limits",
-    num_replicas: replicas,
-    max_consumers: -1,
-    max_msg_size: -1,
-    max_msgs: -1,
-    max_msgs_per_subject: -1,
-    max_bytes: -1,
-    max_age: 0,
-    discard: "old",
-    duplicate_window: 120_000_000_000,
-    deny_delete: true,
-    deny_purge: true,
-    ...defaults,
-  } satisfies Partial<StreamConfig>;
-}
-
-// Make this list fail type checking when the SDK adds a configuration field.
-type OtherChecks = {
-  [Key in Exclude<keyof StreamConfig, keyof ReturnType<typeof eventsConfig>>]-?:
-    (config: StreamConfig) => boolean;
-};
-const otherChecks = {
-  mirror: ({ mirror }) => mirror === undefined,
-  sources: ({ sources }) => sources === undefined,
-  republish: ({ republish }) => republish === undefined,
-  subject_transform: ({ subject_transform }) => subject_transform === undefined,
-  consumer_limits: ({ consumer_limits }) =>
-    (consumer_limits?.inactive_threshold ?? 0) === 0 &&
-    (consumer_limits?.max_ack_pending ?? 0) === 0,
-  first_seq: ({ first_seq }) =>
-    first_seq === undefined || first_seq === 0 || first_seq === 1,
-  compression: ({ compression }) =>
-    compression === undefined || compression === "none" || compression === "s2",
-  allow_direct: () => true,
-  description: () => true,
-  metadata: () => true,
-  placement: () => true,
-} satisfies OtherChecks;
-
-function verifyEventsConfig(config: StreamConfig, replicas: number): void {
-  for (const [key, expected] of Object.entries(eventsConfig(replicas))) {
-    const actual: unknown = Reflect.get(config, key);
-    const fallback: unknown = Reflect.get(defaults, key);
-    if (JSON.stringify(actual ?? fallback) !== JSON.stringify(expected)) {
-      throw new Error(`Incompatible EVENTS configuration: ${key}`);
-    }
-  }
-  for (const [key, accepts] of Object.entries(otherChecks)) {
-    if (!accepts(config)) {
-      throw new Error(`Incompatible EVENTS configuration: ${key}`);
-    }
+// Keep the existing command API while ownership-sensitive callers use the detailed result.
+function commandResult(outcome: AppendOutcome): AppendResult {
+  switch (outcome.status) {
+    case 'appended':
+    case 'duplicate_saved':
+      return { status: 'appended', sequence: outcome.sequence };
+    case 'conditional_rejection_changed':
+    case 'conditional_rejection_unchanged':
+      return { status: 'conflict' };
+    case 'conditional_rejection_unknown':
+    case 'transport_failure':
+      if (outcome.mayHavePublished) {
+        return { status: 'unavailable', cause: outcome.cause };
+      }
+      return { status: 'unavailable', cause: outcome.cause, notPublished: true };
+    case 'rejected':
+      return outcome;
   }
 }
 
@@ -244,18 +187,23 @@ export class EventStore {
   }
 
   async append(command: AppendCommand): Promise<AppendResult> {
+    const outcome = await this.appendOutcome(command);
+    return commandResult(outcome);
+  }
+
+  async appendOutcome(command: AppendCommand): Promise<AppendOutcome> {
     const event = validateCommand(command);
     if (!event) {
       return { status: "rejected", reason: "invalid_event" };
     }
     const deadline = Math.min(performance.now() + appendMs, command.deadline ?? Infinity);
     // Keep uncertainty across retries once any publish could have reached NATS.
-    const publication = { attempted: false };
+    const publication = { mayHavePublished: false };
     let cause: unknown;
     let backoff = 25;
     while (performance.now() < deadline) {
       if (command.signal?.aborted) {
-        return unavailableAppend(command.signal.reason, publication.attempted);
+        return unavailableAppend(command.signal.reason, publication.mayHavePublished);
       }
       try {
         return await this.attempt(event, command.expectedSequence, deadline, publication,
@@ -263,7 +211,7 @@ export class EventStore {
           command.expectedGlobalSequence, command.historyChecked, command.signal, command.checkAccess);
       } catch (error) {
         if (command.signal?.aborted) {
-          return unavailableAppend(command.signal.reason, publication.attempted);
+          return unavailableAppend(command.signal.reason, publication.mayHavePublished);
         }
         if (!isEventStoreUnavailable(error)) {
           throw new Error("Event append failed", { cause: error });
@@ -282,22 +230,22 @@ export class EventStore {
           if (!command.signal?.aborted) {
             throw error;
           }
-          return unavailableAppend(command.signal.reason, publication.attempted);
+          return unavailableAppend(command.signal.reason, publication.mayHavePublished);
         }
         backoff = Math.min(backoff * 2, 500);
       }
     }
-    return unavailableAppend(cause, publication.attempted);
+    return unavailableAppend(cause, publication.mayHavePublished);
   }
 
   private async previous(
     event: EventEnvelope,
     deadline: number,
     fromSequence = 1,
-  ): Promise<AppendResult | undefined> {
+  ): Promise<AppendOutcome | undefined> {
     for await (const stored of this.readStream(event.subject, fromSequence, deadline)) {
       if (sameCommand(stored.event, event)) {
-        return { status: "appended", sequence: stored.sequence };
+        return { status: "duplicate_saved", sequence: stored.sequence };
       }
     }
     return undefined;
@@ -307,13 +255,13 @@ export class EventStore {
     event: EventEnvelope,
     expectedSequence: number,
     deadline: number,
-    publication: { attempted: boolean },
+    publication: { mayHavePublished: boolean },
     expectedSubject?: string,
     expectedGlobalSequence?: number,
     historyChecked?: true,
     signal?: AbortSignal,
     checkAccess?: () => Promise<unknown>,
-  ): Promise<AppendResult> {
+  ): Promise<AppendOutcome> {
     if (!historyChecked) {
       const previous = await this.previous(event, deadline);
       if (previous) {
@@ -328,10 +276,10 @@ export class EventStore {
       if (expectedSubject === 'conversation-*') {
         const existing = await this.head(event.subject, deadline);
         if (existing !== 0) {
-          return await this.previousCreation(event, deadline) ?? { status: 'conflict' };
+          return await this.previousCreation(event, deadline) ?? { status: 'conditional_rejection_changed' };
         }
       } else if (expectedSequence !== 0) {
-        return { status: 'conflict' };
+        return { status: 'conditional_rejection_changed' };
       }
     }
     if (checkAccess) {
@@ -341,7 +289,7 @@ export class EventStore {
         await checkAccess();
       } catch (cause) {
         // Keep an earlier publish with a lost reply uncertain until the caller reconciles it.
-        return unavailableAppend(cause, publication.attempted);
+        return unavailableAppend(cause, publication.mayHavePublished);
       }
     }
     // Recheck after awaited reads, immediately before starting a new publish.
@@ -349,8 +297,7 @@ export class EventStore {
     if (performance.now() >= deadline) {
       throw new TimeoutError();
     }
-    publication.attempted = true;
-    return this.publishConditional(event, expectedSequence, deadline, expectedSubject,
+    return this.publishConditional(event, expectedSequence, deadline, publication, expectedSubject,
       expectedGlobalSequence, historyChecked);
   }
 
@@ -358,11 +305,14 @@ export class EventStore {
     event: EventEnvelope,
     expectedSequence: number,
     deadline: number,
+    publication: { mayHavePublished: boolean },
     expectedSubject?: string,
     expectedGlobalSequence?: number,
     historyChecked?: true,
-  ): Promise<AppendResult> {
+  ): Promise<AppendOutcome> {
     const subject = wireSubject(event.subject);
+    const earlierUncertainty = publication.mayHavePublished;
+    publication.mayHavePublished = true;
     try {
       const ack = await this.client.publish(subject, JSON.stringify(event), {
         msgID: event.id,
@@ -383,6 +333,7 @@ export class EventStore {
         ) {
           return { status: "rejected", reason: "duplicate_id" };
         }
+        return { status: 'duplicate_saved', sequence: ack.seq };
       }
       return { status: "appended", sequence: ack.seq };
     } catch (error) {
@@ -390,10 +341,38 @@ export class EventStore {
         error instanceof JetStreamApiError &&
         [10071, 10164].includes(error.code)
       ) {
-        const fromSequence = historyChecked ? expectedSequence + 1 : 1;
-        return (await this.previous(event, deadline, fromSequence)) ?? { status: "conflict" };
+        // Keep an earlier lost reply uncertain, but this rejected publish saved nothing.
+        publication.mayHavePublished = earlierUncertainty;
+        return this.recoverConditional(event, expectedSequence, deadline, publication,
+          expectedSubject, historyChecked);
       }
       throw error;
+    }
+  }
+
+  private async recoverConditional(event: EventEnvelope, expectedSequence: number,
+    deadline: number, publication: { mayHavePublished: boolean },
+    expectedSubject?: string, historyChecked?: true): Promise<AppendOutcome> {
+    const fromSequence = historyChecked ? expectedSequence + 1 : 1;
+    let position = expectedSequence;
+    try {
+      for await (const stored of this.readStream(event.subject, fromSequence, deadline)) {
+        if (sameCommand(stored.event, event)) {
+          return { status: 'duplicate_saved', sequence: stored.sequence };
+        }
+        position = Math.max(position, stored.sequence);
+      }
+      if (expectedSubject && expectedSubject !== event.subject) {
+        position = await this.head(expectedSubject, deadline);
+      }
+      if (position !== expectedSequence) {
+        return { status: 'conditional_rejection_changed' };
+      }
+      return { status: 'conditional_rejection_unchanged' };
+    } catch (cause) {
+      // End this request. A failed recovery read cannot establish a changed subject.
+      return { status: 'conditional_rejection_unknown', cause,
+        mayHavePublished: publication.mayHavePublished };
     }
   }
 
@@ -401,7 +380,7 @@ export class EventStore {
     // Check one event for a lost creation reply, even when the category has moved.
     for await (const stored of this.readStream(event.subject, 1, deadline)) {
       if (sameCommand(stored.event, event)) {
-        return { status: 'appended' as const, sequence: stored.sequence };
+        return { status: 'duplicate_saved' as const, sequence: stored.sequence };
       }
       break;
     }

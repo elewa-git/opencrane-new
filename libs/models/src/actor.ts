@@ -1,3 +1,4 @@
+import { savedBudgetEvent, unchangedBudgetPosition, BudgetWriterChanged } from './budget-append.ts';
 import { prepareCeilingChange } from './ceiling-command.ts';
 import { CeilingReceiptRecovery } from './ceiling-receipt-recovery.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -34,6 +35,7 @@ export class BudgetActor {
   private readonly ceilingReceipts = new CeilingReceiptRecovery();
   private queue = Promise.resolve();
   private failed = false;
+  private refreshBeforeNextCommand = false;
   private reservationsStopped = false;
   private readonly timedOut = new Set<string>();
   readonly store: EventStore;
@@ -50,12 +52,24 @@ export class BudgetActor {
     await this.append('budget.period_started', { periodStart: this.monthStart() });
   }
   private serial<T>(work: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(() => {
-      if (this.failed) throw new Error('Budget writer unavailable');
-      return work();
-    });
+    const run = (this.runCommand<T>).bind(this, work);
+    const result = this.queue.then(run);
     this.queue = result.then(() => undefined, () => undefined);
     return result;
+  }
+  private async runCommand<T>(work: () => Promise<T>): Promise<T> {
+    if (this.failed) throw new Error('Budget writer unavailable');
+    if (this.refreshBeforeNextCommand) {
+      // Read before making another money decision after an unknown append outcome.
+      await this.canRepeatAppend(false, performance.now() + 2000);
+      this.refreshBeforeNextCommand = false;
+    }
+    try {
+      return await work();
+    } catch (error) {
+      if (error instanceof BudgetWriterChanged) this.failed = true;
+      throw error;
+    }
   }
   private async append(type: string, payload: unknown, id: string = randomUUID(),
     confirmAccess?: AccessCheck, deadline = confirmAccess?.deadline) {
@@ -70,8 +84,9 @@ export class BudgetActor {
     const command = { event, expectedSequence: this.sequence, historyChecked: true as const,
       ...(confirmAccess ? { checkAccess: confirmAccess } : {}),
       ...(deadline === undefined ? {} : { deadline }) };
-    let result = await this.store.append(command);
-    while (result.status === 'conflict') {
+    let result = await this.store.appendOutcome(command);
+    while (result.status === 'conditional_rejection_changed' ||
+        result.status === 'conditional_rejection_unchanged') {
       const canRepeat = await this.canRepeatAppend(confirmAccess !== undefined, retryDeadline);
       if (!canRepeat) {
         throw new Error('Budget append contention');
@@ -84,35 +99,20 @@ export class BudgetActor {
       }
       // Keep the same event id, time limit and global publish check.
       command.expectedSequence = this.sequence;
-      result = await this.store.append(command);
+      result = await this.store.appendOutcome(command);
     }
-    if (result.status === 'rejected') {
-      // Refuse only this command. Exact duplicates already return their saved append result.
-      throw new Error(`Budget append rejected: ${result.reason}`);
-    }
-    if (result.status === 'unavailable') {
-      if (result.notPublished) {
-        // Refuse this request without stopping an unchanged writer when no publish began.
-        throw new Error('Budget append unavailable', { cause: result.cause });
-      }
-      // Stop when a lost reply leaves the saved budget position uncertain.
-      this.failed = true;
-      throw new Error('Budget writer lost its fence');
-    }
-    this.sequence = result.sequence;
-    this.apply(event);
+    // Require a new read if storage or duplicate recovery leaves this request unfinished.
+    this.refreshBeforeNextCommand = true;
+    const saved = await savedBudgetEvent(this.store, result, event, retryDeadline);
+    this.sequence = saved.sequence;
+    this.apply(saved.event);
+    this.refreshBeforeNextCommand = false;
   }
   private async canRepeatAppend(hasAccessCheck: boolean, deadline: number) {
-    const subject = `budget-${this.silo}`;
-    let position = this.sequence;
-    for await (const row of this.store.readStream(subject, this.sequence + 1, deadline)) {
-      // Refuse another budget writer's changes. Only switch-on leaves money untouched.
-      if (row.event.silo !== this.silo || row.event.subject !== subject ||
-          row.event.type !== 'provider.managed_calls_enabled') {
-        this.failed = true;
-        throw new Error('Budget writer lost its fence');
-      }
-      position = row.sequence;
+    const position = await unchangedBudgetPosition(this.store, this.silo, this.sequence, deadline);
+    if (position === undefined) {
+      this.failed = true;
+      throw new BudgetWriterChanged();
     }
     if (position === this.sequence) {
       // Allow an unrelated write to move the global position without stopping this writer.
