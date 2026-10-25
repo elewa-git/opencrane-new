@@ -55,7 +55,7 @@ available for diagnosis.
   text after a reload. Uses separate messages and invitations for each screen width and
   attempt, and saves step pictures before recording success.
 - Keeps two spare test stacks separate from the owner's copy and from each other.
-- Checks sign-in and the first personal memory read on an empty installation.
+- Checks sign-in, personal memory reads, saves, correction and forgetting on an empty installation.
   Checks supplied memory receipts and records incomplete journeys honestly.
 - Provides demo preparation and screen measurements, while refusing automated coding
   jobs that try to run the owner's commands.

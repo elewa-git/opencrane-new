@@ -1,82 +1,121 @@
 # Personal memory qualification
 
-25 October 2026. Part of #94. Part of #95. Both tickets remain PARTIAL.
+25 October 2026. Part of #94. Part of #95. Both remain PARTIAL.
 
-The journey uses this worktree's claimed secondary slot 1, an empty installation,
-real SSO and the existing local model stub. Native memory is off. Browser search
-does not qualify governed MCP recall: that path is NOT RUN.
+`git fetch origin` and rebase completed on `4b72856ac`, including #688
+`f01ee18f7`. The earlier prerequisites are #646 `59a81b70f` and #641 `105071aaa`.
+One secondary slot, number 1, was claimed through `infra/dev-stack/claim.sh`.
+The journey used empty membership history, real SSO and the local model stub.
+The setup credential was supplied as a path through `ZITADEL_KEY_FILE`.
+Contact details and browser sessions stayed in private slot files. Key folders
+belonged to the slot; no private memory custody files were inspected.
+No product, Stage B or authority-test files changed.
 
-Prerequisites merged: #646 `59a81b70f9a66fb6597ec3027065eb292c0c8c28`;
-and #641 `105071aaa08e82c638276886936c8538c007a9f3`.
-Stage B live3's final task report records release of its slot before this claim.
-Product source: `105071aaa08e82c638276886936c8538c007a9f3`, including Edit UI `b3953fccb`.
-No Stage B or memory product files changed. Both authority tests are unchanged.
+## Earlier attempt
 
-The first test commit is `77aaeb8c2`. Its first run failed because the checker
-module did not yet exist. The implemented checker rejects missing receipts, stale
-revisions, forgotten text, repeated writes during recovery and replay effects.
+The original run on `105071aaa` passed SSO and owner claim, then failed its first
+Memory load with HTTP 503. Later read-only requests returned 200. Writes, recovery,
+restart and rebuild were NOT RUN then. The original [observations](observations.jsonl),
+[safe request log](scopes-log.json) and four pictures remain unchanged.
+The original phone failure picture shows a closed panel; its later phone picture
+caught an opening transition. Neither establishes a phone layout pass.
 
-The first startup attempt could not find the SSO setup credential in this worktree.
-Supplying its existing path through `ZITADEL_KEY_FILE` allowed startup to finish.
-No credential values were logged. No private memory custody files were inspected.
+The first checker tests failed because their module did not exist. They were
+committed before implementation. The previous run passed eight checker tests twice,
+438 event security tests, CI test selection, lint, typecheck, event catalogue,
+Knip, documentation and changelog checks. Its slot and disposable database were released.
 
-Run command: `DEV_STACK_ID=1 MEMORY_CLAIMED_ID=1 nice -n 10 node
---experimental-strip-types infra/dev-stack/memory-personal-live.ts`.
-The setup credential path must also be supplied for retained restarts.
+## Rerun results
 
-Original observations are saved in [observations.jsonl](observations.jsonl).
+[Original observations](rerun/observations.jsonl) retain the server replies and times.
+[Acceptance input](rerun/acceptance.json) contains the original receipts and readbacks.
+The desktop collector uses browser controls. Temporary follow-up collectors use the
+same real browser session for phone recovery, authenticated reads and retained restarts.
+They never append business events directly.
 
-## Live result: PARTIAL
+| Step | Result | Observed outcome |
+| --- | --- | --- |
+| Empty install, SSO and owner claim | PASS | No members before claim; browser confirmed the owner. |
+| First Memory load | PASS | First scopes request returned 200 with personal memory. |
+| Save a personal fact | PASS | Browser showed Saved; original receipt has revision 1. |
+| Search and open | PASS | The garden fact opened with Edit available. |
+| Correct on desktop | PASS | Accepted revision 2; refreshed text appeared before Forget. |
+| Forget on desktop | PASS | Accepted revision 3, hidden; list no longer showed the fact. |
+| Original command receipts | PASS | GET returned the original change ids and revisions. |
+| Cleanup completion | FAIL | Correction cleanup became unavailable; forgetting remained pending. |
+| Lost accepted reply at 390 | PASS | One real save reply was dropped; Check status sent GET only. |
+| Correct at 390 | PARTIAL | Revision 2 was accepted, but its detail refresh returned 503. |
+| Forget at 390 | NOT RUN | The failed detail refresh removed the Forget control. |
+| Another joined member's HTTP access | PASS | Owner list, surviving detail and forgotten detail each returned 404 without text. |
+| Another member's Memory screen | PARTIAL | The collector lost the response body during navigation; no screen pass is claimed. |
+| Reload reads | PASS | Forgotten detail said forgotten; only the surviving revision 2 was listed. |
+| Reload pictures | PARTIAL | Desktop search showed no match; the separate phone capture timed out. |
+| Retained server restart | PASS | Both widths read revision 2 and no forgotten text; browser searches showed no match. |
+| Offline rebuild | PASS | Readers, dispatcher and memory worker stopped; event position stayed 51; model calls stayed zero. |
+| Readback after rebuild | PASS | Both widths read the retained revision 2 and forgotten detail; browser searches showed no match. |
+| Complete acceptance checker | FAIL | The unchanged checker rejected incomplete cleanup in the saved live proof. |
+| Governed MCP recall and native memory | NOT RUN | Native memory stayed off; browser search does not qualify this path. |
 
-- PASS: empty membership history, real SSO, token claim and owner confirmation.
-- FAIL: the first Memory panel load returned HTTP 503 and displayed
-  “Memory is unavailable”. Store was not reachable. The cause is not established.
-- PASS: later read-only diagnosis on the same installation returned HTTP 200 with
-  the personal scope and an empty list. This does not replace the first-load failure.
-- PASS: the local model counter reported zero requests. No paid calls were made.
-- NOT RUN: store, search with a saved fact, detail, correction, forgetting,
-  lost accepted reply, GET-only recovery, retained restart and stopped-worker rebuild.
-  Cleanup receipts, retained revisions and absence of forgotten text remain unproved live.
-- NOT RUN: governed MCP recall, native memory, other scopes, keyboard and assistive technology.
+## Product failures and causes
 
-The [safe server extract](scopes-log.json) keeps only request ids, method, path and
-status. It confirms the first 503 and later 200 reads. The initial collector did not
-save that first response body. The tracked helper now records the scopes reply before
-checking its status. A read-only diagnostic exercised that helper successfully.
+Cleanup uses the wrong database connection. `worker.ts` registers
+`memoryCleanupHandler` without its separate content database. The handler receives
+`HandlerRuntime`'s jobs transaction and uses it for `verifySearchRemoval`.
+The live jobs database has neither `projection_checkpoints` nor `memory_facts`;
+the checkpoint query returns PostgreSQL `42P01`. Both tables exist in the content
+database. The correction exhausted five retries. Later cleanup jobs on that stream
+remain queued. [Saved job states](rerun/cleanup-jobs.json) and the database observations
+record this. No job was replayed or altered to make cleanup pass.
 
-The implementation is deliberately split. This first part supplies the acceptance
-checker and fresh baseline collector. Completing the browser writes, response-loss
-check and offline rebuild in a reproducible collector remains in the next part.
-Memory replay refuses `--verify`; that part must use `--confirm-memory-stopped`
-and compare rebuilt reads, original receipts and event/model counts.
+The phone correction exposes the existing read-after-write gap. Its POST returned
+200 at 07:21:20.396. The immediate detail GET returned 503 at 07:21:20.491;
+the memory worker finished applying the correction at 07:21:20.498.
+`memorySnapshot` refuses reads while the projection is behind. `MemoryEdit.refresh`
+reads once and passes that unavailable result to the panel, which hides its actions.
+The [timing extract](rerun/correction-timing.json) and
+[failure picture](rerun/followup-failure-390.png) show this sequence.
+The accepted correction remains recorded. No write retry or UI bypass was used.
 
-## Pictures
+## Setup and collector failures
 
-All four saved images were inspected. Email masking is enabled. The original
-[desktop failure](failure-1280.png) shows the unavailable panel. The original
-[phone capture](failure-390.png) shows the closed panel after resizing, so it does
-not establish the phone failure state. Later read-only captures show the empty panel
-at [1280](later-read-only-1280.png) and [390](later-read-only-390.png).
-The phone picture caught the opening transition; it is not a layout pass.
-The helper now disables screenshot animations.
+The [first setup attempt](setup-attempt/observations.jsonl) stopped after successful
+SSO because the claim screen could not check sign-in. The server had no subsequent
+session-read request. Its precise cause remains unknown. A diagnostic sign-in passed;
+that does not turn the failed attempt into a pass. A second fresh install followed.
 
-All ten supplied MEM-30/33/34/40/41 reference images were inspected. Their form and
-receipt comparisons remain NOT RUN because the first journey stopped before Store.
-Changing width recreates the panel. The later write collector must keep submitted
-forms at their original width and qualify both widths through separate browser steps.
+The [next attempt](input-attempt/observations.jsonl) used a login name as an email.
+Browser validation prevented submission. The collector now reads the test contact
+email from the private slot file `memory-owner-email`. No claim had been sent;
+the unused setup token was replaced before retrying on the still-empty installation.
+The invitation collector initially supplied a non-UUID member id. The API refused it;
+a valid UUID then allowed invitation and joining. These are collector setup failures.
+The first rebuild probe used an unsupported event subject and stopped before replay.
+The corrected probe used the event store's global position. No data was changed by it.
 
-## Local checks
+## Pictures and limits
 
-PASS: eight checker tests twice; CI test-selection guard; 438 event security tests;
-event catalogue; full lint; full workspace typecheck; knip; documentation and changelog checks.
-All tests, lint and typecheck commands ran under `nice -n 10`.
-Lint reported 25 existing function-length warnings outside this change and no errors.
-The event security run used a disposable PostgreSQL 17.6 database on port 37120
-with `PG_TEST_URL` set. Its container and volume were removed afterwards.
-The full root suite was NOT RUN, as requested.
+All 33 saved pictures were inspected, including the original four, both setup attempts,
+and the new 1280 and 390 captures. They contain no visible email or private path.
+All ten MEM-30/33/34/40/41 design references were inspected.
+The store and correction forms fit their captured widths. Receipt pictures taken
+before the detail refresh still show revision 1 beside the accepted revision 2;
+they are transitional pictures, not proof of the refreshed value. Later HTTP reads
+establish the retained correction. The early phone list pictures show Searching;
+the phone detail picture shows Loading. The isolation failure pictures are blank
+collector pages and establish no product state. No keyboard or assistive-technology
+qualification is claimed. Other memory scopes remain NOT RUN.
 
-Replacing the checker with an empty function in a temporary fixture gave seven
-expected assertion failures and one passing positive case. No repository mutation
-was left behind. These are acceptance-checker tests, not live product guarantees.
+## Final local checks and release
 
-PASS: `down.sh --id 1` completed. Only this worktree's claimed resources were released.
+PASS: clean `npm ci`; requested NATS and Lychee links; eight acceptance tests twice;
+438 event security tests; CI dev-stack test selection; 153 catalogue event types;
+`npm run lint:docs` including the public-evidence privacy check; `npm run lint:changelog`.
+All lint, typecheck and test commands ran under `nice -n 10`.
+PASS: full workspace typecheck, including package and dev-stack checks.
+PASS: full `npm run lint`, including Knip, documentation, links, fixture and licence
+checks. ESLint reported only existing function-length warnings and no errors.
+The security suite used a disposable PostgreSQL 17.6 database with `PG_TEST_URL` set.
+Its container and volume were removed with `docker rm -f -v`.
+PASS: `down.sh --id 1` released the slot. Its owner marker and Compose containers
+are absent. Only claimed resources were removed.
+The full root suite is NOT RUN, as required by the build prompt.

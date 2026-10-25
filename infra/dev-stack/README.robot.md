@@ -28,16 +28,23 @@ nice -n 10 node --experimental-strip-types infra/dev-stack/memory-personal-live.
 nice -n 10 node --experimental-strip-types --test infra/dev-stack/memory-personal.test.ts
 ```
 
-This first split signs in, claims the empty silo and records the first scopes reply.
-It stops on a refused or unavailable read. The separate acceptance checker requires
-original receipts, GET-only lost-reply recovery, retained correction and absence of
-forgotten text after reload, restart and replay. Its tests use synthetic evidence;
-they do not qualify live memory operations. The remaining browser write and replay
-collector belongs in the next split after the recorded first-load failure is resolved.
-Memory replay refuses `--verify`; the follow-up must compare HTTP readbacks instead.
+The collector signs in, claims the empty silo and records the first scopes reply.
+It then saves, searches, opens, corrects and forgets a synthetic personal fact through
+browser controls. It saves each write receipt before checking the outcome and stops
+on failure. After stack startup, configure the test contact email privately in
+`memory-owner-email` inside the claimed slot directory. The collector reads that file;
+the browser session stays in that directory too.
+New evidence goes into `docs/process/memory-fresh-personal/rerun/`; the launcher
+refuses an existing observations file. Earlier attempts remain separate.
+The acceptance checker additionally requires original receipts, GET-only lost-reply
+recovery, retained correction, completed cleanup and absence of forgotten text after
+reload, restart and replay. Its unit tests use synthetic evidence.
+The rerun used temporary collectors for those additional checks. They are not yet part
+of the tracked launcher. The receipt distinguishes their results and failures.
+Memory replay refuses `--verify`; the operator compares HTTP readbacks instead.
 The checker requires unchanged event counts and zero local model requests during replay.
 No helper inspects private memory key files. Native memory remains off and NOT RUN.
-Resizing recreates the panel; the next collector must keep submitted forms at one width.
+Resizing recreates the panel; submitted forms stay at one width until the receipt is read.
 Release the claimed slot with `down.sh --id` after inspecting the saved pictures.
 See [the qualification receipt](../../docs/process/memory-fresh-personal/receipt.md).
 

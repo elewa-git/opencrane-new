@@ -1,2 +1,2 @@
-- Add fresh-install personal memory read checks and an acceptance checker for saved
-  receipts, correction, forgetting, lost-reply recovery and offline rebuild evidence.
+- Check fresh personal memory saves, correction, forgetting and reload through the browser.
+  Record live recovery, access and restart evidence, including incomplete cleanup and read failures.

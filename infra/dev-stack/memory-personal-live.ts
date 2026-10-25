@@ -4,11 +4,12 @@ import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { promisify } from 'node:util';
-import { chromium } from 'playwright';
+import { chromium, type Request, type Response } from 'playwright';
 import { connectEventStore } from '@opencrane/event-store';
 import { requireStageBStack } from './stage-b-guard.ts';
 import { requireStandInJourney } from './journey-guard.ts';
 import { directory, readEnv, root } from './config.ts';
+import { exercisePersonalMemory } from './memory-personal-steps.ts';
 import { enterLoginName, testUsers } from './browser-signin.ts';
 import { captureMemory, memoryOutput, openMemory,
   recordMemory } from './memory-personal-browser.ts';
@@ -22,8 +23,20 @@ const execute = promisify(execFile);
 await mkdir(memoryOutput, { recursive: true });
 await writeFile(`${memoryOutput}/observations.jsonl`, '', { flag: 'wx', mode: 0o600 });
 const browser = await chromium.launch({ headless: true, channel: 'chromium' });
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
 page.setDefaultTimeout(30_000);
+function failedSessionRead(request: Request) {
+  if (new URL(request.url()).pathname !== '/auth/me') return;
+  const error = request.failure()?.errorText;
+  const code = error && /^net::[A-Z_]+$/u.test(error) ? error : 'unavailable';
+  void recordMemory('session-read-failed', { code });
+}
+function sessionReply(response: Response) {
+  if (new URL(response.url()).pathname !== '/auth/me') return;
+  void recordMemory('session-read', { status: response.status() });
+}
+page.on('requestfailed', failedSessionRead);
+page.on('response', sessionReply);
 let stage = 'empty install';
 try {
   const events = await connectEventStore(await readEnv('projection'));
@@ -54,7 +67,7 @@ try {
   await page.waitForURL(`${origin}/claim`);
   stage = 'owner claim';
   await page.getByLabel('Display name').fill('Memory test owner');
-  await page.getByLabel('Contact email').fill('memory-test@example.test');
+  await page.getByLabel('Contact email').fill((await readFile(`${directory}/memory-owner-email`, 'utf8')).trim());
   await page.getByLabel('Bootstrap token').fill(token);
   await page.getByRole('button', { name: 'Claim this silo', exact: true }).click();
   await page.getByRole('heading', { name: 'You are the silo owner' }).waitFor();
@@ -63,10 +76,13 @@ try {
   await openMemory(page, origin);
   await captureMemory(page, 'empty-memory');
   await recordMemory('baseline', { result: 'PASS', qualification: 'PARTIAL' });
+  stage = 'personal memory operations';
+  await exercisePersonalMemory(page, origin);
 } catch {
   await recordMemory('failure', { result: 'FAIL', stage });
   await captureMemory(page, 'failure');
   throw new Error(`Personal memory qualification failed at ${stage}; replies remain in observations`);
 } finally {
+  await page.context().storageState({ path: `${directory}/memory-browser.json` });
   await browser.close();
 }
