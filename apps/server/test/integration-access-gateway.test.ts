@@ -433,7 +433,7 @@ async function approveCall(context: Context, approvalId: string, action: 'approv
     true, fresh, current, setup.actor.now());
 }
 
-async function recoversUnsentApproval() {
+async function recoversUnsentApproval(stage: 'saved start' | 'budget admission') {
   const context = await gatewayFixture('ask');
   const setup = context.setup;
   await context.grant('member');
@@ -443,12 +443,35 @@ async function recoversUnsentApproval() {
   const approvalId = requested.evidence[0]!.event.correlation.approval!;
   expect(approvalId).toBeDefined();
   expect((await approveCall(context, approvalId, 'approved')).status).toBe('appended');
-  try {
-    const pauseIam = fga.pause.bind(fga);
-    await heldCall(context, pauseIam, 403, approvalId);
-  } finally {
-    await fga.resume();
+  if (stage === 'saved start') {
+    try {
+      const pauseIam = fga.pause.bind(fga);
+      await heldCall(context, pauseIam, 403, approvalId);
+    } finally {
+      await fga.resume();
+    }
+  } else {
+    async function refuseAdmission() {
+      throw new Error('PRIVATE_ADMISSION_CANARY');
+    }
+    const admission = vi.spyOn(setup.actor, 'admitDispatch');
+    admission.mockImplementationOnce(refuseAdmission);
+    try {
+      const refused = await context.call(approvalId);
+      expect(admission).toHaveBeenCalledTimes(1);
+      expect(refused.status).toBe(403);
+      expect(refused.evidence).toHaveLength(3);
+      expect(refused.evidence[1]!.event.type).toBe('tool.dispatch_started');
+      const proof = { outcome: 'not_dispatched', evidence: 'adapter_dispatch_refused' };
+      expect(refused.evidence[2]!.event.data).toMatchObject(proof);
+      expect(JSON.stringify(refused.evidence)).not.toContain('PRIVATE_ADMISSION_CANARY');
+      expect(context.remote.connections()).toBe(0);
+      expect(context.remote.received).toHaveLength(0);
+    } finally {
+      admission.mockRestore();
+    }
   }
+  expect(setup.actor.state.dispatches).toHaveLength(0);
   const approval = await readApproval(setup.nats.store, 'test', approvalId);
   expect(approval).toMatchObject({ state: 'outcome_unknown', canRetry: true });
   expect(approval.uses).toHaveLength(1);
@@ -476,8 +499,26 @@ async function recoversUnsentApproval() {
     return row.event.type === 'budget.reserved';
   }
   expect(budget.filter(reserved)).toHaveLength(0);
+  expect(setup.actor.state.reservations).toHaveLength(0);
+  const amounts = { heldCents: 0, settledCents: 0 };
+  for (const reservation of setup.actor.state.reservations) {
+    amounts.heldCents += reservation.amountCents;
+    amounts.settledCents += reservation.settledCents ?? 0;
+  }
+  expect(amounts).toEqual({ heldCents: 0, settledCents: 0 });
+  expect(setup.actor.state.dispatches).toHaveLength(1);
+  function admitted(row: StoredEvent) {
+    return row.event.type === 'budget.call_dispatch_admitted';
+  }
+  expect(budget.filter(admitted)).toHaveLength(1);
+  const approvalRows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+  function consumed(row: StoredEvent) {
+    return row.event.type === 'approval.used';
+  }
+  expect(approvalRows.filter(consumed)).toHaveLength(2);
 }
-it('restores one approval retry after IAM refuses a saved start without sending',
+it.each(['saved start', 'budget admission'] as const)(
+  'restores one approval retry after refusal at %s without sending',
   recoversUnsentApproval, 60_000);
 
 async function restoresGrant() {
