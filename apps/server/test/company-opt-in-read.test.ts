@@ -313,4 +313,4 @@ async function malformedBody() {
     headers: { ...headers(), 'content-type': 'application/json' }, payload: canary });
   expect(checked(response, 400)).toEqual({ status: 'invalid_request' });
 }
-it('keeps parser errors fixed and uncached without logging the body', malformedBody);
+it('refuses malformed bodies with a fixed uncached reply', malformedBody);

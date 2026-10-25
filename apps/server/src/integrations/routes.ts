@@ -88,11 +88,12 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
       done();
     }
     function invalidRead(error: Error & { statusCode?: number },
-      _request: FastifyRequest, reply: FastifyReply) {
+      _request: FastifyRequest, reply: FastifyReply): void {
       if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
-        return reply.code(400).send({ status: 'invalid_request' });
+        reply.code(400).send({ status: 'invalid_request' });
+        return;
       }
-      return reply.code(503).send({ status: 'unavailable' });
+      reply.code(503).send({ status: 'unavailable' });
     }
     if (path.endsWith('/company-opt-in')) {
       app.route({ method, url: path, handler: handleIntegration,
