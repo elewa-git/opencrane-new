@@ -52,6 +52,10 @@ async function setup() {
   const db = pgDb(storage.queue);
   const runner = new ProjectionRunner(db, nats.reader, createLogger('memory-main'));
   await runner.initialise(members);
+  startMemoryWorker(env);
+  await until(memoryReady);
+  expect(await nats.store.head()).toBe(0);
+  server = await startServer(env);
   const owner = {
     ...event('first-owner', 'member-bootstrap-owner', 'silo.owner_bootstrapped'),
     silo: 'acme', principal: { kind: 'human' as const, id: 'alice' },
@@ -67,9 +71,6 @@ async function setup() {
     await auth.handler.handle(row.event, db);
   }
   await runner.run(members);
-  startMemoryWorker(env);
-  await until(memoryReady);
-  server = await startServer(env);
   // Leave the new assistant awaiting its permission worker, as during account setup.
   const assistant = { ...event('new-assistant', 'assistant-personal', 'assistant.created'),
     silo: 'acme', data: { assistantId: 'personal', kind: 'personal', ownerId: 'bootstrap-owner' } };
