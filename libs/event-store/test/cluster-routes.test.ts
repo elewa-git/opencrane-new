@@ -120,6 +120,7 @@ async function startPeer(directory: string, env: NodeJS.ProcessEnv,
   let output = "";
   let ready = false;
   let failed = false;
+  let stopped = false;
   function recordOutput(chunk: Buffer) {
     // Keep process output private: startup errors can contain mounted file paths.
     output += chunk.toString();
@@ -130,13 +131,21 @@ async function startPeer(directory: string, env: NodeJS.ProcessEnv,
   function recordFailure() {
     failed = true;
   }
+  function recordStopped() {
+    stopped = true;
+  }
   child.stderr.on('data', recordOutput);
   child.on('error', recordFailure);
+  // Wait for stderr to close before classifying a failed process.
+  child.on('close', recordStopped);
   const deadline = Date.now() + 5000;
   while (!ready) {
-    if (failed || child.exitCode !== null || Date.now() >= deadline) {
+    if (failed || stopped || Date.now() >= deadline) {
       if (output.includes(`${directory}/routes/absent.crt`)) {
         throw new Error('Route trust file is missing');
+      }
+      if (output.includes('address already in use')) {
+        throw new Error('Cluster peer listening port is already in use');
       }
       throw new Error('Cluster peer failed to start');
     }

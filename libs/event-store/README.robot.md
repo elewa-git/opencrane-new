@@ -299,9 +299,13 @@ Other errors, including timeouts with an unknown creation result, throw immediat
 After creation, setup waits for the stream leader and two current, online replicas
 before any route probe. `cluster-stream.test.ts` checks the selective wait and
 immediate propagation of other errors, including an incompatible replica count.
-The first test checks these conditions without polling. Setup waits at most ten seconds for complete routes and metadata, and five seconds
-each for placement and current stream copies. These waits poll real state and finish
+The first test checks routes and stream copies without polling.
+Setup waits at most ten seconds each for complete routes and healthy metadata,
+and five seconds each for placement and current stream copies. These waits poll real state and finish
 as soon as it is ready; they do not add a fixed startup delay.
+Failed peer startup waits for process output to close before classifying a missing
+trust file. A process exit can arrive before its final error output under load.
+Startup errors stay private; listener collisions get a fixed error without port or path data.
 It checks route authentication, a leader with two current
 replicas, conditional append, stale-position refusal and PostgreSQL member replay
 through the projection identity. It also checks publish refusals and rejects R3
