@@ -131,7 +131,7 @@ async function unavailableCheckpoint(missing: boolean) {
   const deletion = vi.spyOn(boss, 'deleteJob');
   deletion.mockImplementation(deleteAfterInspection);
   async function remainingTrigger() {
-    const remaining = await setup.storage.queue.query(
+    const remaining = await setup.storage.queue.query<{ id: string }>(
       'SELECT id FROM pgboss.job WHERE id=$1', [id]);
     inspected.resolve();
     return remaining.rows;
