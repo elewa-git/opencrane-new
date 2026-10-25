@@ -26,7 +26,7 @@ function withoutServerMetadata(config: Record<string, unknown>) {
   return settings;
 }
 const stateSchema = z.object({ first_seq: integer, last_seq: integer, messages: integer });
-const infoSchema = z.object({
+export const infoSchema = z.object({
   error: z.never().optional(),
   created: z.string().datetime({ offset: true }), config: configSchema, state: stateSchema,
 });
@@ -54,7 +54,8 @@ const refusal = () => new Error('Event backup refused');
 const maximumBytes = 64 * 1024 * 1024;
 const maximumMs = 60_000;
 
-function captureBounds(connection: NatsConnection, options: Options) {
+export function captureBounds(connection: NatsConnection,
+  options: Pick<Options, 'signal' | 'timeoutMs'>) {
   const stopped = Promise.withResolvers<never>();
   // Observe rejection even when a synchronous file operation fails first.
   void stopped.promise.catch(ignoreFailure);
@@ -102,7 +103,7 @@ function captureBounds(connection: NatsConnection, options: Options) {
 
 type Bounds = ReturnType<typeof captureBounds>;
 
-async function readIdentities(bounds: Bounds, before: z.infer<typeof infoSchema>,
+export async function readIdentities(bounds: Bounds, before: z.infer<typeof infoSchema>,
   silo: string, maxBytes: number) {
   if (before.state.messages === 0 || before.state.messages > 100_000 ||
       before.state.last_seq - before.state.first_seq + 1 !== before.state.messages) throw refusal();

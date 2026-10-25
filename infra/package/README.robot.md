@@ -345,3 +345,37 @@ P5-7 PR 1 covers event-byte proof only. Stable positions are not proof of quiesc
 CNPG/WAL, objects, volumes, custody inventory and coordinated restore remain later
 work, with live P5-3/P5-5 still required. See the
 [receipt](../../docs/process/p5-7-pr1/receipt.md).
+
+## Event-byte restore
+
+`event-restore-run.ts SILO DIRECTORY --disposable` restores the event-only export.
+`SOURCE_NATS_*` supplies the reachable source connection; `NATS_*` supplies the
+separate disposable target, using the same TLS/NKey fields as export. The operator
+must isolate that target and keep all product processes stopped. The explicit flag
+confirms it is disposable; this command does not prove Kubernetes ownership.
+Both servers must be standalone, without advertised cluster or domain settings, and the
+archive must describe one replica. Offline-source and clustered restore are later work.
+
+Before mutation, the helper checks private files, the strict export descriptor,
+size/SHA-256, source creation time/configuration, range, ordered event ids and subject
+positions. The source must still match the capture. It requires the precise NATS
+stream-not-found response for target `EVENTS`; an existing stream, even empty,
+refuses. NATS also refuses a competing creator at restore start. No path deletes,
+purges or overwrites a stream, and no transfer is retried. NATS assigns a new stream
+creation time; that identity must remain stable during target proof checks.
+
+The command uses the export's 64 MiB, 100,000-event, 1 MiB reply and 60-second bounds.
+Native restore sends 32 KiB frames and one empty completion frame. An uncertain
+completion, timeout, partial transfer or failed close returns a fixed error and
+leaves the target isolated. A lost completion reply refuses even if all bytes were
+saved. Inspect or dispose of that owned target separately; rerunning refuses any
+existing `EVENTS`. The command starts no readers, scheduler or dispatcher.
+
+Tests use real disposable TLS NATS processes and inject selected transport faults.
+They restart the event-store client, check stale-position refusal and prove command
+history prevents a repeated command after native deduplication is lost. Executable
+output checks include private canaries and failed connection cleanup.
+See the [receipt](../../docs/process/p5-8-pr1/receipt.md). P5-8 remains partial:
+all databases/CNPG, object and volume ownership, current custody/deletion state,
+rights/cents comparisons, outbound-effect suppression and reopening are NOT RUN.
+A partial event archive cannot authorise a full restore; full P5-8 needs live P5-7.

@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, it, vi } from 'vitest';
 import { jetstream, jetstreamManager } from '@nats-io/jetstream';
 import { createEventStore } from '../src/index.ts';
@@ -63,12 +64,11 @@ async function restoresEvents() {
 }
 
 const inputFaults = ['truncated', 'corrupt', 'hash', 'identity', 'foreign-config',
-  'same-server', 'empty-existing', 'populated-existing', 'not-disposable'] as const;
+  'same-server', 'empty-existing', 'populated-existing', 'foreign-existing', 'not-disposable'] as const;
 async function refusesBeforeMutation(fault: typeof inputFaults[number]) {
   const setup = await fixture();
   const connection = setup.target.connection;
   const request = vi.spyOn(connection, 'request');
-  const manager = await jetstreamManager(connection);
   const descriptorPath = join(setup.destination, 'descriptor.json');
   const archivePath = join(setup.destination, 'events.snapshot');
   try {
@@ -91,11 +91,18 @@ async function refusesBeforeMutation(fault: typeof inputFaults[number]) {
         await setup.target.store.append({ event: event('keep-me'), expectedSequence: 0 });
       }
     }
-    const before = await manager.streams.list().next();
+    if (fault === 'foreign-existing') {
+      const manager = await jetstreamManager(connection);
+      await manager.streams.add({ name: 'EVENTS', subjects: ['foreign.>'] });
+    }
+    const before = await connection.request('$JS.API.STREAM.INFO.EVENTS', '{}');
     const source = fault === 'same-server' ? connection : setup.source.connection;
     const options = { ...setup.options, disposable: fault !== 'not-disposable' };
     await expect(restoreEventBackup(source, connection, options)).rejects.toEqual(refused);
-    expect(await manager.streams.list().next()).toEqual(before);
+    const after = await connection.request('$JS.API.STREAM.INFO.EVENTS', '{}');
+    const { ts: _beforeTime, ...beforeState } = before.json<Record<string, unknown>>();
+    const { ts: _afterTime, ...afterState } = after.json<Record<string, unknown>>();
+    expect(afterState).toEqual(beforeState);
     for (const call of request.mock.calls) {
       expect(call[0]).not.toMatch(/STREAM\.(RESTORE|DELETE|PURGE)/);
     }
@@ -135,6 +142,13 @@ async function refusesUncertainTransfer(fault: typeof transferFaults[number]) {
     if (subject === '$JS.API.STREAM.RESTORE.EVENTS') {
       delivery = reply.json<{ deliver_subject?: string }>().deliver_subject ?? '';
     }
+    if (subject === '$JS.API.STREAM.MSG.GET.EVENTS' && fault === 'wrong-order') {
+      const data = reply.json<{ message: { data: string } }>();
+      const body = JSON.parse(Buffer.from(data.message.data, 'base64').toString()) as object;
+      const changed = { ...body, id: 'changed-restored-id' };
+      data.message.data = Buffer.from(JSON.stringify(changed)).toString('base64');
+      reply.data = Buffer.from(JSON.stringify(data));
+    }
     if (subject === delivery && !bytes?.length) {
       if (fault === 'lost-final') throw new Error(canary);
       if (fault === 'error-final') reply.data = Buffer.from(JSON.stringify({ error: canary }));
@@ -146,7 +160,6 @@ async function refusesUncertainTransfer(fault: typeof transferFaults[number]) {
   try {
     const path = join(setup.destination, 'descriptor.json');
     const descriptor = descriptorSchema.parse(JSON.parse(await readFile(path, 'utf8')));
-    if (fault === 'wrong-order') descriptor.identityDigest = '0'.repeat(64);
     if (fault === 'wrong-position') descriptor.subjectPositions['ev.member.alice'] = 2;
     if (fault === 'wrong-range') descriptor.lastSequence = 4;
     await writeFile(path, JSON.stringify(descriptor));
@@ -175,17 +188,37 @@ async function refusesUncertainTransfer(fault: typeof transferFaults[number]) {
 async function checksExecutable(role: string) {
   const setup = await fixture();
   try {
-    const env = { ...process.env, ...setup.target.env(role), NODE_NO_WARNINGS: '1' };
+    const identity = role === 'cleanup-failure' ? 'command' : role;
+    const env: NodeJS.ProcessEnv = { ...process.env, ...setup.target.env(identity),
+      NODE_NO_WARNINGS: '1' };
     const sourceEnv = setup.source.env();
     for (const [name, value] of Object.entries(sourceEnv)) env[`SOURCE_${name}`] = value;
     const args = ['--experimental-strip-types', 'infra/package/event-restore-run.ts',
       'test', setup.destination, '--disposable'];
+    if (role === 'cleanup-failure') {
+      const path = join(setup.destination, 'close-fault.mjs');
+      const moduleUrl = pathToFileURL(resolve('libs/event-store/src/nats-connection.ts'));
+      const preload = `import { connectNats } from ${JSON.stringify(moduleUrl.href)};
+const probe = await connectNats();
+const prototype = Object.getPrototypeOf(probe);
+const close = prototype.close;
+await probe.close();
+prototype.close = async function failAfterClose() {
+  await close.call(this);
+  throw new Error(${JSON.stringify(canary)});
+};
+`;
+      await writeFile(path, preload, { mode: 0o600 });
+      args.unshift('--import', path);
+    }
     const operation = execute(process.execPath, args, { env, timeout: 10_000 });
     if (role === 'command') {
       const output = await operation;
       expect(output.stdout + output.stderr).toBe('');
     } else {
-      await expect(operation).rejects.toMatchObject({ stdout: '', stderr: `${refused.message}\n` });
+      let stderr = `${refused.message}\n`;
+      if (role === 'cleanup-failure') stderr += stderr;
+      await expect(operation).rejects.toMatchObject({ stdout: '', stderr });
     }
   } finally {
     await setup.close();
@@ -195,4 +228,4 @@ async function checksExecutable(role: string) {
 it('restores an absent stream and preserves command history after client restart', restoresEvents);
 it.each(inputFaults)('refuses %s before sending restore bytes', refusesBeforeMutation);
 it.each(transferFaults)('refuses %s without erasing or retrying the target', refusesUncertainTransfer);
-it.each(['command', 'projection'])('restore executable uses %s permissions', checksExecutable);
+it.each(['command', 'projection', 'cleanup-failure'])('restore executable uses %s permissions', checksExecutable);
