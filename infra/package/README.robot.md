@@ -493,3 +493,35 @@ missing and wrong surviving keys are tested in both folders.
 Full P5-8, P4-13–17, company/rights recovery, browser
 qualification and computer no-disk proof remain NOT RUN. This command cannot approve
 reopening an installation. See the [receipt](../../docs/process/p5-12-pr1/receipt.md).
+
+## Recorded connection during package operations
+
+P5-4 PR 4 is split. This first part connects private preparation and browser
+forwarding to the recorded package target. `packageConnectionArgs` checks the
+current package owner and namespace UID against the owner captured at the start.
+It then checks target ownership again before returning context and kubeconfig
+arguments. Each of the six Secret creations uses this check. Route preparation
+retains its existing target check before each Secret operation.
+
+Helm compares the requested context with the currently checked target before
+install, list and uninstall. Kubernetes calls carry the context checked at the start and compare it
+with the current target before sending each request. Losing both ownership records
+during cleanup also refuses before the next request. Losing a target record while its
+package record remains refuses; it cannot switch to `k3d-ocn`. An ordinary R1
+package recorded on `k3d-ocn` continues to use that cluster.
+
+`forward.sh` runs `forward.ts`, which rechecks the package and target before
+starting a loopback-only forward. The launcher forwards SIGINT and SIGTERM to
+its child and waits for it to exit. Command output is withheld and failures use
+fixed text, including when Kubernetes includes private values in an error.
+
+R3 installation remains refused by preflight. This part changes host-side
+commands, not the running bootstrap or adapter. It neither promotes a new runtime
+image nor treats an old image as proof of new bootstrap code. The next part must
+validate prepared identities, eligible nodes and reviewed pins; use one replica
+choice across stream setup, owner bootstrap, runtime and dispatcher; render the
+complete cluster bootstrap Job; and promote the changed runtime through digest
+and licence checks. Those steps block live installation.
+
+The [receipt](../../docs/process/p5-4-pr4/receipt.md) records source checks.
+Live placement, rotation and node failure remain NOT RUN.
