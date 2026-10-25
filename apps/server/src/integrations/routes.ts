@@ -1,5 +1,6 @@
 import { readToolModeChange } from '@opencrane/models';
 import { readIntegrationFacts } from './facts.ts';
+import { readCompanyOptIn } from './company-opt-in-read.ts';
 import { budgetChange } from '@opencrane/models';
 import { readPublication, publicationChange } from '@opencrane/projections';
 import { readHostedAdmission, requestHostedCheck } from '@opencrane/models';
@@ -48,11 +49,12 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
     '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/discovery',
     '/api/org/integrations/:serverId/admission', '/api/org/integrations/:serverId/checks',
     '/api/org/integrations/discovery', '/api/org/integrations/changes/:commandId',
+    '/api/org/integrations/:serverId/company-opt-in',
     '/api/org/integrations/:serverId/facts', '/api/org/integrations/:serverId/changes/:commandId',
   ];
   for (const path of paths) {
     const readOnly = path.endsWith('/discovery') || path.endsWith('/:commandId') ||
-      path.endsWith('/admission') || path.endsWith('/facts');
+      path.endsWith('/admission') || path.endsWith('/facts') || path.endsWith('/company-opt-in');
     let method: ('GET' | 'POST')[] = ['GET', 'POST'];
     if (readOnly) {
       method = ['GET'];
@@ -81,13 +83,33 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
         return routeError(request, reply, error);
       }
     }
-    app.route({ method, url: path, handler: handleIntegration });
+    function privateReply(_request: FastifyRequest, reply: FastifyReply, done: () => void) {
+      reply.header('cache-control', 'no-store');
+      done();
+    }
+    function invalidRead(error: Error & { statusCode?: number },
+      _request: FastifyRequest, reply: FastifyReply): void {
+      if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+        reply.code(400).send({ status: 'invalid_request' });
+        return;
+      }
+      reply.code(503).send({ status: 'unavailable' });
+    }
+    if (path.endsWith('/company-opt-in')) {
+      app.route({ method, url: path, handler: handleIntegration,
+        onRequest: privateReply, errorHandler: invalidRead });
+    } else {
+      app.route({ method, url: path, handler: handleIntegration });
+    }
   }
 }
 
 async function checkedIntegrationRequest(path: string, request: FastifyRequest,
   reply: FastifyReply, config: AuthConfig, options: IntegrationOptions,
   memberId: string, now: Date) {
+  if (path.endsWith('/company-opt-in')) {
+    return readCompanyOptIn(request, reply, options, memberId);
+  }
   if (path === '/api/org/integrations/:serverId/changes/:commandId') {
     const id = z.string().regex(/^[\w-]{1,200}$/u);
     const parameters = z.strictObject({ serverId: id, commandId: id });
