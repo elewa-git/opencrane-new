@@ -59,7 +59,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, own routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads own saved profiles and original change and publication receipts; records changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -142,7 +142,11 @@ can be used now is checked separately. Missing evidence never means it is safe t
 
 A person lists their own routines in small pages. Admins using this list also see only
 their own routines. Changes to another owner’s routines do not restart these pages.
-A filtered page can be empty and still have a next page.
+Owners and admins can also list safe routine details across all owners in their silo.
+A filtered page can be empty and still have a next page. Losing admin access refuses
+that list, even when loading fails or finds no routines.
+Older routines awaiting migration grant no read access. The list omits them without
+blocking readable routines, and marks any page with omitted rows as incomplete.
 
 A person opens a routine. The server loads its saved history, then checks permission.
 It checks permission even if history fails, so non-readers receive the same refusal.
