@@ -1,0 +1,2 @@
+A remote tool approval can offer one explicit retry when a saved start is closed with trusted proof that a refusal sent nothing. Budget admission now follows that start. Missing or uncertain evidence keeps retry unavailable, and the original access deadline stays unchanged.
+Competing approved retries now report the saved approval outcome consistently. Reusing each request's immutable access history avoids repeated reads that could exhaust its original deadline; live permission and later-event checks still run before sending.

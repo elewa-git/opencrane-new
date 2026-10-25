@@ -1,6 +1,7 @@
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import * as observability from '@opencrane/observability';
 import { encodeSession } from '@opencrane/auth';
 import { grantStream } from '@opencrane/authz';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
@@ -207,19 +208,28 @@ async function gatewayCall(setup: Setup, approvalId?: string) {
   const before = await setup.nats.store.head();
   const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
     request);
-  await response.text();
+  const responseText = await response.text();
+  const responseBody: unknown = JSON.parse(responseText);
+  const refused = z.object({ requestId: z.string() }).safeParse(responseBody);
   const events: StoredEvent[] = [];
   const last = await setup.nats.store.head();
   for (let sequence = before + 1; sequence <= last; sequence++) {
     events.push(await setup.nats.store.readEvent(sequence));
   }
   function decision(row: typeof events[number]) {
-    return row.event.type === 'decision.recorded';
+    if (row.event.type !== 'decision.recorded') {
+      return false;
+    }
+    const data = z.object({ callId: z.string().optional(), requestId: z.string() })
+      .parse(row.event.data);
+    // Use the refusal's own id when access ends before the body can be read.
+    return data.callId === callId ||
+      (refused.success && data.requestId === refused.data.requestId);
   }
   const admitted = events.find(decision);
   expect(admitted).toBeDefined();
   const evidence = await history(setup.nats.store, admitted!.event.subject, 'test');
-  return { status: response.status, raw, evidence };
+  return { status: response.status, raw, evidence, responseText };
 }
 
 type Context = Awaited<ReturnType<typeof gatewayFixture>>;
@@ -433,7 +443,26 @@ async function approveCall(context: Context, approvalId: string, action: 'approv
     true, fresh, current, setup.actor.now());
 }
 
-async function recoversUnsentApproval() {
+function dispatchWarnings() {
+  const createLogger = observability.createLogger;
+  const logger = createLogger('dispatch-test', { level: 'silent' });
+  const warnings = vi.spyOn(logger, 'warn');
+  function makeLogger(...parameters: Parameters<typeof createLogger>) {
+    if (parameters[0] === 'mcp-dispatch') {
+      return logger;
+    }
+    return createLogger(...parameters);
+  }
+  const factory = vi.spyOn(observability, 'createLogger');
+  factory.mockImplementation(makeLogger);
+  onTestFinished(factory.mockRestore.bind(factory));
+  onTestFinished(warnings.mockRestore.bind(warnings));
+  return warnings;
+}
+
+async function recoversUnsentApproval(stage: 'saved start' | 'budget admission',
+  slowHistory = false) {
+  const warnings = dispatchWarnings();
   const context = await gatewayFixture('ask');
   const setup = context.setup;
   await context.grant('member');
@@ -443,30 +472,74 @@ async function recoversUnsentApproval() {
   const approvalId = requested.evidence[0]!.event.correlation.approval!;
   expect(approvalId).toBeDefined();
   expect((await approveCall(context, approvalId, 'approved')).status).toBe('appended');
-  try {
-    const pauseIam = fga.pause.bind(fga);
-    await heldCall(context, pauseIam, 403, approvalId);
-  } finally {
-    await fga.resume();
+  const initialConnections = context.remote.connections();
+  const initialRequests = context.remote.received.length;
+  if (stage === 'saved start') {
+    try {
+      const pauseIam = fga.pause.bind(fga);
+      await heldCall(context, pauseIam, 403, approvalId);
+    } finally {
+      await fga.resume();
+    }
+  } else {
+    function refuseAdmission() {
+      return Promise.reject(new Error('PRIVATE_ADMISSION_CANARY'));
+    }
+    const admission = vi.spyOn(setup.actor, 'admitDispatch');
+    admission.mockImplementationOnce(refuseAdmission);
+    try {
+      const refused = await context.call(approvalId);
+      expect(admission).toHaveBeenCalledTimes(1);
+      expect(refused.status).toBe(403);
+      expect(refused.responseText).not.toContain('PRIVATE_ADMISSION_CANARY');
+      const timing: unknown = expect.any(Number);
+      const diagnostic = { stage: 'budget_admission', reason: 'decision_unavailable',
+        elapsedMs: timing, accessRemainingMs: timing };
+      expect(warnings).toHaveBeenCalledWith(diagnostic, 'MCP dispatch refused');
+      expect(JSON.stringify(warnings.mock.calls)).not.toContain('PRIVATE_ADMISSION_CANARY');
+      expect(refused.evidence).toHaveLength(3);
+      expect(refused.evidence[1]!.event.type).toBe('tool.dispatch_started');
+      const proof = { outcome: 'not_dispatched', evidence: 'adapter_dispatch_refused' };
+      expect(refused.evidence[2]!.event.data).toMatchObject(proof);
+      expect(JSON.stringify(refused.evidence)).not.toContain('PRIVATE_ADMISSION_CANARY');
+      expect(context.remote.connections()).toBe(initialConnections);
+      expect(context.remote.received).toHaveLength(initialRequests);
+    } finally {
+      admission.mockRestore();
+    }
   }
+  expect(setup.actor.state.dispatches).toHaveLength(0);
   const approval = await readApproval(setup.nats.store, 'test', approvalId);
   expect(approval).toMatchObject({ state: 'outcome_unknown', canRetry: true });
   expect(approval.uses).toHaveLength(1);
   expect((await approveCall(context, approvalId, 'retry')).status).toBe('appended');
   expect((await approveCall(context, approvalId, 'retry')).status).toBe('conflict');
   const before = context.remote.received.length;
-  const first = context.call(approvalId);
-  const second = context.call(approvalId);
-  const replies = await Promise.all([first, second]);
+  const race = await raceApprovalCalls(context, approvalId, slowHistory);
+  const replies = race.replies;
   function status(reply: Awaited<ReturnType<typeof context.call>>) {
     return reply.status;
   }
   const statuses = replies.map(status);
-  expect(statuses.sort()).toEqual([200, 403]);
+  const diagnostic = JSON.stringify({ trace: race.trace, warnings: warnings.mock.calls });
+  expect(statuses.sort(), diagnostic).toEqual([200, 403]);
   expect(context.remote.received).toHaveLength(before + 1);
   const used = await readApproval(setup.nats.store, 'test', approvalId);
   expect(used).toMatchObject({ state: 'outcome_unknown', canRetry: false });
   expect(used.uses).toHaveLength(2);
+  for (const reply of replies) {
+    const decision = z.object({ requestId: z.string(), reason: z.string() })
+      .parse(reply.evidence[0]!.event.data);
+    if (reply.status === 200) {
+      expect(decision.requestId).toBe(used.permitId);
+      expect(decision.reason).toBe('approval_used');
+    } else {
+      expect(decision.requestId).not.toBe(used.permitId);
+      expect(decision.reason).toBe('approval_outcome_unknown');
+      expect(JSON.parse(reply.responseText)).toMatchObject({ reason: decision.reason });
+      expect(reply.evidence).toHaveLength(1);
+    }
+  }
   const connections = context.remote.connections();
   expect((await context.call(approvalId)).status).toBe(403);
   expect(context.remote.received).toHaveLength(before + 1);
@@ -476,9 +549,212 @@ async function recoversUnsentApproval() {
     return row.event.type === 'budget.reserved';
   }
   expect(budget.filter(reserved)).toHaveLength(0);
+  expect(setup.actor.state.reservations).toHaveLength(0);
+  const amounts = { heldCents: 0, settledCents: 0 };
+  for (const reservation of setup.actor.state.reservations) {
+    amounts.heldCents += reservation.amountCents;
+    amounts.settledCents += reservation.settledCents ?? 0;
+  }
+  expect(amounts).toEqual({ heldCents: 0, settledCents: 0 });
+  expect(setup.actor.state.dispatches).toHaveLength(1);
+  function admitted(row: StoredEvent) {
+    return row.event.type === 'budget.call_dispatch_admitted';
+  }
+  expect(budget.filter(admitted)).toHaveLength(1);
+  const approvalRows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+  function consumed(row: StoredEvent) {
+    return row.event.type === 'approval.used';
+  }
+  expect(approvalRows.filter(consumed)).toHaveLength(2);
 }
-it('restores one approval retry after IAM refuses a saved start without sending',
-  recoversUnsentApproval, 60_000);
+async function recoversWithRealClock(stage: 'saved start' | 'budget admission') {
+  await recoversUnsentApproval(stage);
+}
+it.each(['saved start', 'budget admission'] as const)(
+  'restores one approval retry after refusal at %s without sending',
+  recoversWithRealClock, 60_000);
+
+// Make both calls read the restored approval before either can consume it.
+async function raceApprovalCalls(context: Context, approvalId: string, slowHistory: boolean) {
+  const store = context.setup.nats.store;
+  const append = store.append.bind(store);
+  const readStream = store.readStream.bind(store);
+  const now = performance.now.bind(performance);
+  const ready = Promise.withResolvers<void>();
+  const attempts: string[] = [];
+  const restoredReads: number[] = [];
+  const trace: { stage: string; requestId?: string; sequence?: number;
+    status?: string; remainingMs?: number }[] = [];
+  // Control only the deadline regression; run the load cases on the real clock.
+  const startedAt = now();
+  let elapsed = 0;
+  function currentTime() {
+    if (slowHistory) {
+      return startedAt + elapsed;
+    }
+    return now();
+  }
+  async function save(command: AppendCommand) {
+    const event = z.object({ type: z.string(), data: z.unknown() }).parse(command.event);
+    if (event.type === 'approval.used') {
+      const data = z.object({ permitId: z.string() }).parse(event.data);
+      attempts.push(data.permitId);
+      trace.push({ stage: 'consume_attempt', requestId: data.permitId });
+      if (attempts.length === 2) {
+        ready.resolve();
+      }
+      await ready.promise;
+    }
+    const result = await append(command);
+    if (event.type === 'approval.used') {
+      const data = z.object({ permitId: z.string() }).parse(event.data);
+      trace.push({ stage: 'consume_result', requestId: data.permitId, status: result.status });
+    }
+    return result;
+  }
+  async function* read(...parameters: Parameters<typeof readStream>) {
+    const fullMemberRead = parameters[0] === 'member-alice' && parameters[1] === 1;
+    for await (const row of readStream(...parameters)) {
+      if (row.event.type === 'approval.retry_requested') {
+        restoredReads.push(row.sequence);
+        trace.push({ stage: 'restore_read', sequence: row.sequence });
+      }
+      yield row;
+    }
+    if (slowHistory && fullMemberRead) {
+      elapsed += 300;
+      const remainingMs = Math.round((parameters[2] ?? Infinity) - currentTime());
+      trace.push({ stage: 'authority_history', remainingMs });
+    }
+  }
+  const writer = vi.spyOn(store, 'append');
+  const reader = vi.spyOn(store, 'readStream');
+  const clock = vi.spyOn(performance, 'now');
+  writer.mockImplementation(save);
+  reader.mockImplementation(read);
+  clock.mockImplementation(currentTime);
+  try {
+    const first = context.call(approvalId);
+    const second = context.call(approvalId);
+    const replies = await Promise.all([first, second]);
+    expect(attempts).toHaveLength(2);
+    expect(new Set(attempts).size).toBe(2);
+    expect(restoredReads.length).toBeGreaterThanOrEqual(2);
+    if (slowHistory) {
+      expect(elapsed).toBeGreaterThanOrEqual(600);
+    }
+    for (const reply of replies) {
+      const decision = z.object({ requestId: z.string(), reason: z.string() })
+        .parse(reply.evidence[0]!.event.data);
+      trace.push({ stage: decision.reason, requestId: decision.requestId,
+        status: String(reply.status) });
+    }
+    return { replies, trace };
+  } finally {
+    writer.mockRestore();
+    reader.mockRestore();
+    clock.mockRestore();
+  }
+}
+
+async function recoversWithSlowHistory(stage: 'saved start' | 'budget admission') {
+  await recoversUnsentApproval(stage, true);
+}
+it.each(['saved start', 'budget admission'] as const)(
+  'executes one restored approval with slow authority history after %s',
+  recoversWithSlowHistory, 60_000);
+
+const missingProof = ['missing start', 'lost start', 'missing observation', 'failed read'] as const;
+async function refusesIncompleteProof(mode: typeof missingProof[number]) {
+  const warnings = dispatchWarnings();
+  const context = await gatewayFixture('ask');
+  const { setup } = context;
+  await context.grant('member');
+  await context.grant('assistant');
+  const requested = await context.call();
+  const approvalId = requested.evidence[0]!.event.correlation.approval!;
+  expect((await approveCall(context, approvalId, 'approved')).status).toBe('appended');
+  const initialConnections = context.remote.connections();
+  const initialRequests = context.remote.received.length;
+  const store = setup.nats.store;
+  const append = store.append.bind(store);
+  const read = store.readStream.bind(store);
+  let refused = false;
+  let injected = false;
+  const deadlines: number[] = [];
+  function refuseAdmission() {
+    refused = true;
+    return Promise.reject(new Error('PRIVATE_REFUSAL_CANARY'));
+  }
+  async function save(command: AppendCommand) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    const start = event.type === 'tool.dispatch_started';
+    const observation = event.type === 'tool.dispatch_recorded';
+    if ((start && mode === 'missing start') ||
+        (observation && mode === 'missing observation')) {
+      injected = true;
+      if (observation) deadlines.push(command.deadline ?? Infinity);
+      return { status: 'unavailable' as const, cause: new Error('PRIVATE_SAVE_CANARY') };
+    }
+    const result = await append(command);
+    if (start && mode === 'lost start') {
+      injected = true;
+      throw new Error('PRIVATE_SAVE_CANARY');
+    }
+    return result;
+  }
+  async function* readEvidence(...parameters: Parameters<typeof read>) {
+    if (refused && !injected && parameters[0].startsWith('decision-')) {
+      deadlines.push(parameters[2] ?? Infinity);
+      if (mode === 'failed read') {
+        injected = true;
+        throw new Error('PRIVATE_READ_CANARY');
+      }
+    }
+    yield* read(...parameters);
+  }
+  const writer = vi.spyOn(store, 'append');
+  const reader = vi.spyOn(store, 'readStream');
+  const admission = vi.spyOn(setup.actor, 'admitDispatch');
+  writer.mockImplementation(save);
+  reader.mockImplementation(readEvidence);
+  admission.mockImplementationOnce(refuseAdmission);
+  let response: Awaited<ReturnType<typeof context.call>>;
+  try {
+    response = await context.call(approvalId);
+    expect(response.status).toBe(403);
+    expect(response.responseText).not.toContain('PRIVATE_');
+  } finally {
+    writer.mockRestore();
+    reader.mockRestore();
+    admission.mockRestore();
+  }
+  expect(injected).toBe(true);
+  if (refused) {
+    expect(deadlines.length).toBeGreaterThan(0);
+    for (const deadline of deadlines) {
+      expect(Number.isFinite(deadline)).toBe(true);
+      expect(deadline).toBe(deadlines[0]);
+      expect(deadline - performance.now()).toBeLessThanOrEqual(1000);
+    }
+    const timing: unknown = expect.any(Number);
+    const diagnostic = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
+      elapsedMs: timing };
+    expect(warnings).toHaveBeenCalledWith(diagnostic, 'MCP dispatch refused');
+  }
+  const current = await readApproval(store, 'test', approvalId);
+  expect(current).toMatchObject({ state: 'outcome_unknown', canRetry: false });
+  expect(current.uses).toHaveLength(1);
+  expect((await approveCall(context, approvalId, 'retry')).status).toBe('conflict');
+  expect((await context.call(approvalId)).status).toBe(403);
+  expect(context.remote.received).toHaveLength(initialRequests);
+  expect(context.remote.connections()).toBe(initialConnections);
+  expect(setup.actor.state.dispatches).toHaveLength(0);
+  const saved = JSON.stringify(response.evidence);
+  expect(saved).not.toMatch(/PRIVATE_|adapter_dispatch_refused/u);
+  expect(JSON.stringify(warnings.mock.calls)).not.toContain('PRIVATE_');
+}
+it.each(missingProof)('keeps approval retry unavailable after %s', refusesIncompleteProof, 60_000);
 
 async function restoresGrant() {
   const context = await gatewayFixture();

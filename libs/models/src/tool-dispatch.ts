@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { StoredEvent } from '@opencrane/event-store';
+import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { decisionRecordedDataSchema, toolDispatchRecordedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { envelope, history, type BudgetActor } from './actor.ts';
 
@@ -42,8 +42,8 @@ export function toolObservation(line: string) {
 }
 
 export async function recordToolObservation(actor: BudgetActor,
-  observation: z.infer<typeof toolObservationSchema>) {
-  await recordObservation(actor, toolObservationSchema.parse(observation));
+  observation: z.infer<typeof toolObservationSchema>, deadline = Infinity) {
+  await recordObservation(actor, toolObservationSchema.parse(observation), undefined, deadline);
 }
 
 type AdapterBinding = NonNullable<z.infer<typeof toolDispatchRecordedDataSchema>['adapter']>;
@@ -52,16 +52,16 @@ type Observation = Omit<z.infer<typeof toolObservationSchema>, 'evidence'> & {
 };
 
 export async function recordAdapterObservation(actor: BudgetActor,
-  binding: AdapterBinding & { silo: string }, observation: Observation) {
+  binding: AdapterBinding & { silo: string }, observation: Observation, deadline = Infinity) {
   if (binding.silo !== actor.silo) throw new Error('Tool dispatch evidence unavailable');
   const { silo: _silo, ...adapter } = binding;
-  await recordObservation(actor, observation, adapter);
+  await recordObservation(actor, observation, adapter, deadline);
 }
 
 async function recordObservation(actor: BudgetActor, observation: Observation,
-  adapter?: AdapterBinding) {
+  adapter: AdapterBinding | undefined, deadline: number) {
   const subject = `decision-${observation.id}`;
-  const rows = await history(actor.store, subject, actor.silo);
+  const rows = await history(actor.store, subject, actor.silo, deadline);
   const context = observationContext(rows, observation, adapter);
   if (!context) return;
   const { decisionEvent, decision, start } = context;
@@ -94,18 +94,26 @@ async function recordObservation(actor: BudgetActor, observation: Observation,
   const data = toolDispatchRecordedDataSchema.parse(dispatchDetails);
   const event = envelope(actor.silo, subject, 'tool.dispatch_recorded', data, eventId);
   event.time = observation.observedAt;
-  const command = { event, expectedSequence: rows.at(-1)!.sequence };
+  const command = observationCommand(event, rows.at(-1)!.sequence, deadline);
   try {
     const result = await actor.store.append(command);
     if (result.status === 'appended') return;
   } catch {
     // Read the original record after a lost save reply. Never send the tool again.
   }
-  const savedRows = await history(actor.store, subject, actor.silo);
+  const savedRows = await history(actor.store, subject, actor.silo, deadline);
   const saved = savedRows.find(alreadyRecorded);
   if (!saved || JSON.stringify(saved.event.data) !== JSON.stringify(data)) {
     throw new Error('Tool dispatch evidence unavailable');
   }
+}
+
+function observationCommand(event: EventEnvelope, expectedSequence: number, deadline: number) {
+  const command: AppendCommand = { event, expectedSequence };
+  if (Number.isFinite(deadline)) {
+    command.deadline = deadline;
+  }
+  return command;
 }
 
 function observationContext(rows: StoredEvent[], observation: Observation,

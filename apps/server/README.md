@@ -37,6 +37,11 @@ Removal progress covers permissions and the member list. It does not report depa
 Approval reads distinguish a tool reply from an uncertain transport result. This does not
 change the saved approval state or allow another use.
 
+A requester can choose one retry when trusted saved evidence proves a remote tool
+was refused before connecting. Current permissions and the reviewed request must
+still match. An ordinary error reply cannot restore approval. If two calls try to
+use the retry, the refused call reports that the approval has already been used.
+
 Approval decisions check ownership and current write access before saving a cancellation.
 Approval polling saves cancellation when a saved takeover covers an unused approval.
 It notices computer changes even when the chat and approval have not changed.
@@ -68,7 +73,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads company opt-in, own saved profiles and original change, publication and selection receipts; records personal account choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads company opt-in, own saved profiles and original change, publication and selection receipts; records personal account choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
