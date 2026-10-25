@@ -3699,6 +3699,22 @@ Reads retain the ten-second history limit and one final current Owner/Admin chec
 including after failed loading. No read uses a write authority fence.
 Lifecycle receipts, screens and fresh-install qualification remain later work.
 
+## Bounded current effect pages (Part of #108)
+
+`readCurrentEffects` accepts only a finite continuation query with a limit from 1 to 50.
+It reads indexed rows for the configured silo and preserves reservation order. A page
+returns only permit id, original position, payer, assistant, reservation time, exact held
+and settled cents, state, conflict and the two saved effect positions. Missing amounts
+remain null. Pending resolutions do not prove settlement, and a conflict can retain a
+charge and the full hold.
+
+The continuation binds the route, silo, limit, projection generation and last position.
+It cannot be reused across routes, silos, limits or projection rebuilds. The server captures
+progress once and shares the two-second deadline across capture and the bounded queries.
+This reader never loads an event history, budget JSON or conversation. It does not append
+events, settle, release or call an upstream service. Missing or unusable projections stay
+unavailable. Fresh-install qualification: NOT RUN.
+
 ## Original personal account selection receipts (Part of #49)
 
 `readOwnSelectionChange` takes the authenticated member separately from strict server/change

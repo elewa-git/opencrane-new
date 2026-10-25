@@ -5362,6 +5362,40 @@ filtering, continuation substitution, reassignment, unavailable projections, slo
 history, ordinary chat activity and replay. Attention, creation, execution and
 screens remain later work. Fresh-install qualification: NOT RUN.
 
+## Bounded current effect pages
+
+`GET /api/org/spending/current-effects` uses `integrations.modelDb` and
+`readCurrentEffects`. The strict query accepts only `limit` (default 20, range 1–50)
+and opaque `continuation`. Replies are no-store. Rows explicitly select `permitId`,
+original `position`, `payingGroupId`, `assistantId`, `reservedAt`, `heldCents`, nullable
+`settledCents`, `state`, `conflict`, `budgetPosition` and `effectPosition`.
+The reply adds checkpoint `sequence`, `generation` and nullable `next`.
+
+Original reservation order and old-month holds remain. A saved resolution without
+settlement stays pending. Conflicts can retain both a charge and the full hold.
+No state proves outside success. Missing amounts are null, never invented zeroes.
+There are no totals, private work fields, evidence payloads or new filters.
+
+The route captures required global progress once before the bounded database read.
+Capture and the three queries share two seconds; later chat activity is not chased.
+Current event-backed Owner/Admin and IAM are checked once after loading, even on
+failure. Reads use no write access check and load no conversation or effect histories.
+Missing, old, lagging, malformed, replaced-during-read or locked projections return
+503 unavailable. No fallback loads budget JSON or calls `listEffects`.
+
+Continuation signatures bind this route, silo, limit, generation and last position.
+Altered, cross-route, cross-silo and rebuilt continuations return 409 restart.
+Restart without a continuation. Pages describe current rows, not a frozen snapshot.
+Other refusal codes follow the saved effect route. All errors contain fixed statuses.
+GET and replay append nothing and make no settlement, release or upstream calls.
+
+`test/current-effects.test.ts` covers 63 permits across two payers and assistants,
+old holds, pending/conflicting amounts, paging, access races, failures and replay.
+The internal reader prerequisite is #663, squash
+`3b623f52a841601a62c99629790cf4f2d08e0839`. Existing `/api/org/effects`, its web
+consumer and saved `/api/org/spending/effects` retain their contracts. UI migration,
+impact and root/routine joins follow later. Fresh-install qualification: NOT RUN.
+
 ## Original personal selection receipt API (Part of #49)
 
 `GET /api/my/tools/:serverId/selection/changes/:changeRef` uses the profile reader's

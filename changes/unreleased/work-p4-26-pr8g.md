@@ -1,0 +1,1 @@
+- Let owners and admins read small pages of current effect states, original payers and exact held or settled cents. Unavailable data stays unavailable; reading never releases money or repeats an outside action.

@@ -28,7 +28,9 @@ let outsideCalls = 0;
 const permits: string[] = [];
 const expected: Record<string, unknown>[] = [];
 let clock = new Date('2026-09-30T23:59:00.000Z');
-function now() { return clock; }
+function now() {
+  return clock;
+}
 function memberId(_silo: string, _issuer: string, sub: string) {
   return Promise.resolve(sub);
 }
@@ -95,7 +97,7 @@ async function initialise() {
     const effectPosition = await nats.store.head();
     await actor.settleRecorded(permits[2]!, saved.id);
     Object.assign(expected[2]!, { settledCents: cents, conflict: cents === 180,
-      effectPosition, budgetPosition: await nats.store.head() });
+      effectPosition, budgetPosition: effectPosition + 1 });
   }
   const foreign = new BudgetActor(nats.store, 'foreign', now);
   await foreign.start(1000, 1000, 'foreign');
@@ -112,10 +114,13 @@ async function close() {
   await fga?.close();
   await nats?.close();
 }
-function request(query = '', sub = 'owner', orgId = 'org-acme', route = '/current-effects') {
+async function request(query = '', sub = 'owner', orgId = 'org-acme', route = '/current-effects') {
   const session = { sub, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  return app.inject({ method: 'GET', url: `/api/org/spending${route}?${query}`, headers });
+  const response = await app.inject({ method: 'GET', url: `/api/org/spending${route}?${query}`, headers });
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(response.body).not.toContain('private-');
+  return response;
 }
 async function page(query = '', sub = 'owner') {
   const response = await request(query, sub);
@@ -158,7 +163,8 @@ async function continuations() {
   const changed = signature![0] === 'A' ? 'B' : 'A';
   const altered = `${encoded}.${changed}${signature!.slice(1)}`;
   for (const query of [`limit=1&continuation=${savedPage.next}`,
-    `limit=2&continuation=${first.next}`, `limit=1&continuation=${altered}`]) {
+    `limit=2&continuation=${first.next}`, `limit=1&continuation=${altered}`,
+    `limit=1&continuation=${first.next}!`]) {
     const response = await request(query);
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({ status: 'restart' });
@@ -169,18 +175,21 @@ async function continuations() {
   expect((await page(`limit=1&continuation=${first.next}`)).rows).toEqual([expected[1]]);
   const originalBinding = options.binding;
   const foreignBinding = await createStore(fga.apiUrl, 'foreign');
-  const joined = await append('member-owner', 'member.joined', {
-    memberId: 'owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
+  const joined = await append('member-foreign-owner', 'member.joined', {
+    memberId: 'foreign-owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
   }, 'foreign');
   await memberAuthorisation(foreignBinding).handler.handle(joined, pgDb(dbs.queue));
   options.silo = 'foreign';
   options.binding = foreignBinding;
   try {
-    expect((await request(`limit=1&continuation=${first.next}`)).statusCode).toBe(409);
+    const response = await request(`limit=1&continuation=${first.next}`, 'foreign-owner');
+    expect(response.statusCode).toBe(409);
   } finally {
     options.silo = 'acme';
     options.binding = originalBinding;
   }
+  await options.modelDb!.query('DELETE FROM model_current_effects WHERE permit_id = $1',
+    [permits[0]]);
   await rebuildBudgetProjection(pgDb(dbs.queue), nats.reader, logger);
   expect((await request(`limit=1&continuation=${first.next}`)).statusCode).toBe(409);
 }
@@ -236,7 +245,9 @@ async function duringRead(action: string) {
   }
   database.query = query;
   try {
-    const response = await request('', action.startsWith('demote') || action.startsWith('remove') ? 'admin' : 'owner');
+    const changesAccess = action.startsWith('demote') || action.startsWith('remove');
+    const sub = changesAccess ? 'admin' : 'owner';
+    const response = await request('', sub);
     const statuses: Record<string, number> = { chat: 200, slow: 503, rebuild: 503,
       demote: 403, 'demote-failed': 403, remove: 403, 'remove-failed': 403 };
     expect(response.statusCode).toBe(statuses[action]);
