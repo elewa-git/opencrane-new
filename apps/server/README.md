@@ -145,6 +145,8 @@ their own routines. Changes to another owner’s routines do not restart these p
 Owners and admins can also list safe routine details across all owners in their silo.
 A filtered page can be empty and still have a next page. Losing admin access refuses
 that list, even when loading fails or finds no routines.
+Older routines awaiting migration grant no read access. The list omits them without
+blocking readable routines, and marks any page with omitted rows as incomplete.
 
 A person opens a routine. The server loads its saved history, then checks permission.
 It checks permission even if history fails, so non-readers receive the same refusal.

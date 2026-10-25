@@ -5346,6 +5346,15 @@ empty pages, failed queries and malformed rows. Demotion or removal refuses acce
 even when IAM still holds the old role. Reads use no write authority window and
 never load conversations, decrypt, read approvals, append, schedule or dispatch.
 
+Before permission is checked, candidate validation requires only the routine id and
+position needed for loading and paging. Full modern metadata validation runs after
+permission is granted. Legacy routines with `legacy-needs-migration` have no modern
+definition and grant no read permission, so they are omitted without failing the
+page or exposing an id or count. Their positions still advance the continuation;
+any page that omits them has `complete: false`. The mixed modern/legacy HTTP test
+checks readable rows, empty filtered pages, continuations and unchanged event history
+before and after verified replay.
+
 Based on #670 squash `84cbf5641aae5f5c6b75287584ed5608c8919901`, including its
 owner-specific paging correction. Detail/run errors and the #661 terminal retry
 checks remain unchanged. `test/routine-list.test.ts` covers both views, role loss,

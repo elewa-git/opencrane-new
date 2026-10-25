@@ -13,6 +13,10 @@ export const routineListQuery = z.strictObject({
 const progressSchema = z.object({ sequence: z.coerce.number().int().nonnegative(),
   generation: z.coerce.number().int().nonnegative() });
 const candidateSchema = routineMetadataSchema.extend({ position: z.coerce.number().int().positive() });
+const candidateIdentitySchema = z.object({
+  routineId: routineMetadataSchema.shape.routineId,
+  position: candidateSchema.shape.position,
+});
 type ListQuery = z.infer<typeof routineListQuery>;
 type RoutineAccess = Awaited<ReturnType<
   ReturnType<typeof memberAuthorisation>['loadRoutineAccess']>>;
@@ -74,15 +78,18 @@ async function loadPage(options: GroupOptions, memberId: string, query: ListQuer
   return { records: result.rows, cursor, position, scope, ...before };
 }
 
-async function readableMetadata(candidate: z.infer<typeof candidateSchema>,
+async function readableMetadata(record: Record<string, unknown>,
   saved: RoutineAccess, loaded: PromiseSettledResult<number>, checkpoint: number) {
   const permission = await saved.check('read_metadata');
   if (permission.status === 'unavailable') throw new Error('Routine list unavailable');
   const savedOwner = saved.state?.definition?.definition.ownerId;
-  if (savedOwner !== undefined && savedOwner !== candidate.ownerId) {
+  if (savedOwner !== undefined && savedOwner !== record['ownerId']) {
     throw new ConversationListChanged();
   }
   if (!permission.allowed || savedOwner === undefined) return undefined;
+  // Require modern metadata only for permitted readers. Legacy routines grant no read access.
+  const publicRecord = { ...record, executionAvailable: false };
+  const candidate = candidateSchema.parse(publicRecord);
   if (loaded.status === 'rejected') throw new Error('Routine list unavailable');
   const latest = saved.rows.at(-1)?.sequence;
   // Compare with loaded history: a duplicate outcome need not update the projected row.
@@ -101,10 +108,9 @@ async function authorisedPage(options: GroupOptions, memberId: string,
   const auth = memberAuthorisation(options.binding, options.store);
   const prepared = [];
   for (const record of candidates) {
-    const publicRecord = { ...record, executionAvailable: false };
-    const candidate = candidateSchema.parse(publicRecord);
+    const candidate = candidateIdentitySchema.parse(record);
     const saved = await auth.loadRoutineAccess(memberId, candidate.routineId);
-    const preparedCandidate = { candidate, saved };
+    const preparedCandidate = { candidate, record, saved };
     prepared.push(preparedCandidate);
   }
   // Finish loading before permission checks. Use only the selected owner’s position for mine.
@@ -120,8 +126,8 @@ async function authorisedPage(options: GroupOptions, memberId: string,
     const [loaded] = await Promise.allSettled([loading]);
     positions.push(loaded);
   }
-  for (const [index, { candidate, saved }] of prepared.entries()) {
-    const metadata = await readableMetadata(candidate, saved,
+  for (const [index, { record, saved }] of prepared.entries()) {
+    const metadata = await readableMetadata(record, saved,
       positions[index]!, page.sequence);
     if (metadata) rows.push(metadata);
   }
