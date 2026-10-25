@@ -17,7 +17,7 @@ which runs programs in [Pods](../../GLOSSARY.md#container-and-pod).
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>Helm and private certificates"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>Helm, certificates and event copies"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|reserves test space| package
@@ -48,6 +48,7 @@ installation files only. Credential preparation and a running install still need
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.
 - Gives computers the private gateway address and short-lived access passes.
+- Saves a bounded private copy of the event log for an operator.
 - Removes only this worktree's install, including after an interrupted launcher.
 
 ## Processes it handles
@@ -89,6 +90,12 @@ one peer; the ordinary installer refuses three-peer mode. Live checks remain out
 
 The chart render test needs Helm and checks the installation files without starting
 an install. It uses made-up settings. The [operator notes](README.robot.md) give the command.
+
+The operator event-copy command saves native NATS bytes and a private description
+of their source, positions and checksums. It refuses a log that changes during
+capture. Stable positions do not prove that writers stopped. This is only the
+event part of recovery; database, file and computer-volume backups still need work.
+The [operator notes](README.robot.md#event-byte-export) describe its limits.
 
 ## Folders
 

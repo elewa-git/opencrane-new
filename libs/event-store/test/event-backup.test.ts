@@ -1,13 +1,17 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
-import { jetstream, jetstreamManager } from '@nats-io/jetstream';
+import { AckPolicy, jetstream, jetstreamManager } from '@nats-io/jetstream';
 import type { Msg, Subscription, SubscriptionOptions } from '@nats-io/transport-node';
 import { collectEventBackup, descriptorSchema } from '../../../infra/package/event-backup.ts';
 import { event, natsFixture } from './testing.ts';
 
+const execute = promisify(execFile);
 const canary = 'synthetic-sensitive-value-never-print';
 
 async function fixture() {
@@ -15,8 +19,8 @@ async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'event-backup-'));
   const destination = join(directory, 'capture');
   const options = { silo: 'test', attempt: 'attempt-1', destination };
-  const command = event('saved-command');
-  command.data = { ...command.data, displayName: canary };
+  const original = event('saved-command');
+  const command = { ...original, data: { ...original.data, displayName: canary } };
   await source.store.append({ event: command, expectedSequence: 0 });
   async function close() {
     await source.close();
@@ -25,10 +29,15 @@ async function fixture() {
   return { source, directory, destination, options, command, close };
 }
 
-it('exports private native bytes, restores identities and preserves command idempotency', async () => {
+async function restoresNativeBytes() {
   const setup = await fixture();
   const target = await natsFixture();
   try {
+    await setup.source.store.append({ event: event('second', 'member-bob'), expectedSequence: 0 });
+    await setup.source.store.append({ event: event('third'), expectedSequence: 1 });
+    const sourceManager = await jetstreamManager(setup.source.connection);
+    await sourceManager.consumers.add('EVENTS',
+      { durable_name: 'backup-probe', ack_policy: AckPolicy.Explicit });
     const before = await Array.fromAsync(setup.source.store.readStream('member-alice'));
     await collectEventBackup(setup.source.connection, setup.options);
     const descriptorText = await readFile(join(setup.destination, 'descriptor.json'), 'utf8');
@@ -36,9 +45,11 @@ it('exports private native bytes, restores identities and preserves command idem
     const archive = await readFile(join(setup.destination, 'events.snapshot'));
     expect(descriptor).toMatchObject({
       kind: 'event-bytes-only', silo: 'test', attempt: 'attempt-1',
-      firstSequence: 1, lastSequence: 1, eventCount: 1,
-      subjectPositions: { 'ev.member.alice': 1 }, byteCount: archive.length,
+      firstSequence: 1, lastSequence: 3, eventCount: 3,
+      subjectPositions: { 'ev.member.alice': 3, 'ev.member.bob': 2 }, byteCount: archive.length,
     });
+    expect(descriptor.identityDigest)
+      .toBe('89ca95e09c6fca864827df93595a175aaedd7ec939ae8829112625fbcc9cb26a');
     expect(descriptor.sha256).toBe(createHash('sha256').update(archive).digest('hex'));
     expect(descriptorText).not.toContain(canary);
     expect(descriptorSchema.safeParse({ ...descriptor, completeBackup: true }).success).toBe(false);
@@ -49,7 +60,6 @@ it('exports private native bytes, restores identities and preserves command idem
     expect(await readdir(setup.destination)).toEqual(['descriptor.json', 'events.snapshot']);
     const manager = await jetstreamManager(target.connection);
     await manager.streams.delete('EVENTS');
-    const sourceManager = await jetstreamManager(setup.source.connection);
     const info = await sourceManager.streams.info('EVENTS');
     const reply = await target.connection.request('$JS.API.STREAM.RESTORE.EVENTS',
       JSON.stringify({ config: info.config, state: info.state }));
@@ -57,23 +67,25 @@ it('exports private native bytes, restores identities and preserves command idem
     await target.connection.request(delivery, archive);
     const finished = await target.connection.request(delivery, new Uint8Array());
     expect(finished.json<{ error?: unknown }>().error).toBeUndefined();
+    const restoredInfo = await manager.streams.info('EVENTS');
+    expect(restoredInfo.state.consumer_count).toBe(0);
     expect(await Array.fromAsync(target.store.readStream('member-alice'))).toEqual(before);
     const probe = await jetstream(target.connection).publish('ev.member.probe', '{}',
       { msgID: setup.command.id });
     expect(probe.duplicate).toBe(false);
     const repeated = { ...setup.command, id: 'another-id' };
-    expect(await target.store.append({ event: repeated, expectedSequence: 1 }))
+    expect(await target.store.append({ event: repeated, expectedSequence: 3 }))
       .toMatchObject({ status: 'appended', sequence: 1 });
     expect(await Array.fromAsync(target.store.readStream('member-alice'))).toEqual(before);
   } finally {
     await target.close();
     await setup.close();
   }
-});
+}
 
 const failures = ['write', 'identity', 'malformed', 'missing-final', 'size', 'timeout',
-  'cancel', 'disconnect', 'wrong-silo'] as const;
-it.each(failures)('refuses %s without publishing a descriptor or retaining partial files', async (fault) => {
+  'cancel', 'disconnect', 'wrong-silo', 'snapshot-size', 'api-error'] as const;
+async function refusesCaptureFault(fault: typeof failures[number]) {
   const setup = await fixture();
   const connection = setup.source.connection;
   const request = connection.request.bind(connection);
@@ -96,7 +108,12 @@ it.each(failures)('refuses %s without publishing a descriptor or retaining parti
         await setup.source.store.append({ event: event('racing-write'), expectedSequence: 1 });
       }
       if (fault === 'malformed') reply.data = Buffer.from(canary);
-      if (fault === 'disconnect') await connection.close();
+      if (fault === 'api-error') {
+        const data = reply.json<Record<string, unknown>>();
+        data['error'] = { description: canary };
+        reply.data = Buffer.from(JSON.stringify(data));
+      }
+      if (fault === 'disconnect') await setup.source.stop();
       if (fault === 'cancel') controller.abort(new Error(canary));
     }
     return reply;
@@ -104,8 +121,13 @@ it.each(failures)('refuses %s without publishing a descriptor or retaining parti
   function faultySubscribe(subject: string, options?: SubscriptionOptions) {
     const callback = options?.callback;
     function deliver(error: Error | null, message: Msg) {
+      expect(statSync(join(setup.destination, 'events.partial')).mode & 0o777).toBe(0o600);
+      expect(statSync(setup.destination).mode & 0o777).toBe(0o700);
+      if (fault === 'snapshot-size' && message.data.length > 0) {
+        message.data = new Uint8Array(2048);
+      }
       if (fault === 'missing-final' && message.data.length === 0) return;
-      callback?.(error, message);
+      return callback?.(error, message);
     }
     captureSubscription = subscribe(subject, { ...options, callback: deliver });
     return captureSubscription;
@@ -114,19 +136,23 @@ it.each(failures)('refuses %s without publishing a descriptor or retaining parti
   vi.spyOn(connection, 'subscribe').mockImplementation(faultySubscribe);
   try {
     if (fault === 'timeout') setup.source.pauseResponses(true);
+    let maxBytes = 64 * 1024 * 1024;
+    if (fault === 'size') maxBytes = 1;
+    if (fault === 'snapshot-size') maxBytes = 1024;
     const options = { ...setup.options, signal: controller.signal, timeoutMs: 300,
-      maxBytes: fault === 'size' ? 1 : 64 * 1024 * 1024,
+      maxBytes,
       silo: fault === 'wrong-silo' ? 'foreign' : 'test' };
-    await expect(collectEventBackup(connection, options)).rejects.toThrow('Event backup refused');
+    await expect(collectEventBackup(connection, options)).rejects.toEqual(new Error('Event backup refused'));
     expect(await readdir(setup.directory)).toEqual([]);
+    if (fault === 'identity') expect(infoReads).toBe(2);
     if (captureSubscription) expect(captureSubscription.isClosed()).toBe(true);
   } finally {
     vi.restoreAllMocks();
     await setup.close();
   }
-});
+}
 
-it.each(['existing', 'symlink'] as const)('refuses an %s destination without changing it', async (kind) => {
+async function refusesExistingDestination(kind: 'existing' | 'symlink') {
   const setup = await fixture();
   try {
     if (kind === 'existing') {
@@ -135,23 +161,49 @@ it.each(['existing', 'symlink'] as const)('refuses an %s destination without cha
       await symlink(setup.directory, setup.destination);
     }
     await expect(collectEventBackup(setup.source.connection, setup.options))
-      .rejects.toThrow('Event backup refused');
+      .rejects.toEqual(new Error('Event backup refused'));
     if (kind === 'existing') {
       expect(await readdir(setup.destination)).toEqual(['descriptor.json', 'events.snapshot']);
     }
   } finally {
     await setup.close();
   }
-});
+}
 
-it.each(['projection', 'dispatcher', 'computer', 'gateway'])('refuses the %s identity', async (role) => {
+async function refusesOrdinaryIdentity(role: string) {
   const setup = await fixture();
   try {
     const connection = await setup.source.client(role);
     await expect(collectEventBackup(connection, { ...setup.options, timeoutMs: 300 }))
-      .rejects.toThrow('Event backup refused');
+      .rejects.toEqual(new Error('Event backup refused'));
     expect(await readdir(setup.directory)).toEqual([]);
   } finally {
     await setup.close();
   }
-});
+}
+
+const entry = 'infra/package/event-backup-run.ts';
+async function checksExecutablePermissions(role: string) {
+  const setup = await fixture();
+  try {
+    const env = { ...process.env, ...setup.source.env(role), NODE_NO_WARNINGS: '1' };
+    const args = ['--experimental-strip-types', entry, 'test', 'attempt-1', setup.destination];
+    const operation = execute(process.execPath, args, { env, timeout: 10_000 });
+    if (role === 'command') {
+      const result = await operation;
+      expect(result.stdout + result.stderr).toBe('');
+      expect(await readdir(setup.destination)).toEqual(['descriptor.json', 'events.snapshot']);
+    } else {
+      await expect(operation).rejects.toMatchObject({ stdout: '', stderr: 'Event backup refused\n' });
+      expect(await readdir(setup.directory)).toEqual([]);
+    }
+  } finally {
+    await setup.close();
+  }
+}
+
+it('exports native bytes, restores identities and preserves command idempotency', restoresNativeBytes);
+it.each(failures)('refuses %s and removes partial files', refusesCaptureFault);
+it.each(['existing', 'symlink'] as const)('refuses an %s destination', refusesExistingDestination);
+it.each(['projection', 'dispatcher', 'computer', 'gateway'])('refuses %s', refusesOrdinaryIdentity);
+it.each(['command', 'projection'])('operator executable uses %s permissions', checksExecutablePermissions);
