@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { X509Certificate } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { connect as connectTcp } from 'node:net';
@@ -266,6 +267,11 @@ it('refuses a foreign route CA with the right peer name and key usages',
 async function refusesExpiredCertificate() {
   const directory = `${cluster.directory}/routes`;
   await issueCertificate(directory, 'expired', '/CN=expired', routeExtensions, -1);
+  const certificate = new X509Certificate(await readFile(`${directory}/expired.crt`));
+  const validFrom = Date.parse(certificate.validFrom);
+  const validTo = Date.parse(certificate.validTo);
+  expect(validFrom).toBeLessThan(validTo);
+  expect(validTo).toBeLessThan(Date.now());
   expect(await routeAttempt(cluster, `${directory}/expired`)).toMatch(/certificate expired/i);
   await connectedPeers(cluster);
 }
