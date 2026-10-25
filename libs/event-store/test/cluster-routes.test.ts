@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { connect as connectTcp } from 'node:net';
 import { resolve } from 'node:path';
 import { connect as connectTls } from 'node:tls';
@@ -10,7 +10,7 @@ import { PermissionViolationError, type NatsConnection } from '@nats-io/transpor
 import { createLogger } from '@opencrane/observability';
 import { members, ProjectionRunner } from '@opencrane/projections';
 import { database } from '../../projections/test/database.ts';
-import { afterAll, beforeAll, expect, it, onTestFinished } from 'vitest';
+import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { connectNats, createEventStore } from '../src/index.ts';
 import { certificates, issueCertificate, sharedCertificates } from './certificates.ts';
 import { freePort } from './ports.ts';
@@ -20,22 +20,27 @@ const routeExtensions = 'subjectAltName=DNS:localhost\nextendedKeyUsage=serverAu
 const roles = ['command', 'projection', 'dispatcher', 'computer', 'gateway'];
 type Peer = { name: string; port: number; route: number; monitor: number };
 
-async function clusterFixture(missingTrust = false) {
+async function clusterFixture(missingTrust = false, children: ChildProcess[] = []) {
   const directory = await mkdtemp(resolve('.tools/nats-cluster-'));
-  const children: ChildProcess[] = [];
   const connections: NatsConnection[] = [];
   async function close() {
-    for (const connection of connections) {
-      await connection.close();
-    }
-    for (const child of children) {
-      if (child.exitCode === null && child.signalCode === null) {
-        const stopped = once(child, 'close');
-        child.kill('SIGKILL');
-        await stopped;
+    try {
+      for (const connection of connections) {
+        await connection.close();
+      }
+    } finally {
+      try {
+        for (const child of children) {
+          if (child.pid && child.exitCode === null && child.signalCode === null) {
+            const stopped = once(child, 'close');
+            child.kill('SIGKILL');
+            await stopped;
+          }
+        }
+      } finally {
+        await rm(directory, { recursive: true, force: true });
       }
     }
-    await rm(directory, { recursive: true, force: true });
   }
   const peers: Peer[] = [];
   function env(peer: Peer, identity = 'command') {
@@ -70,25 +75,31 @@ async function clusterFixture(missingTrust = false) {
         routeExtensions);
     }
     const config = await readFile(resolve('infra/nats/cluster.conf'), 'utf8');
-    await writeFile(`${directory}/cluster.conf`, config);
+    await writeFile(`${directory}/cluster.conf`, `${config}\nhttp: $NATS_TEST_MONITOR\n`);
     const policy = await readFile(resolve('infra/nats/nats.conf'), 'utf8');
     await writeFile(`${directory}/nats.conf`, policy);
     for (const peer of peers) {
       const others: Peer[] = [];
       for (const candidate of peers) {
-        if (candidate !== peer) others.push(candidate);
+        if (candidate !== peer) {
+          others.push(candidate);
+        }
       }
       const serverEnv = { ...process.env, ...env(peer, 'server'), ...publicKeys,
         NATS_SERVER_NAME: peer.name, NATS_CLUSTER_NAME: 'route-tests',
+        NATS_TEST_MONITOR: `127.0.0.1:${peer.monitor}`,
         NATS_LISTEN: `127.0.0.1:${peer.port}`, NATS_STORE_DIR: `${directory}/${peer.name}`,
         NATS_ROUTE_LISTEN: `127.0.0.1:${peer.route}`,
         NATS_ROUTE_ADVERTISE: `localhost:${peer.route}`,
         NATS_ROUTE_1: `nats-route://localhost:${others[0]!.route}`,
         NATS_ROUTE_2: `nats-route://localhost:${others[1]!.route}`,
-        NATS_ROUTE_CA_FILE: `${directory}/routes/${missingTrust ? 'absent' : 'ca'}.crt`,
+        NATS_ROUTE_CA_FILE: `${directory}/routes/ca.crt`,
         NATS_ROUTE_CERT_FILE: `${directory}/routes/${peer.name}.crt`,
         NATS_ROUTE_KEY_FILE: `${directory}/routes/${peer.name}.key` };
-      await startPeer(directory, peer, serverEnv, children);
+      if (missingTrust && peer.name === 'peer-3') {
+        serverEnv.NATS_ROUTE_CA_FILE = `${directory}/routes/absent.crt`;
+      }
+      await startPeer(directory, serverEnv, children);
     }
     return { directory, peers, client, close };
   } catch (error) {
@@ -97,16 +108,20 @@ async function clusterFixture(missingTrust = false) {
   }
 }
 
-async function startPeer(directory: string, peer: Peer, env: NodeJS.ProcessEnv,
+async function startPeer(directory: string, env: NodeJS.ProcessEnv,
   children: ChildProcess[]) {
   const child = spawn(resolve('.tools/nats-server'),
-    ['-c', `${directory}/cluster.conf`, '-m', `127.0.0.1:${peer.monitor}`], { env });
+    ['-c', `${directory}/cluster.conf`], { env });
   children.push(child);
+  let output = "";
   let ready = false;
   let failed = false;
   function recordOutput(chunk: Buffer) {
     // Keep process output private: startup errors can contain mounted file paths.
-    if (chunk.toString().includes('Server is ready')) ready = true;
+    output += chunk.toString();
+    if (output.includes('Server is ready')) {
+      ready = true;
+    }
   }
   function recordFailure() {
     failed = true;
@@ -116,6 +131,9 @@ async function startPeer(directory: string, peer: Peer, env: NodeJS.ProcessEnv,
   const deadline = Date.now() + 5000;
   while (!ready) {
     if (failed || child.exitCode !== null || Date.now() >= deadline) {
+      if (output.includes(`${directory}/routes/absent.crt`)) {
+        throw new Error('Route trust file is missing');
+      }
       throw new Error('Cluster peer failed to start');
     }
     await delay(25);
@@ -123,10 +141,21 @@ async function startPeer(directory: string, peer: Peer, env: NodeJS.ProcessEnv,
 }
 
 async function peerNames(peer: Peer) {
-  const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`);
-  const result = await response.json() as { routes: { remote_name: string }[] };
+  const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`,
+    { signal: AbortSignal.timeout(1000) });
+  const result: unknown = await response.json();
+  if (!result || typeof result !== 'object' || !('routes' in result) ||
+    !Array.isArray(result.routes)) {
+    throw new Error('Invalid route monitoring response');
+  }
   const names = new Set<string>();
-  for (const route of result.routes) names.add(route.remote_name);
+  for (const route of result.routes as unknown[]) {
+    if (!route || typeof route !== 'object' || !('remote_name' in route) ||
+      typeof route.remote_name !== 'string') {
+      throw new Error('Missing remote peer name');
+    }
+    names.add(route.remote_name);
+  }
   return [...names].sort();
 }
 
@@ -134,37 +163,44 @@ async function connectedPeers(fixture: Awaited<ReturnType<typeof clusterFixture>
   for (const peer of fixture.peers) {
     const expected: string[] = [];
     for (const candidate of fixture.peers) {
-      if (candidate !== peer) expected.push(candidate.name);
+      if (candidate !== peer) {
+        expected.push(candidate.name);
+      }
     }
-    async function names() {
-      return peerNames(peer);
+    async function namesMatch() {
+      expect(await peerNames(peer)).toEqual(expected);
     }
-    await expect.poll(names, { timeout: 5000 }).toEqual(expected);
+    await vi.waitFor(namesMatch, { timeout: 5000 });
+    async function metadataReady() {
+      const response = await fetch(`http://127.0.0.1:${peer.monitor}/jsz`,
+        { signal: AbortSignal.timeout(1000) });
+      const info: unknown = await response.json();
+      const leader: unknown = expect.stringMatching(/^peer-[123]$/);
+      expect(info).toMatchObject({ meta_cluster: { cluster_size: 3, leader } });
+    }
+    await vi.waitFor(metadataReady, { timeout: 10_000 });
   }
 }
 
-// Read the route listener's INFO, then test authentication before exchanging any events.
+// Test authentication before exchanging any events with the route listener.
 async function routeAttempt(fixture: Awaited<ReturnType<typeof clusterFixture>>,
   certificate?: string, plaintext = false) {
   const peer = fixture.peers[0]!;
-  const socket = connectTcp(peer.route, '127.0.0.1');
-  const timeout = setTimeout(destroySocket, 3000);
+  const ca = await readFile(`${fixture.directory}/routes/ca.crt`);
+  let credentials = {};
+  if (certificate) {
+    credentials = { cert: await readFile(`${certificate}.crt`),
+      key: await readFile(`${certificate}.key`) };
+  }
+  const options = { host: '127.0.0.1', port: peer.route, servername: 'localhost',
+    ca, ...credentials };
+  const socket = plaintext ? connectTcp(options) : connectTls(options);
   function destroySocket() {
     socket.destroy(new Error('Route probe timed out'));
   }
+  const timeout = setTimeout(destroySocket, 3000);
   try {
-    await once(socket, 'data');
-    let transport = socket;
-    if (!plaintext) {
-      const ca = await readFile(`${fixture.directory}/routes/ca.crt`);
-      let credentials = {};
-      if (certificate) {
-        credentials = { cert: await readFile(`${certificate}.crt`),
-          key: await readFile(`${certificate}.key`) };
-      }
-      transport = connectTls({ socket, servername: 'localhost', ca, ...credentials });
-    }
-    return await exchangeRouteConnect(transport);
+    return await exchangeRouteConnect(socket);
   } finally {
     clearTimeout(timeout);
     socket.destroy();
@@ -176,7 +212,9 @@ function exchangeRouteConnect(socket: ReturnType<typeof connectTcp>) {
   function finish(done: (result: string) => void) {
     function received(chunk: Buffer) {
       const response = chunk.toString();
-      if (response.includes('PONG') || response.includes('-ERR')) done(response);
+      if (response.includes('PONG') || response.includes('-ERR')) {
+        done(response);
+      }
     }
     function refused(error: Error) {
       done(error.message);
@@ -187,7 +225,7 @@ function exchangeRouteConnect(socket: ReturnType<typeof connectTcp>) {
     socket.on('data', received);
     socket.on('error', refused);
     socket.on('close', closed);
-    socket.write('CONNECT {"name":"route-probe"}\r\nPING\r\n');
+    socket.write('CONNECT {"name":"route-probe","cluster":"route-tests"}\r\nPING\r\n');
   }
 }
 
@@ -203,7 +241,7 @@ beforeAll(prepareCluster);
 afterAll(closeCluster);
 
 async function refusesPlaintext() {
-  expect(await routeAttempt(cluster, undefined, true)).not.toContain('PONG');
+  expect(await routeAttempt(cluster, undefined, true)).toMatch(/closed|ECONNRESET/);
   await connectedPeers(cluster);
 }
 it('refuses a plaintext route in a working cluster', refusesPlaintext);
@@ -228,7 +266,7 @@ it('refuses a foreign route CA with the right peer name and key usages',
 async function refusesExpiredCertificate() {
   const directory = `${cluster.directory}/routes`;
   await issueCertificate(directory, 'expired', '/CN=expired', routeExtensions, -1);
-  expect(await routeAttempt(cluster, `${directory}/expired`)).toMatch(/expired certificate/i);
+  expect(await routeAttempt(cluster, `${directory}/expired`)).toMatch(/certificate expired/i);
   await connectedPeers(cluster);
 }
 it('refuses an expired route certificate with the right name and issuer',
@@ -243,17 +281,17 @@ async function refusesWrongName() {
 }
 it('refuses a trusted route certificate for an unlisted peer name', refusesWrongName);
 
-async function refusesClientCertificate() {
-  expect(await routeAttempt(cluster, `${cluster.directory}/command`))
-    .toMatch(/unknown ca|bad certificate/i);
-  // Isolate route-only trust from the ordinary certificate's name and key usages.
-  await issueCertificate(cluster.directory, 'client-peer', '/CN=client-peer', routeExtensions);
-  expect(await routeAttempt(cluster, `${cluster.directory}/client-peer`))
+async function refusesClientCertificate(identity: string) {
+  if (identity === 'client-peer') {
+    // Isolate route-only trust from the ordinary certificate's name and key usages.
+    await issueCertificate(cluster.directory, identity, '/CN=client-peer', routeExtensions);
+  }
+  expect(await routeAttempt(cluster, `${cluster.directory}/${identity}`))
     .toMatch(/unknown ca|bad certificate/i);
   await connectedPeers(cluster);
 }
-it('refuses client CA certificates even with a matching route name and usages',
-  refusesClientCertificate);
+it.each(['command', 'client-peer'])(
+  'refuses the %s client certificate at the route listener', refusesClientCertificate);
 
 async function acceptsValidCertificate() {
   expect(await routeAttempt(cluster, `${cluster.directory}/routes/peer-2`)).toContain('PONG');
@@ -261,8 +299,20 @@ async function acceptsValidCertificate() {
 }
 it('accepts a current route certificate for a listed peer', acceptsValidCertificate);
 
+function isClusterDirectory(name: string) {
+  return name.startsWith('nats-cluster-');
+}
+
 async function refusesMissingTrust() {
-  await expect(clusterFixture(true)).rejects.toThrow('Cluster peer failed to start');
+  const before = await readdir('.tools');
+  const children: ChildProcess[] = [];
+  await expect(clusterFixture(true, children)).rejects.toThrow('Route trust file is missing');
+  expect(children).toHaveLength(3);
+  for (const child of children) {
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+  }
+  const after = await readdir('.tools');
+  expect(after.filter(isClusterDirectory)).toEqual(before.filter(isClusterDirectory));
   await connectedPeers(cluster);
 }
 it('fails startup when route trust is missing', refusesMissingTrust);
@@ -274,9 +324,11 @@ async function replicasAreCurrent(connection: NatsConnection) {
     expect(info.config.num_replicas).toBe(3);
     expect(info.cluster?.leader).toMatch(/^peer-[123]$/);
     expect(info.cluster?.replicas).toHaveLength(2);
-    for (const replica of info.cluster!.replicas!) expect(replica.current).toBe(true);
+    for (const replica of info.cluster!.replicas!) {
+      expect(replica.current).toBe(true);
+    }
   }
-  await expect.poll(replication, { timeout: 5000 }).toBeUndefined();
+  await vi.waitFor(replication, { timeout: 5000 });
 }
 
 async function appendsAndReplays() {
@@ -313,6 +365,9 @@ it('keeps three current copies, refuses a stale append and rebuilds a projection
   appendsAndReplays);
 
 async function refusesPublish(identity: string) {
+  const command = await cluster.client(cluster.peers[0]!);
+  const store = await createEventStore(command);
+  await store.ensureStream({ replicas: 3 });
   const connection = await cluster.client(cluster.peers[1]!, identity);
   const statuses = connection.status();
   async function permissionError() {
@@ -327,9 +382,7 @@ async function refusesPublish(identity: string) {
   const subject = `ev.member.${identity}`;
   connection.publish(subject, JSON.stringify(event(`forbidden-${identity}`, `member-${identity}`)));
   await expect(refusal).resolves.toMatchObject({ operation: 'publish', subject });
-  const command = await cluster.client(cluster.peers[0]!);
-  const store = await createEventStore(command);
-  expect(await store.head(subject.replace('ev.member.', 'member-'))).toBe(0);
+  expect(await store.head(`member-${identity}`)).toBe(0);
 }
 it.each(['computer', 'gateway', 'projection', 'dispatcher'])(
   '%s still cannot publish events through cluster routes', refusesPublish);

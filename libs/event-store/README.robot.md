@@ -285,6 +285,14 @@ See the [event catalogue](../../docs/architecture/events.md) and
 [plan](../../plan.md#event-driven-core). TLS/account isolation passes against real R1 servers. Live R3 elections with this
 configuration and a fresh silo installation remain unqualified.
 
+`test/cluster-routes.test.ts` uses the production cluster configuration with three
+disposable pinned servers. It checks route authentication, a leader with two current
+replicas, conditional append, stale-position refusal and PostgreSQL member replay
+through the projection identity. It also checks publish refusals and rejects R3
+verification of an existing R1 stream without changing it. It requires
+`PG_TEST_URL` for a throwaway PostgreSQL database; missing setup is not skipped.
+See [cluster settings](../../infra/nats/README.robot.md) for trust rules and limits.
+
 `chat-state-<memberId>` maps to `ev.chat-state.<memberId>`, including category reads.
 Preference parsing binds the human principal to that member id. Access checks remain the caller's job.
 

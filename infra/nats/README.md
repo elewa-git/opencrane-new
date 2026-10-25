@@ -19,6 +19,7 @@ flowchart LR
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   stack -->|loads settings| settings
   settings -->|configures| nats["NATS JetStream<br/>event log"]
+  nats <-->|copies events over TLS| peers["NATS peers<br/>other event copies"]
   server["apps/server<br/>back end"] -->|saves events| nats
   ops["apps/ops<br/>background workers"] -->|reads and saves| nats
 ```
@@ -31,6 +32,8 @@ flowchart LR
   server and reactions that save results, is the only one that may add events.
 - Lets table-building workers read events and lets the dispatcher confirm delivery.
 - Keeps assistant computers and the AI gateway out of the event log.
+- Checks certificates and names when NATS servers connect to copy events.
+  These connections use a separate certificate issuer from ordinary clients.
 - Loads public keys when NATS starts. The settings file holds no private keys.
 
 ## Processes it handles
@@ -41,11 +44,16 @@ flowchart LR
    PostgreSQL. The dispatcher confirms delivery as it hands events to background jobs.
 3. **A computer tries to connect.** Its identity has no event log access, so it
    cannot read or write events.
+4. **NATS servers copy events.** Each server checks the other server’s certificate
+   and route name before accepting its connection. Three servers can then keep
+   three copies of each event.
 
 ## How to run or test it
 
 The development stack loads these settings when it starts NATS. Security tests
-start a real NATS server and check that each key can do only its own job.
+start real NATS servers and check that each key can do only its own job.
+The separate cluster settings are tested with disposable processes. Packaged
+installation, storage placement and recovery after node loss still need live checks.
 
 ```sh
 infra/dev-stack/up.sh
@@ -55,6 +63,8 @@ nice -n 10 npm test -- libs/event-store/test/security.test.ts
 ## Where to read more
 
 - [NATS settings](nats.conf): connection and account rules.
+- [Cluster settings](cluster.conf): authenticated connections between three servers.
+- [README.robot.md](README.robot.md): cluster settings and test limits.
 - [infra/dev-stack](../dev-stack/README.md): the local NATS service.
 - [Read tables](../../GLOSSARY.md#read-table-projection): how workers build data from events.
 - [Dispatcher](../../GLOSSARY.md#dispatcher): how background work starts.
