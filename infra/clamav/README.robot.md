@@ -218,7 +218,15 @@ Only `POST /scan/upload` is accepted, with `Expect: 100-continue`,
 `100 Continue` and file reading. Early bytes cannot bypass verification.
 Header receipt, verification, transfer and scanning share 60 seconds after TLS.
 TLS handshakes also have a 60-second limit. Headers are at most 8 KiB, files 20 MiB and replies
-4 KiB. Connections handle one request. Disconnect cancels scanning and retires
+4 KiB. Connections handle one request. The server admits at most eight TCP connections,
+including incomplete TLS handshakes. Node closes excess connections before creating
+TLS or HTTP buffers. A shared limit admits two active requests before metadata checks,
+pass verification, body collection or scanning. Excess requests receive the fixed
+503 refusal without `100 Continue`, body collection or a queue. Each active request
+can collect at most 20 MiB; the existing scan operation also copies and frames those
+bytes. The reservation lasts until the request finishes, including cancelled scan
+cleanup, and is released on success, error, timeout or client abort.
+Disconnect cancels scanning and retires
 the handle; cleanup retains its separate limits. Refusals are fixed HTTP 503 JSON
 `{ "error": "Scanner request refused" }`; malformed HTTP may close the socket.
 
@@ -229,5 +237,9 @@ check their configured CA/hostname and match results against unchanged bytes and
 the pending request. Retries need fresh ids; copied JSON grants nothing.
 No URL, redirect, minting endpoint, queue, store, credential log or clamd port is added.
 `scripts/clamav-service.test.mjs` uses real TLS/ES256 and process fixtures for the
-existing scan operation. Production issuance, consumers, fresh clean/EICAR and
+existing scan operation. Capacity tests cover transfer and scan saturation, early
+bytes on refused requests, reuse after success, authentication error, transfer abort
+and transfer timeout, and TCP admission before TLS. Cancelling an active scan still
+retires the scanner; releasing capacity does not make a retired scanner reusable.
+Production issuance, consumers, fresh clean/EICAR and
 two-silo qualification remain NOT RUN. This admits no production upload.

@@ -3,6 +3,8 @@ import { tokenVerifier } from '@opencrane/auth';
 
 const refusal = 'Scanner request refused';
 const maximumBytes = 20 * 1024 * 1024;
+const maximumRequests = 2;
+const maximumConnections = 8;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const allowedHeaders = new Set(['host', 'connection', 'authorization', 'expect',
   'content-type', 'content-length', 'x-scan-silo', 'x-scan-purpose',
@@ -112,6 +114,7 @@ export function createScannerService({ scanner, tls, trust, clock = Date.now }) 
   }
   const { scan, signal: retired, databaseUpdatedAt } = scanner;
   const databaseExpiry = Date.parse(databaseUpdatedAt) + 86400000;
+  let activeRequests = 0;
 
   async function authenticate(value, input) {
     const expected = { purpose: 'upload', requestId: input.requestId };
@@ -128,6 +131,12 @@ export function createScannerService({ scanner, tls, trust, clock = Date.now }) 
   }
 
   async function handle(request, response) {
+    // Reserve capacity before verifying passes or collecting any file bytes.
+    if (activeRequests >= maximumRequests) {
+      refuse(request, response);
+      return;
+    }
+    activeRequests += 1;
     const { started, elapsedStart } = arrivals.get(request.socket);
     const controller = new AbortController();
     const signal = AbortSignal.any([retired, controller.signal]);
@@ -178,6 +187,8 @@ export function createScannerService({ scanner, tls, trust, clock = Date.now }) 
       cancel();
       failed();
     } finally {
+      // Keep the reservation until cancelled scan work has finished its cleanup.
+      activeRequests -= 1;
       clearTimeout(timer);
       signal.removeEventListener('abort', failed);
       request.removeListener('aborted', cancel);
@@ -197,5 +208,7 @@ export function createScannerService({ scanner, tls, trust, clock = Date.now }) 
   server.on('clientError', clientError);
   server.setTimeout(60000);
   server.maxRequestsPerSocket = 1;
+  // Let Node refuse excess TCP connections before creating TLS or HTTP buffers.
+  server.maxConnections = maximumConnections;
   return server;
 }
