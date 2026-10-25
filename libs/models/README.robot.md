@@ -1309,6 +1309,19 @@ and `grants-backfill.test.ts`; settlement history remains covered by `reconcile.
 
 Provider bindings read history before the two-second authority check and make one category-conditional append with `historyChecked`. Moves require both creation receipts, manage permissions and reviewed revisions. The default reaction never replaces a recorded choice or pause. Ordinary-call activation remains unavailable.
 
+`providerDependencies` receives the read database from the provider route.
+`provider-routine-presence.ts` captures `head('routine-*')`, requires the routines
+checkpoint to cover it, and reads only the latest position for the silo with
+`ORDER BY position DESC LIMIT 1`. It reuses `routines_silo_position`.
+It checks generation, checkpoint coverage and category position again before returning.
+Unrelated checkpoint progress is allowed. `routines.position` remains the captured
+category position, including when duplicate outcomes leave a row's position unchanged.
+Any saved row gives `unsupported`; a caught-up empty table gives `absent`.
+No definition, instruction, count or routine history is fetched. Failed preparation
+still reaches current member and provider permission checks before a fixed unavailable
+error. Routine execution and destructive-operation blockers are unchanged.
+Tests: `apps/server/test/provider-routine-presence.test.ts` and the existing provider suites.
+
 Binding commands find saved ids across actors on the same provider. Actor or request
 changes return a conflict. After append, `readEventAt` checks the stored event before
 returning its receipt, including duplicate recovery. The automatic default calls the

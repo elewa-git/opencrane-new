@@ -1,0 +1,1 @@
+Provider dependency reads now check for routines through one indexed database position, so long routine histories do not need to be loaded. Delayed, failed or changing data stays unavailable; older and retired routines still block a complete dependency result.

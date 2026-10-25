@@ -228,7 +228,12 @@ chat checks. Provider rows still contain no upstream address.
 ## Saved provider choices
 
 `GET /api/org/providers/:providerId/bindings` returns saved `rows`, `expectedProviderSequence`, real `assistantCount` values and `ordinaryCallsAvailable: false`.
-Its `routines.status` is `absent` after checked empty history, otherwise `unsupported`. Reader failure or changing history returns 503.
+Its `routines.status` is `absent` after a caught-up empty projection check, otherwise
+`unsupported`, including older, active and retired routines. `routines.position` is the
+captured routine category event position. The lookup reads one indexed position and no
+private definitions. Lag, failed reads, rebuilds or changing routine positions return 503.
+Current member and provider permissions are checked after preparation, including failures;
+removed and non-admin callers receive the same 403 refusal. Unrelated chat activity is allowed.
 `POST` accepts `commandId`, `expectedProviderSequence`, `expectedRevision`, `kind` (`assistant` or `silo_default`), `dependantId`, `task: chat_turn`, `expectedBindingSequence`, and `action: select|pause`.
 Select requires `model`; a move also requires `expectedSourceRevision`. Pause keeps the provider and model. The existing changes GET recovers the original receipt; retry uses the same body and id.
 After switch-on, new turns use these choices. Models process requirements appear

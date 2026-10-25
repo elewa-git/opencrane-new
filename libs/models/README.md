@@ -51,7 +51,7 @@ flowchart LR
   models -->|stages credentials, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, remote starts and unsent proof; recovers budgets in order and reads spending| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, remote starts and unsent proof; recovers budgets in order and reads spending and routine presence| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -185,6 +185,11 @@ rollover or replay. Reading these records never permits spending.
 An agent's correction or forget request needs both read and write permission and that
 tool's reviewed Allow rule. Ask returns a configuration refusal without opening an approval.
 The backend checks the target proof, then refuses the operation because it is still disabled.
+
+Provider dependency reads check whether the routine read table contains a saved routine.
+They read one indexed position and check that the table has caught up with the event log.
+Missing, delayed or changing data cannot be reported as empty. Any saved routine,
+including retired and older records, still blocks a complete dependency result.
 
 ## What it is responsible for
 

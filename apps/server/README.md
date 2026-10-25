@@ -77,7 +77,7 @@ flowchart LR
   server -->|reads and saves company opt-in, own saved profiles and original change, publication and selection receipts; records personal account choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
+  server -->|reads routine presence, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
@@ -96,6 +96,10 @@ Memory tests finish their setup reads before signing short-lived requests. Separ
 delay history and permission reads inside the server and record only elapsed times.
 These check that slow preparation leaves the original two-second pass available
 for current permissions and memory revisions.
+
+Provider dependency requests use the database to check for saved routines before checking
+current administrator and provider permissions. Missing or changing data returns unavailable.
+Older and retired routines still mean that complete dependency information is unsupported.
 
 ## What it is responsible for
 

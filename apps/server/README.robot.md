@@ -2331,7 +2331,7 @@ Human group events are now valid stored records. Chat reads, lists and
 subscriptions check saved participation and the caller’s latest join position.
 Creation and participant commands for that mode are not exposed yet.
 
-Provider binding POSTs use the existing organisation, exact Origin and current Owner/Admin checks with a 4,096-byte limit. GET reads checked event histories, reports real default counts and marks routine history as absent or unsupported. Reader failure or changing history returns 503. See [the provider API](../../docs/api/providers.md).
+Provider binding POSTs use the existing organisation, exact Origin and current Owner/Admin checks with a 4,096-byte limit. GET reads checked provider and assistant histories and reports real default counts. It passes the read database to the bounded routine presence check. A caught-up empty routine projection reports absent; any recorded routine reports unsupported. Lag, failed reads, rebuilds and changing routine positions return 503 after current member and provider permission checks. Unrelated chat activity does not invalidate this read. See [the provider API](../../docs/api/providers.md).
 
 Concurrent binding and configuration requests with the same command id return
 one saved receipt and one 409 response. Both must finish their final access checks

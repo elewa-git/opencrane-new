@@ -7,11 +7,12 @@ import {
 } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { applyProvider, type ProviderState } from '@opencrane/projections';
+import { applyProvider, type ProviderState, type Query } from '@opencrane/projections';
 import { history } from './actor.ts';
 import { readActiveMember } from './member-authority.ts';
 import { modelForTask } from './routing.ts';
 import { models } from './state.ts';
+import { providerRoutinePresence } from './provider-routine-presence.ts';
 import {
   ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
   providerReceipt, providerSecretRef,
@@ -226,17 +227,29 @@ async function checkedHistory(store: EventStore, silo: string, subject: string, 
   return rows;
 }
 
-export async function providerDependencies(store: EventStore, binding: Binding,
-  memberId: string, providerId: string) {
-  const current = await inventory(store, binding.silo);
+async function prepareDependencies(store: EventStore, db: Query, silo: string,
+  providerPosition: number) {
   const deadline = performance.now() + 10_000;
-  const assistants = await checkedHistory(store, binding.silo, 'assistant-*', deadline);
-  const routines = await checkedHistory(store, binding.silo, 'routine-*', deadline);
-  if (await store.head('provider-*', deadline) !== current.position) {
+  const assistants = await checkedHistory(store, silo, 'assistant-*', deadline);
+  const routines = await providerRoutinePresence(store, db, silo, deadline);
+  if (await store.head('provider-*', deadline) !== providerPosition) {
     throw new Error('Provider history changed');
   }
+  return { assistants, routines };
+}
+
+export async function providerDependencies(store: EventStore, binding: Binding,
+  memberId: string, providerId: string, db: Query) {
+  const current = await inventory(store, binding.silo);
+  const loading = prepareDependencies(store, db, binding.silo, current.position);
+  const [prepared] = await Promise.allSettled([loading]);
   await readActiveMember(store, binding, memberId, 'admin');
   await providerPermission(binding, memberId, connectionRows(current.rows, providerId));
+  // Check current rights before disclosing missing or failed routine preparation.
+  if (prepared.status === 'rejected') {
+    throw new Error('Provider dependencies unavailable');
+  }
+  const { assistants, routines } = prepared.value;
   const assistantIds = new Set<string>();
   for (const row of assistants) {
     if (isAssistantCreation(row)) {
@@ -261,10 +274,7 @@ export async function providerDependencies(store: EventStore, binding: Binding,
   }
   return {
     rows, expectedProviderSequence: current.position, ordinaryCallsAvailable: false,
-    routines: {
-      status: routines.length ? 'unsupported' : 'absent',
-      position: routines.at(-1)?.sequence ?? 0,
-    },
+    routines,
   };
 }
 

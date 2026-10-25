@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import type { EventEnvelope } from '@opencrane/events';
+import { getEventDefinition,
+  type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { ProjectionRunner, rebuildRoutineProjection, routines,
   type Db } from '@opencrane/projections';
@@ -81,9 +82,13 @@ it('reports absence only from an empty caught-up projection, including after rep
 async function recorded(kind: string) {
   let saved = routine('routine.created');
   if (kind === 'legacy') saved = legacy();
+  if (kind === 'active') {
+    const data = saved.data;
+    if (!data || typeof data !== 'object') throw new Error('Missing routine fixture');
+    saved = { ...saved, data: { ...data, status: 'active' } };
+  }
   await nats.seed([saved]);
   if (kind === 'retired') await nats.seed([routine('routine.retired')]);
-  if (kind === 'active') await nats.seed([routine('routine.resumed')]);
   await runner.run(routines);
   const position = await nats.store.head('routine-*');
   const before = await nats.store.head();
@@ -96,6 +101,30 @@ async function recorded(kind: string) {
 }
 it.each(['modern', 'legacy', 'active', 'retired'])(
   'keeps %s records unsupported before and after effect-free replay', recorded);
+function catalogueRoutine(type: string, id: string): EventEnvelope {
+  const data: unknown = getEventDefinition(type)?.example;
+  if (!data || typeof data !== 'object') throw new Error('Missing routine example');
+  const actor: unknown = Reflect.get(data, 'actorId');
+  const principal = { kind: 'system' as 'system' | 'human', id: 'opencrane-server' };
+  if (typeof actor === 'string') {
+    principal.kind = 'human';
+    principal.id = actor;
+  }
+  return { ...event(id, 'routine-orders', type), source: 'opencrane-server', data, principal };
+}
+async function duplicatePosition() {
+  const records = [catalogueRoutine('routine.created', 'created'),
+    catalogueRoutine('routine.resumed', 'resumed'), catalogueRoutine('routine.due', 'due'),
+    catalogueRoutine('routine.due', 'duplicate-due')];
+  await nats.seed(records);
+  await runner.run(routines);
+  const position = await nats.store.head('routine-*');
+  const projected = await db.query('SELECT position FROM routines WHERE silo = $1', ['test']);
+  expect(Number(projected.rows[0]?.['position'])).toBeLessThan(position);
+  await result('unsupported', position);
+}
+it('returns the category position when a repeated outcome does not move the routine row',
+  duplicatePosition);
 async function volume() {
   const events: EventEnvelope[] = [];
   for (let index = 0; index < 2001; index++) events.push(legacy(index));
@@ -128,7 +157,7 @@ async function volume() {
   expect(lookups).toBeGreaterThan(0);
 }
 it('uses a bounded position lookup for thousands of events without reading routine history',
-  volume, 60_000);
+  volume, 120_000);
 async function lag() {
   await nats.seed([legacy()]);
   expect((await request()).statusCode).toBe(503);
@@ -136,14 +165,25 @@ async function lag() {
   await result('unsupported', await nats.store.head('routine-*'));
 }
 it('does not report absence while projection work is behind', lag);
-async function failedLookup() {
-  throw new Error('private-canary orders ciphertext');
+function failLookup(expire = false) {
+  const originalQuery = db.query.bind(db);
+  async function unavailableQuery<Row extends Record<string, unknown>>(sql: string,
+    values?: unknown[], options?: { deadline: number }) {
+    if (/FROM routines\b/u.test(sql)) {
+      if (expire) {
+        vi.spyOn(performance, 'now').mockReturnValue(options!.deadline + 1);
+      }
+      throw new Error('private-canary orders ciphertext');
+    }
+    return originalQuery<Row>(sql, values, options);
+  }
+  vi.spyOn(db, 'query').mockImplementation(unavailableQuery);
 }
 async function unavailable(kind: string) {
   if (kind === 'missing') {
     await db.query("DELETE FROM projection_checkpoints WHERE name = 'routines'");
   } else {
-    vi.spyOn(db, 'query').mockImplementation(failedLookup);
+    failLookup();
   }
   const response = await request();
   expect(response.statusCode).toBe(503);
@@ -157,7 +197,7 @@ async function refusal(actor: string, fail: boolean) {
       data: { memberId: 'admin', removedBy: 'admin' } };
     await nats.seed([removed]);
   }
-  if (fail) vi.spyOn(db, 'query').mockImplementation(failedLookup);
+  if (fail) failLookup();
   const response = await request(actor);
   expect(response.statusCode).toBe(403);
   expect(response.json()).toEqual({ status: 'refused' });
@@ -165,8 +205,13 @@ async function refusal(actor: string, fail: boolean) {
 }
 it.each([['admin', false], ['admin', true], ['alice', false], ['alice', true]] as const)(
   'returns the same refusal to %s when lookup fails: %s', refusal);
+async function expiredPreparation(actor: string) {
+  failLookup(true);
+  await refusal(actor, false);
+}
+it.each(['admin', 'alice'])('still checks %s after routine preparation expires', expiredPreparation);
 async function providerRefusal() {
-  vi.spyOn(db, 'query').mockImplementation(failedLookup);
+  failLookup();
   const response = await request('admin', 'missing');
   expect(response.statusCode).toBe(403);
   expect(response.json()).toEqual({ status: 'refused' });
@@ -182,9 +227,13 @@ async function changed(kind: string) {
       changed = true;
       if (kind === 'rebuild') {
         await rebuildRoutineProjection(db, nats.reader, logger, { verify: true });
+      } else if (kind === 'removal') {
+        const removed = { ...event('removed', 'member-admin', 'member.removed'),
+          data: { memberId: 'admin', removedBy: 'admin' } };
+        await nats.seed([removed]);
       } else if (kind === 'chat') {
         const message = { ...event('chat', 'conversation-unrelated', 'message.posted'),
-          data: { conversationId: 'unrelated', authorId: 'alice', text: 'hello' } };
+          data: getEventDefinition('message.posted')?.example };
         await nats.seed([message]);
         await runner.run(routines);
       } else {
@@ -200,10 +249,13 @@ async function changed(kind: string) {
   if (kind === 'chat') {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ routines: { status: 'absent', position: 0 } });
+  } else if (kind === 'removal') {
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
   } else {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ status: 'unavailable' });
   }
 }
-it.each(['rebuild', 'insertion', 'projected insertion', 'chat'])(
+it.each(['rebuild', 'insertion', 'projected insertion', 'chat', 'removal'])(
   'checks routine movement while preserving unrelated reads: %s', changed);
