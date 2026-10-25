@@ -66,7 +66,8 @@ afterAll(close);
 function headers(memberId = 'alice', orgId = 'org-test') {
   const now = Math.floor(Date.now() / 1000);
   const session = { sub: memberId, orgId, roles: ['owner'], authTime: now, exp: now + 60 };
-  return { origin: new URL(config.redirectUri).origin, cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
+  return { origin: new URL(config.redirectUri).origin, cookie };
 }
 async function saved(serverId = `server${counter + 1}`, changeRef = `save${counter + 1}`) {
   counter += 1;
@@ -123,6 +124,8 @@ async function recover(lost: boolean) {
     await append(command);
     throw new Error(`${privateCanary} ${material}`);
   }
+  const noCustody = vi.spyOn(custody, 'connectionCustody');
+  const provider = vi.spyOn(globalThis, 'fetch');
   const writes = vi.spyOn(nats.store, 'append');
   if (lost) {
     writes.mockImplementationOnce(loseReply);
@@ -130,14 +133,12 @@ async function recover(lost: boolean) {
   const response = await post(fixture.url, input);
   expect(response.statusCode).toBe(lost ? 503 : 200);
   expect(writes).toHaveBeenCalledTimes(1);
-  vi.restoreAllMocks();
+  writes.mockRestore();
   await waitForDuplicateWindow(nats);
   await app.close();
   app = startApp();
   const position = await nats.store.head();
   const noAppend = vi.spyOn(nats.store, 'append');
-  const noCustody = vi.spyOn(custody, 'connectionCustody');
-  const provider = vi.spyOn(globalThis, 'fetch');
   try {
     const receipt = await get(`${fixture.url}/changes/revoke`);
     expect(receipt.statusCode).toBe(200);
@@ -205,9 +206,12 @@ async function boundaries() {
     expect((await post(fixture.url, { ...input, userId: 'alice' }, headers(member)))
       .statusCode).toBe(400);
   }
-  for (const id of ['bad%20id', 'x'.repeat(201)]) {
-    expect((await post(fixture.url.replace(fixture.profileId, id), input)).statusCode).toBe(400);
-  }
+  const malformed = fixture.url.replace(fixture.profileId, 'bad%20id');
+  expect((await post(malformed, input)).statusCode).toBe(400);
+  const overlong = fixture.url.replace(fixture.profileId, 'x'.repeat(201));
+  const unmatched = await app.inject({ method: 'POST', url: `${overlong}/revoke`,
+    payload: input, headers: headers() });
+  expect(unmatched.statusCode).toBe(414);
   const query = await app.inject({ method: 'POST', url: `${fixture.url}/revoke?extra=value`,
     payload: input, headers: headers() });
   privateOutput(query);
@@ -302,8 +306,12 @@ async function loading(outcome: string) {
   try {
     const response = await post(fixture.url, revoke(fixture));
     let expected = 403;
-    if (outcome === 'slow') expected = 200;
-    if (outcome === 'failure') expected = 503;
+    if (outcome === 'slow') {
+      expected = 200;
+    }
+    if (outcome === 'failure') {
+      expected = 503;
+    }
     expect(response.statusCode).toBe(expected);
     expect(writes).toHaveBeenCalledTimes(outcome === 'slow' ? 1 : 0);
   } finally {
@@ -317,3 +325,34 @@ async function loading(outcome: string) {
 }
 it.each(['successful', 'missing', 'failed', 'failure', 'slow'])(
   'checks current membership after %s history and hides dependency details', loading);
+
+async function unconfirmedAppend() {
+  const fixture = await saved();
+  const position = await nats.store.head();
+  const writes = vi.spyOn(nats.store, 'append');
+  const result = { status: 'unavailable' as const, cause: new Error(material) };
+  writes.mockResolvedValueOnce(result);
+  try {
+    const response = await post(fixture.url, revoke(fixture));
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(writes).toHaveBeenCalledTimes(1);
+    const missing = await get(`${fixture.url}/changes/revoke`);
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ status: 'unknown' });
+    expect(await nats.store.head()).toBe(position);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('keeps an unconfirmed append unknown without resending', unconfirmedAppend);
+
+async function staleSequence() {
+  const fixture = await saved();
+  const position = await nats.store.head();
+  const response = await post(fixture.url, { changeRef: 'stale', expectedSequence: 0 });
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+  expect(await nats.store.head()).toBe(position);
+}
+it('refuses a stale revision of an otherwise usable profile', staleSequence);

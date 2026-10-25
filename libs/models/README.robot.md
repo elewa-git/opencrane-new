@@ -2000,7 +2000,8 @@ the existing custody tests separately exercise the private HTTP adapter.
 
 ## Personal revoke and admin disable (P3-8 PR 3, first part of row 3)
 
-`changePersonalConnection(store, binding, actorId, input)` is internal, with no HTTP route.
+`changePersonalConnection(store, binding, actorId, input)` is exported for the personal
+revoke HTTP route. Admin disable remains internal.
 The binding and actor come from authenticated server context. Strict input names action
 (revoke/disable), userId, serverId, profileId, changeRef and expectedSequence.
 Revoke requires the current owner and the profile stream revision. It appends
