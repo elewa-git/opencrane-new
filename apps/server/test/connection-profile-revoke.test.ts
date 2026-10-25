@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
+import { TupleClient, type Tuple } from '../../../libs/authz/src/client.ts';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { envelope, history, foldConnection } from '@opencrane/models';
 import * as custody from '../../../libs/models/src/connection-custody.ts';
@@ -26,8 +27,11 @@ function write(line: string) {
   logs.push(line);
 }
 const logDestination = { write };
-function startApp(store = nats.store, silo = 'test') {
+function startApp(store = nats.store, silo = 'test', knownMember = true) {
   function memberId(_silo: string, _issuer: string, subject: string) {
+    if (!knownMember) {
+      return Promise.resolve(undefined);
+    }
     return Promise.resolve(subject);
   }
   const memberReads = { silo, store, binding,
@@ -367,3 +371,89 @@ async function staleSequence() {
   expect(await nats.store.head()).toBe(position);
 }
 it('refuses a stale revision of an otherwise usable profile', staleSequence);
+
+async function onePermissionCheck(outcome: string) {
+  const fixture = await saved();
+  const read = nats.store.readStream.bind(nats.store);
+  const check = TupleClient.prototype.check;
+  let prepared = false;
+  let checks = 0;
+  let denied = false;
+  async function* prepare(subject: string, from?: number, deadline?: number) {
+    if (subject === fixture.subject) {
+      prepared = true;
+      if (outcome === 'failed history') {
+        throw new Error(privateCanary);
+      }
+      if (outcome === 'missing history') {
+        return;
+      }
+    }
+    yield* read(subject, from, deadline);
+  }
+  async function permission(this: TupleClient, tuple: Tuple) {
+    if (tuple.relation === 'member') {
+      checks += 1;
+      if (denied) {
+        throw new Error(privateCanary);
+      }
+      if (prepared && outcome === 'denied permission') {
+        denied = true;
+        return { status: 'ok' as const, allowed: false };
+      }
+    }
+    return check.call(this, tuple);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(prepare);
+  vi.spyOn(TupleClient.prototype, 'check').mockImplementation(permission);
+  const writes = vi.spyOn(nats.store, 'append');
+  try {
+    let expectedStatus = 503;
+    let expectedWrites = 0;
+    const input = revoke(fixture);
+    if (outcome === 'success') {
+      expectedStatus = 200;
+      expectedWrites = 1;
+    } else if (outcome === 'denied permission') {
+      expectedStatus = 403;
+    } else if (outcome === 'stale revision') {
+      input.expectedSequence = 0;
+    }
+    const response = await post(fixture.url, input);
+    expect(response.statusCode).toBe(expectedStatus);
+    if (outcome === 'denied permission') {
+      expect(response.json()).toEqual({ status: 'refused' });
+      expect(denied).toBe(true);
+    }
+    expect(prepared).toBe(true);
+    expect(checks).toBe(1);
+    expect(writes).toHaveBeenCalledTimes(expectedWrites);
+  } finally {
+    vi.restoreAllMocks();
+  }
+  const rows = await history(nats.store, fixture.subject, 'test');
+  expect(rows).toHaveLength(outcome === 'success' ? 2 : 1);
+}
+it.each(['success', 'failed history', 'missing history', 'stale revision', 'denied permission'])(
+  'checks permission once after %s and preserves refusal if OpenFGA then fails', onePermissionCheck);
+
+async function missingSetup(knownMember: boolean) {
+  const fixture = await saved();
+  const position = await nats.store.head();
+  await app.close();
+  if (knownMember) {
+    app = buildServer(config, { logDestination });
+  } else {
+    app = startApp(nats.store, 'test', false);
+  }
+  try {
+    const response = await post(fixture.url, revoke(fixture));
+    expect(response.statusCode).toBe(knownMember ? 503 : 403);
+    expect(response.json()).toEqual({ status: knownMember ? 'unavailable' : 'refused' });
+    expect(await nats.store.head()).toBe(position);
+  } finally {
+    await app.close();
+    app = startApp();
+  }
+}
+it.each([false, true])('refuses missing configuration or member lookup (member: %s)', missingSetup);
