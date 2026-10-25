@@ -5,7 +5,8 @@ import DurationSequencer from './scripts/ci/sequencer.mjs';
 // apps/ and libs/, plus checks under scripts/, so new packages share this config.
 export default defineConfig({
   test: {
-    include: ['apps/**/*.test.ts', 'libs/**/*.test.ts', 'scripts/*.test.mjs'],
+    include: ['apps/**/*.test.ts', 'libs/**/*.test.ts', 'scripts/*.test.mjs',
+      'infra/package/upgrade-recovery*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', 'spikes/**'],
     environment: 'node',
     sequence: { sequencer: DurationSequencer },
