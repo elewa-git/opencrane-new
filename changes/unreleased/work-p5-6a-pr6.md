@@ -1,0 +1,1 @@
+- Add a separate HTTPS upload scanner that checks service passes before accepting file bytes and returns results bound to the exact file, silo and request. Deployed callers and fresh-install qualification remain later work; production uploads are unchanged.

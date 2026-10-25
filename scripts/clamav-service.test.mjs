@@ -1,4 +1,4 @@
-import { generateKeyPairSync, createHash, randomUUID } from 'node:crypto';
+import { generateKeyPairSync, createHash, randomUUID, sign } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,7 +6,6 @@ import { request } from 'node:https';
 import { EventEmitter, once } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { spawn } from 'node:child_process';
-import { decodeJwt, importPKCS8, SignJWT } from 'jose';
 import { tokenIssuer } from '@opencrane/auth';
 import { sharedCertificates } from '../libs/event-store/test/certificates.ts';
 import { createScanOperation } from '../infra/clamav/scan.mjs';
@@ -20,10 +19,14 @@ vi.mock('node:child_process', mockProcesses);
 const issuer = 'https://scanner.invalid/';
 const state = `${'c'.repeat(64)} sha256:${'a'.repeat(64)} 2026-10-25T12:00:00Z true 0`;
 let directory, server, scanner, now, updated, tokens, key, ca, mode, supplied, shutdown;
-let continued, lastRequest, logs;
+let continued, lastRequest, logs, output;
 const requests = [];
-function clock() { return now; }
-function seconds() { return Math.floor(now / 1000); }
+function clock() {
+  return now;
+}
+function seconds() {
+  return Math.floor(now / 1000);
+}
 function hash(bytes) {
   const digest = createHash('sha256');
   digest.update(bytes);
@@ -35,14 +38,20 @@ function fresh() {
   }
   return now;
 }
-async function stop() { shutdown.abort(); }
+async function stop() {
+  shutdown.abort();
+}
 function scanProcess(_command, args) {
   const child = new EventEmitter();
   child.stdin = new PassThrough();
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
-  function close() { child.emit('close', 0); }
-  function kill() { queueMicrotask(close); }
+  function close() {
+    child.emit('close', 0);
+  }
+  function kill() {
+    queueMicrotask(close);
+  }
   child.kill = kill;
   function finish() {
     if (args[0] === 'inspect') {
@@ -60,11 +69,12 @@ function scanProcess(_command, args) {
       supplied.push(bytes);
       server.emit('scanned');
       if (mode === 'hang') return;
-      if (mode === 'pass-expiry') now += 120000;
+      if (mode === 'pass-expiry') now += 2000;
       if (mode === 'database-expiry') now = updated + 86400000;
       let reply = 'stream: OK\0';
       if (mode === 'forged') reply += 'private-canary';
       if (bytes.toString() === 'infected') reply = 'stream: fixture FOUND\0';
+      child.stderr.write('private-canary');
       child.stdout.write(reply);
     }
     queueMicrotask(close);
@@ -104,16 +114,25 @@ async function setup() {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   logs = [vi.spyOn(console, 'log'), vi.spyOn(console, 'error'), vi.spyOn(console, 'warn')];
+  output = [vi.spyOn(process.stdout, 'write'), vi.spyOn(process.stderr, 'write')];
 }
 async function cleanup() {
   await stop();
   for (const client of requests) client.destroy();
-  requests.length = 0;
   if (server) {
     server.closeAllConnections();
-    await new Promise(function close(resolve) { server.close(resolve); });
+    function close(resolve) {
+      server.close(resolve);
+    }
+    await new Promise(close);
   }
   for (const log of logs ?? []) expect(log).not.toHaveBeenCalled();
+  for (const stream of output ?? []) {
+    const written = JSON.stringify(stream.mock.calls);
+    expect(written).not.toContain('private-canary');
+    for (const client of requests) expect(written).not.toContain(client.getHeader('authorization'));
+  }
+  requests.length = 0;
   vi.restoreAllMocks();
   vi.useRealTimers();
   await rm(directory, { recursive: true, force: true });
@@ -139,7 +158,9 @@ function send(value, overrides = {}, transfer) {
   function exchange(resolve, reject) {
     function response(reply) {
       const chunks = [];
-      function read(chunk) { chunks.push(chunk); }
+      function read(chunk) {
+        chunks.push(chunk);
+      }
       function end() {
         const bytes = Buffer.concat(chunks);
         expect(bytes.length).toBeLessThanOrEqual(4096);
@@ -168,6 +189,8 @@ function refused(result) {
 }
 async function exactResults() {
   const first = await input();
+  const claims = decodeJwt(first.pass);
+  first.pass = changedPass(first.pass, claims);
   const second = await input(Buffer.from('infected'));
   const results = await Promise.all([send(first), send(second)]);
   for (const [index, value] of [first, second].entries()) {
@@ -191,6 +214,17 @@ async function badTls(kind) {
   expect(continued).toBe(false);
 }
 test.each(['CA', 'hostname'])('refuses wrong TLS %s', badTls);
+function decodeJwt(value) {
+  const payload = Buffer.from(value.split('.')[1], 'base64url');
+  return JSON.parse(payload.toString());
+}
+function changedPass(value, claims) {
+  const payload = Buffer.from(JSON.stringify(claims));
+  const signed = `${value.split('.')[0]}.${payload.toString('base64url')}`;
+  const options = { key: key.privateKey, dsaEncoding: 'ieee-p1363' };
+  const signature = sign('sha256', Buffer.from(signed), options);
+  return `${signed}.${signature.toString('base64url')}`;
+}
 async function wrongIdentity(kind) {
   const value = await input();
   const claims = decodeJwt(value.pass);
@@ -199,13 +233,19 @@ async function wrongIdentity(kind) {
     expired: ['exp', seconds()], browser: ['typ', 'browser'], computer: ['typ', 'computer'],
     turn: ['typ', 'turn'] };
   if (kind === 'missing') value.pass = '';
-  else {
+  else if (kind === 'computer') {
+    const identity = { silo: 'silo-one', computerId: 'computer',
+      assistantId: 'assistant', generation: 1 };
+    value.pass = (await tokens.computer(identity)).value;
+  } else if (kind === 'turn') {
+    const identity = { silo: 'silo-one', conversationId: 'chat', turnId: 'turn',
+      requesterId: 'person', threadId: 'thread', task: 'chat_turn', model: 'model',
+      assistantId: 'assistant' };
+    value.pass = (await tokens.turn(identity)).value;
+  } else {
     const [field, replacement] = changes[kind];
     claims[field] = replacement;
-    const signingKey = await importPKCS8(key.privateKey, 'ES256');
-    const jwt = new SignJWT(claims);
-    jwt.setProtectedHeader({ alg: 'ES256', kid: 'lifecycle' });
-    value.pass = await jwt.sign(signingKey);
+    value.pass = changedPass(value.pass, claims);
   }
   refused(await send(value));
   expect(continued).toBe(false);
@@ -214,7 +254,10 @@ async function wrongIdentity(kind) {
 test.each(['missing', 'expired', 'issuer', 'service', 'silo', 'purpose', 'request',
   'browser', 'computer', 'turn'])('%s identity cannot reach the scan', wrongIdentity);
 async function badInput(kind) {
+  if (kind === 'database-expiry') now = updated + 86400000 - 500;
+  if (kind === 'pass-expiry') now -= 119000;
   const value = await input();
+  if (kind === 'pass-expiry') now += 119000;
   if (kind === 'changed') value.bytes[0] ^= 1;
   if (kind === 'truncated') value.byteCount += 1;
   if (kind === 'oversized') value.byteCount = 20 * 1024 * 1024 + 1;
@@ -224,10 +267,13 @@ async function badInput(kind) {
   if (kind === 'forged') mode = 'forged';
   if (kind === 'pass-expiry' || kind === 'database-expiry') mode = kind;
   if (kind === 'truncated') {
-    function incomplete(client) { client.end(value.bytes); }
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    function incomplete(client) {
+      client.end(value.bytes);
+    }
     const pending = send(value, {}, incomplete);
     await once(lastRequest, 'continue');
-    await scanner.stop();
+    await vi.advanceTimersByTimeAsync(60000);
     refused(await pending);
   } else refused(await send(value));
   if (kind !== 'forged' && !kind.endsWith('expiry')) expect(supplied).toHaveLength(0);
@@ -235,9 +281,12 @@ async function badInput(kind) {
 test.each(['changed', 'truncated', 'oversized', 'silo', 'purpose', 'request', 'forged',
   'pass-expiry', 'database-expiry'])('refuses %s bytes, bindings or results', badInput);
 async function transferExpiry(kind) {
+  if (kind === 'database') now = updated + 86400000 - 500;
+  if (kind === 'pass') now -= 119000;
   const value = await input();
+  if (kind === 'pass') now += 119000;
   function transfer(client) {
-    now += kind === 'pass' ? 120000 : 86400000;
+    now += kind === 'pass' ? 2000 : 500;
     client.end(value.bytes);
   }
   refused(await send(value, {}, transfer));
@@ -250,12 +299,17 @@ async function cancelWork(kind) {
   if (kind === 'timeout') vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const scanned = once(server, 'scanned');
   const pending = send(value);
-  const settled = pending.catch(function disconnected() { return 'disconnected'; });
+  function disconnected() {
+    return 'disconnected';
+  }
+  const settled = pending.catch(disconnected);
+  const retired = once(shutdown.signal, 'abort');
   await scanned;
   if (kind === 'timeout') await vi.advanceTimersByTimeAsync(60000);
   if (kind === 'disconnect') lastRequest.destroy();
   if (kind === 'retire') await scanner.stop();
   await settled;
+  await retired;
   expect(shutdown.signal.aborted).toBe(true);
   refused(await send(await input()));
 }
@@ -267,3 +321,61 @@ async function rejectsOtherRoutes() {
   expect(supplied).toHaveLength(0);
 }
 test('accepts no URL, redirect or minting endpoint', rejectsOtherRoutes);
+
+async function retiresPending() {
+  mode = 'hang';
+  const scanned = once(server, 'scanned');
+  const first = send(await input());
+  await scanned;
+  function waitForRetirement(client) {
+    client.write('x');
+  }
+  const second = send(await input(), {}, waitForRetirement);
+  await once(lastRequest, 'continue');
+  await scanner.stop();
+  refused(await first);
+  refused(await second);
+  refused(await send(await input()));
+  expect(supplied).toHaveLength(1);
+}
+test('retirement refuses a scan, a pending transfer and later calls', retiresPending);
+async function sharesDeadline(stage) {
+  mode = 'hang';
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const scanned = once(server, 'scanned');
+  const value = await input();
+  function delayedHeaders() { now += 59000; }
+  if (stage === 'headers') server.once('secureConnection', delayedHeaders);
+  let client;
+  function holdTransfer(request) {
+    client = request;
+  }
+  const pending = send(value, {}, holdTransfer);
+  await once(lastRequest, 'continue');
+  if (stage === 'transfer') {
+    await vi.advanceTimersByTimeAsync(59000);
+    now += 59000;
+  }
+  client.end(value.bytes);
+  await scanned;
+  await vi.advanceTimersByTimeAsync(1000);
+  refused(await pending);
+  expect(shutdown.signal.aborted).toBe(true);
+}
+test.each(['headers', 'transfer'])('%s and scan share sixty seconds', sharesDeadline);
+
+async function immutableResponse() {
+  now -= 119000;
+  const value = await input();
+  now += 119000;
+  const first = await send(value);
+  expect(Date.parse(first.value.expiresAt)).toBe(decodeJwt(value.pass).exp * 1000);
+  first.value.databases[0].version = 999;
+  const second = await send(await input());
+  expect(second.value.databases[0].version).toBe(42);
+  const headers = { ...lastRequest.getHeaders(), 'x-scan-result': JSON.stringify(first.value) };
+  refused(await send(await input(), { headers }));
+  expect(supplied).toHaveLength(2);
+}
+test('caps expiry at the pass and refuses copied success without changing database facts',
+  immutableResponse);
