@@ -15,15 +15,23 @@ function eventData(row: StoredEvent) {
   return z.record(z.string(), z.unknown()).parse(data);
 }
 
+function recordMemoryTurn(row: StoredEvent, turnIds: Set<string>) {
+  if (row.event.type !== 'agent.memory_context_recorded') return;
+  const turnId = eventData(row)['turnId'];
+  if (typeof turnId === 'string') turnIds.add(turnId);
+}
+
 // Read replies across the stream. An earlier turn can finish after the next message is posted.
 export function privateContext(rows: StoredEvent[], message: StoredEvent, requesterId: string,
   decrypt: (data: unknown) => string): PrivateContext | undefined {
   const messages: StoredEvent[] = [];
   const completed = new Set<string>();
   const lost = new Set<string>();
+  const memoryTurns = new Set<string>();
   const replies = new Map<string, StoredEvent[]>();
   for (const row of rows) {
     const type = row.event.type;
+    recordMemoryTurn(row, memoryTurns);
     if (type === 'message.posted') {
       if (isEarlierMessage(row, message, requesterId)) {
         messages.push(row);
@@ -43,6 +51,8 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
       replies.set(turnId, texts);
     }
   }
+  // Exclude the whole turn before decryption, including replies saved before its first recall.
+  for (const turnId of memoryTurns) replies.delete(turnId);
   if (!messages.length) return undefined;
   const result: PrivateContext = { exchanges: [], omittedExchanges: messages.length };
   for (const earlier of messages.reverse()) {

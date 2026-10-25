@@ -1,0 +1,1 @@
+- Refuse saved reply text, reasoning and command hashes for turns with memory evidence. Keep human messages and text-free outcomes, and exclude that turn's earlier assistant replies when rebuilding private context. Native memory remains disabled.

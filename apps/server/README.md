@@ -61,6 +61,10 @@ A new assistant with no access to notes does not block personal memory.
 Notes with access grants still need the assistant's permissions to be ready.
 Memory reads give the website a safe setup reply while saved membership permissions
 are still being applied. Every later read checks access again.
+Saved evidence that memory was prepared for a turn prevents its reply and reasoning
+text from being saved as chat reports. Rebuilding private context also leaves out earlier
+assistant replies from that turn. Human messages stay saved. Delivering these private
+replies without saving them is still planned; native memory remains disabled.
 
 ## Where it fits
 
@@ -78,7 +82,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads routine presence, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server -->|chat work and reports| computer["apps/computer<br/>assistant computers"]
+  server -->|chat work and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
 ```

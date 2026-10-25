@@ -4078,6 +4078,30 @@ normal startup leaves gateway CONNECT and command-worker networking off. No sett
 is added. The [models contract](../../libs/models/README.robot.md#relay-startup-and-revocation-checks-part-of-61)
 records the closure checks and the remaining outage-watchdog and crash-recovery work.
 
+## Memory-bearing reports (P4-15 PR 3a; Part of #97)
+
+`chat/reports.ts` reads `readChatFacts` before hashing or encrypting report content.
+Any saved memory context, including prepared, invalidated and ended context, refuses
+reports carrying `text` or `commandDigest`. The fixed `ReportRejected` message is
+`Memory-bearing report content refused`. The existing bridge closes with code 1008
+and retains the permanent refusal, so its watcher does not keep retrying the report.
+Duplicate reports receive the same check before saved digest comparison.
+Text-free loss and completion reports keep their existing acknowledgements and replay.
+
+A competing memory append makes the report's conditional append conflict. Reloading
+checks the new evidence before another hash or encryption attempt. An uncertain append
+is never repeated automatically. Ciphertext constructed before a competing recall
+is not saved when recall wins the append.
+`chat/private-context.ts` collects every memory-bearing turn before decrypting replies.
+It excludes replies saved before the first recall too, while preserving human records
+and the existing behaviour for turns without memory.
+
+`test/memory-reports.test.ts` uses the same real gateway, preparation and service fixture
+as the memory MCP and dispatch tests. It covers report types, batches, conflicting
+evidence, prepared and closed states, lost acknowledgements, two-requester reconstruction
+and cold replay. Admission remains disabled. Volatile delivery, live invalidation and
+native forwarding are later work. Native recall qualification: NOT RUN.
+
 ## Streamed reply batches
 
 The bridge combines only adjacent queued `agent.message_delta` reports with identical
