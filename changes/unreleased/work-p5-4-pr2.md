@@ -1,0 +1,1 @@
+- Helm can render three private event-log peers with separate storage, certificates and required node separation. The default remains one peer; the ordinary installer refuses the optional mode until three-copy setup is built.

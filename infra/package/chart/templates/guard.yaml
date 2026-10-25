@@ -36,3 +36,22 @@
 {{- fail "Separate CNPG credential references are required" -}}
 {{- end -}}
 {{- end -}}
+{{- if .Values.natsCluster.enabled -}}
+{{- if not .Values.natsCluster.renderOnly -}}
+{{- fail "NATS cluster is render-only: R3 provisioning and bootstrap are not available" -}}
+{{- end -}}
+{{- $cluster := .Values.natsCluster -}}
+{{- $references := prepend $cluster.peerCertificateSecrets $cluster.routeCASecret -}}
+{{- if ne (len $cluster.peerCertificateSecrets) 3 -}}
+{{- fail "NATS cluster requires three separate peer certificate references" -}}
+{{- end -}}
+{{- if ne (len (uniq $references)) 4 -}}
+{{- fail "NATS cluster requires separate route trust and peer identities" -}}
+{{- end -}}
+{{- range $reference := $references -}}
+{{- if or (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $reference))
+          (has $reference (values $.Values.secrets)) -}}
+{{- fail "NATS cluster requires private route references separate from client settings" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

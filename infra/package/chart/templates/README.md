@@ -23,6 +23,7 @@ a running standby has not yet been tested.
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
 | `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
 | `data.yaml` | Runs the database and event log, and requests saved storage. |
+| `nats-cluster.yaml` | Renders three private event-log peers with separate storage and certificates. |
 | `services.yaml` | Gives the programs private network addresses. |
 | `bootstrap.yaml` | Sets up initial data and the access needed by setup and workers. |
 | `computer.yaml` | Describes assistant computers, their settings and network limits. |
@@ -42,3 +43,7 @@ flowchart LR
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```
+
+The optional three-peer render is for inspection only. The ordinary installer
+refuses it. The [operator notes](../../README.robot.md#three-peer-nats-rendering)
+explain its settings and the live checks still needed.

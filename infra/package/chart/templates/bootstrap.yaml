@@ -60,6 +60,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: package-worker
+{{- if not .Values.natsCluster.enabled }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -120,3 +121,4 @@ spec:
           secret:
             secretName: {{ .Values.secrets.runtimeFiles | quote }}
             defaultMode: 256
+{{- end }}

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { sharedCertificates, certificates, issueCertificate }
+  from '../../libs/event-store/test/certificates.ts';
 import { parseAllDocuments } from 'yaml';
 
 function chartValues() {
@@ -63,22 +68,35 @@ function cnpgValues() {
   return values;
 }
 
-function renderPostgres(values) {
-  const argumentsList = ['template', 'postgres-test', 'infra/package/chart', '--values', '-'];
-  return spawnSync('helm', argumentsList, { encoding: 'utf8', input: JSON.stringify(values) });
+function clusterValues() {
+  const values = chartValues();
+  values.natsCluster = {
+    enabled: true, renderOnly: true, routeCASecret: 'route-issuer',
+    peerCertificateSecrets: ['route-peer-0', 'route-peer-1', 'route-peer-2'],
+  };
+  return values;
+}
+
+function renderChart(values) {
+  const options = { encoding: 'utf8', input: JSON.stringify(values) };
+  const args = ['template', 'chart-test', 'infra/package/chart',
+    '--namespace', 'cluster-test', '--values', '-'];
+  const result = spawnSync('helm', args, options);
+  assert.equal(result.error, undefined);
+  return result;
 }
 
 function renderedResources(values) {
-  const result = renderPostgres(values);
+  const result = renderChart(values);
   assert.equal(result.status, 0, result.stderr);
-  const resources = [];
+  const resources = new Map();
   for (const document of parseAllDocuments(result.stdout)) {
     assert.deepEqual(document.errors, []);
-    resources.push(document.toJS());
+    const resource = document.toJS();
+    resources.set(`${resource.kind}/${resource.metadata.name}`, resource);
   }
   return resources;
 }
-
 function postgresStatefulSet(resource) {
   return resource.kind === 'StatefulSet' && resource.metadata.name === 'postgres';
 }
@@ -89,18 +107,18 @@ function cnpgCluster(resource) {
 
 function defaultPostgresRemains() {
   const resources = renderedResources(chartValues());
-  const databases = resources.filter(postgresStatefulSet);
+  const databases = [...resources.values()].filter(postgresStatefulSet);
   assert.equal(databases.length, 1);
   assert.equal(databases[0].spec.replicas, 1);
-  assert.equal(resources.filter(cnpgCluster).length, 0);
+  assert.equal([...resources.values()].filter(cnpgCluster).length, 0);
 }
 test('the default still runs one PostgreSQL StatefulSet', defaultPostgresRemains);
 
 function twoInstanceCluster() {
   const values = cnpgValues();
   const resources = renderedResources(values);
-  assert.equal(resources.filter(postgresStatefulSet).length, 0);
-  const clusters = resources.filter(cnpgCluster);
+  assert.equal([...resources.values()].filter(postgresStatefulSet).length, 0);
+  const clusters = [...resources.values()].filter(cnpgCluster);
   assert.equal(clusters.length, 1);
   const cluster = clusters[0];
   assert.equal(cluster.metadata.name, 'postgres');
@@ -121,7 +139,7 @@ function twoInstanceCluster() {
   assert.deepEqual(cluster.spec.bootstrap.initdb, {
     database: 'projections', owner: 'projection', secret: { name: 'cnpg-projection' },
   });
-  const writer = resources.find(postgresService);
+  const writer = resources.get('Service/postgres');
   assert.equal(writer.spec.type, 'ClusterIP');
   assert.deepEqual(writer.spec.ports, [{ port: 5432, targetPort: 5432 }]);
   assert.deepEqual(writer.spec.selector, {
@@ -133,16 +151,12 @@ function twoInstanceCluster() {
   assert.equal(matchesSelector(writer.spec.selector, primary), true);
   assert.equal(matchesSelector(writer.spec.selector, standby), false);
   assert.equal(matchesSelector(writer.spec.selector, foreign), false);
-  for (const resource of resources) {
+  for (const resource of resources.values()) {
     if (resource.kind === 'Service') {
       assert.equal(resource.spec.type, 'ClusterIP');
     }
     assert.notEqual(resource.kind, 'Secret');
   }
-}
-
-function postgresService(resource) {
-  return resource.kind === 'Service' && resource.metadata.name === 'postgres';
 }
 
 function matchesSelector(selector, labels) {
@@ -170,7 +184,7 @@ for (const [field, value, expected] of renderRefusals) {
   function refusesIncompleteCluster() {
     const values = cnpgValues();
     values.postgres[field] = value;
-    const result = renderPostgres(values);
+    const result = renderChart(values);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, expected);
   }
@@ -187,9 +201,215 @@ for (const exposure of ['ingress', 'loadBalancer', 'funnel', 'mutable']) {
     } else {
       values.exposure[exposure] = true;
     }
-    const result = renderPostgres(values);
+    const result = renderChart(values);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, expected);
   }
   test(`Helm refuses CNPG ${exposure}`, refusesUnsafeCluster);
 }
+
+function peerEnvironment(peer) {
+  const env = {};
+  for (const setting of peer.spec.template.spec.containers[0].env) {
+    env[setting.name] = setting.value;
+  }
+  return env;
+}
+
+function peerDns(index) {
+  return `nats-${index}-0.nats-routes.cluster-test.svc.cluster.local`;
+}
+
+function threePrivatePeers() {
+  const values = clusterValues();
+  const resources = renderedResources(values);
+  const claims = new Set();
+  const names = new Set();
+  for (let index = 0; index < 3; index++) {
+    const peer = resources.get(`StatefulSet/nats-${index}`);
+    assert.ok(peer, 'Each named peer must exist');
+    const spec = peer.spec.template.spec;
+    assert.equal(peer.spec.replicas, 1);
+    assert.equal(peer.spec.serviceName, 'nats-routes');
+    assert.deepEqual(peer.spec.selector.matchLabels, { app: 'nats', peer: `nats-${index}` });
+    assert.deepEqual(peer.spec.template.metadata.labels, peer.spec.selector.matchLabels);
+    assert.equal(peer.spec.volumeClaimTemplates.length, 1);
+    const claim = peer.spec.volumeClaimTemplates[0];
+    assert.deepEqual(claim.spec.accessModes, ['ReadWriteOnce']);
+    assert.equal(claim.spec.resources.requests.storage, '1Gi');
+    claims.add(`${claim.metadata.name}-${peer.metadata.name}-0`);
+    const placement = spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution;
+    assert.deepEqual(placement, [{ topologyKey: 'kubernetes.io/hostname',
+      labelSelector: { matchLabels: { app: 'nats' } } }]);
+    const container = spec.containers[0];
+    assert.deepEqual(container.args, ['-c', '/etc/nats/cluster.conf']);
+    assert.ok(container.volumeMounts.some(isDataMount));
+    assert.deepEqual(container.readinessProbe.tcpSocket, { port: 4222 });
+    const mountedSecrets = new Map();
+    for (const volume of spec.volumes) {
+      if (volume.secret) mountedSecrets.set(volume.name, volume.secret.secretName);
+    }
+    assert.equal(mountedSecrets.get('route-ca'), values.natsCluster.routeCASecret);
+    assert.equal(mountedSecrets.get('route-identity'), values.natsCluster.peerCertificateSecrets[index]);
+    assert.equal(mountedSecrets.size, 3);
+    assert.deepEqual(container.volumeMounts, [
+      { name: 'data', mountPath: '/data' },
+      { name: 'config', mountPath: '/etc/nats', readOnly: true },
+      { name: 'settings', mountPath: '/tls', readOnly: true },
+      { name: 'route-ca', mountPath: '/route-ca', readOnly: true },
+      { name: 'route-identity', mountPath: '/route-identity', readOnly: true },
+    ]);
+    for (const mount of container.volumeMounts) {
+      if (mount.name !== 'data') assert.equal(mount.readOnly, true);
+    }
+    const configuration = spec.volumes.find(isConfigurationVolume);
+    assert.deepEqual(configuration.projected.sources, [
+      { configMap: { name: 'nats-cluster' } },
+      { secret: { name: values.secrets.nats, items: [{ key: 'nats.conf', path: 'nats.conf' }] } },
+    ]);
+    const env = peerEnvironment(peer);
+    names.add(env.NATS_SERVER_NAME);
+    assert.equal(env.NATS_ROUTE_ADVERTISE, `${peerDns(index)}:6222`);
+    const routes = [];
+    for (let other = 0; other < 3; other++) {
+      if (other !== index) routes.push(`nats-route://${peerDns(other)}:6222`);
+    }
+    assert.deepEqual([env.NATS_ROUTE_1, env.NATS_ROUTE_2], routes);
+    assert.equal(env.NATS_STORE_DIR, '/data');
+    assert.equal(env.NATS_ROUTE_CA_FILE, '/route-ca/ca.crt');
+    assert.equal(env.NATS_ROUTE_CERT_FILE, '/route-identity/tls.crt');
+    assert.equal(env.NATS_ROUTE_KEY_FILE, '/route-identity/tls.key');
+  }
+  assert.equal(claims.size, 3);
+  assert.equal(names.size, 3);
+  assert.equal(resources.has('StatefulSet/nats'), false);
+  assert.equal(resources.has('Job/bootstrap'), false, 'R1 bootstrap cannot run in cluster mode');
+  const discovery = resources.get('Service/nats-routes');
+  assert.equal(discovery.spec.clusterIP, 'None');
+  assert.equal(discovery.spec.publishNotReadyAddresses, true);
+  assert.deepEqual(discovery.spec.selector, { app: 'nats' });
+  assert.deepEqual(discovery.spec.ports, [{ name: 'routes', port: 6222, targetPort: 6222 }]);
+  const budget = resources.get('PodDisruptionBudget/nats');
+  assert.equal(budget.spec.minAvailable, 2);
+  assert.deepEqual(budget.spec.selector.matchLabels, { app: 'nats' });
+  for (const resource of resources.values()) {
+    if (resource.kind === 'Service') assert.equal(resource.spec.type, 'ClusterIP');
+    assert.notEqual(resource.kind, 'Ingress');
+    assert.notEqual(resource.kind, 'Gateway');
+  }
+}
+
+function isConfigurationVolume(volume) {
+  return volume.name === 'config';
+}
+
+function isDataMount(mount) {
+  return mount.name === 'data' && mount.mountPath === '/data';
+}
+
+test('three private peers have separate claims, identities and required node placement',
+  threePrivatePeers);
+
+function defaultPeerUnchanged() {
+  const resources = renderedResources(chartValues());
+  const peer = resources.get('StatefulSet/nats');
+  assert.equal(peer.spec.replicas, 1);
+  assert.deepEqual(peer.spec.template.spec.containers[0].args, ['-c', '/etc/nats/nats.conf']);
+  assert.equal(resources.has('Service/nats-routes'), false);
+  assert.equal(resources.has('PodDisruptionBudget/nats'), false);
+  assert.equal(resources.has('Job/bootstrap'), true);
+}
+test('default rendering retains one peer and the ordinary bootstrap', defaultPeerUnchanged);
+
+const invalidClusters = [
+  { renderOnly: false },
+  { routeCASecret: '' },
+  { routeCASecret: 'chart-test-nats' },
+  { peerCertificateSecrets: [] },
+  { peerCertificateSecrets: ['same', 'same', 'same'] },
+  { peerCertificateSecrets: ['chart-test-nats', 'peer-1', 'peer-2'] },
+  { peerCertificateSecrets: ['route-issuer', 'peer-1', 'peer-2'] },
+  { peerCertificateSecrets: ['peer-0', '', 'peer-2'] },
+];
+for (const invalid of invalidClusters) {
+  function refusesIncompleteCluster() {
+    const values = clusterValues();
+    Object.assign(values.natsCluster, invalid);
+    const result = renderChart(values);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /NATS cluster/u);
+  }
+  test(`cluster rendering refuses ${JSON.stringify(invalid)}`, refusesIncompleteCluster);
+}
+
+async function validatesRenderedConfiguration() {
+  const fetched = spawnSync('sh', ['scripts/fetch-nats.sh'], { encoding: 'utf8' });
+  assert.equal(fetched.status, 0, 'The pinned NATS test server must be available');
+  const resources = renderedResources(clusterValues());
+  const config = resources.get('ConfigMap/nats-cluster').data['cluster.conf'];
+  assert.equal(config, await readFile('infra/nats/cluster.conf', 'utf8'));
+  assert.match(config, /verify_cert_and_check_known_urls: true/u);
+  assert.doesNotMatch(config, /insecure|verify: false/u);
+  const directory = await mkdtemp(join(tmpdir(), 'chart-nats-'));
+  try {
+    await sharedCertificates(directory);
+    await mkdir(`${directory}/routes`, { mode: 0o700 });
+    await certificates(`${directory}/routes`);
+    await writeFile(`${directory}/cluster.conf`, config);
+    await copyFile('infra/nats/nats.conf', `${directory}/nats.conf`);
+    const clientEnv = { ...process.env, NATS_LISTEN: '0.0.0.0:4222',
+      NATS_CA_FILE: `${directory}/ca.crt`, NATS_CERT_FILE: `${directory}/server.crt`,
+      NATS_KEY_FILE: `${directory}/server.key` };
+    for (const role of ['command', 'projection', 'dispatcher', 'computer', 'gateway']) {
+      clientEnv[`NATS_${role.toUpperCase()}_NKEY`] = await readFile(`${directory}/${role}.pub`, 'utf8');
+    }
+    for (let index = 0; index < 3; index++) {
+      const peer = resources.get(`StatefulSet/nats-${index}`);
+      const env = { ...clientEnv, ...peerEnvironment(peer) };
+      const extensions = `subjectAltName=DNS:${peerDns(index)}\n` +
+        'extendedKeyUsage=serverAuth,clientAuth\n';
+      await issueCertificate(`${directory}/routes`, `peer-${index}`, '/CN=peer', extensions);
+      // Replace only mounted paths; keep the rendered names and route addresses verbatim.
+      env.NATS_STORE_DIR = `${directory}/data-${index}`;
+      env.NATS_ROUTE_CA_FILE = `${directory}/routes/ca.crt`;
+      env.NATS_ROUTE_CERT_FILE = `${directory}/routes/peer-${index}.crt`;
+      env.NATS_ROUTE_KEY_FILE = `${directory}/routes/peer-${index}.key`;
+      const args = ['-t', '-c', `${directory}/cluster.conf`];
+      const result = spawnSync('.tools/nats-server', args, { env, encoding: 'utf8' });
+      assert.equal(result.status, 0, 'Pinned NATS must accept the rendered DNS and TLS configuration');
+      env.NATS_ROUTE_CA_FILE = `${directory}/absent.crt`;
+      assert.notEqual(spawnSync('.tools/nats-server', args, { env }).status, 0);
+      env.NATS_ROUTE_CA_FILE = `${directory}/routes/ca.crt`;
+      for (const name of ['NATS_ROUTE_CA_FILE', 'NATS_ROUTE_CERT_FILE', 'NATS_ROUTE_KEY_FILE',
+        'NATS_ROUTE_1', 'NATS_ROUTE_2', 'NATS_CA_FILE']) {
+        const incomplete = { ...env };
+        delete incomplete[name];
+        const refused = spawnSync('.tools/nats-server', args, { env: incomplete });
+        assert.notEqual(refused.status, 0, `NATS must refuse missing ${name}`);
+      }
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('pinned NATS validates rendered DNS and refuses missing route trust',
+  validatesRenderedConfiguration);
+
+async function refusesClusterInstallation() {
+  const directory = await mkdtemp(join(tmpdir(), 'chart-install-'));
+  try {
+    const values = clusterValues();
+    const review = { chartVersion: values.chartVersion, images: values.images };
+    await writeFile(`${directory}/values.json`, JSON.stringify(values));
+    await writeFile(`${directory}/review.json`, JSON.stringify(review));
+    const args = ['infra/package/preflight.mjs', `${directory}/values.json`,
+      `${directory}/review.json`];
+    const result = spawnSync('node', args, { encoding: 'utf8' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Unsupported package setting/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('ordinary installer refuses even a complete cluster render configuration',
+  refusesClusterInstallation);

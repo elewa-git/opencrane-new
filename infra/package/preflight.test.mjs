@@ -40,6 +40,10 @@ function reviewedImagePasses() {
 }
 test('a reviewed digest and named secret pass', reviewedImagePasses);
 
+function enableCluster(values) {
+  values.natsCluster = { enabled: true, renderOnly: true };
+}
+
 function removePin(values) { delete values.images.server; }
 function useMutableImage(values) { values.images.server = 'registry.local/server:latest'; }
 function useUnreviewedImage(values) { values.images.server = `registry.local/other@${digest}`; }
@@ -50,6 +54,7 @@ function enableFunnel(values) { values.exposure.funnel = true; }
 function removeChartVersion(values) { delete values.chartVersion; }
 
 const refusals = [
+  ['cluster without R3 runtime support', enableCluster, /Unsupported package setting/u],
   ['missing pin', removePin, /Missing immutable image pin/u],
   ['mutable image', useMutableImage, /Missing immutable image pin/u],
   ['unreviewed image', useUnreviewedImage, /absent from the reviewed list/u],
