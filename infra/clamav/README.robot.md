@@ -27,9 +27,51 @@ are imported.
 ## Refresh on the dev box
 
 Run `infra/clamav/refresh.sh /absolute/scratch/candidate-signatures`. FreshClam
-updates a separate candidate using the pinned engine and writes its SHA-256
-manifest. Review that candidate, package it in an offline image, then change the
-image digest here, in compose and in the test fixture together. Re-run EICAR and
+updates a separate candidate using the pinned engine and writes `signatures.json`.
+Review that candidate, package it in an offline image, then change the image digest here, in compose and in the test fixture together. Re-run EICAR and
 clean-file qualification before deployment. The script never changes the shared
 dev stack or the signatures of a running daemon. Keep the previous digest for
 rollback. Cached image layers keep a pinned deployment independent of the CDN.
+
+## Candidate update evidence
+
+`refresh.sh` invokes the adjacent Node 22 helper. It runs FreshClam from the pinned
+image against the complete main/daily/bytecode set, using a fixed configuration
+with database testing and bytecode enabled. No caller-provided success or old log
+is read. The helper requires a successful process exit and one matching upstream
+update result per database. It then requires successful `sigtool --info`
+verification, matches each version, and compares SHA-256 before and after that
+verification with a streamed hash of the actual candidate file.
+
+The JSON has `formatVersion: 1`, `toolImage`, `databaseUpdatedAt`, `databases` and
+`updaterEvidence`. Each database has `file`, `sha256`, `version` and `builtAt`.
+The safe updater evidence records FreshClam's successful exit and each database's
+file, version and `updated` or `up-to-date` result. Raw tool output is discarded.
+Dates are stored in UTC. Build dates come from the pinned tool's metadata, with
+its numeric timezone offset converted to UTC. Impossible, unknown or future dates
+refuse. The build date must match the numeric timestamp that `sigtool` verifies
+against the database's internal record; the stored date keeps its seconds.
+The update-check time comes from this invocation
+after the whole check succeeds, never file mtimes or the bundled image's age.
+
+The helper accepts exactly one CVD or CLD file for each database. It refuses
+missing, duplicate, symbolic-link or altered databases. Each file is at most
+512 MiB, captured tool output at most 1 MiB, and the manifest at most 8 KiB.
+The update and verification have a 15-minute limit; container cleanup has a
+30-second limit. The candidate directory must be private to the packaging job.
+A directory lock prevents concurrent helper runs. If the Docker client fails,
+the helper attempts to remove its container. Failed cleanup keeps the lock and
+blocks later attempts because the updater may still be writing candidate files.
+After failed cleanup or an interrupted run, the operator confirms its updater
+container has stopped before removing a leftover
+`.refresh-lock` directory. Starting another attempt removes both the old JSON
+manifest and the former `signatures.sha256` before running the updater. The new
+JSON is renamed into place only after every check passes.
+
+P5-6a PR 2 covers candidate evidence only. Reviewed image-to-manifest release
+binding, immutable loaded databases, HTTPS, expiry during scans and consumer
+admission remain later work. Copying this JSON never makes it trusted or newer.
+Tests in `scripts/clamav-refresh.test.mjs` use temporary files and updater fixtures;
+they are not live upstream, clean/EICAR or two-silo qualification.
+The Docker fixture also checks that failed container cleanup blocks a retry and
+successful cleanup allows one. It does not induce a real Docker connection failure.
