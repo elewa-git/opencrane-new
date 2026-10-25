@@ -5518,6 +5518,7 @@ uses, one budget admission and no later send. Free calls retain zero held and se
 cents. Missing/lost starts and incomplete observations keep retry unavailable.
 The [receipt](../../docs/process/budget-approval-retry/receipt.md) retains the earlier
 load failures separately from these checks. Fresh-install qualification is NOT RUN.
+
 ## Company opt-in write (Part of #49; P3-8 PR 4c)
 
 `integrations/company-opt-in-write.ts` validates the exact Origin, path, empty query

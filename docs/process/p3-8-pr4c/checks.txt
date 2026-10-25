@@ -1,0 +1,44 @@
+25 October 2026 — own checks for company opt-in HTTP writes
+All suites and static checks used nice -n 10. Vitest used --maxWorkers=1.
+PG_TEST_URL selected the disposable PostgreSQL database, not an owner stack.
+
+npm ci
+PASS. Requested NATS and lychee tool links were installed.
+
+npx vitest run apps/server/test/company-opt-in-write.test.ts --maxWorkers=1
+Expected RED: 37 failures at the missing POST route, before implementation.
+Test commit: 4a678db8d.
+
+npx vitest run apps/server/test/company-opt-in-write.test.ts apps/server/test/company-opt-in-read.test.ts --maxWorkers=1
+PASS twice: 2 files, 58 tests each. Durations: 66.37s and 68.67s.
+Later changes only corrected TypeScript annotations and type imports.
+
+npx vitest run apps/server/test/company-opt-in-write.test.ts apps/server/test/company-opt-in-read.test.ts libs/models/test/company-opt-in.test.ts libs/models/test/connection-selection.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1
+Earlier broader run: 615 passed, 2 failed, 232.42s.
+The HTTP fixture omitted memberReads configuration; corrected before final runs.
+Company command/fold: PASS, 33 tests. Security rules: PASS, 438 tests.
+Personal selection: FAIL, 87/88 passed. The first explicit-selection test failed
+while creating its profile fixture. withConnectionStage reported
+"Connection coordination unavailable" from the database lock. Not rerun.
+
+npm run check:events
+PASS: 154 event types agree.
+npm run lint:changelog
+PASS: branch fragment accepted.
+
+npm run typecheck
+Initial FAIL: new HTTP fixture typing errors. Every other workspace passed.
+npm run typecheck -w apps/server
+PASS after the typing corrections.
+npm run typecheck:package && npm run typecheck:dev-stack
+PASS.
+npx eslint apps/server/src/integrations/company-opt-in-write.ts apps/server/src/integrations/routes.ts apps/server/test/company-opt-in-write.test.ts
+PASS on the final files.
+npm run lint
+Initial code scan: 10 errors in an earlier version of the new HTTP test file.
+The final focused ESLint command above passes. Other files had warnings only.
+npm run lint:deps; npm run lint:unused; npm run lint:docs; npm run lint:readmes;
+npm run lint:links; npm run lint:fixtures; npm run check:package-licences;
+npm run lint:changelog
+PASS: all remaining lint stages, including knip and 2961 checked links (0 errors).
+No full root suite, live account, provider or model journey ran.
