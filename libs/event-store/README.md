@@ -62,9 +62,13 @@ flowchart LR
 
 Tests share a helper that chooses unused listening ports outside the ranges used
 by outgoing connections and the secondary dev stacks. Each fixture starts its own
-NATS server and keeps its own event history, while reusing certificates to reduce
+NATS server and keeps its own event history. Cluster fixtures keep their ports
+reserved until each server is ready to start, so other tests cannot take them
+during certificate setup. Tests reuse certificates to reduce
 setup time. A separate cluster test checks authenticated connections between
 three NATS servers, conditional writes and rebuilding a PostgreSQL read table.
+It waits for every server connection and three current event copies before testing
+which connections and writes the cluster refuses.
 
 These commands run from the repository root. The test command fetches the required
 tools before running the tests. The helper `wireSubject` turns an event stream

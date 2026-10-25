@@ -286,7 +286,32 @@ See the [event catalogue](../../docs/architecture/events.md) and
 configuration and a fresh silo installation remain unqualified.
 
 `test/cluster-routes.test.ts` uses the production cluster configuration with three
-disposable pinned servers. It checks route authentication, a leader with two current
+disposable pinned servers. It holds each chosen port with `reservePort()` during
+certificate setup, then releases that peer's ports immediately before starting it.
+The holding listener closes incoming probes so early route attempts cannot delay
+its release. The ordinary `freePort()` API still releases its port before returning.
+`ports.test.ts` checks both exclusive use while held and successful reuse after release.
+Setup waits for all three pooled routes and the dedicated
+`$SYS` route between each pair of servers. Seeing both peer names is not enough:
+the system route carries cluster information and the pooled routes carry requests.
+It waits for the built-in metadata health check on each server, then creates `EVENTS`.
+This checks contact with a metadata leader and current local metadata without
+requiring repeated detailed cluster reports.
+NATS can report metadata readiness before receiving the peer statistics needed for
+stream placement. `cluster-stream.ts` polls creation only for API error 10005, status
+400, with the exact description `no suitable peers for placement, peer offline`.
+Other errors, including timeouts with an unknown creation result, throw immediately.
+After creation, setup waits for the stream leader and two current, online replicas
+before any route probe. `cluster-stream.test.ts` checks the selective wait and
+immediate propagation of other errors, including an incompatible replica count.
+The first test checks routes and stream copies without polling.
+Setup waits at most ten seconds each for complete routes and healthy metadata,
+and five seconds each for placement and current stream copies. These waits poll real state and finish
+as soon as it is ready; they do not add a fixed startup delay.
+Failed peer startup waits for process output to close before classifying a missing
+trust file. A process exit can arrive before its final error output under load.
+Startup errors stay private; listener collisions get a fixed error without port or path data.
+It checks route authentication, a leader with two current
 replicas, conditional append, stale-position refusal and PostgreSQL member replay
 through the projection identity. It also checks publish refusals and rejects R3
 verification of an existing R1 stream without changing it. It requires

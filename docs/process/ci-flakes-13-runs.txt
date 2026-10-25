@@ -1,0 +1,199 @@
+NATS cluster readiness: 25 October 2026
+Test source: abf5c5a77be7a9e24bfd2864f47993a33c32b100
+Base: 4b72856acb34c77fc7e7fb27b2cda2753f1b318f
+Shared Linux runner; Node 22.23.3; NATS 2.15.0; disposable PostgreSQL 17.6-alpine.
+Final primary: PASS 30/30 runs, with 16/16 cluster cases and 48/48 cases each.
+Final companion: PASS 18/18 runs, with 46/46 cases each.
+
+Cause and repair
+The old check counted peer names while pooled and system routes were missing.
+Even complete routes and current metadata did not prove placement readiness:
+the diagnostic batch reproduced CI API error 10005, status 400, peer offline.
+NATS uses this response when a candidate lacks placement configuration or statistics.
+Source: https://github.com/nats-io/nats-server/blob/v2.15.0/server/server.go
+Source: https://github.com/nats-io/nats-server/blob/v2.15.0/server/jetstream_cluster.go
+Setup now waits for all routes, built-in metadata health, accepted three-copy
+placement and a leader with two current, online stream replicas.
+Only the exact peer-offline placement response is polled; other errors throw.
+Routes and metadata each have a ten-second bound; placement and copies five each.
+No fixed sleep was increased. Every original refusal assertion remains.
+A later run proved a port collision during the separate replica-mismatch fixture.
+Ports now stay bound during certificate setup, until each peer is ready to start.
+Holding listeners close incoming probes so release cannot wait on an early route.
+Failed startup also waits for child close before classifying complete stderr.
+Source: https://nodejs.org/api/child_process.html#event-close
+
+Failing-first and focused checks
+c0ebfd573: route regression FAIL; six connections where eight were required.
+2fa6711dd: placement-wait regression FAIL with the exact peer-offline error.
+836304183: port regression FAIL; another listener could bind the selected port.
+Reservation development run FAIL: open probes delayed release; probes now close.
+Final focused check PASS 466/466, including 438 event security-rule cases.
+Final complete event-store directory PASS 130/130 across 13 parallel files.
+Baseline with monitoring captures: runs 01-03 PASS, 04 FAIL (creation timeout),
+05-14 PASS. Early placement probes 01-05 PASS. These did not prove readiness.
+
+Load commands
+Primary: nice -n 10 npx vitest run libs/event-store/test/cluster-routes.test.ts
+  libs/event-store/test/backup.test.ts libs/event-store/test/security.test.ts
+  libs/event-store/test/provision.test.ts --maxWorkers=4
+Companion: nice -n 10 npx vitest run libs/event-store/test/stream-summary.test.ts
+  libs/event-store/test/append.test.ts libs/event-store/test/read-retry.test.ts
+  --maxWorkers=2
+Both used taskset -c 0,1 and PG_TEST_URL for the disposable database.
+File parallelism stayed enabled. Each primary run had fresh Vitest/NATS processes.
+The companion command repeated continuously alongside every primary run.
+Results come from per-run JSON reports. Skipped suites count as FAIL.
+
+Diagnostic at 7883c16d0: FAIL. Only routes and metadata were checked.
+Runs 06, 07, 10, 25: exact peer-offline error; 16, 17, 24: incomplete routes at 5s.
+diagnostic-01 PASS cluster=16/16 all=48/48 wall=29.06s load1=8.21
+diagnostic-02 PASS cluster=16/16 all=48/48 wall=20.99s load1=9.43
+diagnostic-03 PASS cluster=16/16 all=48/48 wall=24.1s load1=10.35
+diagnostic-04 PASS cluster=16/16 all=48/48 wall=21.25s load1=9.79
+diagnostic-05 PASS cluster=16/16 all=48/48 wall=19.68s load1=9.76
+diagnostic-06 FAIL cluster=0/16 all=32/48 wall=10.24s load1=10.59
+diagnostic-07 FAIL cluster=0/16 all=32/48 wall=14.96s load1=11.24
+diagnostic-08 PASS cluster=16/16 all=48/48 wall=25.29s load1=11.35
+diagnostic-09 PASS cluster=16/16 all=48/48 wall=26.36s load1=11.86
+diagnostic-10 FAIL cluster=0/16 all=32/48 wall=13.01s load1=13.92
+diagnostic-11 PASS cluster=16/16 all=48/48 wall=21.98s load1=13.65
+diagnostic-12 PASS cluster=16/16 all=48/48 wall=24.74s load1=13.43
+diagnostic-13 PASS cluster=16/16 all=48/48 wall=19.89s load1=11.95
+diagnostic-14 PASS cluster=16/16 all=48/48 wall=25.63s load1=13.56
+diagnostic-15 PASS cluster=16/16 all=48/48 wall=20.75s load1=13.23
+diagnostic-16 FAIL cluster=15/16 all=47/48 wall=28.33s load1=13.10
+diagnostic-17 FAIL cluster=15/16 all=47/48 wall=29.46s load1=11.84
+diagnostic-18 PASS cluster=16/16 all=48/48 wall=25.65s load1=10.81
+diagnostic-19 PASS cluster=16/16 all=48/48 wall=26.37s load1=10.85
+diagnostic-20 PASS cluster=16/16 all=48/48 wall=21.69s load1=10.82
+diagnostic-21 PASS cluster=16/16 all=48/48 wall=25.43s load1=9.78
+diagnostic-22 PASS cluster=16/16 all=48/48 wall=19.07s load1=10.48
+diagnostic-23 PASS cluster=16/16 all=48/48 wall=27.49s load1=9.11
+diagnostic-24 FAIL cluster=15/16 all=47/48 wall=24.49s load1=9.82
+diagnostic-25 FAIL cluster=0/16 all=32/48 wall=14.07s load1=8.67
+diagnostic-26 PASS cluster=16/16 all=48/48 wall=24.24s load1=9.17
+diagnostic-27 PASS cluster=16/16 all=48/48 wall=29.59s load1=8.94
+diagnostic-28 PASS cluster=16/16 all=48/48 wall=23.87s load1=9.97
+diagnostic-29 PASS cluster=16/16 all=48/48 wall=27.75s load1=10.64
+diagnostic-30 PASS cluster=16/16 all=48/48 wall=21.19s load1=9.21
+Diagnostic companions 01-16 PASS 46/46 each.
+
+Detailed-metadata batch at 7414195f4: FAIL; stopped after eight runs.
+Run 01: metadata monitor timeout. Run 08 finished before controller shutdown;
+its wall time is from Vitest and its load reading was not recorded.
+metadata-01 FAIL cluster=0/16 all=32/48 wall=26.01s load1=6.50
+metadata-02 PASS cluster=16/16 all=48/48 wall=32.79s load1=8.94
+metadata-03 PASS cluster=16/16 all=48/48 wall=24.6s load1=10.90
+metadata-04 PASS cluster=16/16 all=48/48 wall=24.2s load1=11.41
+metadata-05 PASS cluster=16/16 all=48/48 wall=27.46s load1=12.59
+metadata-06 PASS cluster=16/16 all=48/48 wall=26.75s load1=12.37
+metadata-07 PASS cluster=16/16 all=48/48 wall=19.24s load1=12.33
+metadata-08 PASS cluster=16/16 all=48/48 wall=27.39s load1=unrecorded
+Metadata companions 01-06 PASS 46/46 each.
+
+Startup-output batch at 9497238bf: FAIL; stopped after five runs.
+Run 05: missing-trust case received the generic startup error.
+startup-01 PASS cluster=16/16 all=48/48 wall=30.57s load1=7.67
+startup-02 PASS cluster=16/16 all=48/48 wall=26.66s load1=10.72
+startup-03 PASS cluster=16/16 all=48/48 wall=31.36s load1=12.97
+startup-04 PASS cluster=16/16 all=48/48 wall=37.99s load1=13.83
+startup-05 FAIL cluster=15/16 all=47/48 wall=42.39s load1=16.19
+Startup companions 01-04 PASS 46/46 each.
+
+Port-collision batch at c65f38189: FAIL, 29/30 primary runs passed.
+Run 28: listening port taken before replica-mismatch fixture startup.
+ports-01 PASS cluster=16/16 all=48/48 wall=37.78s load1=17.16
+ports-02 PASS cluster=16/16 all=48/48 wall=28.17s load1=18.01
+ports-03 PASS cluster=16/16 all=48/48 wall=42.06s load1=17.45
+ports-04 PASS cluster=16/16 all=48/48 wall=55.06s load1=18.69
+ports-05 PASS cluster=16/16 all=48/48 wall=40.64s load1=22.92
+ports-06 PASS cluster=16/16 all=48/48 wall=25.8s load1=20.20
+ports-07 PASS cluster=16/16 all=48/48 wall=36.39s load1=19.32
+ports-08 PASS cluster=16/16 all=48/48 wall=32.83s load1=18.82
+ports-09 PASS cluster=16/16 all=48/48 wall=33.29s load1=19.61
+ports-10 PASS cluster=16/16 all=48/48 wall=46.5s load1=19.64
+ports-11 PASS cluster=16/16 all=48/48 wall=35.23s load1=23.39
+ports-12 PASS cluster=16/16 all=48/48 wall=32.02s load1=21.15
+ports-13 PASS cluster=16/16 all=48/48 wall=42.25s load1=19.13
+ports-14 PASS cluster=16/16 all=48/48 wall=41.39s load1=22.20
+ports-15 PASS cluster=16/16 all=48/48 wall=32.16s load1=22.18
+ports-16 PASS cluster=16/16 all=48/48 wall=28.06s load1=20.24
+ports-17 PASS cluster=16/16 all=48/48 wall=24.64s load1=19.61
+ports-18 PASS cluster=16/16 all=48/48 wall=27.84s load1=17.46
+ports-19 PASS cluster=16/16 all=48/48 wall=28.58s load1=15.53
+ports-20 PASS cluster=16/16 all=48/48 wall=29.09s load1=13.88
+ports-21 PASS cluster=16/16 all=48/48 wall=29.59s load1=14.85
+ports-22 PASS cluster=16/16 all=48/48 wall=25.61s load1=12.58
+ports-23 PASS cluster=16/16 all=48/48 wall=26.0s load1=11.94
+ports-24 PASS cluster=16/16 all=48/48 wall=22.43s load1=12.04
+ports-25 PASS cluster=16/16 all=48/48 wall=28.2s load1=11.23
+ports-26 PASS cluster=16/16 all=48/48 wall=19.33s load1=11.09
+ports-27 PASS cluster=16/16 all=48/48 wall=30.16s load1=10.68
+ports-28 FAIL cluster=15/16 all=47/48 wall=23.46s load1=11.13
+ports-29 PASS cluster=16/16 all=48/48 wall=34.58s load1=10.54
+ports-30 PASS cluster=16/16 all=48/48 wall=26.67s load1=10.33
+Port-batch companions 03 and 10 FAIL 45/46: NATS connection errors in
+stream-summary.test.ts and read-retry.test.ts. Other runs 01-19 PASS 46/46.
+Those failures remain FAIL; later passing runs do not replace them.
+
+Final primary batch after reserving ports
+final-01 PASS cluster=16/16 all=48/48 wall=31.78s load1=5.75
+final-02 PASS cluster=16/16 all=48/48 wall=25.58s load1=7.46
+final-03 PASS cluster=16/16 all=48/48 wall=31.69s load1=8.65
+final-04 PASS cluster=16/16 all=48/48 wall=34.56s load1=9.04
+final-05 PASS cluster=16/16 all=48/48 wall=29.89s load1=9.98
+final-06 PASS cluster=16/16 all=48/48 wall=32.29s load1=11.01
+final-07 PASS cluster=16/16 all=48/48 wall=26.9s load1=12.38
+final-08 PASS cluster=16/16 all=48/48 wall=23.94s load1=11.63
+final-09 PASS cluster=16/16 all=48/48 wall=29.59s load1=12.59
+final-10 PASS cluster=16/16 all=48/48 wall=25.25s load1=14.71
+final-11 PASS cluster=16/16 all=48/48 wall=33.98s load1=15.10
+final-12 PASS cluster=16/16 all=48/48 wall=27.68s load1=17.06
+final-13 PASS cluster=16/16 all=48/48 wall=31.21s load1=15.59
+final-14 PASS cluster=16/16 all=48/48 wall=33.92s load1=17.57
+final-15 PASS cluster=16/16 all=48/48 wall=34.53s load1=18.24
+final-16 PASS cluster=16/16 all=48/48 wall=29.55s load1=16.44
+final-17 PASS cluster=16/16 all=48/48 wall=25.09s load1=15.72
+final-18 PASS cluster=16/16 all=48/48 wall=30.51s load1=15.39
+final-19 PASS cluster=16/16 all=48/48 wall=26.95s load1=15.42
+final-20 PASS cluster=16/16 all=48/48 wall=38.33s load1=15.29
+final-21 PASS cluster=16/16 all=48/48 wall=33.4s load1=15.65
+final-22 PASS cluster=16/16 all=48/48 wall=25.9s load1=15.54
+final-23 PASS cluster=16/16 all=48/48 wall=34.54s load1=15.36
+final-24 PASS cluster=16/16 all=48/48 wall=33.28s load1=14.36
+final-25 PASS cluster=16/16 all=48/48 wall=27.41s load1=14.55
+final-26 PASS cluster=16/16 all=48/48 wall=31.04s load1=13.11
+final-27 PASS cluster=16/16 all=48/48 wall=21.49s load1=12.98
+final-28 PASS cluster=16/16 all=48/48 wall=28.17s load1=12.58
+final-29 PASS cluster=16/16 all=48/48 wall=29.24s load1=12.47
+final-30 PASS cluster=16/16 all=48/48 wall=27.24s load1=10.45
+
+Final companion batch
+final-load-01 PASS all=46/46 wall=50.38s load1=5.75
+final-load-02 PASS all=46/46 wall=50.11s load1=8.10
+final-load-03 PASS all=46/46 wall=49.86s load1=9.66
+final-load-04 PASS all=46/46 wall=50.44s load1=10.66
+final-load-05 PASS all=46/46 wall=46.94s load1=12.12
+final-load-06 PASS all=46/46 wall=50.85s load1=12.99
+final-load-07 PASS all=46/46 wall=55.16s load1=15.49
+final-load-08 PASS all=46/46 wall=51.81s load1=15.59
+final-load-09 PASS all=46/46 wall=49.97s load1=18.46
+final-load-10 PASS all=46/46 wall=51.39s load1=16.44
+final-load-11 PASS all=46/46 wall=52.07s load1=15.39
+final-load-12 PASS all=46/46 wall=51.27s load1=15.22
+final-load-13 PASS all=46/46 wall=53.85s load1=16.00
+final-load-14 PASS all=46/46 wall=55.34s load1=15.36
+final-load-15 PASS all=46/46 wall=47.37s load1=14.24
+final-load-16 PASS all=46/46 wall=50.77s load1=13.41
+final-load-17 PASS all=46/46 wall=48.34s load1=12.14
+final-load-18 PASS all=46/46 wall=47.31s load1=10.93
+
+Other checks
+PASS: npm ci; pinned NATS and lychee links; full lint and updated-file ESLint.
+PASS: full typecheck, check:events, Knip, docs and changelog lint; diff whitespace.
+PASS: changed tests twice; event security rules; authority tests unchanged.
+Cleanup: disposable PostgreSQL removed with docker rm -f -v.
+Full root suite and fresh-install product journey: NOT RUN (fixture repair).
+CI after publishing: NOT RUN by this task; stop after opening the draft PR.
+Raw safe command/JSON reports remain in the local ci-flakes-13 temporary directory.
