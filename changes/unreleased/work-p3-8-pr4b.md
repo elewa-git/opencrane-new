@@ -1,0 +1,1 @@
+Admins can record or remove company account opt-in for an exact installation. Re-registering the server requires a new opt-in. This internal command grants no access; company account use remains unavailable.

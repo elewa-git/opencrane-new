@@ -106,6 +106,13 @@ export const mcpEvents = [
     { resourceType: 'mcp_server', resourceId: 'mcp_1', granteeId: 'team_1', revokedBy: 'mem_1' },
   ),
   event(
+    'connection.company_opt_in_set', 'connection',
+    'An admin recorded or removed company account opt-in for one exact installation.',
+    data.companyOptInSetDataSchema,
+    { serverId: 'mcp_1', connectionId: 'installed_1', registrationRevision: 1,
+      enabled: true, changedBy: 'mem_1', expectedSequence: 0 },
+  ),
+  event(
     'connection.selected', 'connection',
     'A person explicitly selected a personal account revision or cleared their choice.',
     data.connectionSelectedDataSchema,

@@ -51,3 +51,8 @@ export const connectionSelectedDataSchema = z.discriminatedUnion('action', [
     profileId: connectionId, profileRevision: z.int().positive() }),
   z.strictObject({ ...selectionFields, action: z.literal('clear') }),
 ]);
+
+export const companyOptInSetDataSchema = z.strictObject({
+  serverId: connectionId, connectionId, registrationRevision: z.int().positive(),
+  enabled: z.boolean(), changedBy: connectionId, expectedSequence: z.int().nonnegative(),
+});

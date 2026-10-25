@@ -786,3 +786,11 @@ Other routine events still start no work.
 
 `routineControlSchema` is exported for the internal owner pause to validate and compare
 saved control facts. Its event shape and subscriptions are unchanged; it starts no work.
+
+## Company account opt-in
+
+`connection.company_opt_in_set` strictly requires serverId, connectionId,
+registrationRevision, enabled, changedBy and expectedSequence. The envelope records the
+human actor, silo and original change reference. The command derives changedBy from
+current admin membership. The models fold checks identity, stream position and the exact
+installation. No reaction subscribes; replay grants nothing and releases no credential.
