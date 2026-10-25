@@ -3,7 +3,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { pgDb, providers, ProjectionRunner, rebuildProviderProjection, readProviders } from '@opencrane/projections';
+import { pgDb, providers, routines, ProjectionRunner, rebuildProviderProjection, readProviders } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import type { EventEnvelope } from '@opencrane/events';
 import { providerDefaultHandler, providerSecretRef } from '@opencrane/models';
@@ -67,6 +67,7 @@ async function initialise() {
   runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader,
     createLogger('bindings', { level: 'silent' }));
   await runner.initialise(providers);
+  await runner.initialise(routines);
 }
 beforeAll(initialise, 120_000);
 async function close() {
@@ -207,25 +208,16 @@ async function hidesAfterRemoval() {
 it('refuses a departed admin even before IAM catches up', hidesAfterRemoval);
 
 async function routineGaps() {
-  const read = nats.store.readStream.bind(nats.store);
-  const spy = vi.spyOn(nats.store, 'readStream');
-  function fails(subject: string, from?: number, deadline?: number) {
-    if (subject === 'routine-*') throw new Error('reader failed');
-    return read(subject, from, deadline);
-  }
-  spy.mockImplementation(fails);
+  await dbs.queue.query("DELETE FROM projection_checkpoints WHERE name = 'routines'");
   expect((await request('GET')).statusCode).toBe(503);
-  spy.mockRestore();
+  await runner.initialise(routines);
   await append('routine-old', 'routine.paused', { routineId: 'old', pausedBy: 'owner' });
-  expect((await request('GET')).json()).toMatchObject({ routines: { status: 'unsupported' } });
-  async function* lags(subject: string, from?: number, deadline?: number) {
-    if (subject !== 'routine-*') yield* read(subject, from, deadline);
-  }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(lags);
   expect((await request('GET')).statusCode).toBe(503);
-  vi.restoreAllMocks();
+  await runner.run(routines);
+  expect((await request('GET')).json()).toMatchObject({ routines: { status: 'unsupported' } });
 }
-it('reports reader failure and legacy routine history without invented counts', routineGaps);
+it('reports projection failure and legacy routine history without invented counts', routineGaps);
+
 
 
 async function replaysRecordedSwitchOn() {
