@@ -588,7 +588,10 @@ if (program === 'k3d' && args[1] === 'create') {
 if (program === 'k3d' && args[0] === 'kubeconfig') process.stdout.write('PRIVATE-KUBECONFIG');
 if (program === 'helm' && args.includes('list')) output([]);
 if (program === 'kubectl' && args.includes('nodes')) output({ items: state.nodes });
-if (program === 'kubectl' && args.includes('namespace') && state.namespace) output(state.namespace);
+if (program === 'kubectl' && args.includes('namespace') && state.namespace) {
+  output(state.namespace);
+  if (state.loseTarget) fs.rmSync(ownerFile, { force: true });
+}
 save();
 `;
 
@@ -601,6 +604,7 @@ type TargetState = {
   namespace?: { metadata: { uid: string; annotations: Record<string, string> } };
   fail?: string;
   partial?: boolean;
+  loseTarget?: boolean;
   retain?: boolean;
   recordBeforeCreate?: { id: string };
 };
@@ -812,6 +816,8 @@ async function packageUsesCheckedTarget() {
     await mkdir(otherSlot);
     await writeFile(`${otherSlot}/sentinel`, 'other slot');
     await fixture.run('package-check');
+    const env = { ...fixture.env, DEV_STACK_ID: '1' };
+    await exec('infra/package/forward.sh', [], { env });
     await fixture.run('package-down');
     await fixture.loadState();
     for (const call of fixture.state.calls) {
@@ -827,3 +833,31 @@ async function packageUsesCheckedTarget() {
   }
 }
 test('package ownership and cleanup use only the checked target context', packageUsesCheckedTarget);
+
+async function missingTargetNeverFallsBack() {
+  const fixture = await targetFixture();
+  try {
+    await fixture.run('target-up');
+    await fixture.loadState();
+    const annotations = { 'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1' };
+    fixture.state.namespace = { metadata: { uid: 'package-uid', annotations } };
+    const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-opencrane-target-1',
+      namespace: 'opencrane-package-1', namespaceUid: 'package-uid',
+      release: 'opencrane-package-1' };
+    const record = `${fixture.slotDirectory}/package-owner.json`;
+    await writeFile(record, JSON.stringify(owner));
+    fixture.state.calls = [];
+    fixture.state.loseTarget = true;
+    await fixture.saveState();
+    await assert.rejects(fixture.run('package-down'));
+    await fixture.loadState();
+    for (const call of fixture.state.calls) {
+      assert.ok(!call.includes('--context=k3d-ocn'));
+      assert.ok(!call.includes('uninstall') && !call.includes('delete'));
+    }
+    assert.equal(await readFile(record, 'utf8'), JSON.stringify(owner));
+  } finally {
+    await fixture.close();
+  }
+}
+test('cleanup never falls back after the recorded target disappears', missingTargetNeverFallsBack);

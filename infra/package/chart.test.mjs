@@ -110,10 +110,19 @@ function isFileSourceArgument(argument) {
   return argument.startsWith('--from-file=');
 }
 
-async function preparedSecretsFixture(withOwner = true) {
+async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
   const settings = new Map();
   const secrets = new Map();
+  const context = isolated ? 'k3d-opencrane-target-1' : 'k3d-ocn';
+  const owner = { context, namespace: 'opencrane-package-test', namespaceUid: 'original' };
+  async function checkedConnection(expected) {
+    assert.equal(expected, owner);
+    if (loseTarget && secrets.size > 0) throw new Error('Target changed');
+    const args = [`--context=${context}`];
+    if (isolated) args.push('--kubeconfig', '/private/target.kubeconfig');
+    return args;
+  }
   const key = Buffer.alloc(32, 0x41);
   key[3] = 0;
   settings.set('postgres', { POSTGRES_PASSWORD: 'test-only' });
@@ -148,6 +157,10 @@ async function preparedSecretsFixture(withOwner = true) {
   }
   function executeFixture(program, args, options, callback) {
     assert.equal(program, 'kubectl');
+    assert.ok(args.includes(`--context=${context}`));
+    if (isolated) {
+      assert.equal(args[args.indexOf('--kubeconfig') + 1], '/private/target.kubeconfig');
+    }
     const name = args[args.indexOf('generic') + 1];
     const sourceArgument = args.find(isFileSourceArgument);
     assert.ok(sourceArgument);
@@ -167,7 +180,8 @@ async function preparedSecretsFixture(withOwner = true) {
       root: process.cwd(), writeEnv: writeFixture,
     },
     '../dev-stack/identity.ts': { localOrigin: 'http://localhost:25106', stackId: 'test' },
-    '../dev-stack/packaged.ts': { verifyPackageOwner: async () => {} },
+    '../dev-stack/packaged.ts': { verifyPackageOwner: async () => owner,
+      packageConnectionArgs: checkedConnection },
   };
   try {
     const prepareSettings = loadPrivateFunction('infra/package/prepare.ts',
@@ -175,7 +189,7 @@ async function preparedSecretsFixture(withOwner = true) {
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
       'provisionSecrets', replacements);
     await prepareSettings();
-    await provisionSecrets(values.secrets);
+    await provisionSecrets(values.secrets, owner);
     return { key, settings, secrets };
   } finally {
     const remainingFiles = readdirSync(directory);
@@ -401,3 +415,42 @@ async function refusesMissingPrivateOwnerEmail() {
 
 test('refuses missing owner email before preparing private credentials',
   refusesMissingPrivateOwnerEmail);
+
+async function prepareOnRecordedTarget() {
+  const { secrets, settings } = await preparedSecretsFixture(true, true);
+  assert.equal(secrets.size, 6);
+  assert.equal(settings.get('package-runtime').NATS_REPLICAS, '1');
+  assert.equal(settings.get('package-runtime').COMMAND_NATS_REPLICAS, '1');
+}
+test('private preparation uses the recorded target connection for all six Secrets',
+  prepareOnRecordedTarget);
+
+async function preparationRefusesChangedTarget() {
+  await assert.rejects(preparedSecretsFixture(true, true, true), /Target changed/u);
+}
+test('private preparation stops when the target changes between Secret creations',
+  preparationRefusesChangedTarget);
+
+async function helmRefusesChangedConnection() {
+  let calls = 0;
+  function executeFixture(program, args, options, callback) {
+    calls++;
+    callback(null, { stdout: '', stderr: '' });
+  }
+  async function changedConnection() {
+    return { context: 'k3d-ocn', kubeconfig: undefined };
+  }
+  const command = loadPrivateFunction('infra/dev-stack/packaged.ts', 'command', {
+    'node:child_process': { execFile: executeFixture },
+    './config.ts': { directory: '/tmp/package-test', root: process.cwd() },
+    './identity.ts': { secondary: true, stackId: '1' },
+    './target.ts': { targetConnection: changedConnection },
+  });
+  for (const action of ['install', 'list', 'uninstall']) {
+    await assert.rejects(command('helm', [action, '--kube-context',
+      'k3d-opencrane-target-1']), /target/u);
+  }
+  assert.equal(calls, 0);
+}
+test('Helm refuses a target change before install, inspection or removal',
+  helmRefusesChangedConnection);
