@@ -1,4 +1,162 @@
-# Approval retry during a competing refusal
+# Budget writer recovery and approval retries
+
+## Typed append outcomes and unknown-state recovery, 25 October 2026
+
+A definite conditional rejection followed by a recovery-read timeout used to stop an unchanged
+budget writer. `EventStore.appendOutcome` now reports distinct typed outcomes. A failed recovery
+read returns `conditional_rejection_unknown` immediately. The actor refuses that request and
+reads the budget before the next queued command. Only a confirmed budget change or lost
+ownership stops it. The read must succeed before another money decision; repeated read failures
+keep recovery pending.
+
+The store distinguishes a new append, a duplicate already saved, a rejection with changed state,
+a rejection with unchanged state, a rejection with unknown state, a transport failure and
+invalid input or a colliding id. A definite rejection cannot erase uncertainty from an earlier
+lost reply. The original `append` method maps these results to the existing command API, keeping
+other callers unchanged. Budget duplicate recovery reads the exact saved event and applies its
+stored payload.
+
+### Failing-first evidence and retained checks
+
+Tests were committed first in `1d27ce585`, followed by the guard coverage and test adapter
+changes in `7c649e7d3`, before the implementation in `de1ce58f4`. The first reproduction failed
+with `Budget writer lost its fence` instead of the request-only refusal. The new store-result
+tests failed because the typed API did not exist yet. Actor tests for unknown transport results
+and lost replies also failed before the actor changed. Logs are `reproduction-red.log`,
+`outcomes-red.log` and `actor-outcomes-red.log` in the directory below.
+
+The retained reproduction uses a real NATS conditional rejection (10071 or 10164), then forces
+its recovery read to throw `TimeoutError`. It checks one rejection, one failed read, an
+unchanged budget, no saved admission and a successful later reservation. The store now ends
+after callback two, before the old third callback could refuse access. The next request must
+read the budget again.
+
+The focused event-store and actor run passed 65/65. The refreshed core suite passed 92/92 twice.
+After the final queue callback and command-construction cleanup, the actor passed 59/59 twice;
+scoped lint and typecheck passed too. Five additional guard cases passed: the fallback two-second limit and the actor's check after a callback, foreign-silo and foreign-subject switch-on
+rows, and exact deadline transfer from MCP dispatch. Seven temporary loader mutations caused
+eight targeted tests to fail as expected. These removed or changed those guards, erased earlier
+lost-reply uncertainty, or confused recovery-read failure with transport failure. No mutation
+changed repository files. Logs are `second-green.log`, `guards-green.log` and `mutation-*.log`.
+
+The first implementation check exposed a test spy calling itself after the API change and a
+timeout assertion using the wrong case. Both were corrected; the second run passed. Scoped lint
+caught file-size and complexity limits. The unchanged stream configuration checks moved to
+`stream-config.ts`; budget result and history checks moved to `budget-append.ts`. The dependency
+check then required the new configuration file in the explicit NATS adapter list. Full lint then
+caught a generic method binding, a file one line over its limit and an async test iterator
+without an await. A named queue callback and the existing budget append helper now hold these
+steps clearly. A strict optional-property test fixture was corrected by omitting the flag. Knip
+caught a test-only NATS import that was not a declared models dependency. The test now gets the
+same error class from the existing event-store test helper; no dependency was added. The import
+check, four targeted regressions and both affected package typechecks passed. No application
+permission, money, memory, conditional-write or two-second deadline check was removed or
+weakened.
+
+### Base and setup
+
+The initial rebase onto `d674ca2e5` finished after merging both README descriptions. Main then
+added an unrelated worker fixture test. The second fetch and rebase onto
+`786e21a19b4ab0da29140f7922222e9504ff598b` finished, with no rebase state left. Its changes did
+not alter any event-store, models or server file. That base was an ancestor of the branch.
+Selected tests had already started on identical source.
+
+After both complete runs finished, the final fetch and rebase onto
+`6ddd5bef191ee0490b0e315085575cdf955d3312` completed. The two README diagram conflicts retain
+both publication receipts and write-outcome checks. No rebase state remains, the final base is
+an ancestor, and all 17 TypeScript files changed by this PR are byte-for-byte unchanged. Main
+added publication-receipt recovery and routine-list changes. Final-base tests include their
+integration files, plus the budget writer, append outcomes and access gateway.
+
+Focused checks used the supplied PostgreSQL URL on port 55432. The complete selected suites and
+load batch use the throwaway PostgreSQL 17.6 container `pgtest-ci-flakes-11-fix3`, port 36058,
+after `pg_isready` passed. Tests start their normal isolated NATS, OpenFGA and gateway fixtures.
+All lint, typecheck and test commands use `nice -n 10`, with one worker per Vitest process. The
+first complete selected pass overlaps the 30 approval-retry repetitions. No full root suite or
+fresh-install journey was run. The owner stack and Docker daemon settings are unchanged.
+
+Own logs and JSON reports are in `/tmp/ci-flakes-11-fix3/`.
+
+### Own final results
+
+Own checks, all run under `nice -n 10`:
+
+- **PASS:** final-base full lint, typecheck, event catalogue, Knip and changelog checks. ESLint reports 25 warnings and no errors; Knip reports two configuration hints and no failures.
+- **PASS:** final-base append, typed outcomes, actor, gateway integration, publication-receipt integration and routine-list tests: 172/172 twice, using the supplied PostgreSQL URL.
+- **FAIL:** first complete 24-file run: 609 passed, seven failed, one optional browser case NOT RUN. Second complete run: 607 passed, nine failed, one optional browser case NOT RUN. All 117 event-store cases passed in both. The second run passed all 59 actor cases, including the retained rejection/read-timeout reproduction, and all 183 MCP dispatch cases.
+- **FAIL:** all 30 approval-retry repetitions ran under load; 24/30 repetitions passed both cases, and 53/60 cases passed. The seven failures remain unexplained beyond the recorded diagnostic details.
+- **PARTIAL:** overall qualification. Later passing runs do not establish the causes of earlier failures. Full root tests, fresh-install journeys and the optional browser case are NOT RUN.
+
+### First complete-pass failures
+
+The first complete pass had 609 passes, seven failures and one optional browser case NOT RUN.
+Six failures were in `mcp-dispatch.test.ts`:
+
+| Case | Recorded failure |
+| --- | --- |
+| Recording upstream during failed capture and worker replacement | A tool-policy history read reached its deadline. |
+| Exact drift restoration with an expired approval | The `mcp-catalogue --verify` replay command failed. |
+| Saved gateway generation after the last read | OpenFGA store creation timed out after one second during fixture setup. |
+| Saved reload with an approved, non-pending approval | The `conversations --confirm-conversations-stopped` replay command failed. |
+| Another server's approval through Odoo reload | HTTP 403 instead of 200. |
+| Remote adapter redirect failure | Gateway witness polling returned 404 instead of 200. |
+
+The actor's unknown-transport test failed before its assertions because the loaded test-helper
+module did not yet export `TimeoutError`. This long-running process started before the test-helper export changed. The mixed source snapshot is an own validation setup error; the first run
+remains FAIL. A fresh actor process passed 59/59, and the second complete pass uses stable
+source. The real-NATS conditional-rejection/read-timeout reproduction passed in the first
+complete run.
+
+### Second complete-pass failures
+
+The second complete pass had 607 passes, nine failures and one optional browser case NOT RUN.
+All 117 event-store cases, 59 actor cases, 183 MCP dispatch cases, 75 decision-fence cases and
+74 executed server approval cases passed. Both gateway approval-recovery cases passed. The nine
+failures were:
+
+| File and case | Recorded failure |
+| --- | --- |
+| Gateway integration: both grant sides, starting with member | HTTP 403 instead of 200; the saved dispatch result says `not_dispatched` with `adapter_dispatch_refused`. |
+| Decision activity: warmed 5,000-event provider history | The test reached its 30-second limit. |
+| Decision cost: flat reads across chat and turn history | HTTP 403 instead of 200 during the long-chat measurement. |
+| Decision cost: cold process catches up before reading the chat tail | The event-store read reached its deadline. |
+| Decision cost: 3,000 model grants | HTTP 403 instead of 200. |
+| Decision cost: 15,000 edits to one grantee | NATS timed out while seeding the fixture. |
+| Decision cost: 10,000 members and eight models | NATS timed out while seeding the fixture. |
+| Managed decision: bound call settles once | HTTP 503 instead of 200. |
+| Managed decision: cold 5,000-event provider history | HTTP 403 instead of 200; recorded history duration was 11,412 ms. |
+
+These cases passed in the first run. That does not establish why they failed in the second run,
+and they remain FAIL. No deadline, assertion or access check was changed to obtain a pass. Full
+details are in `selected-2.log` and `selected-2.json`.
+
+### Load diagnosis
+
+All 30 repetitions ran alongside the selected suites, with static checks also running for part
+of the batch. There were 24 completely passing repetitions and 53/60 passing cases. Repetitions
+3, 4, 5, 6, 8 and 15 failed: 5 failed both cases; 3 and 15 failed budget-admission recovery; 4,
+6 and 8 failed saved-start recovery. Every failed case returned `[403, 403]` instead of `[200,
+403]`. No failed run was replaced by a passing rerun.
+
+The first extra diagnostic passed both retry cases. The second reproduced both unexpected `[403,
+403]` results. Its saved-start retry failed at `final_access`, with `event_store_unavailable`,
+1,176 ms into dispatch and 185 ms after the original access deadline. The budget-admission retry
+failed at `budget_admission`, with `event_store_unavailable`, 683 ms into dispatch and 257 ms
+after that deadline. Their permit expiry times still had 818 ms and 1,302 ms left. The original
+access deadline correctly remained stricter than the later permit expiry.
+
+These measurements locate two failed retries after the access deadline. They do not explain all
+failed repetitions or establish why the request exhausted its budget. They do not prove host
+contention, nor do they prove an application performance defect absent. The load failures remain
+FAIL. The temporary loader logged only fixed reason labels, result types and time measurements,
+and did not change any check or test assertion. Logs are `diagnostic-1.log` and
+`diagnostic-2.log`.
+
+The throwaway PostgreSQL container and its volume were removed with `docker rm -f -v pgtest-ci-flakes-11-fix3` after the complete runs. Final-base focused checks use the supplied PostgreSQL
+URL on port 55432. No owner container was removed.
+
+The remaining sections record earlier commits and checks. Their descriptions of
+when the writer stops are historical; the typed outcomes above describe the current code.
 
 ## Definite append rejection correction, 24–25 October 2026
 
