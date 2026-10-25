@@ -1,5 +1,84 @@
 # Approval retry during a competing refusal
 
+## Definite append rejection correction, 24–25 October 2026
+
+An id used by an unrelated member event could refuse a budget command and stop
+its unchanged writer permanently. Invalid-event rejection by the store had the
+same problem. Both now refuse only that command. Exact duplicates keep their
+earlier result. An uncertain publish still stops the writer because its saved
+budget position may have changed. No access, money, memory or deadline check,
+or test assertion, was removed or relaxed.
+
+The test-first sequence is retained in `691fc8cb9` (tests) and `df52bb10d` (fix).
+The original commits were `a7015110d` and `968607b29` before the final rebase.
+Three regressions failed before the fix: duplicate-id collision on the first
+append, collision after a conflict, and invalid-event rejection by the store.
+All three passed after the fix. The focused audit passed 8/8, including exact
+retries, thrown append errors, conflict-read errors and unchecked contention.
+Logs are `rejected-red.log`, `rejected-green.log` and `audit-green.log` below.
+
+### Bases and test setup
+
+The initial fetched base was `f4f4fecb13df380882293bd37745b1d388412b52`.
+The complete 16-file passes and load batch used source `968607b29` on that base.
+Main then added indexed finance reads. The final fetched base is
+`3b623f52a841601a62c99629790cf4f2d08e0839`; the final source fix is `df52bb10d`.
+Both rebases finished, the final base is an ancestor, and no rebase state remains.
+README conflicts preserved main's finance description and the budget-write notes.
+All 11 TypeScript files changed by this PR remained byte-for-byte unchanged.
+
+Node was v22.23.3. The failing-first run used the supplied PostgreSQL URL on port
+55432. Complete suites and final-base checks used the throwaway PostgreSQL 17.6
+container `pgtest-ci-flakes-11-fix2` on port 35523 after `pg_isready` passed.
+Tests started their normal isolated NATS, OpenFGA and gateway fixtures.
+Every test, lint and typecheck command used `nice -n 10`. Each Vitest process had
+one worker. The first complete pass overlapped all 30 approval-retry invocations.
+Own logs and JSON reports are in `/tmp/ci-flakes-11-fix2/`.
+
+### Own results for this correction
+
+| Check | Result |
+| --- | --- |
+| First complete 16-file pass | FAIL: 540 passed, 6 failed, 1 optional browser case NOT RUN |
+| Second complete 16-file pass | PASS: 546 passed, 1 optional browser case NOT RUN |
+| Actor and gateway integration within those passes | PASS twice: 54 actor and 17 integration cases each |
+| Final-base accounting, actor, append and gateway integration | PASS: 116/116 twice |
+| Final-base lint, typecheck, event catalogue, Knip and changelog | PASS; ESLint has 25 warnings and no errors |
+| Approval retry under load | FAIL: 22/30 invocations; 50/60 cases passed |
+
+The complete passes include actor, all decision files, MCP dispatch, server
+approvals, approval cancellation/record, root append retry, gateway integration,
+and event-store append/history-checked/read-retry tests. Their reports are
+`selected-{1,2}.json`. Final-base reports are `final-tests-{1,2}.json`.
+The initial scoped lint caught complexity 16 in append; grouping the unavailable
+result checks reduced it to 15 without removing a check. Full lint then passed
+on both bases. Final static logs start with `final-`.
+
+### Retained failures and diagnostics
+
+The first complete pass had three MCP approval-reload failures in replay CLI
+commands: one conversation replay and two catalogue verification commands.
+Their helpers retain the existing ten-second subprocess limits. The approval
+UTC-date case failed during OpenFGA fixture setup with a one-second Axios timeout.
+The owning-team grant revocation case reached its 40-second test limit.
+The 10,000-member cache case returned HTTP 403 where HTTP 200 was required.
+All six passed in the second complete run; this does not establish their causes.
+
+Load invocations 10, 15, 16, 17, 18, 19, 21 and 23 returned `[403, 403]` instead of
+`[200, 403]` for competing retries. Both cases failed in 15 and 21; the other six
+had one failure each. No failed invocation was replaced by a passing rerun.
+An extra diagnostic reproduced the saved-start failure at `budget_admission`,
+with the fixed reason `decision_unavailable`, after 521 ms in the dispatcher.
+That label does not establish its cause. A temporary loader added fixed labels
+for the nested cause of `Budget append unavailable`, without raw exceptions or
+behaviour changes. Four diagnostic invocations then passed both cases (8/8),
+so the earlier failure remains unexplained. No diagnostic source was committed.
+
+Removed the throwaway database and its volume with `docker rm -f -v` after testing.
+The owner stack and Docker daemon settings were untouched. Overall qualification
+is PARTIAL. Full root tests, fresh-install journeys and the optional approval
+browser case are NOT RUN. Earlier results below remain recorded.
+
 ## Pre-publish expiry correction, 24 October 2026
 
 The store now distinguishes a refusal before any publish from an uncertain write.
