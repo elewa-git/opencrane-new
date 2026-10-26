@@ -23,7 +23,10 @@ export async function stalledStorage(fault: string) {
     if (fault.startsWith('region')) status = 200;
     response.writeHead(status);
     response.flushHeaders();
-    const chunk = Buffer.alloc(16 * 1024, 65);
+    let chunkSize = 128;
+    if (fault.endsWith('large')) chunkSize = 16 * 1024;
+    // Keep unfinished bodies below the byte limit until well after the deadline.
+    const chunk = Buffer.alloc(chunkSize, 65);
     let sent = 0;
     function send() {
       // Keep the response open so only cancellation can close the connection.

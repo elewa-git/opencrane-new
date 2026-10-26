@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
@@ -95,6 +95,65 @@ const objectDescriptor = z.object({
   eventDescriptorSha256: z.string(),
   objects: z.array(z.object({ identity: z.string(), byteCount: z.number(), sha256: z.string() })),
 });
+
+function decryptObject(bytes: Buffer, key: Buffer, associatedData?: Buffer) {
+  const nonce = bytes.subarray(0, 12);
+  const ciphertext = bytes.subarray(12, bytes.length - 16);
+  const tag = bytes.subarray(bytes.length - 16);
+  const decipher = createDecipheriv('aes-256-gcm', key, nonce);
+  if (associatedData) decipher.setAAD(associatedData);
+  decipher.setAuthTag(tag);
+  const plaintext = decipher.update(ciphertext);
+  const final = decipher.final();
+  return Buffer.concat([plaintext, final]);
+}
+
+async function checksEncryptedFormat() {
+  const setup = await fixture();
+  await services.objects.putObject('files', setup.data.objectKey, setup.bytes);
+  await setup.archive();
+  await setup.capture();
+  const description = await readFile(join(setup.destination, 'descriptor.json'), 'utf8');
+  const descriptor = objectDescriptor.parse(JSON.parse(description));
+  const entry = descriptor.objects[0]!;
+  const bytes = await readFile(join(setup.destination, entry.identity));
+  const key = await readFile(setup.options.backupKeyFile);
+  const requiredData = Buffer.from(JSON.stringify([entry.identity, entry.sha256]));
+  expect(decryptObject(bytes, key, requiredData)).toEqual(setup.bytes);
+  function withoutAssociatedData() {
+    return decryptObject(bytes, key);
+  }
+  function withoutContentHash() {
+    const identityOnly = Buffer.from(JSON.stringify([entry.identity]));
+    return decryptObject(bytes, key, identityOnly);
+  }
+  expect(withoutAssociatedData).toThrow();
+  expect(withoutContentHash).toThrow();
+}
+it('uses AES-256-GCM with the object identity and content hash', checksEncryptedFormat);
+
+async function refusesAuthenticatedWrongChecksum() {
+  const setup = await fixture();
+  const reference = { identity: 'a'.repeat(64), sha256: digest(setup.bytes),
+    byteCount: setup.bytes.length };
+  const plaintext = Buffer.alloc(reference.byteCount, 65);
+  expect(digest(plaintext)).not.toBe(reference.sha256);
+  const key = await readFile(setup.options.backupKeyFile);
+  const nonce = randomBytes(12);
+  const associatedData = Buffer.from(JSON.stringify([reference.identity, reference.sha256]));
+  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  cipher.setAAD(associatedData);
+  const ciphertext = cipher.update(plaintext);
+  const final = cipher.final();
+  const encrypted = Buffer.concat([nonce, ciphertext, final, cipher.getAuthTag()]);
+  expect(decryptObject(encrypted, key, associatedData)).toEqual(plaintext);
+  await writeFile(join(setup.directory, reference.identity), encrypted, { mode: 0o600 });
+  function restore() {
+    return readBackupObject(setup.directory, setup.options.backupKeyFile, reference);
+  }
+  expect(restore).toThrow('Object restore refused');
+}
+it('refuses authenticated plaintext with the wrong checksum', refusesAuthenticatedWrongChecksum);
 
 async function savesReferencedBytes() {
   const setup = await fixture();
@@ -338,9 +397,11 @@ async function closesFailedRequest(fault: typeof transportFaults[number]) {
   const storage = await stalledStorage(fault);
   onTestFinished(storage.close);
   const options = { ...setup.options, timeoutMs: 1_000 };
+  const started = performance.now();
   await expect(collectObjectBackup(setup.source.connection, setup.target.connection,
     storage.client, options)).rejects.toEqual(new Error('Object backup refused'));
   await expect.poll(storage.closed, { timeout: 500 }).toBe(true);
+  expect(performance.now() - started).toBeLessThan(1_500);
   expect(storage.requests()).toBeGreaterThan(0);
   await expect(stat(setup.destination)).rejects.toMatchObject({ code: 'ENOENT' });
 }
