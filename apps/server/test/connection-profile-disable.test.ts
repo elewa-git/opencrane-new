@@ -131,6 +131,15 @@ async function metadata(url: string) {
   expect(response.statusCode).toBe(200);
   return response.json<{ controlRevision: number; profileRevision: number }>();
 }
+function requestUrl(input: Parameters<typeof fetch>[0]) {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input.url;
+}
 const input = { changeRef: 'disable', expectedSequence: 0 };
 
 async function recover(actor: string, lost: boolean) {
@@ -189,7 +198,7 @@ async function recover(actor: string, lost: boolean) {
   expect(noCustody).not.toHaveBeenCalled();
   // Allow only the existing permission service to receive HTTP calls.
   for (const [url] of fetch.mock.calls) {
-    expect(String(url).startsWith(fga.apiUrl)).toBe(true);
+    expect(requestUrl(url).startsWith(fga.apiUrl)).toBe(true);
   }
   // Seeding the replacement adds its profile and four server events only.
   expect(await nats.store.head()).toBe(position + 5);
@@ -255,7 +264,7 @@ async function permissionOrdering(outcome: string, retry: boolean) {
         let data: Record<string, unknown> = { memberId: 'admin', removedBy: 'owner' };
         if (outcome === 'demoted') {
           type = 'member.role_changed';
-          data = { memberId: 'admin', previousRole: 'admin', role: 'member', changedBy: 'owner' };
+          data = { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
         }
         changed = envelope('test', 'member-admin', type, data);
         await nats.seed([changed]);
@@ -442,9 +451,9 @@ async function missingSetup(kind: string) {
     memberReads.silo = 'foreign';
   }
   if (kind === 'configuration') {
-    app = buildServer(config);
+    app = buildServer(config, { logDestination: { write } });
   } else {
-    app = buildServer(config, { memberReads });
+    app = buildServer(config, { memberReads, logDestination: { write } });
   }
   try {
     const response = await post(fixture.url, input);
