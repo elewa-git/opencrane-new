@@ -300,3 +300,118 @@ companion-59 PASS 58/58 wall=43.79s exit=0
 companion-60 PASS 58/58 wall=42.90s exit=0
 companion-61 PASS 58/58 wall=42.74s exit=0
 companion gate: PASS; 61/61 invocations passed.
+
+
+Bootstrap request deadline correction: 26 October 2026
+Source: 134ac8dd6; test commits: 0ecdab27c and d8e34b161.
+All tests used nice -n 10 and the requested PG_TEST_URL.
+These diagnostic and confirmation runs precede the loaded batch:
+
+deadline-red-01 FAIL (expected) 0/7 selected passed; 28 skipped; duration=59.48s exit=1
+deadline-first-full FAIL 34/35 duration=131.62s exit=1
+  FAIL late consumer creation reply: real 200 ms request timeout interrupted the injected-clock case.
+deadline-red-clock FAIL (expected) 0/7 selected passed; 28 skipped; duration=58.40s exit=1
+deadline-changed-01 PASS 68/68 duration=127.17s exit=0
+deadline-changed-02 PASS 68/68 duration=138.85s exit=0
+
+Bootstrap deadline stress runs: 26 October 2026
+Source: 134ac8dd607e95cae9090fee56d1635f2d42ea0c
+Two independent invocations run at once, both pinned to CPUs 0 and 1.
+Each runs bootstrap with cluster-stream using two workers and file parallelism.
+Every invocation uses nice -n 10 and the requested PG_TEST_URL.
+All 30 invocations and any failed result are retained.
+
+bootstrap-01 PASS 42/42 wall=141.27s exit=0
+bootstrap-02 PASS 42/42 wall=150.63s exit=0
+bootstrap-03 PASS 42/42 wall=163.45s exit=0
+bootstrap-04 PASS 42/42 wall=168.84s exit=0
+bootstrap-05 PASS 42/42 wall=145.37s exit=0
+bootstrap-06 PASS 42/42 wall=146.76s exit=0
+bootstrap-07 PASS 42/42 wall=160.42s exit=0
+bootstrap-08 PASS 42/42 wall=160.89s exit=0
+bootstrap-09 PASS 42/42 wall=135.12s exit=0
+bootstrap-10 PASS 42/42 wall=169.53s exit=0
+bootstrap-11 PASS 42/42 wall=168.53s exit=0
+bootstrap-12 PASS 42/42 wall=179.68s exit=0
+bootstrap-13 PASS 42/42 wall=163.11s exit=0
+bootstrap-14 PASS 42/42 wall=163.31s exit=0
+bootstrap-15 PASS 42/42 wall=152.72s exit=0
+bootstrap-16 PASS 42/42 wall=152.34s exit=0
+bootstrap-17 PASS 42/42 wall=158.69s exit=0
+bootstrap-18 PASS 42/42 wall=151.22s exit=0
+bootstrap-19 PASS 42/42 wall=164.38s exit=0
+bootstrap-20 PASS 42/42 wall=150.95s exit=0
+bootstrap-21 PASS 42/42 wall=152.13s exit=0
+bootstrap-22 PASS 42/42 wall=143.61s exit=0
+bootstrap-23 PASS 42/42 wall=156.26s exit=0
+bootstrap-24 PASS 42/42 wall=131.46s exit=0
+bootstrap-25 PASS 42/42 wall=173.53s exit=0
+bootstrap-26 PASS 42/42 wall=152.88s exit=0
+bootstrap-27 PASS 42/42 wall=143.65s exit=0
+bootstrap-28 PASS 42/42 wall=157.44s exit=0
+bootstrap-29 PASS 42/42 wall=151.14s exit=0
+bootstrap-30 PASS 42/42 wall=161.95s exit=0
+bootstrap gate: PASS; 30/30 invocations passed.
+
+A third process repeatedly ran security, provisioning and append tests on CPUs 0 and 1.
+It started while bootstrap runs 01 and 02 were active; full lint also ran during their start.
+Each companion used nice -n 10, two workers and file parallelism.
+The last companion finished before the final results were counted.
+Every companion invocation follows:
+
+companion-01 PASS 58/58 wall=46.82s exit=0
+companion-02 PASS 58/58 wall=52.28s exit=0
+companion-03 PASS 58/58 wall=50.14s exit=0
+companion-04 PASS 58/58 wall=47.10s exit=0
+companion-05 PASS 58/58 wall=48.51s exit=0
+companion-06 PASS 58/58 wall=48.44s exit=0
+companion-07 PASS 58/58 wall=48.18s exit=0
+companion-08 PASS 58/58 wall=48.44s exit=0
+companion-09 PASS 58/58 wall=51.86s exit=0
+companion-10 PASS 58/58 wall=50.90s exit=0
+companion-11 PASS 58/58 wall=48.83s exit=0
+companion-12 PASS 58/58 wall=48.55s exit=0
+companion-13 PASS 58/58 wall=50.45s exit=0
+companion-14 PASS 58/58 wall=55.32s exit=0
+companion-15 PASS 58/58 wall=59.96s exit=0
+companion-16 PASS 58/58 wall=51.83s exit=0
+companion-17 PASS 58/58 wall=50.14s exit=0
+companion-18 PASS 58/58 wall=50.32s exit=0
+companion-19 PASS 58/58 wall=48.92s exit=0
+companion-20 PASS 58/58 wall=48.18s exit=0
+companion-21 PASS 58/58 wall=52.69s exit=0
+companion-22 PASS 58/58 wall=49.46s exit=0
+companion-23 PASS 58/58 wall=48.10s exit=0
+companion-24 PASS 58/58 wall=51.05s exit=0
+companion-25 PASS 58/58 wall=47.06s exit=0
+companion-26 PASS 58/58 wall=48.62s exit=0
+companion-27 PASS 58/58 wall=52.06s exit=0
+companion-28 PASS 58/58 wall=49.83s exit=0
+companion-29 PASS 58/58 wall=47.54s exit=0
+companion-30 PASS 58/58 wall=50.29s exit=0
+companion-31 PASS 58/58 wall=49.37s exit=0
+companion-32 PASS 58/58 wall=46.82s exit=0
+companion-33 PASS 58/58 wall=49.18s exit=0
+companion-34 PASS 58/58 wall=49.22s exit=0
+companion-35 PASS 58/58 wall=48.36s exit=0
+companion-36 PASS 58/58 wall=47.51s exit=0
+companion-37 PASS 58/58 wall=45.74s exit=0
+companion-38 PASS 58/58 wall=46.55s exit=0
+companion-39 PASS 58/58 wall=55.48s exit=0
+companion-40 PASS 58/58 wall=54.14s exit=0
+companion-41 PASS 58/58 wall=46.40s exit=0
+companion-42 PASS 58/58 wall=48.13s exit=0
+companion-43 PASS 58/58 wall=48.02s exit=0
+companion-44 PASS 58/58 wall=47.33s exit=0
+companion-45 PASS 58/58 wall=51.60s exit=0
+companion-46 PASS 58/58 wall=45.64s exit=0
+companion gate: PASS; 46/46 invocations passed.
+
+Final fetch and completed rebase: origin/main c3e7ae2e2; source 536dd7e93.
+Bootstrap source/tests, NATS settings, event-store/handlers, root dependencies,
+compiler settings and test settings are byte-for-byte unchanged from batch source 134ac8dd6.
+Full lint, typecheck and catalogue checks were repeated after the rebase.
+The two changed-file confirmations after the rebase follow:
+
+deadline-rebased-changed-01 PASS 68/68 duration=152.72s exit=0
+deadline-rebased-changed-02 PASS 68/68 duration=142.79s exit=0

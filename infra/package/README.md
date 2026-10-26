@@ -72,8 +72,8 @@ running install still need work.
    It retries a refused three-copy placement while peers finish starting.
    Every request to check or create the event log and dispatcher uses the time left.
    It refuses late replies and stops when the same two-minute limit expires.
-   Before Helm runs, the installer checks that the private runtime and setup settings request the number of event
-   copies described by the chart. The private values file's folder stays out of
+   Before Helm runs, the installer checks that the private runtime and setup
+   settings request the number of event copies described by the chart. The private values file's folder stays out of
    preflight and Helm command arguments, including during fresh browser journeys.
    Workers start the assistant's computer as needed.
 3. **A developer opens the website.** A local port forward connects the private

@@ -122,3 +122,103 @@ leader assertion. No earlier failure has been removed or relabelled.
 Full root suite, fresh-install Kubernetes qualification and pushed-branch CI are
 NOT RUN. Image promotion, controller and storage checks, and live Kubernetes
 placement remain outside this source fix.
+
+## Pending-request deadline correction
+
+Date: 26 October 2026. Rebased source: `536dd7e93`.
+The first fetch and completed rebase used
+`6cc9d0e87b9c1952e6115fc3d8349cf037f252ca`. Main advanced during the load batch.
+A second fetch and completed rebase used
+`c3e7ae2e2f675151c9f02be7743822324a022234`. Only the package README diagram
+needed conflict resolution; it keeps both the bootstrap and object-restore work.
+Bootstrap source and tests, NATS settings, event-store and handler packages,
+root dependencies, compiler settings and test settings are byte-for-byte
+identical to load-batch source `134ac8dd6`. The final source checks and two
+combined confirmations were repeated after this rebase.
+
+A pending NATS client request still had its own five-second timeout when bootstrap
+had less time left. A successful reply after expiry could continue to stream or
+consumer creation. Bootstrap now limits every setup request on its dedicated
+connection to the smaller of the normal request timeout and the time left in the
+original 120-second allowance. This covers both API checks, stream lookup or
+creation, and consumer creation. It checks the deadline before sending a request,
+after a reply and after each awaited setup step. The shared adapters keep their
+normal timeouts. A request already sent can have reached NATS; refusal does not
+undo a stream or consumer that NATS has already created.
+
+The R3-only placement retry keeps the same error class, status, code, description
+and 200 ms backoff. A late placement refusal gets no further wait or request.
+The original replica, owner-setting, consumer-inheritance, incompatible-stream
+and security assertions remain. No access, money or memory check changed.
+
+### Failing-first evidence
+
+Test commit `b7dfc3c7f` (previously `0ecdab27c`) preceded the implementation.
+The seven new cases all failed against the old code. Five late replies resolved instead of refusing. The request
+timeout checks saw 5,000 ms instead of the time left.
+Test commit `eaea24243` (previously `d8e34b161`) then paused the client timers in the injected-clock cases while real NATS replies
+arrived. The repeated red check still failed all seven cases.
+Implementation `536dd7e93` (previously `134ac8dd6`) followed both test commits.
+
+The regressions make metadata ready at 119,800 ms and return a setup reply at
+120,800 ms. Late API checks, stream lookup, stream creation and consumer creation
+all refuse. No later request is sent. Late stream creation adds no dispatcher
+consumer. Another case checks that the five requests receive exactly 200, 180,
+160, 140 and 120 ms. Late placement refusal keeps one attempt and adds no stream
+or consumer.
+
+The first complete implementation run was FAIL, 34/35. A real consumer-creation
+reply outlasted its 200 ms timer before the injected clock could deliver the
+intended late reply. The fixture correction pauses client timers while real
+replies arrive, then advances the injected bootstrap clock. It isolates late-reply handling from
+real network timing. The separate timeout-value case checks every remaining-time
+limit. The companion provisioning tests exercise client timeouts normally.
+No deadline, timeout or state assertion changed.
+Both later combined confirmations passed all 68 tests, as did both confirmations
+after the final rebase.
+
+### Commands and environment
+
+Node 22.23.3 and the existing NATS 2.15.0 binary. Tests use disposable TLS NATS
+processes and private temporary storage. These selected files do not use
+PostgreSQL; every invocation receives the requested
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+No dev stack, owner service, Docker daemon or host network setting changed.
+Every lint, typecheck and test invocation uses `nice -n 10`.
+
+Changed-file confirmations, twice:
+
+```sh
+nice -n 10 npx vitest run infra/package/bootstrap.test.ts \
+  libs/event-store/test/security.test.ts --maxWorkers=2 --fileParallelism
+```
+
+The load batch starts two independent invocations on CPUs 0 and 1. Each runs
+bootstrap with `cluster-stream.test.ts`, two workers and file parallelism.
+A third process repeatedly runs event-store security, provisioning and append
+tests on those same CPUs. It starts while the first pair is active; full lint
+also runs during the start of that pair. The last companion finishes before
+results are counted. Each invocation has its own text log and JSON result under
+`/tmp/ci-flakes-15-deadline/loaded/`. The red runs, initial failure and combined
+confirmations are under `/tmp/ci-flakes-15-deadline/`.
+The [complete run list](ci-flakes-15-runs.txt) retains every result.
+
+### Correction results
+
+| Check | Result | Observed result |
+| --- | --- | --- |
+| Initial regression check | FAIL, expected | Seven new cases failed; 28 existing cases were not selected. |
+| Regression check after clock correction | FAIL, expected | The same seven new cases failed against the old code. |
+| First complete implementation run | FAIL | 34/35 passed; the real client timer interrupted the intended late-reply case. |
+| Changed files twice before final rebase | PASS | 68/68 passed in each combined bootstrap/security run. |
+| Changed files twice after final rebase | PASS | 68/68 passed again in each combined bootstrap/security run. |
+| Full lint | PASS | All stages passed after the final rebase; ESLint reported warnings and no errors. |
+| Typecheck | PASS | Every workspace and package/dev-stack check passed after the final rebase; package check also passed separately before it. |
+| Event catalogue | PASS | All 154 event names agreed after the final rebase. |
+| Knip | PASS | The separate unused-code check and the full lint stage passed. |
+| Changelog lint | PASS | The separate check and the full lint stage passed. |
+| Loaded bootstrap batch | PASS | 30/30 invocations passed, with 42 tests each: 35 bootstrap and seven cluster-stream checks. |
+| Load companion | PASS | 46/46 invocations passed, with 58 tests each. |
+
+The full root suite, runtime image promotion and fresh-install Kubernetes
+qualification are NOT RUN. These source checks do not qualify a live install.
