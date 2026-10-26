@@ -246,15 +246,23 @@ function checkSecretFields(name: string, stored: SecretData) {
 }
 
 function checkReplicaSettings(name: string, stored: SecretData, values: PackageValues) {
-  if (name !== 'runtime' && name !== 'bootstrap') return;
+  if (name !== 'runtime' && name !== 'bootstrap') {
+    return;
+  }
   let replicas = '1';
-  if (values.natsCluster?.enabled === true) replicas = '3';
+  if (values.natsCluster?.enabled === true) {
+    replicas = '3';
+  }
   const expected = Buffer.from(replicas).toString('base64');
   for (const key of ['NATS_REPLICAS', 'COMMAND_NATS_REPLICAS']) {
     const encoded = stored.data?.[key];
     // Require runtime settings even when bootstrap supplies its own overrides.
-    if (name === 'bootstrap' && encoded === undefined) continue;
-    if (encoded !== expected) throw new Error('Invalid package NATS replica settings');
+    if (name === 'bootstrap' && encoded === undefined) {
+      continue;
+    }
+    if (encoded !== expected) {
+      throw new Error('Invalid package NATS replica settings');
+    }
   }
 }
 

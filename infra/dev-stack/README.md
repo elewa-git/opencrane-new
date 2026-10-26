@@ -21,7 +21,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks bounded ownership files, the recorded cluster and database inputs| package["infra/package<br/>Helm install"]
+  stack -->|checks bounded ownership files, the recorded cluster, database inputs and replica settings| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
@@ -56,6 +56,7 @@ available for diagnosis.
   attempt, and saves step pictures before recording success.
 - Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
   Checks password format and conflicting database connections before installation.
+  Requires runtime and setup replica settings to match the chart before Helm runs.
 - Keeps two spare test stacks separate from the owner's copy and from each other.
 - Checks sign-in, personal memory reads, saves, correction and forgetting on an
   empty installation. Checks supplied memory receipts and records incomplete
@@ -66,7 +67,7 @@ available for diagnosis.
   keeps the slot reserved until the cluster and its data are removed.
 - Removes the nodes it created before reporting a failed start.
 - Keeps package commands on their recorded cluster. A missing target stops the command
-  before it can connect to the shared cluster. Ownership checks keep the private
+  before it can connect to the shared cluster. Ownership checks and forwarding keep the private
   connection filename in the child environment rather than its command arguments.
 - Provides demo preparation and screen measurements, while refusing automated coding
   jobs that try to run the owner's commands.

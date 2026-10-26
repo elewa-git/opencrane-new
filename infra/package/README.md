@@ -21,7 +21,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks ownership, cluster access and bootstrap connections| package
+  stack -->|checks ownership, cluster access and setup settings| package
   package -->|uses local cluster| devbox
   package -->|starts services and replays memory| apps["apps<br/>product services and replay"]
   package -->|runs services and checks NATS placement| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
@@ -66,12 +66,14 @@ running install still need work.
 1. **A developer claims a spare stack.** Preparation checks that its Docker Compose
    stack is stopped, then creates a separate space in Kubernetes for the package.
 2. **The package starts.** Helm starts the apps and services. A short setup job
-   prepares the databases, event log and first owner. It checks that all setup steps
-   use the same number of event copies. Workers start the assistant's computer as needed.
+   prepares the databases, event log and first owner. Before Helm runs, the installer
+   checks that the private runtime and setup settings request the number of event
+   copies described by the chart. Workers start the assistant's computer as needed.
 3. **A developer opens the website.** A local port forward connects the private
    website to a browser on this machine. Preparation and forwarding use the same
    recorded cluster and private connection file as installation and cleanup.
-   A missing or changed target stops the operation.
+   A missing or changed target stops the operation. Private connection and Secret
+   folder paths stay out of the Kubernetes command arguments.
 4. **A developer stops the package.** Cleanup checks ownership and removes only
    this developer's install, even after a crash.
 5. **A developer checks fresh installs.** A check installs the package twice from
@@ -103,7 +105,7 @@ It preserves the same identities on retry. Installation still uses
 one peer; the ordinary installer refuses three-peer mode. The preview includes the
 complete setup job and its private file mounts. Source tests check that setup can
 request three copies and keep that choice when creating the first owner. A compatible
-image review, installer checks and live checks remain outstanding.
+image review, controller and storage prerequisites, and live checks remain outstanding.
 A bounded collector can check recorded nodes, storage and replica state once a supported
 install exists. It requires mounted claim storage and event history with no expiry limits.
 It checks placement only; sign-in, chat and service refusals need their own checks.

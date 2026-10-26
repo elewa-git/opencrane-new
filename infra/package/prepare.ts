@@ -15,8 +15,14 @@ const execute = promisify(execFile);
 type PackageOwner = Awaited<ReturnType<typeof verifyPackageOwner>>;
 let stage = 'preflight';
 
-async function command(program: string, args: string[]) {
-  await execute(program, args, { cwd: root, timeout: 120_000 });
+async function command(program: string, args: string[], cwd = root) {
+  const env = { ...process.env };
+  const configIndex = args.indexOf('--kubeconfig');
+  if (configIndex !== -1) {
+    env['KUBECONFIG'] = args[configIndex + 1];
+    args = [...args.slice(0, configIndex), ...args.slice(configIndex + 2)];
+  }
+  await execute(program, args, { cwd, env, timeout: 120_000 });
 }
 
 async function createSecret(owner: PackageOwner, name: string, environment?: string,
@@ -32,8 +38,9 @@ async function createSecret(owner: PackageOwner, name: string, environment?: str
       await chmod(`${source}/${key}`, 0o600);
     }
     const connection = await packageConnectionArgs(owner);
+    // Read relative to the private directory so its host path never enters child arguments.
     await command('kubectl', [...connection, '-n', owner.namespace,
-      'create', 'secret', 'generic', name, `--from-file=${source}`]);
+      'create', 'secret', 'generic', name, '--from-file=.'], source);
   } finally {
     await rm(source, { recursive: true, force: true });
   }
