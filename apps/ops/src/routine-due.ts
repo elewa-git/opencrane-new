@@ -1,4 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
+import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
+import { ownershipWriteAccess } from '@opencrane/models';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { foldRoutine, routineRecordIdentitySchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
@@ -15,6 +17,7 @@ interface Input {
 }
 interface Worker {
   silo: string;
+  binding: Binding;
   // Supply this from the trusted worker, never from a request or saved due record.
   checkCurrent: (deadline: number) => Promise<boolean>;
   now?: () => number;
@@ -47,6 +50,7 @@ function requireInput(input: Input) {
 async function loadHistory(store: EventStore, silo: string, input: Input) {
   const rows: StoredEvent[] = [];
   let state: RoutineState | undefined;
+  const completedRuns = new Map<string, Run>();
   const deadline = performance.now() + 10_000;
   for await (const row of store.readStream(`routine-${input.routineId}`, 1, deadline)) {
     const identity = routineRecordIdentitySchema.parse(row.event.data);
@@ -54,13 +58,54 @@ async function loadHistory(store: EventStore, silo: string, input: Input) {
         (rows.length === 0 && row.event.type !== 'routine.created')) {
       throw new DueRefused();
     }
-    state = foldRoutine(state, row.event);
+    state = foldRoutineHistory(state, row.event, completedRuns);
     rows.push(row);
   }
   if (performance.now() >= deadline) {
     throw new DueRefused();
   }
   return { rows, state };
+}
+async function loadClaimAccess(store: EventStore, worker: Worker, input: Input) {
+  try {
+    if (worker.binding.silo !== worker.silo) {
+      throw new DueRefused();
+    }
+    const history = await loadHistory(store, worker.silo, input);
+    const ownerId = history.state?.definition?.definition.ownerId;
+    if (!ownerId) {
+      throw new DueRefused();
+    }
+    const auth = memberAuthorisation(worker.binding, store);
+    const access = await auth.loadRoutineAccess(ownerId, input.routineId);
+    if (access.rows.at(-1)?.sequence !== history.rows.at(-1)?.sequence) {
+      throw new DueRefused();
+    }
+    return { ...history, access };
+  } catch {
+    // Keep missing access and incomplete history indistinguishable to this internal caller.
+    throw new DueRefused();
+  }
+}
+async function requireWorker(worker: Worker, deadline: number) {
+  if (!(await worker.checkCurrent(deadline)) || performance.now() >= deadline) {
+    throw new DueRefused();
+  }
+}
+async function requireOwner(access: Awaited<ReturnType<typeof loadClaimAccess>>['access']) {
+  if (!(await access.check('manage')).allowed) {
+    throw new DueRefused();
+  }
+}
+async function claimWriteAccess(store: EventStore,
+  access: Awaited<ReturnType<typeof loadClaimAccess>>['access']) {
+  try {
+    const fresh = await ownershipWriteAccess(store, access.positions);
+    await requireOwner(access);
+    return fresh;
+  } catch {
+    throw new DueRefused();
+  }
 }
 function dueData(state: RoutineState | undefined, input: Input, firedAt: string): Run {
   const saved = state?.definition;
@@ -129,24 +174,40 @@ function savedReceipt(row: StoredEvent, state: RoutineState | undefined, input: 
 }
 function previousReceipt(rows: StoredEvent[], input: Input) {
   let state: RoutineState | undefined;
+  const completedRuns = new Map<string, Run>();
   let position = 0;
   for (const row of rows) {
     if (position === input.expectedPosition && row.event.type === 'routine.due') {
       return savedReceipt(row, state, input);
     }
-    state = foldRoutine(state, row.event);
+    state = foldRoutineHistory(state, row.event, completedRuns);
     position = row.sequence;
   }
   return undefined;
+}
+
+function appendedPosition(result: Awaited<ReturnType<EventStore['append']>>) {
+  if (result.status === 'conflict' || result.status === 'rejected') {
+    throw new DueRefused();
+  }
+  if (result.status === 'appended') {
+    return result.sequence;
+  }
+  if (result.cause instanceof DueRefused) {
+    throw result.cause;
+  }
+  throw new Error('Append unavailable');
 }
 
 /** Claim one saved slot. A confirmed record never grants permission to start work. */
 export async function claimRoutineDue(store: EventStore, worker: Worker, input: Input) {
   try {
     requireInput(input);
-    const saved = await loadHistory(store, worker.silo, input);
+    const saved = await loadClaimAccess(store, worker, input);
     const previous = previousReceipt(saved.rows, input);
     if (previous) {
+      await requireOwner(saved.access);
+      await requireWorker(worker, performance.now() + 2000);
       return previous;
     }
     if (saved.rows.at(-1)?.sequence !== input.expectedPosition) {
@@ -165,25 +226,29 @@ export async function claimRoutineDue(store: EventStore, worker: Worker, input: 
       }
     }
     foldRoutine(saved.state, event);
-    // Retain the checked history before starting the short ownership check.
-    const deadline = performance.now() + 2000;
+    // Finish routine history before watching only the small membership access streams.
+    const fresh = await claimWriteAccess(store, saved.access);
+    const deadline = fresh.deadline;
     async function checkAccess() {
-      if (!(await worker.checkCurrent(deadline)) || performance.now() >= deadline) {
+      await requireWorker(worker, deadline);
+      try {
+        await fresh();
+      } catch {
         throw new DueRefused();
       }
       requireSlot(worker.silo, run, now());
     }
+    await checkAccess();
     const change = { event, expectedSequence: input.expectedPosition,
       historyChecked: true as const, deadline, checkAccess };
     const result = await store.append(change);
-    if (result.status === 'conflict' || result.status === 'rejected') {
-      throw new DueRefused();
-    }
-    if (result.status !== 'appended') {
-      throw new Error('Append unavailable');
-    }
-    const row = await store.readEvent(result.sequence, performance.now() + 10_000);
-    return savedReceipt(row, saved.state, input);
+    const position = appendedPosition(result);
+    const row = await store.readEvent(position, performance.now() + 10_000);
+    const confirmed = savedReceipt(row, saved.state, input);
+    // Recheck access even when the store recovered an already saved event.
+    await requireOwner(saved.access);
+    await checkAccess();
+    return confirmed;
   } catch (error) {
     if (error instanceof DueRefused) {
       throw error;

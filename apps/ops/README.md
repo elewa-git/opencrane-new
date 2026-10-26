@@ -23,7 +23,7 @@ flowchart LR
   ops -->|reads events| nats
   ops -->|saves results and routine claims| nats
   ops -->|keeps jobs separate from content reads| pg["PostgreSQL<br/>jobs and content databases"]
-  ops -->|updates permissions| fga["OpenFGA<br/>access checks"]
+  ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
 ```
@@ -71,6 +71,10 @@ perform outside actions must stay stopped until it finishes.
 An internal command can claim one saved routine slot and return the same record on
 retry. It keeps the original owner, payer and run identities. It starts no session,
 model or tool call. Scheduling and execution are not connected yet.
+Routine claims check that the saved owner is still a member with permission to manage
+the routine. Retries also check current access and worker ownership before returning
+the saved run identifiers. Repeated completion records keep their first outcome.
+Execution remains disabled.
 
 A reviewed template defines how hosted tools may run. Separate Kubernetes rules check
 the image and settings and limit who may create or scale a tool. Starting hosted tools

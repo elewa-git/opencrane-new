@@ -63,7 +63,8 @@ async function cleanup() {
 beforeEach(setup, 30_000);
 afterEach(cleanup);
 function claim(request = input) {
-  return claimRoutineDue(nats.store, { ...worker, binding }, request);
+  const trustedWorker = { ...worker, binding };
+  return claimRoutineDue(nats.store, trustedWorker, request);
 }
 async function rows() {
   const result: StoredEvent[] = [];
@@ -156,7 +157,8 @@ async function recoversOriginal() {
   const connection = await nats.client('command');
   const restarted = await createEventStore(connection);
   const before = await nats.store.head();
-  expect(await claimRoutineDue(restarted, { ...worker, binding }, input)).toEqual(first);
+  const trustedWorker = { ...worker, binding };
+  expect(await claimRoutineDue(restarted, trustedWorker, input)).toEqual(first);
   expect(await rows()).toHaveLength(6);
   expect(await nats.store.head()).toBe(before);
 }
@@ -285,7 +287,7 @@ async function retainsHistory() {
   async function* slowRead(subject: string, from?: number, deadline?: number) {
     expect(appending).toBe(false);
     expect(['routine-orders', 'member-alice', 'ownership-test']).toContain(subject);
-    expect(deadline).toBeGreaterThanOrEqual(started + 10_000);
+    expect(deadline).toBe(performance.now() + 10_000);
     yield* read(subject, from, deadline);
     clock.mockReturnValue(started + 3000);
   }
@@ -351,7 +353,15 @@ async function refusesLostAccess(kind: string, retry: boolean) {
         yield* read(subject, from, deadline);
       }
     }
+    const head = nats.store.head.bind(nats.store);
+    function missingMemberPosition(subject?: string, deadline?: number) {
+      if (subject === 'member-alice') {
+        return Promise.resolve(0);
+      }
+      return head(subject, deadline);
+    }
     vi.spyOn(nats.store, 'readStream').mockImplementation(missingMember);
+    vi.spyOn(nats.store, 'head').mockImplementation(missingMemberPosition);
   } else if (kind === 'permission') {
     const client = new TupleClient(binding);
     const owner = { user: objectId('person', 'test', 'alice'), relation: 'owner',
@@ -408,7 +418,8 @@ async function twoCompletedOccurrences() {
   const next = { ...created.data.next, localDate: '2026-11-01',
     at: '2026-11-01T01:30:00.000Z', offsetMinutes: 60 };
   const data = { ...created.data, next };
-  await nats.seed([{ ...created, id: 'next', commandId: 'next', type: 'routine.updated', data }]);
+  const updated = { ...created, id: 'next', commandId: 'next', type: 'routine.updated', data };
+  await nats.seed([updated]);
   now = Date.parse(next.at);
   const request = { ...input, expectedPosition: 5, localDate: next.localDate };
   const second = await claim(request);
@@ -453,7 +464,8 @@ async function refusesChangedOlderCompletion(field: string) {
     value = 99;
   }
   const data = { ...firstFinish.data, [field]: value };
-  await nats.seed([{ ...firstFinish, id: 'bad-finish', commandId: 'bad-finish', data }]);
+  const invalid = { ...firstFinish, id: 'bad-finish', commandId: 'bad-finish', data };
+  await nats.seed([invalid]);
   const before = await nats.store.head();
   await expect(claim()).rejects.toThrow(/^Routine due (refused|unavailable)$/u);
   expect(await nats.store.head()).toBe(before);

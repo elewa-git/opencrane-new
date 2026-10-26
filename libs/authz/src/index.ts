@@ -6,3 +6,4 @@ export {
 } from "./client.ts";
 export { memberAuthorisation, grantStream } from "./members.ts";
 export { rebuildMembers } from "./rebuild.ts";
+export { foldRoutineHistory } from './routines.ts';
