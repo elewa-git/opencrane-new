@@ -371,15 +371,21 @@ A metadata group stores the shared stream and consumer settings, separately from
 Each request waits at most one second. Failed readiness checks run again after at
 most 200 ms, within one 120-second deadline. Expiry names the replica count and
 limit, closes the connection and leaves the stream and consumer untouched.
-Only unavailable reads are retried. Stream creation and incompatible-stream
-refusals are never retried. The bootstrap failure stage names this readiness limit.
+Only unavailable readiness reads are retried. Incompatible-stream refusals fail
+immediately. The bootstrap failure stage names the replica count and time limit.
 The NATS settings expose this one read service only to the command key; no HTTP
 monitoring port or system-account credentials are added.
 
 The leader's report does not show whether it has received each peer's storage
-statistics. Stream placement can still fail after this check. The
-[readiness evidence](../../docs/process/ci-flakes-15.md) records that remaining race.
-Stream creation is never retried.
+statistics. For R3 only, bootstrap retries the explicit peer-offline placement
+refusal: `JetStreamApiError`, status 400, code 10005 and description
+`no suitable peers for placement, peer offline`. The fixed backoff is 200 ms,
+shortened only to stop at the deadline. Metadata readiness and placement share the
+same 120-second deadline; placement gets no new time allowance. Expiry reports a
+fixed placement error and closes the connection without adding a consumer.
+Every other creation error, including timeouts, lost replies and other JetStream
+codes or refusal descriptions, fails immediately. R1 creation is never retried.
+The [readiness evidence](../../docs/process/ci-flakes-15.md) records the checks.
 
 The Helm preview includes the same Job, service account and private mounts as the
 default render. The shipped image pin is unchanged and has not been qualified for
@@ -390,7 +396,9 @@ The chart tests inspect real Helm output and the existing preparation fixture's
 written settings. `bootstrap.test.ts` executes the bootstrap functions with disposable
 TLS NATS peers and captures the private settings passed to the owner command.
 It checks standalone and clustered R1, R3, consumer inheritance, invalid settings,
-an unchanged incompatible stream, delayed metadata readiness and deadline refusal. These are source checks. Images, controller and storage prerequisites, and
+an unchanged incompatible stream, delayed metadata readiness, placement recovery,
+shared-deadline refusal and immediate refusal of other creation errors.
+These are source checks. Images, controller and storage prerequisites, and
 live Kubernetes placement are NOT RUN. The
 [receipt](../../docs/process/p5-4-pr5a/receipt.md) records the checks.
 

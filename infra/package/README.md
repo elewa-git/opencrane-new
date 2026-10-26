@@ -24,7 +24,7 @@ flowchart LR
   stack -->|checks ownership and cluster access; keeps values paths private| package
   package -->|uses local cluster| devbox
   package -->|starts services, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|waits for NATS peers, runs services and checks placement and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  package -->|waits for NATS peers and placement, runs services and checks fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -69,7 +69,8 @@ running install still need work.
 2. **The package starts.** Helm starts the apps and services. A short setup job
    prepares the databases, event log and first owner. It waits for enough NATS peers
    to be ready. Their leader must report enough current copies of their shared settings.
-   It stops if they are still unready after two minutes. Before Helm runs, the installer
+   It retries a refused three-copy placement while peers finish starting.
+   It stops when the same two-minute limit expires. Before Helm runs, the installer
    checks that the private runtime and setup settings request the number of event
    copies described by the chart. The private values file's folder stays out of
    preflight and Helm command arguments, including during fresh browser journeys.

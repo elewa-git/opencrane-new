@@ -5,6 +5,7 @@ import { request } from 'node:https';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
+import { JetStreamApiError } from '@nats-io/jetstream';
 import { createStore } from '@opencrane/authz';
 import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
@@ -145,8 +146,7 @@ async function metadataReady(connection: Awaited<ReturnType<typeof connectNats>>
 }
 
 async function waitForMetadata(connection: Awaited<ReturnType<typeof connectNats>>,
-  replicas: number) {
-  const deadline = Date.now() + 120_000;
+  replicas: number, deadline: number) {
   while (Date.now() < deadline) {
     try {
       const ready = await metadataReady(connection, replicas, Math.min(1000, deadline - Date.now()));
@@ -158,7 +158,7 @@ async function waitForMetadata(connection: Awaited<ReturnType<typeof connectNats
         throw error;
       }
     }
-    // Check actual peer state again; never retry stream creation or a refused configuration.
+    // Check the leader again within the time left for bootstrap.
     const remaining = deadline - Date.now();
     if (remaining > 0) {
       await delay(Math.min(200, remaining));
@@ -167,15 +167,45 @@ async function waitForMetadata(connection: Awaited<ReturnType<typeof connectNats
   throw new Error(`JetStream did not become ready for R${replicas} within 120000 ms`);
 }
 
+function isPlacementRefusal(error: unknown) {
+  return error instanceof JetStreamApiError && error.status === 400 && error.code === 10005 &&
+    error.apiError().description === 'no suitable peers for placement, peer offline';
+}
+
+async function provisionStream(store: Awaited<ReturnType<typeof createEventStore>>,
+  replicas: number, deadline: number) {
+  while (true) {
+    try {
+      await store.ensureStream({ replicas });
+      return;
+    } catch (error) {
+      if (replicas !== 3 || !isPlacementRefusal(error)) {
+        throw error;
+      }
+      // Retry only an explicit refusal: NATS has confirmed that it did not place the stream.
+      const remaining = deadline - Date.now();
+      if (remaining > 0) {
+        await delay(Math.min(200, remaining));
+      }
+      if (Date.now() >= deadline) {
+        stage = 'R3 stream placement refusal (120000 ms bootstrap deadline expired)';
+        throw new Error('JetStream R3 stream placement refused within 120000 ms bootstrap deadline',
+          { cause: error });
+      }
+    }
+  }
+}
+
 async function provisionEvents() {
   const replicas = replicaSettings();
   const connection = await connectNats();
   try {
+    const deadline = Date.now() + 120_000;
     stage = `JetStream readiness for R${replicas} (120000 ms deadline)`;
-    await waitForMetadata(connection, replicas);
-    stage = 'event stream setup';
+    await waitForMetadata(connection, replicas, deadline);
+    stage = `event stream setup for R${replicas} (120000 ms bootstrap deadline)`;
     const store = await createEventStore(connection);
-    await store.ensureStream({ replicas });
+    await provisionStream(store, replicas, deadline);
     await provisionDispatcher(connection);
   } finally {
     await connection.close();

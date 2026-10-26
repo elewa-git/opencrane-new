@@ -1,1 +1,1 @@
-- Packaged bootstrap waits up to two minutes for enough ready NATS metadata peers before creating the event log, and reports a clear readiness failure if they do not arrive.
+- Packaged bootstrap waits for ready NATS metadata peers and retries only an explicit three-copy placement refusal within the same two-minute limit, with a clear error if readiness or placement stays unavailable.
