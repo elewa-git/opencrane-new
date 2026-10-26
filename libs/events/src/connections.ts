@@ -25,6 +25,13 @@ export const connectionCreatedDataSchema = z
 
 export const connectionRefreshedDataSchema = connectionCreatedDataSchema.clone();
 
+export const connectionOAuthStartedDataSchema = z.strictObject({
+  userId: connectionId, serverId: connectionId, connectionId, profile: connectionId,
+  attemptId: digestSchema, attemptDigest: digestSchema, stateDigest: digestSchema,
+  secretRef: secretRefSchema, uid: connectionId, resourceVersion: connectionId,
+  expectedSequence: z.literal(0), appendUntil: z.int().positive(),
+});
+
 export const connectionRevokedDataSchema = z
   .object({ userId: id, serverId: id, profile: id, revokedBy: id,
     expectedSequence: z.int().nonnegative().optional(),

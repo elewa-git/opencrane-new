@@ -2,7 +2,7 @@
 
 For people, read [README.md](README.md) first.
 
-## Private OAuth preparation (P3-9 PR 8a, first part; Part of #50)
+## Private OAuth preparation and consent start (P3-9 PR 8a/8b; Part of #50)
 
 `oauth-attempt.ts` supplies internal `prepareOAuthAttempt(custody, context, configuration, rows)`.
 It is not exported from the package or called by a route. The caller supplies trusted
@@ -29,12 +29,37 @@ The existing scanner and deletion adapter retain every OAuth attempt, including 
 uncertain ones. Bearer folds and cleanup keep their existing behaviour. The journal holds
 no state or verifier. No dependency or licence change is needed.
 
-This split stops before the consent-start command. Membership, persistent admin block and
-policy checks at append/receipt, `connection.oauth_started` schema/registry/catalogue,
-conditional append and approved URL return are NOT BUILT. They must land together next.
-Callback, confirmation, refresh, revoke and release also remain later work. No event or
-public API is added here; no replay path invokes preparation or custody.
-Own check results and remaining qualification are in the [receipt](../../docs/process/p3-9-pr8a/receipt.md).
+`oauth-start.ts` adds internal `startPersonalOAuth` for new personal profiles only.
+Trusted server code supplies the signed-in silo, member, session digest and member stream
+revision, plus a loader for current operator configuration. Input cannot choose another owner
+or add provider parameters. An admin has no override. Removal or rejoining invalidates the
+old membership revision. OAuth operation ids bind silo/member/changeRef independently of the
+target profile, so changing a retry's profile or server cannot create another attempt.
+The attempt digest also includes the membership revision.
+
+The existing profile lock covers preparation and the one conditional `connection.oauth_started`
+append. The `connection-*` condition orders it against persistent admin blocks. The append's
+`checkAccess` callback checks the original membership and server policy snapshot. The event
+store binds that check to conditional publication without extending the two-second deadline.
+Exact saved event confirmation precedes URL construction. After lock release and private
+recovery, current membership, block, configuration, server/profile positions and expiry are
+checked again. Configuration and profile/server positions are checked after the membership
+wait. If the event log moved during these reads, the small checks repeat within the original
+deadline. Unrelated events do not themselves refuse the link.
+Only small access streams enter the two-second check; history loads happen beforehand.
+Failures return fixed `unknown` without a URL. Retries retain the original changeRef and expiry
+beyond transport deduplication. The private `consentUrl` contains fixed code/S256 parameters,
+configured client/redirect/scopes and opaque state. No provider request or discovery runs.
+The event carries references and digests only, adds no reaction and leaves bearer folds/readers
+unchanged. Replay cannot read custody or return a URL. No public API is added. Callback claim,
+guarded exchange, confirmation, activation, selection and reconnect remain later work.
+`connection-custody.test.ts` covers real custody, NATS, PostgreSQL locks and OpenFGA, including
+concurrent starts, lost replies, changed bindings and changes while dependencies are awaited.
+Member removal or server withdrawal before publication leaves zero consent events. Changes
+to configuration, profile or server during the final membership read return no link. Removal
+and admin disable during configuration loading still refuse; unrelated activity still passes.
+Live provider and fresh-install qualification: NOT RUN.
+Earlier preparation-only checks are in the [receipt](../../docs/process/p3-9-pr8a/receipt.md).
 
 ## Shared private caller checks
 

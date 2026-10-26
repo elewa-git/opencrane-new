@@ -14,7 +14,8 @@ import { mkdtemp, rm, readdir, readFile, stat, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { databases, until } from '@opencrane/authz/testing';
+import { databases, openfga, until } from '@opencrane/authz/testing';
+import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { type Db, type Query, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
@@ -25,6 +26,8 @@ import { connectionCustody, type ConnectionStage } from '../src/connection-custo
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { prepareOAuthAttempt } from '../src/oauth-attempt.ts';
+import { startPersonalOAuth } from '../src/oauth-start.ts';
+import { toolPolicyFromRows } from '../src/tool-policy.ts';
 
 const material = 'synthetic-custody-material';
 const keyring = { currentKeyId: 'fixture', keys: { fixture: Buffer.alloc(32, 7) } };
@@ -294,6 +297,385 @@ function oauthFixture(withTools = false) {
   }
   return { context, configuration, rows };
 }
+
+async function consentStartFixture() {
+  const store = await fixture();
+  const input = oauthFixture(true);
+  const configuration = { ...input.configuration };
+  candidateCount += 1;
+  const userId = `consent${candidateCount}`;
+  const context = { ...input.context, siloId: 'test', userId };
+  const joined = envelope('test', `member-${userId}`, 'member.joined', {
+    memberId: userId, role: 'member', email: `${userId}@example.test`, displayName: userId,
+  });
+  await events.seed([joined]);
+  await memberAuthorisation(consentBinding).handler.handle(joined, pgDb(storage.queue));
+  const memberRevision = await events.store.head(joined.subject);
+  for (const row of input.rows) {
+    row.event.silo = 'test';
+    if (row.event.type === 'mcp.server_reviewed') {
+      const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+      row.event.data = { ...data, policyRevision: await events.store.head(row.event.subject) };
+    }
+    await events.seed([row.event]);
+  }
+  const rows = await history(events.store, 'mcp-server-a', 'test');
+  configuration.policyRevision = toolPolicyFromRows(rows).policyRevision;
+  const session = { siloId: 'test', userId, sessionDigest: context.sessionDigest, memberRevision };
+  const command = { userId, serverId: context.serverId, connectionId: context.connectionId,
+    profileId: context.profileId, changeRef: context.changeRef, expectedSequence: 0 };
+  function loadConfiguration() {
+    return Promise.resolve(configuration);
+  }
+  const loader = { loadConfiguration };
+  const database = pgDb(storage.queue);
+  function waitForLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    return database.lock!(name, work);
+  }
+  const db = { ...database, lock: waitForLock };
+  const custody = store.restart();
+  function start(raw: unknown = command) {
+    return startPersonalOAuth(events.store, consentBinding, session, custody,
+      raw, loader.loadConfiguration, db);
+  }
+  const subject = `connection-${userId}-server-a-${context.profileId}`;
+  return { store, configuration, session, command, start, subject, custody, loader };
+}
+
+async function startsPrivateConsent() {
+  const test = await consentStartFixture();
+  const started = await test.start();
+  expect(started.status).toBe('started');
+  if (started.status !== 'started') {
+    throw new Error('Fixture start failed');
+  }
+  const url = new URL(started.consentUrl);
+  expect(url.origin + url.pathname).toBe('https://identity.example.test/consent');
+  const state = url.searchParams.get('state');
+  const challenge = url.searchParams.get('code_challenge');
+  expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+  expect(challenge).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+  expect(Object.fromEntries(url.searchParams)).toEqual({ response_type: 'code',
+    client_id: 'fixture', redirect_uri: 'https://app.example.test/api/my/tools/oauth/callback',
+    scope: 'openid read', state, code_challenge: challenge, code_challenge_method: 'S256' });
+  expect(started.changeRef).toBe(test.command.changeRef);
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event.type).toBe('connection.oauth_started');
+  const privateData = Buffer.from(test.store.secret.data.token, 'base64').toString();
+  const saved = z.object({ state: z.string(), verifier: z.string() }).parse(JSON.parse(privateData));
+  expect(url.searchParams.get('state')).toBe(saved.state);
+  expect(JSON.stringify({ started, rows })).not.toContain(saved.verifier);
+  expect(JSON.stringify(rows)).not.toContain(saved.state);
+  expect(foldConnection(rows).status).toBe('unavailable');
+  expect(await test.start()).toEqual(started);
+  expect(test.store.creates).toBe(1);
+}
+it('records private consent before returning only its approved URL', startsPrivateConsent);
+
+async function changeConsentAccess(test: Awaited<ReturnType<typeof consentStartFixture>>,
+  change: string) {
+  const userId = test.session.userId;
+  if (change === 'configuration') {
+    test.configuration.clientId = 'changed';
+    return;
+  }
+  let subject = `member-${userId}`;
+  let type = 'member.removed';
+  let data: unknown = { memberId: userId, removedBy: 'admin' };
+  if (change === 'disabled') {
+    subject = `connection-control-${userId}-server-a`;
+    type = 'connection.disabled';
+    data = { userId, serverId: 'server-a', profile: 'old-profile', disabledBy: 'admin',
+      expectedSequence: 0, reason: 'admin_disabled' };
+  }
+  if (change === 'policy') {
+    subject = 'mcp-server-a';
+    type = 'mcp.server_unpublished';
+    data = { serverId: 'server-a', unpublishedBy: 'admin' };
+  }
+  if (change === 'profile') {
+    subject = test.subject;
+    type = 'connection.revoked';
+    data = { userId, serverId: 'server-a', profile: test.command.profileId, revokedBy: userId };
+  }
+  await events.seed([envelope('test', subject, type, data)]);
+  if (change === 'rejoined') {
+    const joined = envelope('test', subject, 'member.joined', {
+      memberId: userId, role: 'member', email: `${userId}@example.test`, displayName: userId,
+    });
+    await events.seed([joined]);
+    await memberAuthorisation(consentBinding).handler.handle(joined, pgDb(storage.queue));
+  }
+}
+
+async function refusesConsentInput(change: string) {
+  const test = await consentStartFixture();
+  let command: unknown = test.command;
+  if (change === 'non-owner' || change === 'admin-as-owner') {
+    if (change === 'admin-as-owner') {
+      const role = envelope('test', `member-${test.session.userId}`, 'member.role_changed', {
+        memberId: test.session.userId, previousRole: 'member', newRole: 'admin', changedBy: 'admin',
+      });
+      await events.seed([role]);
+      await memberAuthorisation(consentBinding).handler.handle(role, pgDb(storage.queue));
+      test.session.memberRevision = await events.store.head(role.subject);
+    }
+    command = { ...test.command, userId: 'someone-else' };
+  } else if (change === 'silo') {
+    test.session.siloId = 'foreign';
+  } else if (change === 'destination') {
+    command = { ...test.command, consentEndpoint: 'https://unapproved.example.test/' };
+  } else if (change === 'stale-config') {
+    test.configuration.policyRevision += 1;
+  } else if (change === 'credentials' || change === 'redirect') {
+    test.configuration.consentEndpoint = change === 'credentials'
+      ? 'https://user:canary@identity.example.test/consent'
+      : 'https://identity.example.test/consent?redirect_uri=https://unapproved.example.test/';
+  } else {
+    await changeConsentAccess(test, change);
+  }
+  expect(await test.start(command)).toEqual({ status: 'unknown' });
+  expect(await events.store.head(test.subject)).toBe(0);
+  expect(test.store.creates).toBe(0);
+}
+it.each(['non-owner', 'admin-as-owner', 'silo', 'removed', 'rejoined', 'disabled',
+  'stale-config', 'policy', 'credentials', 'redirect', 'destination'])(
+  'refuses private consent before append or URL release: %s', refusesConsentInput);
+
+async function refusesChangedStart(change: string) {
+  const test = await consentStartFixture();
+  expect((await test.start()).status).toBe('started');
+  const sequence = await events.store.head(test.subject);
+  let command = test.command;
+  if (change === 'session') {
+    test.session.sessionDigest = 'd'.repeat(64);
+  } else if (change === 'profile') {
+    command = { ...command, profileId: 'another-profile' };
+  } else {
+    await changeConsentAccess(test, change);
+  }
+  expect(await test.start(command)).toEqual({ status: 'unknown' });
+  expect(await events.store.head(test.subject)).toBe(sequence);
+  expect(await events.store.head(`connection-${test.session.userId}-server-a-another-profile`))
+    .toBe(0);
+  expect(test.store.creates).toBe(1);
+}
+it.each(['session', 'profile', 'configuration', 'removed', 'rejoined', 'disabled', 'policy'])(
+  'refuses private consent recovery with changed %s', refusesChangedStart);
+
+async function recoversConsentStart(failure: string) {
+  const test = await consentStartFixture();
+  const append = events.store.append.bind(events.store);
+  async function loseReply(command: AppendCommand) {
+    await append(command);
+    return { status: 'unavailable' as const, cause: new Error(material) };
+  }
+  const fault = vi.spyOn(events.store, 'append');
+  if (failure === 'lost-reply') {
+    fault.mockImplementationOnce(loseReply);
+    expect(await test.start()).toEqual({ status: 'unknown' });
+  } else {
+    await Promise.all([test.start(), test.start()]);
+  }
+  fault.mockClear();
+  const original = await test.start();
+  const clock = vi.spyOn(Date, 'now');
+  clock.mockReturnValue(Date.now() + 121_000);
+  try {
+    const recovered = await test.start();
+    expect(recovered.status).toBe('started');
+    expect(recovered).toEqual(original);
+    expect(fault).not.toHaveBeenCalled();
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(1);
+    expect(test.store.creates).toBe(1);
+  } finally {
+    clock.mockRestore();
+    fault.mockRestore();
+  }
+}
+it.each(['race', 'lost-reply'])(
+  'recovers one private consent after %s beyond transport deduplication', recoversConsentStart);
+
+async function checksAfterConsentWait(point: 'prepare' | 'read' | 'append' | 'readback',
+  change: string) {
+  const test = await consentStartFixture();
+  async function changeNow() {
+    if (change === 'failure') {
+      throw new Error(material);
+    }
+    if (change === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 600_001);
+      return;
+    }
+    await changeConsentAccess(test, change);
+  }
+  if (point === 'prepare') {
+    const prepare = test.custody.prepareAttempt.bind(test.custody);
+    async function delayedPrepare(...args: Parameters<typeof prepare>) {
+      const result = await prepare(...args);
+      await changeNow();
+      return result;
+    }
+    test.custody.prepareAttempt = delayedPrepare;
+  } else if (point === 'read') {
+    const read = test.custody.readAttempt.bind(test.custody);
+    let reads = 0;
+    async function delayedRead(...args: Parameters<typeof read>) {
+      const result = await read(...args);
+      reads += 1;
+      if (reads === 2) {
+        await changeNow();
+      }
+      return result;
+    }
+    test.custody.readAttempt = delayedRead;
+  } else if (point === 'append') {
+    const append = events.store.append.bind(events.store);
+    async function delayedAppend(command: AppendCommand) {
+      vi.restoreAllMocks();
+      await changeNow();
+      return append(command);
+    }
+    vi.spyOn(events.store, 'append').mockImplementationOnce(delayedAppend);
+  } else {
+    const read = events.store.readStream.bind(events.store);
+    async function* failedRead(subject: string, from?: number, deadline?: number) {
+      if (subject === test.subject && (from ?? 0) > 1) {
+        await changeNow();
+      }
+      yield* read(subject, from, deadline);
+    }
+    vi.spyOn(events.store, 'readStream').mockImplementation(failedRead);
+  }
+  try {
+    expect(await test.start()).toEqual({ status: 'unknown' });
+  } finally {
+    vi.restoreAllMocks();
+  }
+  const rows = await history(events.store, test.subject, 'test');
+  if (point === 'prepare' || point === 'append') {
+    expect(rows).toHaveLength(0);
+  }
+  expect(JSON.stringify(rows)).not.toContain(material);
+}
+const consentWaits = [
+  ['prepare', 'removed'], ['prepare', 'rejoined'], ['prepare', 'disabled'],
+  ['prepare', 'policy'], ['prepare', 'configuration'], ['prepare', 'expiry'],
+  ['prepare', 'failure'], ['append', 'disabled'], ['append', 'failure'],
+  ['append', 'removed'], ['append', 'policy'],
+  ['readback', 'failure'], ['read', 'failure'], ['read', 'expiry'], ['read', 'removed'],
+  ['read', 'rejoined'], ['read', 'disabled'], ['read', 'configuration'],
+  ['read', 'policy'], ['read', 'profile'],
+] as const;
+it.each(consentWaits)('refuses private consent after %s waits across %s', checksAfterConsentWait);
+
+async function accessChangesDuringConfiguration(readNumber: number, change: string) {
+  const test = await consentStartFixture();
+  let reads = 0;
+  async function delayedConfiguration() {
+    reads += 1;
+    if (reads === readNumber) {
+      await changeConsentAccess(test, change);
+    }
+    return test.configuration;
+  }
+  test.loader.loadConfiguration = delayedConfiguration;
+  expect(await test.start()).toEqual({ status: 'unknown' });
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(readNumber === 2 ? 0 : 1);
+}
+const consentConfigurationWaits = [
+  [2, 'policy'], [3, 'policy'], [2, 'removed'], [3, 'removed'],
+  [2, 'disabled'], [3, 'disabled'],
+] as const;
+it.each(consentConfigurationWaits)(
+  'rechecks private consent after configuration read %s across %s',
+  accessChangesDuringConfiguration);
+
+async function changesDuringFinalConsentMembershipRead(change: string) {
+  const test = await consentStartFixture();
+  const readAttempt = test.custody.readAttempt.bind(test.custody);
+  let privateReads = 0;
+  async function observePrivateRead(...args: Parameters<typeof readAttempt>) {
+    const contents = await readAttempt(...args);
+    privateReads += 1;
+    return contents;
+  }
+  test.custody.readAttempt = observePrivateRead;
+  const head = events.store.head.bind(events.store);
+  let membershipReads = 0;
+  let changed = false;
+  async function delayedMembershipRead(subject?: string, deadline?: number) {
+    const position = await head(subject, deadline);
+    if (privateReads === 2 && subject === `member-${test.session.userId}`) {
+      membershipReads += 1;
+      // Let the last membership read return its old position after the dependency changes.
+      if (membershipReads === 3) {
+        await changeConsentAccess(test, change);
+        changed = true;
+      }
+    }
+    return position;
+  }
+  const fault = vi.spyOn(events.store, 'head').mockImplementation(delayedMembershipRead);
+  try {
+    const result = await test.start();
+    expect(changed).toBe(true);
+    expect(result).toEqual({ status: 'unknown' });
+  } finally {
+    fault.mockRestore();
+  }
+}
+it.each(['policy', 'configuration', 'profile'])(
+  'withholds private consent when %s changes during the final membership read',
+  changesDuringFinalConsentMembershipRead);
+
+async function unrelatedActivityDuringConsentConfiguration() {
+  const test = await consentStartFixture();
+  let reads = 0;
+  async function delayedConfiguration() {
+    reads += 1;
+    if (reads === 3) {
+      const memberId = 'unrelated-consent-member';
+      const joined = envelope('test', `member-${memberId}`, 'member.joined', {
+        memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
+      });
+      await events.seed([joined]);
+    }
+    return test.configuration;
+  }
+  test.loader.loadConfiguration = delayedConfiguration;
+  expect((await test.start()).status).toBe('started');
+  expect(await history(events.store, test.subject, 'test')).toHaveLength(1);
+}
+it('returns private consent after unrelated activity during the final configuration read',
+  unrelatedActivityDuringConsentConfiguration);
+
+async function refusesUnconfirmedConsentRecord() {
+  const test = await consentStartFixture();
+  const read = events.store.readStream.bind(events.store);
+  async function* changedRead(subject: string, from?: number, deadline?: number) {
+    for await (const row of read(subject, from, deadline)) {
+      if (subject === test.subject && (from ?? 0) > 1) {
+        row.event.commandId = 'different-reference';
+      }
+      yield row;
+    }
+  }
+  const fault = vi.spyOn(events.store, 'readStream').mockImplementation(changedRead);
+  try {
+    expect(await test.start()).toEqual({ status: 'unknown' });
+  } finally {
+    fault.mockRestore();
+  }
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect((await test.start()).status).toBe('started');
+  expect(test.store.creates).toBe(1);
+}
+it('withholds the private consent URL when exact readback does not match',
+  refusesUnconfirmedConsentRecord);
 
 async function preparesPrivateConsent() {
   const store = await fixture();
@@ -836,11 +1218,16 @@ it('refuses recovery without a prepared operation', refusesMissingPreparation);
 let events: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof databases>>;
 let candidateCount = 0;
+let consentFga: Awaited<ReturnType<typeof openfga>>;
+let consentBinding: Awaited<ReturnType<typeof createStore>>;
 async function startReconciliation() {
   events = await natsFixture();
   storage = await databases();
+  consentFga = await openfga();
+  consentBinding = await createStore(consentFga.apiUrl, 'test');
 }
 async function stopReconciliation() {
+  await consentFga?.close();
   await storage?.close();
   await events?.close();
 }

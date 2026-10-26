@@ -5,6 +5,13 @@ For people, read [README.md](README.md) first.
 This package is the typed event catalogue used by server validation and the event
 core. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
+
+`connection.oauth_started` is a strict first-connect record on the personal profile stream.
+It binds user/server/installation/profile, attempt and state digests, exact custody reference,
+UID/version, expectedSequence zero and original appendUntil. Its internal command confirms
+the human owner and exact saved event. It has no reaction, URL, raw state or verifier;
+replay grants no access and reads no custody. Existing bearer schemas remain unchanged.
+
 The existing `agent.turn_failed` schema accepts the fixed
 `conversation_closed` reason from the server's waiting-input cleanup. It adds
 no event type or field. The registry and `docs/architecture/events.md` describe

@@ -28,7 +28,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks takeover cancellation and saved event shapes, including native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, takeover cancellation and saved event shapes, including native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
@@ -105,6 +105,8 @@ These records contain no check result or report bytes.
 Personal connection records can name an exact stored generation and the person who
 saved it. A replacement names the expected stream version. Old records still replay,
 but missing generation details never make a profile available for tool calls.
+Consent starts record private storage references and expiry. They contain no consent link
+or private sign-in values, and replay never contacts the provider or activates an account.
 Owner revocation records invalidate one profile. Admin disable records block all personal
 profiles for one member and server. Neither record claims the stored token was deleted.
 
