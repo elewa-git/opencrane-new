@@ -775,3 +775,19 @@ The receipt says PARTIAL. Collector or cleanup failure prevents the next install
 The [receipt](../../docs/process/p5-11-pr1/receipt.md) gives the later claim-based
 command, source checks and live blockers. Fixtures and Stage B captures cannot
 replace live packaged checks. Full inherited product acceptance remains NOT RUN.
+
+## Company acceptance checklist
+
+The [company checklist](../../docs/process/p5-13-pr1/checklist.md) maps every
+P4-28 acceptance/refusal set to `company-qualification.ts`. It reads existing
+private records; it starts no services and writes no qualification receipt.
+
+```sh
+nice -n 10 node --experimental-strip-types infra/package/company-qualification.ts "$PRIVATE_MANIFEST" "$SOURCE_SHA" "$SERVER_IMAGE"
+nice -n 10 node --experimental-strip-types --test infra/package/company-qualification.test.ts
+```
+
+Exit zero means submitted records cover the checklist, including synthetic test
+records. The output still says PARTIAL; it does not establish live qualification.
+Exit one lists missing/refused evidence. The [source receipt](../../docs/process/p5-13-pr1/receipt.md)
+records checks and outstanding native-memory, company-credential and routine proof.

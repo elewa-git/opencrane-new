@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and evidence checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership and cluster access; keeps values paths private| package
@@ -58,6 +58,7 @@ running install still need work.
 - Restores checked events and files into separate empty disposable targets.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
+- Checks company journey records against the full acceptance checklist.
 - Checks three event-log placements against Kubernetes and fresh-install observations.
 - Removes only this worktree's install, including after an interrupted launcher.
 
@@ -84,6 +85,8 @@ running install still need work.
    Browser results record the namespace, storage and install time they checked.
    A separate browser with no
    session must receive only a refusal when it requests that chat history.
+   A separate checker lists completed company checks and missing evidence.
+   It cannot qualify the product from synthetic records.
 
 ## How to run or test it
 

@@ -1,0 +1,1 @@
+- Check packaged company journey evidence against the complete acceptance checklist, preserving completed conditions and naming missing or mismatched proof. Synthetic records cannot produce a qualification pass.

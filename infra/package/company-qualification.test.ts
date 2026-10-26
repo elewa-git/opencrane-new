@@ -118,7 +118,9 @@ for (const fault of ['installId', 'pvcUids', 'pvUids', 'storeId', 'namespaceUid'
           const assertions = artifact['assertions'] as Array<Record<string, unknown>>;
           for (const assertion of assertions) {
             if (fault === 'skip') assertion['executed'] = false;
-            else delete assertion['zero'];
+            else if (assertion['id'] === 'group_chat.exchange_and_no_agent') {
+              delete assertion['zero'];
+            }
           }
         }
         await editsArtifact(root, edit);
