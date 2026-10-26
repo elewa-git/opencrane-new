@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
 import { proxy } from '../src/proxy.ts';
 import { proxyControl } from '../src/proxy-control.ts';
+import { approvalHolds } from '../src/approval-holds.ts';
+import { mcpProxy, type ProxyGrant } from '../src/mcp-proxy.ts';
 
 const tools = [{ key: 'oc_0123456789', serverId: 'fixture', connectionId: 'fixture',
   definitions: ['{"name":"read","inputSchema":{"type":"object"}}'],
@@ -13,6 +15,130 @@ const first = { turnId: 'turn-A', conversation: 'same-chat', generation: 1,
   inputGeneration: 1, expires: Date.now() + 120_000 };
 const privateResult = 'fixture-private-result';
 const approvalId = 'c'.repeat(64);
+
+async function grantSelectionFixture(kind: string, needsApproval = false) {
+  const restricted = kind === 'restricted';
+  const catalogueTurn = restricted ? 'private-turn' : 'ordinary-turn';
+  const thread = 'thread-A';
+  const loadKey = 'a'.repeat(32);
+  const grant: ProxyGrant = { turnId: catalogueTurn, conversation: 'same-chat',
+    computer: 'fixture-computer', token: 'initial-pass', expires: Date.now() + 60_000 };
+  const renewedGrant = { ...grant, turnId: 'private-turn', token: 'renewed-pass' };
+  const grants = new Map([[thread, grant]]);
+  if (!needsApproval) grants.set(thread, renewedGrant);
+  let grantAllowed = needsApproval;
+  const received: IncomingMessage['headers'][] = [];
+  function upstream(incoming: IncomingMessage, response: ServerResponse) {
+    received.push(incoming.headers);
+    incoming.resume();
+    if (needsApproval && !incoming.headers['x-opencrane-approval-id']) {
+      response.writeHead(403, { 'x-opencrane-decision': 'refused' });
+      response.end(JSON.stringify({ reason: 'approval_requested', approvalId }));
+      return;
+    }
+    const reply = { result: { content: [{ type: 'text', text: privateResult }] } };
+    response.end(JSON.stringify(reply));
+  }
+  const gateway = createServer(upstream);
+  gateway.listen(0, '127.0.0.1');
+  await once(gateway, 'listening');
+  const address = gateway.address();
+  if (!address || typeof address === 'string') throw new Error('Missing gateway address');
+  function waiting() { return true; }
+  function renewGrant(requestedThread: string) {
+    expect(requestedThread).toBe(thread);
+    grants.set(thread, renewedGrant);
+    grantAllowed = false;
+    return Promise.resolve();
+  }
+  const renew = vi.fn(renewGrant);
+  const approvals = approvalHolds({ waiting, renew });
+  approvals.resume(true);
+  const mcp = mcpProxy(`http://127.0.0.1:${address.port}`, grants, approvals);
+  let listedTools = tools;
+  if (needsApproval) listedTools = [{ ...tools[0]!, modes: { read: 'ask' } }];
+  const catalogue = { loadKey, turnId: catalogueTurn, conversation: 'same-chat', thread,
+    tools: listedTools };
+  // Exercise grant selection directly so a binding refusal cannot hide a missing caller check.
+  mcp.catalogue(catalogue, restricted);
+  function permitsCaller(turnId: string, requestedThread?: string) {
+    if (requestedThread === undefined) return turnId === catalogueTurn;
+    return grantAllowed && turnId === catalogueTurn && requestedThread === thread;
+  }
+  const permits = vi.fn(permitsCaller);
+  function handle(incoming: IncomingMessage, response: ServerResponse) {
+    void mcp.handle(incoming, response, permits);
+  }
+  const listener = createServer(handle);
+  listener.listen(0, '127.0.0.1');
+  await once(listener, 'listening');
+  const localAddress = listener.address();
+  if (!localAddress || typeof localAddress === 'string') throw new Error('Missing proxy address');
+  const url = `http://127.0.0.1:${localAddress.port}/mcp/${loadKey}/oc_0123456789`;
+  async function send() {
+    const metadata = { threadId: thread,
+      'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
+    const body = { jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'read', arguments: {}, _meta: metadata } };
+    const headers = { 'mcp-method': 'tools/call', 'mcp-name': 'read',
+      'mcp-protocol-version': '2026-07-28' };
+    const options = { method: 'POST', headers, body: JSON.stringify(body) };
+    const response = await fetch(url, options);
+    return response.text();
+  }
+  async function close() {
+    mcp.drop({ loadKey });
+    approvals.stop();
+    listener.closeAllConnections();
+    gateway.closeAllConnections();
+    function stopListener(resolve: () => void) { listener.close(resolve); }
+    function stopGateway(resolve: () => void) { gateway.close(resolve); }
+    await new Promise<void>(stopListener);
+    await new Promise<void>(stopGateway);
+  }
+  return { send, close, received, permits, approvals, renew, grants, renewedGrant, catalogueTurn };
+}
+
+async function refusesSelectedGrant(kind: string) {
+  const test = await grantSelectionFixture(kind);
+  try {
+    const reply = await test.send();
+    expect.soft(test.received).toEqual([]);
+    expect.soft(reply).not.toContain(privateResult);
+    expect(reply).toContain('"isError":true');
+    expect(reply).toContain('This tool is not available in this conversation. Nothing was sent.');
+    expect(test.permits).toHaveBeenCalledWith(test.catalogueTurn);
+    expect(test.permits).toHaveBeenCalledWith('private-turn', 'thread-A');
+  } finally { await test.close(); }
+}
+it.each(['ordinary', 'restricted'])(
+  'refuses the selected grant caller for a %s catalogue before forwarding', refusesSelectedGrant);
+
+async function refusesRenewedGrant(kind: string) {
+  const test = await grantSelectionFixture(kind, true);
+  try {
+    const pending = test.send();
+    function held() { expect(test.approvals.size).toBe(1); }
+    await vi.waitFor(held);
+    expect(test.received).toHaveLength(1);
+    expect(test.received[0]?.['x-turn-token']).toBe('initial-pass');
+    expect(test.received[0]?.['x-opencrane-approval-id']).toBe('');
+    test.permits.mockClear();
+    await test.approvals.settle(approvalId, 'approved');
+    const reply = await pending;
+    expect.soft(test.received).toHaveLength(1);
+    expect.soft(reply).not.toContain(privateResult);
+    expect(reply).toContain('"isError":true');
+    expect(reply).toContain('This tool is not available in this conversation. Nothing was sent.');
+    expect(test.renew).toHaveBeenCalledExactlyOnceWith('thread-A');
+    expect(test.grants.get('thread-A')).toBe(test.renewedGrant);
+    expect(test.permits).toHaveBeenCalledWith('private-turn', 'thread-A');
+    expect(test.permits).toHaveBeenCalledWith(test.catalogueTurn);
+  } finally { await test.close(); }
+}
+it.each(['ordinary', 'restricted'])(
+  'refuses the renewed grant caller for a %s catalogue without forwarding the approval retry',
+  refusesRenewedGrant);
 
 async function fixture(approvalDriver?: Parameters<typeof proxy>[3]) {
   const directory = mkdtempSync(`${tmpdir()}/private-proxy-`);
