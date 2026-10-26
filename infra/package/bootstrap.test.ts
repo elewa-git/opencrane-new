@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import ts from 'typescript';
+import { JetStreamApiError } from '@nats-io/jetstream';
 import { expect, it, vi } from 'vitest';
 import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
@@ -36,8 +37,10 @@ async function streamInfo(connection: Awaited<ReturnType<typeof connectNats>>) {
 }
 
 type ReadinessFixture = { replies: unknown[]; elapsed: number; failure?: Error };
+type PlacementFixture = { failure: Error; refusals: number; attempts: number };
 
-async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFixture) {
+async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFixture,
+  placement?: PlacementFixture) {
   const files = new Map<string, string>();
   const actions: string[] = [];
   async function mkdirFixture(path: string, options: { mode: number }) {
@@ -71,6 +74,12 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFix
           }
           const reply = readiness!.replies.shift();
           return { json: () => reply } as Awaited<ReturnType<typeof connected.request>>;
+        }
+        if (args[0] === '$JS.API.STREAM.CREATE.EVENTS' && placement) {
+          placement.attempts += 1;
+          if (placement.attempts <= placement.refusals) {
+            throw placement.failure;
+          }
         }
         return request(...args);
       }
@@ -287,3 +296,102 @@ async function preservesReadinessRefusals() {
 }
 it('bootstrap preserves a readiness refusal without retrying or creating a stream',
   preservesReadinessRefusals);
+
+const peerOffline = 'no suitable peers for placement, peer offline';
+
+function placementRefusal() {
+  return new JetStreamApiError({ code: 400, err_code: 10005, description: peerOffline });
+}
+
+async function provisionsAfterPlacementStatisticsArrive() {
+  const cluster = await clusterFixture();
+  try {
+    const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
+    const placement = { failure: placementRefusal(), refusals: 2, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness, placement);
+    await bootstrap.provisionEvents();
+    const connection = await cluster.client(cluster.peers[0]!);
+    const stream = await streamInfo(connection);
+    expect(stream.config.num_replicas).toBe(3);
+    expect(stream.state.consumer_count).toBe(1);
+    expect(placement.attempts).toBe(3);
+    expect(readiness.elapsed).toBe(400);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap creates R3 when a placement refusal clears before the deadline',
+  provisionsAfterPlacementStatisticsArrive);
+
+async function refusesPlacementAtTheOriginalDeadline() {
+  const cluster = await clusterFixture();
+  try {
+    const replies: unknown[] = Array<null>(599).fill(null);
+    replies.push(metadataReport('peer-1', true));
+    const readiness = { replies, elapsed: 0 };
+    const placement = { failure: placementRefusal(), refusals: Infinity, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness, placement);
+    await expect(bootstrap.provisionEvents()).rejects.toThrow(
+      'JetStream R3 stream placement refused within 120000 ms bootstrap deadline');
+    expect(readiness.elapsed).toBe(120000);
+    expect(placement.attempts).toBe(1);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+    expect(bootstrap.files.size).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap refuses persistent placement failures at the original readiness deadline',
+  refusesPlacementAtTheOriginalDeadline);
+
+const creationFailures = [
+  new Error(peerOffline),
+  new Error('timeout'),
+  new JetStreamApiError({ code: 403, err_code: 10005, description: peerOffline }),
+  new JetStreamApiError({ code: 400, err_code: 10023, description: peerOffline }),
+  new JetStreamApiError({ code: 503, err_code: 10008, description: 'JetStream unavailable' }),
+  new JetStreamApiError({ code: 400, err_code: 10005,
+    description: 'no suitable peers for placement, insufficient storage' }),
+];
+
+async function preservesOtherCreationFailures(failure: Error) {
+  const cluster = await clusterFixture();
+  try {
+    const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
+    const placement = { failure, refusals: 1, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness, placement);
+    await expect(bootstrap.provisionEvents()).rejects.toBe(failure);
+    expect(placement.attempts).toBe(1);
+    expect(readiness.elapsed).toBe(0);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it.each(creationFailures)('bootstrap preserves other creation failures without retry: %s',
+  preservesOtherCreationFailures);
+
+async function refusesR1PlacementWithoutRetry() {
+  const fixture = await natsFixture({ provision: false });
+  try {
+    const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
+    const placement = { failure: placementRefusal(), refusals: 1, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...fixture.env(),
+      NATS_REPLICAS: '1', COMMAND_NATS_REPLICAS: '1' }, readiness, placement);
+    await expect(bootstrap.provisionEvents()).rejects.toBe(placement.failure);
+    expect(placement.attempts).toBe(1);
+    expect(readiness.elapsed).toBe(0);
+    const reply = await fixture.connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+  } finally {
+    await fixture.close();
+  }
+}
+it('bootstrap preserves an R1 placement refusal without retry', refusesR1PlacementWithoutRetry);
