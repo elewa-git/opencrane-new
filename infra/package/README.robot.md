@@ -383,6 +383,14 @@ refusal: `JetStreamApiError`, status 400, code 10005 and description
 shortened only to stop at the deadline. Metadata readiness and placement share the
 same 120-second deadline; placement gets no new time allowance. Expiry reports a
 fixed placement error and closes the connection without adding a consumer.
+Every later setup request on bootstrap's dedicated connection also uses only the
+remaining time, capped by the SDK's own request timeout. This covers both API
+checks, stream lookup or creation, and dispatcher consumer creation. Bootstrap
+checks the deadline after each reply and each setup step. A late successful reply
+refuses before the SDK can start another request; a late placement refusal gets
+no extra wait or retry. The connection closes on refusal. A request already sent
+may have reached NATS, so refusal does not undo a stream or consumer that
+NATS has already created.
 Every other creation error, including timeouts, lost replies and other JetStream
 codes or refusal descriptions, fails immediately. R1 creation is never retried.
 The [readiness evidence](../../docs/process/ci-flakes-15.md) records the checks.
@@ -398,8 +406,13 @@ TLS NATS peers and captures the private settings passed to the owner command.
 It checks standalone and clustered R1, R3, consumer inheritance, invalid settings,
 an unchanged incompatible stream, delayed metadata readiness, placement recovery,
 shared-deadline refusal and immediate refusal of other creation errors.
-The two success tests with injected clocks prepare real NATS placement statistics
-and remove the setup stream before checking their exact retry timing. The ordinary
+Late-reply tests make metadata ready at 119,800 ms and receive a setup reply at
+120,800 ms. They check refusal at each request, no later setup requests and no
+consumer after late stream creation. Another test checks that all five SDK
+requests receive the decreasing time left. A late placement refusal checks that
+bootstrap neither waits again nor creates a stream or consumer.
+Tests that create streams with injected clocks prepare real NATS placement
+statistics and remove the setup stream before checking their exact timing. The ordinary
 R3 test uses real time and starts without this extra preparation.
 These are source checks. Images, controller and storage prerequisites, and
 live Kubernetes placement are NOT RUN. The

@@ -172,11 +172,36 @@ function isPlacementRefusal(error: unknown) {
     error.apiError().description === 'no suitable peers for placement, peer offline';
 }
 
+function remainingSetupTime(deadline: number) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error('JetStream setup exceeded 120000 ms bootstrap deadline');
+  }
+  return remaining;
+}
+
+function boundSetupRequests(connection: Awaited<ReturnType<typeof connectNats>>, deadline: number) {
+  const request = connection.request.bind(connection);
+  async function requestBeforeDeadline(...args: Parameters<typeof connection.request>) {
+    const [subject, data, options] = args;
+    const remaining = remainingSetupTime(deadline);
+    const timeout = Math.min(options?.timeout ?? 1000, remaining);
+    const reply = await request(subject, data, { ...options, timeout });
+    remainingSetupTime(deadline);
+    return reply;
+  }
+  // Bound requests on this dedicated connection because SDK setup methods share no deadline.
+  // Reject late replies before the SDK can start another request.
+  connection.request = requestBeforeDeadline;
+}
+
 async function provisionStream(store: Awaited<ReturnType<typeof createEventStore>>,
   replicas: number, deadline: number) {
   while (true) {
+    remainingSetupTime(deadline);
     try {
       await store.ensureStream({ replicas });
+      remainingSetupTime(deadline);
       return;
     } catch (error) {
       if (replicas !== 3 || !isPlacementRefusal(error)) {
@@ -204,9 +229,14 @@ async function provisionEvents() {
     stage = `JetStream readiness for R${replicas} (120000 ms deadline)`;
     await waitForMetadata(connection, replicas, deadline);
     stage = `event stream setup for R${replicas} (120000 ms bootstrap deadline)`;
+    remainingSetupTime(deadline);
+    boundSetupRequests(connection, deadline);
     const store = await createEventStore(connection);
+    remainingSetupTime(deadline);
     await provisionStream(store, replicas, deadline);
+    remainingSetupTime(deadline);
     await provisionDispatcher(connection);
+    remainingSetupTime(deadline);
   } finally {
     await connection.close();
   }
