@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
+import { z } from 'zod';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { createEventStore, type AppendCommand, type StoredEvent } from '@opencrane/event-store';
 import { event } from '@opencrane/event-store/testing';
@@ -578,13 +579,13 @@ describe('routine input', () => {
         const event = structuredClone(row.event);
         if (event.type === 'conversation.created') {
           const data = agentSession([{ ...row, event }]);
-          if (kind === 'ordinary') delete data.routinePreparation;
+          if (kind === 'ordinary' && 'routinePreparation' in data) delete data.routinePreparation;
           if (kind === 'session') data.createdBy = 'bob';
           event.data = data;
         }
         if (event.type === 'routine.due') {
           if (kind === 'claim') event.id = 'another-claim';
-          const data = { ...due().data as Record<string, unknown> };
+          const data = z.record(z.string(), z.unknown()).parse(event.data);
           if (kind === 'instructions') {
             const changed = { ...definition().definition,
               instructions: keys.encrypt('test', 'routine-orders', 'Changed instructions') };
@@ -594,7 +595,8 @@ describe('routine input', () => {
         }
         if (event.type === 'message.posted' && kind === 'message') {
           const encrypted = keys.encrypt('test', conversationId, 'Changed input');
-          event.data = { ...event.data as Record<string, unknown>, ...encrypted };
+          const data = z.record(z.string(), z.unknown()).parse(event.data);
+          event.data = { ...data, ...encrypted };
         }
         yield { ...row, event };
       }
@@ -612,6 +614,18 @@ describe('routine input', () => {
   }
   it.each([false, true])('refuses custody failure, with input saved: %s', custodyFailure);
 
+  async function losesCustodyDuringCheck(saved: boolean) {
+    if (saved) await prepare();
+    async function loseCustody() {
+      await Promise.resolve();
+      vi.spyOn(keys, 'decrypt').mockImplementation(forbiddenEffect);
+    }
+    duringCheck = loseCustody;
+    await refuses();
+  }
+  it.each([false, true])('refuses custody lost during access checks, with input saved: %s',
+    losesCustodyDuringCheck);
+
   async function noDelivery(state: string) {
     await prepare();
     if (state === 'computer.ready') {
@@ -623,7 +637,7 @@ describe('routine input', () => {
     const saved = await rows();
     const creation = agentSession(saved);
     const conversation = { ...creation, createdAt: saved[0]!.event.time, assistantKind: 'team' };
-    const example = getEventDefinition(state)!.example as Record<string, unknown>;
+    const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(state)!.example);
     const lifecycle = record('computer-state', 'computer-sales-assistant', state,
       { ...example, assistantId: 'sales-assistant', computerId: 'computer' });
     await nats.seed([lifecycle]);
