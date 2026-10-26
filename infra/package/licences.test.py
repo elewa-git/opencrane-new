@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import shutil
 import subprocess
@@ -15,6 +16,96 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def test_runtime_image_labels_its_source_revision(self):
+        dockerfile = source.with_name("Dockerfile").read_text(encoding="utf-8")
+        runtime = dockerfile.rsplit("FROM ", 1)[1]
+        self.assertIn("ARG SOURCE_REVISION", runtime)
+        self.assertIn('LABEL org.opencontainers.image.revision="$SOURCE_REVISION"', runtime)
+
+    def promotion_fixture(self, directory):
+        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        revision = "a" * 40
+        image_id = "sha256:" + "b" * 64
+        pin = reviewed["images"]["server"]
+        entries = inventory["images"]["server"]["artifacts"]
+        artifacts = []
+        for entry in entries:
+            artifacts.append({"type": entry[0], "name": entry[1], "version": entry[2]})
+        scan = {"source": {"type": "image", "metadata": {"imageID": image_id}},
+                "descriptor": {"configuration": {"search": {"scope": "all-layers"}}},
+                "artifacts": artifacts}
+        scan_path = Path(directory) / "scan.json"
+        scan_path.write_text(json.dumps(scan), encoding="utf-8")
+        reviewed["natsCluster"] = {
+            "replicas": 3, "server": pin, "web": pin, "sourceRevision": revision,
+            "imageId": image_id, "scanSha256": hashlib.sha256(scan_path.read_bytes()).hexdigest(),
+        }
+        inventory["images"]["server"]["sourceRevision"] = revision
+        inspection = [{"Id": image_id, "RepoDigests": [pin], "Config": {
+            "Labels": {"org.opencontainers.image.revision": revision}}}]
+        return reviewed, inventory, inspection, scan_path, revision
+
+    def test_promotion_binds_source_image_and_full_layer_scan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.promotion_fixture(directory)
+            checker.check_package_promotion(*fixture)
+
+    def test_promotion_refuses_incomplete_or_mismatched_evidence(self):
+        cases = ("missing label", "wrong label", "invalid revision", "wrong server",
+                 "wrong web", "missing R3", "wrong replicas", "wrong inventory source",
+                 "wrong inventory pin", "wrong image", "wrong scan image", "stale scan",
+                 "squashed scan", "missing package", "changed version", "forbidden licence")
+        with tempfile.TemporaryDirectory() as directory:
+            for case in cases:
+                with self.subTest(case=case):
+                    reviewed, inventory, inspection, path, revision = self.promotion_fixture(directory)
+                    scan = checker.read_json(path)
+                    cluster = reviewed["natsCluster"]
+                    labels = inspection[0]["Config"]["Labels"]
+                    if case == "missing label":
+                        labels.clear()
+                    elif case == "wrong label":
+                        labels["org.opencontainers.image.revision"] = "c" * 40
+                    elif case == "invalid revision":
+                        revision = "main"
+                    elif case in ("wrong server", "wrong web"):
+                        role = case.split()[1]
+                        cluster[role] = "example.test/wrong@sha256:" + "d" * 64
+                    elif case == "missing R3":
+                        del reviewed["natsCluster"]
+                    elif case == "wrong replicas":
+                        cluster["replicas"] = 1
+                    elif case == "wrong inventory source":
+                        inventory["images"]["server"]["sourceRevision"] = "c" * 40
+                    elif case == "wrong inventory pin":
+                        inventory["images"]["web"]["pin"] = "wrong"
+                    elif case == "wrong image":
+                        inspection[0]["RepoDigests"] = []
+                    elif case == "wrong scan image":
+                        scan["source"]["metadata"]["imageID"] = "sha256:" + "c" * 64
+                    elif case == "squashed scan":
+                        scan["descriptor"]["configuration"]["search"]["scope"] = "squashed"
+                    elif case == "missing package":
+                        scan["artifacts"].pop()
+                    elif case == "changed version":
+                        scan["artifacts"][0]["version"] = "0.0"
+                    elif case == "forbidden licence":
+                        scan["artifacts"][0]["licenses"] = [{"spdxExpression": "BUSL-1.1"}]
+                    path.write_text(json.dumps(scan), encoding="utf-8")
+                    cluster["scanSha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+                    if case == "stale scan":
+                        cluster["scanSha256"] = "0" * 64
+                    with self.assertRaises(ValueError):
+                        checker.check_package_promotion(reviewed, inventory, inspection, path, revision)
+
+    def test_promotion_cli_requires_real_inspection_and_scans(self):
+        result = subprocess.run(
+            [sys.executable, str(source), "--promotion", "a" * 40, "/missing/inspection.json"],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("/missing", result.stderr)
+
     def run_with_postgres_package(self, source_label, name, version, licence):
         with tempfile.TemporaryDirectory() as temporary_directory:
             package = Path(temporary_directory)
