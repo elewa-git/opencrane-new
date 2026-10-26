@@ -61,6 +61,11 @@ names in the chart.
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
 six secret names and all three exposure flags set to `false`:
 
+Preflight and Helm run from the values file's directory and receive only its
+filename. The private directory remains in the child process's working directory,
+outside its command arguments. The chart, preflight script and image review use
+absolute paths under this worktree so they remain available from that directory.
+
 ```sh
 infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"
 DEV_STACK_ID="$DEV_STACK_ID" node --experimental-strip-types infra/package/prepare.ts /private/values.json

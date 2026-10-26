@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+The packaged installer runs preflight and Helm from the values file's directory.
+It passes only the filename as the values argument, so an absolute private
+directory does not enter child command arguments.
+
 ## Personal Memory response collection
 
 `memory-personal-browser.ts` comes from the draft personal Memory journey. It records

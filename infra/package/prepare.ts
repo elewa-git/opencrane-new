@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { tokenIssuer } from '@opencrane/auth';
@@ -173,8 +174,12 @@ async function main() {
   assert(secondary, 'Package secrets require a claimed secondary slot');
   const valuesFile = process.argv[2];
   assert(valuesFile && process.argv.length === 3, 'Pass one private values file path');
-  await command('node', ['infra/package/preflight.mjs', valuesFile,
-    'infra/package/reviewed-images.json']);
+  const privateValuesFile = resolve(root, valuesFile);
+  const valuesDirectory = dirname(privateValuesFile);
+  const valuesName = basename(privateValuesFile);
+  // Run inside the values directory so its private host path stays out of child arguments.
+  await command('node', [resolve(root, 'infra/package/preflight.mjs'), valuesName,
+    resolve(root, 'infra/package/reviewed-images.json')], valuesDirectory);
   stage = 'claim';
   const owner = await verifyPackageOwner();
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as {

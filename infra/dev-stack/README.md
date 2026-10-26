@@ -21,7 +21,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks bounded ownership files, the recorded cluster, database inputs and replica settings| package["infra/package<br/>Helm install"]
+  stack -->|checks ownership, cluster, private values and replica settings| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
@@ -69,6 +69,8 @@ available for diagnosis.
 - Keeps package commands on their recorded cluster. A missing target stops the command
   before it can connect to the shared cluster. Ownership checks and forwarding keep the private
   connection filename in the child environment rather than its command arguments.
+- Runs preflight and Helm from the private values file's folder so its path stays out
+  of child command arguments.
 - Provides demo preparation and screen measurements, while refusing automated coding
   jobs that try to run the owner's commands.
 - Checks the demo tool server through local TLS. Requires saved tool definitions and
