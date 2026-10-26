@@ -1,0 +1,3 @@
+- Restore checked encrypted file backups into a new disposable MinIO bucket, preserve file addresses and types, and verify every stored file. Existing buckets and uncertain transfers refuse without retry or deletion.
+- Require a freshly provisioned recovery target with checked ownership and exclusive use before restoring files. Refuse swapped destinations, changed owner markers and other running processes.
+- Bound storage replies even when an unexpected success status makes the storage library parse them as errors.

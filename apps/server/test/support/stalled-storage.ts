@@ -21,6 +21,7 @@ export async function stalledStorage(fault: string) {
     if (fault === 'headers') return;
     let status = 403;
     if (fault.startsWith('region')) status = 200;
+    if (fault.startsWith('put-created')) status = 201;
     response.writeHead(status);
     response.flushHeaders();
     let chunkSize = 128;
