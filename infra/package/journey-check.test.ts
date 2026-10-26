@@ -55,9 +55,9 @@ test('a non-loopback origin refuses even when the receipt agrees', () => {
 });
 
 test('unauthenticated history requires the exact refusal with no extra bytes', () => {
-  checkHistoryRefusal(401, '{"status":"unauthenticated"}');
+  checkHistoryRefusal(401, '{"status":"refused"}');
   for (const [status, body] of [[200, 'protected'], [401, 'protected'],
-    [401, '{"status":"unauthenticated","messages":["protected"]}']] as const) {
+    [401, '{"status":"refused","messages":["protected"]}']] as const) {
     function accept() {
       checkHistoryRefusal(status, body);
     }
