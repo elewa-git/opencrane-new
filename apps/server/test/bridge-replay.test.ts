@@ -1340,7 +1340,8 @@ async function wakesApprovalsThroughWatcher() {
 it('wakes the right computer through watchBridges while another hold leaves reports and turns free',
   wakesApprovalsThroughWatcher);
 
-async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: number) {
+async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: number,
+  retryStop = false) {
   const setup = await approvalWatcherFixture();
   const { fixture, dbs, stop, sockets, frames, work, append } = setup;
   const approvalId = 'a'.repeat(64);
@@ -1361,9 +1362,12 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     const received = frames.get('computer');
     return received?.some(isSettlement) === true;
   }
-  function isStopOrSettlement(value: unknown) {
-    return typeof value === 'object' && value !== null &&
-      ['stop', 'approval_settled'].includes(String(Reflect.get(value, 'type')));
+  function isStop(value: unknown) {
+    return typeof value === 'object' && value !== null && Reflect.get(value, 'type') === 'stop';
+  }
+  function stopArrived() {
+    const received = frames.get('computer');
+    return received?.some(isStop) === true;
   }
   try {
     await until(turnArrived);
@@ -1381,8 +1385,10 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     computer.send(JSON.stringify(signal));
     await until(approvalWasRead);
     const head = fixture.store.head.bind(fixture.store);
+    let polls = 0;
     async function pauseNextPoll(subject?: string, deadline?: number) {
       if (subject === undefined) {
+        polls++;
         entered.resolve();
         await release.promise;
       }
@@ -1390,8 +1396,21 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     }
     vi.spyOn(fixture.store, 'head').mockImplementation(pauseNextPoll);
     await entered.promise;
+    const received = frames.get('computer')!;
+    const beforeStop = received.length;
+    function isStoppedChatOrControl(value: unknown, index: number) {
+      if (isStop(value) || isSettlement(value)) {
+        return true;
+      }
+      return index >= beforeStop && typeof value === 'object' && value !== null &&
+        Reflect.get(value, 'conversationId') === 'alice';
+    }
     let delayedComputerReads = 0;
     let delayedApprovalRead = false;
+    const realNow = performance.now.bind(performance);
+    function afterStopRetryInterval() {
+      return realNow() + 1000;
+    }
     async function* delayedRead(subject: string, from?: number, deadline?: number) {
       if (subject === 'computer-assistant') {
         delayedComputerReads++;
@@ -1400,6 +1419,11 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
       if (subject === `approval-${approvalId}` && !delayedApprovalRead) {
         delayedApprovalRead = true;
         await delay(approvalDelay);
+        if (retryStop) {
+          await until(stopArrived, 5000);
+          // Cross the sender's retry interval while approval settlement is still held.
+          vi.spyOn(performance, 'now').mockImplementation(afterStopRetryInterval);
+        }
       }
       yield* read(subject, from, deadline);
     }
@@ -1413,12 +1437,38 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     await append('conversation-alice', 'agent.turn_stop_requested', savedStop);
     release.resolve();
     await until(settlementArrived, 5000);
-    const received = frames.get('computer')!;
-    const ordered = received.filter(isStopOrSettlement);
-    expect(ordered).toEqual([
-      { type: 'stop', ...savedStop },
-      { type: 'approval_settled', approvalId, state: 'cancelled' },
-    ]);
+    const settledAtPoll = polls;
+    function laterPollsFinished() {
+      return polls >= settledAtPoll + 2;
+    }
+    await until(laterPollsFinished, 5000);
+    stop.abort();
+    await work;
+    // Allow delivery retries, but keep the same command and send Stop before the only wake.
+    // Check every Stop and settlement, including frames received during startup.
+    const commands = received.filter(isStoppedChatOrControl);
+    const expectedStop = { type: 'stop', ...savedStop };
+    const expectedSettlement = { type: 'approval_settled', approvalId, state: 'cancelled' };
+    expect(commands[0]).toEqual(expectedStop);
+    const stops = commands.filter(isStop);
+    if (retryStop) {
+      expect(stops.length).toBeGreaterThanOrEqual(2);
+    }
+    for (const command of commands) {
+      if (isStop(command)) {
+        expect(command).toEqual(expectedStop);
+      } else {
+        expect(command).toEqual(expectedSettlement);
+      }
+    }
+    const settlements = commands.filter(isSettlement);
+    expect(settlements).toEqual([expectedSettlement]);
+    const approvalRows = await history(fixture.store, `approval-${approvalId}`);
+    function isCancellation(row: typeof approvalRows[number]) {
+      return row.event.type === 'approval.cancelled';
+    }
+    const cancellations = approvalRows.filter(isCancellation);
+    expect(cancellations).toHaveLength(1);
     expect(delayedComputerReads).toBeGreaterThan(0);
     expect(delayedApprovalRead).toBe(true);
   } finally {
@@ -1433,6 +1483,12 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
 it.each([[300, 0], [0, 300], [300, 300], [0, 0]])(
   'sends Stop before approval wake with computer delay %i ms and approval delay %i ms',
   stopsBeforeApprovalWake);
+
+async function retriesStopBeforeApprovalWake() {
+  await stopsBeforeApprovalWake(300, 300, true);
+}
+it('retries the same Stop before approval wake when its retry interval passes',
+  retriesStopBeforeApprovalWake);
 
 async function reissuesSavedProviderModel() {
   const fixture = await replayFixture(['alice']);

@@ -48,6 +48,8 @@ Approval polling saves cancellation when a saved takeover covers an unused appro
 It notices computer changes even when the chat and approval have not changed.
 The computer receives its local work gate before an approval reply. Failed saves or
 unavailable gate delivery keep the wait pending. Reconnection reads the same result.
+Saved spending stops can repeat while the computer has not finished the turn.
+Each repeat asks for the same stop; the waiting approval receives one settlement reply.
 HTTP decisions check approval ownership and current write access before saving a
 cancellation, so a foreign approval stays unchanged.
 
