@@ -3,9 +3,10 @@ import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { promisify } from 'node:util';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { createStore } from '@opencrane/authz';
-import { connectNats, createEventStore } from '@opencrane/event-store';
+import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
 
 const execute = promisify(execFile);
@@ -102,10 +103,77 @@ async function openFgaReady() {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function metadataIsReady(value: unknown, replicas: number) {
+  if (!isRecord(value) || !isRecord(value['server']) || !isRecord(value['data'])) {
+    return false;
+  }
+  const server = value['server'];
+  const data = value['data'];
+  if (typeof server['name'] !== 'string' || data['disabled'] === true) {
+    return false;
+  }
+  const name = server['name'];
+  const metadata = data['meta_cluster'];
+  if (!metadata && !server['cluster'] && replicas === 1) {
+    return true;
+  }
+  if (!isRecord(metadata) || metadata['leader'] !== name || !name) {
+    return false;
+  }
+  const peers = new Set([name]);
+  const followers = metadata['replicas'];
+  if (Array.isArray(followers)) {
+    for (const peer of followers) {
+      if (isRecord(peer) && peer['current'] === true && peer['offline'] !== true &&
+        typeof peer['name'] === 'string') {
+        peers.add(peer['name']);
+      }
+    }
+  }
+  return peers.size >= replicas;
+}
+
+async function metadataReady(connection: Awaited<ReturnType<typeof connectNats>>,
+  replicas: number, maxWait: number) {
+  const options = { timeout: maxWait };
+  const reply = await connection.request('bootstrap.meta', '{"leader_only":true}', options);
+  return metadataIsReady(reply.json<unknown>(), replicas);
+}
+
+async function waitForMetadata(connection: Awaited<ReturnType<typeof connectNats>>,
+  replicas: number) {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    try {
+      const ready = await metadataReady(connection, replicas, Math.min(1000, deadline - Date.now()));
+      if (ready && Date.now() < deadline) {
+        return;
+      }
+    } catch (error) {
+      if (!isEventStoreUnavailable(error)) {
+        throw error;
+      }
+    }
+    // Check actual peer state again; never retry stream creation or a refused configuration.
+    const remaining = deadline - Date.now();
+    if (remaining > 0) {
+      await delay(Math.min(200, remaining));
+    }
+  }
+  throw new Error(`JetStream did not become ready for R${replicas} within 120000 ms`);
+}
+
 async function provisionEvents() {
   const replicas = replicaSettings();
   const connection = await connectNats();
   try {
+    stage = `JetStream readiness for R${replicas} (120000 ms deadline)`;
+    await waitForMetadata(connection, replicas);
+    stage = 'event stream setup';
     const store = await createEventStore(connection);
     await store.ensureStream({ replicas });
     await provisionDispatcher(connection);

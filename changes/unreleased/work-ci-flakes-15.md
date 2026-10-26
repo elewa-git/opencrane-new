@@ -1,0 +1,1 @@
+- Packaged bootstrap waits up to two minutes for enough ready NATS metadata peers before creating the event log, and reports a clear readiness failure if they do not arrive.

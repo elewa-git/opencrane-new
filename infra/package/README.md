@@ -24,7 +24,7 @@ flowchart LR
   stack -->|checks ownership and cluster access; keeps values paths private| package
   package -->|uses local cluster| devbox
   package -->|starts services, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|runs services and checks placement and recovery| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  package -->|waits for NATS peers, runs services and checks placement and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -53,6 +53,7 @@ running install still need work.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.
+- Waits for the event-log peers to be ready before creating the event stream.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log and its referenced files for an operator.
 - Restores checked events and files into separate empty disposable targets.
@@ -66,7 +67,9 @@ running install still need work.
 1. **A developer claims a spare stack.** Preparation checks that its Docker Compose
    stack is stopped, then creates a separate space in Kubernetes for the package.
 2. **The package starts.** Helm starts the apps and services. A short setup job
-   prepares the databases, event log and first owner. Before Helm runs, the installer
+   prepares the databases, event log and first owner. It waits for enough NATS peers
+   to be ready. Their leader must report enough current copies of their shared settings.
+   It stops if they are still unready after two minutes. Before Helm runs, the installer
    checks that the private runtime and setup settings request the number of event
    copies described by the chart. The private values file's folder stays out of
    preflight and Helm command arguments, including during fresh browser journeys.

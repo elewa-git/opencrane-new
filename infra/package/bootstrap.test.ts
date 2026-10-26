@@ -5,8 +5,9 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import ts from 'typescript';
 import { expect, it, vi } from 'vitest';
-import { connectNats, createEventStore } from '@opencrane/event-store';
+import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
+import { natsFixture } from '../../libs/event-store/test/testing.ts';
 import { clusterFixture } from '../../libs/event-store/test/cluster-fixture.ts';
 
 type Bootstrap = {
@@ -34,7 +35,7 @@ async function streamInfo(connection: Awaited<ReturnType<typeof connectNats>>) {
     state: { consumer_count: number } }>();
 }
 
-type ReadinessFixture = { replies: unknown[]; elapsed: number };
+type ReadinessFixture = { replies: unknown[]; elapsed: number; failure?: Error };
 
 async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFixture) {
   const files = new Map<string, string>();
@@ -65,6 +66,9 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFix
       const request = connected.request.bind(connected);
       async function requestFixture(...args: Parameters<typeof connected.request>) {
         if (args[0] === 'bootstrap.meta') {
+          if (readiness!.failure) {
+            throw readiness!.failure;
+          }
           const reply = readiness!.replies.shift();
           return { json: () => reply } as Awaited<ReturnType<typeof connected.request>>;
         }
@@ -91,7 +95,7 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFix
   const replacements: Record<string, unknown> = {
     'node:fs/promises': { mkdir: mkdirFixture, writeFile: writeFixture },
     'node:child_process': { execFile: executeFixture },
-    '@opencrane/event-store': { connectNats: connection, createEventStore },
+    '@opencrane/event-store': { connectNats: connection, createEventStore, isEventStoreUnavailable },
     '@opencrane/handlers': { provisionDispatcher },
     '@opencrane/authz': {}, pg: { Pool },
     ...(readiness ? { 'node:timers/promises': { setTimeout: advanceClock } } : {}),
@@ -211,3 +215,75 @@ async function refusesWhenMetadataNeverBecomesReady() {
 }
 it('bootstrap refuses before creating a stream when metadata readiness expires',
   refusesWhenMetadataNeverBecomesReady);
+
+function metadataReport(leader: string, current: boolean, offline = false) {
+  const followers = [
+    { name: 'peer-2', current, offline }, { name: 'peer-3', current, offline },
+  ];
+  return { server: { name: 'peer-1', cluster: 'route-tests' },
+    data: { meta_cluster: { leader, replicas: followers } } };
+}
+
+async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
+  const cluster = await clusterFixture();
+  try {
+    const noLeader = metadataReport('', true);
+    const missingPeer = metadataReport('peer-1', true);
+    missingPeer.data.meta_cluster.replicas.pop();
+    const behind = metadataReport('peer-1', false);
+    const offline = metadataReport('peer-1', true, true);
+    const duplicate = metadataReport('peer-1', true);
+    duplicate.data.meta_cluster.replicas[1] = duplicate.data.meta_cluster.replicas[0]!;
+    const follower = metadataReport('peer-2', true);
+    const ready = metadataReport('peer-1', true);
+    const replies = [null, noLeader, missingPeer, behind, offline, duplicate, follower, ready];
+    const readiness = { replies, elapsed: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await bootstrap.provisionEvents();
+    const connection = await cluster.client(cluster.peers[0]!);
+    const stream = await streamInfo(connection);
+    expect(stream.config.num_replicas).toBe(3);
+    expect(stream.state.consumer_count).toBe(1);
+    expect(readiness.replies).toEqual([]);
+    expect(readiness.elapsed).toBe(1400);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap waits for the metadata leader to report enough current online peers',
+  waitsUntilMetadataLeaderHasEnoughCurrentPeers);
+
+async function provisionsStandalone() {
+  const fixture = await natsFixture();
+  try {
+    const bootstrap = await bootstrapFixture({ ...fixture.env(),
+      NATS_REPLICAS: '1', COMMAND_NATS_REPLICAS: '1' });
+    await bootstrap.provisionEvents();
+    const stream = await streamInfo(fixture.connection);
+    expect(stream.config.num_replicas).toBe(1);
+    expect(stream.state.consumer_count).toBe(1);
+  } finally {
+    await fixture.close();
+  }
+}
+it('bootstrap provisions a standalone R1 server without a metadata group', provisionsStandalone);
+
+async function preservesReadinessRefusals() {
+  const cluster = await clusterFixture();
+  try {
+    const failure = new Error('Monitoring access refused');
+    const readiness = { replies: [], elapsed: 0, failure };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await expect(bootstrap.provisionEvents()).rejects.toBe(failure);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+    expect(readiness.elapsed).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap preserves a readiness refusal without retrying or creating a stream',
+  preservesReadinessRefusals);

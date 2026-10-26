@@ -363,6 +363,19 @@ private `command.env`. The dispatcher consumer inherits the stream's count.
 An existing incompatible stream refuses without changing its configuration or data.
 There is no extra stream or automatic conversion from R1 to R3.
 
+Before provisioning, bootstrap polls the authenticated `bootstrap.meta` service.
+For R3, the JetStream metadata leader must report at least three distinct current,
+online metadata peers, including itself. Replies from followers cannot grant readiness.
+For R1, the leader alone suffices; a standalone server has no metadata group.
+A metadata group stores the shared stream and consumer settings, separately from events.
+Each request waits at most one second. Failed readiness checks run again after at
+most 200 ms, within one 120-second deadline. Expiry names the replica count and
+limit, closes the connection and leaves the stream and consumer untouched.
+Only unavailable reads are retried. Stream creation and incompatible-stream
+refusals are never retried. The bootstrap failure stage names this readiness limit.
+The NATS settings expose this one read service only to the command key; no HTTP
+monitoring port or system-account credentials are added.
+
 The Helm preview includes the same Job, service account and private mounts as the
 default render. The shipped image pin is unchanged and has not been qualified for
 this source. Controller and storage prerequisites and a compatible image must
@@ -371,8 +384,8 @@ be checked before the ordinary installer can accept R3.
 The chart tests inspect real Helm output and the existing preparation fixture's
 written settings. `bootstrap.test.ts` executes the bootstrap functions with disposable
 TLS NATS peers and captures the private settings passed to the owner command.
-It checks R1, R3, consumer inheritance, invalid settings and an unchanged incompatible
-stream. These are source checks. Images, controller and storage prerequisites, and
+It checks standalone and clustered R1, R3, consumer inheritance, invalid settings,
+an unchanged incompatible stream, delayed metadata readiness and deadline refusal. These are source checks. Images, controller and storage prerequisites, and
 live Kubernetes placement are NOT RUN. The
 [receipt](../../docs/process/p5-4-pr5a/receipt.md) records the checks.
 
