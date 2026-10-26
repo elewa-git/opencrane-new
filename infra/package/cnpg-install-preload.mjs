@@ -68,13 +68,14 @@ function kubernetes(args) {
       'opencrane.dev/install-id': owner.installId,
     } } };
   }
+  if (fixture.loseRouteTarget && name === 'route-trust') rmSync('target-owner.json');
   if (fixture.dependencyFailure === name) throw new Error(fixture.canary);
   if (fixture.invalidJson === name) return fixture.canary;
   return fixture.secrets[name] ?? '';
 }
 function execute(program, args, options, callback) {
   appendFileSync('calls.jsonl', JSON.stringify({ program, args }) + '\n');
-  if (program === 'node' || program === 'openssl') return original(program, args, options, callback);
+  if (program === 'node' || program === process.execPath || program === 'openssl') return original(program, args, options, callback);
   if (program === 'docker') {
     const record = JSON.parse(readFileSync('target-owner.json', 'utf8'));
     const labels = { 'opencrane.dev/target-id': record.id };

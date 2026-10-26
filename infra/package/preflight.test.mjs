@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -54,7 +54,7 @@ function enableFunnel(values) { values.exposure.funnel = true; }
 function removeChartVersion(values) { delete values.chartVersion; }
 
 const refusals = [
-  ['cluster without R3 runtime support', enableCluster, /Unsupported package setting/u],
+  ['cluster without R3 runtime support', enableCluster, /Unsupported NATS cluster setting/u],
   ['missing pin', removePin, /Missing immutable image pin/u],
   ['mutable image', useMutableImage, /Missing immutable image pin/u],
   ['unreviewed image', useUnreviewedImage, /absent from the reviewed list/u],
@@ -163,3 +163,40 @@ for (const [name, change, expected] of cnpgRefusals) {
   }
   test(`${name} refuses before installation`, refusesUnreviewedCnpg);
 }
+
+function clusterSettings(values, review) {
+  values.natsCluster = { enabled: true, renderOnly: false, routeCASecret: 'routes',
+    peerCertificateSecrets: ['route-zero', 'route-one', 'route-two'] };
+  values.images.web = values.images.server;
+  review.images.web = values.images.web;
+  review.natsCluster = { replicas: 3, server: values.images.server, web: values.images.web };
+}
+function clusterPreflightBeforePreparation() {
+  const { directory, values, review } = fixture();
+  try {
+    clusterSettings(values, review);
+    const result = check(values, review, directory);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+}
+test('reviewed R3 settings pass before any route objects exist', clusterPreflightBeforePreparation);
+
+function oldImageStillRefuses() {
+  const { directory, values } = fixture();
+  try {
+    const review = JSON.parse(readFileSync('infra/package/reviewed-images.json', 'utf8'));
+    values.images = review.images;
+    values.chartVersion = review.chartVersion;
+    for (const name of review.requiredSecrets) values.secrets[name] = name.toLowerCase();
+    values.natsCluster = { enabled: true, renderOnly: false, routeCASecret: 'routes',
+      peerCertificateSecrets: ['route-zero', 'route-one', 'route-two'] };
+    const result = check(values, review, directory);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /NATS cluster image compatibility is not reviewed/u);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+}
+test('the shipped image still has no R3 compatibility approval', oldImageStillRefuses);

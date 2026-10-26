@@ -30,7 +30,7 @@ combines those settings with the templates.
 
 ```mermaid
 flowchart LR
-  package["Local installation tools"] --> chart["chart<br/>installation, optional database standby and three-peer NATS render"]
+  package["Local installation tools"] --> chart["chart<br/>installation, optional database standby and three-peer NATS"]
   package --> prepare["Preparation and checks"]
   chart --> templates["templates<br/>programs and settings"]
 ```
@@ -42,5 +42,6 @@ name. The optional database standby needs separately prepared credentials and a
 CloudNativePG controller. It has been checked by rendering the chart, which does
 not prove a running standby. An optional render also describes three private NATS
 peers. It needs separate route trust and one certificate reference per peer.
-Installation remains unavailable; the [operator notes](../README.robot.md#three-peer-nats-rendering)
-explain why. File storage and virus scanning are outside this package.
+The installer checks prepared certificates, eligible nodes and reviewed images first.
+The shipped image still refuses this mode; the
+[operator notes](../README.robot.md#three-peer-nats-rendering) explain the remaining work. File storage and virus scanning are outside this package.

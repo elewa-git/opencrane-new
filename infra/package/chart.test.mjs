@@ -340,9 +340,17 @@ test('the computer can reach only the private gateway without DNS', () => {
 
 test('the installer sets the computer gateway from a validated Service IP', async () => {
   const installSource = readFileSync('infra/dev-stack/packaged.ts', 'utf8');
-  assert.match(installSource, /await configureComputerGateway\(context\);\s*await waitForBootstrap\(context\);/u);
+  assert.match(installSource, /await configureComputerGateway\(owner\);\s*await waitForBootstrap\(owner\);/u);
   let service = { spec: { type: 'ClusterIP', clusterIP: '10.43.0.27' } };
   const patches = [];
+  const owner = { worktree: process.cwd(), slot: 'test', context: 'k3d-test-target',
+    namespace: 'opencrane-package-test', namespaceUid: 'original', release: 'opencrane-package-test' };
+  async function readOwnerFixture() {
+    return owner;
+  }
+  async function readClaimFixture() {
+    return `worktree=${owner.worktree}\n`;
+  }
   async function targetConnectionFixture() {
     return { context: 'k3d-test-target', kubeconfig: '/tmp/package-test/target.kubeconfig' };
   }
@@ -351,6 +359,13 @@ test('the installer sets the computer gateway from a validated Service IP', asyn
     assert.ok(args.includes('--context=k3d-test-target'));
     assert.equal(args.includes('--kubeconfig'), false);
     assert.equal(options.env.KUBECONFIG, '/tmp/package-test/target.kubeconfig');
+    if (args.includes('namespace')) {
+      const namespace = { metadata: { uid: owner.namespaceUid, annotations: {
+        'opencrane.dev/worktree': owner.worktree, 'opencrane.dev/slot': owner.slot,
+      } } };
+      callback(null, { stdout: JSON.stringify(namespace), stderr: '' });
+      return;
+    }
     if (args.includes('get') && args.includes('service')) {
       callback(null, { stdout: JSON.stringify(service), stderr: '' });
       return;
@@ -362,16 +377,17 @@ test('the installer sets the computer gateway from a validated Service IP', asyn
   const configureGateway = loadPrivateFunction('infra/dev-stack/packaged.ts',
     'configureComputerGateway', {
       'node:child_process': { execFile: executeFixture },
+      './bounded-input.ts': { readBoundedText: readClaimFixture, readBoundedJson: readOwnerFixture },
       './config.ts': { directory: '/tmp/package-test', root: process.cwd() },
       './identity.ts': { secondary: true, stackId: 'test' },
       './target.ts': { targetConnection: targetConnectionFixture },
     });
-  await configureGateway('k3d-test-target');
+  await configureGateway(owner);
   assert.deepEqual(patches, [{ data: { gateway: 'http://10.43.0.27:43000' } }]);
   assert.notEqual(patches[0].data.gateway, 'http://127.0.0.1:1');
 
   service = { spec: { type: 'ClusterIP', clusterIP: 'not-an-ip' } };
-  await assert.rejects(configureGateway(), /no ClusterIP/u);
+  await assert.rejects(configureGateway(owner), /no ClusterIP/u);
   assert.equal(patches.length, 1);
 });
 

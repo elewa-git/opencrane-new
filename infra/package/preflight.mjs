@@ -60,8 +60,39 @@ function checkPostgres(values, review) {
   }
 }
 
+function checkNatsCluster(values, review) {
+  const cluster = values.natsCluster;
+  if (cluster === undefined) return;
+  if (!cluster || typeof cluster !== 'object' || Array.isArray(cluster) ||
+      cluster.enabled !== true || cluster.renderOnly !== false) {
+    throw new Error('Unsupported NATS cluster setting');
+  }
+  const allowed = ['enabled', 'renderOnly', 'routeCASecret', 'peerCertificateSecrets'];
+  for (const key of Object.keys(cluster)) {
+    if (!allowed.includes(key)) throw new Error('Unsupported NATS cluster setting');
+  }
+  if (!Array.isArray(cluster.peerCertificateSecrets) || cluster.peerCertificateSecrets.length !== 3) {
+    throw new Error('NATS cluster needs three peer references');
+  }
+  const references = [cluster.routeCASecret, ...cluster.peerCertificateSecrets];
+  for (const reference of references) {
+    requireSecret('NATS route', reference);
+    if (reference.length > 253 || Object.values(values.secrets).includes(reference)) {
+      throw new Error('NATS route references must be separate from client settings');
+    }
+  }
+  if (new Set(references).size !== 4) throw new Error('NATS route references must be distinct');
+  requireImage('server', values.images.server, review.images.server);
+  requireImage('web', values.images.web, review.images.web);
+  if (review.natsCluster?.replicas !== 3 ||
+      review.natsCluster.server !== values.images.server ||
+      review.natsCluster.web !== values.images.web) {
+    throw new Error('NATS cluster image compatibility is not reviewed');
+  }
+}
+
 function check(values, review) {
-  const allowedKeys = ['chartVersion', 'images', 'secrets', 'exposure', 'postgres'];
+  const allowedKeys = ['chartVersion', 'images', 'secrets', 'exposure', 'postgres', 'natsCluster'];
   for (const key of Object.keys(values)) {
     if (!allowedKeys.includes(key)) throw new Error('Unsupported package setting');
   }
@@ -81,6 +112,7 @@ function check(values, review) {
     if (!requiredSecrets.includes(name)) throw new Error('Unsupported secret setting');
   }
   checkPostgres(values, review);
+  checkNatsCluster(values, review);
   const exposure = values.exposure;
   if (!exposure || exposure.ingress !== false || exposure.loadBalancer !== false ||
       exposure.funnel !== false) {

@@ -60,7 +60,7 @@ function packageReplicas(values: { natsCluster?: unknown }): 1 | 3 {
   const invalid = 'Invalid package NATS replica settings';
   assert(cluster !== null && typeof cluster === 'object' && !Array.isArray(cluster), invalid);
   const settings = cluster as Record<string, unknown>;
-  if (settings['enabled'] === true && settings['renderOnly'] === true) {
+  if (settings['enabled'] === true && typeof settings['renderOnly'] === 'boolean') {
     return 3;
   }
   if (settings['enabled'] === false &&

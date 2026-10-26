@@ -18,13 +18,13 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and result checks"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks ownership and cluster access; keeps values paths private| package
+  stack -->|checks ownership and private values| package
   package -->|uses local cluster| devbox
   package -->|starts services, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|waits for NATS, limits setup time and checks recovery and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  package -->|checks NATS placement, setup time and recovery| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -53,6 +53,7 @@ running install still need work.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.
+- Checks the three peers' nodes, certificates and image compatibility before installation.
 - Waits for the event-log peers to be ready before creating the event stream.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log and its referenced files for an operator.
@@ -74,8 +75,11 @@ running install still need work.
    Every request to check or create the event log and dispatcher uses the time left.
    It refuses late replies and stops when the same two-minute limit expires.
    Before Helm runs, the installer checks that the private runtime and setup
-   settings request the number of event copies described by the chart. The private values file's folder stays out of
-   preflight and Helm command arguments, including during fresh browser journeys.
+   settings request the number of event copies described by the chart. Three peers
+   also need separate prepared certificates, three eligible nodes and an image review
+   for that mode. The shipped image still refuses it. The private values file's
+   folder stays out of preflight and Helm command arguments, including during fresh
+   browser journeys.
    Workers start the assistant's computer as needed.
 3. **A developer opens the website.** A local port forward connects the private
    website to a browser on this machine. Preparation and forwarding use the same

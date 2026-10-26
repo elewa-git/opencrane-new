@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { preProcessFile } from 'typescript';
 
 const files = [
+  'infra/package/prepare-nats-routes.ts',
   'infra/dev-stack/bounded-input.ts',
   'infra/dev-stack/cnpg.ts',
   'infra/dev-stack/config.ts',
