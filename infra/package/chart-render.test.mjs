@@ -436,3 +436,162 @@ async function refusesClusterInstallation() {
 }
 test('ordinary installer refuses preview-only cluster settings',
   refusesClusterInstallation);
+
+function backupValues() {
+  const values = cnpgValues();
+  values.postgres.backup = {
+    enabled: true,
+    renderOnly: true,
+    method: 'barmanObjectStore',
+    destinationPath: 's3://database-backups/local-check',
+    endpointURL: 'https://backup-store.cluster-test.svc:9000',
+    endpointCA: { name: 'backup-trust', key: 'ca.crt' },
+    s3Credentials: {
+      accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
+      secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+    },
+  };
+  return values;
+}
+
+function rendersSuspendedBackup() {
+  const resources = renderedResources(backupValues());
+  const cluster = resources.get('Cluster/postgres');
+  assert.deepEqual(cluster.spec.backup, {
+    barmanObjectStore: {
+      destinationPath: 's3://database-backups/local-check',
+      endpointURL: 'https://backup-store.cluster-test.svc:9000',
+      endpointCA: { name: 'backup-trust', key: 'ca.crt' },
+      s3Credentials: {
+        accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
+        secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+      },
+      data: { encryption: 'AES256' },
+      wal: { encryption: 'AES256' },
+    },
+  });
+  const schedules = [];
+  for (const resource of resources.values()) {
+    if (resource.kind === 'ScheduledBackup') {
+      schedules.push(resource);
+    }
+    if (resource.kind === 'Service') {
+      assert.equal(resource.spec.type, 'ClusterIP');
+    }
+    for (const forbidden of ['Secret', 'Ingress', 'Gateway', 'Backup', 'CronJob']) {
+      assert.notEqual(resource.kind, forbidden);
+    }
+  }
+  assert.equal(schedules.length, 1);
+  assert.equal(schedules[0].apiVersion, 'postgresql.cnpg.io/v1');
+  assert.deepEqual(schedules[0].spec, {
+    cluster: { name: 'postgres' }, method: 'barmanObjectStore',
+    schedule: '0 0 0 * * *', suspend: true, immediate: false,
+  });
+}
+test('CNPG renders encrypted local backup and WAL with one suspended schedule',
+  rendersSuspendedBackup);
+
+const privateBackupCanary = 'private-backup-value';
+const backupRefusals = [
+  ['standalone', ['mode'], 'standalone'],
+  ['missing opt-in', ['backup', 'enabled'], undefined],
+  ['disabled with settings', ['backup', 'enabled'], false],
+  ['string opt-in', ['backup', 'enabled'], 'true'],
+  ['missing render-only choice', ['backup', 'renderOnly'], undefined],
+  ['installation requested', ['backup', 'renderOnly'], false],
+  ['string render-only choice', ['backup', 'renderOnly'], 'true'],
+  ['missing method', ['backup', 'method'], undefined],
+  ['plugin method', ['backup', 'method'], 'plugin'],
+  ['snapshot method', ['backup', 'method'], 'volumeSnapshot'],
+  ['missing destination', ['backup', 'destinationPath'], undefined],
+  ['HTTPS destination', ['backup', 'destinationPath'], 'https://bucket/prefix'],
+  ['destination credentials', ['backup', 'destinationPath'],
+    `s3://user:${privateBackupCanary}@bucket/prefix`],
+  ['destination query', ['backup', 'destinationPath'], `s3://bucket/?key=${privateBackupCanary}`],
+  ['destination fragment', ['backup', 'destinationPath'], `s3://bucket/#${privateBackupCanary}`],
+  ['missing endpoint', ['backup', 'endpointURL'], undefined],
+  ['plaintext endpoint', ['backup', 'endpointURL'], 'http://backup-store.cluster-test.svc'],
+  ['external endpoint', ['backup', 'endpointURL'], 'https://storage.example.com'],
+  ['foreign namespace', ['backup', 'endpointURL'], 'https://backup-store.other.svc'],
+  ['endpoint credentials', ['backup', 'endpointURL'],
+    `https://user:${privateBackupCanary}@backup-store.cluster-test.svc`],
+  ['endpoint query', ['backup', 'endpointURL'],
+    `https://backup-store.cluster-test.svc?key=${privateBackupCanary}`],
+  ['endpoint fragment', ['backup', 'endpointURL'],
+    `https://backup-store.cluster-test.svc#${privateBackupCanary}`],
+  ['endpoint path', ['backup', 'endpointURL'], 'https://backup-store.cluster-test.svc/override'],
+  ['inline credentials', ['backup', 'password'], privateBackupCanary],
+  ['inline S3 credentials', ['backup', 's3Credentials', 'secretAccessKey'], privateBackupCanary],
+  ['inherited IAM', ['backup', 's3Credentials', 'inheritFromIAMRole'], true],
+  ['unsupported provider', ['backup', 'azureCredentials'], { value: privateBackupCanary }],
+  ['base override', ['backup', 'data'], { encryption: '' }],
+  ['WAL override', ['backup', 'wal'], { encryption: '' }],
+  ['schedule override', ['backup', 'schedule'], '* * * * * *'],
+  ['unsuspend override', ['backup', 'suspend'], false],
+  ['immediate override', ['backup', 'immediate'], true],
+  ['retention override', ['backup', 'retentionPolicy'], '1d'],
+  ['invalid port', ['backup', 'endpointURL'], 'https://backup-store.cluster-test.svc:65536'],
+  ['zero port', ['backup', 'endpointURL'], 'https://backup-store.cluster-test.svc:0'],
+  ['missing S3 references', ['backup', 's3Credentials'], undefined],
+  ['null S3 references', ['backup', 's3Credentials'], null],
+  ['null backup', ['backup'], null],
+  ['empty backup', ['backup'], {}],
+  ['scalar backup', ['backup'], privateBackupCanary],
+  ['array backup', ['backup'], []],
+];
+const referencePaths = [
+  ['backup', 'endpointCA'],
+  ['backup', 's3Credentials', 'accessKeyId'],
+  ['backup', 's3Credentials', 'secretAccessKey'],
+];
+for (const path of referencePaths) {
+  const referenceName = path.at(-1);
+  backupRefusals.push([`${referenceName} missing`, path, undefined]);
+  for (const field of ['name', 'key']) {
+    for (const invalid of [undefined, '', 42, 'invalid/value']) {
+      backupRefusals.push([`${referenceName} invalid ${field}: ${invalid}`,
+        [...path, field], invalid]);
+    }
+  }
+  backupRefusals.push([`${referenceName} inline value`, [...path, 'value'], privateBackupCanary]);
+}
+for (const [name, path, value] of backupRefusals) {
+  function refusesBackup() {
+    const values = backupValues();
+    let parent = values.postgres;
+    for (const key of path.slice(0, -1)) {
+      parent = parent[key];
+    }
+    parent[path.at(-1)] = value;
+    const result = renderChart(values);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /CNPG backup/u);
+    assert.equal(result.stdout, '');
+    assert.ok(!result.stderr.includes(privateBackupCanary));
+  }
+  test(`Helm refuses backup with ${name}`, refusesBackup);
+}
+
+function defaultHasNoBackup() {
+  for (const values of [chartValues(), cnpgValues()]) {
+    const resources = renderedResources(values);
+    for (const resource of resources.values()) {
+      assert.notEqual(resource.kind, 'ScheduledBackup');
+      assert.equal(resource.spec?.backup, undefined);
+    }
+  }
+}
+test('default and ordinary CNPG renders contain no backup work', defaultHasNoBackup);
+
+for (const contract of ['', '1.28', '1.32', 'unknown']) {
+  function refusesBackupOperator() {
+    const values = backupValues();
+    values.postgres.operatorContract = contract;
+    const result = renderChart(values);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Unsupported CNPG operator contract/u);
+    assert.equal(result.stdout, '');
+  }
+  test(`Helm refuses backup with operator contract ${contract}`, refusesBackupOperator);
+}

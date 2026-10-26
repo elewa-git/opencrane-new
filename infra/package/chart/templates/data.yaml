@@ -15,6 +15,24 @@ metadata:
 spec:
   instances: 2
   imageName: {{ .Values.images.postgres | quote }}
+{{- with .Values.postgres.backup }}
+  backup:
+    barmanObjectStore:
+      destinationPath: {{ .destinationPath | quote }}
+      endpointURL: {{ .endpointURL | quote }}
+      endpointCA:
+        name: {{ .endpointCA.name | quote }}
+        key: {{ .endpointCA.key | quote }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .s3Credentials.accessKeyId.name | quote }}
+          key: {{ .s3Credentials.accessKeyId.key | quote }}
+        secretAccessKey:
+          name: {{ .s3Credentials.secretAccessKey.name | quote }}
+          key: {{ .s3Credentials.secretAccessKey.key | quote }}
+      data: { encryption: AES256 }
+      wal: { encryption: AES256 }
+{{- end }}
   enableSuperuserAccess: true
   superuserSecret: { name: {{ .Values.postgres.superuserSecret | quote }} }
   bootstrap:

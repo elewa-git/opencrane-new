@@ -5,7 +5,9 @@ reach each other. It includes the website, back end, background workers and the
 services they need. Helm fills in the chosen settings before installation.
 The database normally runs as one container. The optional primary and standby description needs CloudNativePG,
 a PostgreSQL controller installed separately. Rendering checks this description;
-a running standby has not yet been tested.
+a running standby has not yet been tested. A backup preview describes encrypted base
+backups and the write-ahead log, which PostgreSQL uses to recover changes.
+Its schedule stays paused, and installation refuses until the remaining checks are ready.
 
 ## What it is responsible for
 
@@ -22,7 +24,9 @@ a running standby has not yet been tested.
 | --- | --- |
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
 | `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
-| `data.yaml` | Runs the database and event log, and requests saved storage. |
+| `data.yaml` | Describes the database, optional backup settings, event log and saved storage. |
+| `backup.yaml` | Describes one paused database backup schedule for preview only. |
+| `_backup.tpl` | Checks local backup addresses and existing private-setting references. |
 | `nats-cluster.yaml` | Renders three private event-log peers with separate storage and certificates. |
 | `services.yaml` | Gives the programs private network addresses. |
 | `bootstrap.yaml` | Sets up initial data and the access needed by setup and workers. |
@@ -39,7 +43,7 @@ images first. The setup job runs [bootstrap.ts](../../bootstrap.ts); workers run
 
 ```mermaid
 flowchart LR
-  chart["Local installation chart"] --> templates["templates<br/>programs and optional database standby"]
+  chart["Local installation chart"] --> templates["templates<br/>programs, database standby and backup preview"]
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```

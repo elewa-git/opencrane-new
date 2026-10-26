@@ -639,3 +639,20 @@ async function refusesStandaloneIdentity() {
   await runFixture(fixture, natsRefusal);
 }
 test('R1 also refuses an expired mounted command certificate before Helm', refusesStandaloneIdentity);
+
+async function refusesBackupWithOrdinaryImageApproval() {
+  const fixture = validFixture();
+  fixture.values.postgres.backup = {
+    enabled: true, renderOnly: true, method: 'barmanObjectStore',
+    destinationPath: 's3://database-backups/local-check',
+    endpointURL: 'https://backup-store.opencrane-package-1.svc:9000',
+    endpointCA: { name: 'backup-trust', key: 'ca.crt' },
+    s3Credentials: {
+      accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
+      secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+    },
+  };
+  await runFixture(fixture, 'Package command failed');
+}
+test('backup refuses before Helm even with ordinary CNPG image approval',
+  refusesBackupWithOrdinaryImageApproval);

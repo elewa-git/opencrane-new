@@ -299,6 +299,69 @@ The [receipt](../../docs/process/p5-3-pr1/receipt.md) records checks and limits.
 Backup/WAL, all-database restore, storage denial, live standby and promotion remain
 NOT RUN under #15. Rendering is not live k3d proof.
 
+## Local database backup preview
+
+P5-3 PR 3a adds render/refusal support after PR #738 merged at
+`ced4d8002413382f369d99901eb55a4c9e480909`. It uses CNPG 1.30's existing native
+[`barmanObjectStore` contract](https://github.com/cloudnative-pg/cloudnative-pg/blob/release-1.30/docs/src/appendixes/backup_barmanobjectstore.md).
+Upstream deprecated native support in 1.26. Its 1.30 documentation now identifies
+1.31 as the last minor release with native support and removal from 1.32 onwards.
+A future upgrade needs a separately tested migration. This preview adds no plugin,
+operator, image or registry change. Image/helper compatibility and shipped inventory
+belong to p5-4-images1.
+
+The ordinary PostgreSQL and CNPG renders stay unchanged when `postgres.backup` is
+absent. For a preview, add this block under the existing CNPG settings, replacing
+`cluster-test` with the Helm release namespace:
+
+```yaml
+postgres:
+  mode: cnpg
+  operatorContract: "1.30"
+  superuserSecret: cnpg-superuser
+  applicationSecret: cnpg-projection
+  backup:
+    enabled: true
+    renderOnly: true
+    method: barmanObjectStore
+    destinationPath: s3://database-backups/local-check
+    endpointURL: https://backup-store.cluster-test.svc:9000
+    endpointCA: { name: backup-trust, key: ca.crt }
+    s3Credentials:
+      accessKeyId: { name: backup-identity, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: backup-identity, key: ACCESS_SECRET_KEY }
+```
+
+The endpoint must name an HTTPS Service in that namespace, ending in `.svc` or
+`.svc.cluster.local`, with an optional port from 1 to 65535 and trailing slash.
+URL credentials, query strings, fragments and other paths refuse. The S3 bucket
+name has 3–63 lower-case letters, digits or hyphens, starting and ending with a
+letter or digit. Optional path segments use letters, digits, underscores or hyphens.
+The CA certificate and both credentials refer to existing Secret names and keys.
+No Secret or credential value is rendered. Rendering checks their shape only;
+it cannot establish trust, read the references or verify the endpoint's owner.
+
+The Cluster requests AES256 object-store encryption for both `data` (base backup)
+and `wal` (write-ahead log). One `ScheduledBackup` names that Cluster, explicitly
+uses `barmanObjectStore`, and fixes `schedule: "0 0 0 * * *"`, `suspend: true` and
+`immediate: false`. The [upstream scheduling contract](https://github.com/cloudnative-pg/cloudnative-pg/blob/release-1.30/docs/src/backup.md#scheduled-backups)
+uses six fields including seconds. The suspended schedule requests no scheduled
+or immediate base backup; no on-demand `Backup` is emitted. Overrides, inline
+credentials, other methods and standalone backup settings refuse.
+
+Suspension does not stop WAL archiving if someone applies the Cluster directly.
+The package installer therefore refuses any `postgres.backup` setting before Helm,
+even with ordinary CNPG image approval. Removing this refusal needs compatible
+images and backup helpers, live credential/CA/endpoint checks and storage proof.
+The preview must not be installed directly. AES256 settings request server-side
+encryption; rendered YAML does not prove encryption or constitute a database backup.
+
+Real Helm and installer tests cover the preview and refusals. The installer uses
+synthetic Kubernetes replies and image approval. All three database recovery,
+missing WAL, denied storage access, encryption, standby promotion and fresh-install
+backup work remain **NOT RUN**. Local S3 would prove local recovery only. The
+matched event/database/object/volume set in the accepted design remains later work.
+
 ## Three-peer NATS rendering
 
 The chart describes three peers for preview or checked installation. Installation
