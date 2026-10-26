@@ -19,7 +19,7 @@ flowchart LR
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
-  server -->|messages, files and Stop| computer
+  server -->|messages, files, Stop and disconnect| computer
   server -.->|tests use helper| computer
   computer -->|progress and results| server
   computer -->|checks command ownership| executor["socket-denied executor"]
@@ -64,7 +64,10 @@ flowchart LR
 5. **The server asks work to stop.** The computer can stop everything the assistant
    is running and check that the work has stopped. Taking control of the desktop
    remains unavailable. Stopping one private turn clears its buffered reply and
-   rejects later reply text, while other people's turns keep running.
+   rejects later reply text, while other people's turns keep running. A failed private
+   turn or refused tool also clears its reply. Losing the server connection cancels
+   all private turns and clears buffered private replies, including completed ones.
+   Ordinary memory-free work can still recover after reconnecting.
 6. **A command asks for a package or repository.** The executor refuses network
    execution. Ordinary commands still run as a separate user that cannot open sockets.
 

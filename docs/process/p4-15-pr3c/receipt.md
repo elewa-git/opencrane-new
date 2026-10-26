@@ -22,8 +22,8 @@ requester-only server/browser buffers and browser clearance remain pending. Nati
 admission stays disabled. Existing dispatch and renewal guards are unchanged.
 
 No event or API field was added. The exact `RISKY_FIELD_NAME` expression in
-`libs/events/test/security-rules.test.ts` was checked. That file and both authority
-test files are unchanged. No authority deadline, watched stream, credential route,
+`libs/events/test/security-rules.test.ts` was checked. At that stage, that file and both authority
+test files were unchanged. The later fixture changes are recorded below. No authority deadline, watched stream, credential route,
 models index, dependency or SQL rule changed. No model or owner-stack call was made.
 
 ## Own checks
@@ -92,3 +92,83 @@ and `typecheck.log`. The two passing six-file runs are `affected-2` and `affecte
 Separate check logs are `knip.log`, `docs.log` and `computer-typecheck.log`.
 Final focused logs are `final-1.log`, `final-2.log`, `final-changed-1.log`,
 `final-changed-2.log`, `focused-lint.log` and `focused-lint-2.log`.
+
+## Termination and connection fixes, 26 October 2026
+
+Implementation source: `bf11466a6cc1c920e56e186408b2d4fc6c33b330`.
+Regression source: `2d70f1f44`. Local worktree and disposable service fixtures;
+not a fresh installation. Rebased onto `origin/main` at
+`599d4261d67362938df73cea7efdac36d3fc40f7` and confirmed the rebase finished.
+
+Failed terminal notifications, `thread/closed`, private-session EOF and a rejected
+`turn/start` now cancel the private turn and clear its reply before cleanup starts.
+Tool refusal also cancels the turn, clears its text and starts access removal before
+waiting for a terminal report. It keeps the existing refusal reason.
+
+Connection loss clears private reply buffers, including completed replies, and
+cancels preparing and running private turns. Replacing a socket clears the old
+connection before the new one resumes. The old socket's later close cannot cancel
+new work. Server shutdown closes sockets before waiting for unfinished reads.
+Ordinary memory-free work and its reply recovery remain available.
+
+The failure tests hold access removal open. They check queued delivery, later
+message and reasoning text, replay before acknowledgement and cold journal reads.
+Disconnect tests include a completed private reply and preparation held across
+reconnect. The shutdown case uses real NATS, PostgreSQL and computer WebSockets,
+with a server read held open while checking grant removal and replay.
+
+The gate-authority fixture now keeps its existing exact assertions on two ordinary
+turns. All fifteen rejected gate cases also run with a private turn and an ordinary
+turn. They require refusal, private cancellation, retained ordinary access and no
+gate receipt. No signature, access, money or memory assertion was relaxed.
+The Stop tests also cover different turn ids in one conversation and late
+memory-free text arriving before completion.
+
+### Own failing-first evidence
+
+- Expected FAIL: `38bcc6d25` added five termination cases. Four delivered queued
+  private text after failure; tool refusal also retained its grant and accepted
+  later text. All five passed after `a90d06395`.
+- Expected FAIL: disconnect regressions in `d17d034bc` retained private work or
+  completed reply text. They passed after `98cad690a`.
+- Expected FAIL: shutdown regression in `a5c8daa30` kept the private grant while
+  a server read waited. It passed after `bf11466a6`.
+- Initial broad run: 428 tests passed. Thirteen memory-report cases could not run
+  because the pinned gateway executable was absent. The normal `npm run pretest`
+  script installed it and verified its checksum. Thirty gate-authority cases
+  exposed the old fixture's assumption that private work survives reconnect;
+  the expanded matrix above preserves all existing authority assertions.
+
+### Own final checks
+
+- PASS: the selected 29 test files twice, 486/486 tests in each pass, in
+  273.17 and 245.39 seconds. These include all requested runner, bridge, socket,
+  memory-report and replay checks.
+- PASS: all 438 unchanged event-security tests, once.
+- PASS: full workspace and infrastructure typecheck, then the computer typecheck
+  after the final test-only edits.
+- PASS: full lint, including Knip, dependency rules, documentation, links, fixtures,
+  package licences and changelog validation. Code lint reported 26 warnings and
+  zero errors. Final focused lint also passed after typing socket close values.
+- PASS: `check:events`, with 154 matching event types. The event-security source
+  file and production authority code are unchanged.
+
+### Environment and remaining qualification
+
+All tests, lint and typechecks used `nice -n 10`. Targeted computer runs used the
+supplied `PG_TEST_URL` at port 55432. Projection and server runs used a new
+`postgres:17.6-alpine` container, `pgtest-p4-15-pr3c-fix`, published on local port
+40602 after `pg_isready` passed. The container and its volume were removed after the checks.
+The test services used local fixture replies.
+No model provider, owner stack, second Docker daemon or development stack was used.
+
+PARTIAL: automatic memory invalidation and requester-only delivery remain pending.
+NOT RUN: full root suite, fresh-install journeys, native recall and the four
+memory tools in a live installation. Native memory admission remains disabled.
+
+Fix logs use `/tmp/p4-15-pr3c-fix-` followed by `red-termination.log`,
+`red-disconnect.log`, `red-shutdown.log`, `green-termination.log`,
+`green-disconnect.log`, `green-shutdown.log`, `tests-initial.log`,
+`authority-fixture.log`, `fixture-setup.log`, `tests-1.log`, `tests-2.log`,
+`security.log`, `lint.log`, `typecheck.log`, `events.log` and `docs-final.log`.
+The complete selected test command is `/tmp/p4-15-pr3c-fix-tests.sh`.

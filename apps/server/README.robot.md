@@ -2,6 +2,20 @@
 
 For people, read [README.md](README.md) first.
 
+## Private work during bridge shutdown
+
+The bridge watcher closes its computer sockets as soon as shutdown is requested.
+It then waits for outstanding control, report and Stop checks. A slow event-store
+read cannot keep a private turn connected during that wait. Computers cancel their
+private turns and clear private reply buffers on connection loss. Ordinary
+memory-free turns retain their existing recovery behaviour.
+
+`test/bridge-replay.test.ts` holds a computer read open while shutdown starts.
+It checks grant removal before releasing the read, refuses later private output,
+checks saved reports and replays the computer journal through a fresh socket.
+This is a local fixture check. Native memory admission stays disabled. Fresh-install
+recall qualification is NOT RUN. No access deadline or event contract changes.
+
 ## Bounded routine presence in member reviews
 
 Member inventory excludes routine references and category aggregation from its member

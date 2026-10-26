@@ -41,7 +41,8 @@ Stop and signed control requests do not wait for that space. Reconnecting rebuil
 the list from the server's saved position and the outstanding grant requests.
 The journal remains the recovery source. Private text is still removed on its
 acknowledgement, when the server's saved position covers it, or when Stop arrives
-for that conversation and turn.
+for that conversation and turn. Private failures, tool refusal and connection loss
+also clear private text before cleanup can wait.
 
 `test/report-pressure.test.ts` drives the real computer WebSocket and a stand-in
 model that keeps producing text. Its server fixture enforces the existing bounded
@@ -50,7 +51,7 @@ its closure within two seconds, retaining every partial reply piece. See the
 [Stop closure receipt](../../docs/process/demo-kit/stop-throughput.md#stop-closure)
 for live results. Reservations, holds, permissions and memory admission are unchanged.
 
-### Private reply removal on Stop (P4-15 PR 3c, first part)
+### Private reply removal on termination (P4-15 PR 3c, first part)
 
 `turn-runner.ts` clears the matching private report text before waiting for access
 removal or process interruption. `report-journal.ts` keeps the existing report
@@ -70,6 +71,23 @@ messages, queued bytes, reconnect, cold journal reads, completion metadata, a he
 renewal, a fresh explicit request and another requester's simultaneous private reply.
 The existing proxy Stop tests cover grant/catalogue removal and pending model/tool
 responses. These are local fixture tests, not native process qualification.
+
+Failed terminal reports, `thread/closed`, private-session EOF and a rejected
+`turn/start` clear private text before releasing the turn. Refusing a private tool
+marks cancellation and removes its grant before waiting for a terminal report.
+The existing `restricted_tool_refused` reason is retained.
+
+Connection loss cancels preparing and running private turns and clears all private
+reply buffers, including completed replies. Replacing the socket clears the old
+connection before accepting the new one; a later close from the old socket cannot
+cancel new work. Closing the computer bridge uses the same cancellation path.
+Memory-free work and buffered text keep their existing recovery behaviour.
+`test/private-termination.test.ts` checks each failure, held cleanup, queued output,
+late content, lost connections and pending preparation. The Stop tests also check
+two turn ids in one conversation and memory-free output after cancellation.
+The server shutdown regression in `apps/server/test/bridge-replay.test.ts` holds
+an event-store read open and checks that the private grant is removed before it
+finishes, with no private text in saved reports or reconnect replay.
 
 This is the first computer-side part of the accepted invalidation work. Automatic
 reference/access-change detection, the conditional invalidated-evidence command,
@@ -731,7 +749,7 @@ Stderr is discarded. The whole container inherits a hard core-file limit of zero
 
 | Writable place | Backing | Who can write | Private text allowed? |
 | --- | --- | --- | --- |
-| Bridge memory | Process RAM | UID 1000 bridge | Yes, until acknowledged or stopped; swappable here |
+| Bridge memory | Process RAM | UID 1000 bridge | Yes, until acknowledged or cleared; swappable here |
 | Supervisor stream buffers | Process RAM | Root supervisor | Yes, while passing bytes; swappable here |
 | Private Codex memory | Process RAM | UID 1003 Codex | Yes; swappable here |
 | `/home/private/turn-<n>` | 16Mi Memory volume | UID 1003 | Yes; gVisor tmpfs measured; host swap remains an accepted dev-box risk |
@@ -756,7 +774,8 @@ Codex uses its RAM `TMPDIR`, but the kernel still permits writes to `/tmp` and
 
 The PVC journal stores a text-free line for each private text report, marked
 `memoryOnly: true`. Its text remains in bridge memory until acknowledged,
-covered by `resume.since` or cleared by Stop. Replay with missing text sends `agent.output_lost`.
+covered by `resume.since` or cleared on Stop, failure or connection loss. Replay with
+missing text sends `agent.output_lost`.
 Outline lines expose reply timing and size through the number of deltas. They
 also contain client-chosen ids, up to 200 characters for conversation and turn ids.
 The execution marker remains unchanged and contains only turn ids.

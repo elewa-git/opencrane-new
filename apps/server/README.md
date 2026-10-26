@@ -85,7 +85,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server -->|chat work, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
+  server -->|chat connections and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
 ```
@@ -354,8 +354,11 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
    again before sending a turn or file, so new control intent holds waiting work.
    While a computer has not acknowledged a file, the watcher still sends spending
    Stops and checks approvals. A slow chat history read delays only that chat’s Stop
-   check. Shutdown waits for unfinished checks. It sends each file once per connection and waits for
-   the receipt before sending that chat’s turn.
+   check. Shutdown closes computer connections first, then waits for unfinished checks.
+   The computers cancel private work and clear its buffered replies when those
+   connections close. Ordinary memory-free work keeps its reconnect behaviour.
+   The watcher sends each file once per connection and waits for the receipt before
+   sending that chat’s turn.
    Open chat pages repeat permission checks when silo or team membership changes.
    Removing someone from a team closes their private chat with that team's assistant
    within two seconds. If OpenFGA takes too long to apply another change, the page
