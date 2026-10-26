@@ -17,7 +17,7 @@ afterAll(close);
 
 function diagnosticDatabase(): Db {
   const database = pgDb(storage.queue);
-  const lock = database.lock!;
+  const lock = database.lock!.bind(database);
   const initialPool = { total: storage.queue.totalCount, idle: storage.queue.idleCount,
     waiting: storage.queue.waitingCount };
   async function loggedLock<Result>(...args: Parameters<typeof lock<Result>>) {

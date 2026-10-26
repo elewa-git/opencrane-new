@@ -23,7 +23,9 @@ export async function withConnectionStage<Result>(db: Pick<Db, 'lock'>,
   }
   // Hide database failures while preserving the command's own fixed refusal messages.
   let outcome: Awaited<ReturnType<typeof execute>>;
-  const options = { timeoutMs: 100 };
+  // Allow the pool and PostgreSQL round trips the same one-second wait as a normal connection.
+  // Acquire before loading history and checking access, so this wait grants no authority.
+  const options = { timeoutMs: 1000 };
   try {
     outcome = await db.lock(name, execute, options);
   } catch {
