@@ -175,10 +175,12 @@ export async function verifyPackageOwner() {
   await requireOwner();
   const owner = await readOwner();
   const { context } = await targetConnection();
-  const found = await getNamespace(owner?.context);
   if (!owner || owner.worktree !== root || owner.slot !== stackId ||
-      owner.context !== context || owner.namespace !== namespace ||
-      owner.release !== release || !found || !ownedNamespace(found, owner)) {
+      owner.context !== context || owner.namespace !== namespace || owner.release !== release) {
+    throw new Error('Package ownership differs from the recorded namespace');
+  }
+  const found = await getNamespace(context);
+  if (!found || !ownedNamespace(found, owner)) {
     throw new Error('Package ownership differs from the recorded namespace');
   }
   return owner;
