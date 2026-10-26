@@ -563,6 +563,7 @@ const consentWaits = [
   ['prepare', 'removed'], ['prepare', 'rejoined'], ['prepare', 'disabled'],
   ['prepare', 'policy'], ['prepare', 'configuration'], ['prepare', 'expiry'],
   ['prepare', 'failure'], ['append', 'disabled'], ['append', 'failure'],
+  ['append', 'removed'], ['append', 'policy'],
   ['readback', 'failure'], ['read', 'failure'], ['read', 'expiry'], ['read', 'removed'],
   ['read', 'rejoined'], ['read', 'disabled'], ['read', 'configuration'],
   ['read', 'policy'], ['read', 'profile'],
