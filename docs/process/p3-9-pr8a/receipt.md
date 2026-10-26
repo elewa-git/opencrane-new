@@ -36,6 +36,30 @@ changed bindings, missing or replaced custody and unsafe URLs refuse; ambiguous
 creation remains unknown; cleanup retains current bearer material and OAuth attempts.
 Only enabled reviewed tools add scopes. State and verifier stay out of results and journals.
 
+## Expiry correction
+
+Date: 26 October 2026. Rebased onto `d45dd860c0730957bc044602184f2b8980294d2a`.
+Source checked: `ebe66a9b090b7033b08db663c62d94035acfacc6`.
+
+Recovery now checks expiry after its final awaited custody read. Preparation checks
+again before reporting success. An expired attempt returns no private material.
+Four new cases advance the clock during recovery, including during the final read,
+for both `readAttempt` and `prepareAttempt`. The frozen-clock tests are unchanged.
+
+PASS: all four new cases failed before the fix, in test commit `e458c62ba`.
+PASS: all 157 custody tests, including OAuth preparation, passed twice on the final
+source (143.18 and 155.15 seconds). The unchanged security-rule suite passed once:
+438 tests, in a combined run of 595 tests. The first typecheck found a test callback
+narrowing error; the final source captures the known expiry before creating that callback.
+PASS: full lint, including Knip and changelog checks, full typecheck, event catalogue
+agreement and whitespace checks. ESLint reported no errors and 27 existing warnings.
+
+These runs used the existing worktree, disposable NATS and local HTTP fixtures, and
+temporary databases on the supplied PostgreSQL test service at `127.0.0.1:55432`.
+The fixtures removed their databases afterwards. Every test used `nice -n 10`, one
+worker and the requested `PG_TEST_URL`. This was not a fresh installation.
+The [command results](checks.txt) include the correction's own checks.
+
 ## Remaining work
 
 PARTIAL: the requested internal consent start. Its conditional event append, strict

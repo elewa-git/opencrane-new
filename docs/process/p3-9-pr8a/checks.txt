@@ -18,3 +18,25 @@ PASS npx vitest run libs/models/test/connection-custody.test.ts --maxWorkers=1:
 PASS 31 preparation field names against the unchanged RISKY_FIELD_NAME rules
 PASS git diff --check
 NOT RUN live/fresh-install qualification, full root suite and CI
+
+Expiry correction, 26 October 2026
+Source: ebe66a9b090b7033b08db663c62d94035acfacc6
+PASS git fetch origin; git rebase origin/main; no rebase remains in progress
+Base: d45dd860c0730957bc044602184f2b8980294d2a
+PASS failing-first proof: four expected assertion failures in test commit e458c62ba
+  PG_TEST_URL supplied; nice -n 10 npm test --
+  libs/models/test/connection-custody.test.ts --maxWorkers=1 -t 'crosses expiry'
+PASS final custody and OAuth tests twice: 157 tests each, 143.18s and 155.15s
+  PG_TEST_URL supplied; nice -n 10 npm test --
+  libs/models/test/connection-custody.test.ts --maxWorkers=1
+PASS security rules once: 438 tests, included in the earlier 595-test combined run
+  PG_TEST_URL supplied; nice -n 10 npm test --
+  libs/models/test/connection-custody.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1
+PASS nice -n 10 npx eslint libs/models/test/connection-custody.test.ts
+  libs/models/src/connection-custody.ts
+PASS nice -n 10 npm run check:events: 154 event types agree
+PASS nice -n 10 npm run lint: 0 ESLint errors, 27 existing warnings; all stages passed
+PASS Knip and npm run lint:changelog, both included in npm run lint
+PASS nice -n 10 npm run typecheck, including package and dev-stack checks
+PASS git diff --check
+NOT RUN full root suite, live/fresh-install qualification and CI
