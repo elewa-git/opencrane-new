@@ -18,6 +18,27 @@ including when preparation fails or expires. Private error text is never returne
 Tests: `test/member-routine-presence.test.ts` and the existing inventory/removal suites.
 Routine counts, ownership transfer and firing remain later work.
 
+## Spending Stop retries before approval settlement
+
+`bridge-budget-stops.ts` deliberately resends an unfinished budget Stop after
+1,000 ms, measured with `performance.now()`. Ordinary polling and approval
+settlement share the same sent-time map. Sending a frame does not prove that the
+computer stopped. Each resend has the same conversation, turn, reason and stop id.
+The computer may repeat its interrupt request; dropping access again leaves the
+turn stopped and does not grant access or create another saved stop request.
+
+`test/bridge-replay.test.ts` keeps all four computer/approval read-delay combinations.
+It checks Stop before settlement, identical retry commands, one cancelled reply,
+one saved cancellation and no other command. It observes two later watcher polls
+before checking the result. An extra case holds approval history until Stop arrives,
+then advances the monotonic clock by one second while real service timers continue.
+This reproduces the original extra Stop without waiting for a retry timer.
+`test/bridge-budget-stop.test.ts` repeats the exact Stop over the real computer
+channel and checks that only its turn is interrupted, no access is granted again,
+the other turn can renew and finish, and there is still one saved stop request.
+
+[Own checks and every load run](../../docs/process/evidence/ci-flakes-14.md).
+
 ## Takeover approval cancellation
 
 Bridge approval entries include the computer stream position in their change check.

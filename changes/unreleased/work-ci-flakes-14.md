@@ -1,0 +1,1 @@
+- Keep spending-stop and approval-ordering tests reliable when the bridge resends the same unfinished Stop, while checking one cancellation and protecting other turns.

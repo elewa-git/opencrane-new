@@ -195,6 +195,13 @@ async function budgetBridge(realChannel = false) {
     link = { ...await connectBridge(options, input, tokens), connectionId: 2 };
     frames.length = 0;
   }
+  function repeatStop() {
+    const stop = frames.find(isStop);
+    if (!stop) {
+      throw new Error('Expected a saved Stop frame');
+    }
+    link.socket.send(JSON.stringify(stop));
+  }
   async function upload(turn: Turn) {
     const uploaded = { conversationId: turn.conversationId, fileId: 'upload',
       uploadedBy: 'alice', name: 'upload.txt', size: bytes.length, sha256, mime: 'text/plain',
@@ -213,7 +220,7 @@ async function budgetBridge(realChannel = false) {
   }
   return { ...options, actor, assistantId, frames, interrupts, grants, revocations, catalogues,
     channel, objects, bytes,
-    message, start, stop, process, reconnect, pauseConnection, upload, close };
+    message, start, stop, process, reconnect, repeatStop, pauseConnection, upload, close };
 }
 
 function isStop(frame: Frame) {
@@ -356,6 +363,17 @@ async function isolatesRealTurns() {
     { type: 'stop', ...first, reason: 'budget', stopId: 'first-stop' },
   ]);
   expect(test.frames.filter(isTurn)).toEqual([]);
+  test.repeatStop();
+  function interruptedAgain() {
+    return test.interrupts.length === 2;
+  }
+  await until(interruptedAgain);
+  expect(test.interrupts).toEqual([
+    { threadId: 'thread-1', turnId: 'codex-thread-1' },
+    { threadId: 'thread-1', turnId: 'codex-thread-1' },
+  ]);
+  expect(test.catalogues.size).toBe(1);
+  expect(test.grants).toEqual(['thread-1', 'thread-2']);
   await test.channel!.renew('thread-2');
   expect(test.grants).toEqual(['thread-1', 'thread-2', 'thread-2']);
   function secondAcknowledgement(frame: Frame) {
@@ -378,6 +396,9 @@ async function isolatesRealTurns() {
   await until(secondCompleted);
   const rows = await chatHistory(test.store, 'test', 'second');
   expect(rows.filter(isSavedStop)).toEqual([]);
+  const stoppedRows = await chatHistory(test.store, 'test', 'first');
+  const savedStops = stoppedRows.filter(isSavedStop);
+  expect(savedStops).toHaveLength(1);
 }
 it('interrupts only the stopped payer on the real team computer channel', isolatesRealTurns);
 
