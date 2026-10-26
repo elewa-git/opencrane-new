@@ -2458,6 +2458,49 @@ desktop grant. A late participant can list and download screenshots saved after 
 latest join. Older previews and downloads are refused, including after projection replay.
 Private team sessions still refuse participant capture.
 
+## Restricted recall assembly — P4-15 PR 4b, first part
+
+`buildPrivateTurnRecallTools` is an internal assembly path with no live bridge caller.
+It accepts the saved `TurnSummary`, a trusted turn grant and a private caller registry.
+It requires an open, server-recorded restricted chat turn, without shared context.
+The supplied requester, assistant and silo must match that record. The grant must
+also match its requester, assistant, computer, conversation, turn and thread.
+An absent or expired grant gets no offer.
+
+The path reuses `privateCallers`, moved unchanged from the computer to `libs/models`.
+Its `identify`, `permits` and `check` methods require a live registered caller for
+the grant's turn, bound thread, computer generation and input generation. These
+checks run before catalogue access and again after asynchronous assembly.
+The caller registry and grant must come from trusted internal code, never a request
+body. This prepares the assembly contract; it does not register a live private process.
+
+Only this checked path calls the now-private `buildPersonalRecallTools`. It derives
+the requester's person scope before reading the catalogue. Another person, group,
+notes scope or silo gets no offer. Changing the requester and scope together cannot
+replace the requester saved on the turn, even with a changed grant.
+
+It reads only `memory`, requires connection `server` and the built-in server name
+and version, and selects only one recall definition and policy. Both saved revisions
+must match the exact definition served by `memory/mcp.ts`. The existing lossless JSON
+parser accepts reordered object keys but refuses changed instructions, schema or
+additional fields. Duplicate recall entries are refused. Other tools are omitted.
+Published, credential-free, reviewed, zero-cent Allow policy and both MCP use grants
+are still required. Ask is refused even with a saved approval review.
+
+The helper reuses the existing 48 KiB tool and 120 KiB combined-frame limits and
+ordinary entry construction. It does not load facts or grant permission to invoke
+a tool. Gateway and backend checks remain necessary on every call. An unavailable
+catalogue or access service still rejects the build. No new API or event field,
+dependency, access stream or deadline is introduced.
+
+`test/personal-recall-tools.test.ts` exercises this checked path without an
+environment switch. `buildTurnTools`, the live bridge and `mayOfferTurnTools` keep
+memory excluded. Native launch/loading, live proxy registration, person-only call enforcement,
+volatile delivery and image qualification remain pending. This first part does not
+prove a native recall reaches the governed backend. Memory admission stays disabled.
+Own checks and the remaining wire tests are recorded in the
+[receipt](../../docs/process/p4-15-pr4b/receipt.md).
+
 ## Governed memory recall
 
 `POST /mcp/memory/server` serves stateless 2026-07-28 discovery, listing and scoped recall.

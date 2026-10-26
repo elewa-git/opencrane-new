@@ -24,6 +24,7 @@ flowchart LR
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
+  computer -.->|shares private caller checks with the server| models["libs/models<br/>AI access checks"]
 ```
 
 ## What it is responsible for
@@ -41,6 +42,8 @@ flowchart LR
   still need to be connected to these checks before they provide isolation.
   Each tool call checks the caller against the pass it will send, including after
   approval. Ordinary and private turns cannot share a bound thread.
+  The server and computer use the same private caller checks from the models library.
+  The image includes this small shared file, which uses only Node's built-in functions.
 - Checks fixed package and Git requests against the supervisor's record of the tool call.
   Each request must match its executor, silo, person, computer and process.
   Each valid registration can produce only one plan.

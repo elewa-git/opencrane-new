@@ -36,6 +36,26 @@ Callback, confirmation, refresh, revoke and release also remain later work. No e
 public API is added here; no replay path invokes preparation or custody.
 Own check results and remaining qualification are in the [receipt](../../docs/process/p3-9-pr8a/receipt.md).
 
+## Shared private caller checks
+
+`privateCallers` is the unchanged registry formerly in `apps/computer/src`.
+The computer proxy and disabled server recall assembly use this one implementation.
+The computer imports the `@opencrane/models/private-callers` entry point. Its image
+copies that file and the package metadata; it does not load the main entry point
+or install the library's server dependencies. The registry uses only `node:crypto`.
+Registration records the conversation, turn, computer generation, input generation
+and expiry. `identify` finds a live caller; `permits` checks its turn and bound thread;
+`check` also matches the conversation and both generations against the registration.
+Close and expiry remove permission. Used turn identities cannot register again until
+restart. The two-active-caller, 4,096-used-turn and 120-second limits are unchanged.
+The registry is temporary process authority, not a replacement for saved turn events.
+Only trusted internal code can register a caller. Native launch wiring remains pending.
+
+The existing computer private-proxy tests exercise the shared implementation through
+the proxy. Server personal-recall tests also use the real registry, with saved turn
+fixtures, to check missing or mismatched grants, ordinary turns and caller closure
+during assembly. No external dependency, event, API field or runtime setting is added.
+
 ## Shared routine presence check for member reviews
 
 `providerRoutinePresence` is exported for member departure reads. Its internal result

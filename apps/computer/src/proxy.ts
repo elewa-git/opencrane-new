@@ -7,7 +7,7 @@ import { body, json, record } from './http.ts';
 import { approvalHolds } from './approval-holds.ts';
 import { mcpProxy, type ProxyGrant } from './mcp-proxy.ts';
 import { proxyRequests } from './proxy-requests.ts';
-import { privateCallers } from './private-callers.ts';
+import { privateCallers } from '@opencrane/models/private-callers';
 
 // Let Codex use the computer for ten minutes before it needs a new turn grant.
 const CALLER_CREDENTIAL_LIFETIME_MS = 600_000;

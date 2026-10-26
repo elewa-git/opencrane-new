@@ -1512,6 +1512,18 @@ CONNECT and fresh gVisor qualification remain unbuilt or NOT RUN in this slice.
 
 ## Private proxy callers — P4-15 PR 4a, first part
 
+The caller registry comes from `@opencrane/models/private-callers`.
+Its implementation is unchanged. The Dockerfile copies this dependency-free module
+alongside `routing.ts`. The separate package entry point avoids loading the models
+library's server dependencies in the computer image.
+The disabled server recall assembler uses the same checks before preparing a tool list.
+This shared code does not connect private launches to the proxy.
+
+`test/supervisor-identity.test.ts` starts the packaged proxy without source mounts
+and checks that an unauthenticated request is refused. Run it and
+`test/supervisor-stop.test.ts` after building `test/upload-bake.hcl`, as CI does.
+Set `COMPUTER_TEST_IMAGE` to test a separate local image tag.
+
 The proxy has an in-process `privateCaller` method. It returns a fresh random caller,
 `bind(thread)` and `close()`. No HTTP or control-socket route can register a caller.
 The future trusted bridge launch path must keep this returned value in RAM and pass

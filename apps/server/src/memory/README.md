@@ -22,6 +22,8 @@ A memory fact is one saved piece of information. Its scope says whose memory it 
 
 **Assistant access.** A turn is one message and the assistant's reply. The memory tool server checks the AI gateway's signed [access token](../../../../GLOSSARY.md#access-token), a short-lived pass, alongside saved grants, current permissions, the bound assistant and recorded turn mode. It can return personal facts and permitted group facts or assistant notes. Every call checks the previously loaded references. The memory tool server checks each signed description of the turn once. It also checks whose memory the call may use and the proof required for a write.
 
+The recall definition is also used to check the private chat tool list. Changed definitions and Ask or Block choices cannot enter that list. Live private tool delivery remains disabled.
+
 Recall, Correct and Forget load history before the gateway signs the short pass. The server keeps that data for one use and checks current access again. Correct and Forget check the loaded target and later revisions, then report that these tools are disabled.
 
 Recall saves its references before returning fact text or signed proof of what was read. Failed or uncertain saves return neither. A lost reply keeps the references and cannot send the same recall again. If the conversation closes during saving, the references remain readable but the ended context returns no text or proof. References keep personal and shared facts separate and cannot restart a turn or grant access. Chat summaries rebuild them using the models library's shared memory reader without loading fact text.
