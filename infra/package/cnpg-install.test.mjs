@@ -507,7 +507,7 @@ function clusterFixture() {
   fixture.values.natsCluster = { enabled: true, renderOnly: false, routeCASecret: 'route-trust',
     peerCertificateSecrets: ['route-zero', 'route-one', 'route-two'] };
   fixture.review.natsCluster = { replicas: 3, server: fixture.values.images.server,
-    web: fixture.values.images.web };
+    web: fixture.values.images.web, sourceRevision: 'a'.repeat(40) };
   fixture.secrets.runtime.data.NATS_REPLICAS = encoded('3');
   fixture.secrets.runtime.data.COMMAND_NATS_REPLICAS = encoded('3');
   return fixture;

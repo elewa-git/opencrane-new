@@ -86,7 +86,8 @@ function checkNatsCluster(values, review) {
   requireImage('web', values.images.web, review.images.web);
   if (review.natsCluster?.replicas !== 3 ||
       review.natsCluster.server !== values.images.server ||
-      review.natsCluster.web !== values.images.web) {
+      review.natsCluster.web !== values.images.web ||
+      !/^[a-f0-9]{40}$/u.test(review.natsCluster.sourceRevision ?? '')) {
     throw new Error('NATS cluster image compatibility is not reviewed');
   }
 }

@@ -1,0 +1,1 @@
+Package image promotion now requires matching source, image inspection and a scan of all shipped layers. Three-peer installation refuses image reviews without an exact source revision. The current image remains unapproved for three peers.

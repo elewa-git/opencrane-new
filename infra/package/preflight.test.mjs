@@ -169,7 +169,23 @@ function clusterSettings(values, review) {
     peerCertificateSecrets: ['route-zero', 'route-one', 'route-two'] };
   values.images.web = values.images.server;
   review.images.web = values.images.web;
-  review.natsCluster = { replicas: 3, server: values.images.server, web: values.images.web };
+  review.natsCluster = { replicas: 3, server: values.images.server, web: values.images.web,
+    sourceRevision: 'a'.repeat(40) };
+}
+for (const revision of [undefined, '', 'main', 'a'.repeat(39)]) {
+  function missingSourceRefuses() {
+    const { directory, values, review } = fixture();
+    try {
+      clusterSettings(values, review);
+      review.natsCluster.sourceRevision = revision;
+      const result = check(values, review, directory);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /NATS cluster image compatibility is not reviewed/u);
+    } finally {
+      rmSync(directory, { recursive: true });
+    }
+  }
+  test(`R3 review refuses invalid source revision ${String(revision)}`, missingSourceRefuses);
 }
 function clusterPreflightBeforePreparation() {
   const { directory, values, review } = fixture();
@@ -200,3 +216,9 @@ function oldImageStillRefuses() {
   }
 }
 test('the shipped image still has no R3 compatibility approval', oldImageStillRefuses);
+
+function packagePromotionRefusals() {
+  const result = spawnSync('python3', ['infra/package/licences.test.py'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+}
+test('package licence and image promotion refusals pass', packagePromotionRefusals);
