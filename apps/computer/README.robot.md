@@ -1509,3 +1509,32 @@ protection against a hostile process with the supervisor's UID.
 The existing executor refusal and UID 1001 socket-denial regression remains unchanged.
 Native delivery, worker runtime installation, chroot, quotas, scanning, publication,
 CONNECT and fresh gVisor qualification remain unbuilt or NOT RUN in this slice.
+
+## Private proxy callers — P4-15 PR 4a, first part
+
+The proxy has an in-process `privateCaller` method. It returns a fresh random caller,
+`bind(thread)` and `close()`. No HTTP or control-socket route can register a caller.
+The future trusted bridge launch path must keep this returned value in RAM and pass
+it only to the matching child. The current launcher still uses its shared caller;
+this part does not establish isolation between running private processes.
+
+Registration records the conversation, turn, computer generation, input generation
+and an absolute expiry of at most 120 seconds. It permits two active callers and
+remembers at most 4,096 used turn identities. At that limit it refuses new private
+registrations until restart. A thread can be bound once. Grants and catalogues must
+match the recorded identity. A private caller cannot use ordinary work or another
+turn, and the ordinary caller cannot use registered private work.
+
+Restricted catalogues replace lists for their own turn only. Fixed discovery can
+run before binding; calls need the bound thread and matching live grant. Ordinary
+catalogue replacement and thread reuse retain their existing behaviour. Close,
+expiry and Stop remove grants, lists and pending upstream requests. Closing the
+proxy removes every private caller. Delayed grants and registrations cannot reopen
+an ended identity. The model proxy checks again after reading the request body.
+
+No private caller bytes enter the caller file, control replies or errors. The existing
+control socket remains a trusted input; supervisor authentication and process launch
+integration, private thread loading and computer replacement wiring remain pending.
+The new local fields `generation` and `inputGeneration` do not match the exact
+`RISKY_FIELD_NAME` rule. No event or public API schema changes. No dependency is added.
+Own checks and untested conditions: [receipt](../../docs/process/p4-15-pr4a/receipt.md).
