@@ -213,6 +213,14 @@ export function reportJournal(driver: JournalDriver) {
     if (report?.memoryOnly) delete report.text;
   }
 
+  function forgetTurnText(conversationId: string, turnId: string) {
+    for (const report of reports) {
+      if (report.conversationId === conversationId && report.turnId === turnId) {
+        forgetText(report.sequence);
+      }
+    }
+  }
+
   function replay(since: number, waiting: Map<number, unknown>, send: (report: BridgeReport) => void) {
     for (const report of reports) {
       if (report.sequence <= since) forgetText(report.sequence);
@@ -229,7 +237,8 @@ export function reportJournal(driver: JournalDriver) {
     executions.add(turnId);
   }
 
-  return { reports, executions, load, findLast, append, replay, recordExecution, forgetText };
+  return { reports, executions, load, findLast, append, replay, recordExecution,
+    forgetText, forgetTurnText };
 }
 
 

@@ -1,3 +1,4 @@
+import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { z } from 'zod';
 import { createHash, generateKeyPairSync } from 'node:crypto';
@@ -11,9 +12,9 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import { expect, it, vi } from 'vitest';
-import { countReads, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
+import { countReads, event, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
 import { databases, until } from '@opencrane/authz/testing';
 import { connectBridge, watchBridges } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
@@ -38,10 +39,10 @@ async function bridgeTokens(fixture: { directory: string }) {
   return tokenIssuer(options);
 }
 
-async function replayFixture(conversationIds = ['alice', 'bob']) {
+async function replayFixture(conversationIds = ['alice', 'bob'], kind = 'personal') {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/bridge-replay-`);
   await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
-  await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' }) });
+  await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind }) });
   const keys = conversationKeys(directory), server = createServer(), wss = new WebSocketServer({ server });
   const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
   for (const conversationId of conversationIds) {
@@ -51,8 +52,28 @@ async function replayFixture(conversationIds = ['alice', 'bob']) {
     });
     await nats.seed([joined]);
     keys.provision('test', conversationId);
-    await chatCommand(nats.store, keys, { silo: 'test', memberId: conversationId }, { id: `create-${conversationId}`, conversationId, assistantId: 'assistant' });
-    await chatCommand(nats.store, keys, { silo: 'test', memberId: conversationId }, { id: `message-${conversationId}`, conversationId, text: 'Hello' });
+    if (kind === 'team') {
+      const created = { conversationId, assistantId: 'assistant', createdBy: conversationId,
+        mode: 'agent_session', payingGroupId: 'personal-default' };
+      await nats.seed([envelope('test', `conversation-${conversationId}`,
+        'conversation.created', created)]);
+    } else {
+      const owner = { silo: 'test', memberId: conversationId };
+      const creation = { id: `create-${conversationId}`, conversationId, assistantId: 'assistant' };
+      await chatCommand(nats.store, keys, owner, creation);
+    }
+    if (kind === 'team') {
+      const encrypted = keys.encrypt('test', conversationId, 'Hello');
+      const data = { conversationId, authorId: conversationId, authorKind: 'human',
+        contentType: 'text', ...encrypted };
+      const message = envelope('test', `conversation-${conversationId}`, 'message.posted', data);
+      message.id = `message-${conversationId}`;
+      await nats.seed([message]);
+    } else {
+      const owner = { silo: 'test', memberId: conversationId };
+      const message = { id: `message-${conversationId}`, conversationId, text: 'Hello' };
+      await chatCommand(nats.store, keys, owner, message);
+    }
   }
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
@@ -1974,3 +1995,136 @@ async function recordsBudgetAdmissionRefusal(failure: 'none' | 'before' | 'after
 }
 it.each(['none', 'before', 'after'] as const)(
   'records one budget refusal across recovery and a lost save (%s)', recordsBudgetAdmissionRefusal);
+
+async function cancelsPrivateWorkBeforeShutdownWaits() {
+  const fixture = await replayFixture(['alice'], 'team');
+  const dbs = await databases();
+  const stop = new AbortController();
+  const server = createServer();
+  const tokens = await bridgeTokens(fixture);
+  const releaseRead = Promise.withResolvers<void>();
+  const readStarted = Promise.withResolvers<void>();
+  const privateClosed = Promise.withResolvers<void>();
+  let credential = { value: '', expiresAt: 0 };
+  let granted = false;
+  let executed = 0;
+  function rpc(method: string) {
+    if (method === 'turn/start') executed++;
+    return Promise.resolve({ thread: { id: 'thread-alice', ephemeral: true, path: null },
+      turn: { id: 'codex-turn' } });
+  }
+  function grant(_thread: string, _chat: string, token: string) {
+    granted = token !== '';
+    return Promise.resolve();
+  }
+  function readCredential() { return credential; }
+  function privateSession() {
+    return Promise.resolve({ rpc, close: privateClosed.resolve, closed: privateClosed.promise });
+  }
+  const driver = { rpc, grant, credential: readCredential, privateSession,
+    journal: `${fixture.directory}/shutdown-reports` };
+  function proxyPath(request: import('node:http').IncomingMessage) {
+    request.url = '/bridge';
+  }
+  server.on('upgrade', proxyPath);
+  const channel = bridgeChannel(server, driver);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('No computer port');
+  const proxyUrl = `http://127.0.0.1:${address.port}`;
+  const computer = { assistantId: 'assistant', computerId: 'computer', generation: 1 };
+  const started = { assistantId: 'assistant', computerId: 'computer',
+    conversationId: 'alice', turnId: 'message-alice',
+    threadId: 'thread-alice', requesterId: 'alice', task: 'chat_turn',
+    payingGroupId: 'personal-default', executionMode: 'restricted' };
+  await fixture.seed([
+    envelope('test', 'computer-assistant', 'computer.claimed', { ...computer, tokenId: 'token:test' }),
+    envelope('test', 'computer-assistant', 'computer.ready', { ...computer, podUid: 'pod' }),
+    envelope('test', 'computer-assistant', 'computer.turn_started', started),
+  ]);
+  const db = pgDb(dbs.queue);
+  const projection = new ProjectionRunner(db, fixture.store, createLogger('shutdown-test'));
+  await projection.initialise(conversations);
+  await projection.run(conversations);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  function installCredential(_computer: string, token: typeof credential) {
+    credential = token;
+    return Promise.resolve();
+  }
+  vi.spyOn(kube, 'credentials').mockImplementation(installCredential);
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const work = watchBridges(options, tokens, kube, proxyUrl, stop.signal);
+  let replay: WebSocket | undefined;
+  try {
+    function running() { return executed === 1; }
+    await until(running, 5000);
+    expect(granted).toBe(true);
+    const memory = { ...computer, conversationId: 'alice', turnId: 'message-alice',
+      requesterId: 'alice', threadId: 'thread-alice',
+      inputGeneration: 'input', projectionGeneration: '1',
+      action: 'prepared', delivery: null, callDigest: null, dispatchDigest: null,
+      additions: [], scopePositions: [], byteCount: 0, hasOmissions: false, reason: 'none' };
+    const memoryEvent = { ...event('memory', 'conversation-alice', 'agent.memory_context_recorded'),
+      source: 'opencrane-server', data: memory };
+    await fixture.seed([memoryContextRecordedEventSchema.parse(memoryEvent)]);
+    const head = fixture.store.head.bind(fixture.store);
+    async function holdComputerRead(...args: Parameters<typeof head>) {
+      if (args[0] === 'computer-assistant') {
+        readStarted.resolve();
+        await releaseRead.promise;
+      }
+      return head(...args);
+    }
+    vi.spyOn(fixture.store, 'head').mockImplementation(holdComputerRead);
+    await readStarted.promise;
+    function output(text: string) {
+      channel.notification({ method: 'item/agentMessage/delta', params: {
+        threadId: 'thread-alice', itemId: 'reply', delta: text } });
+    }
+    for (let index = 0; index < 40; index++) output('private-before-shutdown');
+    stop.abort();
+    function accessRemoved() { expect(granted).toBe(false); }
+    await vi.waitFor(accessRemoved);
+    output('private-after-shutdown');
+    releaseRead.resolve();
+    await work;
+    vi.restoreAllMocks();
+    const frames: unknown[] = [];
+    replay = new WebSocket(`${proxyUrl.replace('http:', 'ws:')}/bridge`, {
+      headers: { 'x-bridge-token': credential.value } });
+    function receive(bytes: Buffer) {
+      const frame = z.record(z.string(), z.unknown()).parse(JSON.parse(bytes.toString()));
+      frames.push(frame);
+      replay!.send(JSON.stringify({ type: 'ack', sequence: frame['sequence'] }));
+    }
+    replay.on('message', receive);
+    await once(replay, 'open');
+    replay.send(JSON.stringify({ type: 'resume', since: 0 }));
+    function failed() {
+      return frames.some(isFailure);
+    }
+    function isFailure(frame: unknown) {
+      return z.object({ type: z.literal('agent.turn_failed') }).safeParse(frame).success;
+    }
+    await until(failed, 3000);
+    expect(JSON.stringify(frames)).not.toMatch(/private-before-shutdown|private-after-shutdown/u);
+    expect(executed).toBe(1);
+    const saved = await chatHistory(fixture.store, 'test', 'alice');
+    function reported(row: typeof saved[number]) { return row.event.report !== undefined; }
+    const reports = saved.filter(reported);
+    expect(JSON.stringify(reports)).not.toMatch(/ciphertext|private-before-shutdown|private-after-shutdown/u);
+  } finally {
+    releaseRead.resolve();
+    stop.abort();
+    await work;
+    replay?.terminate();
+    await channel.close();
+    server.close();
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+it('cancels private work and clears replies before shutdown waits for an unfinished read',
+  cancelsPrivateWorkBeforeShutdownWaits);
