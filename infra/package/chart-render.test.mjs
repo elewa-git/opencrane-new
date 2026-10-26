@@ -283,7 +283,29 @@ function threePrivatePeers() {
   assert.equal(claims.size, 3);
   assert.equal(names.size, 3);
   assert.equal(resources.has('StatefulSet/nats'), false);
-  assert.equal(resources.has('Job/bootstrap'), false, 'R1 bootstrap cannot run in cluster mode');
+  const bootstrap = resources.get('Job/bootstrap');
+  assert.ok(bootstrap, 'The cluster preview needs the complete bootstrap Job');
+  const ordinary = renderedResources(chartValues()).get('Job/bootstrap');
+  assert.deepEqual(bootstrap, ordinary);
+  const pod = bootstrap.spec.template.spec;
+  assert.equal(pod.serviceAccountName, 'package-bootstrap');
+  assert.deepEqual(pod.containers[0].command,
+    ['node', '--experimental-strip-types', 'infra/package/bootstrap.ts']);
+  assert.deepEqual(pod.containers[0].envFrom, [
+    { secretRef: { name: values.secrets.runtime } },
+    { secretRef: { name: values.secrets.bootstrap } },
+  ]);
+  assert.deepEqual(pod.containers[0].volumeMounts, [
+    { name: 'runtime', mountPath: '/run/opencrane', readOnly: true },
+    { name: 'runtime-files', mountPath: '/run/opencrane/files', readOnly: true },
+  ]);
+  assert.deepEqual(pod.volumes, [
+    { name: 'runtime', secret: { secretName: values.secrets.runtime } },
+    { name: 'runtime-files', emptyDir: { medium: 'Memory' } },
+    { name: 'runtime-file-source',
+      secret: { secretName: values.secrets.runtimeFiles, defaultMode: 256 } },
+  ]);
+  assert.equal(pod.initContainers[0].name, 'copy-private-files');
   const discovery = resources.get('Service/nats-routes');
   assert.equal(discovery.spec.clusterIP, 'None');
   assert.equal(discovery.spec.publishNotReadyAddresses, true);

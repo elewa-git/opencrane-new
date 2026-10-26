@@ -110,7 +110,8 @@ function isFileSourceArgument(argument) {
   return argument.startsWith('--from-file=');
 }
 
-async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false) {
+async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
+  packageValues = {}, refusesBeforeGeneration = false) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
   const settings = new Map();
   const secrets = new Map();
@@ -195,14 +196,16 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       'prepareSettings', replacements);
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
       'provisionSecrets', replacements);
-    await prepareSettings();
+    await prepareSettings(packageValues);
     await provisionSecrets(values.secrets, owner);
     return { key, settings, secrets };
   } finally {
     const remainingFiles = readdirSync(directory);
     const cleanup = { recursive: true, force: true };
     rmSync(directory, cleanup);
-    if (!withOwner) {
+    if (!withOwner || refusesBeforeGeneration) {
+      assert.equal(secrets.size, 0);
+      assert.equal(settings.size, 2);
       assert.deepEqual(remainingFiles, [], 'Missing owner settings changed private files');
     }
   }
@@ -503,3 +506,26 @@ async function refusesReplacedPackageNamespace() {
 }
 test('preparation and forwarding refuse a replacement namespace despite an updated owner record',
   refusesReplacedPackageNamespace);
+
+async function prepareThreeReplicas() {
+  const packageValues = { natsCluster: { enabled: true, renderOnly: true } };
+  const prepared = await preparedSecretsFixture(true, true, false, packageValues);
+  const runtime = prepared.settings.get('package-runtime');
+  assert.equal(runtime.NATS_REPLICAS, '3');
+  assert.equal(runtime.COMMAND_NATS_REPLICAS, '3');
+  assert.equal(prepared.secrets.get('runtime').NATS_REPLICAS.toString(), '3');
+  assert.equal(prepared.secrets.get('runtime').COMMAND_NATS_REPLICAS.toString(), '3');
+}
+test('private preparation carries the cluster choice into both runtime settings',
+  prepareThreeReplicas);
+
+for (const cluster of [null, {}, { enabled: 'true' }, { enabled: true },
+  { enabled: true, renderOnly: false }, { enabled: false, renderOnly: true }]) {
+  async function refusesInvalidReplicaChoice() {
+    const packageValues = { natsCluster: cluster };
+    await assert.rejects(preparedSecretsFixture(true, true, false, packageValues, true),
+      /Invalid package NATS replica settings/u);
+  }
+  test(`preparation refuses invalid replica choice ${JSON.stringify(cluster)}`,
+    refusesInvalidReplicaChoice);
+}
