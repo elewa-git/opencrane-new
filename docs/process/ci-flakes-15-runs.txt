@@ -1,0 +1,136 @@
+Packaged bootstrap stress runs: 26 October 2026
+Source: a0cb1407b446bdae07cd3116faa24bfb46868f50
+All runs used nice -n 10, CPUs 0 and 1, --maxWorkers=2 and --fileParallelism.
+PG_TEST_URL was supplied. Bootstrap includes cluster-stream.test.ts (26 tests total).
+A single companion process repeated security, provision and cluster-failover tests (38 total).
+Original reproduction: 01 PASS; 02 PASS; 03 PASS; 04 PASS; 05 FAIL (R3 peer offline).
+No failed invocation is replaced by a passing repeat.
+
+bootstrap-01 FAIL 25/26 wall=53.10s exit=1
+  FAIL  infra/package/bootstrap.test.ts > bootstrap provisions R3 and lets the dispatcher inherit it
+  JetStreamApiError: no suitable peers for placement, peer offline
+bootstrap-02 PASS 26/26 wall=51.45s exit=0
+bootstrap-03 PASS 26/26 wall=51.51s exit=0
+bootstrap-04 PASS 26/26 wall=61.82s exit=0
+bootstrap-05 PASS 26/26 wall=49.85s exit=0
+bootstrap-06 PASS 26/26 wall=45.92s exit=0
+bootstrap-07 PASS 26/26 wall=44.24s exit=0
+bootstrap-08 PASS 26/26 wall=44.03s exit=0
+bootstrap-09 PASS 26/26 wall=39.15s exit=0
+bootstrap-10 PASS 26/26 wall=41.76s exit=0
+bootstrap-11 PASS 26/26 wall=61.56s exit=0
+bootstrap-12 PASS 26/26 wall=44.20s exit=0
+bootstrap-13 PASS 26/26 wall=45.95s exit=0
+bootstrap-14 PASS 26/26 wall=48.22s exit=0
+bootstrap-15 PASS 26/26 wall=47.04s exit=0
+bootstrap-16 PASS 26/26 wall=45.49s exit=0
+bootstrap-17 PASS 26/26 wall=41.96s exit=0
+bootstrap-18 PASS 26/26 wall=48.94s exit=0
+bootstrap-19 PASS 26/26 wall=64.14s exit=0
+bootstrap-20 PASS 26/26 wall=58.48s exit=0
+bootstrap-21 PASS 26/26 wall=57.69s exit=0
+bootstrap-22 PASS 26/26 wall=60.22s exit=0
+bootstrap-23 PASS 26/26 wall=47.88s exit=0
+bootstrap-24 PASS 26/26 wall=50.12s exit=0
+bootstrap-25 PASS 26/26 wall=58.03s exit=0
+bootstrap-26 FAIL 25/26 wall=47.27s exit=1
+  FAIL  infra/package/bootstrap.test.ts > bootstrap waits for the metadata leader to report enough current online peers
+  JetStreamApiError: no suitable peers for placement, peer offline
+bootstrap-27 PASS 26/26 wall=49.79s exit=0
+bootstrap-28 PASS 26/26 wall=49.05s exit=0
+bootstrap-29 PASS 26/26 wall=52.33s exit=0
+bootstrap-30 PASS 26/26 wall=58.26s exit=0
+bootstrap gate: FAIL; 28/30 invocations passed; failed runs: 1, 26.
+
+companion-01 PASS 38/38 wall=22.04s exit=0
+companion-02 PASS 38/38 wall=22.02s exit=0
+companion-03 PASS 38/38 wall=21.04s exit=0
+companion-04 PASS 38/38 wall=23.05s exit=0
+companion-05 PASS 38/38 wall=24.38s exit=0
+companion-06 PASS 38/38 wall=19.02s exit=0
+companion-07 PASS 38/38 wall=24.51s exit=0
+companion-08 FAIL 37/38 wall=19.02s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-09 PASS 38/38 wall=24.07s exit=0
+companion-10 PASS 38/38 wall=23.73s exit=0
+companion-11 PASS 38/38 wall=22.02s exit=0
+companion-12 PASS 38/38 wall=22.03s exit=0
+companion-13 PASS 38/38 wall=23.80s exit=0
+companion-14 PASS 38/38 wall=24.91s exit=0
+companion-15 PASS 38/38 wall=24.01s exit=0
+companion-16 PASS 38/38 wall=22.23s exit=0
+companion-17 FAIL 37/38 wall=17.01s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-18 PASS 38/38 wall=24.02s exit=0
+companion-19 PASS 38/38 wall=20.01s exit=0
+companion-20 PASS 38/38 wall=20.14s exit=0
+companion-21 PASS 38/38 wall=18.01s exit=0
+companion-22 PASS 38/38 wall=18.01s exit=0
+companion-23 PASS 38/38 wall=27.76s exit=0
+companion-24 PASS 38/38 wall=22.04s exit=0
+companion-25 PASS 38/38 wall=18.50s exit=0
+companion-26 PASS 38/38 wall=27.02s exit=0
+companion-27 PASS 38/38 wall=21.18s exit=0
+companion-28 PASS 38/38 wall=22.01s exit=0
+companion-29 PASS 38/38 wall=21.94s exit=0
+companion-30 FAIL 37/38 wall=17.01s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-31 PASS 38/38 wall=18.01s exit=0
+companion-32 FAIL 37/38 wall=19.21s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-33 PASS 38/38 wall=24.01s exit=0
+companion-34 PASS 38/38 wall=16.02s exit=0
+companion-35 PASS 38/38 wall=17.00s exit=0
+companion-36 PASS 38/38 wall=22.01s exit=0
+companion-37 PASS 38/38 wall=21.48s exit=0
+companion-38 PASS 38/38 wall=23.96s exit=0
+companion-39 PASS 38/38 wall=21.02s exit=0
+companion-40 PASS 38/38 wall=24.02s exit=0
+companion-41 FAIL 37/38 wall=20.90s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-42 PASS 38/38 wall=21.04s exit=0
+companion-43 PASS 38/38 wall=21.01s exit=0
+companion-44 FAIL 37/38 wall=23.09s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-45 PASS 38/38 wall=20.02s exit=0
+companion-46 PASS 38/38 wall=21.44s exit=0
+companion-47 PASS 38/38 wall=26.03s exit=0
+companion-48 PASS 38/38 wall=25.03s exit=0
+companion-49 FAIL 37/38 wall=19.64s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-50 FAIL 37/38 wall=23.01s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  TypeError: .toMatch() expects to receive a string, but got undefined
+companion-51 PASS 38/38 wall=26.21s exit=0
+companion-52 PASS 38/38 wall=32.03s exit=0
+companion-53 PASS 38/38 wall=24.85s exit=0
+companion-54 PASS 38/38 wall=32.02s exit=0
+companion-55 PASS 38/38 wall=20.09s exit=0
+companion-56 PASS 38/38 wall=24.02s exit=0
+companion-57 PASS 38/38 wall=22.00s exit=0
+companion-58 PASS 38/38 wall=25.03s exit=0
+companion-59 PASS 38/38 wall=24.24s exit=0
+companion-60 FAIL 37/38 wall=17.01s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-61 PASS 38/38 wall=25.02s exit=0
+companion-62 FAIL 37/38 wall=19.74s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-63 PASS 38/38 wall=23.04s exit=0
+companion-64 FAIL 37/38 wall=23.02s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-65 PASS 38/38 wall=22.02s exit=0
+companion-66 PASS 38/38 wall=19.28s exit=0
+companion-67 PASS 38/38 wall=22.02s exit=0
+companion-68 PASS 38/38 wall=21.02s exit=0
+companion-69 PASS 38/38 wall=20.45s exit=0
+companion gate: FAIL; 58/69 invocations passed; failed runs: 8, 17, 30, 32, 41, 44, 49, 50, 60, 62, 64.

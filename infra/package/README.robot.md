@@ -376,6 +376,11 @@ refusals are never retried. The bootstrap failure stage names this readiness lim
 The NATS settings expose this one read service only to the command key; no HTTP
 monitoring port or system-account credentials are added.
 
+The leader's report does not show whether it has received each peer's storage
+statistics. Stream placement can still fail after this check. The
+[readiness evidence](../../docs/process/ci-flakes-15.md) records that remaining race.
+Stream creation is never retried.
+
 The Helm preview includes the same Job, service account and private mounts as the
 default render. The shipped image pin is unchanged and has not been qualified for
 this source. Controller and storage prerequisites and a compatible image must
