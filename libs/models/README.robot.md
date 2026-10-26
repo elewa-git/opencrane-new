@@ -2131,10 +2131,18 @@ The live connection cleanup reaction calls it. Replay never calls it, and it per
 no provider call or release.
 
 Saving and cleanup both use `withConnectionStage` with the same silo/member/server/profile
-lock name. The existing PostgreSQL advisory lock waits at most 100 ms for acquisition.
+lock name. The PostgreSQL advisory lock waits at most 1,000 ms for acquisition,
+including the pool wait and PostgreSQL round trips. This matches the shared projection
+pool's one-second connection wait. The deadline never restarts. Brief worker scheduling
+delays can exceed the former 100 ms budget even with an idle connection and no lock holder.
 It stores no business state. Missing or failed coordination refuses staging and retains
 cleanup candidates. Profile history, custody work and lock waiting precede the save's
 short access check. The authority implementation and volume tests are unchanged.
+The helper keeps a command refusal inside the callback before PostgreSQL releases the
+lock. An unlock failure, timeout reset failure or lost session returns that same refusal
+object. Successful work still throws `Connection coordination unavailable` if coordination
+fails. The regression uses the real `pgDb` adapter with a synthetic pool and client to
+exercise each failure for both refused and successful work.
 
 Under the lock, cleanup recovers the exact identity from the private journal, verifies
 all custody bindings and reads fresh profile history. A current reference is always kept.
@@ -3972,3 +3980,113 @@ and incomplete legacy targets reveal none. Rotation and revoke keep the exact pr
 sequence; any valid member/server block covers replacement profiles too. Saved identity
 stays unverified and `callsAvailable` stays false. No custody, provider, append, selection
 or release operation runs. Lists, mutations, projections and OAuth are outside this read.
+
+## Connection lock acquisition checks
+
+Part of #576. The 100 ms acquisition budget expired while a loaded test worker
+was waiting for PostgreSQL, before staging or any access check started. The
+fixtures already wait for PostgreSQL readiness and create separate databases.
+Lock names cannot collide across those databases.
+
+Before the fix, both affected files ran together with `--maxWorkers=2`, pinned to
+the same two CPUs as another test run. The first two runs passed all 124 tests
+(96.47 s and 107.96 s). The third failed the same server test reported by CI:
+`keeps the original receipt after rotate and tool grant loss without restoring selection`.
+A temporary test-only wrapper printed `Database lock acquisition cancelled or expired`
+after 105 ms. That run had 123 passes and one failure (115.22 s). The wrapper printed
+only a fixed adapter message, elapsed time and pool counts, then was removed.
+
+The first commit, `3b9b935b8`, adds the failing regression before the production change.
+It advances only the test's monotonic clock by 150 ms when PostgreSQL delivers a
+connection. With the former budget, the real adapter reports
+`Database lock acquisition expired`, starting from one idle connection and no waiters.
+The loaded regression run failed that test as expected while running alongside
+the projection runner tests. This proves the failure can happen without
+pool exhaustion or another lock holder. The retained diagnostic logs only that fixed
+adapter message and pool counts. It never logs driver errors or command values.
+
+The new budget is one second, matching the shared projection pool's connection wait.
+The existing adapter still refuses late acquisition and destroys its connection.
+The regression checks a 150 ms delay, refusal after 1,200 ms, sanitised database
+errors and preservation of a command's own refusal. Existing staging and cleanup
+tests check real lock contention. Lock waiting still precedes history loading and
+the short write access check. No access rule, lock identity, retry or sleep changed.
+
+Each repeated run starts these commands together, with `nice -n 10` and
+`PG_TEST_URL` pointing to the ready disposable PostgreSQL container:
+
+```sh
+npx vitest run libs/models/test/connection-selection.test.ts \
+  apps/server/test/connection-selection-change-read.test.ts \
+  libs/models/test/connection-stage-lock.test.ts --maxWorkers=2
+npx vitest run libs/projections/test/streaming.test.ts \
+  libs/projections/test/runner.test.ts --maxWorkers=2
+```
+
+The target command includes all 124 affected tests and four new regression cases.
+The separate load command has nine tests. Results below include both commands;
+time covers the pair. No run is discarded or retried. A different failure remains FAIL, even when later runs pass.
+
+| Run | Target tests | Load tests | Seconds |
+| --- | --- | --- | --- |
+| 01 | PASS 128/128 | PASS 9/9 | 197.65 |
+| 02 | PASS 128/128 | PASS 9/9 | 181.29 |
+| 03 | PASS 128/128 | PASS 9/9 | 185.67 |
+| 04 | FAIL 125/128 | PASS 9/9 | 203.24 |
+| 05 | FAIL 127/128 | PASS 9/9 | 168.27 |
+| 06 | FAIL 126/128 | FAIL 8/9 | 145.82 |
+| 07 | FAIL 103/128 | PASS 9/9 | 87.06 |
+| 08 | PASS 128/128 | PASS 9/9 | 123.62 |
+| 09 | PASS 128/128 | PASS 9/9 | 95.44 |
+| 10 | PASS 128/128 | PASS 9/9 | 85.13 |
+| 11 | PASS 128/128 | PASS 9/9 | 105.08 |
+| 12 | PASS 128/128 | PASS 9/9 | 110.35 |
+| 13 | PASS 128/128 | PASS 9/9 | 78.56 |
+| 14 | PASS 128/128 | PASS 9/9 | 73.38 |
+| 15 | PASS 128/128 | PASS 9/9 | 95.19 |
+| 16 | PASS 128/128 | PASS 9/9 | 82.78 |
+| 17 | PASS 128/128 | PASS 9/9 | 59.28 |
+| 18 | PASS 128/128 | PASS 9/9 | 64.91 |
+| 19 | PASS 128/128 | PASS 9/9 | 82.67 |
+| 20 | PASS 128/128 | PASS 9/9 | 68.94 |
+| 21 | PASS 128/128 | PASS 9/9 | 64.68 |
+| 22 | PASS 128/128 | PASS 9/9 | 74.73 |
+| 23 | PASS 128/128 | PASS 9/9 | 116.70 |
+| 24 | PASS 128/128 | PASS 9/9 | 92.68 |
+| 25 | PASS 128/128 | PASS 9/9 | 76.13 |
+| 26 | PASS 128/128 | PASS 9/9 | 106.07 |
+| 27 | PASS 128/128 | PASS 9/9 | 72.82 |
+| 28 | PASS 128/128 | PASS 9/9 | 76.62 |
+| 29 | PASS 128/128 | PASS 9/9 | 78.50 |
+| 30 | PASS 128/128 | PASS 9/9 | 76.94 |
+
+Failure details, grouped by the reported error:
+
+- Run 04, target, 3 test(s): `TimeoutError: timeout`.
+- Run 05, target, 1 test(s): `AssertionError: expected 503 to be 200 // Object.is equality`.
+- Run 06, target, 1 test(s): `TimeoutError: timeout`.
+- Run 06, target, 1 test(s): `Error: expected [Function] to throw error including 'Selection conflict' but got 'timeout'`.
+- Run 06, load, 1 test(s): `Error: Test timed out in 30000ms.`.
+- Run 07, target, 1 test(s): `TimeoutError: timeout`.
+- Run 07, target, 24 test(s): `Error: Connection server unavailable`.
+
+Own checks:
+
+- PASS: full `npm run lint` (28 existing warnings, no errors). Its first attempt found
+  an unbound method in the new test helper; binding that method fixed it.
+- PASS: full `npm run typecheck`, then the models typecheck after that test-only fix.
+- PASS: `npm run check:events` (154 types), `npm run lint:unused` (knip) and
+  `npm run lint:changelog`.
+- PASS: 641 tests across the lock regression, bearer connections, connection custody
+  and `libs/events/test/security-rules.test.ts`. The changed regression passed in that run
+  and all 30 repeats, including after the helper binding fix.
+- FAIL: the 30-run stress batch. Twenty-six pairs passed; runs 04–07 remain FAIL.
+  Every run reported all 128 target/regression tests and nine load tests without skips.
+  All four lock regression cases passed in every run. No unexpected
+  `Connection coordination unavailable` failure occurred after the production fix.
+- NOT RUN: the full root test suite and a fresh-install live journey.
+
+The other failures above remain unresolved. Runs 04 and 06 hit NATS read timeouts.
+Run 05 returned 503 where the slow receipt test expected 200; its cause is not proved.
+Run 06 also exceeded the PGlite test's 30-second limit. In run 07, a NATS timeout was
+followed by 24 `Connection server unavailable` failures. This draft is not source ready.
