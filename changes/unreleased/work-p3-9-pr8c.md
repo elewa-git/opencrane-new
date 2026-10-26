@@ -1,0 +1,1 @@
+Personal OAuth callbacks can be checked internally and claimed once by one live worker, with private code storage and no repeated claim after restart. Public routes and provider exchange remain unavailable.

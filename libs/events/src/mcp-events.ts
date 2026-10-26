@@ -129,6 +129,15 @@ export const mcpEvents = [
       expectedSequence: 0, appendUntil: 1 },
   ),
   event(
+    'connection.oauth_exchange_claimed', 'connection',
+    'One live worker claimed a private consent attempt; no provider send is confirmed.',
+    data.connectionOAuthExchangeClaimedDataSchema,
+    { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1', profile: 'personal_1',
+      attemptId: DIGEST_EXAMPLE, workerId: 'worker_1', purpose: 'consent',
+      secretRef: 'secret:exchange_1', uid: 'uid_1', resourceVersion: '1',
+      expectedSequence: 1, appendUntil: 1 },
+  ),
+  event(
     'connection.created',
     'connection',
     'A person saved a staged connection reference; account identity may remain unverified.',

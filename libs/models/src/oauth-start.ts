@@ -14,9 +14,9 @@ import { withConnectionStage } from './connection-stage-lock.ts';
 import { oauthConfigurationSchema, oauthConsentUrl, prepareOAuthAttempt } from './oauth-attempt.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
-const sessionSchema = z.strictObject({ siloId: id, userId: id,
+export const sessionSchema = z.strictObject({ siloId: id, userId: id,
   sessionDigest: z.string().regex(/^[a-f0-9]{64}$/u), memberRevision: z.int().positive() });
-const inputSchema = z.strictObject({ userId: id, serverId: id, connectionId: id, profileId: id,
+export const inputSchema = z.strictObject({ userId: id, serverId: id, connectionId: id, profileId: id,
   changeRef: id, expectedSequence: z.literal(0) });
 type Session = z.infer<typeof sessionSchema>;
 type Input = z.infer<typeof inputSchema>;
@@ -57,6 +57,16 @@ export async function startPersonalOAuth(store: EventStore, binding: Binding,
 }
 
 async function recordStart(store: EventStore, binding: Binding, session: Session,
+  custody: Custody, input: Input, loadConfiguration: ConfigurationLoader) {
+  const saved = await checkPersonalOAuthStart(store, binding, session, custody, input,
+    loadConfiguration);
+  const checked = await saved.checkCurrent(saved.original?.sequence ?? 0);
+  const sequence = await appendStart(store, saved.event, checked, saved.original);
+  return { ...saved, sequence };
+}
+
+/** Reuse the original consent bindings and publication checks for a private callback. */
+export async function checkPersonalOAuthStart(store: EventStore, binding: Binding, session: Session,
   custody: Custody, input: Input, loadConfiguration: ConfigurationLoader) {
   const subject = `connection-${session.userId}-${input.serverId}-${input.profileId}`;
   const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
@@ -133,9 +143,10 @@ async function recordStart(store: EventStore, binding: Binding, session: Session
     const deadline = Math.min(fresh.deadline, performance.now() + appendUntil - Date.now());
     return { categorySequence, deadline, checkAccess: fresh };
   }
-  const checked = await checkCurrent(original?.sequence ?? 0);
-  const sequence = await appendStart(store, event, checked, original);
-  return { sequence, event, configuration, prepared, checkCurrent, expiresAt: appendUntil };
+  if (original && !sameStart(original.event, event)) {
+    throw new Error('OAuth attempt changed');
+  }
+  return { original, event, configuration, prepared, checkCurrent, expiresAt: appendUntil };
 }
 
 /** Append once. Custody preparation and URL construction belong to the surrounding process. */

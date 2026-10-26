@@ -12,6 +12,12 @@ UID/version, expectedSequence zero and original appendUntil. Its internal comman
 the human owner and exact saved event. It has no reaction, URL, raw state or verifier;
 replay grants no access and reads no custody. Existing bearer schemas remain unchanged.
 
+`connection.oauth_exchange_claimed` is a strict personal-profile record. It names the
+original attempt, one fresh worker id, consent purpose, private code reference and exact
+UID/version, previous profile position and original expiry. It stores no code, verifier
+or material digest. No handler subscribes. A claim alone proves no provider send and gives
+a restarted worker no permission to send. The callback confirms the exact saved event.
+
 The existing `agent.turn_failed` schema accepts the fixed
 `conversation_closed` reason from the server's waiting-input cleanup. It adds
 no event type or field. The registry and `docs/architecture/events.md` describe

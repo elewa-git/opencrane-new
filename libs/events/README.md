@@ -28,7 +28,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, takeover cancellation and saved event shapes, including native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts and callback claims, takeover cancellation and saved event shapes, including native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
@@ -49,6 +49,10 @@ flowchart LR
   Share the same pause record checks with the server's internal owner operation.
 
 ## Processes it handles
+
+A personal callback claim records the one worker allowed to continue the attempt.
+It contains only references. It does not confirm a provider request or activate an account.
+Replaying it reads no credentials and starts no work.
 
 Routine session creation can name its saved claim, occurrence and worker. These details
 keep retries apart from ordinary human chats and grant no permission to start work.
