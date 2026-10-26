@@ -17,7 +17,7 @@ export async function stalledStorage(fault: string) {
     function closed() {
       responseClosed = true;
     }
-    response.on('close', closed);
+    request.socket.once('close', closed);
     if (fault === 'headers') return;
     let status = 403;
     if (fault.startsWith('region')) status = 200;

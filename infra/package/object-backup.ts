@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, realpathSync,
   renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -8,9 +8,10 @@ import type { NatsConnection } from '@nats-io/transport-node';
 import { fileUploadedDataSchema, type EventEnvelope } from '@opencrane/events';
 import type { storageClient } from '../../apps/server/src/files/storage.ts';
 import { captureBounds, descriptorSchema } from './event-backup.ts';
-import { checkHistory, readPrivateFile, restoreEventBackup } from './event-restore.ts';
+import { checkHistory, readBackupKey, readPrivateFile, restoreEventBackup } from './event-restore.ts';
 
 interface Options {
+  backupKeyFile: string;
   directory: string;
   destination: string;
   silo: string;
@@ -76,7 +77,8 @@ function objectReferences(silo: string, maxObjects: number, maxBytes: number) {
 }
 
 async function copyObject(objects: ReturnType<typeof storageClient>, address: string,
-  reference: ObjectReference, destination: string, bounds: Bounds) {
+  reference: ObjectReference, destination: string, bounds: Bounds, key: Buffer,
+  signal: AbortSignal, timeoutMs: number) {
   let stream: Readable | undefined;
   let output: number | undefined;
   // Dispose of a response arriving after cancellation without writing any more bytes.
@@ -91,9 +93,15 @@ async function copyObject(objects: ReturnType<typeof storageClient>, address: st
     }
   }
   try {
-    const pending = objects.getObject('files', address).then(accept);
+    const requestOptions = { signal, timeoutMs };
+    const pending = objects.getObjectBounded('files', address, requestOptions).then(accept);
     const response = await bounds.bounded(pending);
     output = openSync(join(destination, reference.identity), 'wx', 0o600);
+    // Write only nonce, ciphertext and tag; bind each file to its archived identity and hash.
+    const nonce = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, nonce);
+    cipher.setAAD(Buffer.from(JSON.stringify([reference.identity, reference.sha256])));
+    writeBytes(output, nonce, bounds);
     const iterator = response[Symbol.asyncIterator]();
     const hash = createHash('sha256');
     let byteCount = 0;
@@ -105,15 +113,13 @@ async function copyObject(objects: ReturnType<typeof storageClient>, address: st
       byteCount += bytes.length;
       if (byteCount > reference.byteCount) throw refusal();
       hash.update(bytes);
-      let offset = 0;
-      while (offset < bytes.length) {
-        bounds.check();
-        offset += writeSync(output, bytes, offset);
-      }
+      writeBytes(output, cipher.update(bytes), bounds);
     }
     if (byteCount !== reference.byteCount || hash.digest('hex') !== reference.sha256) {
       throw refusal();
     }
+    writeBytes(output, cipher.final(), bounds);
+    writeBytes(output, cipher.getAuthTag(), bounds);
     bounds.check();
     fsyncSync(output);
   } finally {
@@ -122,14 +128,26 @@ async function copyObject(objects: ReturnType<typeof storageClient>, address: st
   }
 }
 
+function writeBytes(output: number, bytes: Buffer, bounds: Bounds) {
+  let offset = 0;
+  while (offset < bytes.length) {
+    bounds.check();
+    const written = writeSync(output, bytes, offset);
+    if (written === 0) throw refusal();
+    offset += written;
+  }
+}
+
 /** Keep writers stopped throughout capture. Stable event positions cannot prove that condition. */
 export async function collectObjectBackup(source: NatsConnection, target: NatsConnection,
   objects: ReturnType<typeof storageClient>, options: Options): Promise<void> {
+  let key: Buffer | undefined;
   let owned = false;
   let bounds: Bounds | undefined;
   let targetBounds: Bounds | undefined;
   const controller = new AbortController();
   try {
+    key = readBackupKey(options.backupKeyFile);
     const timeoutMs = boundedLimit(options.timeoutMs, 60_000);
     const maxBytes = boundedLimit(options.maxBytes, maximumBytes);
     const maxObjects = boundedLimit(options.maxObjects, 1_000);
@@ -154,7 +172,8 @@ export async function collectObjectBackup(source: NatsConnection, target: NatsCo
     await checkHistory(targetBounds, targetDescriptor, maximumBytes, collected.visit);
     const entries: ObjectReference[] = [];
     for (const reference of collected.references.values()) {
-      await copyObject(objects, reference.address, reference, options.destination, bounds);
+      await copyObject(objects, reference.address, reference, options.destination, bounds,
+        key, signal, timeoutMs);
       const { address: _address, ...entry } = reference;
       entries.push(entry);
     }
@@ -166,7 +185,8 @@ export async function collectObjectBackup(source: NatsConnection, target: NatsCo
     const archive = readPrivateFile(join(options.directory, 'events.snapshot'), maximumBytes);
     if (!isDeepStrictEqual(current, descriptor) || archive.length !== descriptor.byteCount ||
         sha256(archive) !== descriptor.sha256) throw refusal();
-    const result = { version: 1, kind: 'event-referenced-objects-only', silo: descriptor.silo,
+    const result = { version: 2, encryption: 'aes-256-gcm',
+      kind: 'event-referenced-objects-only', silo: descriptor.silo,
       attempt: descriptor.attempt, eventArchiveSha256: descriptor.sha256,
       eventDescriptorSha256: sha256(saved), objects: entries };
     bounds.check();
@@ -187,6 +207,7 @@ export async function collectObjectBackup(source: NatsConnection, target: NatsCo
     }
     throw refusal();
   } finally {
+    key?.fill(0);
     controller.abort();
     bounds?.dispose();
     targetBounds?.dispose();

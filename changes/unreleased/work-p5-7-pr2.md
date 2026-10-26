@@ -1,1 +1,1 @@
-- Operators can capture checked event-referenced files and screenshots beside an event archive, with private output, byte checks and refusal of incomplete copies. Full coordinated backup remains unfinished.
+- Operators can capture checked event-referenced files and screenshots beside an event archive. Files are encrypted with a private backup key and authenticated before restoration. Stalled storage requests are cancelled and oversized replies refuse. Full coordinated backup remains unfinished.

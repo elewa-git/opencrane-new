@@ -378,7 +378,7 @@ work, with live P5-3/P5-5 still required. See the
 
 `collectObjectBackup` in `object-backup.ts` accepts source and empty disposable NATS
 connections, the existing scoped `storageClient`, and options naming the private
-event archive directory, a new destination, silo and attempt. `writersStopped: true`
+event archive directory, a new destination, silo, attempt and `backupKeyFile`. `writersStopped: true`
 and `disposable: true` are required. The operator must stop writers and keep them
 stopped throughout. Unchanged positions alone cannot prove this.
 
@@ -397,7 +397,29 @@ Tests may tighten those limits. Existing event archive limits still apply separa
 
 Absolute directories must be owned, mode 0700, with no symlink ancestors. The new
 destination must not exist. Object files and the descriptor use exclusive mode 0600.
-Each object is counted, hashed and flushed before `descriptor.json` is published.
+Each object is counted, hashed, encrypted and flushed before `descriptor.json` is published.
+The key file contains exactly 32 raw bytes, belongs to the process user and has mode
+0600. Missing files, links, other modes and other lengths refuse before capture.
+The caller passes its path in process memory through `backupKeyFile`; neither key
+nor path belongs in command arguments, logs, events or the descriptor. No wrapper
+accepts this path on the command line. Keep the key separate from the copied files.
+
+Node's built-in AES-256-GCM encrypts each file with a fresh random 12-byte nonce.
+The associated data is UTF-8 JSON `[identity, sha256]`, using the opaque object
+identity and archived content hash. Each file contains that nonce, ciphertext,
+then the 16-byte authentication tag. No plaintext object is written. The descriptor
+uses version 2 and `encryption: aes-256-gcm`; object byte counts still count plaintext.
+`readBackupObject(directory, keyFile, reference)` in `event-restore.ts` reuses the
+private-file checks, authenticates the encrypted bytes and checks their plaintext
+length and hash before returning any bytes. Changed ciphertext, nonce, tag,
+identity, hash or key refuses with `Object restore refused`. It returns checked
+bytes to its caller; uploading restored files and reopening an installation remain
+outside this helper. The reference must come from the checked archive's inventory.
+
+Capture cancellation reaches the HTTP request before headers, during region lookup
+and during object download. Requests also have socket and absolute time limits.
+Region and error bodies are limited to 64 KiB before the MinIO SDK receives them;
+headers are limited to 16 KiB. A failed capture destroys its active request.
 The private descriptor binds silo, attempt, event archive and descriptor hashes to
 each object's opaque identity, byte count and SHA-256. Names, addresses and bytes
 never enter diagnostics or the descriptor. A failed capture removes only its own
@@ -407,7 +429,7 @@ The archive and source positions are checked again before completion.
 `apps/server/test/object-backup.test.ts` runs in the existing CI test glob with
 real disposable NATS and scoped MinIO. Selected stream faults are injected after
 opening a real object response. The [receipt](../../docs/process/p5-7-pr2/receipt.md)
-records local checks. P5-7 remains PARTIAL: encryption, CNPG/WAL, computer volumes,
+records local checks. P5-7 remains PARTIAL: CNPG/WAL, computer volumes,
 coordinated-set completion, admission reopening and fresh-install recovery are NOT RUN.
 The private descriptor is trusted operator material, not an authenticated manifest.
 

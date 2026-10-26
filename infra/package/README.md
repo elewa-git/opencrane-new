@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, cluster access and bootstrap connections| package
   package -->|uses local cluster| devbox
-  package -->|starts services, copies files and replays memory| apps["apps<br/>product services and replay"]
+  package -->|starts services, encrypts copied files and replays memory| apps["apps<br/>product services and replay"]
   package -->|runs services and checks NATS placement| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -116,7 +116,9 @@ The [operator notes](README.robot.md#event-byte-export) describe its limits.
 
 The object-copy helper saves files named by the checked event archive, including
 screenshots and files already delivered to computers. Writers must remain stopped.
-It checks every file's length and checksum before saving a private completion record.
+It encrypts each file with a separate private backup key and checks its length and
+checksum before saving a completion record. Its restore checker refuses changed
+encrypted files before returning their contents.
 It does not copy unreferenced files or prove that a whole installation can recover.
 The [object notes](README.robot.md#event-referenced-object-copy) explain its limits.
 
