@@ -149,7 +149,7 @@ async function createsOnce() {
   expect(decryption).not.toHaveBeenCalled();
   expect(JSON.stringify(first)).not.toMatch(/ciphertext|key:1|instructions|private-service/u);
 }
-it('two workers recover one private session with zero input or execution effects', createsOnce);
+it('racing retries recover one private session with zero input or execution effects', createsOnce);
 
 async function recovers() {
   const append = nats.store.append.bind(nats.store);
