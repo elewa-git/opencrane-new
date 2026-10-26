@@ -305,6 +305,13 @@ class ConnectionCustody {
       return undefined;
     }
   }
+  private async matchesDeletion(input: ConnectionStage, expected: ConnectionIdentity,
+    pending: ConnectionIdentity) {
+    const recorded = await this.journal.identity(nameFor(input));
+    const prepared = await this.journal.prepared(recordFor(input), false);
+    return prepared && recorded !== undefined && sameIdentity(recorded, expected)
+      && sameIdentity(pending, expected);
+  }
   async remove(input: ConnectionStage, expected?: ConnectionIdentity): Promise<Result> {
     if (!expected || input.attemptId !== undefined) {
       return { status: 'conflict' };
@@ -313,10 +320,7 @@ class ConnectionCustody {
       const checked = checkedStage(input);
       const pending = await this.journal.deletion(nameFor(checked));
       if (pending) {
-        const recorded = await this.journal.identity(nameFor(checked));
-        const prepared = await this.journal.prepared(recordFor(checked), false);
-        if (!prepared || !recorded || !sameIdentity(recorded, expected)
-            || !sameIdentity(pending, expected)) {
+        if (!await this.matchesDeletion(checked, expected, pending)) {
           return { status: 'conflict' };
         }
         const result = await this.confirmRemoval(expected.reference);

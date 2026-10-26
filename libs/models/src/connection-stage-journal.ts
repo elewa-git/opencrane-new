@@ -60,7 +60,7 @@ export function connectionStageJournal(directory: string) {
       if (missingFile.safeParse(error).success) {
         return undefined;
       }
-      throw new Error('Connection preparation unavailable');
+      throw new Error('Connection preparation unavailable', { cause: error });
     }
   }
   async function readIdentity(kind: string, name: string): Promise<Identity | undefined> {
