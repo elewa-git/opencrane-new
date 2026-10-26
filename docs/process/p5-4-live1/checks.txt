@@ -1,0 +1,12 @@
+FAIL: test commit c4ba88b58 could not import the not-yet-written checker.
+FAIL: first implementation run passed 21/22; the synthetic Service lacked metadata.
+FAIL: initial package typecheck found two test environment typing errors; corrected its annotation.
+PASS: final changed tests, run 1: 29/29; run 2: 29/29.
+PASS: event security rules: 438/438, using the requested PG_TEST_URL.
+PASS: all workspace and infra typechecks.
+PASS: check:events, 154 event types.
+PASS: separate Knip and lint:changelog commands.
+PASS: existing image licence inventories.
+PASS: full npm run lint, including docs, links, licences and changelog.
+All checks used nice -n 10. No full root suite or live collector ran.
+Local logs: /tmp/p5-4-live1-{tests-1,tests-2,security,typecheck,events,knip,changelog,lint}.log.

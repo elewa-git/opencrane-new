@@ -1,0 +1,1 @@
+- Add a bounded Kubernetes collector and checks for fresh three-peer NATS placement. Packaged R3 installation and live qualification remain blocked.

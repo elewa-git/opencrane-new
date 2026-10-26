@@ -549,3 +549,31 @@ and licence checks. Those steps block live installation.
 
 The [receipt](../../docs/process/p5-4-pr4/receipt.md) records source checks.
 Live placement, rotation and node failure remain NOT RUN.
+
+## Fresh NATS placement observations
+
+P5-4 live1 first part adds `nats-placement.ts` and a bounded Kubernetes collector.
+The checker requires raw Node, Pod, PVC, namespace and release metadata, private
+endpoints, EVENTS stream information and the existing `checkFresh` input.
+Expected ownership comes from the checked claim and target, not the observations.
+It checks three distinct node UIDs and hostnames, peer names, bound claims and
+volumes, reviewed NATS image references, R3 file storage and two current replicas.
+It also applies the inherited empty-data check. It does not prove route handshakes,
+conditional writes, replay, sign-in, chat or outside-tailnet refusal.
+
+After a supported fresh R3 install, the collector accepts the original fresh-state
+and JetStream stream-info JSON files, then a new output filename. These supplied
+files must come from that install; this command does not collect or authenticate
+their origin. It checks the recorded target and package before and after reading
+Kubernetes. It refuses the shared cluster and owner slot, bounds commands and the
+whole run to 60 seconds, and writes only selected checked identifiers with mode 0600.
+It never saves raw Pod settings, Secret data or supplied JSON. Existing output refuses.
+
+```sh
+DEV_STACK_ID=1 nice -n 10 node --experimental-strip-types \
+  infra/package/nats-placement-collect.ts fresh.json stream.json placement.json
+nice -n 10 node --experimental-strip-types --test infra/package/nats-placement.test.ts
+```
+
+The installer still refuses R3 and bootstrap still selects R1. These source checks
+do not qualify a live install. See the [receipt](../../docs/process/p5-4-live1/receipt.md) for blockers and remaining work.
