@@ -104,6 +104,49 @@ it.each(routes)('refuses a session from another issuer on %s %s',
     }
   });
 
+const postInputs = [
+  { name: 'empty body', payload: {} },
+  { name: 'reserved conversation id',
+    payload: { id: 'ordinary-command', conversationId: 'routine-session-occurrence' } },
+  { name: 'reserved command id', payload: { id: 'routine-session-create-occurrence' } },
+];
+
+it.each(postInputs)('checks organisation and session before POST validation: $name',
+  async function checkPostGuard({ payload }) {
+    const configured = testAuthConfig({ expectedOrgId: 'org-test' });
+    const missingOrganisation = testAuthConfig();
+    const otherIssuer = { ...configured, issuerUrl: 'https://other.test' };
+    const cases = [
+      { config: missingOrganisation, headers: headers(missingOrganisation),
+        code: 503, status: 'unavailable' },
+      { config: configured, headers: headers(configured, 'other-org'),
+        code: 403, status: 'refused' },
+      { config: configured, headers: headers(otherIssuer), code: 401, status: 'refused' },
+    ];
+    const urls = [
+      '/api/conversations',
+      '/api/conversations/conversation/messages',
+      '/api/conversations/conversation/participants',
+      '/api/conversations/conversation/state',
+    ];
+    const position = await services.nats.store.head();
+    for (const scenario of cases) {
+      const app = server(scenario.config);
+      try {
+        for (const url of urls) {
+          const request = { method: 'POST' as const, url, headers: scenario.headers, payload };
+          const response = await app.inject(request);
+          expect(response.statusCode).toBe(scenario.code);
+          expect(response.json()).toEqual({ status: scenario.status });
+          expect(response.headers['cache-control']).toContain('no-store');
+        }
+      } finally {
+        await app.close();
+      }
+    }
+    expect(await services.nats.store.head()).toBe(position);
+  });
+
 it('compares Origin with the configured website origin', function checkOrigin() {
   const config = testAuthConfig();
   const accepted = { headers: { origin: 'https://app.example.test' } };

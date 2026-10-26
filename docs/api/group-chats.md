@@ -13,7 +13,9 @@ read or send. Owners and admins have no private-history bypass.
 | `POST /api/conversations` | `{id, conversationId, mode: "group", participantIds, groupId?, groupSnapshotPosition?}`. The two snapshot fields must appear together. The selected ids must match the reviewed group. Returns `{status: "appended", sequence}` after one conditional append. Body limit: 32 KiB. |
 
 Ids contain 1–200 characters, without dots, whitespace or NATS wildcards. Conversation
-ids also refuse the reserved `provider-` prefix. Invalid or mixed bodies return 400.
+ids also refuse the reserved `provider-` prefix. Public chat routes refuse conversation
+and command ids starting with `routine-session-`, including `routine-session-create-`.
+Invalid or mixed bodies return 400.
 A changed snapshot or changed retry returns 409. Missing, foreign and unowned groups
 return the same generic 403. Unknown, foreign and removed participant ids also return
 403 with only `{status: "refused"}`. Every response uses `Cache-Control: no-store`.

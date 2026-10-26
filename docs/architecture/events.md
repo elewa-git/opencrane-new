@@ -286,7 +286,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `conversation.created` | command | conversations (immutable `mode`: `agent_session` binds one assistant; `direct` records exactly two distinct `participantIds`, including `createdBy`, with no assistant; `group` records 2–97 distinct people including the creator on new writes (older 100-person records remain readable) and optional paired group snapshot fields, with no assistant or payer; group creation commands are deferred; missing mode in older assistant events reads as `agent_session`; strict `contextKind: shared_child` binds a fixed payer, origin and 1–97 original parent joins including creator; internal creation checks the saved parent request) | OpenFGA explicit participants and group or shared-child creator; creation and participant jobs share the conversation id |
+| `conversation.created` | command | conversations (immutable `mode`: `agent_session` binds one assistant and may carry the internal `routinePreparation` claim/worker binding described below; `direct` records exactly two distinct `participantIds`, including `createdBy`, with no assistant; `group` records 2–97 distinct people including the creator on new writes (older 100-person records remain readable) and optional paired group snapshot fields, with no assistant or payer; group creation commands are deferred; missing mode in older assistant events reads as `agent_session`; strict `contextKind: shared_child` binds a fixed payer, origin and 1–97 original parent joins including creator; internal creation checks the saved parent request) | OpenFGA explicit participants and group or shared-child creator; creation and participant jobs share the conversation id |
 | `conversation.child_requested` | reviewed child start API | no feed row; a rebuildable reference index finds unfinished requests without text or audience; the event keeps frozen original parent joins and a 1–1,000 cent upper bound | the route creates the child and first input; guarded recovery continues through activation; retried POSTs complete missing creation and input; bridge delivery stays held |
 | `conversation.child_start_failed` | opencrane-server, system principal; may record after parent close | no feed row; child-requests-v4 marks the request failed with attempt 1–3, create/first_input/activation stage and access_refused/conversation_closed/record_changed reason | recovery stops; requester-only status shows the saved failure; outages and applying access save nothing |
 | `conversation.child_retry_requested` | opencrane-server, original requester | no feed row; child-requests-v4 clears the matching saved failure | recovery resumes missing stages with original ids and choices, at attempt 2 or 3; children remain held |
@@ -563,6 +563,12 @@ before validating the old choice again. These checks add no event types or field
 the `budget.ceiling_set` registry entry and replay contract remain unchanged.
 
 `conversation.created` may hold an explicitly selected shared `payingGroupId`.
+Its assistant-session variant may carry strict `routinePreparation`: `routineId`,
+`occurrenceId`, `claimId`, positive integer `claimPosition` and `workerId`.
+Only the internal routine preparation append supplies this binding, after checking the
+claim and current worker ownership. Recovery requires an exact match and creation after
+that claim. Ordinary chats remain readable but cannot become routine preparations.
+The field starts no work and changes no subscriptions.
 At work admission, the server binds that group, or the installation's configured
 default for personal work, into `computer.turn_started.payingGroupId`. Retries
 keep the admitted value; descendants must carry the inherited value. Missing

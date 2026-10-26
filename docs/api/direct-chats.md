@@ -9,6 +9,9 @@ All HTTP reads require a signed-in active silo member. Writes also require the
 configured browser Origin. Silo and caller come from server configuration and
 the verified session identity, never request fields. Responses use `no-store`.
 An Owner/Admin gains no access to another person's direct conversation.
+Public chat routes reserve conversation and command ids starting with `routine-session-`,
+including `routine-session-create-`, for internal preparation. Such requests return 400
+without appending. Public creation bodies cannot supply `routinePreparation`.
 
 | Interface | Request | Response / meaning |
 | --- | --- | --- |

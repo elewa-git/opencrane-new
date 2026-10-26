@@ -38,7 +38,21 @@ const assistantDetails = z.object({
   kind: z.string(), payingGroupId: z.string().optional(),
 });
 class InvalidChatRequest extends Error {}
-const parameters = z.object({ conversationId: id.optional(), commandId: id.optional() });
+function isPublicChatId(value: string) {
+  // Reserve both routine-session- and its routine-session-create- subset for worker preparation.
+  return !value.startsWith('routine-session-');
+}
+const publicChatId = id.refine(isPublicChatId, 'Reserved routine session prefix');
+const parameters = z.object({
+  conversationId: publicChatId.optional(), commandId: publicChatId.optional(),
+});
+const publicCommandIds = z.object({ id: publicChatId, conversationId: publicChatId.optional() });
+
+function validatePublicCommandIds(request: FastifyRequest) {
+  if (request.method === 'POST') {
+    publicCommandIds.parse(request.body);
+  }
+}
 
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
   app.get('/api/chat', handler);
@@ -104,6 +118,8 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       const checks = { write: request.method === 'POST', conversationId: accessConversationId,
         allowApplying: commandId !== undefined };
       const context = await requireMember(request, reply, config, options, checks);
+      // Preserve organisation and session refusals before validating command input.
+      validatePublicCommandIds(request);
       const { memberId, access } = context;
       const configured = context.options;
       if (participants) {

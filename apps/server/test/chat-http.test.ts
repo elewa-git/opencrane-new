@@ -1,3 +1,5 @@
+import type { FastifyInstance } from 'fastify';
+import type { EventStore } from '@opencrane/event-store';
 import { WebSocket } from 'ws';
 import { once } from 'node:events';
 import { chatMessageSchema, chatFeedSchema } from '@opencrane/protocol';
@@ -18,6 +20,52 @@ import { envelope, history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+
+async function refusesRoutineIdentifiers(app: FastifyInstance, store: EventStore,
+  headers: Record<string, string>, conversationId: string) {
+  const before = await store.head();
+  const prefixes = ['routine-session-', 'routine-session-create-'];
+  for (const prefix of prefixes) {
+    const reserved = `${prefix}future-occurrence`;
+    const creations = [
+      { id: `create-${reserved}`, conversationId: reserved, assistantId: 'assistant' },
+      { id: reserved, conversationId: `ordinary-${reserved}`, assistantId: 'assistant' },
+    ];
+    for (const payload of creations) {
+      const request = { method: 'POST' as const, url: '/api/conversations', headers, payload };
+      const reply = await app.inject(request);
+      expect(reply.statusCode).toBe(400);
+      expect(reply.json()).toEqual({ status: 'refused' });
+    }
+    const message = { method: 'POST' as const,
+      url: `/api/conversations/${conversationId}/messages`, headers,
+      payload: { id: reserved, text: 'Must not be appended' } };
+    expect((await app.inject(message)).statusCode).toBe(400);
+    const paths = ['messages', 'participants', 'origin', 'changes/ordinary-change'];
+    for (const path of paths) {
+      const request = { url: `/api/conversations/${reserved}/${path}`, headers };
+      expect((await app.inject(request)).statusCode).toBe(400);
+    }
+    const receipt = { url: `/api/conversations/${conversationId}/changes/${reserved}`, headers };
+    expect((await app.inject(receipt)).statusCode).toBe(400);
+    const commands = [
+      { path: 'messages', payload: { id: 'ordinary-message', text: 'Must not be appended' } },
+      { path: 'participants', payload: { id: 'ordinary-participant', action: 'leave' } },
+      { path: 'state', payload: { id: 'ordinary-state', action: 'archive', archived: true } },
+    ];
+    for (const command of commands) {
+      const request = { method: 'POST' as const,
+        url: `/api/conversations/${reserved}/${command.path}`, headers, payload: command.payload };
+      expect((await app.inject(request)).statusCode).toBe(400);
+    }
+  }
+  const forged = { method: 'POST' as const, url: '/api/conversations', headers,
+    payload: { id: 'forged-binding', conversationId: 'forged-binding', assistantId: 'assistant',
+      routinePreparation: { routineId: 'orders', occurrenceId: 'future-occurrence',
+        claimId: 'claim', claimPosition: 1, workerId: 'worker' } } };
+  expect((await app.inject(forged)).statusCode).toBe(400);
+  expect(await store.head()).toBe(before);
+}
 
 it('serves private chat commands and reads to joined members, refusing other organisations and wrong origins', async () => {
   const nats = await natsFixture(), dbs = await databases(), fga = await openfga();
@@ -93,6 +141,7 @@ it('serves private chat commands and reads to joined members, refusing other org
     }
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(), payload: create })).statusCode).toBe(200);
     await auth.handler.handle((await history(nats.store, `conversation-${conversationId}`, 'test'))[0]!.event, db);
+    await refusesRoutineIdentifiers(app, nats.store, headers(), conversationId);
     expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: { id: randomUUID(), text: 'Hello computer' } })).statusCode).toBe(200);
     await runner.run(conversations);
     await runner.run(computers);
