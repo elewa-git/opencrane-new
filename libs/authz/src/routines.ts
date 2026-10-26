@@ -72,7 +72,7 @@ export async function applyRoutine(client: TupleClient, event: EventEnvelope, re
   await client.write(writes, deletes);
 }
 
-function foldAccessHistory(state: RoutineState | undefined, event: EventEnvelope,
+export function foldRoutineHistory(state: RoutineState | undefined, event: EventEnvelope,
   completedRuns: Map<string, NonNullable<RoutineState['activeRun']>>) {
   if (!state || event.type !== 'routine.run_finished') {
     return foldRoutine(state, event);
@@ -108,7 +108,7 @@ async function readRoutine(store: History, silo: string, routineId: string,
     if (row.event.silo !== silo) {
       throw new Error('Routine silo mismatch');
     }
-    state = foldAccessHistory(state, row.event, completedRuns);
+    state = foldRoutineHistory(state, row.event, completedRuns);
     rows.push(row);
     const identity = routineRecordIdentitySchema.parse(row.event.data);
     if (row.event.type === 'routine.created' && identity.version === 1) {

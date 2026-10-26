@@ -882,3 +882,43 @@ Verification detects a changed row and leaves existing rows/checkpoints intact.
 A failed rebuild rolls back all changes. Replay needs no instruction keys.
 The [projection contract](../../libs/projections/README.robot.md#routine-records-and-offline-replay)
 describes the saved rows and tests. Fresh-install live qualification is NOT RUN.
+
+### Internal scheduled occurrence claim
+
+`src/routine-due.ts` provides `claimRoutineDue(store, worker, input)` for the
+command-only part of P4-24 row 8. It has no route, worker registration or caller
+outside tests. Input names a routine, its expected event position, three saved
+revisions and the next local date. Replacement fields refuse.
+
+The command reads the routine's complete history with a ten-second deadline.
+It uses the shared `foldRoutineHistory` check and the existing calendar calculation
+to check the active definition and saved next slot. Slots may be at most sixty seconds late. Missing
+times, overlap, legacy records, foreign history and changed revisions refuse.
+One conditional append saves `routine.due` with the frozen definition and payer.
+The calendar supplies the occurrence id; fixed prefixes derive the session, input,
+turn, root and event ids. `startBy` stays sixty seconds after the first `firedAt`.
+Retries compare the original full record, even after later runs finish or the
+broker forgets duplicate ids. A changed request cannot reclaim a consumed slot.
+
+The trusted worker supplies its silo, permission-service binding and
+`checkCurrent(deadline)` ownership check. The binding must name the same silo.
+The command loads current owner membership and routine access through
+`loadRoutineAccess`, including exact applied receipts. Both routine reads finish
+before the two-second write window. `ownershipWriteAccess` watches only the member
+and silo ownership streams; the conditional append checks the routine position.
+No conversation history or execution service is called.
+
+The worker check must confirm current ownership and honour its deadline. It runs
+before append, immediately before publication, and before returning the saved
+receipt. Retries check current owner access and worker ownership too. Access
+refusals and broken history return the same fixed refusal without run or session
+identifiers. Late repeated completions must match the original run binding; they
+keep its first outcome and do not block old receipts or later claims. Recovery
+returns saved facts, not permission to act. Both fold and receipt keep
+`executionAvailable: false`.
+The existing schema requires the server system identity on this internal event.
+
+`test/routine-due.test.ts` uses disposable NATS and OpenFGA for claims, access
+removal, missing membership, permission loss, races and recovery.
+Lease implementation, ticks, missed/skip writers, catch-up, manual runs, activation,
+deployment and fresh-install execution qualification remain later work.

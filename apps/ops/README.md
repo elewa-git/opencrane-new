@@ -21,9 +21,9 @@ flowchart LR
   server -.->|tests use helper| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
-  ops -->|saves results| nats
+  ops -->|saves results and routine claims| nats
   ops -->|keeps jobs separate from content reads| pg["PostgreSQL<br/>jobs and content databases"]
-  ops -->|updates permissions| fga["OpenFGA<br/>access checks"]
+  ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
 ```
@@ -43,6 +43,7 @@ The computers run in [Kubernetes](../../GLOSSARY.md#kubernetes).
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
+- Provides an internal command that claims one scheduled routine occurrence without starting it.
 
 ## Processes it handles
 
@@ -66,6 +67,14 @@ The routines worker copies routine and occurrence events into read tables. It ke
 instructions encrypted and starts no work. Offline routine replay restores these
 records in one database transaction. Readers, scheduler, dispatcher and workers that
 perform outside actions must stay stopped until it finishes.
+
+An internal command can claim one saved routine slot and return the same record on
+retry. It keeps the original owner, payer and run identities. It starts no session,
+model or tool call. Scheduling and execution are not connected yet.
+Routine claims check that the saved owner is still a member with permission to manage
+the routine. Retries also check current access and worker ownership before returning
+the saved run identifiers. Repeated completion records keep their first outcome.
+Execution remains disabled.
 
 A reviewed template defines how hosted tools may run. Separate Kubernetes rules check
 the image and settings and limit who may create or scale a tool. Starting hosted tools

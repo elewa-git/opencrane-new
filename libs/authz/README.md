@@ -22,7 +22,7 @@ flowchart LR
   parent["libs/<br/>shared libraries"] --> authz["libs/authz<br/>who may use what"]
   server["apps/server<br/>back end"] -.->|checks routine access and original run links| authz
   models["libs/models<br/>AI access and spending"] -.->|checks access, receipts and outages| authz
-  ops["apps/ops<br/>background workers"] -.-> authz
+  ops["apps/ops<br/>background workers"] -.->|checks routine claims and run links| authz
   authz -->|checks permissions, including routine ownership| fga["OpenFGA<br/>permissions service"]
   authz -.->|reads saved ownership and membership| store["libs/event-store<br/>saved changes"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
@@ -58,7 +58,7 @@ flowchart LR
    records and their receipts. Admin metadata access gives no private instructions,
    management or execution rights.
    Repeated completion records must match the original run. They keep its first outcome,
-   even after another run finishes.
+   even after another run finishes. Routine claims use the same history check.
    Failed history still checks read permission. Non-readers receive a refusal;
    permitted readers receive unavailable. Incomplete history never grants access.
    The result distinguishes failed history from an unavailable permissions service,

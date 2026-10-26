@@ -273,3 +273,8 @@ state stay unchanged, even after other runs finish. No permission rule changes.
 run's terminal record with a different outcome, and requires the same two rows before
 and after a verified projection rebuild. Changed run links and revisions remain
 unavailable to a permitted reader and refused to a non-reader.
+
+`foldRoutineHistory(state, event, completedRuns)` exposes that same ordered history
+check to the internal routine claim command. The caller keeps one map of completed
+runs for each history read. Repeated terminal records still pass `foldRoutine`
+against the original run before being ignored. No access check is bypassed.

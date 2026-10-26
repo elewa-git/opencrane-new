@@ -1,0 +1,2 @@
+- An internal routine command can claim one scheduled occurrence with stable run identities and recover its original record after restart. It starts no session or work; routine execution remains disabled.
+- Routine claims and retries require current owner membership, routine permission and worker ownership. Valid late completion records preserve recovery and later claims; changed run bindings still refuse.
