@@ -21,7 +21,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks ownership, cluster access and private values| package
+  stack -->|checks ownership and cluster access; keeps values paths private| package
   package -->|uses local cluster| devbox
   package -->|starts services, encrypts copied files and replays memory| apps["apps<br/>product services and replay"]
   package -->|runs services and checks placement and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
@@ -69,7 +69,8 @@ running install still need work.
    prepares the databases, event log and first owner. Before Helm runs, the installer
    checks that the private runtime and setup settings request the number of event
    copies described by the chart. The private values file's folder stays out of
-   preflight and Helm command arguments. Workers start the assistant's computer as needed.
+   preflight and Helm command arguments, including during fresh browser journeys.
+   Workers start the assistant's computer as needed.
 3. **A developer opens the website.** A local port forward connects the private
    website to a browser on this machine. Preparation and forwarding use the same
    recorded cluster and private connection file as installation and cleanup.

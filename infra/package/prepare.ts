@@ -173,8 +173,11 @@ async function provisionSecrets(names: Record<string, string>, owner: PackageOwn
 
 async function main() {
   assert(secondary, 'Package secrets require a claimed secondary slot');
-  const valuesFile = process.argv[2];
-  assert(valuesFile && process.argv.length === 3, 'Pass one private values file path');
+  const environmentValuesFile = process.env['PACKAGE_VALUES_FILE'];
+  const valuesFile = environmentValuesFile ?? process.argv[2];
+  const expectedArgumentCount = environmentValuesFile === undefined ? 3 : 2;
+  assert(valuesFile && process.argv.length === expectedArgumentCount,
+    'Pass one private values file path');
   const privateValuesFile = resolve(root, valuesFile);
   const valuesDirectory = dirname(privateValuesFile);
   const valuesName = basename(privateValuesFile);

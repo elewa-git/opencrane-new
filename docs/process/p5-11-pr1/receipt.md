@@ -60,11 +60,30 @@ and #724 at `5d66d23bb1d68be847f53aa9a5b53fa998b0ad75`.
 The earlier twice-fresh package journey is #514 at `0b116876f`;
 fresh-dev Stage B is #641 at `105071aaa`. Their reports were read before building.
 
-Own source checks, 26 October 2026:
+Own source checks after rebasing onto #725, 26 October 2026:
 
-- PASS: expected failing tests committed before implementation.
-- PASS: 100 package tests twice and 38 claim and fresh-install tests twice,
-  with `PG_TEST_URL` set and `nice -n 10`.
-- PASS: full typecheck, event catalogue, knip and changelog lint.
-- NOT RUN: root test suite, live installs, live browser qualification and paid models.
-- PASS: full lint, including dependency, documentation, licence and changelog checks.
+- PASS: rebase completed onto `origin/main` at `5557c51ba`. The main branch is an
+  ancestor of this branch, and no rebase remains in progress.
+- PASS: tests committed first in `00e178976`. The new environment-only preparation
+  test failed with `Pass one private values file path` before the implementation.
+  It passed after preparation accepted `PACKAGE_VALUES_FILE` with no positional
+  arguments. A positional filename still requires exactly one argument.
+- PASS: 405 targeted Node tests twice, with no failures or skips. Both runs used
+  the supplied `PG_TEST_URL`, `nice -n 10` and `--test-concurrency=1`.
+  The files were `fresh-twice.test.ts`, `journey-check.test.ts`, `journey-run.test.ts`,
+  `nats-placement-collect.test.ts`, `nats-placement.test.ts`, `chart.test.mjs`,
+  `chart-render.test.mjs`, `cnpg-install.test.mjs`, `prepare-nats-routes.test.mjs`,
+  `preflight.test.mjs` and `infra/dev-stack/claim.test.ts`.
+- PASS: preparation's real main function and preflight, and the real installer,
+  preflight and Helm template, run with recorded child commands. The journey's
+  environment setting reaches these functions. Every child argument is checked
+  for the private values directory. Both Helm template and install must run.
+- PASS: four temporary changes restored the private path to preparation preflight,
+  installer preflight, Helm template and Helm install, one at a time. Each change
+  failed its owning journey test on the private-directory assertion. Every changed
+  file was restored byte for byte.
+- PASS: full lint, including dependency, documentation, licence and changelog checks;
+  full typecheck; event catalogue with 154 matching types; separate knip and changelog
+  lint runs. All lint and typecheck commands used `nice -n 10`.
+- NOT RUN: root test suite, development stacks, live installs, live browser
+  qualification and paid models. No development stack was started or claimed.

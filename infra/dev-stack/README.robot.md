@@ -2064,8 +2064,9 @@ Target Kubernetes calls and internal package Kubernetes and Helm calls pass the
 connection filename through `KUBECONFIG`. The placement collector uses the same
 rule, including its inherited ownership checks. Private preparation and forwarding
 use the same child environment transport.
-The argument helper retains its calling contract; its callers remove the filename
-from arguments before starting the child.
+`packageConnectionArgs` returns separate arguments and an environment for private
+preparation and forwarding. Internal package commands remove the connection
+filename from arguments before starting the child.
 
 The package placement collector tests exercise these helpers with disposable files
 and command fixtures. The claim tests check the changed child environment through
