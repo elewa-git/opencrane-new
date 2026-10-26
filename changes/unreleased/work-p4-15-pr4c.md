@@ -1,1 +1,1 @@
-Private personal turns can prepare an internal remember tool definition only with a matching live caller, saved turn and reviewed free Allow policy. Native writes remain disabled, and recall qualification cannot enable them.
+Private personal turns can prepare an internal remember tool definition only with matching privacy evidence, a live caller, a saved turn and a reviewed free Allow policy. Evidence must still match the current source, image and host after catalogue and access reads. Native writes remain disabled, and recall qualification cannot enable them.

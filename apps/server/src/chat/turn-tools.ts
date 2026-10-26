@@ -85,12 +85,12 @@ type PrivateMemoryInput = PersonalMemoryInput & {
   caller: string | undefined;
   callers: Pick<PrivateCallers, 'identify' | 'permits' | 'check'>;
 };
-type PrivateRecallInput = PrivateMemoryInput & {
+type QualifiedPrivateMemoryInput = PrivateMemoryInput & {
   runtime?: { sourceSha: string; imageDigest: string; environmentId: string } | undefined;
   qualification?: unknown;
 };
 
-export async function buildPrivateTurnRecallTools(input: PrivateRecallInput) {
+export async function buildPrivateTurnRecallTools(input: QualifiedPrivateMemoryInput) {
   if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
     return [];
   }
@@ -103,12 +103,12 @@ export async function buildPrivateTurnRecallTools(input: PrivateRecallInput) {
 }
 
 // Prepare definitions only. Recall qualification does not approve native writes.
-export async function buildPrivateTurnRememberTools(input: PrivateMemoryInput) {
-  if (!hasPrivateBinding(input)) {
+export async function buildPrivateTurnRememberTools(input: QualifiedPrivateMemoryInput) {
+  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
     return [];
   }
   const tools = await buildPersonalMemoryTools(input, rememberTool);
-  if (!hasPrivateBinding(input)) {
+  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
     return [];
   }
   return tools;

@@ -100,7 +100,7 @@ flowchart LR
   server -->|chat work, connections, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
-  runtime -->|checks memory access and prepares private tool definitions| server
+  runtime -->|checks memory access and privacy evidence before preparing private tool definitions| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -118,9 +118,10 @@ definition for the requester's personal scope. It requires passing privacy check
 the exact server source, computer image and host, before and after preparing the list.
 Missing or changed evidence leaves the list empty. It refuses Ask and Block choices. Private tool
 delivery remains disabled; the builder is exercised by local tests.
-A separate internal builder prepares the remember definition with the same saved-turn
-and caller checks. It reads no facts and saves nothing. Passing recall checks cannot
-enable native writes; public discovery still lists recall alone.
+A separate internal builder prepares the remember definition with the same privacy
+evidence, saved-turn and caller checks before and after loading. It reads no facts
+and saves nothing. Passing recall checks cannot enable native writes; public
+discovery still lists recall alone.
 Memory tests finish their setup reads before signing short-lived requests. Separate tests
 delay history and permission reads inside the server and record only elapsed times.
 These check that slow preparation leaves the original two-second pass available

@@ -5897,7 +5897,10 @@ Only the requester's own person scope is accepted. Both requester and assistant
 need current MCP-use grants. One exact definition and matching reviewed zero-cent
 Allow policy are required. Changed definitions, duplicates, Ask and Block refuse.
 
-The internal helper has no production caller. It accepts no qualification input:
+The internal helper has no production caller. It reuses `personalRecallQualified`
+before and after catalogue and permission reads. Passing privacy evidence must
+match the current source, image and host. Missing, failed, mismatched or changed
+evidence leaves out remember. This evidence permits definition preparation only;
 recall qualification cannot approve writes. The qualified recall helper still
 returns recall alone, ordinary assembly excludes memory, and public MCP discovery
 still lists recall alone. Native memory admission and image approval are unchanged.
