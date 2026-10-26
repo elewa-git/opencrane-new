@@ -1,5 +1,7 @@
 # Claim one scheduled occurrence without starting it
 
+For the later access and recovery fixes, see [their source checks](access-recovery.md).
+
 Date: 26 October 2026. Part of #106.
 Base: `690c2e44c`. Failing-first test commit: `dd007443c`.
 Source: `04a4f9736f83a54b6ff09352c03317a419e9ab00`.
