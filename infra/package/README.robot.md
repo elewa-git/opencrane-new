@@ -787,6 +787,18 @@ nice -n 10 node --experimental-strip-types infra/package/company-qualification.t
 nice -n 10 node --experimental-strip-types --test infra/package/company-qualification.test.ts
 ```
 
+Each assertion links every required subcondition to a `company-results` JSON file.
+The fixed list in `company-conditions.ts` includes each screen state, feature receipt,
+child crash boundary and native memory location during execution, kill/resume and replay.
+Each result records its own outcome and links non-empty supporting files. Its file
+must match the source, image, install and width. The [input contract](../../docs/process/p5-13-pr1/checklist.md#input-and-result)
+names the fields and limits. Missing or refused proof names the untested subcondition.
+
+Binding and freshness checks apply separately to each install. Rejected freshness
+leaves that install's dependent conditions NOT RUN. Valid results from the other
+install remain visible. Binding errors name the field without its supplied value;
+reused identities have a separate shared blocker.
+
 Exit zero means submitted records cover the checklist, including synthetic test
 records. The output still says PARTIAL; it does not establish live qualification.
 Exit one lists missing/refused evidence. The [source receipt](../../docs/process/p5-13-pr1/receipt.md)

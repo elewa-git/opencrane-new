@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and evidence checks"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and result checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership and cluster access; keeps values paths private| package
@@ -85,8 +85,10 @@ running install still need work.
    Browser results record the namespace, storage and install time they checked.
    A separate browser with no
    session must receive only a refusal when it requests that chat history.
-   A separate checker lists completed company checks and missing evidence.
-   It cannot qualify the product from synthetic records.
+   A separate checker requires a linked result and supporting file for every company
+   check, including each screen state and inherited feature. A rejected install leaves
+   its checks untested while the other install keeps its valid results.
+   The checker cannot qualify the product from synthetic records.
 
 ## How to run or test it
 

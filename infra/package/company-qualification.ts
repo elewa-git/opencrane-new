@@ -7,95 +7,9 @@ import { z } from 'zod';
 import { checkFresh } from './fresh-twice.ts';
 import { checkJourney } from './journey-check.ts';
 
-export const companyConditions = {
-  'participants': 'Two ordinary people, two groups with distinct facts, child-only ' +
-    'invitee, admin, second silo.',
-  'groups.list': 'Load actual group membership.',
-  'groups.create': 'Create a flat group and grant access through membership.',
-  'groups.search': 'Search groups.',
-  'groups.detail': 'Show actual group members and access.',
-  'groups.removal_review': 'Explain lost access before removal.',
-  'groups.remove_member': 'Revoke new calls and affected sockets within two seconds.',
-  'membership.refusals': 'Deny same-id cross-silo calls and unavailable or stale OpenFGA.',
-  'ownership.transfer': 'Transfer authority, retain the old owner, then step down separately.',
-  'ownership.last_owner_refused': 'Concurrent last-owner demotions leave an owner; ' +
-    'safe leaver reassignment.',
-  'direct_chat.exchange_and_no_agent': 'Direct human chat causes no AI effects.',
-  'group_chat.exchange_and_no_agent': 'Group human chat causes no AI effects.',
-  'chat.lifecycle': 'Send, reload, reconnect, paginate, close, archive, unread and ' +
-    'participant changes.',
-  'chat.refusals': 'Deny mode mutation, nonparticipant, closed and foreign requests.',
-  'shared_assistant.created': 'Create and select the group assistant with its ' +
-    'reviewed grants and payer.',
-  'shared_assistant.private_chat': 'Two simultaneous requesters and follow-ups keep ' +
-    'credentials, tokens and memory separate on one ' +
-    'computer.',
-  'child.creation': 'Crash at each boundary produces one child and activation; ' +
-    'explicit assistant and payer.',
-  'child.navigation': 'All starting, working, waiting, retrying, terminal, closed ' +
-    'and restricted states; Back restores position at 390px.',
-  'child.disclosure': 'Frozen audience, late child-only invite/full history, ' +
-    'independent parent rights, purge removed viewers, deny ' +
-    'guessed ids and late HTTP/socket replies; restricted ' +
-    'summaries reveal no text, counts or assets.',
-  'child.publish': 'Human-reviewed publication to immediate parent once on retry; ' +
-    'deny closed/revoked parent and private assets.',
-  'delegation.money': 'One root allowance and charge for concurrent children and ' +
-    'retries; hold unknown usage and settle late charges once.',
-  'delegation.refusals': 'Deny altered root, payer, requester, computer and scopes; ' +
-    'Stop and exhaustion cancel descendants before dispatch, ' +
-    'including old reservations.',
-  'memory.tools': 'Remember, recall, correct, forget in every allowed scope; ' +
-    'approval-free group writes; exact/partial search, ranking, ' +
-    'bounds, empty results, preferences and pins.',
-  'memory.refusals': 'Deny cross-person, assistant-notes, group and silo ' +
-    'reads/writes/search/pins; ignore forged scope headers.',
-  'memory.deletion': 'Correction races, multibyte pin/preference cap, stale context ' +
-    'invalidation, forget after duplicate merge/dreaming, key-deletion ' +
-    ' failure and restart; tombstones and dependent facts ' +
-    'survive replay with model endpoints disabled.',
-  'memory.no_disk': 'Native Codex canaries absent from persistent volumes, ' +
-    'rollouts, compaction, SOUL/config, outbox, logs, temporary ' +
-    'files and crash artefacts during execution, kill/resume and ' +
-    'replay; attempt local file/shell/browser writes.',
-  'memory.isolation': 'Personal/group canaries absent from another requester ' +
-    'prompt, shared notes, instructions, summary and published ' +
-    'output without authorised sharing.',
-  'dreaming': 'Nightly clock boundary, one scope/date batch, capped spend, merge, ' +
-    'contradictions, expiry and pinned facts; crash/lost reply and ' +
-    'concurrent correction/forget never repeat effects or revive content.',
-  'dreaming.refusals': 'Deny missing owner, grant, model, payer or price.',
-  'onboarding': 'Sign-in/invite, survey reload/edit/restart, persona review, no-Agent ' +
-    ' welcome, ordered completion, read-only/archive and read-only ' +
-    'SSO fields.',
-  'admin.refusals': 'Wrong/expired invite account, absent email service, role ' +
-    'denial and safe removal.',
-  'providers.key_save': 'Keys absent from browser storage, events and logs; verify ' +
-    'skip and unknown-save reconciliation.',
-  'providers.paid_model_answer': 'Confirm remaining shared 500-cent allowance, ' +
-    'provider cap and authorised paid answer.',
-  'routines': 'Daily/weekly firing, timezone/DST, two schedulers, restart, ' +
-    'missed/overlapping occurrence; company identity observed upstream.',
-  'routines.refusals': 'Deny revoked owner/company profile or budget; Ask only ' +
-    'original owner, timeout stops and no silent personal-account ' +
-    ' fallback.',
-  'replay.zero_effects': 'Rebuild PostgreSQL/OpenFGA; compare facts/revisions, ' +
-    'search, UI, audit and budgets with model endpoints ' +
-    'disabled; no model/tool/routine dispatch.',
-  'recovery': 'Replace computer Pod; recover only authorised context, no private ' +
-    'session files; duplicate routine/delegation delivery adds no effect ' +
-    'or spend.',
-  'regressions.phase2': 'Retain full reload and Pod recovery journeys.',
-  'regressions.phase3': 'Retain full Odoo rights/read/approved write, OAuth, policy ' +
-    'refusals, paying-group hard stop and audited takeover.',
-  'screens.accessibility': 'Compare every delivered screen/state at 1280/390, ' +
-    'including loading, empty, error, unknown outcome, ' +
-    'changed access and long content; keyboard, assistive ' +
-    'technology and reduced motion.',
-  'gates.inherited': 'Full live P5-11, P5-12 and P4-28 feature dependencies; ' +
-    'restore retains deleted keys and never revives forgotten ' +
-    'facts.',
-};
+import { companyConditions, companyRequirements } from './company-conditions.ts';
+
+export { companyConditions } from './company-conditions.ts';
 
 const text = z.string().min(1).max(4096);
 const strings = z.array(text).min(1).max(128);
@@ -114,7 +28,7 @@ const fresh = z.object({ kind: z.literal('fresh-install'), state: z.object({
   rowCounts: z.record(text, z.number().int().nonnegative()),
 }) });
 const inputSchema = z.object({ journey: z.object({ status: z.literal('PARTIAL'),
-  runs: z.array(z.object({ binding, outcomes: z.unknown() })).length(2) }),
+  runs: z.array(z.unknown()).length(2) }),
   runs: z.array(z.object({ fresh: z.unknown(),
     artifacts: z.array(text).max(64) })).length(2) });
 const artifactSchema = z.object({ kind: z.literal('company-journey'), binding,
@@ -122,7 +36,19 @@ const artifactSchema = z.object({ kind: z.literal('company-journey'), binding,
   assertions: z.array(z.object({ id: text, status: text, executed: z.boolean(),
     expected: text, observed: text,
     zero: z.record(text, z.number().int().nonnegative()).optional(),
+    results: z.array(z.object({ requirement: text, evidence: text })).max(512).optional(),
   })).max(128) });
+const resultSchema = z.object({ id: text, requirement: text, status: text,
+  executed: z.boolean(), expected: text, observed: text,
+  zero: z.record(text, z.number().int().nonnegative()).optional(), links: strings });
+const proofSchema = z.object({ kind: z.literal('company-results'), binding,
+  width: z.union([z.literal(1280), z.literal(390)]), date: z.iso.datetime(), command: text,
+  results: z.array(resultSchema).max(2048) });
+const journeyRunSchema = z.object({ binding, outcomes: z.unknown() });
+type Proof = z.infer<typeof proofSchema>;
+type JourneyRun = z.infer<typeof journeyRunSchema>;
+type EvidenceFiles = { root: string; budget: { bytes: number };
+  proofs: Map<string, Proof | null>; links: Set<string> };
 type Binding = z.infer<typeof binding>;
 type Artifact = z.infer<typeof artifactSchema>;
 
@@ -130,7 +56,7 @@ function requireEvidence(valid: unknown): asserts valid {
   if (!valid) throw new Error('Evidence refused');
 }
 
-async function readJson(root: string, name: string, budget: { bytes: number }) {
+async function readEvidenceFile(root: string, name: string, budget: { bytes: number }) {
   requireEvidence(!isAbsolute(name) && !name.includes('\\'));
   const parts = name.split('/');
   let path = root;
@@ -151,11 +77,16 @@ async function readJson(root: string, name: string, budget: { bytes: number }) {
     const result = await handle.read(buffer, 0, buffer.length, 0);
     const after = await handle.stat();
     requireEvidence(result.bytesRead === before.size && after.size === before.size);
-    const value: unknown = JSON.parse(buffer.toString('utf8', 0, result.bytesRead));
-    return value;
+    return buffer.subarray(0, result.bytesRead);
   } finally {
     await handle.close();
   }
+}
+
+async function readJson(root: string, name: string, budget: { bytes: number }) {
+  const buffer = await readEvidenceFile(root, name, budget);
+  const value: unknown = JSON.parse(buffer.toString('utf8'));
+  return value;
 }
 
 function checkFreshBinding(value: z.infer<typeof fresh>, current: Binding, previous?: Binding) {
@@ -170,22 +101,58 @@ function checkFreshBinding(value: z.infer<typeof fresh>, current: Binding, previ
     isDeepStrictEqual(state.pvs.map(uid), current.pvUids));
 }
 
-function checkBindings(runs: z.infer<typeof inputSchema>['journey']['runs'],
-  expected: { source: string; image: string }) {
-  const earlier = runs[0]!.binding;
-  for (const run of runs) {
-    const current = run.binding;
-    requireEvidence(current.source === expected.source && current.image === expected.image);
-    requireEvidence(/^k3d-opencrane-target-[12]$/u.test(current.context));
-    requireEvidence(current.context === earlier.context && current.namespace === earlier.namespace);
-    checkJourney(run, current);
+function checkInstallBinding(value: unknown, expected: { source: string; image: string },
+  label: string, blockers: string[]): JourneyRun | undefined {
+  const parsed = journeyRunSchema.safeParse(value);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[1];
+      let message = `${label}: journey binding refused`;
+      if (issue.path[0] === 'binding' && typeof field === 'string' && field in binding.shape) {
+        message = `${label}: journey binding ${field} refused`;
+      }
+      blockers.push(message);
+    }
+    return undefined;
   }
-  const later = runs[1]!.binding;
+  const current = parsed.data.binding;
+  const mismatches: string[] = [];
+  if (current.source !== expected.source) mismatches.push('source');
+  if (current.image !== expected.image) mismatches.push('image');
+  if (!/^k3d-opencrane-target-[12]$/u.test(current.context)) mismatches.push('context');
+  const slot = current.context.slice(-1);
+  if (current.namespace !== `opencrane-package-${slot}`) mismatches.push('namespace');
+  if (current.origin !== `http://127.0.0.1:25${slot}06`) mismatches.push('origin');
+  for (const field of mismatches) blockers.push(`${label}: journey binding ${field} refused`);
+  if (mismatches.length > 0) return undefined;
+  try {
+    checkJourney(parsed.data, current);
+  } catch {
+    blockers.push(`${label}: journey outcomes refused`);
+    return undefined;
+  }
+  return parsed.data;
+}
+
+function checkSharedBindings(runs: unknown[], blockers: string[]) {
+  const earlierRun = journeyRunSchema.safeParse(runs[0]);
+  const laterRun = journeyRunSchema.safeParse(runs[1]);
+  if (!earlierRun.success || !laterRun.success) return;
+  const earlier = earlierRun.data.binding;
+  const later = laterRun.data.binding;
+  for (const field of ['context', 'namespace'] as const) {
+    if (earlier[field] !== later[field]) blockers.push(`shared: mismatched ${field} refused`);
+  }
   for (const field of ['namespaceUid', 'releaseUid', 'installId', 'storeId'] as const) {
-    requireEvidence(earlier[field] !== later[field]);
+    if (earlier[field] === later[field]) blockers.push(`shared: reused ${field} refused`);
   }
   for (const field of ['pvcUids', 'pvUids'] as const) {
-    for (const uid of later[field]) requireEvidence(!earlier[field].includes(uid));
+    for (const uid of later[field]) {
+      if (earlier[field].includes(uid)) {
+        blockers.push(`shared: reused ${field} refused`);
+        break;
+      }
+    }
   }
 }
 
@@ -207,12 +174,8 @@ function zeroFields(id: string): string[] {
   return [];
 }
 
-function conditionStatus(artifact: Artifact | undefined, id: string) {
-  if (!artifact) return 'NOT RUN';
-  function matches(assertion: Artifact['assertions'][number]) { return assertion.id === id; }
-  const rows = artifact.assertions.filter(matches);
-  if (rows.length !== 1) return 'NOT RUN';
-  const row = rows[0]!;
+function recordedStatus(row: { status: string; executed: boolean;
+  zero?: Record<string, number> | undefined }, id: string) {
   if (row.status === 'FAIL') return 'FAIL';
   if (row.status !== 'PASS' || !row.executed) return 'NOT RUN';
   for (const field of zeroFields(id)) {
@@ -221,48 +184,135 @@ function conditionStatus(artifact: Artifact | undefined, id: string) {
   return 'PASS';
 }
 
+async function readProof(files: EvidenceFiles, name: string, artifact: Artifact) {
+  let proof = files.proofs.get(name);
+  if (!files.proofs.has(name)) {
+    // Remember a refused file so repeated references cannot spend the other install's byte budget.
+    files.proofs.set(name, null);
+    const value = await readJson(files.root, name, files.budget);
+    proof = proofSchema.parse(value);
+    files.proofs.set(name, proof);
+  }
+  requireEvidence(proof);
+  requireEvidence(isDeepStrictEqual(proof.binding, artifact.binding));
+  requireEvidence(proof.width === artifact.width);
+  requireEvidence(Date.parse(proof.date) >= Date.parse(artifact.binding.installedAt));
+  return proof;
+}
+
+async function checkResult(files: EvidenceFiles, artifact: Artifact, id: string,
+  requirement: string, references: NonNullable<Artifact['assertions'][number]['results']>) {
+  function matchesReference(reference: typeof references[number]) {
+    return reference.requirement === requirement;
+  }
+  const matching = references.filter(matchesReference);
+  if (matching.length !== 1) return 'NOT RUN';
+  try {
+    const proof = await readProof(files, matching[0]!.evidence, artifact);
+    function matchesResult(result: Proof['results'][number]) {
+      return result.id === id && result.requirement === requirement;
+    }
+    const results = proof.results.filter(matchesResult);
+    if (results.length !== 1) return 'NOT RUN';
+    const result = results[0]!;
+    const status = recordedStatus(result, id);
+    if (status !== 'PASS') return status;
+    for (const link of result.links) {
+      if (files.links.has(link)) continue;
+      const buffer = await readEvidenceFile(files.root, link, files.budget);
+      requireEvidence(buffer.length > 0);
+      files.links.add(link);
+    }
+    return 'PASS';
+  } catch {
+    return 'NOT RUN';
+  }
+}
+
+async function checkCondition(files: EvidenceFiles, artifact: Artifact | undefined,
+  id: string, label: string, blockers: string[]) {
+  if (!artifact) {
+    blockers.push(`${label}: NOT RUN`);
+    return;
+  }
+  function matches(assertion: Artifact['assertions'][number]) { return assertion.id === id; }
+  const rows = artifact.assertions.filter(matches);
+  if (rows.length !== 1) {
+    blockers.push(`${label}: NOT RUN`);
+    return;
+  }
+  const row = rows[0]!;
+  const status = recordedStatus(row, id);
+  if (status !== 'PASS') {
+    blockers.push(`${label}: ${status}`);
+    return;
+  }
+  for (const requirement of companyRequirements[id]!) {
+    const status = await checkResult(files, artifact, id, requirement, row.results ?? []);
+    if (status !== 'PASS') blockers.push(`${label} / ${requirement}: ${status}`);
+  }
+}
+
+async function readArtifacts(files: EvidenceFiles, names: string[], current: Binding,
+  label: string, blockers: string[]) {
+  const artifacts = new Map<number, Artifact>();
+  try {
+    files.root = await realpath(files.root);
+    for (const name of names) {
+      const value = await readJson(files.root, name, files.budget);
+      const artifact = artifactSchema.parse(value);
+      requireEvidence(Date.parse(artifact.date) >= Date.parse(current.installedAt));
+      requireEvidence(isDeepStrictEqual(artifact.binding, current));
+      requireEvidence(!artifacts.has(artifact.width));
+      artifacts.set(artifact.width, artifact);
+    }
+  } catch {
+    blockers.push(`${label}: artefact refused`);
+  }
+  return artifacts;
+}
+
 export async function checkCompanyQualification(root: string, value: unknown,
   expected: { source: string; image: string }) {
   const completed: string[] = [];
   const blockers: string[] = [];
   const input = inputSchema.safeParse(value);
-  try {
-    requireEvidence(input.success);
-    checkBindings(input.data.journey.runs, expected);
-  } catch {
-    return { status: 'NOT RUN', complete: false, completed, blockers: ['Journey bindings refused'] };
+  if (!input.success) {
+    return { status: 'NOT RUN', complete: false, completed, blockers: ['Journey input refused'] };
   }
+  const journeys: (JourneyRun | undefined)[] = [];
+  for (let index = 0; index < 2; index++) {
+    const label = `install ${index + 1}`;
+    journeys.push(checkInstallBinding(input.data.journey.runs[index], expected, label, blockers));
+  }
+  checkSharedBindings(input.data.journey.runs, blockers);
   const budget = { bytes: 0 };
   for (let index = 0; index < 2; index++) {
     const label = `install ${index + 1}`;
-    const current = input.data.journey.runs[index]!.binding;
+    const current = journeys[index]?.binding;
     const run = input.data.runs[index]!;
-    try {
-      const snapshot = fresh.parse(run.fresh);
-      checkFreshBinding(snapshot, current, input.data.journey.runs[index - 1]?.binding);
-    } catch {
-      blockers.push(`${label}: fresh empty state NOT RUN`);
-    }
-    const artifacts = new Map<number, Artifact>();
-    try {
-      const directory = await realpath(root);
-      for (const name of run.artifacts) {
-        const value = await readJson(directory, name, budget);
-        const artifact = artifactSchema.parse(value);
-        requireEvidence(Date.parse(artifact.date) >= Date.parse(current.installedAt));
-        requireEvidence(isDeepStrictEqual(artifact.binding, current));
-        requireEvidence(!artifacts.has(artifact.width));
-        artifacts.set(artifact.width, artifact);
+    let acceptedFresh = false;
+    if (current) {
+      try {
+        const snapshot = fresh.parse(run.fresh);
+        checkFreshBinding(snapshot, current, journeys[index - 1]?.binding);
+        acceptedFresh = true;
+      } catch {
+        blockers.push(`${label}: fresh empty state NOT RUN`);
       }
-    } catch {
-      blockers.push(`${label}: artefact refused`);
+    }
+    const files: EvidenceFiles = { root, budget, proofs: new Map(), links: new Set() };
+    let artifacts = new Map<number, Artifact>();
+    // Require an accepted binding and fresh state before counting this install's results.
+    if (current && acceptedFresh) {
+      artifacts = await readArtifacts(files, run.artifacts, current, label, blockers);
     }
     for (const width of [1280, 390]) {
       for (const id of Object.keys(companyConditions)) {
         const labelWithCondition = `${label} / ${width} / ${id}`;
-        const status = conditionStatus(artifacts.get(width), id);
-        if (status === 'PASS') completed.push(labelWithCondition);
-        else blockers.push(`${labelWithCondition}: ${status}`);
+        const previousBlockerCount = blockers.length;
+        await checkCondition(files, artifacts.get(width), id, labelWithCondition, blockers);
+        if (blockers.length === previousBlockerCount) completed.push(labelWithCondition);
       }
     }
   }

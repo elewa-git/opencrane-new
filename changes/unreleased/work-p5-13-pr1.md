@@ -1,1 +1,1 @@
-- Check packaged company journey evidence against the complete acceptance checklist, preserving completed conditions and naming missing or mismatched proof. Synthetic records cannot produce a qualification pass.
+- Check packaged company journeys with linked results and supporting files for every required subcondition, including native memory, routines, screen states and inherited receipts. Keep valid results from the other install when binding or freshness checks refuse one install. Synthetic records cannot produce a qualification pass.
