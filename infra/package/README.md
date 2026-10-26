@@ -142,6 +142,7 @@ The [memory recovery notes](README.robot.md#memory-restore-preflight) explain it
 
 ## Where to read more
 
+- [Local operator guide](README.robot.md#local-operator-guide): commands, evidence and recovery limits.
 - [README.robot.md](README.robot.md): settings, image review, commands and current limits.
 - [infra/dev-stack](../dev-stack/README.md): the other local install path and stack claims.
 - [Planned customer installation](../../docs/architecture/target.md): the intended customer setup.

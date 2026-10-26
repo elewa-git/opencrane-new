@@ -1,5 +1,11 @@
 # Qualification ledger
 
+The [local operator guide](p5-14-pr1/operator.md) and
+[machine-checkable local index](p5-14-pr1/qualification.json) cover P5-1–P5-14,
+including both scanner rows. The [source receipt](p5-14-pr1/receipt.md) records
+this index's checks only. Full local operator execution, P5-13 and hosted acceptance
+remain NOT RUN. Original receipts retain their historical failures and partial results.
+
 Verified against PR titles and evidence on 2026-10-04.
 
 Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. The initial ledger excluded issue #70's external-worktree measurements because they had no committed receipt at that checkpoint. External-worktree measurements without committed receipts remain excluded. Pending PRs below are identified by issue number.

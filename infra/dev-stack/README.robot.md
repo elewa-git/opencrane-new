@@ -2053,3 +2053,8 @@ private preparation and forwarding retains its separate calling contract.
 The package placement collector tests exercise these helpers with disposable files
 and command fixtures. The claim tests check the changed child environment through
 package ownership and cleanup. Neither test requires a running development stack.
+
+## Local operator guide
+
+The [local operator guide and index](../../docs/process/p5-14-pr1/operator.md)
+link existing commands and distinguish source checks from live qualification.

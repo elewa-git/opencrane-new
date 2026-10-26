@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "hosting": {"status": "NOT RUN", "blockers": ["Gate H: owner cluster, storage, custody, capacity/spend, recovery and failure-domain inputs remain required; see operator.md."]},
+  "vulnerabilities": {"status": "PARTIAL", "artefacts": ["docs/process/p5-14-pr1/receipt.md"], "criticalHigh": ["OPEN: npm ci reports seven High findings across all scopes; shipped-path assessment is missing."], "blockers": ["No dated runtime/image vulnerability evidence. Missing scans cannot clear Critical/High findings."]},
+  "rows": [
+    {"id": "P5-1", "status": "PARTIAL", "blockers": ["Historical core proof uses old images; current-source fresh acceptance and dated vulnerability clearance are missing."], "receipts": [{
+      "status": "PASS", "kind": "fresh", "scope": "product", "source": "56a79c6d18c0062252ecbe94c1290826a587c800",
+      "image": "sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a", "environment": "local", "freshness": {"state": "twice-empty", "detail": "19 October 2026; both install, PVC and store ids in original receipt."},
+      "artefacts": ["docs/process/p5-1-local.md", "infra/package/reviewed-images.json"], "conditions": {"core-private-exposure-refusals": "PASS"}, "failures": [], "blockers": []
+    }]},
+    {"id": "P5-2", "status": "PARTIAL", "blockers": ["Historical core pair passed; other-slot namespace comparison NOT RUN, current-source images and vulnerability clearance missing."], "receipts": [{
+      "status": "PASS", "kind": "fresh", "scope": "product", "source": "56a79c6d18c0062252ecbe94c1290826a587c800",
+      "image": "sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a", "environment": "local", "freshness": {"state": "twice-empty", "detail": "19 October 2026, 15:25–15:32 UTC; distinct ids retained in original receipt."},
+      "artefacts": ["docs/process/p5-1-local.md"], "conditions": {"twice-empty-distinct": "PASS", "verified-owner-core-1280-390": "PASS"}, "failures": [], "blockers": []
+    }, {
+      "status": "FAIL", "kind": "fresh", "scope": "product", "source": "NOT RECORDED for earlier failed attempts", "image": "NOT RECORDED for earlier failed attempts", "environment": "local",
+      "freshness": {"state": "NOT RUN", "detail": "Earlier first capture failed; later missing-values attempt never installed; second installs NOT RUN."}, "artefacts": ["docs/process/p5-1-local.md"], "conditions": {},
+      "failures": ["Earlier corrected-runner browser attempt failed at first install's capture, with no kept reason.", "Later attempt failed before installation because the private values file had not been recreated."], "blockers": ["Neither earlier attempt counts as a passing pair."]
+    }]},
+    {"id": "P5-3", "status": "PARTIAL", "blockers": ["Approved operator/image preparation, live standby, backup/WAL, all databases, recovery and storage denial NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "source", "source": "a0c33c81aa7e2f2474518ae3c6eec6553266a66f", "image": "Synthetic image review only", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "25 October 2026; synthetic Kubernetes and real Helm renders; no install."}, "artefacts": ["docs/process/p5-3-pr1/receipt.md", "docs/process/p5-3-pr2/receipt.md"], "conditions": {}, "failures": [], "blockers": ["Installer checks are not live CNPG proof."]
+    }]},
+    {"id": "P5-4", "status": "PARTIAL", "blockers": ["R3 installer/bootstrap/runtime wiring and image promotion missing; registry probe FAIL in #724; packaged placement, rotation NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "source", "source": "592515e6f (implementation)", "image": "NOT RUN: no promoted R3 runtime", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "25–26 October 2026; command fixtures, Helm and NATS processes; no fresh package."}, "artefacts": ["docs/process/p5-4-pr4/receipt.md", "docs/process/p5-4-target1/receipt.md"], "conditions": {}, "failures": ["Broad package run: 281/282 passed; foreign-context fixture failed."], "blockers": ["Host-side connection checks do not qualify R3 installation."]
+    }]},
+    {"id": "P5-5", "status": "PARTIAL", "blockers": ["Kubernetes node loss/rejoin and packaged fresh qualification NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "source", "source": "fe0f43f7c8dead2c34e3816bd2dc33f2c986adf0", "image": "NATS 2.15.0 test binary; no runtime image", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "25 October 2026; fresh three-process TLS storage; recovery retains storage."}, "artefacts": ["docs/process/p5-5-pr1/receipt.md", "docs/process/p5-5-pr2/receipt.md"], "conditions": {}, "failures": [], "blockers": ["Process quorum tests do not prove node placement or packaged failover."]
+    }]},
+    {"id": "P5-6a", "status": "PARTIAL", "blockers": ["Fresh reviewed database/image launch, production issuance, clean/EICAR/two-silo deployment NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "source", "source": "04a1b15ec (implementation)", "image": "Old local ClamAV image/database transport smoke only", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "25–26 October 2026; TLS/ES256 fixtures; old-database smoke is not fresh scan proof."}, "artefacts": ["docs/process/p5-6a-pr4/receipt.md", "docs/process/p5-6a-pr5/receipt.md", "docs/process/p5-6a-pr6/receipt.md"], "conditions": {}, "failures": [], "blockers": ["Fixture dates cannot qualify live database freshness."]
+    }]},
+    {"id": "P5-6b", "status": "NOT RUN", "blockers": ["Production upload/image consumer wiring and two-silo fresh/refusal/outage/recovery journeys NOT RUN."], "receipts": []},
+    {"id": "P5-7", "status": "PARTIAL", "blockers": ["Quiescing, CNPG/WAL, matched objects/volumes, custody inventory and coordinated set NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "event-only", "source": "3132c2993cba1deb44f60fe9902639d06b7eb290", "image": "NATS 2.15.0 test binary; no runtime image", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "25 October 2026; fresh disposable TLS NATS; no installed stack."}, "artefacts": ["docs/process/p5-7-pr1/receipt.md"], "conditions": {}, "failures": [], "blockers": ["Stable positions do not prove stopped writers or a coordinated backup."]
+    }]},
+    {"id": "P5-8", "status": "PARTIAL", "blockers": ["Coordinated databases/WAL, objects, volumes, current custody/deletion state, rights/cents, effects and reopening NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "event-only", "source": "ef721c97a580ef9dcfd54e9b78462dd0e3ef8148", "image": "NATS 2.15.0 test binary; no runtime image", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "25 October 2026; separate empty standalone NATS process; reachable unchanged source."}, "artefacts": ["docs/process/p5-8-pr1/receipt.md"], "conditions": {}, "failures": [], "blockers": ["Event-only restoration is not coordinated recovery or fresh product acceptance."]
+    }]},
+    {"id": "P5-9", "status": "PARTIAL", "blockers": ["Pinned package upgrade, schema-compatible rollback and full coordinated recovery NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "event-only", "source": "a40ff12ef (merged source increment)", "image": "NATS 2.15.0/PostgreSQL 17.6-alpine fixtures; no package image", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "25 October 2026; empty NATS target and disposable members projection."}, "artefacts": ["docs/process/p5-9-pr1/receipt.md", "docs/process/p5-9-pr1/attempts.txt"], "conditions": {}, "failures": ["Initial attempts remain in attempts.txt."], "blockers": ["Subscription manifests cannot establish package/schema rollback compatibility."]
+    }]},
+    {"id": "P5-10", "status": "PARTIAL", "blockers": ["Packaged replicas, budget-writer failure, gateway/live-view/network/browser isolation and scanner consumers NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "source", "source": "fdd7f3a526251867b1e0acc397a419551633d464 (receipt inclusion)", "image": "Disposable NATS/PostgreSQL/OpenFGA services; no package image", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "Separate fixture silos and server processes; no fresh product installation."}, "artefacts": ["docs/process/p5-10-pr1/receipt.md", "docs/process/p5-10-pr2/receipt.md"], "conditions": {}, "failures": [], "blockers": ["Member-list reconnect proof covers a subset only."]
+    }]},
+    {"id": "P5-11", "status": "NOT RUN", "blockers": ["Twice-fresh complete packaged P3-22, all Phase 3 refusals and real Odoo/Codex/browser 1280/390 proof missing."], "receipts": []},
+    {"id": "P5-12", "status": "PARTIAL", "blockers": ["Company/rights recovery, native computer no-disk and fresh product acceptance NOT RUN."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "event-only", "source": "903c0765f (test source)", "image": "Disposable NATS/PostgreSQL 17.6-alpine; synthetic keys/facts", "environment": "fixture",
+      "freshness": {"state": "source", "detail": "25–26 October 2026; disposable services, not a fresh product install."}, "artefacts": ["docs/process/p5-12-pr1/receipt.md"], "conditions": {}, "failures": [], "blockers": ["Memory preflight cannot permit reopening or establish full company recovery."]
+    }]},
+    {"id": "P5-13", "status": "NOT RUN", "blockers": ["Full P4-28 twice fresh, complete Phase 4 refusals, Phase 2/3 regressions and 1280/390 acceptance missing."], "receipts": []},
+    {"id": "P5-14", "status": "NOT RUN", "blockers": ["Full local operator execution NOT RUN; upstream coordinated recovery and product journeys incomplete."], "receipts": [{
+      "status": "PARTIAL", "kind": "source", "scope": "source", "source": "690c2e44c (base); implementation is this PR", "image": "NOT RUN: no image built or exercised", "environment": "local",
+      "freshness": {"state": "source", "detail": "26 October 2026; existing worktree, Node 22.23.3; no install."}, "artefacts": ["docs/process/p5-14-pr1/receipt.md", "docs/process/p5-14-pr1/operator.md"], "conditions": {}, "failures": [], "blockers": ["Index consistency checks are not a repeated local recovery drill."]
+    }]}
+  ]
+}
