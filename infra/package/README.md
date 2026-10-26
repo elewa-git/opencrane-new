@@ -21,10 +21,10 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks ownership, cluster access and private values| package
+  stack -->|checks ownership and cluster access; keeps values paths private| package
   package -->|uses local cluster| devbox
   package -->|starts services, encrypts copied files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|runs services and checks NATS placement| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
+  package -->|runs services and checks placement and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -69,7 +69,8 @@ running install still need work.
    prepares the databases, event log and first owner. Before Helm runs, the installer
    checks that the private runtime and setup settings request the number of event
    copies described by the chart. The private values file's folder stays out of
-   preflight and Helm command arguments. Workers start the assistant's computer as needed.
+   preflight and Helm command arguments, including during fresh browser journeys.
+   Workers start the assistant's computer as needed.
 3. **A developer opens the website.** A local port forward connects the private
    website to a browser on this machine. Preparation and forwarding use the same
    recorded cluster and private connection file as installation and cleanup.
@@ -78,7 +79,11 @@ running install still need work.
 4. **A developer stops the package.** Cleanup checks ownership and removes only
    this developer's install, even after a crash.
 5. **A developer checks fresh installs.** A check installs the package twice from
-   scratch and confirms the second install starts empty and chat still works.
+   scratch on one dedicated test cluster. Each run gets a new namespace and storage.
+   The check confirms the second install starts empty and chat still works.
+   Browser results record the namespace, storage and install time they checked.
+   A separate browser with no
+   session must receive only a refusal when it requests that chat history.
 
 ## How to run or test it
 

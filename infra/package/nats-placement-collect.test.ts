@@ -97,7 +97,7 @@ async function prepareCollector(home: string) {
   await copyPackagedFixture(worktree);
   symlinkSync(join(process.cwd(), 'node_modules'), join(worktree, 'node_modules'));
   const files = ['nats-placement.ts', 'nats-placement-collect.ts', 'fresh-twice.ts',
-    'fresh-twice-entry.ts', 'browser-capture.ts'];
+    'fresh-twice-entry.ts', 'browser-capture.ts', 'forward.ts'];
   mkdirSync(join(worktree, 'infra/package'), { recursive: true });
   mkdirSync(join(worktree, 'infra/nats'), { recursive: true });
   cpSync('infra/dev-stack/journey-guard.ts', join(worktree, 'infra/dev-stack/journey-guard.ts'));
@@ -189,6 +189,30 @@ async function privateArguments() {
   }
 }
 test('collector and inherited ownership calls keep private paths out of spawned argv', privateArguments);
+
+async function forwardKeepsPrivatePathOutOfArgv() {
+  const home = mkdtempSync(join(tmpdir(), 'package-forward-'));
+  try {
+    const { worktree, slot, env } = await prepareCollector(home);
+    const result = spawnSync(process.execPath,
+      ['--experimental-strip-types', 'infra/package/forward.ts'],
+      { cwd: worktree, env, encoding: 'utf8', timeout: 15_000 });
+    assert.equal(result.status, 0, result.stderr);
+    const calls = readFileSync(join(home, 'calls.bin'), 'utf8');
+    assert.doesNotMatch(calls, /--kubeconfig/u);
+    const forwardedCall = calls.trimEnd().split('\n').at(-1)!;
+    const fields = forwardedCall.split('\0');
+    assert.equal(fields[0], 'kubectl');
+    assert.equal(fields[1], join(slot, 'target.kubeconfig'));
+    for (const argument of fields.slice(2)) {
+      assert.equal(argument.includes(home), false);
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+test('package forward keeps kubeconfig in the child environment',
+  forwardKeepsPrivatePathOutOfArgv);
 
 for (const source of ['fresh', 'stream', 'target', 'review', 'package', 'stack']) {
   async function growingInput() {

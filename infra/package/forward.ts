@@ -5,17 +5,12 @@ import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged
 
 async function main() {
   const owner = await verifyPackageOwner();
-  let connection = await packageConnectionArgs(owner);
-  const env = { ...process.env };
-  const configIndex = connection.indexOf('--kubeconfig');
-  if (configIndex !== -1) {
-    env['KUBECONFIG'] = connection[configIndex + 1];
-    connection = [...connection.slice(0, configIndex), ...connection.slice(configIndex + 2)];
-  }
+  const connection = await packageConnectionArgs(owner);
   const port = 25000 + Number(stackId) * 100 + 6;
-  const args = [...connection, '-n', owner.namespace,
+  const args = [...connection.args, '-n', owner.namespace,
     'port-forward', '--address', '127.0.0.1', 'service/web', `${port}:80`];
-  const child = spawn('kubectl', args, { cwd: root, env, stdio: 'ignore' });
+  const child = spawn('kubectl', args, {
+    cwd: root, env: connection.environment, stdio: 'ignore' });
   function stop() {
     child.kill('SIGTERM');
   }

@@ -625,11 +625,10 @@ reopening an installation. See the [receipt](../../docs/process/p5-12-pr1/receip
 P5-4 PR 4 is split. This first part connects private preparation and browser
 forwarding to the recorded package target. `packageConnectionArgs` checks the
 current package owner and namespace UID against the owner captured at the start.
-It then checks target ownership again before returning context and kubeconfig
-arguments. Each of the six Secret creations uses this check. Preparation and
-forwarding move the private kubeconfig filename into the child environment before
-spawning Kubernetes commands. Secret creation runs with the private temporary
-folder as its working directory and uses `--from-file=.`. The folder stays mode
+It then checks target ownership again before returning the context argument and
+`KUBECONFIG` in the child environment. Each of the six Secret creations uses this
+check. Preparation and forwarding pass that environment to Kubernetes commands.
+Secret creation runs with the private temporary folder as its working directory and uses `--from-file=.`. The folder stays mode
 0700 and its files stay mode 0600 until removal after creation. Route preparation
 retains its existing target check before each Secret operation.
 
@@ -703,3 +702,33 @@ do not qualify a live install. See the [receipt](../../docs/process/p5-4-live1/r
 
 The [local operator guide and index](../../docs/process/p5-14-pr1/operator.md)
 link existing commands and distinguish source checks from live qualification.
+
+## Bound package journeys
+
+`journey-entry.ts PRIVATE_VALUES_FILE` requires a claimed, checked dedicated k3d
+cluster. It uses that cluster for two fresh namespaces and fresh storage sets.
+It calls `fresh-twice.ts` twice with the fixed `capture.mjs` collector,
+while each package and loopback forward still run. At 1280/390 the collector
+checks owner sign-in, stub chat and an unauthenticated history request with only
+public refusal bytes. It checks ownership before opening the browser.
+Results bind the runner revision and Deployment-checked server image to context,
+namespace/release UIDs, install time and id, PVCs, PVs and OpenFGA store.
+Fresh identities must
+not repeat. Screenshots and `package-journey.json` stay in the private claimed slot.
+The runner sends the private values filename to preparation and installation through
+`PACKAGE_VALUES_FILE` in each child environment. Preparation accepts either that
+setting with no positional arguments or one positional filename without the setting.
+Missing filenames and extra arguments refuse before preflight. Preparation and the
+installer run preflight from the values file's folder, passing only its basename.
+Helm template and install use the same folder and basename. Preparation and browser
+forwarding send the private kubeconfig filename to kubectl through `KUBECONFIG`.
+
+`chart.test.mjs` runs preparation's real main function and preflight using the journey
+environment setting. `cnpg-install.test.mjs` runs the real installer, preflight and
+Helm template with synthetic cluster replies. Both inspect every child argument and
+refuse the private directory. The journey ordering fixture still replaces preparation
+and installation; these separate tests check their descendants.
+The receipt says PARTIAL. Collector or cleanup failure prevents the next install.
+The [receipt](../../docs/process/p5-11-pr1/receipt.md) gives the later claim-based
+command, source checks and live blockers. Fixtures and Stage B captures cannot
+replace live packaged checks. Full inherited product acceptance remains NOT RUN.

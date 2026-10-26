@@ -2048,7 +2048,8 @@ cluster retain their existing behaviour.
 
 `packageConnectionArgs` rechecks package ownership and the captured namespace UID
 for private preparation and browser forwarding. It supplies the recorded context
-and private kubeconfig path without reading or printing credential contents.
+as an argument and the private kubeconfig path through `KUBECONFIG` in the child
+environment, without reading or printing credential contents.
 The [package notes](../package/README.robot.md#recorded-connection-during-package-operations)
 describe the split scope and remaining R3 installation work.
 
@@ -2063,8 +2064,9 @@ Target Kubernetes calls and internal package Kubernetes and Helm calls pass the
 connection filename through `KUBECONFIG`. The placement collector uses the same
 rule, including its inherited ownership checks. Private preparation and forwarding
 use the same child environment transport.
-The argument helper retains its calling contract; its callers remove the filename
-from arguments before starting the child.
+`packageConnectionArgs` returns separate arguments and an environment for private
+preparation and forwarding. Internal package commands remove the connection
+filename from arguments before starting the child.
 
 The package placement collector tests exercise these helpers with disposable files
 and command fixtures. The claim tests check the changed child environment through
