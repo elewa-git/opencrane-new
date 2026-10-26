@@ -293,6 +293,11 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   const refused = new Set<string>();
   type Link = Awaited<ReturnType<typeof connectBridge>> & { connectionId: number };
   const links = new Map<string, Link>();
+  function closeConnections() {
+    // Let computers cancel private work before shutdown waits for unfinished reads.
+    for (const link of links.values()) link.socket.terminate();
+  }
+  signal.addEventListener('abort', closeConnections, { once: true });
   const settlingReports = new Set<Promise<void[]>>();
   const connectionIds = new Map<string, number>();
   let lastConnectionId = 0;
@@ -401,9 +406,10 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   } catch (error) {
     if (!signal.aborted) throw error;
   } finally {
-    await controls;
     const active = [...links.values()];
-    for (const link of active) link.socket.terminate();
+    closeConnections();
+    signal.removeEventListener('abort', closeConnections);
+    await controls;
     await processing;
     await processor.settledStops();
     const pending = active.map(settledBridge);

@@ -58,7 +58,9 @@ async function replayFixture(conversationIds = ['alice', 'bob'], kind = 'persona
       await nats.seed([envelope('test', `conversation-${conversationId}`,
         'conversation.created', created)]);
     } else {
-    await chatCommand(nats.store, keys, { silo: 'test', memberId: conversationId }, { id: `create-${conversationId}`, conversationId, assistantId: 'assistant' });
+      const owner = { silo: 'test', memberId: conversationId };
+      const creation = { id: `create-${conversationId}`, conversationId, assistantId: 'assistant' };
+      await chatCommand(nats.store, keys, owner, creation);
     }
     if (kind === 'team') {
       const encrypted = keys.encrypt('test', conversationId, 'Hello');
@@ -68,7 +70,9 @@ async function replayFixture(conversationIds = ['alice', 'bob'], kind = 'persona
       message.id = `message-${conversationId}`;
       await nats.seed([message]);
     } else {
-    await chatCommand(nats.store, keys, { silo: 'test', memberId: conversationId }, { id: `message-${conversationId}`, conversationId, text: 'Hello' });
+      const owner = { silo: 'test', memberId: conversationId };
+      const message = { id: `message-${conversationId}`, conversationId, text: 'Hello' };
+      await chatCommand(nats.store, keys, owner, message);
     }
   }
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -1988,8 +1992,9 @@ async function cancelsPrivateWorkBeforeShutdownWaits() {
   await projection.initialise(conversations);
   await projection.run(conversations);
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
-  async function installCredential(_computer: string, token: typeof credential) {
+  function installCredential(_computer: string, token: typeof credential) {
     credential = token;
+    return Promise.resolve();
   }
   vi.spyOn(kube, 'credentials').mockImplementation(installCredential);
   const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
