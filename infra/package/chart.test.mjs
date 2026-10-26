@@ -562,7 +562,7 @@ test('preparation and forwarding refuse a replacement namespace despite an updat
   refusesReplacedPackageNamespace);
 
 async function prepareThreeReplicas() {
-  const packageValues = { natsCluster: { enabled: true, renderOnly: true } };
+  const packageValues = { natsCluster: { enabled: true, renderOnly: false } };
   const prepared = await preparedSecretsFixture(true, true, false, packageValues);
   const runtime = prepared.settings.get('package-runtime');
   assert.equal(runtime.NATS_REPLICAS, '3');
@@ -574,7 +574,7 @@ test('private preparation carries the cluster choice into both runtime settings'
   prepareThreeReplicas);
 
 for (const cluster of [null, {}, { enabled: 'true' }, { enabled: true },
-  { enabled: true, renderOnly: false }, { enabled: false, renderOnly: true }]) {
+  { enabled: true, renderOnly: "false" }, { enabled: false, renderOnly: true }]) {
   async function refusesInvalidReplicaChoice() {
     const packageValues = { natsCluster: cluster };
     await assert.rejects(preparedSecretsFixture(true, true, false, packageValues, true),

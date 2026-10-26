@@ -344,7 +344,7 @@ function defaultPeerUnchanged() {
 test('default rendering retains one peer and the ordinary bootstrap', defaultPeerUnchanged);
 
 const invalidClusters = [
-  { renderOnly: false },
+  { renderOnly: "false" },
   { routeCASecret: '' },
   { routeCASecret: 'chart-test-nats' },
   { peerCertificateSecrets: [] },
