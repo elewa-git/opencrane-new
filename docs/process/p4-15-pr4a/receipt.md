@@ -1,7 +1,7 @@
 # Private proxy caller checks
 
-The checks below describe the original implementation. The final section records
-the later fix for borrowing a private grant and its checks against the rebased source.
+The checks below describe the original implementation and the later grant fix.
+The final section records the added grant-selection tests against the rebased source.
 
 Date: 26 October 2026. Part of #97. Base: `12ca064d74866818c81a296046f4703e69fe306d`.
 Failing-first test commit: `189f56584`.
@@ -127,3 +127,56 @@ and `lint.log`.
 PARTIAL: private process launch integration remains pending. Memory admission stays
 disabled. NOT RUN for this fix: a new image build, native recall, gVisor and a fresh
 install journey. The earlier image checks do not qualify the changed source.
+
+## Grant-selection regression coverage — 26 October 2026
+
+Test source: `f3fc7ae94d9295a89770e214cf478c767a9bedb2`.
+Base: `7fb7303993b8223fd18b512e2407d6f76908877d`.
+PASS: fetched origin, completed the rebase and checked that this base is an ancestor
+of the branch, with no rebase still pending. Production code is unchanged by this fix.
+
+The earlier socket tests stop at binding or renewal. Four new cases call the real
+MCP handler through loopback HTTP, with a grant map and a separate caller decision.
+This lets each case reach grant selection without an earlier binding refusal.
+Both ordinary and restricted catalogues are covered before the first forward and
+after successful approval renewal. The tests check the selected grant's turn and
+thread, no private result, and zero forwards from the refused operation. Approval
+cases also assert exactly one initial request and a successfully installed new pass.
+
+Each temporary mutation ran separately and was restored. The tests failed on both
+unexpected forwards and delivery of the fixture's private result:
+
+| Mutation | Initial ordinary | Initial restricted | Retry ordinary | Retry restricted |
+| --- | --- | --- | --- | --- |
+| Remove the actual-grant caller guard | FAIL, expected | FAIL, expected | FAIL, expected | FAIL, expected |
+| Replace only the initial call's caller decision with `allowTurn` | FAIL, expected | FAIL, expected | PASS | PASS |
+| Replace only the retry's caller decision with `allowTurn` | PASS | PASS | FAIL, expected | FAIL, expected |
+
+PASS: all three mutations are detected. The unaffected cases stay green when only
+the other call path is changed. No production mutation remains.
+
+Own checks on Linux, with local fixture services rather than a fresh install:
+
+- PASS: 93 tests in private proxy, MCP proxy, proxy Stop and bridge proxy, twice.
+- PASS: `check:events`, with 154 event types agreeing.
+- PASS: separate Knip and `lint:changelog` checks.
+- PASS: typecheck for every workspace and both infrastructure projects.
+- PASS: full lint, including documentation, links, fixtures and package licences.
+  Code lint reported 26 existing warnings and zero errors.
+
+The repeated test command was:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npm test -- apps/computer/test/private-proxy.test.ts apps/computer/test/mcp-proxy.test.ts apps/computer/test/turn-stop.test.ts apps/server/test/bridge-proxy.test.ts --maxWorkers=1
+```
+
+All checks ran under `nice -n 10`. Tests used one worker and the supplied
+`PG_TEST_URL`; these files do not run projection tests. No full root suite ran.
+No owner stack or secondary stack was touched.
+
+Logs: `/tmp/p4-15-pr4a-fix2-{tests-1,tests-2,events,knip,changelog,typecheck,lint}.log`.
+Mutation logs: `/tmp/p4-15-pr4a-{guard-removed,initial-use-removed,retry-use-removed}.log`.
+
+PARTIAL: private launch integration remains pending and memory admission stays
+disabled. NOT RUN: a new image build, native recall, gVisor or fresh-install journey.
+CI is not awaited for this push.

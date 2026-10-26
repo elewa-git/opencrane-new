@@ -1538,8 +1538,13 @@ Every tool call checks its caller against the actual grant's turn and thread bef
 forwarding. Approval retries repeat this check after renewal. An ordinary catalogue
 can use a later ordinary turn's grant on its thread, but cannot borrow a private one.
 `test/private-proxy.test.ts` checks both borrowing attempts through real loopback
-HTTP and the Unix control socket. The first sends no upstream request; the approval
-case sends only the initial approval request, with no retry or private result.
+HTTP and the Unix control socket. Those attempts stop at binding or renewal.
+Separate MCP fixtures reach grant selection for ordinary and restricted catalogues.
+They allow the catalogue caller but refuse the selected grant's caller and thread.
+The initial cases send no upstream request. Approval cases install a renewed grant
+successfully, then refuse its caller: only the initial approval request is sent,
+with no retry or private result. Removing the grant caller check, its initial-call
+use or its approval-retry use makes the corresponding cases leak the fixture result.
 The file also checks conflicting bindings in both orders and ordinary thread reuse.
 
 No private caller bytes enter the caller file, control replies or errors. The existing
