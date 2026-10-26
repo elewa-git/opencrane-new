@@ -451,6 +451,8 @@ async function refusesLateSetupReply(testCase: typeof lateSetupReplies[number]) 
   const cluster = await clusterFixture();
   try {
     await preparePlacementStatistics(cluster);
+    // Keep real NATS replies independent of the injected bootstrap clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const replies: unknown[] = Array<null>(599).fill(null);
     replies.push(metadataReport('peer-1', true));
     const delayedReply = { subject: testCase.subject, occurrence: testCase.occurrence,
@@ -470,6 +472,7 @@ async function refusesLateSetupReply(testCase: typeof lateSetupReplies[number]) 
     }
     expect(bootstrap.files.size).toBe(0);
   } finally {
+    vi.useRealTimers();
     await cluster.close();
   }
 }
@@ -479,6 +482,8 @@ async function boundsEverySetupRequestByRemainingTime() {
   const cluster = await clusterFixture();
   try {
     await preparePlacementStatistics(cluster);
+    // Keep real NATS replies independent of the injected bootstrap clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const replies: unknown[] = Array<null>(599).fill(null);
     replies.push(metadataReport('peer-1', true));
     const readiness = { replies, elapsed: 0, requestMilliseconds: 20 };
@@ -498,6 +503,7 @@ async function boundsEverySetupRequestByRemainingTime() {
     expect(stream.config.num_replicas).toBe(3);
     expect(stream.state.consumer_count).toBe(1);
   } finally {
+    vi.useRealTimers();
     await cluster.close();
   }
 }
@@ -507,6 +513,7 @@ it('bootstrap gives every setup request only the remaining time',
 async function refusesLatePlacementWithoutBackoff() {
   const cluster = await clusterFixture();
   try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const replies: unknown[] = Array<null>(599).fill(null);
     replies.push(metadataReport('peer-1', true));
     const delayedReply = { subject: '$JS.API.STREAM.CREATE.EVENTS', occurrence: 1,
@@ -525,6 +532,7 @@ async function refusesLatePlacementWithoutBackoff() {
     expect(reply.json<{ streams: number; consumers: number }>()).toMatchObject(
       { streams: 0, consumers: 0 });
   } finally {
+    vi.useRealTimers();
     await cluster.close();
   }
 }
