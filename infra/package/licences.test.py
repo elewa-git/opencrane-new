@@ -32,7 +32,8 @@ class LicenceTests(unittest.TestCase):
         artifacts = []
         for entry in entries:
             artifacts.append({"type": entry[0], "name": entry[1], "version": entry[2]})
-        scan = {"source": {"type": "image", "metadata": {"imageID": image_id}},
+        scan = {"source": {"type": "image", "metadata": {
+                    "imageID": image_id, "repoDigests": [pin]}},
                 "descriptor": {"configuration": {"search": {"scope": "all-layers"}}},
                 "artifacts": artifacts}
         scan_path = Path(directory) / "scan.json"
@@ -51,11 +52,19 @@ class LicenceTests(unittest.TestCase):
             fixture = self.promotion_fixture(directory)
             checker.check_package_promotion(*fixture)
 
+    def test_docker_index_identity_matches_the_scanned_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.promotion_fixture(directory)
+            reviewed, _, inspection, _, _ = fixture
+            inspection[0]["Id"] = reviewed["images"]["server"].split("@")[1]
+            checker.check_package_promotion(*fixture)
+
     def test_promotion_refuses_incomplete_or_mismatched_evidence(self):
         cases = ("missing label", "wrong label", "invalid revision", "wrong server",
                  "wrong web", "missing R3", "wrong replicas", "wrong inventory source",
-                 "wrong inventory pin", "wrong image", "wrong scan image", "stale scan",
-                 "squashed scan", "missing package", "changed version", "forbidden licence")
+                 "wrong inventory pin", "wrong image", "wrong scan image", "wrong scan digest",
+                 "stale scan", "squashed scan", "missing package", "changed version",
+                 "forbidden licence", "unknown licence")
         with tempfile.TemporaryDirectory() as directory:
             for case in cases:
                 with self.subTest(case=case):
@@ -84,6 +93,8 @@ class LicenceTests(unittest.TestCase):
                         inspection[0]["RepoDigests"] = []
                     elif case == "wrong scan image":
                         scan["source"]["metadata"]["imageID"] = "sha256:" + "c" * 64
+                    elif case == "wrong scan digest":
+                        scan["source"]["metadata"]["repoDigests"] = []
                     elif case == "squashed scan":
                         scan["descriptor"]["configuration"]["search"]["scope"] = "squashed"
                     elif case == "missing package":
@@ -92,6 +103,8 @@ class LicenceTests(unittest.TestCase):
                         scan["artifacts"][0]["version"] = "0.0"
                     elif case == "forbidden licence":
                         scan["artifacts"][0]["licenses"] = [{"spdxExpression": "BUSL-1.1"}]
+                    elif case == "unknown licence":
+                        scan["artifacts"][0]["licenses"] = [{"spdxExpression": "UNKNOWN"}]
                     path.write_text(json.dumps(scan), encoding="utf-8")
                     cluster["scanSha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
                     if case == "stale scan":
@@ -101,7 +114,8 @@ class LicenceTests(unittest.TestCase):
 
     def test_promotion_cli_requires_real_inspection_and_scans(self):
         result = subprocess.run(
-            [sys.executable, str(source), "--promotion", "a" * 40, "/missing/inspection.json"],
+            [sys.executable, str(source), "--promotion", "a" * 40, "/missing/inspection.json",
+             "server", "/missing/scan.json", "web", "/missing/scan.json"],
             capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 1)
         self.assertNotIn("/missing", result.stderr)

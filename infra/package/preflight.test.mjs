@@ -216,3 +216,9 @@ function oldImageStillRefuses() {
   }
 }
 test('the shipped image still has no R3 compatibility approval', oldImageStillRefuses);
+
+function packagePromotionRefusals() {
+  const result = spawnSync('python3', ['infra/package/licences.test.py'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+}
+test('package licence and image promotion refusals pass', packagePromotionRefusals);
