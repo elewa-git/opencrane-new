@@ -513,7 +513,12 @@ for (const fault of ['memory_changes', 'installId', 'storeId', 'installedAt', 'p
     try {
       const state = input.runs[0]!.fresh.state;
       if (fault === 'memory_changes') state.rowCounts.memory_changes = 1;
-      else Object.assign(state, { [fault]: 'unaccepted' });
+      else if (fault === 'installedAt') state.installedAt = '2026-10-26T12:00:01.000Z';
+      else if (fault === 'pvcs') {
+        state.pvcs = [{ uid: 'different-pvc', createdAt: state.installedAt }];
+      } else if (fault === 'pvs') {
+        state.pvs = [{ uid: 'different-pv', createdAt: state.installedAt }];
+      } else Object.assign(state, { [fault]: 'unaccepted' });
       const report = await checkCompanyQualification(root, input, expected);
       assert.equal(report.complete, false);
       onlyInstallTwo(report.completed);
