@@ -32,11 +32,10 @@ function fixture() {
   }
   const runs = [run(1), run(2)];
   const journey = { status: 'PARTIAL', runs, notRun: ['full P4-28 (P5-13)'] };
+  function evidenceRun(value: ReturnType<typeof run>) {
+    return { fresh: { kind: 'fresh-install', state: value.state }, artifacts: [] as string[] };
+  }
   return { journey, runs: runs.map(evidenceRun) };
-}
-
-function evidenceRun(run: ReturnType<typeof fixture>['journey']['runs'][number]) {
-  return { fresh: { kind: 'fresh-install', state: run.state }, artifacts: [] as string[] };
 }
 
 async function prepared() {
@@ -47,7 +46,8 @@ async function prepared() {
       function assertion(id: string) {
         return { id, status: 'PASS', executed: true, expected: 'Expected result',
           observed: 'Observed result', zero: { model: 0, tool: 0, routine: 0,
-            wake: 0, approval: 0, reservation: 0, upstream: 0 } };
+            wake: 0, approval: 0, reservation: 0, upstream: 0, turn: 0,
+            persistentCanary: 0, foreignCanary: 0, groupWriteApproval: 0 } };
       }
       const assertions = Object.keys(companyConditions).map(assertion);
       const artifact = { kind: 'company-journey', binding: input.journey.runs[index]!.binding,
@@ -67,7 +67,7 @@ async function editsArtifact(root: string, edit: (artifact: Record<string, unkno
   await writeFile(path, JSON.stringify(artifact));
 }
 
-test('complete synthetic evidence checks logic without issuing a qualification PASS', async function () {
+async function checksSyntheticEvidence() {
   const { root, input } = await prepared();
   try {
     const report = await checkCompanyQualification(root, input, expected);
@@ -78,23 +78,33 @@ test('complete synthetic evidence checks logic without issuing a qualification P
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+test('synthetic evidence checks logic without a qualification PASS', checksSyntheticEvidence);
+
+test('human group chat has its own zero-effect condition', function () {
+  assert.ok(Object.hasOwn(companyConditions, 'group_chat.exchange_and_no_agent'));
 });
 
 for (const fault of ['installId', 'pvcUids', 'pvUids', 'storeId', 'namespaceUid', 'releaseUid',
   'restored', 'source', 'image', 'width', 'stage-a', 'stage-b', 'skip', 'zero', 'foreign',
   'escape', 'symlink', 'oversize', 'count'] as const) {
-  test(`refuses full acceptance: ${fault}`, async function () {
+  async function refusesFullAcceptance() {
     const { root, input } = await prepared();
     try {
       const first = input.journey.runs[0]!;
       const second = input.journey.runs[1]!;
-      if (fault in first.binding) {
-        if (fault === 'source' || fault === 'image') first.binding[fault] = 'wrong';
+      if (fault === 'source' || fault === 'image' || fault === 'installId' ||
+        fault === 'pvcUids' || fault === 'pvUids' || fault === 'storeId' ||
+        fault === 'namespaceUid' || fault === 'releaseUid') {
+        if (fault === 'source' || fault === 'image') first.binding[fault] = fault === 'source'
+          ? 'c'.repeat(40) : `local/server@sha256:${'d'.repeat(64)}`;
         else Object.assign(second.binding, { [fault]: first.binding[fault] });
       }
       if (fault === 'restored') input.runs[0]!.fresh.state.rowCounts.memory_changes = 1;
       if (fault === 'width') input.runs[0]!.artifacts.pop();
-      if (fault === 'stage-a' || fault === 'stage-b') Object.assign(input.journey, { runs: [] });
+      if (fault === 'stage-a' || fault === 'stage-b') {
+        Object.assign(input.journey, { status: 'PASS', stage: fault, screenshots: ['screen.png'] });
+      }
       if (fault === 'escape') input.runs[0]!.artifacts = ['../private.json'];
       if (fault === 'symlink') {
         await symlink(join(root, '0-1280.json'), join(root, 'linked.json'));
@@ -120,11 +130,12 @@ for (const fault of ['installId', 'pvcUids', 'pvUids', 'storeId', 'namespaceUid'
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }
+  test(`refuses full acceptance: ${fault}`, refusesFullAcceptance);
 }
 
-for (const id of ['ownership.last_owner_refused', 'regressions.phase2', 'regressions.phase3']) {
-  test(`partial evidence preserves completed conditions and names missing ${id}`, async function () {
+for (const id of Object.keys(companyConditions)) {
+  async function preservesCompletedConditions() {
     const { root, input } = await prepared();
     try {
       function edit(artifact: Record<string, unknown>) {
@@ -140,5 +151,6 @@ for (const id of ['ownership.last_owner_refused', 'regressions.phase2', 'regress
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }
+  test(`partial evidence names missing ${id}`, preservesCompletedConditions);
 }
