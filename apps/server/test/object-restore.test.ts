@@ -261,3 +261,25 @@ async function cancelsStorageWrites() {
   expect(target.requests()).toBe(2);
 }
 it('cancels the underlying write request before headers arrive', cancelsStorageWrites);
+
+async function refusesSwappedDestination() {
+  const setup = await fixture();
+  const foreign = await restoreStorage(onTestFinished);
+  await foreign.client.makeBucket('opencrane-restore');
+  const marker = Buffer.from(JSON.stringify({ silo: 'another-silo' }));
+  await foreign.client.putObject('opencrane-restore', 'owner', marker);
+  await expect(restoreObjectBackup(setup.restored.connection, source.client,
+    foreign.client, setup.options)).rejects.toThrow('Object restore refused; keep target isolated');
+  expect(await foreign.client.bucketExists('files')).toBe(false);
+  expect(await setup.target.client.bucketExists('files')).toBe(false);
+}
+it('refuses an endpoint and lease swap with unchanged declarations', refusesSwappedDestination);
+
+async function refusesRunningProcess() {
+  const setup = await fixture();
+  const execute = promisify(execFile);
+  await execute('docker', ['exec', '-d', setup.target.name, 'sleep', '300']);
+  await expect(setup.restore()).rejects.toThrow('Object restore refused; keep target isolated');
+  expect(await setup.target.client.bucketExists('files')).toBe(false);
+}
+it('checks that the destination has no other running process', refusesRunningProcess);

@@ -54,7 +54,7 @@ export async function restoreStorage(registerClose?: (close: () => Promise<void>
     const leaseFile = `${directory}/lease`;
     await writeFile(leaseFile, JSON.stringify({ ...lease, expiresAt: Date.now() + 840_000 }),
       { mode: 0o600 });
-    return { client: storageClient(endpoint, leaseFile), close };
+    return { client: storageClient(endpoint, leaseFile), close, name };
   } catch (error) {
     await close();
     throw error;
