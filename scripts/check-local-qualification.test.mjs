@@ -32,6 +32,33 @@ function passingReceipt() {
   };
 }
 
+const prerequisiteConditions = {
+  'P5-9': {
+    'pinned-interrupted-upgrade': 'PASS', 'compatible-rollback-or-fresh-restore': 'PASS',
+    'state-access-refusals': 'PASS',
+  },
+  'P5-10': {
+    'replica-reconnect-rights': 'PASS', 'replica-placement-budget-writer': 'PASS',
+    'gateway-viewer-network-denials': 'PASS', 'requester-only-paused-takeover': 'PASS',
+    'history-and-activity-preserve-access': 'PASS', 'outage-browser-1280-390-services': 'PASS',
+  },
+  'P5-13': {
+    'twice-fresh-full-p4-28': 'PASS', 'all-phase4-refusals-phase2-3-regressions': 'PASS',
+    'screens-1280-390': 'PASS',
+  },
+};
+
+function passingPrerequisiteRow(id) {
+  const receipt = passingReceipt();
+  receipt.conditions = prerequisiteConditions[id];
+  if (id === 'P5-9') {
+    receipt.kind = 'restored';
+    receipt.scope = 'coordinated';
+    receipt.freshness.state = 'restored';
+  }
+  return { id, status: 'PASS', receipts: [receipt], blockers: [] };
+}
+
 function setUp() {
   directory = mkdtempSync(join(tmpdir(), 'qualification-'));
   writeFileSync(join(directory, 'proof.md'), 'A synthetic receipt, not product evidence.\n');
@@ -40,6 +67,9 @@ function setUp() {
     vulnerabilities: { status: 'PASS', artefacts: ['proof.md'], criticalHigh: [], blockers: [] },
     rows: rowIds.map(emptyRow),
   };
+  index.rows[9] = passingPrerequisiteRow('P5-9');
+  index.rows[10] = passingPrerequisiteRow('P5-10');
+  index.rows[13] = passingPrerequisiteRow('P5-13');
   index.rows[14] = { id: 'P5-14', status: 'PASS', receipts: [passingReceipt()], blockers: [] };
   vi.stubGlobal('fetch', vi.fn(forbidExternalActions));
 }
@@ -59,6 +89,21 @@ afterEach(cleanUp);
 function acceptsCompleteProof() {
   expect(check()).toEqual(index);
   expect(fetch).not.toHaveBeenCalled();
+}
+
+function refusesUnfinishedPrerequisite(id, status) {
+  for (const row of index.rows) {
+    if (row.id === id) {
+      row.status = status;
+      row.blockers = ['Required local journey is incomplete.'];
+    }
+  }
+  expect(check).toThrow('Qualification index refused: prerequisites.');
+}
+
+function acceptsPrerequisitesInAnyOrder() {
+  index.rows.reverse();
+  expect(check()).toEqual(index);
 }
 
 function refusesMissingOrDuplicateRows(problem) {
@@ -140,6 +185,9 @@ function refusesLocalAsHosted() {
 }
 
 function retainsPartialResults() {
+  index.rows[9] = emptyRow('P5-9');
+  index.rows[10] = emptyRow('P5-10');
+  index.rows[13] = emptyRow('P5-13');
   const row = index.rows[14];
   row.status = 'PARTIAL';
   row.blockers = ['Guide execution NOT RUN.'];
@@ -194,6 +242,15 @@ function readsRepositoryIndex() {
 }
 
 test('accepts complete proof without commands or requests', acceptsCompleteProof);
+const unfinishedPrerequisites = [
+  ['P5-9', 'NOT RUN'], ['P5-9', 'PARTIAL'], ['P5-9', 'FAIL'],
+  ['P5-10', 'NOT RUN'], ['P5-10', 'PARTIAL'], ['P5-10', 'FAIL'],
+  ['P5-13', 'NOT RUN'], ['P5-13', 'PARTIAL'], ['P5-13', 'FAIL'],
+];
+test.each(unfinishedPrerequisites)(
+  'refuses operator PASS while %s is %s', refusesUnfinishedPrerequisite,
+);
+test('accepts passing prerequisites in any row order', acceptsPrerequisitesInAnyOrder);
 test.each(['missing', 'duplicate'])('refuses a %s row', refusesMissingOrDuplicateRows);
 test.each(['source', 'image', 'environment', 'freshness'])('refuses absent %s', refusesAbsentMetadata);
 test('refuses a broken artefact without exposing its value', refusesBrokenArtefact);
