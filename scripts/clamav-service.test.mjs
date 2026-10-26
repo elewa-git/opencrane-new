@@ -489,7 +489,8 @@ async function saturatedRequests(stage) {
     incoming = request;
   }
   server.once('checkContinue', observeRequest);
-  const pending = send(value, {}, holdTransfer).catch(disconnectedResult);
+  const exchange = send(value, {}, holdTransfer);
+  const pending = exchange.catch(disconnectedResult);
   function responseOrContinue(resolve) {
     lastRequest.once('response', resolve);
     lastRequest.once('continue', resolve);

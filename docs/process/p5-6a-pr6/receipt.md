@@ -1,27 +1,46 @@
 # Authenticated upload scans over HTTPS
 
-Part of #15. Base: `f85834091`. This adds a separate service wrapper around the
-owned scanner. Deployed issuance and upload/image consumers remain later work.
+Part of #15. Checked on 25–26 October 2026 in `<worktree>`,
+using Node 22.23.3. Implementation: `04a1b15ec`; failing test commit: `263948a63`.
+The final fixture edit separates two promise statements without changing behaviour.
+This is local fixture evidence, not a fresh installation or live ClamAV qualification.
 
-- PASS — `npm ci`, with the requested NATS and Lychee tool symlinks.
-- PASS — test commit `396e38b41` came first. All 28 initial TLS cases failed
-  because the service module was absent. A later header-delay probe also failed
-  before the deadline included header receipt.
-- PASS — real TLS and ES256 fixtures exercise trusted and refused connections,
-  caller bindings, byte changes, expiry during transfer/scan, copied success,
-  separate results, cancellation, a shared deadline and retirement.
-  The fixture runs the existing scan operation with process replies, not ClamAV.
-- PASS — the final service/launcher suite passed 97 tests twice. Earlier runs
-  passed 534 tests with security rules, and 140 with scanner-token tests.
-  After removing a test-only undeclared import, all 32 TLS cases passed twice again.
-- PASS — all 17 JSON metadata/result field names pass the exact unchanged
-  `RISKY_FIELD_NAME` expression. Passes travel only in the established HTTP
-  authorisation header. No event fields, dependencies or authority checks changed.
-- PASS — full lint, typecheck, Knip, event catalogue and standalone changelog
-  checks. Lint includes licence checks and reported 25 warnings in unchanged code.
-- NOT RUN — full root suite, production issuance, consumer journeys, fresh
+The wrapper now reserves one of two request places before metadata checks, pass
+verification or body collection. It refuses excess requests immediately with the
+fixed 503 response and no clean verdict. Node admits at most eight TCP connections,
+including unfinished TLS handshakes, and closes excess connections before TLS starts.
+Reservations are released after success, error, timeout and client abort. Cancelled
+scans still wait for cleanup and retire the scanner; capacity release cannot renew it.
+Timeout, expiry and refusal fixtures now use braces and separate statements.
+The saturation tests stay in this PR even though the complete diff exceeds 650 lines.
+
+- PASS — fetched origin and rebased onto `origin/main` at `2fed5714f`.
+  Verified ancestry and the absence of unfinished rebase directories.
+- PASS — failing-first proof: all seven new capacity cases failed before the fix,
+  while all 32 existing service cases passed. The test commit preceded the fix.
+  Expected failures showed excess work accepted and a ninth TCP connection left open.
+- PASS — service and launcher/owned-scan suites passed 104 tests twice.
+  The first run also passed all 438 unchanged event security-rules cases: 542 total.
+- PASS — after the final fixture formatting edit, all 39 service cases passed twice.
+  Tests cover transfer/scan saturation, early bytes without body collection,
+  recovery after success, authentication error, transfer abort and transfer timeout,
+  and TCP refusal/recovery before TLS. Existing scan retirement assertions remain.
+- PASS — event catalogue: all 154 event types agree. Standalone changelog lint passed.
+- PASS — workspace and infrastructure typecheck.
+- PASS — all lint stages: code, dependencies, Knip, docs, READMEs, links, fixtures,
+  licences and changelog. Code lint reported 25 warnings in unchanged files.
+  The initial aggregate run stopped at a home path in this receipt. After replacing
+  it with a placeholder, documentation and all remaining stages passed.
+- NOT RUN — full root suite, production issuance, upload/image consumers, fresh
   clean/EICAR and two-silo deployment. This admits no production upload.
 
-Tests used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and
-one worker, under `nice -n 10`. No projection suite, stack or model call was needed.
-Safe logs are `/tmp/p5-6a-pr6-*.log` on the build host.
+Commands used `nice -n 10`. Vitest used `--maxWorkers=1` and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The tests use real local TLS and ES256 with process fixtures for scanner replies.
+No projection tests, dev stack, model calls or owner services were needed.
+No event fields, dependencies, access checks, money checks or memory checks changed.
+
+Local logs are `/tmp/p5-6a-pr6-fix-red.log`, `-green.log`, `-tests-1.log`,
+`-tests-2.log`, `-final-service-1.log`, `-final-service-2.log`, `-lint.log`,
+`-typecheck.log`, `-events.log` and `-changelog.log`, all with the same
+`/tmp/p5-6a-pr6-fix` prefix.
