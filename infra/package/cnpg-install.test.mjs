@@ -26,6 +26,7 @@ function database(user, name, password = generatedPassword) {
 function validFixture() {
   const secrets = {};
   const runtime = {
+    NATS_REPLICAS: '1', COMMAND_NATS_REPLICAS: '1',
     NATS_URL: 'tls://nats:4222', DATABASE_URL: database('server', 'projections'),
     PROJECTION_DATABASE_URL: database('projection', 'projections'),
     HANDLER_DATABASE_URL: database('dispatcher', 'handlers'),
@@ -310,3 +311,55 @@ async function matchingBootstrapConnections() {
   await runFixture(fixture, nextStep, true);
 }
 test('matching bootstrap connection fields reach the release check', matchingBootstrapConnections);
+
+const replicaCases = [
+  ['unequal runtime settings', '1', '3', {}],
+  ['three copies on a one-peer chart', '3', '3', {}],
+  ['missing runtime settings', undefined, undefined, {}],
+  ['missing runtime count', undefined, '1', {}],
+  ['missing command count', '1', undefined, {}],
+  ['unsupported settings', '2', '2', {}],
+  ['non-strict settings', '01', '01', {}],
+  ['private settings', canary, canary, {}],
+  ['bootstrap runtime override', '1', '1', { NATS_REPLICAS: '3' }],
+  ['bootstrap command override', '1', '1', { COMMAND_NATS_REPLICAS: '3' }],
+  ['matching bootstrap overrides on a one-peer chart', '1', '1',
+    { NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }],
+  ['empty bootstrap override', '1', '1', { NATS_REPLICAS: '' }],
+  ['bootstrap cannot supply missing runtime settings', undefined, undefined,
+    { NATS_REPLICAS: '1', COMMAND_NATS_REPLICAS: '1' }],
+];
+for (const [name, runtime, command, overrides] of replicaCases) {
+  async function refusesReplicaMismatch() {
+    const fixture = validFixture();
+    fixture.values.postgres = { mode: 'standalone' };
+    delete fixture.secrets.runtime.data.NATS_REPLICAS;
+    delete fixture.secrets.runtime.data.COMMAND_NATS_REPLICAS;
+    if (runtime !== undefined) fixture.secrets.runtime.data.NATS_REPLICAS = encoded(runtime);
+    if (command !== undefined) fixture.secrets.runtime.data.COMMAND_NATS_REPLICAS = encoded(command);
+    Object.assign(fixture.secrets.bootstrap.data, secret(overrides).data);
+    await runFixture(fixture, 'Invalid package NATS replica settings');
+  }
+  test(`packaged installer refuses ${name} before any Helm command`, refusesReplicaMismatch);
+}
+
+async function matchingBootstrapReplicas() {
+  const fixture = validFixture();
+  fixture.values.postgres = { mode: 'standalone' };
+  fixture.secrets.bootstrap.data.NATS_REPLICAS = encoded('1');
+  fixture.secrets.bootstrap.data.COMMAND_NATS_REPLICAS = encoded('1');
+  await runFixture(fixture, nextStep, true);
+}
+test('matching bootstrap replica overrides reach the release check', matchingBootstrapReplicas);
+
+for (const renderOnly of [false, true]) {
+  async function refusesClusterInstallation() {
+    const fixture = validFixture();
+    fixture.values.postgres = { mode: 'standalone' };
+    fixture.values.natsCluster = { enabled: true, renderOnly };
+    fixture.secrets.runtime.data.NATS_REPLICAS = encoded('3');
+    fixture.secrets.runtime.data.COMMAND_NATS_REPLICAS = encoded('3');
+    await runFixture(fixture, 'Package command failed');
+  }
+  test(`packaged installer still refuses R3 with renderOnly=${renderOnly}`, refusesClusterInstallation);
+}
