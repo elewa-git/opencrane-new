@@ -105,6 +105,7 @@ function fixture() {
     return Promise.resolve(true);
   }
   const input = {
+    ...qualificationFixture(),
     silo: 'test', scopeId: memoryScopeId('test', 'person', 'alice'),
     requesterId: 'alice', assistantId: 'assistant', baseMessageBytes: 100,
     readServer: vi.fn(read), canUse: vi.fn(allow),
@@ -115,6 +116,50 @@ function fixture() {
   };
   return { state, input, binding };
 }
+
+const invalidQualifications = [
+  'missing evidence', 'failed evidence', 'another image', 'another source', 'another host',
+] as const;
+
+async function refusesQualification(change: typeof invalidQualifications[number]) {
+  const { input } = fixture();
+  let qualification: unknown = input.qualification;
+  if (change === 'missing evidence') qualification = undefined;
+  if (change === 'failed evidence') input.qualification.result = 'FAIL';
+  if (change === 'another image') input.qualification.imageDigest = `sha256:${'c'.repeat(64)}`;
+  if (change === 'another source') input.qualification.sourceSha = 'd'.repeat(40);
+  if (change === 'another host') input.qualification.environmentId = 'another-host';
+  const request = { ...input, qualification };
+  expect(await buildPrivateTurnRememberTools(request)).toEqual([]);
+  expect(input.readServer).not.toHaveBeenCalled();
+  expect(input.canUse).not.toHaveBeenCalled();
+}
+it.each(invalidQualifications)('offers no remember with %s', refusesQualification);
+
+async function refusesChangedQualification(stage: 'catalogue' | 'access') {
+  const { input, state } = fixture();
+  const started = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  async function readServer() {
+    started.resolve();
+    await resume.promise;
+    return state;
+  }
+  async function canUse() {
+    started.resolve();
+    await resume.promise;
+    return true;
+  }
+  if (stage === 'catalogue') input.readServer.mockImplementation(readServer);
+  if (stage === 'access') input.canUse.mockImplementation(canUse);
+  const assembling = buildPrivateTurnRememberTools(input);
+  await started.promise;
+  input.qualification.checks['persistence'] = 'FAIL';
+  resume.resolve();
+  expect(await assembling).toEqual([]);
+}
+it.each(['catalogue', 'access'] as const)(
+  'offers no remember when evidence fails during %s reads', refusesChangedQualification);
 
 const invalidBindings = [
   'no registration', 'no caller', 'another turn caller', 'no grant',
