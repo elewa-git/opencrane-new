@@ -573,6 +573,46 @@ Bytes grant no access: replay/access comparison and current custody/deletion che
 still apply. No scan, delivery, event recreation or admission reopening runs here.
 The [object-only receipt](../../docs/process/p5-8-pr2/receipt.md) records the checks.
 
+## Computer volume inventory
+
+`collectComputerVolumeInventory` in `computer-volume-inventory.ts` takes reachable
+source and empty disposable NATS connections and the private archive directory,
+silo and attempt. Its Kubernetes settings are the caller's already checked context,
+private kubeconfig path, namespace and namespace UID (from package ownership checks).
+It verifies that namespace against Kubernetes twice. It neither claims a namespace
+nor changes any Kubernetes resource. The optional read function is for controlled tests.
+
+The existing restore and history readers check and replay the archive. Assistant
+creation and computer claim/ready events supply the current generation and exact
+Sandbox UID. Missing or conflicting bindings refuse, including older readiness
+records without a generation or Sandbox UID. Lost and retired computers still
+require their retained home. Repeated claims must advance the generation by one;
+a computer cannot change assistant or name. Empty inventory requires no archived claims.
+
+The helper reuses the lifecycle client's label, home owner and suspension checks.
+It requires exactly one matching Sandbox and `home-<computerId>` PVC, with one
+controller owner reference to that exact Sandbox UID. The suspension report must
+say `Suspended=True`, `reason=PodTerminated`, and name the current Kubernetes
+resource generation. That generation is separate from the archived computer generation.
+All Pods in the namespace are checked, including unrelated Pods mounting the home.
+Partial lists, duplicate ownership, denial, timeout and changed resources refuse.
+
+Limits are 1,000 assistants, 10,000 resources per list, 2 MiB per Kubernetes reply
+and 60 seconds overall. Kubernetes commands have an eight-second request limit and
+a ten-second process limit, with cancellation and bounded output. Existing event
+archive limits apply. Source/target history and private archive files are rechecked.
+The returned private record contains only silo, attempt, archive/descriptor hashes,
+namespace name/UID/version and each assistant/computer generation with Sandbox and
+PVC names/UIDs/versions. It saves no file and emits no event or public API response.
+Every failure returns only `Computer volume inventory refused`, without a cause.
+
+`libs/event-store/test/computer-volume-inventory.test.ts` uses real disposable NATS
+archive/replay and synthetic Kubernetes replies. The target remains isolated and
+must be disposed of by the caller. A result describes observations during this call;
+it cannot lock out later writers. Keep writers stopped through later byte capture.
+P5-7 PR 3a is the first volume part only. Volume byte capture, CSI snapshots, custody
+backup and live quiescence remain NOT RUN. This is not coordinated-set completion.
+
 ## Event-byte restore
 
 `event-restore-run.ts SILO DIRECTORY --disposable` restores the event-only export.

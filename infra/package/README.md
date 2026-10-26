@@ -23,8 +23,8 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services, restores files, checks reads and replays memory| apps["apps<br/>product services and replay"]
-  package -->|waits for NATS, checks placement, setup time and recovery| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  package -->|starts services, checks computer homes, restores files and replays memory| apps["apps<br/>product services and replay"]
+  package -->|waits for NATS, checks placement, setup time, recovery and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -58,6 +58,7 @@ running install still need work.
 - Waits for the event-log peers to be ready before creating the event stream.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log and its referenced files for an operator.
+- Checks retained computer homes against saved events and current Kubernetes ownership.
 - Restores checked events and files into separate empty disposable targets.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
@@ -162,6 +163,16 @@ types, then reads every file back to check its size and checksum. Existing bucke
 A failed transfer leaves the target isolated for inspection; it never retries or
 deletes the bucket. Restored files grant no access and do not reopen the installation.
 The [file restore notes](README.robot.md#file-object-restore) describe the requirements.
+
+### Computer home ownership
+
+The computer inventory helper reads the checked event copy to find every required
+retained home. It checks the exact computer and assistant, Sandbox identity and
+home volume owner in the already owned namespace. Each Sandbox must report that
+its current version is suspended and its Pod has stopped. Any remaining Pod using
+that home causes refusal. A second read refuses changed resources before returning
+private metadata. This does not copy volume contents or prove a whole backup is safe.
+The [inventory notes](README.robot.md#computer-volume-inventory) describe its limits.
 
 The event restore command checks that copy against its reachable source, then sends
 it to a separate disposable NATS server with no event stream. It checks the restored

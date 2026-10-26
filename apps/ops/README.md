@@ -16,7 +16,7 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> ops["apps/ops<br/>workers and replay"]
+  apps["apps<br/>applications"] --> ops["apps/ops<br/>workers and recovery checks"]
   apps --> server["apps/server<br/>back end"]
   server -.->|tests use helper| ops
   server -->|saves changes| nats["NATS<br/>event log"]
@@ -30,6 +30,8 @@ flowchart LR
 
 The computers run in [Kubernetes](../../GLOSSARY.md#kubernetes).
 [OpenFGA](../../GLOSSARY.md#openfga-permissions-service) checks who may use what.
+The package backup tool reuses this package’s checks for computer home ownership
+and suspension. Those checks read metadata and change no resources.
 
 ## What it is responsible for
 

@@ -24,7 +24,9 @@ function resources() {
     controller: true };
   const pvc = { kind: 'PersistentVolumeClaim', metadata: {
     ...metadata('home-computer-one'), ownerReferences: [owner] } };
-  const pod = { kind: 'Pod', metadata: metadata('other-pod'),
+  const podMetadata = metadata('other-pod');
+  podMetadata.labels['sandbox.users.io/computer'] = 'unrelated';
+  const pod = { kind: 'Pod', metadata: podMetadata,
     spec: { volumes: [{ name: 'data', persistentVolumeClaim: { claimName: 'home-computer-one' } }] } };
   return { sandbox, pvc, pod };
 }
@@ -44,14 +46,17 @@ async function fixture(empty = false, fault = '') {
   const identity = { assistantId: 'assistant-one', computerId: 'computer-one' };
   if (!empty) {
     const assistant = { assistantId: 'assistant-one', ownerId: 'alice', kind: 'personal' };
-    await append('assistant.created', assistant, 'assistant-assistant-one');
+    if (fault !== 'missing-assistant') {
+      await append('assistant.created', assistant, 'assistant-assistant-one');
+    }
     await append('computer.claimed', { ...identity, generation: 1, tokenId: 'token:one' });
     await append('computer.ready', { ...identity, generation: 1, sandboxUid: 'old-sandbox' });
     await append('computer.lost', identity);
     await append('computer.claimed', { ...identity, generation: 2, tokenId: 'token:two' });
     const generation = fault === 'event-generation' ? 1 : 2;
     const sandboxUid = fault === 'missing-binding' ? {} : { sandboxUid: 'computer-one-uid' };
-    await append('computer.ready', { ...identity, generation, ...sandboxUid });
+    const currentGeneration = fault === 'missing-generation' ? {} : { generation };
+    await append('computer.ready', { ...identity, ...currentGeneration, ...sandboxUid });
     await append('computer.suspended', identity);
     if (fault === 'retired') await append('computer.retired', identity);
     if (fault === 'conflicting-claim') {
@@ -60,11 +65,12 @@ async function fixture(empty = false, fault = '') {
     if (fault === 'duplicate-assistant') {
       await append('assistant.created', assistant, 'assistant-assistant-one');
     }
-    if (fault === 'duplicate-computer') {
+    if (fault === 'multiple' || fault === 'duplicate-computer') {
       await append('assistant.created', { ...assistant, assistantId: 'assistant-two' },
         'assistant-assistant-two');
-      await append('computer.claimed', { ...identity, assistantId: 'assistant-two', generation: 1,
-        sandboxUid: 'computer-one-uid', tokenId: 'token:other' }, 'computer-assistant-two');
+      const computerId = fault === 'multiple' ? 'computer-two' : 'computer-one';
+      await append('computer.claimed', { assistantId: 'assistant-two', computerId, generation: 1,
+        sandboxUid: `${computerId}-uid`, tokenId: 'token:other' }, 'computer-assistant-two');
     }
   }
   await collectEventBackup(source.connection, { silo: 'test', attempt: 'copy', destination: archive });
@@ -77,6 +83,19 @@ async function fixture(empty = false, fault = '') {
     persistentvolumeclaims: { metadata: { resourceVersion: '10', continue: '' }, items: [pvc] },
     pods: { metadata: { resourceVersion: '10', continue: '' }, items: [] as object[] },
   };
+  if (fault === 'multiple') {
+    const secondSandbox = structuredClone(sandbox);
+    secondSandbox.metadata = metadata('computer-two');
+    secondSandbox.spec.podTemplate.metadata.labels = {
+      'sandbox.users.io/computer': 'computer-two', 'sandbox.users.io/assistant': 'assistant-two' };
+    const secondHome = structuredClone(pvc);
+    Object.assign(secondHome.metadata, metadata('home-computer-two'));
+    secondHome.metadata.labels['sandbox.users.io/computer'] = 'computer-two';
+    secondHome.metadata.ownerReferences[0]!.name = 'computer-two';
+    secondHome.metadata.ownerReferences[0]!.uid = 'computer-two-uid';
+    lists.sandboxes.items.push(secondSandbox);
+    lists.persistentvolumeclaims.items.push(secondHome);
+  }
   const requests: string[] = [];
   async function read(request: { resource: string; namespace: string; signal: AbortSignal }) {
     expect(request.namespace).toBe(namespace);
@@ -92,12 +111,13 @@ async function fixture(empty = false, fault = '') {
       if (fault === 'replace-pvc') pvc.metadata.uid = 'replacement';
       if (fault === 'replace-sandbox') sandbox.metadata.uid = 'replacement';
       if (fault === 'resume') sandbox.spec.operatingMode = 'Running';
+      if (fault === 'namespace-race') namespaceResource.metadata.uid = 'replacement';
       if (fault === 'version') pvc.metadata.resourceVersion = '11';
       if (fault === 'late-pod') lists.pods.items.push(pod);
       if (fault === 'archive-race') await writeFile(join(archive, 'events.snapshot'), canary);
       if (fault === 'descriptor-race') {
         const path = join(archive, 'descriptor.json');
-        const descriptor = JSON.parse(await readFile(path, 'utf8')) as object;
+        const descriptor = descriptorSchema.parse(JSON.parse(await readFile(path, 'utf8')));
         await writeFile(path, JSON.stringify({ ...descriptor, attempt: 'other' }));
       }
       if (fault === 'event-resume') {
@@ -124,17 +144,17 @@ async function includesRetainedHome(fault: string) {
     const result = await setup.collect();
     const saved = await readFile(join(setup.archive, 'descriptor.json'), 'utf8');
     const descriptor = descriptorSchema.parse(JSON.parse(saved));
-    expect(result).toMatchObject({ silo: 'test', attempt: 'copy',
+    expect({ ...result, volumes: result.volumes.slice(0, 1) }).toMatchObject({ silo: 'test', attempt: 'copy',
       eventArchiveSha256: descriptor.sha256, namespace: { uid: 'namespace-uid' },
       volumes: [{ assistantId: 'assistant-one', computerId: 'computer-one', generation: 2,
         sandbox: { uid: 'computer-one-uid', resourceVersion: '10' },
         home: { uid: 'home-computer-one-uid', resourceVersion: '10' } }] });
-    expect(result.volumes).toHaveLength(1);
+    expect(result.volumes).toHaveLength(fault === 'multiple' ? 2 : 1);
     expect(JSON.stringify(result)).not.toMatch(/private|token|conditions|podTemplate/);
     expect(setup.requests).toHaveLength(8);
   } finally { await setup.close(); }
 }
-it.each(['suspended', 'retired'])('includes the current retained home once: %s', includesRetainedHome);
+it.each(['suspended', 'retired', 'multiple'])('includes the current retained home once: %s', includesRetainedHome);
 
 async function emptyInventory() {
   const setup = await fixture(true);
@@ -153,7 +173,8 @@ const faults = ['missing-pvc', 'missing-sandbox', 'foreign-pvc', 'foreign-sandbo
   'wrong-owner-name', 'wrong-owner-kind', 'non-controller', 'multiple-owners',
   'namespace-uid', 'denied', 'timeout', 'replace-pvc', 'replace-sandbox', 'resume',
   'version', 'late-pod', 'archive-race', 'descriptor-race', 'event-resume', 'event-generation',
-  'missing-binding', 'conflicting-claim', 'duplicate-assistant', 'duplicate-computer',
+  'missing-binding', 'missing-generation', 'missing-assistant', 'namespace-race', 'remaining-list',
+  'conflicting-claim', 'duplicate-assistant', 'duplicate-computer',
   'attempt', 'silo', 'corrupt-archive', 'oversized-reply'] as const;
 async function refusesFault(fault: typeof faults[number]) {
   const setup = await fixture(false, fault);
@@ -182,6 +203,7 @@ async function refusesFault(fault: typeof faults[number]) {
       lists.pods.items.push(pod);
     }
     if (fault === 'partial-list') lists.pods.metadata.continue = 'next';
+    if (fault === 'remaining-list') Reflect.set(lists.pods.metadata, 'remainingItemCount', 1);
     if (fault === 'missing-items') Reflect.deleteProperty(lists.pods, 'items');
     if (fault === 'duplicate-pvc') lists.persistentvolumeclaims.items.push(structuredClone(pvc));
     if (fault === 'duplicate-sandbox') lists.sandboxes.items.push(structuredClone(sandbox));

@@ -1,0 +1,1 @@
+Check every event-required retained computer home against its exact Sandbox and volume owner before backup. Refuse active Pods, stale suspension reports, incomplete lists and resources that change during the check. This returns private inventory metadata only; volume capture and live quiescence are not yet qualified.
