@@ -8,6 +8,7 @@ import { fileUploadedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { z } from 'zod';
 import type { storageClient } from '../../apps/server/src/files/storage.ts';
 import { captureBounds, descriptorSchema } from './event-backup.ts';
+import { claimDisposableObjectTarget } from './disposable-object-target.ts';
 import { checkHistory, readBackupKey, readBackupObject, readPrivateFile,
   type restoreEventBackup } from './event-restore.ts';
 
@@ -166,19 +167,23 @@ export async function restoreObjectBackup(events: NatsConnection, source: Storag
     const signals = [controller.signal, AbortSignal.timeout(timeoutMs)];
     if (options.signal) signals.push(options.signal);
     const signal = AbortSignal.any(signals);
+    const checkTarget = claimDisposableObjectTarget(target, options.silo, signal);
     bounds = captureBounds(events, { signal, timeoutMs });
     prepared = await prepareObjects(bounds, options);
     async function transfer() {
+      await checkTarget();
       if (await target.bucketExists('files')) throw refusal();
       signal.throwIfAborted();
       // Require MinIO's atomic creation refusal, including an empty bucket created by a rival.
       await target.makeBucket('files');
       for (const object of prepared) {
+        await checkTarget();
         signal.throwIfAborted();
         await target.putObject('files', object.address, object.bytes, object.bytes.length,
           { 'Content-Type': object.mime, 'If-None-Match': '*' });
         await verifyObject(target, object, bounds!, signal, timeoutMs);
       }
+      await checkTarget();
     }
     bounds.check();
     await bounds.bounded(target.withBounds({ signal, timeoutMs }, transfer));
