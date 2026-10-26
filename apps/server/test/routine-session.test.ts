@@ -633,6 +633,9 @@ function routineInputTests() {
     function closed(code: number) {
       closeCode = code;
     }
+    function isClosed() {
+      return closeCode !== undefined;
+    }
     function settled() {
       return closeCode !== undefined || messages.length > 0;
     }
@@ -649,7 +652,7 @@ function routineInputTests() {
       socket.send(JSON.stringify(subscription));
       await until(settled);
       expect(messages.join('')).not.toContain(privateText);
-      await until(function isClosed() { return closeCode !== undefined; });
+      await until(isClosed);
       expect(closeCode).toBe(1008);
       expect(messages).toHaveLength(1);
       expect(JSON.parse(messages[0]!)).toMatchObject({ type: 'refused', conversationId });

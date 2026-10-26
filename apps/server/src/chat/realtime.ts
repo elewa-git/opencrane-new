@@ -4,6 +4,7 @@ import { chatMessageSchema, type ChatRow } from '@opencrane/protocol';
 import { AuthorityApplying } from '@opencrane/models';
 import { chatSubscriptionAccess, isChatRefused } from './access.ts';
 import { chatRows } from './history.ts';
+import { isPublicChatId } from './public-id.ts';
 import type { ChatOptions } from './access.ts';
 
 type Mode = 'agent_session' | 'direct' | 'group';
@@ -48,6 +49,10 @@ export function conversationSubscription(
       ready: false, accessPassed: false, computerState: '', computerRecovered: false,
       computerLostAt: undefined,
     };
+    if (!isPublicChatId(conversationId)) {
+      refuse(state);
+      return;
+    }
     function poll() {
       void drain(state);
     }

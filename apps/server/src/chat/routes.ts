@@ -1,4 +1,6 @@
 import { chatHistoryReply } from './history.ts';
+import { isPublicChatId } from './public-id.ts';
+import { chatDisplayData } from './display.ts';
 import { participantCommand, participantList } from './participants.ts';
 import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { creationEvent, privateSessionReader, sharedAssistantAuthority,
@@ -38,10 +40,6 @@ const assistantDetails = z.object({
   kind: z.string(), payingGroupId: z.string().optional(),
 });
 class InvalidChatRequest extends Error {}
-function isPublicChatId(value: string) {
-  // Reserve both routine-session- and its routine-session-create- subset for worker preparation.
-  return !value.startsWith('routine-session-');
-}
 const publicChatId = id.refine(isPublicChatId, 'Reserved routine session prefix');
 const parameters = z.object({
   conversationId: publicChatId.optional(), commandId: publicChatId.optional(),
@@ -201,6 +199,7 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
     try {
       const access = await readParticipation(row.conversationId);
       if (access.joinEventId !== candidate.joinEventId) throw new ConversationListChanged();
+      chatDisplayData('conversation.created', access.created);
       if (row.mode === 'agent_session' && !('contextKind' in access.created)) {
         await readPrivate(row.conversationId, access.creation.event);
       }

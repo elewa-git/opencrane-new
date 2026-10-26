@@ -5265,6 +5265,19 @@ history. Memory delivery wiring is unchanged. Root/budget admission, Stop and re
 Ask must be connected before any later enablement.
 `test/routine-session.test.ts` exercises both helpers, crash/retry recovery, custody and
 access loss, the actual bridge path and offline replay with effects forbidden.
+Public WebSocket subscriptions share the HTTP reserved-id rule and send `refused`
+with close code 1008 for `routine-session-` ids, before loading or decrypting content.
+History checks the saved creation separately from the requested page, so a cursor
+after creation cannot skip `routinePreparation`. Display rejects that marker and
+reserved conversation ids. Conversation lists omit these sessions, and their title
+reader checks creation before decrypting a first message. These checks also hide a
+marked preparation session whose id has no reserved prefix. Access checks and their
+deadlines are unchanged.
+
+`test/routine-session.test.ts` saves and projects the encrypted input, proves that the
+owner's underlying permissions permit reading, and exercises a real public socket
+starting after creation. It also checks HTTP history, paged history and list titles
+with decryption spies. `test/chat-display.test.ts` checks direct display refusals.
 Part of #106, P4-24 row 9. Fresh-install execution qualification: NOT RUN.
 
 ## Routine metadata reads
