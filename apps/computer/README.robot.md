@@ -731,7 +731,7 @@ Stderr is discarded. The whole container inherits a hard core-file limit of zero
 
 | Writable place | Backing | Who can write | Private text allowed? |
 | --- | --- | --- | --- |
-| Bridge memory | Process RAM | UID 1000 bridge | Yes, until acknowledged; swappable here |
+| Bridge memory | Process RAM | UID 1000 bridge | Yes, until acknowledged or stopped; swappable here |
 | Supervisor stream buffers | Process RAM | Root supervisor | Yes, while passing bytes; swappable here |
 | Private Codex memory | Process RAM | UID 1003 Codex | Yes; swappable here |
 | `/home/private/turn-<n>` | 16Mi Memory volume | UID 1003 | Yes; gVisor tmpfs measured; host swap remains an accepted dev-box risk |
@@ -755,8 +755,8 @@ Codex uses its RAM `TMPDIR`, but the kernel still permits writes to `/tmp` and
 `/dev/shm`. The live probe checks both paths and every other writable directory.
 
 The PVC journal stores a text-free line for each private text report, marked
-`memoryOnly: true`. Its text remains in bridge memory until acknowledged or
-covered by `resume.since`. Replay with missing text sends `agent.output_lost`.
+`memoryOnly: true`. Its text remains in bridge memory until acknowledged,
+covered by `resume.since` or cleared by Stop. Replay with missing text sends `agent.output_lost`.
 Outline lines expose reply timing and size through the number of deltas. They
 also contain client-chosen ids, up to 200 characters for conversation and turn ids.
 The execution marker remains unchanged and contains only turn ids.
