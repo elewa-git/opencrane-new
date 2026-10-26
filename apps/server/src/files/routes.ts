@@ -30,7 +30,8 @@ import { fileListApplying } from './list.ts';
 
 export interface FileOptions extends Omit<ChatOptions, 'keys'> {
   objects: Client;
-  scan(bytes: Buffer): Promise<'clean' | 'infected'>;
+  scan(bytes: Buffer, binding: { silo: string; fileId: string }):
+    Promise<() => 'clean' | 'infected'>;
 }
 
 const id = idSchema.regex(/^[\w-]{1,200}$/u);
@@ -379,8 +380,13 @@ export async function uploadFile(
     return acknowledgePreviousUpload(previous, fileId, name, sha256, bytes.length);
   }
   const objectKey = `${options.silo}/${conversationId}/${fileId}/${sha256}`;
-  const verdict = await options.scan(bytes);
+  const binding = { silo: options.silo, fileId };
+  const validate = await options.scan(bytes, binding);
   await fresh?.();
+  const verdict = validate();
+  if (sha256Digest(bytes) !== sha256) {
+    throw new FileUnavailable('scanner');
+  }
   let type: 'file.uploaded' | 'file.rejected';
   let eventData: object;
   if (verdict === 'clean') {

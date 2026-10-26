@@ -87,8 +87,9 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server -->|chat connections and checked reports| computer["apps/computer<br/>assistant computers"]
-  computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
+  server -->|chat work, connections, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
+  computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
+  server -->|checks upload bytes over HTTPS| runtime
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
 ```
 
@@ -446,6 +447,10 @@ Tests can shorten the interval. A missed reply still closes the connection on th
 next heartbeat.
 Sending too many messages in one second closes the connection with a retryable response.
 The browser can reconnect and keep the chat. Losing access still clears its content.
+
+Uploads go to the configured private scanner over HTTPS before storage. The server
+checks the exact file and a fresh result again after checking access. Missing trust
+settings, expired results and scanner outages leave uploads unavailable.
 
 ## How to run or test it
 

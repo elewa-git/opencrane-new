@@ -28,7 +28,7 @@ export async function childFixture(existingNats?: Awaited<ReturnType<typeof nats
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
   const options: ChatOptions = { silo: 'test', store: nats.store, db, keys, binding, feed };
   const objects = new Client({ endPoint: '127.0.0.1' });
-  function unusedScan(): Promise<'clean'> {
+  function unusedScan(): Promise<never> {
     throw new Error('Reads must not scan a file');
   }
   const app = buildServer(config, { chat: options, memberReads: options, files: { ...options, objects, scan: unusedScan } });

@@ -1,5 +1,5 @@
 import { once } from 'node:events';
-import { createServer, type Socket } from 'node:net';
+import { createServer } from 'node:net';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -20,6 +20,7 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { fileCommand } from '../src/files/commands.ts';
 import { FileRefusal, FileUnavailable } from '../src/files/refusals.ts';
 import { uploadFile, type FileOptions } from '../src/files/routes.ts';
+import { scanFile as scanDaemon } from './support/clamd.ts';
 import { scanFile } from '../src/files/scanner.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -29,18 +30,14 @@ const bytes = Buffer.from('Meeting at ten.');
 let options: FileOptions;
 let app: ReturnType<typeof buildServer>;
 const cleanup: (() => Promise<unknown>)[] = [];
-let scannerPort: number;
 let runner: ProjectionRunner;
-
-function respondWithInvalidVerdict(socket: Socket) {
-  // Exceed the scanner's local response bound without a verdict terminator.
-  socket.resume();
-  socket.end('x'.repeat(4097));
-}
 
 async function cleanScan() {
   await Promise.resolve();
-  return 'clean' as const;
+  function validate() {
+    return 'clean' as const;
+  }
+  return validate;
 }
 
 async function seedUploadHistory(
@@ -89,20 +86,6 @@ async function seedUploadHistory(
 }
 
 async function startUploadFixture() {
-  const scanner = createServer(respondWithInvalidVerdict);
-  scanner.listen(0, '127.0.0.1');
-  await once(scanner, 'listening');
-  const address = scanner.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Scanner fixture has no port');
-  }
-  scannerPort = address.port;
-  async function closeScanner() {
-    scanner.close();
-    await once(scanner, 'close');
-  }
-  cleanup.push(closeScanner);
-
   const nats = await natsFixture();
   cleanup.push(nats.close.bind(nats));
   const dbs = await databases();
@@ -238,21 +221,30 @@ it.each(['ECONNREFUSED', 'ETIMEDOUT', 'ServiceUnavailable'])(
 );
 
 async function invalidScannerResponse() {
-  function invalidScan(content: Buffer) {
-    return scanFile('127.0.0.1', scannerPort, content);
+  function invalidScan(content: Buffer, binding: { silo: string; fileId: string }) {
+    const settings = { url: 'https://scanner.invalid/scan/upload', silo: 'test',
+      caFile: undefined, privateKeyPath: undefined, issuer: undefined };
+    return scanFile(settings, content, binding);
   }
   const scanner = vi.fn(invalidScan);
   options.scan = scanner;
   const request = uploadRequest('invalid-scanner-response');
   const response = await app.inject(request);
-  expect(response.statusCode).toBe(500);
-  expect(response.json()).toEqual({ status: 'failed', error: 'Unexpected failure' });
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable', error: 'Dependency unavailable' });
   expect(scanner).toHaveBeenCalledOnce();
 }
 it(
-  'returns a sanitised 500 for a locally detected invalid scanner response',
+  'returns a sanitised 503 when scanner trust is missing',
   invalidScannerResponse,
 );
+
+function validatedVerdict(verdict: 'clean' | 'infected') {
+  function validate() {
+    return verdict;
+  }
+  return validate;
+}
 
 async function refusedScannerConnection() {
   const unusedPort = createServer();
@@ -266,7 +258,7 @@ async function refusedScannerConnection() {
   await once(unusedPort, 'close');
   const port = address.port;
   function unavailableScan(content: Buffer) {
-    return scanFile('127.0.0.1', port, content);
+    return scanDaemon('127.0.0.1', port, content).then(validatedVerdict);
   }
   const scanner = vi.fn(unavailableScan);
   options.scan = scanner;
@@ -439,7 +431,8 @@ async function listsUploadAfterProjectionCatchesUp() {
   expect(available.json()).toMatchObject({ rows: [{ fileId: saved.fileId }] });
 
   function infectedScan() {
-    return Promise.resolve('infected' as const);
+    const validate = validatedVerdict('infected');
+    return Promise.resolve(validate);
   }
   options.scan = infectedScan;
   const infectedRequest = { ...request,

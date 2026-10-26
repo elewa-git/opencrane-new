@@ -32,8 +32,9 @@ function metadata(request) {
   const input = { purpose: headers['x-scan-purpose'], silo: headers['x-scan-silo'],
     requestId: headers['x-scan-request-id'], fileId: headers['x-scan-file-id'],
     sha256: headers['x-scan-sha256'], byteCount };
+  const validFileId = uuid.test(input.fileId) || /^[a-f0-9]{64}$/.test(input.fileId);
   requireRequest(input.purpose === 'upload' && /^[\w-]{1,200}$/.test(input.silo) &&
-    uuid.test(input.requestId) && uuid.test(input.fileId) && /^[a-f0-9]{64}$/.test(input.sha256));
+    uuid.test(input.requestId) && validFileId && /^[a-f0-9]{64}$/.test(input.sha256));
   requireRequest(typeof headers.authorization === 'string' &&
     headers.authorization.startsWith('Bearer '));
   return input;

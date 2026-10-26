@@ -36,6 +36,7 @@ function facts(input) {
 function response(request, reply) {
   requests.push(request.headers['x-scan-request-id']);
   if (mode === 'timeout') {
+    request.on('data', received.push.bind(received));
     server.emit('waiting');
     return;
   }
@@ -66,7 +67,15 @@ function response(request, reply) {
       mode(result);
     }
     previous = result;
-    reply.end(mode === 'large' ? 'x'.repeat(4097) : JSON.stringify(result));
+    reply.setHeader('content-type', 'application/json');
+    let body = JSON.stringify(result);
+    if (mode === 'large') {
+      body = body.padEnd(4097, ' ');
+    }
+    if (mode === 'malformed') {
+      body = 'private-canary';
+    }
+    reply.end(body);
   }
   request.on('data', receive);
   request.on('end', finish);
@@ -100,8 +109,10 @@ async function setup() {
 async function cleanup() {
   vi.useRealTimers();
   server.closeAllConnections();
-  server.close();
-  await once(server, 'close');
+  if (server.listening) {
+    server.close();
+    await once(server, 'close');
+  }
   await rm(directory, { recursive: true, force: true });
   vi.clearAllMocks();
 }
@@ -112,7 +123,10 @@ function upload(content = bytes, fresh) {
     undefined, fresh);
 }
 async function refused(content = bytes, fresh) {
-  await expect(upload(content, fresh)).rejects.toMatchObject({ kind: 'scanner', statusCode: 503 });
+  const pending = upload(content, fresh);
+  await expect(pending).rejects.toMatchObject({ kind: 'scanner', statusCode: 503,
+    message: 'Dependency unavailable' });
+  await expect(pending).rejects.not.toHaveProperty('cause');
   expect(options.objects.putObject).not.toHaveBeenCalled();
   expect(fileCommand).not.toHaveBeenCalled();
 }
@@ -124,6 +138,7 @@ async function exactUpload() {
   expect(options.objects.putObject).toHaveBeenCalledOnce();
   const saved = fileCommand.mock.calls[0];
   expect(saved[4]).toBe('file.uploaded');
+  expect(saved[5]).toMatchObject({ sha256: hash(bytes), size: bytes.length });
   ownConversation.mockResolvedValue([{ sequence: 1,
     event: { id: saved[3], type: saved[4], data: saved[5] } }]);
   await upload();
@@ -141,6 +156,8 @@ const invalid = [
   ['future', { databaseUpdatedAt: '2099-01-01T00:00:00.000Z' }],
   ['future check', { checkedAt: '2099-01-01T00:00:00.000Z' }],
   ['expired', { expiresAt: '2020-01-01T00:00:00.000Z' }],
+  ['invalid database', { databases: [{ file: 'main.cvd', sha256: 'bad',
+    version: -1, builtAt: '2099-01-01T00:00:00.000Z' }] }],
   ['long expiry', { expiresAt: '2099-01-01T00:00:00.000Z' }],
 ];
 async function invalidResult(_name, patch) {
@@ -151,16 +168,39 @@ async function invalidResult(_name, patch) {
   await refused();
 }
 test.each(invalid)('refuses %s evidence before storage or append', invalidResult);
+async function invalidDatabase(field, value) {
+  function alter(result) {
+    result.databases[0][field] = value;
+  }
+  mode = alter;
+  await refused();
+}
+test.each([['file', 'daily.cvd'], ['sha256', 'unknown'], ['version', 0],
+  ['builtAt', '2099-01-01T00:00:00.000Z']])('checks each database %s', invalidDatabase);
 async function transportFailure(failure) {
   mode = failure;
-  if (failure === 'ca') settings.caFile = join(directory, 'unknown.crt');
-  if (failure === 'hostname') settings.url = settings.url.replace('127.0.0.1', '127.0.0.2');
-  if (failure === 'issuance') settings.privateKeyPath = join(directory, 'missing');
-  if (failure === 'configuration') settings.url = undefined;
+  if (failure === 'ca') {
+    settings.caFile = join(directory, 'unknown.crt');
+  }
+  if (failure === 'hostname') {
+    settings.url = settings.url.replace('127.0.0.1', '127.0.0.2');
+  }
+  if (failure === 'issuance') {
+    settings.privateKeyPath = join(directory, 'missing');
+  }
+  if (failure === 'configuration') {
+    settings.url = undefined;
+  }
+  if (failure === 'outage') {
+    server.close();
+    await once(server, 'close');
+  }
   await refused();
-  if (failure !== 'large') expect(received).toEqual([]);
+  if (failure !== 'large' && failure !== 'malformed') {
+    expect(received).toEqual([]);
+  }
 }
-test.each(['ca', 'hostname', 'issuance', 'configuration', 'redirect', 'large'])(
+test.each(['ca', 'hostname', 'issuance', 'configuration', 'redirect', 'large', 'malformed', 'outage'])(
   'fails closed on %s', transportFailure);
 async function changedBytes() {
   const content = Buffer.from(bytes);
