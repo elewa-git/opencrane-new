@@ -591,3 +591,8 @@ nice -n 10 node --experimental-strip-types --test infra/package/nats-placement.t
 
 The installer still refuses R3 and bootstrap still selects R1. These source checks
 do not qualify a live install. See the [receipt](../../docs/process/p5-4-live1/receipt.md) for blockers and remaining work.
+
+## Local operator guide
+
+The [local operator guide and index](../../docs/process/p5-14-pr1/operator.md)
+link existing commands and distinguish source checks from live qualification.

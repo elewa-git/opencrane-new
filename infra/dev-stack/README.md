@@ -132,6 +132,7 @@ real-provider choices and daily timer settings are in the operator notes.
 
 ## Where to read more
 
+- [Local operator guide](README.robot.md#local-operator-guide): commands, evidence and recovery limits.
 - [README.robot.md](README.robot.md): settings, stack ownership, commands and detailed checks.
 - [Demo guide](../../docs/process/demo/README.md): demo preparation and current limits.
 - [infra/package](../package/README.md): the local Helm installation trial.
