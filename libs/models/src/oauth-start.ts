@@ -97,7 +97,7 @@ async function recordStart(store: EventStore, binding: Binding, session: Session
     principal: { kind: 'human' as const, id: session.userId } };
   const appendUntil = Math.min(prepared.stage.appendUntil, server.expiresAt);
   async function checkCurrent(sequence: number) {
-    const subjects = [...membership.positions.keys(), controlSubject];
+    const subjects = [...membership.positions.keys(), controlSubject, `mcp-${input.serverId}`];
     const fresh = await authorityFence(store, performance.now(), subjects);
     const categorySequence = await store.head('connection-*', fresh.deadline);
     const access = { ...options, fresh };
@@ -117,7 +117,7 @@ async function recordStart(store: EventStore, binding: Binding, session: Session
       throw new Error('OAuth attempt expired');
     }
     const deadline = Math.min(fresh.deadline, performance.now() + appendUntil - Date.now());
-    return { categorySequence, deadline };
+    return { categorySequence, deadline, checkAccess: fresh };
   }
   const checked = await checkCurrent(original?.sequence ?? 0);
   const sequence = await appendStart(store, event, checked, original);
@@ -126,12 +126,15 @@ async function recordStart(store: EventStore, binding: Binding, session: Session
 
 /** Append once. Custody preparation and URL construction belong to the surrounding process. */
 async function appendStart(store: EventStore, event: EventEnvelope,
-  checked: { categorySequence: number; deadline: number }, original?: StoredEvent) {
+  checked: { categorySequence: number; deadline: number; checkAccess: () => Promise<unknown> },
+  original?: StoredEvent) {
   let saved = original;
   if (!saved) {
+    // Bind membership and server policy to publication, keeping the original access deadline.
     // Include the persistent admin block in the native conditional append.
     const command = { event, expectedSequence: checked.categorySequence,
-      expectedSubject: 'connection-*', historyChecked: true as const, deadline: checked.deadline };
+      expectedSubject: 'connection-*', historyChecked: true as const, deadline: checked.deadline,
+      checkAccess: checked.checkAccess };
     const result = await store.append(command);
     if (result.status !== 'appended') {
       throw new Error('OAuth append unconfirmed');
