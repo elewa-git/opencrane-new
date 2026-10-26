@@ -5887,3 +5887,29 @@ this narrower check does not replace its two complete qualification requirements
 Native launch, volatile delivery and automatic invalidation are still incomplete.
 Fresh-install qualification and screen captures are NOT RUN. The
 [receipt](../../docs/process/p4-15-pr5a/receipt.md) records the blockers and source checks.
+
+## Personal remember preparation (P4-15 PR 4c)
+
+`buildPrivateTurnRememberTools` prepares only the fixed `rememberTool` definition
+exported by `memory/mcp.ts`. It shares recall's saved private-turn, caller, grant,
+thread and generation checks, before and after catalogue and permission reads.
+Only the requester's own person scope is accepted. Both requester and assistant
+need current MCP-use grants. One exact definition and matching reviewed zero-cent
+Allow policy are required. Changed definitions, duplicates, Ask and Block refuse.
+
+The internal helper has no production caller. It accepts no qualification input:
+recall qualification cannot approve writes. The qualified recall helper still
+returns recall alone, ordinary assembly excludes memory, and public MCP discovery
+still lists recall alone. Native memory admission and image approval are unchanged.
+
+The definition describes the existing strict `parseMemoryRequest` remember input.
+The parser still enforces UTF-8 text and request byte limits. `remember` and the
+complete same-scope lineage checks are unchanged, including source and stale
+Correct/Forget refusal. Preparing definitions reads no facts, appends no events
+and dispatches no work. Native forwarding, automatic storage, other operations,
+team memory and fresh-install qualification remain NOT RUN.
+
+Prerequisite merge SHAs: #737 `6cc9d0e87b9c1952e6115fc3d8349cf037f252ca`;
+PR #744 `c0829cd0a2827439c796f9f909958633e2211ad3`.
+Failing-first test commit: `eabb7f4ae`; 59 expected failures and one passing
+production-disabled regression before implementation.

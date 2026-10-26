@@ -1,0 +1,1 @@
+Private personal turns can prepare an internal remember tool definition only with a matching live caller, saved turn and reviewed free Allow policy. Native writes remain disabled, and recall qualification cannot enable them.

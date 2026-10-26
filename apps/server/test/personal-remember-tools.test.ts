@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { rememberTool, recallTool } from '../src/memory/mcp.ts';
-import { parseMemoryRequest } from '@opencrane/models';
+import * as models from '@opencrane/models';
 import * as commands from '../src/memory/commands.ts';
 import * as reads from '../src/memory/reads.ts';
 import * as delivery from '../src/memory/recall-delivery.ts';
@@ -105,7 +105,6 @@ function fixture() {
     return Promise.resolve(true);
   }
   const input = {
-    ...qualificationFixture(),
     silo: 'test', scopeId: memoryScopeId('test', 'person', 'alice'),
     requesterId: 'alice', assistantId: 'assistant', baseMessageBytes: 100,
     readServer: vi.fn(read), canUse: vi.fn(allow),
@@ -206,12 +205,15 @@ async function selectsRemember() {
   const facts = vi.spyOn(reads, 'listFacts');
   const context = vi.spyOn(delivery, 'readRecallContext');
   const append = vi.spyOn(EventStore.prototype, 'append');
-  onTestFinished(vi.restoreAllMocks);
+  const dispatch = vi.spyOn(models, 'startDecision');
+  function restoreSpies() { vi.restoreAllMocks(); }
+  onTestFinished(restoreSpies);
   const tools = await buildPrivateTurnRememberTools(input);
   expect(remember).not.toHaveBeenCalled();
   expect(facts).not.toHaveBeenCalled();
   expect(context).not.toHaveBeenCalled();
   expect(append).not.toHaveBeenCalled();
+  expect(dispatch).not.toHaveBeenCalled();
   expect(tools).toHaveLength(1);
   expect(tools[0]).toMatchObject({ serverId: 'memory', connectionId: 'server',
     serverInfo: { name: 'OpenCrane memory', version: '1' },
@@ -220,7 +222,9 @@ async function selectsRemember() {
   expect(input.canUse.mock.calls).toEqual([
     ['memory', 'person', 'alice'], ['memory', 'assistant', 'assistant'],
   ]);
-  expect(JSON.stringify(tools)).not.toContain(input.scopeId);
+  const encoded = JSON.stringify(tools);
+  expect(encoded).not.toContain(input.scopeId);
+  expect(encoded).not.toContain(input.caller);
 }
 it('selects only the reviewed built-in remember and checks both recorded subjects', selectsRemember);
 
@@ -316,7 +320,8 @@ async function leavesProductionDisabled() {
     definition: recallDefinition });
   state.policyTools.push({ name: 'recall', revision: recallRevision, reviewed: true,
     costCents: 0, mode: 'allow' });
-  const qualifiedRecall = await buildPrivateTurnRecallTools(input);
+  const recallInput = { ...input, ...qualificationFixture() };
+  const qualifiedRecall = await buildPrivateTurnRecallTools(recallInput);
   expect(qualifiedRecall[0]?.definitions).toEqual([recallDefinition]);
   expect(qualifiedRecall[0]?.modes).toEqual({ recall: 'allow' });
   const rows = [{ serverId: 'memory' }];
@@ -343,7 +348,7 @@ function rememberRequest(argumentsValue: Record<string, unknown>) {
     params: { name: 'remember', arguments: argumentsValue, _meta: metadata } };
   const headers = { 'mcp-protocol-version': '2026-07-28',
     'mcp-method': 'tools/call', 'mcp-name': 'remember' };
-  return parseMemoryRequest(JSON.stringify(body), headers);
+  return models.parseMemoryRequest(JSON.stringify(body), headers);
 }
 function checksRememberInput() {
   const scopeId = memoryScopeId('test', 'person', 'alice');

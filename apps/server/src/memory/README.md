@@ -22,7 +22,10 @@ A memory fact is one saved piece of information. Its scope says whose memory it 
 
 **Assistant access.** A turn is one message and the assistant's reply. The memory tool server checks the AI gateway's signed [access token](../../../../GLOSSARY.md#access-token), a short-lived pass, alongside saved grants, current permissions, the bound assistant and recorded turn mode. It can return personal facts and permitted group facts or assistant notes. Every call checks the previously loaded references. The memory tool server checks each signed description of the turn once. It also checks whose memory the call may use and the proof required for a write.
 
-The recall definition is also used to check the private chat tool list. Changed definitions and Ask or Block choices cannot enter that list. Live private tool delivery remains disabled.
+The fixed recall and remember definitions also check the internal private chat tool lists.
+Changed definitions and Ask or Block choices cannot enter those lists. Public discovery
+still lists recall alone. Preparing a remember definition reads no facts and saves
+nothing. Live private tool delivery remains disabled.
 
 Recall, Correct and Forget load history before the gateway signs the short pass. The server keeps that data for one use and checks current access again. Correct and Forget check the loaded target and later revisions, then report that these tools are disabled.
 
