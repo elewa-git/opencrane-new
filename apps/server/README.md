@@ -72,7 +72,8 @@ The same computer can keep reporting replies from other chats. Reconnecting rest
 the status alone, even when the computer missed the confirmation.
 
 The file storage adapter also lets offline restore checks cancel bucket creation
-and file writes. It does not start the server or grant access to restored files.
+and file writes. It limits replies before the storage library collects them, including
+unexpected success replies. It does not start the server or grant access to restored files.
 
 ## Where it fits
 

@@ -24,7 +24,7 @@ flowchart LR
   stack -->|checks ownership and cluster access; keeps values paths private| package
   package -->|uses local cluster| devbox
   package -->|starts services, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|runs services and checks placement and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
+  package -->|runs services and checks placement and recovery| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -135,8 +135,10 @@ It does not copy unreferenced files or prove that a whole installation can recov
 The [object notes](README.robot.md#event-referenced-object-copy) explain its limits.
 
 The file restore helper checks every encrypted file before creating a new storage
-bucket. It restores the saved addresses and file types, then reads every file back
-to check its size and checksum. Existing buckets refuse, including empty ones.
+bucket. It accepts only a fresh local MinIO instance made by the recovery provisioner.
+It checks the owner marker at that destination and refuses other running processes
+or another restore using the same instance. It restores the saved addresses and file
+types, then reads every file back to check its size and checksum. Existing buckets refuse, including empty ones.
 A failed transfer leaves the target isolated for inspection; it never retries or
 deletes the bucket. Restored files grant no access and do not reopen the installation.
 The [file restore notes](README.robot.md#file-object-restore) describe the requirements.

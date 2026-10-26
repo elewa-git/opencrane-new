@@ -5801,8 +5801,9 @@ P5-6b PR 1 leaves image consumers, deployed entry/rotation and live checks for l
 `getObjectBounded(bucket, address, { signal, timeoutMs })` passes capture cancellation
 through the SDK's region lookup and object download without changing another read's
 limits. Ordinary requests have a 60-second absolute and socket timeout. Capture
-also supplies its own total deadline. HTTP headers have a 16 KiB ceiling. Region
-and error bodies are collected with a 64 KiB ceiling before the SDK can buffer them.
+also supplies its own total deadline. HTTP headers have a 16 KiB ceiling. All replies
+except expected object downloads are collected with a 64 KiB ceiling before the SDK can buffer them. This includes
+unexpected success statuses, such as a 201 response to bucket or object PUT.
 Failures close the connection and reject the SDK's pending request, including when
 reading a bad body already closed its socket. HTTP 503 keeps its existing safe error.
 The storage fixtures withhold headers and send oversized or unfinished bodies;

@@ -75,8 +75,10 @@ or retry. An uncertain target stays isolated even if bytes arrived. Original
 
 The [file restore helper](../../../infra/package/README.robot.md#file-object-restore)
 uses the checked native event restore and its matching encrypted object archive.
-It requires stopped, exclusive disposable MinIO with no files bucket. It checks
-all files before creation and reads back every upload. Failed or uncertain writes
+It requires a fresh MinIO target from the recovery provisioner, with no files bucket.
+It checks ownership at that endpoint, checks for other running processes and allows
+only one restore to claim the instance. It checks all files before bucket creation
+and reads back every upload. Failed or uncertain writes
 leave the target isolated and intact; a rerun refuses its bucket. There is no CLI
 or permission to reopen admission. Current access and deletion checks still apply.
 

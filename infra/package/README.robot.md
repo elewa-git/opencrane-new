@@ -461,7 +461,7 @@ outside this helper. The reference must come from the checked archive's inventor
 
 Capture cancellation reaches the HTTP request before headers, during region lookup
 and during object download. Requests also have socket and absolute time limits.
-Region and error bodies are limited to 64 KiB before the MinIO SDK receives them;
+All replies except expected object downloads are limited to 64 KiB before the SDK receives them;
 headers are limited to 16 KiB. A failed capture destroys its active request.
 The private descriptor binds silo, attempt, event archive and descriptor hashes to
 each object's opaque identity, byte count and SHA-256. Names, addresses and bytes
@@ -482,12 +482,27 @@ The private descriptor is trusted operator material, not an authenticated manife
 `proof` returned by `restoreEventBackup`, plus source and target `storageClient`
 instances. The caller supplies `directory` for objects, `eventDirectory`,
 `backupKeyFile`, `silo`, `attempt`, `targetSilo`, and true `stopped`, `exclusive`
-and `disposable` confirmations. The operator owns these confirmations and keeps
-all target product processes and other writers stopped. Endpoint comparison
-rejects the source address; an alias with its existing files bucket also refuses.
+and `disposable` confirmations. These confirmations alone never authorise a target.
+`provisionDisposableObjectTarget(silo)` creates a fresh local MinIO container with
+new private credentials and no product processes or existing data mounts. It issues
+one short-lived lease and writes an owner marker with the silo and a random instance
+id into `opencrane-restore/owner`. It returns `client`, `name` and an explicit `close`
+operation. The caller retains the target for inspection until it chooses to close it.
+Only clients registered by that provisioner in this process can restore files.
+
+Restore claims the registered instance once, including after a failed attempt.
+It refuses a foreign silo, an unmanaged client, a closed instance or a second claim.
+Before bucket creation, before each upload and after readback, it checks the actual
+Docker process list contains only MinIO, checks the loopback port matches the client,
+and reads the exact owner marker back from that endpoint with a byte limit. Missing,
+changed or oversized markers refuse. Endpoint and lease swaps cannot reuse caller
+declarations to authorise another silo. No product process receives these credentials.
+Docker administrators remain trusted: they can inspect credentials or alter running
+containers. This helper does not claim isolation against host administrators.
+Endpoint comparison also rejects the source address.
 The private descriptors remain trusted operator material, not signed manifests.
 
-Before any storage write, it checks the merged version-2 encrypted descriptor,
+Before creating the files bucket, it checks the merged version-2 encrypted descriptor,
 both archive hashes, silo and attempt, private paths/modes/owners, every file's
 authentication, count and checksum, and the checked events' addresses and MIME types.
 Matching upload references share one object; conflicting references refuse.
