@@ -1,0 +1,7 @@
+{
+  "run": "Earlier passing changed-case run; later failures are recorded in receipt.md",
+  "eventCount": 279,
+  "fileRebuilds": [{"checkpoint":279,"rowCount":2,"byteCount":92,"rowsDigest":"07ccca8f46450a7d8565707e946248ab09d7165d45dab64742384797e3e92f43","objectsDigest":"37051e11ae4020c36797d6514a3c8ef1bbc649ba3f93fe2aa37ab40e2e758fb1","rightsSequence":279,"replayCount":1,"readCount":1,"effects":{"upload":0,"scan":0,"delivery":0,"scheduler":0,"credential":0,"model":0,"tool":0}},{"checkpoint":279,"rowCount":2,"byteCount":92,"rowsDigest":"07ccca8f46450a7d8565707e946248ab09d7165d45dab64742384797e3e92f43","objectsDigest":"37051e11ae4020c36797d6514a3c8ef1bbc649ba3f93fe2aa37ab40e2e758fb1","rightsSequence":279,"replayCount":2,"readCount":2,"effects":{"upload":0,"scan":0,"delivery":0,"scheduler":0,"credential":0,"model":0,"tool":0}}],
+  "budgetRebuilds": [{"checkpoint":279,"rowsDigest":"73cfb088e8ccc04c9c323233a7ae10a6777dabd936bfe474f642c5ad5923824f"},{"checkpoint":279,"rowsDigest":"73cfb088e8ccc04c9c323233a7ae10a6777dabd936bfe474f642c5ad5923824f"}],
+  "reactionCalls": 0
+}

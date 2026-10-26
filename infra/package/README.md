@@ -23,8 +23,8 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|checks NATS placement, setup time and recovery| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  package -->|starts services, restores files, checks reads and replays memory| apps["apps<br/>product services and replay"]
+  package -->|waits for NATS, checks placement, setup time and recovery| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -64,6 +64,9 @@ running install still need work.
 - Checks company journey records against the full acceptance checklist.
 - Checks three event-log placements against Kubernetes and fresh-install observations.
 - Removes only this worktree's install, including after an interrupted launcher.
+
+The recovery fixture compares restored files and spending, then checks who can read
+those files. It uses disposable services and does not reopen a running installation.
 
 ## Processes it handles
 

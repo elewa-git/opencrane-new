@@ -82,6 +82,10 @@ and reads back every upload. Failed or uncertain writes
 leave the target isolated and intact; a rerun refuses its bucket. There is no CLI
 or permission to reopen admission. Current access and deletion checks still apply.
 
+The [interrupted file recovery fixture](../p5-9-pr3/receipt.md) also compares full
+file rows, checkpoints, actual bytes and authorised HTTP reads after two rebuilds.
+It uses disposable services; it cannot authorise reopening an installation.
+
 ## Recovery limits and qualification
 
 Normal preparation/bootstrap use R1: one stored copy. R3 means three copies; process tests
