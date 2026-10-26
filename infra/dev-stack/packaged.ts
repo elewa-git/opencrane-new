@@ -66,7 +66,9 @@ type PackageOwner = {
   releaseSecretUid?: string;
   installId?: string;
 };
-type PackageValues = Parameters<typeof checkCnpgInstallation>[0];
+type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
+  natsCluster?: { enabled: boolean };
+};
 type PackageReview = {
   requiredSecrets: string[];
   chartVersion: string;
@@ -243,6 +245,19 @@ function checkSecretFields(name: string, stored: SecretData) {
   }
 }
 
+function checkReplicaSettings(name: string, stored: SecretData, values: PackageValues) {
+  if (name !== 'runtime' && name !== 'bootstrap') return;
+  let replicas = '1';
+  if (values.natsCluster?.enabled === true) replicas = '3';
+  const expected = Buffer.from(replicas).toString('base64');
+  for (const key of ['NATS_REPLICAS', 'COMMAND_NATS_REPLICAS']) {
+    const encoded = stored.data?.[key];
+    // Require runtime settings even when bootstrap supplies its own overrides.
+    if (name === 'bootstrap' && encoded === undefined) continue;
+    if (encoded !== expected) throw new Error('Invalid package NATS replica settings');
+  }
+}
+
 async function checkNamedSecrets(values: PackageValues, review: PackageReview, context: string) {
   for (const name of review.requiredSecrets) {
     const secret = values.secrets[name]!;
@@ -250,6 +265,7 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, c
       '--ignore-not-found', '-o', 'json'], context);
     if (!found) throw new Error(`Required secret is absent: ${name}`);
     const stored = JSON.parse(found) as SecretData;
+    checkReplicaSettings(name, stored, values);
     checkSecretFields(name, stored);
   }
 }
