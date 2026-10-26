@@ -17,6 +17,8 @@ import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { prepareRoutineSession } from '../src/routine-session.ts';
+import { assistantSnapshot, processConversation } from '../src/chat/bridge-conversation.ts';
+import { agentSession } from '../src/chat/reports.ts';
 import { prepareRoutineInput } from '../src/routine-input.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
@@ -125,9 +127,13 @@ async function rows() {
   }
   return saved;
 }
+function refusal() {
+  if (inputMode) return 'Routine input refused';
+  return 'Routine session refused';
+}
 async function refuses() {
   const before = await nats.store.head();
-  await expect(prepare()).rejects.toThrow('Routine session refused');
+  await expect(prepare()).rejects.toThrow(refusal());
   expect(await nats.store.head()).toBe(before);
 }
 async function createsOnce() {
@@ -167,8 +173,9 @@ async function recovers() {
     return forbiddenEffect();
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(lostReply);
-  await expect(prepare()).rejects.toThrow('Routine session refused');
+  await expect(prepare()).rejects.toThrow(refusal());
   const first = await prepare();
+  const original = await rows();
   await waitForDuplicateWindow(nats);
   await nats.stop();
   await nats.restart();
@@ -177,7 +184,7 @@ async function recovers() {
   const before = await restarted.head();
   expect(await prepare(restarted)).toEqual(first);
   expect(await restarted.head()).toBe(before);
-  expect(await rows()).toHaveLength(1);
+  expect(await rows()).toEqual(original);
 }
 it('recovers after a lost reply, restart and expired transport deduplication', recovers);
 
@@ -214,7 +221,7 @@ async function refusesOrdinaryChatBeforeClaim() {
   expect(claim.status).toBe('confirmed');
   const before = await nats.store.head();
   const preparation = { routineId, occurrenceId: claim.occurrenceId };
-  await expect(prepare(nats.store, preparation)).rejects.toThrow('Routine session refused');
+  await expect(prepare(nats.store, preparation)).rejects.toThrow(refusal());
   expect(await nats.store.head()).toBe(before);
   expect(await chatHistory(nats.store, 'test', futureConversationId)).toEqual(beforeHistory);
 }
@@ -231,7 +238,7 @@ async function recoversBoundPreparation() {
   } });
   expect(await prepare()).toEqual(first);
   await expect(prepare(nats.store, input, 'other-worker'))
-    .rejects.toThrow('Routine session refused');
+    .rejects.toThrow(refusal());
   expect(await nats.store.head()).toBe(before);
   expect(await rows()).toEqual(saved);
 }
@@ -327,6 +334,7 @@ async function changedControl(type: string) {
 }
 it.each(controls)('refuses preparation after %s', changedControl);
 async function changesAtAppend(kind: string) {
+  const original = await rows();
   const append = nats.store.append.bind(nats.store);
   async function changeBeforeAppend(change: AppendCommand) {
     expect(change.checkAccess).toBeTypeOf('function');
@@ -342,11 +350,12 @@ async function changesAtAppend(kind: string) {
     return append(change);
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(changeBeforeAppend);
-  await expect(prepare()).rejects.toThrow('Routine session refused');
-  expect(await rows()).toEqual([]);
+  await expect(prepare()).rejects.toThrow(refusal());
+  expect(await rows()).toEqual(original);
 }
 it.each([...controls, 'member', 'worker', 'expiry'])('rechecks %s at append', changesAtAppend);
 async function changesAfterAppend(kind: string) {
+  const count = (await rows()).length;
   const append = nats.store.append.bind(nats.store);
   async function changeAfterAppend(change: AppendCommand) {
     const result = await append(change);
@@ -354,21 +363,24 @@ async function changesAfterAppend(kind: string) {
       owned = false;
     } else if (kind === 'expiry') {
       now += 60_000;
+    } else if (controls.includes(kind)) {
+      await control(kind);
     } else {
       await removeMember();
     }
     return result;
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(changeAfterAppend);
-  await expect(prepare()).rejects.toThrow('Routine session refused');
-  expect(await rows()).toHaveLength(1);
+  await expect(prepare()).rejects.toThrow(refusal());
+  expect(await rows()).toHaveLength(count + 1);
 }
 it.each(['member', 'worker', 'expiry'])('checks %s before returning identifiers', changesAfterAppend);
 async function expires() {
   const first = await prepare();
+  const original = await rows();
   now = Date.parse(first.startBy);
   await refuses();
-  expect(await rows()).toHaveLength(1);
+  expect(await rows()).toEqual(original);
 }
 it('old receipts cannot extend startBy or authorise preparation', expires);
 
@@ -417,15 +429,16 @@ async function masksHistory(failedSubject: string) {
 }
 it.each(['routine-orders', subject])('masks private %s history errors', masksHistory);
 async function expiredWrite() {
+  const original = await rows();
   const append = nats.store.append.bind(nats.store);
   async function expire(change: AppendCommand) {
     vi.spyOn(performance, 'now').mockReturnValue(change.deadline! + 1);
     return append(change);
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(expire);
-  await expect(prepare()).rejects.toThrow('Routine session refused');
+  await expect(prepare()).rejects.toThrow(refusal());
   vi.restoreAllMocks();
-  expect(await rows()).toEqual([]);
+  expect(await rows()).toEqual(original);
 }
 it('keeps the original two-second deadline at publication', expiredWrite);
 async function unrelatedActivity() {
@@ -463,9 +476,10 @@ async function changedAssistant(kind: string) {
 }
 it.each(['inactive', 'payer'])('refuses an assistant with changed %s', changedAssistant);
 async function suppliedDefinition() {
+  const original = await rows();
   const request = { ...input, definition: definition().definition };
-  await expect(prepare(nats.store, request)).rejects.toThrow('Routine session refused');
-  expect(await rows()).toEqual([]);
+  await expect(prepare(nats.store, request)).rejects.toThrow(refusal());
+  expect(await rows()).toEqual(original);
 }
 it('refuses a supplied definition', suppliedDefinition);
 async function replay() {
@@ -523,4 +537,112 @@ describe('routine input', () => {
     expect(await rows()).toEqual(saved);
   }
   it('saves one encrypted owner-attributed user input across competing retries', savesOnce);
+
+  it('recovers the original ciphertext after a lost reply, restart and deduplication expiry', recovers);
+  it.each(lostAccess)('refuses input after losing %s', losesAccess);
+  it.each(lostAccess)('withholds input receipts after losing %s', losesReceiptAccess);
+  it.each(controls)('refuses input after %s', changedControl);
+  it.each([...controls, 'member', 'worker', 'expiry'])('rechecks %s at input append', changesAtAppend);
+  it.each([...controls, 'member', 'worker', 'expiry'])(
+    'rechecks %s before input readback', changesAfterAppend);
+  it('refuses expired input receipts', expires);
+  it('loads slow input histories before the short access check', historyFirst);
+  it('unrelated chat activity preserves input receipts', unrelatedActivity);
+  it('refuses an expired input write check', expiredWrite);
+  it('refuses caller-supplied definitions', suppliedDefinition);
+  it.each(['inactive', 'payer'])('refuses input after assistant %s changes', changedAssistant);
+  it('replays saved input with all execution effects forbidden', replay, 30_000);
+
+  async function beforeAppend() {
+    const original = await rows();
+    vi.spyOn(nats.store, 'append').mockImplementationOnce(forbiddenEffect);
+    await expect(prepare()).rejects.toThrow(refusal());
+    expect(await rows()).toEqual(original);
+    await savesOnce();
+  }
+  it('recovers a crash before input append', beforeAppend);
+
+  async function suppliedText() {
+    const before = await nats.store.head();
+    await expect(prepare(nats.store, { ...input, text: privateText })).rejects.toThrow(refusal());
+    await expect(prepare(nats.store, input, 'other-worker')).rejects.toThrow(refusal());
+    expect(await nats.store.head()).toBe(before);
+  }
+  it('refuses caller text and a different worker', suppliedText);
+
+  async function changedHistory(kind: string) {
+    await prepare();
+    const read = nats.store.readStream.bind(nats.store);
+    async function* substitute(target: string, from?: number, deadline?: number) {
+      for await (const row of read(target, from, deadline)) {
+        const event = structuredClone(row.event);
+        if (event.type === 'conversation.created') {
+          const data = agentSession([{ ...row, event }]);
+          if (kind === 'ordinary') delete data.routinePreparation;
+          if (kind === 'session') data.createdBy = 'bob';
+          event.data = data;
+        }
+        if (event.type === 'routine.due') {
+          if (kind === 'claim') event.id = 'another-claim';
+          const data = { ...due().data as Record<string, unknown> };
+          if (kind === 'instructions') {
+            const changed = { ...definition().definition,
+              instructions: keys.encrypt('test', 'routine-orders', 'Changed instructions') };
+            data['definition'] = changed;
+          }
+          event.data = data;
+        }
+        if (event.type === 'message.posted' && kind === 'message') {
+          const encrypted = keys.encrypt('test', conversationId, 'Changed input');
+          event.data = { ...event.data as Record<string, unknown>, ...encrypted };
+        }
+        yield { ...row, event };
+      }
+    }
+    vi.spyOn(nats.store, 'readStream').mockImplementation(substitute);
+    await refuses();
+  }
+  it.each(['ordinary', 'session', 'claim', 'instructions', 'message'])(
+    'refuses substituted %s history', changedHistory);
+
+  async function custodyFailure(saved: boolean) {
+    if (saved) await prepare();
+    vi.spyOn(keys, 'decrypt').mockImplementation(forbiddenEffect);
+    await refuses();
+  }
+  it.each([false, true])('refuses custody failure, with input saved: %s', custodyFailure);
+
+  async function noDelivery(state: string) {
+    await prepare();
+    if (state === 'computer.ready') {
+      const encrypted = keys.encrypt('test', conversationId, 'Earlier human message');
+      const human = record('human-message', subject, 'message.posted', { conversationId,
+        authorKind: 'human', authorId: 'alice', contentType: 'text', ...encrypted });
+      await nats.seed([human]);
+    }
+    const saved = await rows();
+    const creation = agentSession(saved);
+    const conversation = { ...creation, createdAt: saved[0]!.event.time, assistantKind: 'team' };
+    const example = getEventDefinition(state)!.example as Record<string, unknown>;
+    const lifecycle = record('computer-state', 'computer-sales-assistant', state,
+      { ...example, assistantId: 'sales-assistant', computerId: 'computer' });
+    await nats.seed([lifecycle]);
+    const assistant = assistantSnapshot([{ sequence: 100, event: lifecycle }], 'team', 'test');
+    const options = { silo: 'test', store: nats.store, keys, db, binding };
+    const connection = vi.fn(forbiddenEffect);
+    const append = vi.spyOn(nats.store, 'append').mockImplementation(forbiddenEffect);
+    // Refuse every token operation; preparation must never reach lifecycle admission.
+    const tokens = { computer: forbiddenEffect, turn: forbiddenEffect, egress: forbiddenEffect,
+      scanner: forbiddenEffect, jwks: { keys: [] },
+      verify: forbiddenEffect, verifyScanner: forbiddenEffect, memoryContext: forbiddenEffect,
+      takeoverGate: forbiddenEffect, budget: forbiddenEffect, providerVerification: forbiddenEffect };
+    const result = await processConversation(options, tokens, conversation, assistant,
+      new Set(), connection);
+    expect(result).toEqual({ pending: false, retry: false });
+    expect(connection).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+    expect(await rows()).toEqual(saved);
+  }
+  it.each(['computer.suspended', 'computer.ready', 'computer.claimed'])(
+    'never wakes or delivers the saved input when %s', noDelivery);
 });
