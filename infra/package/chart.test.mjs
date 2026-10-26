@@ -78,7 +78,7 @@ function privateFileImport(source) {
   return source.secretRef.name === 'runtime-files';
 }
 
-function loadPrivateFunction(file, name, replacements) {
+function loadPrivateFunction(file, name, replacements, fixtureProcess = process) {
   const source = readFileSync(file, 'utf8');
   const startOfMain = source.indexOf('await main().catch(');
   const body = startOfMain < 0 ? source : source.slice(0, startOfMain);
@@ -92,7 +92,7 @@ function loadPrivateFunction(file, name, replacements) {
     return replacements[specifier] ?? nativeRequire(specifier);
   }
   runInNewContext(compiled.outputText, {
-    exports: moduleExports, require: fixtureRequire, Buffer, URL, process, console,
+    exports: moduleExports, require: fixtureRequire, Buffer, URL, process: fixtureProcess, console,
   }, { filename: file });
   assert.equal(typeof moduleExports[name], 'function');
   return moduleExports[name];
@@ -112,7 +112,7 @@ function isFileSourceArgument(argument) {
 }
 
 async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
-  packageValues = {}, refusesBeforeGeneration = false) {
+  packageValues = {}, refusesBeforeGeneration = false, runMain = false) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
   const settings = new Map();
   const secrets = new Map();
@@ -164,14 +164,26 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   async function writeFixture(name, value) {
     settings.set(name, value);
   }
+  const commands = [];
   function executeFixture(program, args, options, callback) {
-    assert.equal(program, 'kubectl');
-    assert.ok(args.includes(`--context=${context}`));
+    commands.push({ program, args });
     for (const argument of args) {
       assert.ok(!argument.includes(directory), 'Arguments must not include the private directory');
       assert.ok(!argument.includes('/private/target.kubeconfig'),
         'Arguments must not include the private connection filename');
     }
+    if (program === 'node') {
+      if (args[0].endsWith('preflight.mjs')) {
+        execFileSync(process.execPath, args, { cwd: options.cwd });
+      } else {
+        assert.deepEqual(Array.from(args), ['--experimental-strip-types',
+          'infra/dev-stack/zitadel-setup.ts', '--read-only']);
+      }
+      callback(null, { stdout: '', stderr: '' });
+      return;
+    }
+    assert.equal(program, 'kubectl');
+    assert.ok(args.includes(`--context=${context}`));
     assert.equal(args.includes('--kubeconfig'), false);
     if (isolated) {
       assert.equal(options.env.KUBECONFIG, '/private/target.kubeconfig');
@@ -195,11 +207,25 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       readOwnerEmail: readOwnerFixture,
       root: process.cwd(), writeEnv: writeFixture,
     },
-    '../dev-stack/identity.ts': { localOrigin: 'http://localhost:25106', stackId: 'test' },
+    '../dev-stack/identity.ts': { localOrigin: 'http://localhost:25106', stackId: 'test',
+      secondary: true },
     '../dev-stack/packaged.ts': { verifyPackageOwner: recordedOwner,
       packageConnectionArgs: checkedConnection },
   };
   try {
+    if (runMain) {
+      const valuesFile = join(directory, 'values.json');
+      writeFileSync(valuesFile, JSON.stringify(values), { mode: 0o600 });
+      const fixtureProcess = { argv: ['node', 'infra/package/prepare.ts', valuesFile],
+        env: { ...process.env, PACKAGE_SKIP_PROVIDER_SETUP: '1' } };
+      const main = loadPrivateFunction('infra/package/prepare.ts', 'main', replacements,
+        fixtureProcess);
+      await main();
+      assert.deepEqual(commands.map(commandProgram), ['node', 'node',
+        'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl']);
+      assert.equal(secrets.size, 6);
+      return { key, settings, secrets };
+    }
     const prepareSettings = loadPrivateFunction('infra/package/prepare.ts',
       'prepareSettings', replacements);
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
@@ -218,6 +244,16 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     }
   }
 }
+
+function commandProgram(command) {
+  return command.program;
+}
+
+async function preparationMainWithPrivateValuesPath() {
+  await preparedSecretsFixture(true, true, false, {}, false, true);
+}
+test('preparation main keeps an absolute private values path out of every child argument',
+  preparationMainWithPrivateValuesPath);
 
 function assertPrivateFileDelivery(podSpec) {
   const source = podSpec.volumes.find(privateFileSourceVolume);

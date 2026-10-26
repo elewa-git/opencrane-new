@@ -20,6 +20,7 @@ function load(url, context, nextLoad) {
 const hooks = { load };
 registerHooks(hooks);
 const original = childProcess.execFile;
+let installed = false;
 function kubernetes(args) {
   assert.equal(args[0], '--context=k3d-ocn');
   if (args.includes('namespace')) return fixture.namespace;
@@ -31,9 +32,25 @@ function kubernetes(args) {
     if (fixture.dependencyFailure === 'operator') throw new Error(fixture.canary);
     return fixture.operators;
   }
+  if (fixture.install && args.includes('api-resources')) return '';
   assert.equal(args[args.indexOf('-n') + 1], 'opencrane-package-1');
+  if (fixture.install) {
+    if (args.includes('configmap') || args.includes('rollout')) return '';
+    if (args.includes('job')) {
+      return { status: { conditions: [{ type: 'Complete', status: 'True' }] } };
+    }
+    if (args.includes('services,ingresses')) return { items: [] };
+    if (args.includes('service')) return { spec: { type: 'ClusterIP', clusterIP: '10.43.0.27' } };
+  }
   const name = args[args.indexOf('secret') + 1];
-  if (name.startsWith('sh.helm.')) return { metadata: { uid: 'next-step' } };
+  if (name.startsWith('sh.helm.')) {
+    if (!fixture.install) return { metadata: { uid: 'next-step' } };
+    if (!installed) return '';
+    const owner = JSON.parse(readFileSync('package-owner.json', 'utf8'));
+    return { metadata: { uid: 'installed', labels: {
+      'opencrane.dev/install-id': owner.installId,
+    } } };
+  }
   if (fixture.dependencyFailure === name) throw new Error(fixture.canary);
   if (fixture.invalidJson === name) return fixture.canary;
   return fixture.secrets[name] ?? '';
@@ -42,6 +59,16 @@ function execute(program, args, options, callback) {
   appendFileSync('calls.jsonl', JSON.stringify({ program, args }) + '\n');
   if (program === 'node') return original(program, args, options, callback);
   if (program === 'helm') {
+    if (fixture.install) {
+      const valuesName = args[args.indexOf('--values') + 1];
+      const valuesPath = new URL(valuesName, 'file://' + options.cwd + '/');
+      assert.deepEqual(JSON.parse(readFileSync(valuesPath, 'utf8')), fixture.values);
+      if (args[0] === 'install') {
+        installed = true;
+        callback(null, '', '');
+        return;
+      }
+    }
     assert.equal(args[0], 'template', 'A refusal fixture must never apply resources');
     function rendered(error, stdout, stderr) {
       if (fixture.hiddenImage) {

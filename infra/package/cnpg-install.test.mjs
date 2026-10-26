@@ -93,16 +93,20 @@ async function runFixture(fixture, expected, renders = false) {
     await writeFile(`${directory}/stack-owner`, `worktree=${directory}\n`);
     await writeFile(`${directory}/package-owner.json`, JSON.stringify(owner));
     await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
-    await writeFile(`${directory}/values.json`, JSON.stringify(fixture.values));
+    const privateDirectory = `${directory}/private-values`;
+    await mkdir(privateDirectory, { mode: 0o700 });
+    const valuesFile = `${privateDirectory}/values.json`;
+    await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
     await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
     const script = `import { installPackage } from ${JSON.stringify(`${source}/infra/dev-stack/packaged.ts`)};
-      try { await installPackage('values.json'); }
+      try { await installPackage(${JSON.stringify(valuesFile)}); }
       catch (error) { console.error(error); process.exitCode = 1; }`;
     const args = ['--experimental-strip-types', '--import',
       `${source}/infra/package/cnpg-install-preload.mjs`, '--input-type=module', '-e', script];
     const env = { ...process.env, DEV_STACK_ID: '1' };
     const result = spawnSync(process.execPath, args, { cwd: directory, env, encoding: 'utf8' });
-    assert.equal(result.status, 1, result.stderr);
+    const expectedStatus = fixture.install ? 0 : 1;
+    assert.equal(result.status, expectedStatus, result.stderr);
     assert.ok(!result.stderr.includes(canary), 'Errors must discard private values and causes');
     assert.ok(!result.stdout.includes(canary), 'Standard output must discard private values');
     assert.ok(!result.stderr.includes(generatedPassword), 'Errors must discard generated passwords');
@@ -114,12 +118,29 @@ async function runFixture(fixture, expected, renders = false) {
     const callLines = trimmedCalls.split('\n');
     const calls = callLines.map(JSON.parse);
     for (const call of calls) {
+      for (const argument of call.args) {
+        assert.ok(!argument.includes(privateDirectory),
+          `${call.program} arguments must not include the private values directory`);
+      }
       if (call.program === 'helm') {
         assert.equal(renders, true, 'Helm must not run with incomplete inputs');
-        assert.equal(call.args[0], 'template', 'Helm must never apply a refusal fixture');
+        if (fixture.install) {
+          assert.ok(['template', 'install'].includes(call.args[0]));
+        } else {
+          assert.equal(call.args[0], 'template', 'Helm must never apply a refusal fixture');
+        }
       }
     }
-    assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
+    if (fixture.install) {
+      const helmCommands = [];
+      for (const call of calls) {
+        if (call.program === 'helm') helmCommands.push(call.args[0]);
+      }
+      assert.deepEqual(helmCommands, ['template', 'install']);
+      assert.equal(result.stderr, '');
+    } else {
+      assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
+    }
     if (renders) {
       const rendered = await readFile(`${directory}/rendered.yaml`, 'utf8');
       const resources = [];
@@ -241,6 +262,15 @@ async function standalone() {
   await runFixture(fixture, nextStep, true);
 }
 test('standalone still reaches the release check without an operator', standalone);
+
+async function installsWithPrivateValuesPath() {
+  const fixture = validFixture();
+  fixture.values.postgres = { mode: 'standalone' };
+  fixture.install = true;
+  await runFixture(fixture, undefined, true);
+}
+test('installer entry point keeps an absolute private values path out of every child argument',
+  installsWithPrivateValuesPath);
 for (const reference of ['superuser', 'postgres']) {
   async function reusedReference() {
     const fixture = validFixture();
