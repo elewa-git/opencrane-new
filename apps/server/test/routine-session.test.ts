@@ -22,6 +22,9 @@ let keys: ReturnType<typeof conversationKeys>;
 let directory: string;
 let now: number;
 let owned: boolean;
+let duringCheck: (() => Promise<void>) | undefined;
+let encryption: ReturnType<typeof vi.spyOn>;
+let decryption: ReturnType<typeof vi.spyOn>;
 const input = { routineId: 'orders', occurrenceId: 'occurrence' };
 const conversationId = 'routine-session-occurrence';
 const commandId = 'routine-session-create-occurrence';
@@ -29,8 +32,11 @@ const subject = `conversation-${conversationId}`;
 function clock() {
   return now;
 }
-function checkCurrent() {
-  return Promise.resolve(owned);
+async function checkCurrent() {
+  const action = duringCheck;
+  duringCheck = undefined;
+  await action?.();
+  return owned;
 }
 function forbiddenEffect(): never {
   throw new Error('private-service-canary');
@@ -68,6 +74,7 @@ async function setup() {
   keys = conversationKeys(directory);
   now = Date.parse('2026-10-11T07:00:00Z');
   owned = true;
+  duringCheck = undefined;
   const created = routine('routine.created');
   const active = { ...created, data: { ...definition(), status: 'active' } };
   const events = [joinedMember('alice')];
@@ -82,14 +89,16 @@ async function setup() {
   events.push(active);
   await apply(events);
   await nats.seed([due()]);
-  vi.spyOn(keys, 'encrypt').mockImplementation(forbiddenEffect);
-  vi.spyOn(keys, 'decrypt').mockImplementation(forbiddenEffect);
+  encryption = vi.spyOn(keys, 'encrypt').mockImplementation(forbiddenEffect);
+  decryption = vi.spyOn(keys, 'decrypt').mockImplementation(forbiddenEffect);
 }
 async function cleanup() {
   vi.restoreAllMocks();
   await fga?.close();
   await nats?.close();
-  if (directory) await rm(directory, { recursive: true, force: true });
+  if (directory) {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 beforeEach(setup, 30_000);
 afterEach(cleanup);
@@ -99,7 +108,9 @@ function prepare(store = nats.store, request: unknown = input) {
 }
 async function rows() {
   const saved: StoredEvent[] = [];
-  for await (const row of nats.store.readStream(subject)) saved.push(row);
+  for await (const row of nats.store.readStream(subject)) {
+    saved.push(row);
+  }
   return saved;
 }
 async function refuses() {
@@ -112,7 +123,9 @@ async function createsOnce() {
   const fetch = globalThis.fetch;
   function permissionsOnly(url: Parameters<typeof fetch>[0], options?: RequestInit) {
     const address = url instanceof Request ? url.url : url.toString();
-    if (!address.startsWith(binding.apiUrl + '/')) return forbiddenEffect();
+    if (!address.startsWith(binding.apiUrl + '/')) {
+      return forbiddenEffect();
+    }
     return fetch(url, options);
   }
   vi.spyOn(globalThis, 'fetch').mockImplementation(permissionsOnly);
@@ -127,8 +140,8 @@ async function createsOnce() {
   expect(saved[0]!.event.data).toEqual({ conversationId, assistantId: 'sales-assistant',
     createdBy: 'alice', mode: 'agent_session', payingGroupId: 'sales' });
   expect(await nats.store.head()).toBe(before + 1);
-  expect(keys.encrypt).not.toHaveBeenCalled();
-  expect(keys.decrypt).not.toHaveBeenCalled();
+  expect(encryption).not.toHaveBeenCalled();
+  expect(decryption).not.toHaveBeenCalled();
   expect(JSON.stringify(first)).not.toMatch(/ciphertext|key:1|instructions|private-service/u);
 }
 it('two workers recover one private session with zero input or execution effects', createsOnce);
@@ -158,7 +171,7 @@ async function reusedBinding(field: string) {
   const data = { conversationId, assistantId: 'sales-assistant', createdBy: 'alice',
     mode: 'agent_session', payingGroupId: 'sales', [field]: 'someone-else' };
   const saved = record(commandId, subject, 'conversation.created', data);
-  saved.principal = { kind: 'human', id: data.createdBy };
+  saved.principal = { kind: 'human', id: 'alice' };
   await nats.seed([saved]);
   await refuses();
 }
@@ -184,7 +197,7 @@ async function losesAccess(kind: string) {
     let tuple = { user: objectId('person', 'test', 'alice'), relation: 'owner',
       object: objectId('routine', 'test', 'orders') };
     if (kind === 'acts_for') {
-      tuple = { user: objectId('team', 'test', 'billing'), relation: 'team',
+      tuple = { user: `${objectId('team', 'test', 'billing')}#member`, relation: 'acts_for',
         object: objectId('assistant', 'test', 'sales-assistant') };
     }
     await client.write([], [tuple]);
@@ -207,7 +220,7 @@ it.each(lostAccess)('withholds saved identifiers after losing %s', losesReceiptA
 async function control(type: string) {
   const example = getEventDefinition(type)!.example;
   const base = typeof example === 'object' && example !== null ? example : {};
-  let data = { ...base, conversationId, messageId: 'routine-input-occurrence',
+  let data: Record<string, unknown> = { ...base, conversationId, messageId: 'routine-input-occurrence',
     turnId: 'routine-turn-occurrence', rootId: 'routine-root-occurrence' };
   if (type === 'routine.updated') {
     data = { ...definition(), status: 'active', definitionRevision: 2 };
@@ -229,10 +242,15 @@ async function changesAtAppend(kind: string) {
   const append = nats.store.append.bind(nats.store);
   async function changeBeforeAppend(change: AppendCommand) {
     expect(change.checkAccess).toBeTypeOf('function');
-    if (kind === 'member') await removeMember();
-    else if (kind === 'worker') owned = false;
-    else if (kind === 'expiry') now += 60_000;
-    else await control(kind);
+    if (kind === 'member') {
+      await removeMember();
+    } else if (kind === 'worker') {
+      owned = false;
+    } else if (kind === 'expiry') {
+      now += 60_000;
+    } else {
+      await control(kind);
+    }
     return append(change);
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(changeBeforeAppend);
@@ -244,9 +262,13 @@ async function changesAfterAppend(kind: string) {
   const append = nats.store.append.bind(nats.store);
   async function changeAfterAppend(change: AppendCommand) {
     const result = await append(change);
-    if (kind === 'worker') owned = false;
-    else if (kind === 'expiry') now += 60_000;
-    else await removeMember();
+    if (kind === 'worker') {
+      owned = false;
+    } else if (kind === 'expiry') {
+      now += 60_000;
+    } else {
+      await removeMember();
+    }
     return result;
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(changeAfterAppend);
@@ -273,7 +295,9 @@ async function historyFirst() {
     return originalNow() + elapsed;
   }
   async function recordHead(target?: string, deadline?: number) {
-    if (target === undefined) accessStarted = true;
+    if (target === undefined) {
+      accessStarted = true;
+    }
     expect(target).not.toBe(subject);
     expect(target).not.toBe('routine-orders');
     return head(target, deadline);
@@ -291,17 +315,71 @@ async function historyFirst() {
   expect((await prepare()).executionAvailable).toBe(false);
 }
 it('loads long histories before access and never watches growing streams', historyFirst);
-async function masksHistory() {
+async function masksHistory(failedSubject: string) {
   owned = false;
   const read = nats.store.readStream.bind(nats.store);
   async function* unavailable(target: string, from?: number, deadline?: number) {
-    if (target === 'routine-orders' || target === subject) forbiddenEffect();
+    if (target === failedSubject) {
+      forbiddenEffect();
+    }
     yield* read(target, from, deadline);
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(unavailable);
   await refuses();
 }
-it('masks private history errors for an unauthorised worker', masksHistory);
+it.each(['routine-orders', subject])('masks private %s history errors', masksHistory);
+async function expiredWrite() {
+  const append = nats.store.append.bind(nats.store);
+  async function expire(change: AppendCommand) {
+    vi.spyOn(performance, 'now').mockReturnValue(change.deadline! + 1);
+    return append(change);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(expire);
+  await expect(prepare()).rejects.toThrow('Routine session refused');
+  vi.restoreAllMocks();
+  expect(await rows()).toEqual([]);
+}
+it('keeps the original two-second deadline at publication', expiredWrite);
+async function unrelatedActivity() {
+  const original = await prepare();
+  async function addActivity() {
+    const data = { conversationId, turnId: 'unrelated', assistantId: 'sales-assistant' };
+    const activity = record('activity', subject, 'agent.turn_started', data);
+    await nats.seed([activity]);
+  }
+  duringCheck = addActivity;
+  expect(await prepare()).toEqual(original);
+}
+it('unrelated conversation activity preserves receipt access', unrelatedActivity);
+async function changedAssistant(kind: string) {
+  if (kind === 'inactive') {
+    const changed = record('inactive', 'assistant-sales-assistant', 'assistant.settings_changed',
+      { assistantId: 'sales-assistant', changedBy: 'alice', changedFields: ['active'], active: false });
+    await nats.seed([changed]);
+  } else {
+    const read = nats.store.readStream.bind(nats.store);
+    async function* changedPayer(target: string, from?: number, deadline?: number) {
+      for await (const row of read(target, from, deadline)) {
+        if (row.event.type === 'assistant.created') {
+          const data = { assistantId: 'sales-assistant', kind: 'team', ownerId: 'billing',
+            payingGroupId: 'billing' };
+          yield { ...row, event: { ...row.event, data } };
+        } else {
+          yield row;
+        }
+      }
+    }
+    vi.spyOn(nats.store, 'readStream').mockImplementation(changedPayer);
+  }
+  await refuses();
+}
+it.each(['inactive', 'payer'])('refuses an assistant with changed %s', changedAssistant);
+async function suppliedDefinition() {
+  const request = { ...input, definition: definition().definition };
+  await expect(prepare(nats.store, request)).rejects.toThrow('Routine session refused');
+  expect(await rows()).toEqual([]);
+}
+it('refuses a supplied definition', suppliedDefinition);
 async function replay() {
   await prepare();
   const storage = await database('pg');

@@ -83,7 +83,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
@@ -212,6 +212,12 @@ Retirement clears its next scheduled time and keeps permitted history. The origi
 owner can recover a lost retirement reply while they still have metadata access.
 The server checks that access before reporting a saved change or revision conflict.
 Neither operation has a website route. Routine execution remains disabled.
+
+Another internal operation prepares one private session for a claimed routine occurrence.
+It checks the original owner's membership, current permissions, fixed payer and worker
+ownership before saving, and again before returning the session reference. Retries recover
+that same session. A stopped, changed or expired occurrence cannot prepare a session.
+This operation has no production caller. It saves no input and starts no work.
 
 1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.
    [Members](src/members/README.md) handles the first owner's claim or a later invitation.
