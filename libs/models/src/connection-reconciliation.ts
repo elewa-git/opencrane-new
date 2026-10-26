@@ -12,6 +12,10 @@ const retained = { status: 'retained' as const };
 /** Reconcile one private candidate during live maintenance, never during event replay. */
 export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, 'lock'>,
   custody: Custody, stage: ConnectionStage) {
+  // Keep consent attempts until their separate lifecycle can prove deletion is safe.
+  if (stage.attemptId !== undefined) {
+    return retained;
+  }
   async function reconcile() {
     // Read under the lock before rebuilding missing private records from saved identities.
     const subject = `connection-${stage.userId}-${stage.serverId}-${stage.profileId}`;

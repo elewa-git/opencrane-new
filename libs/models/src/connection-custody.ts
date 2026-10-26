@@ -11,6 +11,7 @@ const stageSchema = z.object({
   profileId: identifier, purpose: z.enum(['personal', 'company', 'validation']),
   generation: z.int().positive(), endpointDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   operationId: identifier, expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive(),
+  attemptId: identifier.optional(), attemptDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
 }).strict();
 export type ConnectionStage = z.infer<typeof stageSchema>;
 interface ConnectionIdentity { reference: string; uid: string; resourceVersion: string }
@@ -203,6 +204,60 @@ class ConnectionCustody {
     }
     return this.recoverCreate(checked, material);
   }
+  /** Prepare private consent material once. A saved create claim prevents another create. */
+  async prepareAttempt(input: Omit<ConnectionStage, 'appendUntil'>, material: () => string) {
+    try {
+      const record = await this.journal.preparation(input.operationId);
+      const appendUntil = record?.appendUntil ?? Date.now() + 600_000;
+      const stage = checkedStage({ ...input, appendUntil });
+      if (!stage.attemptId || Date.now() >= appendUntil) {
+        return { status: 'unknown' as const };
+      }
+      if (!record) {
+        await this.stage(stage, material());
+      }
+      const recovered = await this.recover(stage);
+      if (recovered.status !== 'recovered' || !recovered.identity) {
+        return { status: 'unknown' as const };
+      }
+      const contents = await this.readAttempt(stage, recovered.identity);
+      if (contents === undefined || Date.now() >= stage.appendUntil) {
+        return { status: 'unknown' as const };
+      }
+      return { status: 'prepared' as const, stage, identity: recovered.identity, contents };
+    } catch {
+      return { status: 'unknown' as const };
+    }
+  }
+  /** Read only an exact private attempt. Never expose this through a member or admin API. */
+  async readAttempt(input: ConnectionStage, expected: ConnectionIdentity) {
+    try {
+      const stage = checkedStage(input);
+      if (!stage.attemptId || !expected || Date.now() >= stage.appendUntil) {
+        return undefined;
+      }
+      const recovered = await this.recover(stage, expected);
+      if (recovered.status !== 'recovered') {
+        return undefined;
+      }
+      const response = await this.request('GET', expected.reference);
+      if (!response.ok) {
+        await response.body?.cancel();
+        return undefined;
+      }
+      const secret = secretSchema.parse(await readResponse(response));
+      if (!this.verify(secret, stage, expected)) {
+        return undefined;
+      }
+      // Refuse material that expired while custody recovery or its final read was waiting.
+      if (Date.now() >= stage.appendUntil) {
+        return undefined;
+      }
+      return decodeToken(secret.data.token)?.toString('utf8');
+    } catch {
+      return undefined;
+    }
+  }
   /** Read one private maintenance page. Never expose its contents through a user API. */
   async candidates(continuation?: string) {
     try {
@@ -254,18 +309,22 @@ class ConnectionCustody {
       return undefined;
     }
   }
+  private async matchesDeletion(input: ConnectionStage, expected: ConnectionIdentity,
+    pending: ConnectionIdentity) {
+    const recorded = await this.journal.identity(nameFor(input));
+    const prepared = await this.journal.prepared(recordFor(input), false);
+    return prepared && recorded !== undefined && sameIdentity(recorded, expected)
+      && sameIdentity(pending, expected);
+  }
   async remove(input: ConnectionStage, expected?: ConnectionIdentity): Promise<Result> {
-    if (!expected) {
+    if (!expected || input.attemptId !== undefined) {
       return { status: 'conflict' };
     }
     try {
       const checked = checkedStage(input);
       const pending = await this.journal.deletion(nameFor(checked));
       if (pending) {
-        const recorded = await this.journal.identity(nameFor(checked));
-        const prepared = await this.journal.prepared(recordFor(checked), false);
-        if (!prepared || !recorded || !sameIdentity(recorded, expected)
-            || !sameIdentity(pending, expected)) {
+        if (!await this.matchesDeletion(checked, expected, pending)) {
           return { status: 'conflict' };
         }
         const result = await this.confirmRemoval(expected.reference);
@@ -327,12 +386,23 @@ function checkedStage(input: unknown): ConnectionStage {
   if (!checked.success) {
     throw new Error('Connection stage invalid');
   }
-  return checked.data;
+  const stage = checked.data;
+  if (stage.attemptId !== undefined || stage.attemptDigest !== undefined) {
+    if (stage.attemptId !== stage.operationId || !stage.attemptDigest ||
+        stage.generation !== 1 || stage.purpose !== 'personal') {
+      throw new Error('Connection stage invalid');
+    }
+  }
+  return stage;
 }
 function nameFor(input: ConnectionStage) {
   const coordinates = [input.siloId, input.connectionId, input.profileId];
   const hash = createHash('sha256');
   hash.update(JSON.stringify(coordinates));
+  if (input.attemptId !== undefined) {
+    hash.update(JSON.stringify(['oauth-attempt', input.attemptId]));
+    return `mcp-${hash.digest('hex').slice(0, 40)}-attempt`;
+  }
   return `mcp-${hash.digest('hex').slice(0, 40)}-g${input.generation}`;
 }
 function metadataFor(input: ConnectionStage) {
