@@ -22,7 +22,7 @@ import { turnCommand, TurnAdmissionRejected,
 import { recordBudgetRefusal } from './budget-refusal.ts';
 import { readChatFacts } from './chat-summary.ts';
 import { chatHistory } from './commands.ts';
-import { recordReports, canCombineReports, ReportRejected } from './reports.ts';
+import { recordBridgeReports, canCombineReports, ReportRejected } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
 import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
@@ -84,7 +84,7 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
       report.conversationId, report.turnId);
     if (await childRequestHeld(options, facts.created)) throw new ReportRejected('Child request queued');
   }
-  const result = await recordReports(options.store, options.keys, context, batch.values);
+  const result = await recordBridgeReports(options.store, options.keys, context, batch.values);
   const acknowledgement: {
     type: string; sequence: number; token?: string; expiresAt?: number;
     model?: string; refused?: string; context?: unknown;

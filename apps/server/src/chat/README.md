@@ -22,7 +22,13 @@ History loads before the final current-access check and before private text is o
 
 For turns without memory, the server combines adjacent pieces of the same reply before saving them. It checks each piece against saved text before confirming it to the computer. Repeats are recognised without another save, including after reconnection. Accepted reports keep saving after the connection drops. Chat and computer summaries read new changes after their first load and save only if the stored position still matches the history checked. Each summary has a memory budget: a large one is dropped on its own, leaving others available. Saved failure reasons distinguish a person's stop request from a computer restart, model error or tool refusal. Message and stop requests refuse ids already used by another saved record, including a report.
 
-Saved memory evidence prevents a turn's reply text, reasoning and command hashes from becoming chat reports, even after the turn ends. Reports without that content can still record lost output or completion. The refusal stops automatic report retries. Rebuilt private context excludes every assistant reply from that turn, including replies saved before recall. Human messages remain saved. Private memory delivery without saving the reply is still planned.
+Saved memory evidence prevents a turn's reply text, reasoning and command hashes from
+becoming saved chat content, even after the turn ends. The bridge discards reply and
+reasoning text, saves an unavailable status and confirms it to the computer. Repeating
+a report returns the same confirmation; reconnecting restores only that status.
+Command hashes and text hidden on status reports remain refused. Rebuilt private
+context excludes every assistant reply from that turn, including replies saved before
+recall. Human messages remain saved. Private delivery without saving the reply is still planned.
 
 **Live updates.** Open chat pages keep checking access when installation or group membership changes. Removing someone from a group closes their private session with its assistant within two seconds. If another permission update takes too long, the page reconnects after five seconds and resumes from saved messages. The server checks each open chat's feed position every 100 ms and loads content only when it changes. Computer status comes from a small read-table record updated by background workers. A sleeping or waking computer shows Starting; recovery lasts until a new ready record appears.
 

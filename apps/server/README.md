@@ -65,6 +65,9 @@ Saved evidence that memory was prepared for a turn prevents its reply and reason
 text from being saved as chat reports. Rebuilding private context also leaves out earlier
 assistant replies from that turn. Human messages stay saved. Delivering these private
 replies without saving them is still planned; native memory remains disabled.
+For now, the bridge discards this reply text and confirms a saved unavailable status.
+The same computer can keep reporting replies from other chats. Reconnecting restores
+the status alone, even when the computer missed the confirmation.
 
 ## Where it fits
 
@@ -82,7 +85,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads routine presence, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server -->|chat work and checked reports| computer["apps/computer<br/>assistant computers"]
+  server -->|chat work, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
 ```

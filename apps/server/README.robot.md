@@ -4103,8 +4103,9 @@ records the closure checks and the remaining outage-watchdog and crash-recovery 
 `chat/reports.ts` reads `readChatFacts` before hashing or encrypting report content.
 Any saved memory context, including prepared, invalidated and ended context, refuses
 reports carrying `text` or `commandDigest`. The fixed `ReportRejected` message is
-`Memory-bearing report content refused`. The existing bridge closes with code 1008
-and retains the permanent refusal, so its watcher does not keep retrying the report.
+`Memory-bearing report content refused`. The bridge handles ordinary output through
+the text-free unavailable path below. Other refusals still close with code 1008
+and stop the watcher retrying that report.
 Duplicate reports receive the same check before saved digest comparison.
 Text-free loss and completion reports keep their existing acknowledgements and replay.
 
@@ -4121,6 +4122,30 @@ as the memory MCP and dispatch tests. It covers report types, batches, conflicti
 evidence, prepared and closed states, lost acknowledgements, two-requester reconstruction
 and cold replay. Admission remains disabled. Volatile delivery, live invalidation and
 native forwarding are later work. Native recall qualification: NOT RUN.
+
+### Unavailable private bridge output (P4-15 PR 3b, first part)
+
+`recordBridgeReports` catches only the memory-content refusal from `recordReports`.
+It accepts message deltas, completed messages and reasoning summaries as lost output.
+It constructs `agent.output_lost` reports with only the checked conversation, turn,
+assistant and report sequence fields. No original text, message id, thread id or
+requester claim enters the replacement hash. Direct report writers still refuse content.
+Text hidden on status reports and command hashes remain permanently refused.
+
+Each replacement uses the existing conditional append, sequence check and saved receipt.
+Queued batches save one loss per original sequence before acknowledging every sequence.
+A partly saved batch or lost acknowledgement reconciles through those receipts. Repeated
+private bytes are discarded even when their text differs; no content hash is kept for
+comparison. An uncertain append sends no acknowledgement. Accepted queued reports finish
+after socket closure, and their ordinary queue cleanup still runs.
+
+The existing subscription and renderer receive only unavailable status. No new event or
+API field is added. Requester-bound RAM delivery, release-time reference/access checks,
+browser generation clearing and per-turn subscriber capacity refusal remain later work.
+This first split does not release private bytes or enable memory admission.
+`test/memory-bridge-loss.test.ts` covers real bridge sockets, duplicate/uncertain saves,
+prepared/loaded/terminal evidence, closed sockets, queued batches, cold history and
+PostgreSQL replay. It preserves human messages and a second requester's memory-free reply.
 
 ## Streamed reply batches
 
