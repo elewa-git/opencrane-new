@@ -5241,9 +5241,44 @@ before conversation access. A retry from another worker id is refused. The trust
 supplies a stable id across retries; its callback still proves current ownership. Errors contain only a
 fixed refusal. No event type or public preparation API is added.
 `test/routine-session.test.ts` covers recovery, refusals, timing and guarded replay.
-There is no production caller. Execution stays unavailable. Input, scheduling, company
+There is no production caller. Execution stays unavailable. Scheduling, company
 profile checks, wake, root allowance, budgets, Ask and activation remain later work.
 Fresh-install qualification is NOT RUN. Own checks: [receipt](../../docs/process/p4-24-pr9a/receipt.md).
+
+### Encrypted routine input preparation
+
+`src/routine-input.ts` exports `prepareRoutineInput` with the same arguments as session
+preparation. It requires the exact existing worker-prepared session. It never creates one.
+The frozen due definition supplies the instructions. Conversation custody uses
+`routine-<routineId>` for those instructions and the occurrence's conversation id for
+the saved input. Neither key is provisioned by this helper.
+One conditional append saves `message.posted` with the due message id, system origin,
+the worker principal and the recorded owner as author. The encrypted text begins with
+`Routine instructions (user data):`. Retries validate the original input and return its
+position without re-encrypting or appending. Receipts keep `executionAvailable: false`.
+The shared session checks enforce current worker ownership, owner admission, unchanged
+definition, Stop, access and `startBy`. History and custody reads precede the short write
+check. No growing conversation stream is watched for receipt access.
+The bridge checks `routinePreparation` before pending work, lifecycle recovery, wake or
+delivery. The exclusion applies regardless of message author kind, including replayed
+history. Memory delivery wiring is unchanged. Root/budget admission, Stop and required
+Ask must be connected before any later enablement.
+`test/routine-session.test.ts` exercises both helpers, crash/retry recovery, custody and
+access loss, the actual bridge path and offline replay with effects forbidden.
+Public WebSocket subscriptions share the HTTP reserved-id rule and send `refused`
+with close code 1008 for `routine-session-` ids, before loading or decrypting content.
+History checks the saved creation separately from the requested page, so a cursor
+after creation cannot skip `routinePreparation`. Display rejects that marker and
+reserved conversation ids. Conversation lists omit these sessions, and their title
+reader checks creation before decrypting a first message. These checks also hide a
+marked preparation session whose id has no reserved prefix. Access checks and their
+deadlines are unchanged.
+
+`test/routine-session.test.ts` saves and projects the encrypted input, proves that the
+owner's underlying permissions permit reading, and exercises a real public socket
+starting after creation. It also checks HTTP history, paged history and list titles
+with decryption spies. `test/chat-display.test.ts` checks direct display refusals.
+Part of #106, P4-24 row 9. Fresh-install execution qualification: NOT RUN.
 
 ## Routine metadata reads
 

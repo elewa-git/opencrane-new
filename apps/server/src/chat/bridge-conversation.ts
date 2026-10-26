@@ -181,6 +181,14 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
     computerStartHead, controlPending };
 }
 
+function isRoutinePreparation(created: ReturnType<typeof agentSession>) {
+  return 'routinePreparation' in created && created.routinePreparation !== undefined;
+}
+
+function computerUnavailable(type: string, computerId: string, refused: Set<string>) {
+  return type !== 'computer.ready' || refused.has(computerId);
+}
+
 export async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: AgentSession, assistant: ReturnType<typeof assistantSnapshot>,
   refused: Set<string>, connection: Connection,
@@ -204,6 +212,10 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     return control;
   }
   const created = agentSession(rows);
+  // Keep prepared routine sessions inert until root admission, Stop and Ask are connected.
+  if (isRoutinePreparation(created)) {
+    return { pending: false, retry: false };
+  }
   function isConversationClosed(row: ChatRows[number]) {
     return row.event.type === 'conversation.closed';
   }
@@ -233,7 +245,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     await resumeComputer(options.store, tokens, options.silo, conversation.assistantId);
     return { pending: true, retry: true };
   }
-  if (current.type !== 'computer.ready' || refused.has(computer.computerId)) {
+  if (computerUnavailable(current.type, computer.computerId, refused)) {
     return { pending: true, retry: true };
   }
   const link = await connection(computer.computerId, conversation.assistantId);

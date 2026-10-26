@@ -7,6 +7,7 @@ import { sessionFor } from '../members/routes.ts';
 import { legacyParticipation, participation } from './participation.ts';
 import { ChatRefused, type ChatOptions } from './access.ts';
 import { chatDisplayData, hasDisplayText } from './display.ts';
+import { isPublicChatId } from './public-id.ts';
 
 type History = Awaited<ReturnType<typeof readConversation>>;
 
@@ -31,21 +32,32 @@ async function displayHistory(options: ChatOptions, conversationId: string,
   return { ...result, ...computer, rows };
 }
 
+export async function requirePublicHistory(options: ChatOptions, conversationId: string) {
+  if (!isPublicChatId(conversationId)) throw new ChatRefused('Conversation unavailable');
+  // Check creation separately because a history cursor can skip the preparation marker.
+  // Read computer status here too, so a page needs no extra database round trip.
+  const created = await options.db.query<{
+    data: unknown; chat_state: 'ready' | 'starting' | 'recovering';
+    recovered: boolean; lost_at: string | null;
+  }>(
+    `SELECT f.data, c.chat_state, c.recovered, c.lost_at FROM conversation_feed f
+      LEFT JOIN computers c ON c.silo = f.silo AND c.assistant_id = f.data->>'assistantId'
+      WHERE f.silo = $1 AND f.conversation_id = $2 AND f.type = 'conversation.created'`,
+    [options.silo, conversationId]);
+  for (const row of created.rows) {
+    chatDisplayData('conversation.created', row.data);
+  }
+  return created.rows[0];
+}
+
 async function conversationComputerState(options: ChatOptions, conversationId: string,
   mode: 'agent_session' | 'direct' | 'group') {
+  const computer = await requirePublicHistory(options, conversationId);
   // Use the mode from the event log; the read table may still be catching up.
   if (mode !== 'agent_session') {
     return { computerState: 'not_applicable' as const, computerRecovered: false,
       computerLostAt: undefined };
   }
-  const result = await options.db.query<{
-    chat_state: 'ready' | 'starting' | 'recovering'; recovered: boolean; lost_at: string | null;
-  }>(
-    `SELECT c.chat_state, c.recovered, c.lost_at FROM conversation_feed f
-      LEFT JOIN computers c ON c.silo = f.silo AND c.assistant_id = f.data->>'assistantId'
-      WHERE f.silo = $1 AND f.conversation_id = $2 AND f.type = 'conversation.created'`,
-    [options.silo, conversationId]);
-  const computer = result.rows[0];
   return { computerState: computer?.chat_state ?? 'starting',
     computerRecovered: computer?.recovered ?? false, computerLostAt: computer?.lost_at ?? undefined };
 }

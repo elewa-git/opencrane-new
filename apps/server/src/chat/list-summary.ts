@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { sessionSlug } from '@opencrane/protocol';
 import type { ChatOptions } from './access.ts';
+import { requirePublicHistory } from './history.ts';
 
 type SummaryRow = { type: string; data: unknown };
 function isFirstMessage(row: SummaryRow) {
@@ -34,6 +35,7 @@ function outputWasLostForTurn(rows: SummaryRow[], turnId: string): boolean {
 }
 export async function summary(options: ChatOptions, conversationId: string, mode: string,
   joinPosition: number) {
+  await requirePublicHistory(options, conversationId);
   const result = await options.db.query<SummaryRow>(
     `WITH visible_first AS (
       SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2

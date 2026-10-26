@@ -12,8 +12,10 @@ This folder handles conversations between people and with assistants. It saves m
 - Prepares side conversations and lets members review text before sharing it back to the parent chat.
 - Refuses new work in closed chats and repairs unfinished work without disrupting other chats.
 
-Public chat routes reserve routine session identifiers for internal preparation. People
-cannot create, change or read those sessions through these routes.
+Public chat routes and subscriptions reserve routine session identifiers for internal
+preparation. People cannot create, change or read those sessions through these routes.
+History and list titles also check how the session was created before opening private
+text, even when a history page starts after the creation record.
 
 The private recall tool-list builder checks the saved turn, requester, matching grant
 and registered caller before selecting the exact reviewed built-in definition.
@@ -75,7 +77,7 @@ The server renews computer passes through authenticated Kubernetes management ac
 | --- | --- |
 | [routes.ts](routes.ts), [commands.ts](commands.ts), [groups.ts](groups.ts), [reads.ts](reads.ts) | Handle conversation creation, messages, group choices and saved results. |
 | [access.ts](access.ts), [participation.ts](participation.ts), [participants.ts](participants.ts), [private-session.ts](private-session.ts) | Check current access, latest joins and participant changes. |
-| [history.ts](history.ts), [display.ts](display.ts), [realtime.ts](realtime.ts), [list-summary.ts](list-summary.ts), [list-cursor.ts](list-cursor.ts), [state.ts](state.ts) | Return visible messages, live updates, lists and personal choices. |
+| [history.ts](history.ts), [display.ts](display.ts), [public-id.ts](public-id.ts), [realtime.ts](realtime.ts), [list-summary.ts](list-summary.ts), [list-cursor.ts](list-cursor.ts), [state.ts](state.ts) | Return visible messages, live updates, lists and personal choices. |
 | [bridge.ts](bridge.ts), [bridge-poll.ts](bridge-poll.ts), [bridge-conversation.ts](bridge-conversation.ts), [start.ts](start.ts) | Connect computers and deliver pending work. |
 | [reports.ts](reports.ts), [chat-summary.ts](chat-summary.ts), [turns.ts](turns.ts), [write-priority.ts](write-priority.ts) | Check and save reports and turns, with priority for stop requests. |
 | [turn-tools.ts](turn-tools.ts), [turn-credentials.ts](turn-credentials.ts), [private-context.ts](private-context.ts), [shared-context.ts](shared-context.ts), [memory-admission.ts](memory-admission.ts), [keys.ts](keys.ts) | Prepare tools, passes, permitted earlier messages and encryption. |

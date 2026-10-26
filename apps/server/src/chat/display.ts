@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { conversationCreatedDataSchema, fileUploadedDataSchema,
   childResultPublishedDataSchema } from '@opencrane/events';
 import { chatRowSchema } from '@opencrane/protocol';
+import { ChatRefused } from './access.ts';
+import { isPublicChatId } from './public-id.ts';
 
 const rowDisplayData = chatRowSchema.shape.data.strip();
 const displayData = rowDisplayData.extend({
@@ -27,6 +29,10 @@ const encryptedTextTypes = new Set([
 
 // Select display fields before decrypting. Saved access references are not chat content.
 export function chatDisplayData(type: string, input: unknown) {
+  if (typeof input === 'object' && input !== null && 'conversationId' in input &&
+      typeof input.conversationId === 'string' && !isPublicChatId(input.conversationId)) {
+    throw new ChatRefused('Conversation unavailable');
+  }
   if (type === 'conversation.child_result_published') {
     const saved = childResultPublishedDataSchema.parse(input);
     return { authorId: saved.publishedBy, publicationKind: saved.publicationKind,
@@ -34,6 +40,9 @@ export function chatDisplayData(type: string, input: unknown) {
   }
   if (type === 'conversation.created') {
     const created = conversationCreatedDataSchema.parse(input);
+    if ('routinePreparation' in created && created.routinePreparation !== undefined) {
+      throw new ChatRefused('Conversation unavailable');
+    }
     if (!('contextKind' in created)) return created;
     const { conversationId, mode, assistantId, createdBy, payingGroupId } = created;
     return { conversationId, mode, assistantId, createdBy, payingGroupId };
