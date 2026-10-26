@@ -1,3 +1,4 @@
+import { stalledStorage } from './support/stalled-storage.ts';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -39,3 +40,17 @@ async function serviceUnavailableStatus() {
 }
 
 it('marks the object service HTTP 503 before the SDK loses its status', serviceUnavailableStatus);
+
+const oversizedBodies = ['error-large', 'region-large'];
+async function refusesOversizedBody(fault: string) {
+  const storage = await stalledStorage(fault);
+  try {
+    const download = storage.client.getObject('files', 'notes.txt');
+    const refused = expect(download).rejects.toBeInstanceOf(Error);
+    const closed = expect.poll(storage.closed, { timeout: 1_000 }).toBe(true);
+    await Promise.all([refused, closed]);
+  } finally {
+    await storage.close();
+  }
+}
+it.each(oversizedBodies)('bounds SDK buffering for %s', refusesOversizedBody);

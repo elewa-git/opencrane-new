@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
@@ -10,6 +10,8 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
 import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { collectEventBackup } from '../../../infra/package/event-backup.ts';
+import { readBackupObject } from '../../../infra/package/event-restore.ts';
+import { stalledStorage } from './support/stalled-storage.ts';
 import { collectObjectBackup } from '../../../infra/package/object-backup.ts';
 import { uploadServices } from './support/upload-services.ts';
 
@@ -39,6 +41,8 @@ async function fixture(fault = '') {
     await rm(directory, { recursive: true, force: true });
   }
   onTestFinished(cleanDirectory);
+  const backupKeyFile = join(directory, 'backup-key');
+  await writeFile(backupKeyFile, randomBytes(32), { mode: 0o600 });
   const archiveDirectory = join(directory, 'events');
   const destination = join(directory, 'objects');
   const conversationId = randomUUID();
@@ -66,7 +70,7 @@ async function fixture(fault = '') {
   }
   const options = {
     directory: archiveDirectory, destination, silo: 'test', attempt: 'copy',
-    writersStopped: true, disposable: true,
+    writersStopped: true, disposable: true, backupKeyFile,
   };
   function restoreMocks() {
     vi.restoreAllMocks();
@@ -82,7 +86,7 @@ async function refusesMissingObject() {
   const setup = await fixture();
   await setup.archive();
   await expect(setup.capture()).rejects.toEqual(new Error('Object backup refused'));
-  expect(await readdir(setup.directory)).toEqual(['events']);
+  expect(await readdir(setup.directory)).toEqual(['backup-key', 'events']);
 }
 it('refuses completion when an archived upload has no object', refusesMissingObject);
 
@@ -139,12 +143,19 @@ async function savesReferencedBytes() {
   expect(descriptor.eventDescriptorSha256)
     .toBe(digest(await readFile(join(setup.options.directory, 'descriptor.json'))));
   expect(descriptor.objects).toHaveLength(4);
+  const nonces = new Set<string>();
   for (const entry of descriptor.objects) {
     expect(entry.identity).toMatch(/^[a-f0-9]{64}$/);
     const bytes = await readFile(join(setup.destination, entry.identity));
-    expect(bytes).toEqual(expected.get(entry.sha256));
-    expect(bytes.length).toBe(entry.byteCount);
+    nonces.add(bytes.subarray(0, 12).toString('hex'));
+    expect(bytes).not.toEqual(expected.get(entry.sha256));
+    expect(bytes.includes(expected.get(entry.sha256)!)).toBe(false);
+    expect(bytes.length).toBe(entry.byteCount + 28);
+    expect(readBackupObject(setup.destination, setup.options.backupKeyFile, entry))
+      .toEqual(expected.get(entry.sha256));
   }
+  expect(nonces.size).toBe(4);
+  expect(description.toString()).not.toContain(setup.options.backupKeyFile);
   expect(description.toString()).not.toMatch(/private|conversation|objectKey|screenshot/);
   expect((await stat(setup.destination)).mode & 0o777).toBe(0o700);
   for (const name of await readdir(setup.destination)) {
@@ -241,7 +252,7 @@ async function refusesFault(fault: typeof faults[number]) {
     objects, limits)).rejects.toEqual(new Error('Object backup refused'));
   if (fault === 'late-error' || fault === 'timeout') expect(download).toHaveBeenCalled();
   if (fault === 'denied') await rm(join(setup.directory, 'lease'));
-  expect(await readdir(setup.directory)).toEqual(['events']);
+  expect(await readdir(setup.directory)).toEqual(['backup-key', 'events']);
 }
 it.each(faults)('refuses %s without publishing a descriptor', refusesFault);
 
@@ -267,3 +278,70 @@ async function refusesDestination(fault: typeof destinations[number]) {
   }
 }
 it.each(destinations)('preserves foreign output at a %s destination', refusesDestination);
+
+const keyFaults = ['missing', 'public', 'short', 'long', 'symlink'] as const;
+async function refusesKey(fault: typeof keyFaults[number]) {
+  const setup = await fixture();
+  await services.objects.putObject('files', setup.data.objectKey, setup.bytes);
+  await setup.archive();
+  const keyFile = setup.options.backupKeyFile;
+  if (fault === 'missing') await rm(keyFile);
+  if (fault === 'public') await chmod(keyFile, 0o644);
+  if (fault === 'short') await writeFile(keyFile, randomBytes(31));
+  if (fault === 'long') await writeFile(keyFile, randomBytes(33));
+  if (fault === 'symlink') {
+    setup.options.backupKeyFile = join(setup.directory, 'alias');
+    await symlink(keyFile, setup.options.backupKeyFile);
+  }
+  await expect(setup.capture()).rejects.toEqual(new Error('Object backup refused'));
+  await expect(stat(setup.destination)).rejects.toMatchObject({ code: 'ENOENT' });
+}
+it.each(keyFaults)('refuses a %s backup key before capture', refusesKey);
+
+const encryptedFaults = ['ciphertext', 'nonce', 'tag', 'identity', 'hash', 'key'] as const;
+async function refusesEncryptedChange(fault: typeof encryptedFaults[number]) {
+  const setup = await fixture();
+  await services.objects.putObject('files', setup.data.objectKey, setup.bytes);
+  await setup.archive();
+  await setup.capture();
+  const description = await readFile(join(setup.destination, 'descriptor.json'), 'utf8');
+  const descriptor = objectDescriptor.parse(JSON.parse(description));
+  const entry = descriptor.objects[0]!;
+  const file = join(setup.destination, entry.identity);
+  const bytes = await readFile(file);
+  let offset = 12;
+  if (fault === 'nonce') offset = 0;
+  if (fault === 'tag') offset = bytes.length - 1;
+  if (fault === 'ciphertext' || fault === 'nonce' || fault === 'tag') {
+    bytes[offset] = bytes[offset]! ^ 1;
+    await writeFile(file, bytes);
+  }
+  if (fault === 'identity') {
+    entry.identity = 'b'.repeat(64);
+    await writeFile(join(setup.destination, entry.identity), bytes, { mode: 0o600 });
+  }
+  if (fault === 'hash') entry.sha256 = 'b'.repeat(64);
+  if (fault === 'key') await writeFile(setup.options.backupKeyFile, randomBytes(32));
+  function restore() {
+    return readBackupObject(setup.destination, setup.options.backupKeyFile, entry);
+  }
+  expect(restore).toThrow('Object restore refused');
+}
+it.each(encryptedFaults)('refuses changed encrypted %s without returning bytes',
+  refusesEncryptedChange);
+
+const transportFaults = ['headers', 'error-large', 'error-endless', 'region-large',
+  'region-endless'] as const;
+async function closesFailedRequest(fault: typeof transportFaults[number]) {
+  const setup = await fixture();
+  await setup.archive();
+  const storage = await stalledStorage(fault);
+  onTestFinished(storage.close);
+  const options = { ...setup.options, timeoutMs: 1_000 };
+  await expect(collectObjectBackup(setup.source.connection, setup.target.connection,
+    storage.client, options)).rejects.toEqual(new Error('Object backup refused'));
+  await expect.poll(storage.closed, { timeout: 500 }).toBe(true);
+  expect(storage.requests()).toBeGreaterThan(0);
+  await expect(stat(setup.destination)).rejects.toMatchObject({ code: 'ENOENT' });
+}
+it.each(transportFaults)('closes %s requests and removes incomplete output', closesFailedRequest);
