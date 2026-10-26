@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks test space, cluster access and bootstrap connections| package
   package -->|uses local cluster| devbox
-  package -->|starts| apps["Website, server and workers<br/>product requests and background jobs"]
+  package -->|starts services and replays memory| apps["apps<br/>product services and replay"]
   package -->|runs| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
 ```
@@ -56,6 +56,7 @@ running install still need work.
 - Saves a bounded private copy of the event log for an operator.
 - Restores checked events into an empty disposable NATS target.
 - Checks event recovery after an interrupted change to handler subscriptions.
+- Checks current memory deletion records before replaying older events.
 - Removes only this worktree's install, including after an interrupted launcher.
 
 ## Processes it handles
@@ -116,6 +117,12 @@ A separate test interrupts a change to the events that background handlers recei
 It restores the earlier event copy and rebuilds membership tables with reactions
 stopped. This checks event recovery only. It does not qualify a package upgrade.
 The [recovery notes](README.robot.md#interrupted-handler-upgrade-check) explain the proof.
+The memory recovery command compares a proposed key folder with the stopped, trusted
+source and its current events. It refuses stale keys, missing deletion markers and
+missing or damaged keys for live facts, even when both folders match. It completes
+all deletion, identity and stability checks before decrypting any surviving value.
+It then runs the existing memory replay. It changes no keys and does not reopen the installation.
+The [memory recovery notes](README.robot.md#memory-restore-preflight) explain its limits.
 
 ## Folders
 

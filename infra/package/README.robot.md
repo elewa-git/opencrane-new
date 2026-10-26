@@ -436,3 +436,60 @@ See the [receipt](../../docs/process/p5-9-pr1/receipt.md). Handler manifests des
 subscriptions only; they cannot establish package/schema rollback compatibility.
 Coordinated databases/WAL, objects, volumes, custody, rights/cents, pinned-release
 upgrade and full P5-9 remain NOT RUN.
+
+## Memory restore preflight
+
+`memory-restore-check-run.ts` validates custody, the server's private revision-key
+folder, before calling `apps/ops/src/replay.ts` for memory. Stop all readers, writers,
+cleanup jobs and effect workers on both installations. Keep both key folders fixed
+through validation and replay. The flag confirms this operator responsibility;
+stable event positions alone cannot prove it. The operator must identify the
+trusted current source. An archive's inventory is never current deletion evidence.
+
+```sh
+node --experimental-strip-types infra/package/memory-restore-check-run.ts SILO --confirm-stopped
+```
+
+| Setting | Meaning |
+| --- | --- |
+| `SOURCE_NATS_*` | Existing NATS connection settings for the trusted current source |
+| `NATS_*` | Existing projection-reader connection settings for the isolated restored target |
+| `SOURCE_MEMORY_KEY_DIRECTORY` | Current source custody, including permanent empty deletion markers |
+| `MEMORY_KEY_DIRECTORY` | Candidate custody already prepared outside this command |
+| `DATABASE_URL` | Target projection database, opened only after validation succeeds |
+
+The command requires distinct standalone NATS servers and complete event logs from
+position 1. The target must be an exact prefix of the source, including event bodies.
+Each log is limited to 100,000 events and 64 MiB; each folder to 100,000 entries.
+Validation has a 60-second deadline and command setup stops after 65 seconds.
+Folders must be owned by the process user, mode 0700, without symlinks. Files must
+be owned regular files, mode 0600, with 32 bytes or an empty permanent marker.
+Unknown names and pending files refuse. Source and candidate inventories must match
+exactly, including markers for identities absent from the archive. No keys are copied.
+
+`memoryErasureHistory` supplies historical dependants and superseded revisions.
+Their source and candidate keys must be destroyed, including the next candidate
+revision of a forgotten fact. `memoryKeys` checks identities and authenticates
+surviving ciphertext. Every live, unreplaced revision must have an available key
+in both folders. Matching empty files cannot prove valid custody for a live fact.
+All deletion markers, key identities and final folder/history stability checks
+finish before any surviving value is decrypted. Authentication must return a value;
+a null result refuses. Destroyed material is never decrypted or reconstructed.
+Missing, unverified, changing or damaged evidence produces only a fixed refusal.
+
+The isolated test uses the unchanged P5-8 byte restore helper. A separate frozen
+source proves old archive bytes; the current source supplies deletion evidence.
+Old events with current markers rebuild as unavailable, with no searchable text.
+They do not acquire later forget receipts. Replaying twice preserves rows,
+checkpoints and markers; the normal rebuild generation increases.
+
+Run `PG_TEST_URL=… nice -n 10 npx vitest run libs/projections/test/memory-restore.test.ts`.
+It uses synthetic temporary keys, three disposable NATS servers and a disposable
+PostgreSQL database. Guarded child processes count effects and refuse any database
+connection on failed preflight. Late-refusal tests also forbid decryption, with a
+live fact before a missing deletion marker or a mismatched key identity. They cover
+next-revision markers and changes during folder/history validation. Matching empty,
+missing and wrong surviving keys are tested in both folders.
+Full P5-8, P4-13–17, company/rights recovery, browser
+qualification and computer no-disk proof remain NOT RUN. This command cannot approve
+reopening an installation. See the [receipt](../../docs/process/p5-12-pr1/receipt.md).

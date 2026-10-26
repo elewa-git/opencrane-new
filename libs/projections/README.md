@@ -39,13 +39,12 @@ PostgreSQL, the database for the read tables.
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
-<<<<<<< HEAD
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves admission, removal, role, ownership, control and spending history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
-  projections -->|stores and reads wrapped chat keys; repairs unfinished correction keys| keys["Server files<br/>private key store and package Secret"]
+  projections -->|checks memory key identities; stores wrapped chat keys; repairs correction keys| keys["Server files<br/>private key store and package Secret"]
 ```
 
 ## What it is responsible for
@@ -303,6 +302,11 @@ await runner.run(members);
 await database.close();
 await eventStore.close();
 ```
+
+The [memory recovery check](../../infra/package/README.robot.md#memory-restore-preflight)
+checks current deletion records before rebuilding memory from older events.
+It checks every saved key reference and required key before decrypting surviving values.
+Its isolated test uses temporary keys and checks that forgotten text stays out of search.
 
 ## Where to read more
 

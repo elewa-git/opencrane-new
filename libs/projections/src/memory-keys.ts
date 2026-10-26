@@ -159,10 +159,13 @@ export function memoryKeys(directory: string) {
     const bytes = Buffer.concat([nonce, cipher.getAuthTag(), encrypted]);
     return { ciphertext: bytes.toString('base64'), keyId: `key:${reference(identity)}` };
   }
-  function decrypt(identity: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
+  function checkIdentity(identity: MemoryIdentity, value: { keyId: string }): void {
     if (value.keyId !== `key:${reference(identity)}`) {
       throw new Error('Memory key identity mismatch');
     }
+  }
+  function decrypt(identity: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
+    checkIdentity(identity, value);
     const key = readKey(directory, identity);
     if (key === 'destroyed') {
       return null;
@@ -190,5 +193,5 @@ export function memoryKeys(directory: string) {
     }
     return 'available';
   }
-  return { provision, discardUnpublished, delete: remove, encrypt, decrypt, status };
+  return { provision, discardUnpublished, delete: remove, encrypt, decrypt, status, checkIdentity };
 }
