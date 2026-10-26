@@ -1,5 +1,5 @@
 const failurePrefix = 'FAIL browser during ';
-const browserStep = /^(browser launch|[0-9]+px (home|SSO button|login name|password|return|session|signed-in page|chat turn))$/u;
+const browserStep = /^(browser launch|[0-9]+px (home|SSO button|login name|password|return|session|signed-in page|chat turn|history refusal))$/u;
 
 export function browserFailure(step: string, error: unknown) {
   const safeStep = browserStep.test(step) ? step : 'unknown step';

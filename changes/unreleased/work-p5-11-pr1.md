@@ -1,0 +1,1 @@
+Packaged browser journey checks can now bind sign-in, stub chat and unauthenticated history refusals at both screen widths to two fresh installs. Live qualification and the full inherited product journeys remain outstanding.

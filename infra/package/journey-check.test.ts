@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkJourney, checkHistoryRefusal } from './journey-check.ts';
+import { checkJourney, checkHistoryRefusal, checkCollectorOwner } from './journey-check.ts';
 
 const binding = {
   source: 'a'.repeat(40), image: `local/server@sha256:${'b'.repeat(64)}`,
@@ -17,23 +17,27 @@ function receipt() {
   return { binding: structuredClone(binding), outcomes: structuredClone(outcomes) };
 }
 
-test('only both widths from the current installation are accepted', () => {
-  assert.deepEqual(checkJourney(receipt(), binding), outcomes);
-});
+function acceptsCurrentInstall() {
+  const result = receipt();
+  Object.assign(result.outcomes[0]!, { cookie: 'planted-secret' });
+  assert.deepEqual(checkJourney(result, binding), outcomes);
+}
+test('only both widths from the current installation are accepted', acceptsCurrentInstall);
 
 for (const field of Object.keys(binding)) {
-  test(`receipt with foreign ${field} refuses`, () => {
+  function refusesForeignBinding() {
     const result = receipt();
     Object.assign(result.binding, { [field]: 'foreign' });
     function accept() {
       checkJourney(result, binding);
     }
     assert.throws(accept, /Journey receipt belongs to another install/u);
-  });
+  }
+  test(`receipt with foreign ${field} refuses`, refusesForeignBinding);
 }
 
 for (const change of ['missing width', 'failed sign-in', 'failed chat', 'failed refusal']) {
-  test(`incomplete collector refuses: ${change}`, () => {
+  function refusesIncompleteCollector() {
     const result = receipt();
     if (change === 'missing width') result.outcomes.pop();
     if (change === 'failed sign-in') result.outcomes[0]!.authenticated = false;
@@ -43,18 +47,20 @@ for (const change of ['missing width', 'failed sign-in', 'failed chat', 'failed 
       checkJourney(result, binding);
     }
     assert.throws(accept);
-  });
+  }
+  test(`incomplete collector refuses: ${change}`, refusesIncompleteCollector);
 }
 
-test('a non-loopback origin refuses even when the receipt agrees', () => {
+function refusesNonLoopbackOrigin() {
   const foreign = { ...binding, origin: 'https://example.test' };
   function accept() {
     checkJourney({ ...receipt(), binding: foreign }, foreign);
   }
   assert.throws(accept, /Journey origin must be the claimed loopback address/u);
-});
+}
+test('a non-loopback origin refuses even when the receipt agrees', refusesNonLoopbackOrigin);
 
-test('unauthenticated history requires the exact refusal with no extra bytes', () => {
+function refusesProtectedBytes() {
   checkHistoryRefusal(401, '{"status":"refused"}');
   for (const [status, body] of [[200, 'protected'], [401, 'protected'],
     [401, '{"status":"refused","messages":["protected"]}']] as const) {
@@ -63,4 +69,26 @@ test('unauthenticated history requires the exact refusal with no extra bytes', (
     }
     assert.throws(accept);
   }
-});
+}
+test('unauthenticated history requires the exact refusal with no extra bytes', refusesProtectedBytes);
+
+function refusesMissingInstall() {
+  const owner = { context: binding.context, namespaceUid: binding.namespaceUid,
+    releaseSecretUid: binding.releaseUid, installId: binding.installId };
+  checkCollectorOwner(binding, owner);
+  for (const changed of [undefined, { ...owner, installId: 'foreign' }]) {
+    function collect() {
+      checkCollectorOwner(binding, changed);
+    }
+    assert.throws(collect, /Collector requires the current owned install/u);
+  }
+}
+test('collector refuses after teardown and for a foreign owned install', refusesMissingInstall);
+
+function refusesStageB() {
+  function substitute() {
+    checkJourney({ screenshots: ['1280.png', '390.png'], status: 'PASS' }, binding);
+  }
+  assert.throws(substitute, /Journey receipt belongs to another install/u);
+}
+test('Stage B evidence cannot replace a packaged collector receipt', refusesStageB);

@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { directory, readOwnerEmail, root } from '../dev-stack/config.ts';
+import { targetConnection } from '../dev-stack/target.ts';
+import { checkCollectorOwner, checkJourney, type JourneyBinding } from './journey-check.ts';
 import { secondary, stackId } from '../dev-stack/identity.ts';
 import { requireOwner, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
@@ -16,6 +18,7 @@ const installLabel = 'opencrane.dev/install-id';
 
 type DatedObject = { uid?: string; createdAt: string };
 type FreshState = {
+  journey?: { binding: JourneyBinding; outcomes: ReturnType<typeof checkJourney> };
   installId: string; previousInstallId?: string | undefined; startedAt: string;
   previousPvcUids: readonly string[]; previousStoreId?: string | undefined;
   pvClaims: readonly string[];
@@ -127,10 +130,11 @@ async function command(program: string, args: string[], timeout = 180_000,
   return result.stdout.trim();
 }
 
-export async function captureBrowser(index: number) {
+export async function captureBrowser(index: number, binding?: JourneyBinding) {
   try {
     return await command('node', ['--experimental-strip-types', 'infra/package/capture.mjs',
-      `fresh-${index}-`], 360_000);
+      `fresh-${index}-`], 360_000, binding
+        ? { PACKAGE_JOURNEY_BINDING: JSON.stringify(binding) } : {});
   } catch (error) {
     const failure = error as { stderr?: string };
     const reason = retainedBrowserFailure(failure.stderr ?? '');
@@ -139,22 +143,26 @@ export async function captureBrowser(index: number) {
   }
 }
 
-async function kubectl(args: string[]) {
-  return command('kubectl', ['--context=k3d-ocn', ...args]);
+async function kubectl(args: string[], expectedContext?: string) {
+  const connection = await targetConnection();
+  assert(!expectedContext || connection.context === expectedContext, 'Package target changed');
+  const env: Record<string, string> = {};
+  if (connection.kubeconfig) env['KUBECONFIG'] = connection.kubeconfig;
+  return command('kubectl', [`--context=${connection.context}`, ...args], 180_000, env);
 }
 
-async function list(args: string[]): Promise<KubernetesList> {
-  const output = await kubectl([...args, '-o', 'json']);
+async function list(args: string[], context?: string): Promise<KubernetesList> {
+  const output = await kubectl([...args, '-o', 'json'], context);
   return JSON.parse(output) as KubernetesList;
 }
 
-async function claimedPvs() {
-  const volumes = await list(['get', 'pv']);
+async function claimedPvs(context?: string) {
+  const volumes = await list(['get', 'pv'], context);
   return volumes.items.filter(claimedByPackage);
 }
 
 // Check the claim and old storage before the first namespace or Helm write.
-export async function checkStart() {
+export async function checkStart(context?: string) {
   await requireOwner();
   const ownerFile = `${directory}/package-owner.json`;
   try {
@@ -163,9 +171,10 @@ export async function checkStart() {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  const existing = await kubectl(['get', 'namespace', namespace, '--ignore-not-found', '-o', 'json']);
+  const existing = await kubectl(['get', 'namespace', namespace,
+    '--ignore-not-found', '-o', 'json'], context);
   assert.equal(existing, '', 'The package namespace still exists');
-  assert.equal((await claimedPvs()).length, 0, 'A PV remains claimed for this namespace');
+  assert.equal((await claimedPvs(context)).length, 0, 'A PV remains claimed for this namespace');
 }
 
 const inspectScript = `
@@ -216,9 +225,9 @@ try {
 } finally { await pool.end(); await events.close(); }
 `;
 
-async function inspectData() {
+async function inspectData(context?: string) {
   const output = await kubectl(['-n', namespace, 'exec', 'deployment/server', '-c', 'server',
-    '--', 'node', '--input-type=module', '-e', inspectScript]);
+    '--', 'node', '--input-type=module', '-e', inspectScript], context);
   return JSON.parse(output) as {
     members: string[]; identities: OwnerState['identityRows']; role: string; status: string;
     email: string; ownerEvents: OwnerState['ownerEvents'];
@@ -245,19 +254,21 @@ async function providerVerified(issuer: string, orgId: string, subject: string) 
   return body.user.human?.email?.isEmailVerified === true;
 }
 
-async function snapshot(startedAt: string, previous?: FreshState): Promise<FreshState> {
+async function snapshot(startedAt: string, context: string, previous?: FreshState) {
   const owner = await verifyPackageOwner();
   console.log('Checking release label');
   const release = await kubectl(['-n', namespace, 'get', 'secret',
-    `sh.helm.release.v1.${namespace}.v1`, '-o', 'json']);
-  const releaseData = JSON.parse(release) as { metadata: { labels?: Record<string, string> } };
+    `sh.helm.release.v1.${namespace}.v1`, '-o', 'json'], context);
+  const releaseData = JSON.parse(release) as {
+    metadata: { uid: string; labels?: Record<string, string> } };
   const installId = releaseData.metadata.labels?.[installLabel];
-  assert.equal(installId, owner.installId, 'Release label differs from the claim');
+  assert(installId === owner.installId, 'Release label differs from the claim');
+  assert(releaseData.metadata.uid === owner.releaseSecretUid, 'Release UID differs from the claim');
   console.log('Checking PVCs and Kubernetes events');
-  const pvcs = await list(['-n', namespace, 'get', 'pvc']);
-  const events = await list(['-n', namespace, 'get', 'events']);
+  const pvcs = await list(['-n', namespace, 'get', 'pvc'], context);
+  const events = await list(['-n', namespace, 'get', 'events'], context);
   console.log('Checking silo data and OpenFGA');
-  const data = await inspectData();
+  const data = await inspectData(context);
   const state: FreshState = {
     installId: installId ?? '', previousInstallId: previous?.installId, startedAt,
     previousPvcUids: previous?.pvcs.map(pvcUid) ?? [],
@@ -272,7 +283,7 @@ async function snapshot(startedAt: string, previous?: FreshState): Promise<Fresh
       memory_maintenance_runs: data.memory_maintenance_runs,
       memory_maintenance_bindings: data.memory_maintenance_bindings },
   };
-  return state;
+  return { state, owner };
 }
 
 async function waitForForward(child: ChildProcess, port: number) {
@@ -288,11 +299,39 @@ async function waitForForward(child: ChildProcess, port: number) {
   throw new Error('Package forward timed out');
 }
 
-export async function runOnce(index: number, values: string, previous?: FreshState) {
+async function journeyBinding(values: string, state: FreshState,
+    owner: Awaited<ReturnType<typeof verifyPackageOwner>>): Promise<JourneyBinding> {
+  const changes = await command('git', ['status', '--porcelain']);
+  assert(changes === '', 'Source worktree has uncommitted changes');
+  const source = await command('git', ['rev-parse', 'HEAD']);
+  const settings = JSON.parse(await readFile(values, 'utf8')) as { images: { server: string } };
+  assert(/^[a-f0-9]{40}$/u.test(source), 'Source revision is missing');
+  const image = settings.images.server;
+  assert(/@sha256:[a-f0-9]{64}$/u.test(image), 'Source image is missing');
+  const deployment = await kubectl(['-n', namespace, 'get', 'deployment', 'server',
+    '-o', 'json'], owner.context);
+  const workload = JSON.parse(deployment) as { spec: { template: { spec: {
+    containers: Array<{ name: string; image: string }> } } } };
+  function server(container: { name: string }) {
+    return container.name === 'server';
+  }
+  assert(workload.spec.template.spec.containers.find(server)?.image === image,
+    'Running server image differs from the requested image');
+  assert(owner.namespaceUid && owner.releaseSecretUid, 'Package UIDs are missing');
+  return { source, image, context: owner.context, namespace,
+    namespaceUid: owner.namespaceUid, releaseUid: owner.releaseSecretUid,
+    installId: state.installId, pvcUids: state.pvcs.map(pvcUid), storeId: state.storeId,
+    origin: `http://127.0.0.1:${25000 + Number(stackId) * 100 + 6}` };
+}
+
+export async function runOnce(index: number, values: string, previous?: FreshState,
+    journey = false) {
   let stage = 'start ownership';
-  await checkStart();
+  const { context } = await targetConnection();
+  await checkStart(context);
   const startedAt = new Date().toISOString();
   let prepared = false;
+  let failed = false;
   let forward: ChildProcess | undefined;
   try {
     stage = 'package preparation';
@@ -307,13 +346,13 @@ export async function runOnce(index: number, values: string, previous?: FreshSta
     await command('infra/dev-stack/run.sh', ['package-up', '--id', stackId,
       '--values', values], 900_000);
     stage = 'fresh state';
-    const state = await snapshot(startedAt, previous);
+    const { state, owner: packageOwner } = await snapshot(startedAt, context, previous);
     checkFresh(state);
     stage = 'provider and owner';
     const settings = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8')) as {
       issuer: string; orgId: string; users: { owner: { id: string } };
     };
-    const data = await inspectData();
+    const data = await inspectData(context);
     const verified = await providerVerified(settings.issuer, settings.orgId,
       settings.users.owner.id);
     const pinned = JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`,
@@ -335,8 +374,28 @@ export async function runOnce(index: number, values: string, previous?: FreshSta
       cwd: root, env: process.env, stdio: 'ignore' });
     await waitForForward(forward, 25000 + Number(stackId) * 100 + 6);
     stage = 'browser capture';
-    const capture = await captureBrowser(index);
-    const signIns = JSON.parse(capture.split('\n').at(-1) ?? 'null') as Array<{
+    let binding: JourneyBinding | undefined;
+    if (journey) {
+      binding = await journeyBinding(values, state, packageOwner);
+      if (previous?.journey) {
+        const earlier = previous.journey.binding;
+        assert(binding.namespaceUid !== earlier.namespaceUid &&
+          binding.releaseUid !== earlier.releaseUid, 'Package UIDs were reused');
+        assert(binding.source === earlier.source && binding.image === earlier.image,
+          'Source or image changed between runs');
+      }
+      const current = await verifyPackageOwner();
+      checkCollectorOwner(binding, current);
+      assert(forward.exitCode === null, 'Package forward stopped before collection');
+    }
+    const capture = await captureBrowser(index, binding);
+    if (binding) {
+      checkCollectorOwner(binding, await verifyPackageOwner());
+      assert(forward.exitCode === null, 'Package forward stopped during collection');
+    }
+    const result: unknown = JSON.parse(capture.split('\n').at(-1) ?? 'null');
+    if (binding) state.journey = { binding, outcomes: checkJourney(result, binding) };
+    const signIns = (state.journey?.outcomes ?? result) as Array<{
       width: number; authenticated: boolean; subject: string;
     }>;
     assert.deepEqual(signIns.map(signInWidth), [1280, 390]);
@@ -348,13 +407,22 @@ export async function runOnce(index: number, values: string, previous?: FreshSta
       `PVCs ${state.pvcs.map(pvcUid).join(', ')}, store ${state.storeId}`);
     return state;
   } catch (error) {
-    if (error instanceof assert.AssertionError) console.error(error.message);
+    failed = true;
+    if (!journey && error instanceof assert.AssertionError) console.error(error.message);
     console.error(`FAIL fresh ${index} during ${stage}`);
-    throw new Error(`Fresh run ${index} failed during ${stage}`, { cause: error });
+    const message = `Fresh run ${index} failed during ${stage}`;
+    if (journey) throw new Error(message);
+    throw new Error(message, { cause: error });
   } finally {
     forward?.kill();
-    if (prepared) await command('infra/dev-stack/run.sh', ['package-down', '--id', stackId],
-      300_000);
+    if (prepared) {
+      try {
+        await command('infra/dev-stack/run.sh', ['package-down', '--id', stackId], 300_000);
+      } catch {
+        console.error('FAIL owned package cleanup; inspect the claimed slot');
+        if (!failed) throw new Error('Owned package cleanup failed');
+      }
+    }
   }
 }
 

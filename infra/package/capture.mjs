@@ -5,6 +5,8 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
 import { directory, readEnv } from '../dev-stack/config.ts';
+import { verifyPackageOwner } from '../dev-stack/packaged.ts';
+import { checkCollectorOwner, checkHistoryRefusal } from './journey-check.ts';
 import { browserFailure } from './browser-capture.ts';
 import { secondary, stackId } from '../dev-stack/identity.ts';
 
@@ -13,7 +15,10 @@ const settings = await readEnv('settings');
 requireStandInJourney(settings);
 const port = 25000 + Number(stackId) * 100 + 6;
 const origin = `http://127.0.0.1:${port}`;
-const output = 'docs/process/p5-1-live';
+const binding = JSON.parse(process.env['PACKAGE_JOURNEY_BINDING'] ?? 'null');
+assert(!binding || binding.origin === origin, 'Journey origin differs from the claimed loopback');
+let output = 'docs/process/p5-1-live';
+if (binding) output = `${directory}/package-journey/${binding.installId}`;
 const prefix = process.argv[2];
 assert(/^fresh-[12]-$/u.test(prefix), 'Pass fresh-1- or fresh-2- as the capture prefix');
 const setup = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'));
@@ -40,9 +45,13 @@ async function completeChatTurn(page, width) {
   await reply.getByText('Done', { exact: true }).waitFor();
   await page.screenshot({ path: `${output}/${prefix}chat-${width}.png`, fullPage: true });
   console.log(`PASS stub-model browser chat at ${width}px`);
+  const conversation = new URL(page.url()).searchParams.get('conversation');
+  assert(conversation, 'Chat conversation is missing');
+  return conversation;
 }
 
 try {
+  if (binding) checkCollectorOwner(binding, await verifyPackageOwner());
   browser = await chromium.launch({ headless: true, channel: 'chromium' });
   await mkdir(output, { recursive: true });
   for (const width of [1280, 390]) {
@@ -69,17 +78,32 @@ try {
     const session = await response.json();
     assert.equal(session.authenticated, true);
     assert.equal(session.user?.sub, owner.id);
-    signIns.push({ width, authenticated: session.authenticated,
-      subject: session.user?.sub });
     stage = `${width}px signed-in page`;
     await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
     await page.screenshot({ path: `${output}/${prefix}signed-in-${width}.png`, fullPage: true });
     stage = `${width}px chat turn`;
-    await completeChatTurn(page, width);
+    const conversation = await completeChatTurn(page, width);
+    if (binding) {
+      stage = `${width}px history refusal`;
+      const viewport = { width, height: 900 };
+      const anonymousOptions = { viewport };
+      const anonymous = await browser.newContext(anonymousOptions);
+      try {
+        const history = await anonymous.request.get(
+          `${origin}/api/conversations/${encodeURIComponent(conversation)}/messages`,
+          { maxRedirects: 0 });
+        checkHistoryRefusal(history.status(), await history.text());
+      } finally {
+        await anonymous.close();
+      }
+    }
+    signIns.push({ width, authenticated: session.authenticated,
+      subject: session.user?.sub, chat: true, historyRefused: Boolean(binding) });
     await context.close();
     console.log(`PASS signed-in package screenshot at ${width}px`);
   }
-  console.log(JSON.stringify(signIns));
+  const result = binding ? { binding, outcomes: signIns } : signIns;
+  console.log(JSON.stringify(result));
 } catch (error) {
   console.error(browserFailure(stage, error));
   process.exitCode = 1;

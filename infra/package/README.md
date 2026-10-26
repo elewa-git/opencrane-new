@@ -24,7 +24,7 @@ flowchart LR
   stack -->|checks ownership, cluster access and private values| package
   package -->|uses local cluster| devbox
   package -->|starts services, encrypts copied files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|runs services and checks NATS placement| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
+  package -->|runs services and checks placement and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -79,6 +79,8 @@ running install still need work.
    this developer's install, even after a crash.
 5. **A developer checks fresh installs.** A check installs the package twice from
    scratch and confirms the second install starts empty and chat still works.
+   Browser results record which install they checked. A separate browser with no
+   session must receive only a refusal when it requests that chat history.
 
 ## How to run or test it
 
