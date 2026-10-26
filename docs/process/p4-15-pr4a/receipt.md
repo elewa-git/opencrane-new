@@ -1,5 +1,8 @@
 # Private proxy caller checks
 
+The checks below describe the original implementation. The final section records
+the later fix for borrowing a private grant and its checks against the rebased source.
+
 Date: 26 October 2026. Part of #97. Base: `12ca064d74866818c81a296046f4703e69fe306d`.
 Failing-first test commit: `189f56584`.
 Implementation source: `bdd3e2fa26fe7a61e8a7a72ac58a68537ce19565`.
@@ -78,3 +81,49 @@ The repeated targeted command was:
 ```sh
 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npx vitest run apps/computer/test/private-proxy.test.ts apps/computer/test/mcp-proxy.test.ts apps/computer/test/thread-load-lifecycle.test.ts apps/computer/test/turn-stop.test.ts --maxWorkers=1
 ```
+
+## Grant and thread checks — 26 October 2026
+
+Source: `65530cc75`. Base: `b36019eba4f4add1cb77466a7417843b3ee0a787`.
+The rebase completed, the base is an ancestor of this branch and no rebase is pending.
+
+Every tool call now checks the caller against the grant it will send. Approval
+retries repeat that check after renewal. Binding a private caller refuses a thread
+with an ordinary catalogue or another turn's grant before recording the binding.
+The existing checks still refuse ordinary work on a bound private thread. Ordinary
+turns can still reuse their thread and catalogue.
+
+Failing-first commits: `cb4abe3a8` for borrowed grants and `935814db1` for conflicting
+bindings. Both call regressions failed by forwarding and returning the fixture's
+private result. Both new binding regressions failed because binding succeeded.
+These tests use the real loopback proxy and Unix control socket.
+
+Own checks:
+
+- PASS: 176 tests in 13 computer proxy, turn runner and lifecycle files, twice.
+- PASS: 9 memory bridge-loss tests, twice, with real NATS and a throwaway PostgreSQL
+  17.6 container. The container and its volume were removed after the tests.
+- PASS: all 438 tests in the unchanged `libs/events/test/security-rules.test.ts`, once.
+- PASS: `check:events`; all 154 event types agree.
+- PASS: typecheck for every workspace and both infrastructure projects.
+- PASS: full lint, including dependency checks, Knip, docs, links, fixtures,
+  package licences and `lint:changelog`. ESLint reported 26 warnings and zero errors.
+
+The initial borrowed-grant call sends zero upstream requests. The approval case
+sends only the first request needed to obtain the approval refusal, then sends no
+retry. Neither returns the fixture's private result. Conflicting bindings are tested
+in both orders; refusing a conflict leaves the valid caller working.
+
+All test and check commands run under `nice -n 10`; tests use one worker. Computer
+and event tests use the supplied `PG_TEST_URL` on port 55432. The projection test
+uses its own disposable PostgreSQL container on port 41442, as required by the test
+setup rules. No owner stack or secondary stack was touched. No full root suite ran.
+
+Logs use `/tmp/p4-15-pr4a-fix1-` with `red-calls.log`, `green-calls.log`,
+`red-bindings.log`, `green-bindings.log`, `tests-1.log`, `tests-2.log`,
+`memory-1.log`, `memory-2.log`, `security.log`, `events.log`, `typecheck.log`
+and `lint.log`.
+
+PARTIAL: private process launch integration remains pending. Memory admission stays
+disabled. NOT RUN for this fix: a new image build, native recall, gVisor and a fresh
+install journey. The earlier image checks do not qualify the changed source.
