@@ -26,6 +26,7 @@ flowchart LR
   package -->|starts services and replays memory| apps["apps<br/>product services and replay"]
   package -->|runs| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
+  package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
 
 The install runs a fake AI model for testing and creates its first owner through
@@ -55,7 +56,7 @@ running install still need work.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log for an operator.
 - Restores checked events into an empty disposable NATS target.
-- Checks event recovery after an interrupted change to handler subscriptions.
+- Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
 - Removes only this worktree's install, including after an interrupted launcher.
 
@@ -116,8 +117,10 @@ processes. This does not restore or reopen a working installation.
 The [restore notes](README.robot.md#event-byte-restore) explain the requirements.
 
 A separate test interrupts a change to the events that background handlers receive.
-It restores the earlier event copy and rebuilds membership tables with reactions
-stopped. This checks event recovery only. It does not qualify a package upgrade.
+It restores the earlier event copy and rebuilds membership and spending tables with
+reactions stopped. Reservations keep their original identities and exact cents.
+Unresolved work keeps its hold after two rebuilds. This checks event-to-projection
+recovery only. It does not qualify a package upgrade.
 The [recovery notes](README.robot.md#interrupted-handler-upgrade-check) explain the proof.
 The memory recovery command compares a proposed key folder with the stopped, trusted
 source and its current events. It refuses stale keys, missing deletion markers and

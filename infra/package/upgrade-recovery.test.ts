@@ -7,12 +7,16 @@ import { expect, it, vi } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { members, ProjectionRunner } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
-import { HandlerRuntime, registerHandler, upgradeHandlers } from '@opencrane/handlers';
+import { registerHandler } from '@opencrane/handlers';
 import { fixture, logger } from '../../libs/handlers/test/helpers.ts';
 import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
 import { restoreEventBackup } from './event-restore.ts';
 import { collectUpgradeRecovery } from './upgrade-recovery.ts';
 import { checkUpgradeRecovery } from './upgrade-recovery-check.ts';
+import * as models from '@opencrane/models';
+import { interruptAndRefuse } from './upgrade-recovery-fixture.ts';
+import { seedRecoveryBudgets, expectRecoveryMoney } from './upgrade-recovery-budget-fixture.ts';
+import { collectBudgetRecovery, checkBudgetRecovery } from './upgrade-recovery-budget.ts';
 
 type SourceFixture = Awaited<ReturnType<typeof fixture>>;
 
@@ -24,10 +28,16 @@ async function captureBeforeUpgrade(source: SourceFixture, directory: string) {
     history.push(event(`role-${index}`, 'member-alice', 'member.role_changed'));
   }
   await source.nats.seed(history);
+  const budgetIds = await seedRecoveryBudgets(source.nats);
+  const sequence = await source.nats.reader.head();
+  await models.rebuildBudgetProjection(source.db, source.nats.reader, logger);
+  await expectRecoveryMoney(source.db, sequence, budgetIds);
+  const budgetBefore = await collectBudgetRecovery(source.db);
   const previous = JSON.stringify([{ name: 'update-openfga', eventTypes: ['member.joined'] }]);
   await source.db.query(`CREATE TABLE handler_dispatcher (
     id INTEGER PRIMARY KEY, silo TEXT, manifest TEXT, sequence BIGINT)`);
-  await source.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', $1, 260)", [previous]);
+  await source.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', $1, $2)",
+    [previous, sequence]);
   const runner = new ProjectionRunner(source.db, source.nats.reader, logger);
   await runner.initialise(members);
   await runner.run(members);
@@ -37,28 +47,7 @@ async function captureBeforeUpgrade(source: SourceFixture, directory: string) {
   await collectEventBackup(source.nats.connection, backupOptions);
   const descriptorPath = join(destination, 'descriptor.json');
   const descriptor = descriptorSchema.parse(JSON.parse(await readFile(descriptorPath, 'utf8')));
-  return { before, destination, descriptor, previous };
-}
-
-async function interruptAndRefuse(source: SourceFixture, runtime: HandlerRuntime,
-  effectUrl: string, previous: string) {
-  await runtime.stop();
-  await source.waitForConnectionsClosed();
-  await source.crash('upgrade-after-chunk', effectUrl);
-  const progress = await source.db.query('SELECT previous, manifest, target, sequence FROM handler_upgrade');
-  expect(progress.rows).toMatchObject([{ previous, target: '260', sequence: '256' }]);
-  const parked = await source.db.query('SELECT * FROM pgboss.job ORDER BY name, id');
-  expect(parked.rows.length).toBeGreaterThan(256);
-  for (const row of parked.rows) expect(row['start_after']).toBe(Infinity);
-  const incompatible = new HandlerRuntime({ ...runtime.options, handlers: [] });
-  await source.waitForConnectionsClosed();
-  await expect(upgradeHandlers(incompatible, source.nats.reader))
-    .rejects.toThrow('unfinished upgrade uses different subscriptions');
-  expect((await source.db.query('SELECT * FROM pgboss.job ORDER BY name, id')).rows)
-    .toEqual(parked.rows);
-  expect((await source.db.query('SELECT previous, manifest, target, sequence FROM handler_upgrade')).rows)
-    .toEqual(progress.rows);
-  return { progress, parked };
+  return { before, destination, descriptor, previous, budgetBefore, budgetIds };
 }
 
 function observeRestore(target: Awaited<ReturnType<typeof natsFixture>>, lostCompletion: boolean) {
@@ -112,8 +101,13 @@ async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
     await externalEffect();
     expect(calls).toBe(1);
     calls = 0;
-    const { before, destination, descriptor, previous } = await captureBeforeUpgrade(source, directory);
-    const { progress, parked } = await interruptAndRefuse(source, runtime, effectUrl, previous);
+    const captured = await captureBeforeUpgrade(source, directory);
+    const { before, destination, descriptor, previous, budgetBefore, budgetIds } = captured;
+    const actorStart = vi.spyOn(models.BudgetActor.prototype, 'start');
+    const targetAppend = vi.spyOn(target.store, 'append');
+    const budgetReplay = vi.spyOn(models, 'rebuildBudgetProjection');
+    const { progress, parked } = await interruptAndRefuse(source, runtime, effectUrl, previous,
+      descriptor.lastSequence);
     const restoreOptions = { silo: 'test', directory: destination, disposable: true };
     const observed = observeRestore(target, lostCompletion);
     const archivePath = join(destination, 'events.snapshot');
@@ -127,35 +121,53 @@ async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
       await expect(restoreEventBackup(source.nats.connection, target.connection, restoreOptions))
         .rejects.toEqual(new Error('Event restore refused; keep target isolated'));
       expect(observed.transfers).toBe(1);
+      expect(budgetReplay).not.toHaveBeenCalled();
       // Inspect the populated target without retrying restoration or starting a projection.
       const reply = await target.connection.request('$JS.API.STREAM.INFO.EVENTS', '{}');
       const info = infoSchema.parse(reply.json<unknown>());
-      expect(info.state.messages).toBe(260);
-      const tables = await restored.db.query("SELECT to_regclass('projection_checkpoints') AS name");
-      expect(tables.rows).toEqual([{ name: null }]);
+      expect(info.state.messages).toBe(descriptor.eventCount);
+      for (const table of ['projection_checkpoints', 'model_budgets', 'model_budget_calls',
+        'model_budget_effects', 'model_current_effects']) {
+        const tables = await restored.db.query('SELECT to_regclass($1) AS name', [table]);
+        expect(tables.rows).toEqual([{ name: null }]);
+      }
       const proof = { outcome: 'uncertain; target isolated', transfers: observed.transfers,
-        targetEvents: 260, projectionStarted: false, externalCalls: calls };
+        targetEvents: descriptor.eventCount, projectionStarted: false, externalCalls: calls };
       await writeFile('.tools/upgrade-recovery-uncertain.json', JSON.stringify(proof, null, 2),
         { mode: 0o600 });
     } else {
       await restoreEventBackup(source.nats.connection, target.connection, restoreOptions);
+      expect(observed.transfers).toBe(1);
       const restoredRunner = new ProjectionRunner(restored.db, target.reader, logger);
       await restoredRunner.initialise(members);
       await restoredRunner.rebuild(members);
+      const budgetRebuilds = [];
+      for (let rebuild = 0; rebuild < 2; rebuild++) {
+        const result = await models.rebuildBudgetProjection(restored.db, target.reader, logger);
+        const budgetAfter = await collectBudgetRecovery(restored.db);
+        checkBudgetRecovery(budgetBefore, budgetAfter, descriptor.lastSequence);
+        await expectRecoveryMoney(restored.db, descriptor.lastSequence, budgetIds);
+        budgetRebuilds.push(budgetAfter);
+        if (rebuild === 1) expect(result.changed).toBe(false);
+      }
+      expect(budgetReplay).toHaveBeenCalledTimes(2);
+      expect(await collectBudgetRecovery(source.db)).toEqual(budgetBefore);
       const after = await collectUpgradeRecovery(target.reader, restored.db);
       checkUpgradeRecovery(before, after, descriptor);
       expect(await collectUpgradeRecovery(source.nats.reader, source.db)).toEqual(before);
       const proof = { interrupted: progress.rows, parkedJobs: parked.rows.length,
         incompatibleResume: 'refused; parked jobs unchanged',
-        before, after, descriptor, externalCalls: calls };
+        before, after, descriptor, budgetBefore, budgetRebuilds, externalCalls: calls };
       await writeFile('.tools/upgrade-recovery-proof.json', JSON.stringify(proof, null, 2),
         { mode: 0o600 });
     }
     expect(calls).toBe(0);
+    expect(actorStart).not.toHaveBeenCalled();
+    expect(targetAppend).not.toHaveBeenCalled();
     expect((await source.db.query('SELECT * FROM pgboss.job ORDER BY name, id')).rows)
       .toEqual(parked.rows);
     const dispatcher = await source.db.query('SELECT manifest, sequence FROM handler_dispatcher');
-    expect(dispatcher.rows).toEqual([{ manifest: previous, sequence: '260' }]);
+    expect(dispatcher.rows).toEqual([{ manifest: previous, sequence: String(descriptor.lastSequence) }]);
     expect((await source.db.query('SELECT previous, manifest, target, sequence FROM handler_upgrade')).rows)
       .toEqual(progress.rows);
   } finally {

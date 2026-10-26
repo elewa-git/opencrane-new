@@ -1,0 +1,1 @@
+- Recovery checks now compare original reservations, settlements and unresolved holds after an interrupted handler upgrade, including two budget rebuilds without new spend.

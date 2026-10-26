@@ -421,21 +421,45 @@ restore helper checks archive bytes; the comparison does not authenticate an arc
 `upgrade-recovery.test.ts` uses the existing SIGKILL fixture after a committed
 256-event scan chunk. It retains the failed attempt's previous/target manifests,
 refuses a different manifest without changing parked jobs, then restores the earlier
-export into empty standalone NATS. It rebuilds only a disposable members projection.
+export into empty standalone NATS. It rebuilds disposable members and budget projections in a separate database.
 No dispatcher, reaction worker or scheduler starts during recovery. A tested local
 recording endpoint guards reaction callbacks in both processes and receives zero calls.
 A lost restore completion remains uncertain; that target gets no projection, retry
 or stream deletion. Truncated bytes refuse before transfer. The source stays reachable
 and unchanged, as required by the event restore contract.
 
-Run the two `infra/package/upgrade-recovery*.test.ts` files with Vitest and
+Run the three `infra/package/upgrade-recovery*.test.ts` files with Vitest and
 `PG_TEST_URL` pointing to a throwaway PostgreSQL admin database, under `nice -n 10`.
 The root Vitest file list includes them in CI. Safe fixture results go to
 `.tools/upgrade-recovery-proof.json` and `.tools/upgrade-recovery-uncertain.json`.
 See the [receipt](../../docs/process/p5-9-pr1/receipt.md). Handler manifests describe
 subscriptions only; they cannot establish package/schema rollback compatibility.
-Coordinated databases/WAL, objects, volumes, custody, rights/cents, pinned-release
+Coordinated databases/WAL, objects, volumes, custody, rights, pinned-release
 upgrade and full P5-9 remain NOT RUN.
+
+### Budget comparison after interruption
+
+`upgrade-recovery-budget.ts` hashes all rows in `model_budgets`, `model_budget_calls`,
+`model_budget_effects` and `model_current_effects` in stable order. It compares that
+hash and the budget checkpoint with the saved source and checked archive position.
+The fixture uses the existing accounting events and `rebuildBudgetProjection`.
+Only the source starts a BudgetActor to save three acknowledged reservations,
+a 70-cent settlement and an unresolved effect before export. Recovery starts no
+BudgetActor, provider, scheduler, dispatcher or reaction worker.
+
+The same archive restores into empty NATS. Two budget rebuilds retain the original
+reservation and permit ids, 210 held cents and 70 settled cents. The unresolved
+90-cent reservation stays held. Event comparison and an append spy check for new
+spend or retries. Lost completion starts no budget replay and leaves all four budget
+tables absent. The recording endpoint is exercised before its count is reset.
+
+`upgrade-recovery-budget.test.ts` changes real database rows before collecting them.
+It covers changed holds, missing settlement amounts and saved effects, changed current
+effect state, lost reservations, duplicate effects, budget totals, changed identities
+and ahead checkpoints. No test substitutes an already calculated hash.
+The [budget receipt](../../docs/process/p5-9-pr2/receipt.md) records only event-to-budget
+projection proof. CNPG/WAL, objects, volumes, rights, compatible packaged rollback,
+admission reopening and full coordinated P5-7–9 remain NOT RUN.
 
 ## Memory restore preflight
 
