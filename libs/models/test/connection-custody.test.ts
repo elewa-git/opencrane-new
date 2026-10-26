@@ -27,6 +27,7 @@ import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalog
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { prepareOAuthAttempt } from '../src/oauth-attempt.ts';
 import { startPersonalOAuth } from '../src/oauth-start.ts';
+import { claimPersonalOAuthCallback } from '../src/oauth-callback.ts';
 import { toolPolicyFromRows } from '../src/tool-policy.ts';
 
 const material = 'synthetic-custody-material';
@@ -341,6 +342,179 @@ async function consentStartFixture() {
   const subject = `connection-${userId}-server-a-${context.profileId}`;
   return { store, configuration, session, command, start, subject, custody, loader };
 }
+
+async function callbackFixture() {
+  const test = await consentStartFixture();
+  const started = await test.start();
+  if (started.status !== 'started') {
+    throw new Error('Fixture consent failed');
+  }
+  const url = new URL(started.consentUrl);
+  const parameters = new URLSearchParams({ state: url.searchParams.get('state')!,
+    code: 'private-callback-canary', iss: test.configuration.issuer });
+  const input = { ...test.command, redirectUri: test.configuration.redirectUri, parameters };
+  const config = { apiUrl: test.store.apiUrl, namespace: 'custody',
+    journalDirectory: test.store.directory, currentKeyId: 'fixture',
+    keys: { fixture: keyring.keys.fixture.toString('base64') } };
+  const filename = `${test.store.directory}/callback-config.json`;
+  await writeFile(filename, JSON.stringify(config), { mode: 0o600 });
+  async function callback(raw: unknown = input) {
+    const custody = await connectionCustodyFromFile(filename);
+    if (!custody) {
+      throw new Error('Fixture custody failed');
+    }
+    return claimPersonalOAuthCallback(events.store, consentBinding, test.session,
+      custody, raw, test.loader.loadConfiguration, pgDb(storage.queue));
+  }
+  async function claims() {
+    const rows = await history(events.store, test.subject, 'test');
+    function isClaim(row: StoredEvent) {
+      return row.event.type === 'connection.oauth_exchange_claimed';
+    }
+    return rows.filter(isClaim);
+  }
+  return { ...test, input, callback, claims, started };
+}
+
+async function claimsCallbackOnce(failure: string) {
+  const test = await callbackFixture();
+  const originalMaterial = test.store.secret.data.token;
+  const append = events.store.append.bind(events.store);
+  async function loseReply(command: AppendCommand) {
+    await append(command);
+    return { status: 'unavailable' as const, cause: new Error('private-callback-canary') };
+  }
+  const fault = vi.spyOn(events.store, 'append');
+  if (failure === 'lost-reply') {
+    fault.mockImplementationOnce(loseReply);
+  }
+  try {
+    const results = await Promise.all([test.callback(), test.callback()]);
+    function wasClaimed(result: Awaited<ReturnType<typeof test.callback>>) {
+      return result.status === 'claimed';
+    }
+    expect(results.filter(wasClaimed)).toHaveLength(1);
+    const claims = await test.claims();
+    expect(claims).toHaveLength(1);
+    const privateText = Buffer.from(originalMaterial, 'base64').toString();
+    const privateData = z.object({ state: z.string(), verifier: z.string() })
+      .parse(JSON.parse(privateText));
+    const publicText = JSON.stringify({ results, claims });
+    for (const value of ['private-callback-canary', privateData.state, privateData.verifier]) {
+      expect(publicText).not.toContain(value);
+    }
+    const read = vi.spyOn(test.custody, 'readAttempt');
+    expect(foldConnection(await history(events.store, test.subject, 'test')).status)
+      .toBe('unavailable');
+    expect(read).not.toHaveBeenCalled();
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 121_000);
+    fault.mockClear();
+    expect(await test.callback()).toEqual({ status: 'unknown' });
+    expect(fault).not.toHaveBeenCalled();
+    expect(await test.claims()).toEqual(claims);
+    expect(test.store.creates).toBe(2);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['race', 'lost-reply'])(
+  'claims one OAuth callback after %s and refuses restart beyond broker deduplication',
+  claimsCallbackOnce);
+
+async function refusesCallback(change: string) {
+  const test = await callbackFixture();
+  let input = test.input;
+  const parameters = input.parameters;
+  if (change === 'state') parameters.set('state', 'x'.repeat(43));
+  else if (change === 'missing-code') parameters.delete('code');
+  else if (change === 'empty-code') parameters.set('code', '');
+  else if (change === 'malformed-code') parameters.set('code', 'bad\ncode');
+  else if (change === 'long-code') parameters.set('code', 'x'.repeat(4097));
+  else if (change.startsWith('duplicate-')) {
+    const key = change.slice('duplicate-'.length);
+    parameters.append(key, parameters.get(key) ?? 'extra');
+  } else if (change === 'issuer') parameters.set('iss', 'https://foreign.example.test/');
+  else if (change === 'missing-issuer') parameters.delete('iss');
+  else if (change === 'redirect') input = { ...input, redirectUri: 'https://other.example.test/' };
+  else if (change === 'provider') input = { ...input, serverId: 'other-server' };
+  else if (change === 'profile') input = { ...input, profileId: 'other-profile' };
+  else if (change === 'installation') input = { ...input, connectionId: 'other-installation' };
+  else if (change === 'session') test.session.sessionDigest = 'd'.repeat(64);
+  else if (change === 'member') test.session.userId = 'other-member';
+  else if (change === 'revision') test.session.memberRevision += 1;
+  else if (change === 'silo') test.session.siloId = 'foreign';
+  else if (change === 'scopes') test.configuration.protocolScopes.push('extra');
+  else if (change === 'uid') test.store.secret.metadata.uid = 'recreated';
+  else if (change === 'version') test.store.secret.metadata.resourceVersion = '2';
+  else if (change === 'verifier') test.store.secret.data.token = Buffer.from('{}').toString('base64');
+  else if (change === 'expiry') {
+    vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
+  } else await changeConsentAccess(test, change);
+  try {
+    expect(await test.callback(input)).toEqual({ status: 'unknown' });
+    expect(await test.claims()).toHaveLength(0);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['state', 'missing-code', 'empty-code', 'malformed-code', 'long-code',
+  'duplicate-state', 'duplicate-code', 'duplicate-iss', 'duplicate-extra', 'issuer',
+  'missing-issuer', 'redirect', 'provider', 'profile', 'installation', 'session', 'member',
+  'revision', 'silo', 'scopes', 'configuration', 'uid', 'version', 'verifier', 'expiry',
+  'removed', 'rejoined', 'policy', 'disabled'])(
+  'refuses OAuth callback with zero claims for changed %s', refusesCallback);
+
+async function refusesCallbackPublication(change: string) {
+  const test = await callbackFixture();
+  const append = events.store.append.bind(events.store);
+  async function changeBeforePublication(command: AppendCommand) {
+    fault.mockRestore();
+    await changeConsentAccess(test, change);
+    return append(command);
+  }
+  const fault = vi.spyOn(events.store, 'append').mockImplementationOnce(changeBeforePublication);
+  try {
+    expect(await test.callback()).toEqual({ status: 'unknown' });
+    expect(await test.claims()).toHaveLength(0);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['removed', 'policy', 'disabled'])(
+  'refuses OAuth callback when %s changes during publication', refusesCallbackPublication);
+
+async function expiresCallbackAfterWait(point: string) {
+  const test = await callbackFixture();
+  const head = events.store.head.bind(events.store);
+  let appended = false;
+  const append = events.store.append.bind(events.store);
+  async function observeAppend(command: AppendCommand) {
+    const result = await append(command);
+    appended = true;
+    return result;
+  }
+  async function expireAfterRead(subject?: string, deadline?: number) {
+    const result = await head(subject, deadline);
+    if (appended && subject === undefined) {
+      if (point === 'expiry') {
+        vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
+      } else {
+        vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 2001);
+      }
+    }
+    return result;
+  }
+  vi.spyOn(events.store, 'append').mockImplementation(observeAppend);
+  vi.spyOn(events.store, 'head').mockImplementation(expireAfterRead);
+  try {
+    expect(await test.callback()).toEqual({ status: 'unknown' });
+    expect(await test.claims()).toHaveLength(1);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['expiry', 'deadline'])(
+  'refuses OAuth callback continuation when final read crosses %s', expiresCallbackAfterWait);
 
 async function startsPrivateConsent() {
   const test = await consentStartFixture();
