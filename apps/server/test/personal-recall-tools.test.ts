@@ -74,7 +74,8 @@ function fixture() {
 }
 
 const invalidBindings = [
-  'no registration', 'no caller', 'no grant', 'another requester grant', 'another turn grant',
+  'no registration', 'no caller', 'another turn caller', 'no grant',
+  'another requester grant', 'another turn grant',
   'changed requester and scope', 'changed requester scope and grant', 'changed assistant',
   'changed silo and scope', 'no recorded turn', 'closed turn', 'ordinary turn', 'shared turn',
   'untrusted turn', 'another conversation grant', 'another thread grant', 'another computer grant',
@@ -85,6 +86,12 @@ async function refusesBinding(change: typeof invalidBindings[number]) {
   const grant = binding.grant;
   if (change === 'no registration') input.callers = callerRegistry();
   if (change === 'no caller') input.caller = undefined;
+  if (change === 'another turn caller') {
+    const otherGrant = { ...grant, turnId: 'other-turn', thread: 'other-thread' };
+    const otherCaller = binding.callers.register(otherGrant);
+    otherCaller.bind(otherGrant.thread);
+    input.caller = otherCaller.caller;
+  }
   if (change === 'no grant') input.grant = undefined;
   if (change === 'another requester grant') grant.requesterId = 'bob';
   if (change === 'another turn grant') grant.turnId = 'other-turn';
