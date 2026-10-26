@@ -521,6 +521,7 @@ const state = JSON.parse(fs.readFileSync(file));
 const program = path.basename(process.argv[1]);
 const args = process.argv.slice(2);
 state.calls.push([program, ...args]);
+state.kubeconfigs.push(process.env.KUBECONFIG ?? null);
 const ownerFile = home + '/.config/opencrane/dev-stack-1/target-owner.json';
 function save() {
   fs.writeFileSync(file, JSON.stringify(state));
@@ -614,6 +615,7 @@ save();
 
 type TargetState = {
   calls: string[][];
+  kubeconfigs: Array<string | null>;
   otherContainers: string[];
   containers: Array<{ Id: string; Config: { Labels: Record<string, string> }; Mounts: unknown[] }>;
   networks: Array<{ Id: string; Name: string; Labels: Record<string, string> }>;
@@ -631,7 +633,7 @@ async function targetFixture() {
   const fixture = await createClaimFixture();
   const owner = `worktree=${process.cwd()}\npid=2147483647\nstartedAt=2020-01-01T00:00:00Z\n`;
   await writeFile(`${fixture.slotDirectory}/stack-owner`, owner);
-  const state: TargetState = { calls: [], containers: [], networks: [], nodes: [],
+  const state: TargetState = { calls: [], kubeconfigs: [], containers: [], networks: [], nodes: [],
     otherContainers: ['owner-container', 'slot-2-container'] };
   for (const program of ['docker', 'k3d', 'kubectl', 'helm']) {
     await writeFile(`${fixture.home}/bin/${program}`, targetCommands, { mode: 0o755 });
@@ -676,6 +678,7 @@ async function targetLifecycle() {
     await assert.rejects(fixture.run('claim'));
     await writeFile(`${fixture.slotDirectory}/stack-owner`, `worktree=${process.cwd()}\n`);
     fixture.state.calls = [];
+    fixture.state.kubeconfigs = [];
     await fixture.saveState();
     await fixture.run('target-down');
     await fixture.loadState();
@@ -713,6 +716,7 @@ for (const fault of ['docker', 'kubectl', 'container', 'node', 'network', 'workt
       if (fault === 'worktree') await writeDeadOwner(fixture.slotDirectory, 16);
       if (fault === 'retained') fixture.state.retain = true;
       fixture.state.calls = [];
+    fixture.state.kubeconfigs = [];
       await fixture.saveState();
       const started = Date.now();
       await assert.rejects(fixture.run('target-down'));
@@ -828,6 +832,7 @@ async function packageConnectionLifecycle(isolated: boolean) {
     const annotations = { 'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1' };
     fixture.state.namespace = { metadata: { uid: 'package-uid', annotations } };
     fixture.state.calls = [];
+    fixture.state.kubeconfigs = [];
     await fixture.saveState();
     const context = isolated ? 'k3d-opencrane-target-1' : 'k3d-ocn';
     const owner = { worktree: process.cwd(), slot: '1', context,
@@ -852,9 +857,14 @@ async function packageConnectionLifecycle(isolated: boolean) {
     assert.equal(await readFile(`${fixture.home}/forward-stopped`, 'utf8'), 'stopped');
     await fixture.run('package-down');
     await fixture.loadState();
-    for (const call of fixture.state.calls) {
+    for (const [index, call] of fixture.state.calls.entries()) {
       if (call[0] !== 'kubectl' && call[0] !== 'helm') continue;
-      assert.equal(call.includes('--kubeconfig'), isolated);
+      const forward = call.includes('port-forward');
+      assert.equal(call.includes('--kubeconfig'), isolated && forward);
+      if (isolated && !forward) {
+        assert.equal(fixture.state.kubeconfigs[index], `${fixture.slotDirectory}/target.kubeconfig`);
+        assert.equal(call.includes(`${fixture.slotDirectory}/target.kubeconfig`), false);
+      }
       assert.ok(call.includes(context) || call.includes(`--context=${context}`));
       if (call.includes('port-forward')) {
         assert.ok(call.includes('127.0.0.1'));
@@ -906,6 +916,7 @@ async function missingTargetNeverFallsBack(afterHelm: boolean) {
     const record = `${fixture.slotDirectory}/package-owner.json`;
     await writeFile(record, JSON.stringify(owner));
     fixture.state.calls = [];
+    fixture.state.kubeconfigs = [];
     fixture.state.loseTarget = !afterHelm;
     fixture.state.loseAfterHelm = afterHelm;
     await fixture.saveState();

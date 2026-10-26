@@ -34,7 +34,7 @@ const mutations: Array<[string, (state: ReturnType<typeof fixture>) => void]> = 
     evidence.pods.items[0]!.spec.containers[0]!.args.push('--store_dir', '/tmp');
   }],
   ['overridden server command', function overrideCommand({ evidence }) {
-    Object.assign(evidence.pods.items[0]!.spec.containers[0], { command: ['/other-server'] });
+    Object.assign(evidence.pods.items[0]!.spec.containers[0]!, { command: ['/other-server'] });
   }],
   ['changed mounted configuration', function changedConfig({ evidence }) {
     evidence.configuration.clients['nats-settings'] = 'jetstream { store_dir: /tmp }';
@@ -51,7 +51,7 @@ const mutations: Array<[string, (state: ReturnType<typeof fixture>) => void]> = 
     });
   }],
   ['read-only data mount', function readOnlyStore({ evidence }) {
-    Object.assign(evidence.pods.items[0]!.spec.containers[0]!.volumeMounts[0], { readOnly: true });
+    Object.assign(evidence.pods.items[0]!.spec.containers[0]!.volumeMounts[0]!, { readOnly: true });
   }],
   ['message retention limit', function limitedMessages({ evidence }) {
     evidence.stream.config.max_msgs = 1;
@@ -87,7 +87,7 @@ const mutations: Array<[string, (state: ReturnType<typeof fixture>) => void]> = 
     evidence.claims.items[1]!.spec.volumeName = 'volume-0';
   }],
   ['shared claim', function shareClaim({ evidence }) {
-    evidence.pods.items[1]!.spec.volumes[0]!.persistentVolumeClaim.claimName = 'data-0';
+    evidence.pods.items[1]!.spec.volumes[0]!.persistentVolumeClaim!.claimName = 'data-0';
   }],
   ['R1', function r1({ evidence }) {
     evidence.stream.config.num_replicas = 1;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -40,11 +40,13 @@ if (program === 'docker') {
 // Append after the size check so the regression does not depend on a scheduling race.
 const growInput = `
 import files from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { resolve } from 'node:path';
 import { appendFileSync } from 'node:fs';
 const originalOpen = files.open;
 files.open = async function open(path, ...args) {
   const file = await originalOpen(path, ...args);
-  if (path !== process.env.TEST_GROW_FILE) return file;
+  if (resolve(String(path)) !== process.env.TEST_GROW_FILE) return file;
   const originalStat = file.stat.bind(file);
   file.stat = async function stat(...args) {
     const details = await originalStat(...args);
@@ -53,6 +55,7 @@ files.open = async function open(path, ...args) {
   };
   return file;
 };
+syncBuiltinESMExports();
 `;
 
 type Call = { program: string; args: string[]; kubeconfig?: string };
@@ -104,7 +107,7 @@ async function prepareCollector(home: string) {
   for (const command of ['docker', 'kubectl']) {
     writeFileSync(join(bin, command), commands, { mode: 0o755 });
   }
-  const env = { ...process.env, HOME: home, DEV_STACK_ID: '1', PATH: `${bin}:${process.env['PATH']}` };
+  const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, DEV_STACK_ID: '1', PATH: `${bin}:${process.env['PATH']}` };
   delete env['DEV_STACK_DIR'];
   delete env['OPENCRANE_FLEET_TASK'];
   delete env['KUBECONFIG'];
@@ -158,6 +161,7 @@ for (const source of ['fresh', 'stream', 'target', 'review', 'package', 'stack']
       };
       const result = runCollector(home, worktree, { ...env, TEST_GROW_FILE: paths[source] });
       assert.equal(result.status, 1, result.stderr);
+      assert.ok(statSync(paths[source]!).size > 1024 * 1024);
       assert.equal(result.stdout, '');
       assert.equal(result.stderr, 'NATS placement collection refused\n');
       function readSummary() { readFileSync(join(home, 'summary.json')); }
