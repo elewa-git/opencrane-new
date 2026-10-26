@@ -41,6 +41,10 @@ import { resolve } from 'node:path';
 import { appendFileSync } from 'node:fs';
 const originalOpen = files.open;
 const originalReadFile = files.readFile;
+const maximumBytes = 1024 * 1024;
+function record(message) {
+  appendFileSync(process.env.TEST_READ_LOG, message + '\\n');
+}
 let grew = false;
 function grow(path) {
   if (!grew && resolve(String(path)) === process.env.TEST_GROW_FILE) {
@@ -50,11 +54,29 @@ function grow(path) {
 }
 files.readFile = async function readFile(path, ...args) {
   grow(path);
+  if (resolve(String(path)) === process.env.TEST_GROW_FILE) record('unbounded read');
   return originalReadFile(path, ...args);
 };
 files.open = async function open(path, ...args) {
   const file = await originalOpen(path, ...args);
   if (resolve(String(path)) !== process.env.TEST_GROW_FILE) return file;
+  const originalRead = file.read.bind(file);
+  const originalHandleReadFile = file.readFile.bind(file);
+  file.readFile = async function readFile(...args) {
+    record('unbounded read');
+    return originalHandleReadFile(...args);
+  };
+  file.read = async function read(buffer, offset, length, position) {
+    record('bounded read');
+    if (length > maximumBytes + 1) record('oversized read request');
+    const originalToString = buffer.toString.bind(buffer);
+    buffer.toString = function toString(encoding, start = 0, end = buffer.length) {
+      // Record the first oversized text before a later ownership check can refuse it.
+      if (end - start > maximumBytes) record('oversized decode');
+      return originalToString(encoding, start, end);
+    };
+    return originalRead(buffer, offset, length, position);
+  };
   const originalStat = file.stat.bind(file);
   file.stat = async function stat(...args) {
     const details = await originalStat(...args);
@@ -178,7 +200,13 @@ for (const source of ['fresh', 'stream', 'target', 'review', 'package', 'stack']
         target: join(slot, 'target-owner.json'), package: join(slot, 'package-owner.json'),
         stack: join(slot, 'stack-owner'), review: join(worktree, 'infra/package/reviewed-images.json'),
       };
-      const result = runCollector(home, worktree, { ...env, TEST_GROW_FILE: paths[source] });
+      const readLog = join(home, 'reads.log');
+      writeFileSync(readLog, '');
+      const growingEnv = { ...env, TEST_GROW_FILE: paths[source], TEST_READ_LOG: readLog };
+      const result = runCollector(home, worktree, growingEnv);
+      const reads = readFileSync(readLog, 'utf8');
+      assert.doesNotMatch(reads, /unbounded read|oversized read request|oversized decode/);
+      assert.match(reads, /bounded read/);
       assert.ok(statSync(paths[source]!).size > 1024 * 1024);
       assert.equal(result.status, 1, result.stderr);
       assert.equal(result.stdout, '');
