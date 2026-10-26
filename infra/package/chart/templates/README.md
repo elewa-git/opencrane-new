@@ -44,6 +44,7 @@ flowchart LR
   values --> templates
 ```
 
+The setup job and its private file mounts appear in both the default and three-peer render.
 The optional three-peer render is for inspection only. The ordinary installer
 refuses it. The [operator notes](../../README.robot.md#three-peer-nats-rendering)
 explain its settings and the live checks still needed.

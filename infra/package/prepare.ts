@@ -43,7 +43,26 @@ function databaseUrl(role: string, password: string, database: string) {
   return `postgres://${role}:${password}@postgres:5432/${database}`;
 }
 
-async function prepareSettings() {
+function packageReplicas(values: { natsCluster?: unknown }): 1 | 3 {
+  const cluster = values.natsCluster;
+  if (cluster === undefined) {
+    return 1;
+  }
+  const invalid = 'Invalid package NATS replica settings';
+  assert(cluster !== null && typeof cluster === 'object' && !Array.isArray(cluster), invalid);
+  const settings = cluster as Record<string, unknown>;
+  if (settings['enabled'] === true && settings['renderOnly'] === true) {
+    return 3;
+  }
+  if (settings['enabled'] === false &&
+      (settings['renderOnly'] === undefined || settings['renderOnly'] === false)) {
+    return 1;
+  }
+  throw new Error(invalid);
+}
+
+async function prepareSettings(values: { natsCluster?: unknown }) {
+  const replicas = packageReplicas(values);
   const ownerEmail = await readOwnerEmail();
   assert(ownerEmail, 'Private dev-owner-email file is empty');
   await generate(localOrigin);
@@ -67,7 +86,7 @@ async function prepareSettings() {
     NATS_CERT_FILE: '/run/opencrane/files/command.crt',
     NATS_KEY_FILE: '/run/opencrane/files/command.key',
     NATS_NKEY_SEED_FILE: '/run/opencrane/files/command.seed',
-    NATS_INBOX_PREFIX: '_INBOX.command', NATS_REPLICAS: '1',
+    NATS_INBOX_PREFIX: '_INBOX.command', NATS_REPLICAS: String(replicas),
   };
   const serverDatabase = databaseUrl('server', passwords['server']!, 'projections');
   const projectionDatabase = databaseUrl('projection', passwords['projection']!, 'projections');
@@ -152,7 +171,7 @@ async function main() {
   stage = 'claim';
   const owner = await verifyPackageOwner();
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as {
-    secrets: Record<string, string>;
+    secrets: Record<string, string>; natsCluster?: unknown;
   };
   stage = 'development sign-in setup';
   if (process.env['PACKAGE_SKIP_PROVIDER_SETUP'] !== '1') {
@@ -163,7 +182,7 @@ async function main() {
       'infra/dev-stack/zitadel-setup.ts', '--read-only']);
   }
   stage = 'private settings';
-  await prepareSettings();
+  await prepareSettings(values);
   stage = 'Kubernetes secrets';
   await provisionSecrets(values.secrets, owner);
   console.log('PASS private package secrets created from files in the claimed slot');

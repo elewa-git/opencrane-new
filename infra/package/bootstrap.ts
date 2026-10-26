@@ -11,12 +11,24 @@ import { provisionDispatcher } from '@opencrane/handlers';
 const execute = promisify(execFile);
 const serviceAccount = '/var/run/secrets/kubernetes.io/serviceaccount';
 const runtimeDirectory = '/tmp/package-bootstrap';
-let stage = 'PostgreSQL readiness';
+let stage = 'replica settings';
 
 function required(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`Missing ${name}`);
   return value;
+}
+
+function replicaSettings(): 1 | 3 {
+  const replicas = process.env['NATS_REPLICAS'];
+  const commandReplicas = process.env['COMMAND_NATS_REPLICAS'];
+  if ((replicas !== '1' && replicas !== '3') || commandReplicas !== replicas) {
+    throw new Error('Invalid package NATS replica settings');
+  }
+  if (replicas === '3') {
+    return 3;
+  }
+  return 1;
 }
 
 async function waitFor(check: () => Promise<boolean>, name: string) {
@@ -91,10 +103,11 @@ async function openFgaReady() {
 }
 
 async function provisionEvents() {
+  const replicas = replicaSettings();
   const connection = await connectNats();
   try {
     const store = await createEventStore(connection);
-    await store.ensureStream({ replicas: 1 });
+    await store.ensureStream({ replicas });
     await provisionDispatcher(connection);
   } finally {
     await connection.close();
@@ -174,6 +187,7 @@ async function writePrivateEnv(name: string, data: Record<string, string>) {
 
 async function bootstrapOwner(binding: { silo: string; apiUrl: string; storeId: string;
   authorizationModelId: string }) {
+  const replicas = replicaSettings();
   await mkdir(runtimeDirectory, { mode: 0o700 });
   await writePrivateEnv('settings', { SILO_ID: binding.silo });
   await writePrivateEnv('binding', { SILO_ID: binding.silo,
@@ -183,7 +197,7 @@ async function bootstrapOwner(binding: { silo: string; apiUrl: string; storeId: 
     NATS_URL: required('NATS_URL'), NATS_CA_FILE: required('NATS_CA_FILE'),
     NATS_CERT_FILE: required('NATS_CERT_FILE'), NATS_KEY_FILE: required('NATS_KEY_FILE'),
     NATS_NKEY_SEED_FILE: required('NATS_NKEY_SEED_FILE'),
-    NATS_INBOX_PREFIX: required('NATS_INBOX_PREFIX'), NATS_REPLICAS: '1',
+    NATS_INBOX_PREFIX: required('NATS_INBOX_PREFIX'), NATS_REPLICAS: String(replicas),
   });
   await writePrivateEnv('projection', { DATABASE_URL: required('PROJECTION_DATABASE_URL') });
   const env = { ...process.env, DEV_STACK_ID: 'owner', DEV_STACK_DIR: runtimeDirectory };
@@ -192,6 +206,8 @@ async function bootstrapOwner(binding: { silo: string; apiUrl: string; storeId: 
 }
 
 async function main() {
+  replicaSettings();
+  stage = 'PostgreSQL readiness';
   await waitFor(databaseReady, 'PostgreSQL');
   stage = 'database setup';
   await prepareDatabases();

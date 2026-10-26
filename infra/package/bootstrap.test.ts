@@ -5,7 +5,6 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
-import { jetstreamManager } from '@nats-io/jetstream';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
 import { clusterFixture } from '../../libs/event-store/test/cluster-fixture.ts';
@@ -27,6 +26,12 @@ function clusterSettings(cluster: Awaited<ReturnType<typeof clusterFixture>>) {
     NATS_NKEY_SEED_FILE: `${cluster.directory}/command.seed`,
     NATS_INBOX_PREFIX: '_INBOX.command',
   };
+}
+
+async function streamInfo(connection: Awaited<ReturnType<typeof connectNats>>) {
+  const reply = await connection.request('$JS.API.STREAM.INFO.EVENTS');
+  return reply.json<{ config: { num_replicas: number }; created: string;
+    state: { consumer_count: number } }>();
 }
 
 async function bootstrapFixture(env: NodeJS.ProcessEnv) {
@@ -93,11 +98,13 @@ for (const replicas of ['1', '3']) {
       const bootstrap = await bootstrapFixture(env);
       await bootstrap.provisionEvents();
       const connection = await cluster.client(cluster.peers[0]!);
-      const manager = await jetstreamManager(connection);
-      const stream = await manager.streams.info('EVENTS');
+      const stream = await streamInfo(connection);
       expect(stream.config.num_replicas).toBe(Number(replicas));
-      expect((await manager.getAccountInfo()).streams).toBe(1);
-      const consumer = await manager.consumers.info('EVENTS', 'handler-dispatcher');
+      const accountReply = await connection.request('$JS.API.INFO');
+      expect(accountReply.json<{ streams: number }>().streams).toBe(1);
+      const consumerReply = await connection.request('$JS.API.CONSUMER.INFO.EVENTS.handler-dispatcher');
+      const consumer = consumerReply.json<{ config: { num_replicas?: number };
+        cluster?: { replicas?: unknown[] } }>();
       expect(consumer.config.num_replicas ?? 0).toBe(0);
       expect(consumer.cluster?.replicas?.length ?? 0).toBe(Number(replicas) - 1);
     } finally {
@@ -146,12 +153,11 @@ async function preservesExistingStream() {
     const connection = await cluster.client(cluster.peers[0]!);
     const store = await createEventStore(connection);
     await store.ensureStream({ replicas: 1 });
-    const manager = await jetstreamManager(connection);
-    const before = await manager.streams.info('EVENTS');
+    const before = await streamInfo(connection);
     const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
       NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' });
     await expect(bootstrap.provisionEvents()).rejects.toThrow(/num_replicas/u);
-    const after = await manager.streams.info('EVENTS');
+    const after = await streamInfo(connection);
     expect(after.config).toEqual(before.config);
     expect(after.state).toEqual(before.state);
     expect(after.created).toEqual(before.created);

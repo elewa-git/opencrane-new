@@ -1,0 +1,1 @@
+The packaged setup keeps one consistent event-copy count through private preparation, stream creation and the first owner. The three-peer preview includes the complete setup job; installation remains refused pending installer checks and a compatible image review.

@@ -255,11 +255,10 @@ NOT RUN under #15. Rendering is not live k3d proof.
 
 P5-4 PR 2 adds an opt-in render path. It does not install or qualify R3. The
 ordinary installer still rejects `natsCluster` as an unsupported package setting,
-even with complete references. Preparation and bootstrap still request R1.
-The cluster render omits the R1 bootstrap Job. Other application templates are
-unchanged and are not ready for an R3 installation. Never apply this output as a
-working package. Route identity preparation is described below. R3 runtime wiring
-and image promotion come later.
+even with complete references. The preview now includes the complete bootstrap Job
+and its private file mounts. The source behaviour is described in
+[Packaged bootstrap](#packaged-bootstrap). Installer validation and a reviewed compatible
+image are still required before R3 installation. Never apply this preview as a working package.
 
 These chart-only settings are added to an otherwise complete values file:
 
@@ -332,6 +331,37 @@ The helper does not start NATS, change client settings, bootstrap R3 or enable i
 runs disposable certificate and Kubernetes command fixtures, including pinned NATS parsing.
 The [receipt](../../docs/process/p5-4-pr3/receipt.md) records source checks.
 Live rotation and three-node installation remain NOT RUN.
+
+## Packaged bootstrap
+
+P5-4 PR 5a carries one replica choice through preparation and bootstrap. The private
+settings writer chooses `1` when `natsCluster` is absent or explicitly disabled.
+It chooses `3` only when `enabled` and `renderOnly` are both `true`. Missing or
+invalid flags and conflicting modes refuse before credentials or Secrets are written.
+It writes the same value to `NATS_REPLICAS` and `COMMAND_NATS_REPLICAS`.
+The ordinary preparation entry point still runs the unchanged installer preflight,
+which refuses `natsCluster`. The R3 writer is tested through the existing preparation
+fixture; there is no new command or environment bypass to enable installation.
+
+Bootstrap requires both replica settings to be exactly `1` or `3` and to agree.
+It checks them before database setup, stream provisioning and private owner files.
+It passes that count to the existing `EVENTS` stream and writes it into the owner's
+private `command.env`. The dispatcher consumer inherits the stream's count.
+An existing incompatible stream refuses without changing its configuration or data.
+There is no extra stream or automatic conversion from R1 to R3.
+
+The Helm preview includes the same Job, service account and private mounts as the
+default render. The shipped image pin is unchanged and has not been qualified for
+this source. PR 5b must validate installation settings and a compatible image must
+be reviewed before the ordinary installer can accept R3.
+
+The chart tests inspect real Helm output and the existing preparation fixture's
+written settings. `bootstrap.test.ts` executes the bootstrap functions with disposable
+TLS NATS peers and captures the private settings passed to the owner command.
+It checks R1, R3, consumer inheritance, invalid settings and an unchanged incompatible
+stream. These are source checks. Images, controller and storage prerequisites, and
+live Kubernetes placement are NOT RUN. The
+[receipt](../../docs/process/p5-4-pr5a/receipt.md) records the checks.
 
 ## Event-byte export
 

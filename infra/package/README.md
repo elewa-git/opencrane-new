@@ -66,7 +66,8 @@ running install still need work.
 1. **A developer claims a spare stack.** Preparation checks that its Docker Compose
    stack is stopped, then creates a separate space in Kubernetes for the package.
 2. **The package starts.** Helm starts the apps and services. A short setup job
-   prepares the databases and first owner; workers start the assistant's computer as needed.
+   prepares the databases, event log and first owner. It checks that all setup steps
+   use the same number of event copies. Workers start the assistant's computer as needed.
 3. **A developer opens the website.** A local port forward connects the private
    website to a browser on this machine. Preparation and forwarding use the same
    recorded cluster and private connection file as installation and cleanup.
@@ -99,7 +100,10 @@ The optional event-log render describes three private NATS peers on separate Kub
 nodes. A separate preparation command creates their private certificates and public trust.
 It checks ownership and uses the claimed cluster's private connection settings.
 It preserves the same identities on retry. Installation still uses
-one peer; the ordinary installer refuses three-peer mode. Live checks remain outstanding.
+one peer; the ordinary installer refuses three-peer mode. The preview includes the
+complete setup job and its private file mounts. Source tests check that setup can
+request three copies and keep that choice when creating the first owner. A compatible
+image review, installer checks and live checks remain outstanding.
 A bounded collector can check recorded nodes, storage and replica state once a supported
 install exists. It requires mounted claim storage and event history with no expiry limits.
 It checks placement only; sign-in, chat and service refusals need their own checks.
