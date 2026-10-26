@@ -1,10 +1,11 @@
-# Upload scanner
+# File and image part scanner
 
 ## What this is
 
 This package runs [ClamAV](../../GLOSSARY.md#clamav-virus-scanner), a virus scanner,
-for files uploaded to OpenCrane. The server sends each file to the scanner and
-accepts it only after an explicit clean result.
+for files uploaded to OpenCrane and bounded parts of container images. The server
+accepts an upload only after an explicit clean result. Scanning an image part does
+not prove that the whole image is safe.
 
 ## Where it fits
 
@@ -19,7 +20,7 @@ flowchart LR
   infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
-  clamav -->|candidate updater checks| updates["ClamAV update service"]
+  worker["image worker<br/>planned caller"] -.->|sends image parts| launcher
   packaging["packaging job"] -->|checks image databases| clamav
   launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
 ```
@@ -34,7 +35,7 @@ flowchart LR
 - Checks that a packaged image contains exactly the reviewed virus definitions.
 - Offers a separate launcher that keeps those files read-only and stops at database expiry.
 - Scans bounded file bytes through that launcher and returns the loaded database facts.
-- Checks service passes before receiving upload bytes through a separate HTTPS wrapper.
+- Checks separate service passes before receiving uploads or image parts over HTTPS.
 - Limits open connections and active requests, refusing excess work without a waiting list.
 - Keeps the original scanner code from the earlier version of OpenCrane, with its licence, for reference.
 
@@ -53,6 +54,11 @@ flowchart LR
 6. **A trusted process requests a scan.** The launcher copies the bounded bytes, checks
    their hash and size, and sends them to its own daemon. It checks database age
    and the running container before and after the scan. Results last at most two minutes.
+
+7. **An image worker requests a part scan.** The separate image route accepts only
+   image-worker passes. It returns the part hash and size with the silo, server,
+   installation attempt, platform and image digest. The full image caller and
+   coverage checks are not built yet. Image admission stays closed.
 
 ## How to run or test it
 
@@ -86,7 +92,7 @@ replies are saved or returned.
 The separate HTTPS wrapper checks the caller's service, silo and request before
 asking for file bytes. It reserves room for each request before checking the pass
 and refuses excess requests immediately. It also limits connections before TLS starts.
-Its response binds the result to that file and connection.
+Its response binds the result to that file or image part and connection.
 A copied result grants nothing. Caller expiry and database expiry are checked again
 before replying. Upload callers now check this response before storage. They keep
 the same file identity when retrying, with a new request each time. Deployed service

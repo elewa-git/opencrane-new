@@ -1,4 +1,4 @@
-# Upload scanner
+# File and image part scanner
 
 For people, read [README.md](README.md) first.
 
@@ -210,7 +210,7 @@ The returned Node HTTPS server starts listening only when its caller starts it.
 Node execution needs `--experimental-strip-types` for auth. The launch handle's
 new `signal` also refuses pending HTTP transfers when the scanner retires.
 
-Only `POST /scan/upload` is accepted, with `Expect: 100-continue`,
+The upload route accepts `POST /scan/upload`, with `Expect: 100-continue`,
 `Content-Type: application/octet-stream`, `Content-Length` and the standard
 `Authorization: Bearer` pass. Metadata headers are `X-Scan-Silo`, `X-Scan-Purpose`
 (exactly `upload`), `X-Scan-Request-Id`, `X-Scan-File-Id` (UUIDs) and `X-Scan-Sha256`
@@ -251,3 +251,44 @@ Request ids still require UUIDs. P5-6b PR 1 connects the upload caller with trus
 silo/file bindings; it changes no image, event or image-worker contract.
 The real TLS consumer tests interleave two trusted silos. Their scanner facts are
 fixtures; deployed clean/EICAR, entry/rotation and fresh-install checks remain NOT RUN.
+
+## Authenticated image parts
+
+P5-6b PR 2 adds only `POST /scan/image-part`. It shares the loaded scanner,
+ES256 verification, two request slots and eight connections with uploads.
+Limits remain 20 MiB per part, 60 seconds per request and 4 KiB per response.
+Cancelled work holds its slot until scanner cleanup settles. Scanner failure
+retires the handle; recovery needs a newly verified scanner and service.
+
+The route requires an `image-worker` pass with `purpose=image`, its mapped silo
+and the exact request UUID. The trusted caller supplies a fresh UUID per attempt;
+there is no replay store. Upload and computer passes refuse before Continue.
+Image passes cannot scan uploads. TLS, Expect, content type, content length and
+common metadata headers follow the upload contract above. Image requests replace
+`X-Scan-File-Id` with all four required headers below. Unknown or duplicate headers
+refuse before Continue, as do malformed or unsupported bindings.
+
+| Header | Accepted value | Response field |
+| --- | --- | --- |
+| `X-Scan-Server-Id` | 1–200 word characters or hyphens | `serverId` |
+| `X-Scan-Attempt-Id` | Positive safe integer, decimal with no leading zero | `attemptId` |
+| `X-Scan-Platform` | `linux/amd64` or `linux/arm64` | `platform` |
+| `X-Scan-Image-Digest` | Immutable image SHA-256, 64 lowercase hex characters | `targetImageDigest` |
+
+`X-Scan-Sha256` and `Content-Length` describe this part's bytes. The owned scan
+checks the bytes fed to INSTREAM. Responses echo these as `sha256` and `byteCount`,
+plus `silo`, `purpose`, `requestId` and the four image bindings. The existing
+`imageDigest` field still identifies the scanner engine image. All other scan
+facts and expiry limits remain unchanged. Results belong to this authenticated
+connection and pending request; copied JSON grants nothing.
+
+This proves only one bounded part. The service does not resolve an image, prove
+that a part belongs to it, unpack all layers or claim complete coverage. Those
+checks and the image consumer remain later work. Unsupported or oversized parts
+must refuse there too. Nothing writes `mcp.image_checked` or opens admission.
+Signature, vulnerability and licence gates remain independent.
+
+`scripts/clamav-image-service.test.mjs` uses real TLS/ES256 and simulated scanner
+processes. Its delayed-cleanup fixture isolates transport capacity; other failure
+tests use the owned scan operation and retire the handle. Deployed rotation,
+fresh-install clean/EICAR and full image coverage remain NOT RUN.

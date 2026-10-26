@@ -20,7 +20,7 @@ vi.mock('node:child_process', mockProcesses);
 const state = `${'c'.repeat(64)} sha256:${'a'.repeat(64)} 2026-10-25T12:00:00Z true 0`;
 let directory, server, now, updated, shutdown, ca, tls, trust, issuers, mode, supplied;
 const clients = [];
-let scanOperation;
+let scanOperation, logs;
 function clock() {
   return now;
 }
@@ -129,6 +129,7 @@ async function setup() {
   }
   spawn.mockImplementation(scanProcess);
   await start();
+  logs = [vi.spyOn(console, 'log'), vi.spyOn(console, 'error'), vi.spyOn(console, 'warn')];
 }
 async function cleanup() {
   await stop();
@@ -138,6 +139,10 @@ async function cleanup() {
   clients.length = 0;
   await closeServer();
   vi.useRealTimers();
+  for (const log of logs) {
+    expect(log).not.toHaveBeenCalled();
+  }
+  vi.restoreAllMocks();
   await rm(directory, { recursive: true, force: true });
 }
 beforeEach(setup);
@@ -376,7 +381,7 @@ async function holdsCleanupCapacity() {
   refused(await send(await input(1)), true);
   // Keep both slots while the scanner fixture delays cancellation cleanup.
   for (const client of clients.slice(0, 2)) {
-    const closed = once(client, 'close');
+    const closed = once(client, 'close').catch(disconnected);
     client.destroy();
     await closed;
   }
@@ -391,3 +396,17 @@ async function holdsCleanupCapacity() {
   expect((await send(await input(1))).status).toBe(200);
 }
 test('both routes hold the two shared slots until cancellation cleanup finishes', holdsCleanupCapacity);
+async function missingCount() {
+  const value = await input();
+  delete value.headers['content-length'];
+  refused(await send(value), true);
+}
+test('refuses a missing part byte count before Continue', missingCount);
+async function duplicateCount() {
+  const value = await input();
+  const count = value.headers['content-length'];
+  value.headers['content-length'] = [count, count];
+  await expect(send(value)).rejects.toThrow();
+  expect(supplied).toHaveLength(0);
+}
+test('closes malformed HTTP with duplicate part byte counts', duplicateCount);
