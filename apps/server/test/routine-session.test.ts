@@ -581,6 +581,9 @@ describe('routine input', () => {
           const data = agentSession([{ ...row, event }]);
           if (kind === 'ordinary' && 'routinePreparation' in data) delete data.routinePreparation;
           if (kind === 'session') data.createdBy = 'bob';
+          if (kind === 'creation-id') event.id = 'other';
+          if (kind === 'creation-author') event.principal = { kind: 'human', id: 'bob' };
+          if (kind === 'creation-source') event.source = 'other';
           event.data = data;
         }
         if (event.type === 'routine.due') {
@@ -604,7 +607,8 @@ describe('routine input', () => {
     vi.spyOn(nats.store, 'readStream').mockImplementation(substitute);
     await refuses();
   }
-  it.each(['ordinary', 'session', 'claim', 'instructions', 'message'])(
+  it.each(['ordinary', 'session', 'claim', 'instructions', 'message',
+    'creation-id', 'creation-author', 'creation-source'])(
     'refuses substituted %s history', changedHistory);
 
   async function custodyFailure(saved: boolean) {
