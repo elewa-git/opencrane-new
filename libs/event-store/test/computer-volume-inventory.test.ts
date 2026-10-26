@@ -23,12 +23,17 @@ function resources() {
   const owner = { kind: 'Sandbox', name: 'computer-one', uid: 'computer-one-uid',
     controller: true };
   const pvc = { kind: 'PersistentVolumeClaim', metadata: {
-    ...metadata('home-computer-one'), ownerReferences: [owner] } };
+    ...metadata('home-computer-one'), ownerReferences: [owner] },
+    spec: { volumeName: 'volume-one' }, status: { phase: 'Bound' } };
+  const pv = { kind: 'PersistentVolume',
+    metadata: { name: 'volume-one', uid: 'volume-one-uid', resourceVersion: '20' },
+    spec: { claimRef: { namespace, name: 'home-computer-one', uid: 'home-computer-one-uid' } },
+    status: { phase: 'Bound' } };
   const podMetadata = metadata('other-pod');
   podMetadata.labels['sandbox.users.io/computer'] = 'unrelated';
   const pod = { kind: 'Pod', metadata: podMetadata,
     spec: { volumes: [{ name: 'data', persistentVolumeClaim: { claimName: 'home-computer-one' } }] } };
-  return { sandbox, pvc, pod };
+  return { sandbox, pvc, pv, pod };
 }
 async function fixture(empty = false, fault = '') {
   const source = await natsFixture();
@@ -76,7 +81,8 @@ async function fixture(empty = false, fault = '') {
   await collectEventBackup(source.connection, { silo: 'test', attempt: 'copy', destination: archive });
   const options = { directory: archive, silo: 'test', attempt: 'copy', disposable: true,
     namespace, namespaceUid: 'namespace-uid', kubeconfig: '/private/config', context: 'owned' };
-  const { sandbox, pvc, pod } = resources();
+  const { sandbox, pvc, pv, pod } = resources();
+  const persistentVolumes = new Map([[pv.metadata.name, pv]]);
   const namespaceResource = { kind: 'Namespace', metadata: metadata(namespace, 'namespace-uid') };
   const lists = {
     sandboxes: { metadata: { resourceVersion: '10', continue: '' }, items: [sandbox] },
@@ -93,11 +99,18 @@ async function fixture(empty = false, fault = '') {
     secondHome.metadata.labels['sandbox.users.io/computer'] = 'computer-two';
     secondHome.metadata.ownerReferences[0]!.name = 'computer-two';
     secondHome.metadata.ownerReferences[0]!.uid = 'computer-two-uid';
+    secondHome.spec.volumeName = 'volume-two';
+    const secondVolume = structuredClone(pv);
+    secondVolume.metadata = { name: 'volume-two', uid: 'volume-two-uid', resourceVersion: '20' };
+    secondVolume.spec.claimRef.name = 'home-computer-two';
+    secondVolume.spec.claimRef.uid = 'home-computer-two-uid';
+    persistentVolumes.set('volume-two', secondVolume);
     lists.sandboxes.items.push(secondSandbox);
     lists.persistentvolumeclaims.items.push(secondHome);
   }
   const requests: string[] = [];
-  async function read(request: { resource: string; namespace: string; signal: AbortSignal }) {
+  let observations = 0;
+  async function read(request: { resource: string; name?: string; namespace: string; signal: AbortSignal }) {
     expect(request.namespace).toBe(namespace);
     requests.push(request.resource);
     if (fault === 'denied') throw new Error(canary);
@@ -107,7 +120,19 @@ async function fixture(empty = false, fault = '') {
       request.signal.addEventListener('abort', abort, { once: true });
       return pending.promise;
     }
-    if (requests.length === 5) {
+    if (request.resource === 'namespace') observations++;
+    if (request.resource === 'namespace' && observations === 2) {
+      if (fault === 'pv-namespace-race') pv.spec.claimRef.namespace = 'foreign';
+      if (fault === 'pv-uid-race') pv.spec.claimRef.uid = 'old-pvc-uid';
+      if (fault === 'pv-released-race') pv.status.phase = 'Released';
+      if (fault === 'pvc-pending-race') pvc.status.phase = 'Pending';
+      if (fault === 'pv-replacement') pv.metadata.uid = 'replacement';
+      if (fault === 'pv-version') pv.metadata.resourceVersion = '21';
+      if (fault === 'binding-race') {
+        pvc.spec.volumeName = 'replacement-volume';
+        pv.metadata.name = 'replacement-volume';
+        persistentVolumes.set('replacement-volume', pv);
+      }
       if (fault === 'replace-pvc') pvc.metadata.uid = 'replacement';
       if (fault === 'replace-sandbox') sandbox.metadata.uid = 'replacement';
       if (fault === 'resume') sandbox.spec.operatingMode = 'Running';
@@ -125,6 +150,10 @@ async function fixture(empty = false, fault = '') {
       }
     }
     if (request.resource === 'namespace') return JSON.stringify(namespaceResource);
+    if (request.resource === 'persistentvolumes') {
+      if (fault === 'pv-denied') throw new Error(canary);
+      return JSON.stringify(persistentVolumes.get(request.name ?? '') ?? {});
+    }
     return JSON.stringify(Reflect.get(lists, request.resource));
   }
   async function collect() {
@@ -135,7 +164,7 @@ async function fixture(empty = false, fault = '') {
     await target.close();
     await rm(directory, { recursive: true, force: true });
   }
-  return { collect, close, options, sandbox, pvc, pod, namespaceResource, lists, requests, archive };
+  return { collect, close, options, sandbox, pvc, pv, pod, namespaceResource, lists, requests, archive };
 }
 
 async function includesRetainedHome(fault: string) {
@@ -148,10 +177,11 @@ async function includesRetainedHome(fault: string) {
       eventArchiveSha256: descriptor.sha256, namespace: { uid: 'namespace-uid' },
       volumes: [{ assistantId: 'assistant-one', computerId: 'computer-one', generation: 2,
         sandbox: { uid: 'computer-one-uid', resourceVersion: '10' },
-        home: { uid: 'home-computer-one-uid', resourceVersion: '10' } }] });
+        home: { uid: 'home-computer-one-uid', resourceVersion: '10' },
+        volume: { name: 'volume-one', uid: 'volume-one-uid', resourceVersion: '20' } }] });
     expect(result.volumes).toHaveLength(fault === 'multiple' ? 2 : 1);
     expect(JSON.stringify(result)).not.toMatch(/private|token|conditions|podTemplate/);
-    expect(setup.requests).toHaveLength(8);
+    expect(setup.requests).toHaveLength(fault === 'multiple' ? 12 : 10);
   } finally { await setup.close(); }
 }
 it.each(['suspended', 'retired', 'multiple'])('includes the current retained home once: %s', includesRetainedHome);
@@ -175,11 +205,29 @@ const faults = ['missing-pvc', 'missing-sandbox', 'foreign-pvc', 'foreign-sandbo
   'version', 'late-pod', 'archive-race', 'descriptor-race', 'event-resume', 'event-generation',
   'missing-binding', 'missing-generation', 'missing-assistant', 'namespace-race', 'remaining-list',
   'conflicting-claim', 'duplicate-assistant', 'duplicate-computer',
-  'attempt', 'silo', 'corrupt-archive', 'oversized-reply'] as const;
+  'attempt', 'silo', 'corrupt-archive', 'oversized-reply',
+  'pvc-pending', 'pvc-unbound', 'pvc-no-status', 'pv-missing', 'pv-denied',
+  'pv-foreign-namespace', 'pv-stale-uid', 'pv-wrong-claim-name', 'pv-no-claim',
+  'pv-released', 'pv-available', 'pv-no-status', 'pv-wrong-name', 'pv-wrong-kind',
+  'pv-namespace-race', 'pv-uid-race', 'pv-released-race', 'pvc-pending-race',
+  'pv-replacement', 'pv-version', 'binding-race'] as const;
 async function refusesFault(fault: typeof faults[number]) {
   const setup = await fixture(false, fault);
   try {
-    const { sandbox, pvc, pod, lists } = setup;
+    const { sandbox, pvc, pv, pod, lists } = setup;
+    if (fault === 'pvc-pending') pvc.status.phase = 'Pending';
+    if (fault === 'pvc-unbound') Reflect.deleteProperty(pvc.spec, 'volumeName');
+    if (fault === 'pvc-no-status') Reflect.deleteProperty(pvc, 'status');
+    if (fault === 'pv-missing') pvc.spec.volumeName = 'missing';
+    if (fault === 'pv-foreign-namespace') pv.spec.claimRef.namespace = 'foreign';
+    if (fault === 'pv-stale-uid') pv.spec.claimRef.uid = 'old-pvc-uid';
+    if (fault === 'pv-wrong-claim-name') pv.spec.claimRef.name = 'other-home';
+    if (fault === 'pv-no-claim') Reflect.deleteProperty(pv.spec, 'claimRef');
+    if (fault === 'pv-released') pv.status.phase = 'Released';
+    if (fault === 'pv-available') pv.status.phase = 'Available';
+    if (fault === 'pv-no-status') Reflect.deleteProperty(pv, 'status');
+    if (fault === 'pv-wrong-name') pv.metadata.name = 'other-volume';
+    if (fault === 'pv-wrong-kind') pv.kind = 'PersistentVolumeClaim';
     const condition = sandbox.status.conditions[0]!;
     const owner = pvc.metadata.ownerReferences[0]!;
     if (fault === 'missing-pvc') lists.persistentvolumeclaims.items = [];
