@@ -1,4 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { once } from 'node:events';
+import { WebSocket } from 'ws';
+import { encodeSession } from '@opencrane/auth';
+import { createLogger } from '@opencrane/observability';
+import { connectMemberFeed, conversations, computers, ProjectionRunner, readConversation }
+  from '@opencrane/projections';
+import { until } from '@opencrane/authz/testing';
+import { buildServer } from '../src/server.ts';
+import { attachWebSocketServer } from '../src/websocket.ts';
+import { summary } from '../src/chat/list-summary.ts';
+import { chatRows } from '../src/chat/history.ts';
+import { chatSubscriptionAccess } from '../src/chat/access.ts';
+import { testAuthConfig } from './support/test-auth-config.ts';
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -553,6 +566,153 @@ function routineInputTests() {
   it('refuses caller-supplied definitions', suppliedDefinition);
   it.each(['inactive', 'payer'])('refuses input after assistant %s changes', changedAssistant);
   it('replays saved input with all execution effects forbidden', replay, 30_000);
+
+  async function publicReadFixture(targetId = conversationId) {
+    await prepare();
+    const saved = await rows();
+    if (targetId !== conversationId) {
+      keys.provision('test', targetId);
+      const creation = agentSession(saved);
+      const created = record('renamed-creation', `conversation-${targetId}`,
+        'conversation.created', { ...creation, conversationId: targetId });
+      const encrypted = keys.encrypt('test', targetId, privateText);
+      const message = record('renamed-input', `conversation-${targetId}`, 'message.posted',
+        { conversationId: targetId, authorId: 'alice', authorKind: 'system',
+          contentType: 'text', ...encrypted });
+      await apply([created]);
+      await nats.seed([message]);
+    } else {
+      const auth = memberAuthorisation(binding, nats.store);
+      await auth.handler.handle(saved[0]!.event, db);
+    }
+    const storage = await database('pg');
+    const current = await storage.db.query<{ name: string }>('SELECT current_database() AS name');
+    const url = new URL(process.env['PG_TEST_URL']!);
+    url.pathname = `/${current.rows[0]!.name}`;
+    const feed = await connectMemberFeed(url.href);
+    // Supply the signed-in identity; exercise the real saved owner permissions below.
+    vi.spyOn(feed, 'memberId').mockResolvedValue('alice');
+    const logger = createLogger('routine-public-read', { level: 'silent' });
+    const runner = new ProjectionRunner(storage.db, nats.store, logger);
+    await runner.initialise(conversations);
+    await runner.initialise(computers);
+    await runner.run(conversations);
+    const projected = await readConversation(storage.db, 'test', targetId);
+    expect(projected.rows).toHaveLength(2);
+    expect(JSON.stringify(projected)).not.toContain(privateText);
+    const options = { silo: 'test', store: nats.store, db: storage.db, keys, binding, feed };
+    const access = await chatSubscriptionAccess(options, 'alice', targetId,
+      performance.now() + 1500);
+    expect((await access(performance.now() + 1500)).mode).toBe('agent_session');
+    const config = testAuthConfig({ expectedOrgId: 'org-test' });
+    const app = buildServer(config, { chat: options });
+    const session = { sub: 'alice', orgId: 'org-test', roles: [],
+      authTime: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 };
+    const headers = { origin: new URL(config.redirectUri).origin,
+      cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+    async function close() {
+      await app.close();
+      await feed.close();
+      await storage.close();
+    }
+    return { options, config, app, headers, close, creationPosition: projected.rows[0]!.position };
+  }
+
+  async function refusesPublicSubscription() {
+    const fixture = await publicReadFixture();
+    const { app, config, options, headers, creationPosition } = fixture;
+    const realtime = { feed: options.feed, binding, chat: options };
+    const websocketServer = attachWebSocketServer(app.server, app.log, config, realtime);
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, { headers });
+    const messages: string[] = [];
+    let closeCode: number | undefined;
+    function collect(raw: Buffer) {
+      messages.push(raw.toString());
+    }
+    function closed(code: number) {
+      closeCode = code;
+    }
+    function settled() {
+      return closeCode !== undefined || messages.length > 0;
+    }
+    function closeServer(resolve: () => void) {
+      websocketServer.close(resolve);
+    }
+    socket.on('message', collect);
+    socket.on('close', closed);
+    const decrypt = vi.spyOn(keys, 'decrypt');
+    try {
+      await once(socket, 'open');
+      const subscription = { type: 'subscribe', topic: 'conversation', conversationId,
+        since: creationPosition };
+      socket.send(JSON.stringify(subscription));
+      await until(settled);
+      expect(messages.join('')).not.toContain(privateText);
+      await until(function isClosed() { return closeCode !== undefined; });
+      expect(closeCode).toBe(1008);
+      expect(messages).toHaveLength(1);
+      expect(JSON.parse(messages[0]!)).toMatchObject({ type: 'refused', conversationId });
+      expect(decrypt).not.toHaveBeenCalled();
+    } finally {
+      socket.terminate();
+      await new Promise<void>(closeServer);
+      await fixture.close();
+    }
+  }
+  it('refuses the owner subscription after creation without returning routine input',
+    refusesPublicSubscription);
+
+  async function refusesPublicHistory(targetId: string, skipCreation: boolean, path: string) {
+    const fixture = await publicReadFixture(targetId);
+    const decrypt = vi.spyOn(keys, 'decrypt');
+    const since = skipCreation ? fixture.creationPosition : 0;
+    try {
+      if (path === 'rows') {
+        await expect(chatRows(fixture.options, targetId, 'agent_session', since)).rejects.toThrow();
+        expect(decrypt).not.toHaveBeenCalled();
+        return;
+      }
+      const request = { url: `/api/conversations/${targetId}/messages?since=${since}`,
+        headers: fixture.headers };
+      const response = await fixture.app.inject(request);
+      const expectedStatus = targetId.startsWith('routine-session-') ? 400 : 403;
+      expect(response.statusCode).toBe(expectedStatus);
+      expect(response.body).not.toContain(privateText);
+      expect(response.body).not.toMatch(/ciphertext|routinePreparation/u);
+      expect(decrypt).not.toHaveBeenCalled();
+    } finally {
+      await fixture.close();
+    }
+  }
+  it.each([
+    [conversationId, false, 'rows'], [conversationId, true, 'rows'],
+    ['marked-preparation', false, 'rows'], ['marked-preparation', true, 'rows'],
+    [conversationId, true, 'http'],
+    ['marked-preparation', false, 'http'], ['marked-preparation', true, 'http'],
+  ])('refuses public history for %s, skipping creation: %s, via %s', refusesPublicHistory);
+
+  async function hidesRoutineSummary(targetId: string, path: string) {
+    const fixture = await publicReadFixture(targetId);
+    const decrypt = vi.spyOn(keys, 'decrypt');
+    try {
+      if (path === 'summary') {
+        await expect(summary(fixture.options, targetId, 'agent_session', 0)).rejects.toThrow();
+      } else {
+        const response = await fixture.app.inject({ url: '/api/conversations',
+          headers: fixture.headers });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ rows: [], nextCursor: null });
+      }
+      expect(decrypt).not.toHaveBeenCalled();
+    } finally {
+      await fixture.close();
+    }
+  }
+  it.each([
+    [conversationId, 'summary'], ['marked-preparation', 'summary'],
+    [conversationId, 'list'], ['marked-preparation', 'list'],
+  ])('hides routine input for %s from the %s', hidesRoutineSummary);
 
   async function beforeAppend() {
     const original = await rows();

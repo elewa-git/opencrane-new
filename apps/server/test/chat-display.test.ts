@@ -165,3 +165,26 @@ const invalidValues = [
   { callId: undefined },
 ];
 it.each(invalidValues)('refuses invalid dispatch display values: %j', refusesInvalidDisplayValue);
+
+function refusesRoutineCreation(conversationId: string) {
+  const data = { conversationId, mode: 'agent_session', assistantId: 'assistant',
+    createdBy: 'alice', routinePreparation: { routineId: 'orders', occurrenceId: 'occurrence',
+      claimId: 'claim', claimPosition: 1, workerId: 'worker' } };
+  function display() {
+    return chatDisplayData('conversation.created', data);
+  }
+  expect(display).toThrow();
+}
+it.each(['routine-session-occurrence', 'marked-preparation'])(
+  'refuses routine preparation creation display for %s', refusesRoutineCreation);
+
+function refusesRoutineMessage(conversationId: string) {
+  const data = { conversationId, authorId: 'alice', authorKind: 'system',
+    text: 'Private routine instructions', contentType: 'text' };
+  function display() {
+    return chatDisplayData('message.posted', data);
+  }
+  expect(display).toThrow();
+}
+it.each(['routine-session-occurrence', 'routine-session-create-occurrence'])(
+  'refuses routine input display for %s', refusesRoutineMessage);
