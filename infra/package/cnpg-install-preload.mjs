@@ -32,20 +32,32 @@ function kubernetes(args) {
     if (fixture.dependencyFailure === 'operator') throw new Error(fixture.canary);
     return fixture.operators;
   }
-  if (fixture.install && args.includes('api-resources')) return '';
+  if (fixture.install && args.includes('api-resources')) {
+    return '';
+  }
   assert.equal(args[args.indexOf('-n') + 1], 'opencrane-package-1');
   if (fixture.install) {
-    if (args.includes('configmap') || args.includes('rollout')) return '';
+    if (args.includes('configmap') || args.includes('rollout')) {
+      return '';
+    }
     if (args.includes('job')) {
       return { status: { conditions: [{ type: 'Complete', status: 'True' }] } };
     }
-    if (args.includes('services,ingresses')) return { items: [] };
-    if (args.includes('service')) return { spec: { type: 'ClusterIP', clusterIP: '10.43.0.27' } };
+    if (args.includes('services,ingresses')) {
+      return { items: [] };
+    }
+    if (args.includes('service')) {
+      return { spec: { type: 'ClusterIP', clusterIP: '10.43.0.27' } };
+    }
   }
   const name = args[args.indexOf('secret') + 1];
   if (name.startsWith('sh.helm.')) {
-    if (!fixture.install) return { metadata: { uid: 'next-step' } };
-    if (!installed) return '';
+    if (!fixture.install) {
+      return { metadata: { uid: 'next-step' } };
+    }
+    if (!installed) {
+      return '';
+    }
     const owner = JSON.parse(readFileSync('package-owner.json', 'utf8'));
     return { metadata: { uid: 'installed', labels: {
       'opencrane.dev/install-id': owner.installId,

@@ -134,7 +134,9 @@ async function runFixture(fixture, expected, renders = false) {
     if (fixture.install) {
       const helmCommands = [];
       for (const call of calls) {
-        if (call.program === 'helm') helmCommands.push(call.args[0]);
+        if (call.program === 'helm') {
+          helmCommands.push(call.args[0]);
+        }
       }
       assert.deepEqual(helmCommands, ['template', 'install']);
       assert.equal(result.stderr, '');
