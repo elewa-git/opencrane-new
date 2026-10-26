@@ -9,7 +9,7 @@ import { readActiveMember } from './member-authority.ts';
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const referenceSchema = z.strictObject({ serverId: id, profileId: id });
 const identitySchema = z.object({ userId: id, serverId: id, profile: id });
-const metadataSchema = z.strictObject({
+export const metadataSchema = z.strictObject({
   serverId: id, profileId: id, profileRevision: z.int().positive(),
   status: z.enum(['saved_unverified', 'unavailable']), generation: z.int().positive().nullable(),
   adminBlocked: z.boolean(), serverAvailable: z.boolean(), callsAvailable: z.literal(false),

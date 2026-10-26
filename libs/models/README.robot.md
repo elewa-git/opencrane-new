@@ -3878,3 +3878,18 @@ exact saved counts and zero held/settled cents for the free tool. Existing forge
 proof, changed binding, lost reply, revocation and paid hold tests are retained.
 The [receipt](../../docs/process/budget-approval-retry/receipt.md) records own checks
 and unresolved failures. Fresh-install qualification remains NOT RUN.
+
+## Admin personal profile metadata
+
+`readAdminConnectionProfile` accepts the authenticated actor separately from strict
+user/server/profile input. It reads exactly the profile, member/server control and server
+histories under one ten-second deadline, then calls `readActiveMember` once for admin
+access. Missing and failed loads still check current access; refusal takes precedence.
+It uses no write check, stream-position polling or conversation history.
+
+The existing profile and server folds supply lifecycle and availability. A valid original
+personal activation is required before exposing bindings. Foreign, company, validation
+and incomplete legacy targets reveal none. Rotation and revoke keep the exact profile
+sequence; any valid member/server block covers replacement profiles too. Saved identity
+stays unverified and `callsAvailable` stays false. No custody, provider, append, selection
+or release operation runs. Lists, mutations, projections and OAuth are outside this read.
