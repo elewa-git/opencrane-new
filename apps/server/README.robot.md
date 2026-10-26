@@ -5812,3 +5812,43 @@ they check socket closure. Object capture also checks that no descriptor remains
 `withBounds({ signal, timeoutMs }, operation)` carries the same limits through
 bucket creation and restore writes. `endpoint` exposes the normalised origin for
 source/target comparison. These helpers add no HTTP route or access decision.
+
+## Personal recall qualification (P4-15 PR 5a, first part)
+
+`chat/turn-tools.ts` requires qualification before `buildPrivateTurnRecallTools`
+reads the catalogue or permissions. `chat/recall-qualification.ts` checks the exact
+40-character `sourceSha`, SHA-256 `imageDigest` and non-empty `environmentId`.
+Both runtime identity and evidence must come from trusted deployment code, never
+from a browser, computer or model request. This is an internal contract, not a
+public API or a receipt uploader. No production caller supplies these values yet.
+
+The strict evidence object has those three fields, `result: PASS` and exactly
+these passing checks. Each result covers all conditions in its row:
+
+| Check | Required live evidence on the named source, image and host |
+| --- | --- |
+| `privateTurns` | Applicable private-process, RAM, swap/core and pinned Codex/gVisor checks |
+| `nativeRecall` | A saved personal fact recalled through native Codex, real gateway/OpenFGA and current grants; answer absent from the request; volatile chat answer |
+| `requesterIsolation` | Concurrent A/B canaries and later requester isolation |
+| `sessionIsolation` | The same requester in two concurrent sessions with distinct callers |
+| `invalidation` | Revoke, correct and forget stop affected work and refuse late replies |
+| `unrelatedActivity` | Unrelated changes preserve turns and readers |
+| `stopReconnect` | Stop, connection loss and reconnect clear old output without repeating work |
+| `replacementReload` | Pod replacement and browser reload lose private output and old grants |
+| `persistence` | Inspect PVCs, rollouts, caches, outbox, logs and dumps with live canaries and attempted persistence; shell, file and browser tools remain off |
+
+Missing checks, unknown fields, non-PASS results and mismatched identities refuse
+assembly. Repeat the same qualification, scope and caller checks after catalogue
+and permission reads. This also prevents a changed scope from receiving a delayed
+tool list. Existing requester, recorded turn, thread, grant and generation checks
+remain in place. No fact read, event append or dispatch happens during assembly.
+
+The synthetic evidence in `test/personal-recall-tools.test.ts` tests only the
+decision. It is not a live receipt. Production still uses ordinary tool assembly,
+which excludes memory. `mayOfferTurnTools` still refuses restricted turns, and
+`memoryAdmission.state` remains disabled. The protected admission test is unchanged;
+this narrower check does not replace its two complete qualification requirements.
+
+Native launch, volatile delivery and automatic invalidation are still incomplete.
+Fresh-install qualification and screen captures are NOT RUN. The
+[receipt](../../docs/process/p4-15-pr5a/receipt.md) records the blockers and source checks.

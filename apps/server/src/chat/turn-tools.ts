@@ -6,6 +6,7 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import type { privateCallers } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
 import { recallTool, serverInfo as memoryServerInfo } from '../memory/mcp.ts';
+import { personalRecallQualified } from './recall-qualification.ts';
 
 const maximumToolBytes = 48 * 1024;
 const maximumTurnBytes = 120 * 1024;
@@ -79,6 +80,8 @@ type PrivateRecallGrant = Parameters<PrivateCallers['register']>[0] & {
   thread: string;
 };
 type PrivateRecallInput = PersonalRecallInput & {
+  runtime?: { sourceSha: string; imageDigest: string; environmentId: string } | undefined;
+  qualification?: unknown;
   turn: TurnSummary | undefined;
   grant: PrivateRecallGrant | undefined;
   caller: string | undefined;
@@ -117,6 +120,13 @@ function recordedPrivateTurn(input: PrivateRecallInput) {
 }
 
 function hasPrivateRecallBinding(input: PrivateRecallInput) {
+  if (!personalRecallQualified(input.runtime, input.qualification)) {
+    return false;
+  }
+  const scopeId = memoryScopeId(input.silo, 'person', input.requesterId);
+  if (input.scopeId !== scopeId) {
+    return false;
+  }
   const turn = recordedPrivateTurn(input);
   const grant = input.grant;
   if (!turn || !grant || !input.caller || !Number.isSafeInteger(grant.expires)
@@ -148,8 +158,6 @@ function matchesRecordedGrant(input: PersonalRecallInput,
 }
 
 async function buildPersonalRecallTools(input: PersonalRecallInput) {
-  const scopeId = memoryScopeId(input.silo, 'person', input.requesterId);
-  if (input.scopeId !== scopeId) return [];
   const restricted = { ...input, rows: [{ serverId: 'memory' }], approvalWaiting: false };
   return assembleTurnTools(restricted, true);
 }

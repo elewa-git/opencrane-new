@@ -94,7 +94,7 @@ flowchart LR
   server -->|chat work, connections, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
-  runtime -->|checks the recall definition, prepares memory calls and loaded access receipts, then checks permission| server
+  runtime -->|checks recall qualification and its definition, prepares memory calls and loaded access receipts, then checks permission| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -108,7 +108,9 @@ Both operations remain disabled after these checks and create no fact, key or co
 Discovery still lists recall alone.
 A separate tool-list builder requires a saved private turn, its matching requester
 and grant, and a live registered caller. It accepts only that exact reviewed recall
-definition for the requester's personal scope. It refuses Ask and Block choices. Private tool
+definition for the requester's personal scope. It requires passing privacy checks for
+the exact server source, computer image and host, before and after preparing the list.
+Missing or changed evidence leaves the list empty. It refuses Ask and Block choices. Private tool
 delivery remains disabled; the builder is exercised by local tests.
 Memory tests finish their setup reads before signing short-lived requests. Separate tests
 delay history and permission reads inside the server and record only elapsed times.
