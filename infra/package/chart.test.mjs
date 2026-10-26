@@ -101,6 +101,7 @@ function loadPrivateFunction(file, name, replacements) {
 function secretFromDirectory(source) {
   const files = {};
   for (const name of readdirSync(source)) {
+    assert.equal(statSync(join(source, name)).mode & 0o777, 0o600);
     files[name] = readFileSync(join(source, name));
   }
   return files;
@@ -166,13 +167,20 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   function executeFixture(program, args, options, callback) {
     assert.equal(program, 'kubectl');
     assert.ok(args.includes(`--context=${context}`));
+    for (const argument of args) {
+      assert.ok(!argument.includes(directory), 'Arguments must not include the private directory');
+      assert.ok(!argument.includes('/private/target.kubeconfig'),
+        'Arguments must not include the private connection filename');
+    }
+    assert.equal(args.includes('--kubeconfig'), false);
     if (isolated) {
-      assert.equal(args[args.indexOf('--kubeconfig') + 1], '/private/target.kubeconfig');
+      assert.equal(options.env.KUBECONFIG, '/private/target.kubeconfig');
     }
     const name = args[args.indexOf('generic') + 1];
     const sourceArgument = args.find(isFileSourceArgument);
     assert.ok(sourceArgument);
-    const source = sourceArgument.slice('--from-file='.length);
+    const source = resolve(options.cwd, sourceArgument.slice('--from-file='.length));
+    assert.equal(statSync(source).mode & 0o777, 0o700);
     secrets.set(name, secretFromDirectory(source));
     callback(null, { stdout: '', stderr: '' });
   }
