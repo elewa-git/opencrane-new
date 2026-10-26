@@ -5191,8 +5191,11 @@ claimPosition and workerId. Only the preparation append adds it; public chat inp
 supply it. Recovery requires that exact binding and a creation after the saved claim.
 An ordinary chat with matching identifiers is refused, including one with earlier human
 messages. Public chat routes refuse conversation and command ids starting with
-`routine-session-`, including `routine-session-create-`, before access or writes. A retry from another worker id is refused. The trusted worker supplies a stable
-id across retries; its callback still proves current ownership. Errors contain only a
+`routine-session-`, including `routine-session-create-`, before writes. POST bodies are
+validated after the existing organisation, membership and session checks, so empty or
+reserved input preserves their 503, 403 and 401 responses. Path restrictions still apply
+before conversation access. A retry from another worker id is refused. The trusted worker
+supplies a stable id across retries; its callback still proves current ownership. Errors contain only a
 fixed refusal. No event type or public preparation API is added.
 `test/routine-session.test.ts` covers recovery, refusals, timing and guarded replay.
 There is no production caller. Execution stays unavailable. Input, scheduling, company

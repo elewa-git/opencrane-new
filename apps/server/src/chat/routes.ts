@@ -48,12 +48,10 @@ const parameters = z.object({
 });
 const publicCommandIds = z.object({ id: publicChatId, conversationId: publicChatId.optional() });
 
-function publicParameters(request: FastifyRequest) {
-  const parsed = parameters.parse(request.params);
+function validatePublicCommandIds(request: FastifyRequest) {
   if (request.method === 'POST') {
     publicCommandIds.parse(request.body);
   }
-  return parsed;
 }
 
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
@@ -103,7 +101,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     try {
-      const { conversationId, commandId } = publicParameters(request);
+      const { conversationId, commandId } = parameters.parse(request.params);
       const participants = request.routeOptions.url === participantsRoute.url;
       const origin = request.routeOptions.url === '/api/conversations/:conversationId/origin';
       if (origin) {
@@ -120,6 +118,8 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       const checks = { write: request.method === 'POST', conversationId: accessConversationId,
         allowApplying: commandId !== undefined };
       const context = await requireMember(request, reply, config, options, checks);
+      // Preserve organisation and session refusals before validating command input.
+      validatePublicCommandIds(request);
       const { memberId, access } = context;
       const configured = context.options;
       if (participants) {
