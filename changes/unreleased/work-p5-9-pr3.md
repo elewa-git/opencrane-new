@@ -1,0 +1,1 @@
+- Recovery checks compare restored file bytes, full read rows and access after an interrupted handler upgrade. Disposable fixtures rebuild twice and refuse uncertain restoration before starting readers; full live recovery remains unqualified.

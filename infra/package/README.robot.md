@@ -627,7 +627,7 @@ A lost restore completion remains uncertain; that target gets no projection, ret
 or stream deletion. Truncated bytes refuse before transfer. The source stays reachable
 and unchanged, as required by the event restore contract.
 
-Run the three `infra/package/upgrade-recovery*.test.ts` files with Vitest and
+Run the `infra/package/upgrade-recovery*.test.ts` files with Vitest and
 `PG_TEST_URL` pointing to a throwaway PostgreSQL admin database, under `nice -n 10`.
 The root Vitest file list includes them in CI. Safe fixture results go to
 `.tools/upgrade-recovery-proof.json` and `.tools/upgrade-recovery-uncertain.json`.
@@ -659,6 +659,30 @@ and ahead checkpoints. No test substitutes an already calculated hash.
 The [budget receipt](../../docs/process/p5-9-pr2/receipt.md) records only event-to-budget
 projection proof. CNPG/WAL, objects, volumes, rights, compatible packaged rollback,
 admission reopening and full coordinated P5-7–9 remain NOT RUN.
+
+### File comparison and authorised reads after interruption
+
+`upgrade-recovery-files.ts` hashes complete file rows in stable order and reads each
+stored object to check its actual byte count and SHA-256. The result contains only
+counts, hashes and the files checkpoint. Collection allows 1,000 rows, 64 MiB and
+60 seconds. Both checkpoints must equal the checked archive position.
+
+The fixture acknowledges a text upload and a PNG screenshot before export. It uses
+the merged encrypted object capture and disposable restore helpers. It rebuilds
+members, conversations, files and OpenFGA twice, retaining uploaded/delivered states
+and original addresses. Existing event and integer-cent budget comparisons remain.
+An in-process HTTP server permits only GET and uses the existing file list/view
+handlers. The reader gets the original bytes; another member or silo gets none.
+Later turn activity preserves reads, while a recorded member removal refuses them
+even with unchanged read tables and OpenFGA. These later fixture events are outside
+the archive comparison. No admission or product access rules change.
+
+Guards count upload, scan, delivery, scheduler, computer-credential, model-start and
+tool-dispatch entry calls. Each is exercised before resetting its count. Replay
+requires zero calls. Uncertain event or object restoration starts neither replay
+nor the read server. The [receipt](../../docs/process/p5-9-pr3/receipt.md) stays PARTIAL:
+volumes, CNPG/WAL, coordinated backup, pinned package rollback and live recovery
+remain NOT RUN. The HTTP fixture does not qualify admission reopening.
 
 ## Memory restore preflight
 

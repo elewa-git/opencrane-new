@@ -1,0 +1,9 @@
+26 October 2026; source 6e080a6d2; disposable PG_TEST_URL; all checks under nice -n 10.
+PASS npm ci; .tools/nats-server and .tools/lychee symlinked to supplied tools.
+PASS npm run typecheck; npm run check:events; npm run lint:changelog.
+PASS vitest run infra/package/upgrade-recovery-files.test.ts infra/package/upgrade-recovery.test.ts --maxWorkers=1: 15/15.
+EXPECTED FAIL temporary removal of comparison/checksum guards: 10 failed, 2 passed; restored.
+FAIL vitest run infra/package/upgrade-recovery*.test.ts libs/handlers/test/upgrade*.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1: 519 passed, 7 failed.
+FAIL isolated repeat of the two changed test files: 13 passed, 2 failed; crash barrier and NATS deadline.
+NOT COMPLETE first npm run lint: stopped during ESLint to reduce resource pressure.
+PASS serial npm run lint, including knip/docs/links/licences/changelog; 28 existing code warnings, zero errors.
