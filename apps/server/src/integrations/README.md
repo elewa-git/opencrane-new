@@ -42,7 +42,7 @@ Members can read explanations for their own accessible servers; owners and admin
 Members can explicitly select or clear their own account choice. The receipt confirms only
 the saved choice. Connecting never selects an account, and no company account replaces it.
 
-**Saved personal profiles.** Members can read their own profiles, including disabled ones. Current owners and admins can inspect one member’s personal profile metadata and its admin-block revision. The reply says whether it was saved, its revision and generation, and whether an admin block or unavailable server prevents use. It never claims a verified identity or enables calls.
+**Saved personal profiles.** Members can read their own profiles, including disabled ones. Current owners and admins can inspect one member’s personal profile metadata and its admin block revision. The reply says whether it was saved, its revision and generation, and whether an admin block or unavailable server prevents use. It never claims a verified identity or enables calls.
 
 **Hosted images and instances.** An admin can register a hosted image and recover the result by its original request id. It stays Checking until a valid image-check result is saved. All four image checks must pass before admission. Registration does not fetch an image, discover tools or start a process; admission grants no tool access. Startup credential requirements are checked before a connection is offered. Compatible declarations remain reviewable, but startup processes cannot run yet. Existing memory calls keep their own access checks.
 

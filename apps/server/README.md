@@ -136,7 +136,7 @@ Members can inspect their own saved bearer profile even when an admin has disabl
 The reply separates the saved revision, admin block and server availability. Saving
 credentials does not verify an upstream identity or enable calls.
 Current owners and admins can inspect one member’s personal profile metadata.
-They also see the saved admin-block revision, without reading credentials.
+They also see the saved admin block revision, without reading credentials.
 
 Members can revoke their own saved personal account. This stops its local use; it does
 not prove that the provider revoked its token. Retrying the same change returns the
