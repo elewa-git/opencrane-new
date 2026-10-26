@@ -56,6 +56,16 @@ type Computer = z.infer<typeof computerSchema> & { generation: number };
 type Resource = z.infer<typeof resourceSchema>;
 type Bounds = ReturnType<typeof captureBounds>;
 type Connection = Parameters<typeof restoreEventBackup>[0];
+type Reference = z.infer<typeof referenceSchema>;
+interface Inventory {
+  kind: 'computer-volume-inventory-only';
+  silo: string;
+  attempt: string;
+  eventArchiveSha256: string;
+  eventDescriptorSha256: string;
+  namespace: Reference;
+  volumes: (Omit<ReturnType<typeof matchHome>, 'volumeName'> & { volume: Reference })[];
+}
 
 function refusal() {
   return new Error('Computer volume inventory refused');
@@ -192,7 +202,8 @@ function checkVolumeBinding(input: unknown, volumeName: string,
 
 /** Return private metadata only; keep writers stopped until later byte capture has finished. */
 export async function collectComputerVolumeInventory(source: Connection, target: Connection,
-  options: Options, read: (request: Request) => Promise<string> = readKubernetes) {
+  options: Options, read: (request: Request) => Promise<string> = readKubernetes,
+  capture?: (inventory: Inventory) => Promise<void>): Promise<Inventory> {
   let sourceBounds: Bounds | undefined;
   let targetBounds: Bounds | undefined;
   const controller = new AbortController();
@@ -241,6 +252,12 @@ export async function collectComputerVolumeInventory(source: Connection, target:
       return { namespace: referenceSchema.parse(namespace.metadata), volumes };
     }
     const before = await observe();
+    const initial = readPrivateFile(join(options.directory, 'descriptor.json'), 1024 * 1024);
+    const inventory: Inventory = { kind: 'computer-volume-inventory-only',
+      silo: descriptor.silo, attempt: descriptor.attempt, eventArchiveSha256: descriptor.sha256,
+      eventDescriptorSha256: digest(initial), ...before };
+    // Keep capture inside the observations so changed ownership prevents completion.
+    if (capture) await bounds.bounded(capture(structuredClone(inventory)));
     await checkHistory(sourceBounds, descriptor, maximumBytes);
     await checkHistory(targetBounds, targetDescriptor, maximumBytes);
     // Recheck both sides of each binding and compare volume identity and version too.
@@ -250,7 +267,8 @@ export async function collectComputerVolumeInventory(source: Connection, target:
     const saved = readPrivateFile(join(options.directory, 'descriptor.json'), 1024 * 1024);
     const current = descriptorSchema.parse(JSON.parse(saved.toString('utf8')));
     const archive = readPrivateFile(join(options.directory, 'events.snapshot'), maximumBytes);
-    if (!isDeepStrictEqual(current, descriptor) || archive.length !== descriptor.byteCount ||
+    if (!saved.equals(initial) || !isDeepStrictEqual(current, descriptor) ||
+        archive.length !== descriptor.byteCount ||
         digest(archive) !== descriptor.sha256) throw refusal();
     await checkHistory(sourceBounds, descriptor, maximumBytes);
     await checkHistory(targetBounds, targetDescriptor, maximumBytes);

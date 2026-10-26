@@ -71,6 +71,8 @@ export function captureBounds(connection: NatsConnection,
         performance.now() >= deadline) throw refusal();
   }
   async function bounded<Value>(pending: Promise<Value>): Promise<Value> {
+    // Observe work already started even if cancellation refuses the wait immediately.
+    void pending.catch(ignoreFailure);
     check();
     const value = await Promise.race([pending, stopped.promise]);
     check();

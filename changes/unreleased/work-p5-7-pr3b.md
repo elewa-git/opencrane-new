@@ -1,0 +1,1 @@
+- Encrypt one bounded computer-home export and withhold completion if its bytes, ownership or event archive change. Live PVC capture and coordinated recovery remain unqualified.
