@@ -116,7 +116,7 @@ async function refusesFirstGate(input: GateCase, resume: boolean) {
   const test = await fixture(input.savedKey);
   try {
     test.start('first');
-    test.start('second', 'restricted');
+    test.start('second');
     function bothRunning() {
       return test.calls.includes('turn/start:thread-2');
     }
@@ -178,3 +178,57 @@ it.each(cases)('refuses $name before resume with no stop or receipt',
   async input => refusesFirstGate(input, false));
 it.each(cases)('refuses $name after resume with no stop or receipt',
   async input => refusesFirstGate(input, true));
+
+async function refusesGateAndCancelsDisconnectedPrivateWork(input: GateCase) {
+  const test = await fixture(input.savedKey);
+  try {
+    test.start('ordinary');
+    test.start('private', 'restricted');
+    function running() { return test.calls.includes('turn/start:thread-2'); }
+    await until(running);
+    function privateStart(frame: Record<string, unknown>) {
+      return frame['type'] === 'agent.turn_started' && frame['turnId'] === 'private';
+    }
+    function ordinaryStart(frame: Record<string, unknown>) {
+      return frame['type'] === 'agent.turn_started' && frame['turnId'] === 'ordinary';
+    }
+    const privateThread = String(test.frames.find(privateStart)!['threadId']);
+    const ordinaryThread = String(test.frames.find(ordinaryStart)!['threadId']);
+    test.channel.notification({ method: 'item/agentMessage/delta', params: {
+      threadId: privateThread, itemId: 'reply', delta: 'private-before-rejection' } });
+    const callsBefore = [...test.calls];
+    const closed = once(test.socket, 'close');
+    test.send(await input.make(test));
+    const [code, reason] = await closed;
+    expect(code).toBe(1008);
+    expect(String(reason)).toBe('Invalid bridge message');
+    function accessRemoved() { return !test.grants.has(privateThread); }
+    await until(accessRemoved);
+    expect([...test.grants]).toEqual([ordinaryThread]);
+    expect(test.calls).toEqual(callsBefore);
+    test.frames.length = 0;
+    test.channel.notification({ method: 'item/agentMessage/delta', params: {
+      threadId: privateThread, itemId: 'reply', delta: 'private-after-rejection' } });
+    const reconnected = await test.connect();
+    await test.flush(reconnected);
+    expect(JSON.stringify(test.frames)).not.toMatch(/private-before-rejection|private-after-rejection/u);
+    function privateFailure(frame: Record<string, unknown>) {
+      return frame['turnId'] === 'private' && frame['type'] === 'agent.turn_failed';
+    }
+    expect(test.frames.filter(privateFailure)).toMatchObject([{ reason: 'model_error' }]);
+    function gateReceipt(frame: Record<string, unknown>) {
+      return ['bridge_gated', 'bridge_quiet', 'bridge_unavailable'].includes(String(frame['type']));
+    }
+    expect(test.frames.some(gateReceipt)).toBe(false);
+    test.finish(ordinaryThread);
+    await test.flush(reconnected);
+    function ordinaryCompletion(frame: Record<string, unknown>) {
+      return frame['turnId'] === 'ordinary' && frame['type'] === 'agent.turn_completed';
+    }
+    expect(test.frames.filter(ordinaryCompletion)).toHaveLength(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(cases)('refuses $name and cancels only private work when the connection closes',
+  refusesGateAndCancelsDisconnectedPrivateWork);
