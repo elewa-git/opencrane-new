@@ -13,6 +13,9 @@ import { TupleClient, objectId } from '../../../libs/authz/src/client.ts';
 import { database } from '../../../libs/projections/test/database.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
+import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
+import { claimRoutineDue } from '../../ops/src/routine-due.ts';
+import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { prepareRoutineSession } from '../src/routine-session.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
@@ -102,8 +105,8 @@ async function cleanup() {
 }
 beforeEach(setup, 30_000);
 afterEach(cleanup);
-function prepare(store = nats.store, request: unknown = input) {
-  const worker = { silo: 'test', binding, checkCurrent, now: clock };
+function prepare(store = nats.store, request: unknown = input, workerId = 'routine-worker') {
+  const worker = { silo: 'test', binding, workerId, checkCurrent, now: clock };
   return prepareRoutineSession(store, keys, worker, request);
 }
 async function rows() {
@@ -138,7 +141,9 @@ async function createsOnce() {
   const saved = await rows();
   expect(saved).toHaveLength(1);
   expect(saved[0]!.event.data).toEqual({ conversationId, assistantId: 'sales-assistant',
-    createdBy: 'alice', mode: 'agent_session', payingGroupId: 'sales' });
+    createdBy: 'alice', mode: 'agent_session', payingGroupId: 'sales',
+    routinePreparation: { routineId: 'orders', occurrenceId: 'occurrence',
+      claimId: 'due', claimPosition: before, workerId: 'routine-worker' } });
   expect(await nats.store.head()).toBe(before + 1);
   expect(encryption).not.toHaveBeenCalled();
   expect(decryption).not.toHaveBeenCalled();
@@ -166,6 +171,62 @@ async function recovers() {
   expect(await rows()).toHaveLength(1);
 }
 it('recovers after a lost reply, restart and expired transport deduplication', recovers);
+
+async function refusesOrdinaryChatBeforeClaim() {
+  const saved = definition();
+  const routineId = 'future-orders';
+  const created = routine('routine.created', 'alice', 'future-created');
+  const data = { ...saved, routineId, status: 'active' };
+  const future = { ...created, subject: `routine-${routineId}`, data };
+  await apply([future]);
+  const expectedPosition = await nats.store.head(future.subject);
+  const calculation = { silo: 'test', routineId, scheduleRevision: 1,
+    schedule: saved.definition.schedule, localDate: saved.next!.localDate };
+  const occurrence = calculateRoutineOccurrence(calculation);
+  const futureConversationId = `routine-session-${occurrence.occurrenceId}`;
+  const context = { silo: 'test', memberId: 'alice' };
+  const create = { id: `routine-session-create-${occurrence.occurrenceId}`,
+    conversationId: futureConversationId, assistantId: 'sales-assistant',
+    mode: 'agent_session', payingGroupId: 'sales' };
+  keys.provision('test', futureConversationId);
+  expect((await chatCommand(nats.store, keys, context, create)).status).toBe('appended');
+  encryption.mockRestore();
+  decryption.mockRestore();
+  const message = { id: 'human-before-claim', conversationId: futureConversationId,
+    text: 'Earlier human instructions must never enter a routine session' };
+  expect((await chatCommand(nats.store, keys, context, message)).status).toBe('appended');
+  const beforeHistory = await chatHistory(nats.store, 'test', futureConversationId);
+  expect(beforeHistory).toHaveLength(2);
+  expect(beforeHistory[1]!.event.type).toBe('message.posted');
+  const worker = { silo: 'test', binding, checkCurrent, now: clock };
+  const request = { routineId, expectedPosition, localDate: saved.next!.localDate,
+    definitionRevision: 1, scheduleRevision: 1, controlRevision: 1 };
+  const claim = await claimRoutineDue(nats.store, worker, request);
+  expect(claim.status).toBe('confirmed');
+  const before = await nats.store.head();
+  const preparation = { routineId, occurrenceId: claim.occurrenceId };
+  await expect(prepare(nats.store, preparation)).rejects.toThrow('Routine session refused');
+  expect(await nats.store.head()).toBe(before);
+  expect(await chatHistory(nats.store, 'test', futureConversationId)).toEqual(beforeHistory);
+}
+it('refuses an ordinary chat and human message saved before a genuine claim',
+  refusesOrdinaryChatBeforeClaim);
+
+async function recoversBoundPreparation() {
+  const first = await prepare();
+  const before = await nats.store.head();
+  const saved = await rows();
+  expect(saved[0]!.event.data).toMatchObject({ routinePreparation: {
+    routineId: 'orders', occurrenceId: 'occurrence', claimId: 'due',
+    workerId: 'routine-worker', claimPosition: before - 1,
+  } });
+  expect(await prepare()).toEqual(first);
+  await expect(prepare(nats.store, input, 'other-worker'))
+    .rejects.toThrow('Routine session refused');
+  expect(await nats.store.head()).toBe(before);
+  expect(await rows()).toEqual(saved);
+}
+it('returns the saved session only for the same worker and claim', recoversBoundPreparation);
 
 async function reusedBinding(field: string) {
   const data = { conversationId, assistantId: 'sales-assistant', createdBy: 'alice',
