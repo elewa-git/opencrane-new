@@ -28,9 +28,11 @@ The computer may repeat its interrupt request; dropping access again leaves the
 turn stopped and does not grant access or create another saved stop request.
 
 `test/bridge-replay.test.ts` keeps all four computer/approval read-delay combinations.
-It checks Stop before settlement, identical retry commands, one cancelled reply,
-one saved cancellation and no other command. It observes two later watcher polls
-before checking the result. An extra case holds approval history until Stop arrives,
+It checks every captured Stop and settlement, including frames received during startup.
+It requires Stop before settlement, identical retries for the same turn, one cancelled
+reply and one saved cancellation. It rejects Stops for any other turn at any time
+and any additional command for Alice after the saved Stop is prepared. It observes
+two later watcher polls before checking the result. An extra case holds approval history until Stop arrives,
 then advances the monotonic clock by one second while real service timers continue.
 This reproduces the original extra Stop without waiting for a retry timer.
 `test/bridge-budget-stop.test.ts` repeats the exact Stop over the real computer

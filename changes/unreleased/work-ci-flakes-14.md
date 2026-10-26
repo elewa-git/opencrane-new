@@ -1,1 +1,2 @@
 - Keep spending-stop and approval-ordering tests reliable when the bridge resends the same unfinished Stop, while checking one cancellation and protecting other turns.
+- Check startup Stop and settlement frames too, so an incorrect Stop for another turn cannot escape the approval-ordering checks.

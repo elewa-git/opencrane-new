@@ -128,3 +128,88 @@ passed 38 tests. The last companion finished before this record was written.
 | 21 | PASS (38/38) | 42.54 |
 | 22 | PASS (38/38) | 44.49 |
 | 23 | PASS (38/38) | 41.75 |
+
+## Whole-history assertion correction
+
+Rebased onto `52ffc36d1`. The rebase completed. The README.robot.md conflict
+kept both the member-review documentation from main and this branch's Stop checks.
+The test correction is committed as `87e0ba171`. Production code is unchanged.
+
+The previous `received.slice(beforeStop)` discarded early Stop and settlement
+frames. The filter now reads the whole captured history. Every Stop must match
+Alice's saved Stop exactly, and there must be exactly one cancelled settlement.
+Only checks for Alice's other commands use the later-frame boundary.
+
+Expected FAIL: temporarily inserted a Stop for Bob at the start of the captured
+history, before `beforeStop`, while retaining the normal expected Stop and
+settlement. The zero-delay test failed at the first-command assertion: it expected
+Alice's saved Stop and received Bob's incorrect Stop. Restored the mutation before
+all successful runs. Log: `/tmp/ci-flakes-14-fix/mutation.log`.
+
+Own checks after the correction:
+
+- PASS: full lint, typecheck, check:events, Knip and lint:changelog.
+- PASS: both changed files in full twice, 59/59 tests in each run.
+- PASS: 30 fresh-process load runs, six selected cases each, 180/180 tests.
+- NOT RUN: full root suite, live journeys and CI on the pushed commit.
+
+All checks ran under `nice -n 10`. Tests used the supplied
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and their own
+NATS and OpenFGA fixtures. No owner service was changed. Each target run used
+the same command listed above and overlapped a separate test run. Logs and JSON
+reports are in `/tmp/ci-flakes-14-fix/`. No target run was retried.
+
+### Every corrected load run
+
+| Run | Result | Tests passed | Wall time (s) |
+| --- | --- | --- | --- |
+| 01 | PASS | 6/6 | 31.17 |
+| 02 | PASS | 6/6 | 33.39 |
+| 03 | PASS | 6/6 | 39.16 |
+| 04 | PASS | 6/6 | 37.66 |
+| 05 | PASS | 6/6 | 40.78 |
+| 06 | PASS | 6/6 | 38.48 |
+| 07 | PASS | 6/6 | 36.15 |
+| 08 | PASS | 6/6 | 35.27 |
+| 09 | PASS | 6/6 | 40.36 |
+| 10 | PASS | 6/6 | 44.64 |
+| 11 | PASS | 6/6 | 39.72 |
+| 12 | PASS | 6/6 | 36.75 |
+| 13 | PASS | 6/6 | 35.22 |
+| 14 | PASS | 6/6 | 32.76 |
+| 15 | PASS | 6/6 | 29.45 |
+| 16 | PASS | 6/6 | 25.96 |
+| 17 | PASS | 6/6 | 25.34 |
+| 18 | PASS | 6/6 | 25.59 |
+| 19 | PASS | 6/6 | 29.61 |
+| 20 | PASS | 6/6 | 30.36 |
+| 21 | PASS | 6/6 | 32.14 |
+| 22 | PASS | 6/6 | 26.88 |
+| 23 | PASS | 6/6 | 24.08 |
+| 24 | PASS | 6/6 | 23.47 |
+| 25 | PASS | 6/6 | 23.79 |
+| 26 | PASS | 6/6 | 24.75 |
+| 27 | PASS | 6/6 | 24.91 |
+| 28 | PASS | 6/6 | 23.61 |
+| 29 | PASS | 6/6 | 25.25 |
+| 30 | PASS | 6/6 | 23.39 |
+
+### Corrected-run companions
+
+Companions 01 and 02 ran both changed files in full. Companions 03–05 ran
+`apps/server/test/approvals.test.ts`. Each approvals run skipped its browser-only
+case. Companion 03 failed setup because the pinned gateway binary was missing.
+Companion 04 started before the download finished: one test found no binary and
+one rejected the incomplete binary's digest. Another unchanged approval-date case
+hit its existing 40-second timeout. These failures are retained below. No timeout
+or assertion changed. `npm run pretest` fetched and verified the pinned tools;
+companion 05 then passed all 74 runnable approvals cases, including the date case.
+The final companion completed before this record was written.
+
+| Companion | Result | Passed | Failed | Wall time (s) |
+| --- | --- | --- | --- | --- |
+| 01 | PASS | 59 | 0 | 129.59 |
+| 02 | PASS | 59 | 0 | 134.85 |
+| 03 | FAIL | 0 | 74 | 122.86 |
+| 04 | FAIL | 71 | 3 | 452.87 |
+| 05 | PASS | 74 | 0 | 352.89 |
