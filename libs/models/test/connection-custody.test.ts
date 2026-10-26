@@ -327,17 +327,19 @@ async function consentStartFixture() {
   function loadConfiguration() {
     return Promise.resolve(configuration);
   }
+  const loader = { loadConfiguration };
   const database = pgDb(storage.queue);
   function waitForLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
     return database.lock!(name, work);
   }
   const db = { ...database, lock: waitForLock };
+  const custody = store.restart();
   function start(raw: unknown = command) {
-    return startPersonalOAuth(events.store, consentBinding, session, store.restart(),
-      raw, loadConfiguration, db);
+    return startPersonalOAuth(events.store, consentBinding, session, custody,
+      raw, loader.loadConfiguration, db);
   }
   const subject = `connection-${userId}-server-a-${context.profileId}`;
-  return { store, configuration, session, command, start, subject };
+  return { store, configuration, session, command, start, subject, custody, loader };
 }
 
 async function startsPrivateConsent() {
@@ -349,10 +351,13 @@ async function startsPrivateConsent() {
   }
   const url = new URL(started.consentUrl);
   expect(url.origin + url.pathname).toBe('https://identity.example.test/consent');
+  const state = url.searchParams.get('state');
+  const challenge = url.searchParams.get('code_challenge');
+  expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+  expect(challenge).toMatch(/^[A-Za-z0-9_-]{43}$/u);
   expect(Object.fromEntries(url.searchParams)).toEqual({ response_type: 'code',
     client_id: 'fixture', redirect_uri: 'https://app.example.test/api/my/tools/oauth/callback',
-    scope: 'openid read', state: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
-    code_challenge: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u), code_challenge_method: 'S256' });
+    scope: 'openid read', state, code_challenge: challenge, code_challenge_method: 'S256' });
   expect(started.changeRef).toBe(test.command.changeRef);
   const rows = await history(events.store, test.subject, 'test');
   expect(rows).toHaveLength(1);
@@ -367,6 +372,245 @@ async function startsPrivateConsent() {
   expect(test.store.creates).toBe(1);
 }
 it('records private consent before returning only its approved URL', startsPrivateConsent);
+
+async function changeConsentAccess(test: Awaited<ReturnType<typeof consentStartFixture>>,
+  change: string) {
+  const userId = test.session.userId;
+  if (change === 'configuration') {
+    test.configuration.clientId = 'changed';
+    return;
+  }
+  let subject = `member-${userId}`;
+  let type = 'member.removed';
+  let data: unknown = { memberId: userId, removedBy: 'admin' };
+  if (change === 'disabled') {
+    subject = `connection-control-${userId}-server-a`;
+    type = 'connection.disabled';
+    data = { userId, serverId: 'server-a', profile: 'old-profile', disabledBy: 'admin',
+      expectedSequence: 0, reason: 'admin_disabled' };
+  }
+  if (change === 'policy') {
+    subject = 'mcp-server-a';
+    type = 'mcp.server_unpublished';
+    data = { serverId: 'server-a', unpublishedBy: 'admin' };
+  }
+  if (change === 'profile') {
+    subject = test.subject;
+    type = 'connection.revoked';
+    data = { userId, serverId: 'server-a', profile: test.command.profileId, revokedBy: userId };
+  }
+  await events.seed([envelope('test', subject, type, data)]);
+  if (change === 'rejoined') {
+    const joined = envelope('test', subject, 'member.joined', {
+      memberId: userId, role: 'member', email: `${userId}@example.test`, displayName: userId,
+    });
+    await events.seed([joined]);
+    await memberAuthorisation(consentBinding).handler.handle(joined, pgDb(storage.queue));
+  }
+}
+
+async function refusesConsentInput(change: string) {
+  const test = await consentStartFixture();
+  let command: unknown = test.command;
+  if (change === 'non-owner' || change === 'admin-as-owner') {
+    if (change === 'admin-as-owner') {
+      const role = envelope('test', `member-${test.session.userId}`, 'member.role_changed', {
+        memberId: test.session.userId, previousRole: 'member', newRole: 'admin', changedBy: 'admin',
+      });
+      await events.seed([role]);
+      await memberAuthorisation(consentBinding).handler.handle(role, pgDb(storage.queue));
+      test.session.memberRevision = await events.store.head(role.subject);
+    }
+    command = { ...test.command, userId: 'someone-else' };
+  } else if (change === 'silo') {
+    test.session.siloId = 'foreign';
+  } else if (change === 'destination') {
+    command = { ...test.command, consentEndpoint: 'https://unapproved.example.test/' };
+  } else if (change === 'stale-config') {
+    test.configuration.policyRevision += 1;
+  } else if (change === 'credentials' || change === 'redirect') {
+    test.configuration.consentEndpoint = change === 'credentials'
+      ? 'https://user:canary@identity.example.test/consent'
+      : 'https://identity.example.test/consent?redirect_uri=https://unapproved.example.test/';
+  } else {
+    await changeConsentAccess(test, change);
+  }
+  expect(await test.start(command)).toEqual({ status: 'unknown' });
+  expect(await events.store.head(test.subject)).toBe(0);
+  expect(test.store.creates).toBe(0);
+}
+it.each(['non-owner', 'admin-as-owner', 'silo', 'removed', 'rejoined', 'disabled',
+  'stale-config', 'policy', 'credentials', 'redirect', 'destination'])(
+  'refuses private consent before append or URL release: %s', refusesConsentInput);
+
+async function refusesChangedStart(change: string) {
+  const test = await consentStartFixture();
+  expect((await test.start()).status).toBe('started');
+  const sequence = await events.store.head(test.subject);
+  let command = test.command;
+  if (change === 'session') {
+    test.session.sessionDigest = 'd'.repeat(64);
+  } else if (change === 'profile') {
+    command = { ...command, profileId: 'another-profile' };
+  } else {
+    await changeConsentAccess(test, change);
+  }
+  expect(await test.start(command)).toEqual({ status: 'unknown' });
+  expect(await events.store.head(test.subject)).toBe(sequence);
+  expect(await events.store.head(`connection-${test.session.userId}-server-a-another-profile`))
+    .toBe(0);
+  expect(test.store.creates).toBe(1);
+}
+it.each(['session', 'profile', 'configuration', 'removed', 'rejoined', 'disabled', 'policy'])(
+  'refuses private consent recovery with changed %s', refusesChangedStart);
+
+async function recoversConsentStart(failure: string) {
+  const test = await consentStartFixture();
+  const append = events.store.append.bind(events.store);
+  async function loseReply(command: AppendCommand) {
+    await append(command);
+    return { status: 'unavailable' as const, cause: new Error(material) };
+  }
+  const fault = vi.spyOn(events.store, 'append');
+  if (failure === 'lost-reply') {
+    fault.mockImplementationOnce(loseReply);
+    expect(await test.start()).toEqual({ status: 'unknown' });
+  } else {
+    await Promise.all([test.start(), test.start()]);
+  }
+  fault.mockClear();
+  const original = await test.start();
+  const clock = vi.spyOn(Date, 'now');
+  clock.mockReturnValue(Date.now() + 121_000);
+  try {
+    const recovered = await test.start();
+    expect(recovered.status).toBe('started');
+    expect(recovered).toEqual(original);
+    expect(fault).not.toHaveBeenCalled();
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(1);
+    expect(test.store.creates).toBe(1);
+  } finally {
+    clock.mockRestore();
+    fault.mockRestore();
+  }
+}
+it.each(['race', 'lost-reply'])(
+  'recovers one private consent after %s beyond transport deduplication', recoversConsentStart);
+
+async function checksAfterConsentWait(point: 'prepare' | 'read' | 'append' | 'readback',
+  change: string) {
+  const test = await consentStartFixture();
+  async function changeNow() {
+    if (change === 'failure') {
+      throw new Error(material);
+    }
+    if (change === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 600_001);
+      return;
+    }
+    await changeConsentAccess(test, change);
+  }
+  if (point === 'prepare') {
+    const prepare = test.custody.prepareAttempt.bind(test.custody);
+    async function delayedPrepare(...args: Parameters<typeof prepare>) {
+      const result = await prepare(...args);
+      await changeNow();
+      return result;
+    }
+    test.custody.prepareAttempt = delayedPrepare;
+  } else if (point === 'read') {
+    const read = test.custody.readAttempt.bind(test.custody);
+    let reads = 0;
+    async function delayedRead(...args: Parameters<typeof read>) {
+      const result = await read(...args);
+      reads += 1;
+      if (reads === 2) {
+        await changeNow();
+      }
+      return result;
+    }
+    test.custody.readAttempt = delayedRead;
+  } else if (point === 'append') {
+    const append = events.store.append.bind(events.store);
+    async function delayedAppend(command: AppendCommand) {
+      vi.restoreAllMocks();
+      await changeNow();
+      return append(command);
+    }
+    vi.spyOn(events.store, 'append').mockImplementationOnce(delayedAppend);
+  } else {
+    const read = events.store.readStream.bind(events.store);
+    async function* failedRead(subject: string, from?: number, deadline?: number) {
+      if (subject === test.subject && (from ?? 0) > 1) {
+        await changeNow();
+      }
+      yield* read(subject, from, deadline);
+    }
+    vi.spyOn(events.store, 'readStream').mockImplementation(failedRead);
+  }
+  try {
+    expect(await test.start()).toEqual({ status: 'unknown' });
+  } finally {
+    vi.restoreAllMocks();
+  }
+  const rows = await history(events.store, test.subject, 'test');
+  if (point === 'prepare' || point === 'append') {
+    expect(rows).toHaveLength(0);
+  }
+  expect(JSON.stringify(rows)).not.toContain(material);
+}
+const consentWaits = [
+  ['prepare', 'removed'], ['prepare', 'rejoined'], ['prepare', 'disabled'],
+  ['prepare', 'policy'], ['prepare', 'configuration'], ['prepare', 'expiry'],
+  ['prepare', 'failure'], ['append', 'disabled'], ['append', 'failure'],
+  ['readback', 'failure'], ['read', 'failure'], ['read', 'expiry'], ['read', 'removed'],
+  ['read', 'rejoined'], ['read', 'disabled'], ['read', 'configuration'],
+  ['read', 'policy'], ['read', 'profile'],
+] as const;
+it.each(consentWaits)('refuses private consent after %s waits across %s', checksAfterConsentWait);
+
+async function policyChangesDuringConfiguration(readNumber: number) {
+  const test = await consentStartFixture();
+  let reads = 0;
+  async function delayedConfiguration() {
+    reads += 1;
+    if (reads === readNumber) {
+      await changeConsentAccess(test, 'policy');
+    }
+    return test.configuration;
+  }
+  test.loader.loadConfiguration = delayedConfiguration;
+  expect(await test.start()).toEqual({ status: 'unknown' });
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(readNumber === 2 ? 0 : 1);
+}
+it.each([2, 3])('rechecks private consent policy after configuration read %s',
+  policyChangesDuringConfiguration);
+
+async function refusesUnconfirmedConsentRecord() {
+  const test = await consentStartFixture();
+  const read = events.store.readStream.bind(events.store);
+  async function* changedRead(subject: string, from?: number, deadline?: number) {
+    for await (const row of read(subject, from, deadline)) {
+      if (subject === test.subject && (from ?? 0) > 1) {
+        row.event.commandId = 'different-reference';
+      }
+      yield row;
+    }
+  }
+  const fault = vi.spyOn(events.store, 'readStream').mockImplementation(changedRead);
+  try {
+    expect(await test.start()).toEqual({ status: 'unknown' });
+  } finally {
+    fault.mockRestore();
+  }
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect((await test.start()).status).toBe('started');
+  expect(test.store.creates).toBe(1);
+}
+it('withholds the private consent URL when exact readback does not match',
+  refusesUnconfirmedConsentRecord);
 
 async function preparesPrivateConsent() {
   const store = await fixture();

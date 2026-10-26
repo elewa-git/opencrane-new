@@ -120,6 +120,15 @@ export const mcpEvents = [
       action: 'select', profileId: 'personal_1', profileRevision: 1, expectedSequence: 0 },
   ),
   event(
+    'connection.oauth_started', 'connection',
+    'A member recorded a private consent attempt without activating a profile.',
+    data.connectionOAuthStartedDataSchema,
+    { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1', profile: 'personal_1',
+      attemptId: DIGEST_EXAMPLE, attemptDigest: DIGEST_EXAMPLE, stateDigest: DIGEST_EXAMPLE,
+      secretRef: 'secret:attempt_1', uid: 'uid_1', resourceVersion: '1',
+      expectedSequence: 0, appendUntil: 1 },
+  ),
+  event(
     'connection.created',
     'connection',
     'A person saved a staged connection reference; account identity may remain unverified.',

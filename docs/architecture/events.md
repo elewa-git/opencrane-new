@@ -78,7 +78,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `gateway-config-<silo>` | reviewed gateway entries | configuration requested; delivery is not connected |
 | `gateway-<request>` | safe gateway evidence | observation recorded |
 | `provider-<providerId>` | company model provider | configuration and verification |
-| `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
+| `connection-<user>-<server>-<profile>` | credential connection | consent started, created, refreshed, revoked |
 | `connection-company-<server>` | admin company opt-in for one exact installation | opt-in recorded or removed |
 | `connection-control-<user>-<server>` | admin block for a member's personal profiles | disabled |
 | `view-<reference>` | bounded desktop view or refused control attempt | started, stopped, refused |
@@ -399,6 +399,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `connection.company_opt_in_set` | explicit admin opt-in/removal command | company control fold binds silo, server, installation and registration revision; defaults to disabled | no grant, credential, selection, release or provider call |
 | `connection.selected` | explicit personal select/clear command | selection fold binds the requester, server, installation and checked profile revision; clear chooses nothing | no grant, custody read, release or provider call |
 | `connection.created` | personal bearer create command after private staging | connection fold (exact reference and generation; identity unverified) | explicit live candidate cleanup keeps current references; no automatic reaction |
+| `connection.oauth_started` | internal personal consent command after private preparation and current owner checks | exact attempt reference, binding and state digests, UID/version and original expiry only | no activation, selection, custody read, URL return or provider request on replay; no reaction |
 | `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | `cleanup-connection` confirms the saved rotation and removes superseded exact generations under the shared profile lock; never release on replay |
 | `connection.revoked` | personal profile owner command | connection fold invalidates the profile at its expected revision | retain material in the command; `cleanup-connection` confirms the saved revocation and removes invalidated exact generations under the shared profile lock |
 | `connection.operation_closed` | live staged-secret reconciliation after its private append deadline | connection fold keeps the current reference and reserves the closed generation number | conditional append at the stage's expected profile position blocks a delayed save; exact UID/version deletion follows confirmation; no replay effects or provider outcome claim |

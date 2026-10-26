@@ -97,7 +97,7 @@ export { memoryMaintenanceRecordedDataSchema } from './memory.ts';
 
 export { connectionCreatedDataSchema, connectionRefreshedDataSchema, connectionRevokedDataSchema,
   connectionOperationClosedDataSchema, connectionSelectedDataSchema,
-  companyOptInSetDataSchema } from './data.ts';
+  companyOptInSetDataSchema, connectionOAuthStartedDataSchema } from './data.ts';
 export { memoryContextRecordedDataSchema, memoryContextRecordedEventSchema,
   type MemoryContextRecord } from './memory-context.ts';
 

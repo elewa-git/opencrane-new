@@ -15,8 +15,9 @@ const toolName = z.string().regex(/^[A-Za-z0-9_.-]{1,128}$/u);
 const contextSchema = z.strictObject({
   siloId: id, userId: id, serverId: id, connectionId: id, profileId: id, changeRef: id,
   sessionDigest: digestSchema, expectedSequence: z.int().nonnegative(),
+  memberRevision: z.int().positive().optional(),
 });
-const configurationSchema = z.strictObject({
+export const oauthConfigurationSchema = z.strictObject({
   serverId: id, connectionId: id, endpointDigest: digestSchema, policyRevision: z.int().positive(),
   issuer: z.string().max(2048), consentEndpoint: z.string().max(2048),
   redirectUri: z.string().max(2048), clientId: id,
@@ -43,7 +44,7 @@ function exactHttps(value: string) {
     throw new Error('OAuth configuration invalid');
   }
 }
-function requiredScopes(configuration: z.infer<typeof configurationSchema>,
+function requiredScopes(configuration: z.infer<typeof oauthConfigurationSchema>,
   policy: ReturnType<typeof toolPolicyFromRows>) {
   const required = new Set(configuration.protocolScopes);
   for (const tool of policy.tools) {
@@ -68,7 +69,7 @@ export async function prepareOAuthAttempt(custody: Pick<ReturnType<typeof connec
   'prepareAttempt'>, rawContext: unknown, rawConfiguration: unknown, rows: StoredEvent[]) {
   try {
     const context = contextSchema.parse(rawContext);
-    const configuration = configurationSchema.parse(rawConfiguration);
+    const configuration = oauthConfigurationSchema.parse(rawConfiguration);
     for (const value of [configuration.issuer, configuration.consentEndpoint,
       configuration.redirectUri]) {
       exactHttps(value);
@@ -83,7 +84,8 @@ export async function prepareOAuthAttempt(custody: Pick<ReturnType<typeof connec
       return { status: 'unknown' as const };
     }
     const requestedScopes = requiredScopes(configuration, policy);
-    const subject = `connection-${context.userId}-${context.serverId}-${context.profileId}`;
+    // Keep the reference fixed when a retry changes its target profile or server.
+    const subject = `connection-oauth-${context.userId}`;
     const operationId = connectionOperationId(context.siloId, subject, context.changeRef);
     const attemptDigest = digest(JSON.stringify([context, configuration, requestedScopes]));
     const stage = { siloId: context.siloId, userId: context.userId, serverId: context.serverId,
@@ -102,4 +104,21 @@ export async function prepareOAuthAttempt(custody: Pick<ReturnType<typeof connec
     // Hide validation and custody errors because their values can include private material.
     return { status: 'unknown' as const };
   }
+}
+
+/** Build the private browser handoff only after the caller confirms the saved start and access. */
+export function oauthConsentUrl(configuration: z.infer<typeof oauthConfigurationSchema>,
+  prepared: Extract<Awaited<ReturnType<typeof prepareOAuthAttempt>>, { status: 'prepared' }>,
+  contents: string) {
+  const material = privateSchema.parse(JSON.parse(contents));
+  if (digest(material.state) !== prepared.stateDigest ||
+      digest(material.verifier, 'base64url') !== prepared.challenge) {
+    throw new Error('OAuth custody unavailable');
+  }
+  const url = new URL(configuration.consentEndpoint);
+  const parameters = { response_type: 'code', client_id: configuration.clientId,
+    redirect_uri: configuration.redirectUri, scope: prepared.requestedScopes.join(' '),
+    state: material.state, code_challenge: prepared.challenge, code_challenge_method: 'S256' };
+  url.search = new URLSearchParams(parameters).toString();
+  return url.href;
 }
