@@ -123,3 +123,89 @@ const terminations: Termination[] = ['failed notification', 'thread/closed', 'se
   'turn/start timeout', 'restricted tool'];
 it.each(terminations)('clears queued private text and refuses later output after %s',
   clearsFailedReply);
+
+async function clearsOnConnectionLoss(completed: boolean) {
+  const test = await fixture();
+  try {
+    await start(test);
+    output(test, 'private-before-loss');
+    if (completed) test.finish('thread-1');
+    await test.flush();
+    test.start('ordinary');
+    function ordinaryRunning() {
+      expect(test.calls).toContain('turn/start:thread-2');
+    }
+    await vi.waitFor(ordinaryRunning);
+    const beforeLoss = [...test.calls];
+    const closed = new Promise<void>(function register(resolve) {
+      test.socket.once('close', resolve);
+    });
+    test.socket.terminate();
+    await closed;
+    const reconnected = await test.connect();
+    await test.flush(reconnected);
+    expect.soft(test.grants.has('thread-1')).toBe(false);
+    expect(test.grants.has('thread-2')).toBe(true);
+    output(test, 'private-after-loss');
+    test.channel.notification({ method: 'item/agentMessage/delta', params: {
+      threadId: 'thread-2', itemId: 'ordinary-reply', delta: 'ordinary-after-loss' } });
+    await test.flush(reconnected);
+    expect.soft(JSON.stringify(test.frames)).not.toContain('private-after-loss');
+    test.frames.length = 0;
+    reconnected.send(JSON.stringify({ type: 'resume', since: 0 }));
+    await test.flush(reconnected);
+    expect.soft(JSON.stringify(test.frames)).not.toMatch(/private-before-loss|private-after-loss/u);
+    expect(JSON.stringify(test.frames)).toContain('ordinary-after-loss');
+    expect(test.calls).toEqual(beforeLoss);
+    expect(readFileSync(test.driver.journal, 'utf8'))
+      .not.toMatch(/private-before-loss|private-after-loss/u);
+    function terminal(frame: Record<string, unknown>) {
+      return frame['turnId'] === 'first' &&
+        ['agent.turn_failed', 'agent.turn_completed'].includes(String(frame['type']));
+    }
+    let type = 'agent.turn_failed';
+    if (completed) type = 'agent.turn_completed';
+    expect.soft(test.frames.filter(terminal)).toMatchObject([{ type }]);
+  } finally {
+    await test.close();
+  }
+}
+it.each([false, true])('clears private replies on disconnect, keeping ordinary recovery (completed: %s)',
+  clearsOnConnectionLoss);
+
+async function cancelsPreparationOnDisconnect() {
+  const test = await fixture();
+  const release = Promise.withResolvers<void>();
+  const preparing = Promise.withResolvers<void>();
+  const create = test.driver.privateSession!.bind(test.driver);
+  async function privateSession() {
+    preparing.resolve();
+    await release.promise;
+    return create();
+  }
+  test.driver.privateSession = privateSession;
+  try {
+    test.start('first', 'restricted');
+    await preparing.promise;
+    const closed = new Promise<void>(function register(resolve) {
+      test.socket.once('close', resolve);
+    });
+    test.socket.terminate();
+    await closed;
+    const reconnected = await test.connect();
+    await test.flush(reconnected);
+    release.resolve();
+    await test.flush(reconnected);
+    expect.soft(test.calls).not.toContain('turn/start:thread-1');
+    expect.soft(test.grants.size).toBe(0);
+    function failed(frame: Record<string, unknown>) {
+      return frame['turnId'] === 'first' && frame['type'] === 'agent.turn_failed';
+    }
+    expect.soft(test.frames.filter(failed)).toHaveLength(1);
+  } finally {
+    release.resolve();
+    await test.close();
+  }
+}
+it('cancels private preparation held across disconnect before it can install a grant',
+  cancelsPreparationOnDisconnect);

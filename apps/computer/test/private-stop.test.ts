@@ -58,8 +58,8 @@ async function clearsBeforeRemovalFinishes() {
 
     const beforeReconnect = [...test.calls];
     test.frames.length = 0;
-    const reconnected = await test.connect();
-    await test.flush(reconnected);
+    test.send({ type: 'resume', since: 0 });
+    await test.flush();
     expect.soft(JSON.stringify(test.frames)).not.toContain('alice-before-stop');
     expect.soft(JSON.stringify(test.frames)).not.toContain('alice-late-output');
     expect(JSON.stringify(test.frames)).toContain('bob-still-current');
@@ -68,6 +68,12 @@ async function clearsBeforeRemovalFinishes() {
     }
     expect.soft(test.frames.filter(lost)).toHaveLength(3);
     expect(test.calls).toEqual(beforeReconnect);
+    test.frames.length = 0;
+    const reconnected = await test.connect();
+    await test.flush(reconnected);
+    expect(JSON.stringify(test.frames)).not.toMatch(/alice-before-stop|alice-late-output/u);
+    expect(JSON.stringify(test.frames)).not.toContain('bob-still-current');
+    expect(test.grants.has('thread-2')).toBe(false);
     const disk = readFileSync(test.driver.journal, 'utf8');
     expect(disk).not.toContain('alice-before-stop');
     expect(disk).not.toContain('alice-late-output');
