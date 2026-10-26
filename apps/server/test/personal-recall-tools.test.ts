@@ -24,8 +24,10 @@ function fixture() {
     policyTools: [{ name: 'recall', revision: reviewed.digest, reviewed: true,
       costCents: 0, mode: 'allow' }],
   };
-  function read() { return Promise.resolve(state); }
-  function allow() { return Promise.resolve(true); }
+  function read(_serverId: string) { return Promise.resolve(state); }
+  function allow(_serverId: string, _kind: 'person' | 'assistant', _subject: string) {
+    return Promise.resolve(true);
+  }
   const input = {
     silo: 'test', scopeId: memoryScopeId('test', 'person', 'alice'),
     requesterId: 'alice', assistantId: 'assistant', baseMessageBytes: 100,
@@ -116,14 +118,14 @@ async function acceptsCanonicalDefinition() {
 }
 it('accepts the canonical key order saved by discovery', acceptsCanonicalDefinition);
 
-async function refusesScope(ownerKind: 'person' | 'group' | 'assistant', ownerId: string) {
+async function refusesScope(ownerKind: 'person' | 'group' | 'assistant_notes', ownerId: string) {
   const { input } = fixture();
   input.scopeId = memoryScopeId('test', ownerKind, ownerId);
   expect(await buildPersonalRecallTools(input)).toEqual([]);
   expect(input.readServer).not.toHaveBeenCalled();
   expect(input.canUse).not.toHaveBeenCalled();
 }
-it.each([['person', 'bob'], ['group', 'team'], ['assistant', 'assistant']] as const)(
+it.each([['person', 'bob'], ['group', 'team'], ['assistant_notes', 'assistant']] as const)(
   'refuses scope %s/%s before reading the catalogue', refusesScope);
 
 async function refusesOtherSilo() {
@@ -171,3 +173,28 @@ async function leavesProductionDisabled() {
   expect(memoryAdmission.state).toBe('disabled');
 }
 it('keeps ordinary assembly and production memory admission disabled', leavesProductionDisabled);
+
+async function refusesAmbiguousRecall(kind: 'definition' | 'policy') {
+  const { state, input } = fixture();
+  if (kind === 'definition') state.discoveryTools.push(state.discoveryTools[0]!);
+  if (kind === 'policy') state.policyTools.push(state.policyTools[0]!);
+  expect(await buildPersonalRecallTools(input)).toEqual([]);
+}
+it.each(['definition', 'policy'] as const)(
+  'refuses duplicate recall %s entries', refusesAmbiguousRecall);
+
+async function refusesMissingFields(kind: 'definition' | 'serverInfo') {
+  const { state, input } = fixture();
+  if (kind === 'definition') delete state.discoveryTools[0]!.definition;
+  if (kind === 'serverInfo') delete state.serverInfo;
+  expect(await buildPersonalRecallTools(input)).toEqual([]);
+}
+it.each(['definition', 'serverInfo'] as const)(
+  'refuses missing %s', refusesMissingFields);
+
+async function refusesMissingServer() {
+  const { input } = fixture();
+  function missing() { return Promise.resolve(undefined); }
+  expect(await buildPersonalRecallTools({ ...input, readServer: missing })).toEqual([]);
+}
+it('offers nothing when the server is absent', refusesMissingServer);
