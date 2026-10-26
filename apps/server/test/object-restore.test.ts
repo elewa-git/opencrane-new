@@ -16,6 +16,7 @@ import { restoreObjectBackup } from '../../../infra/package/object-restore.ts';
 import { until } from '@opencrane/authz/testing';
 import { stalledStorage } from './support/stalled-storage.ts';
 import { restoreStorage } from './support/restore-storage.ts';
+import { provisionDisposableObjectTarget } from '../../../infra/package/disposable-object-target.ts';
 
 let source: Awaited<ReturnType<typeof restoreStorage>>;
 async function start() {
@@ -40,7 +41,8 @@ function digest(bytes: Buffer | string) {
 
 async function fixture(conflictingMime = false) {
   onTestFinished(restoreMocks);
-  const target = await restoreStorage(onTestFinished);
+  const target = await provisionDisposableObjectTarget('test');
+  onTestFinished(target.close);
   const events = await natsFixture();
   onTestFinished(events.close);
   const copied = await natsFixture({ provision: false });
@@ -264,10 +266,8 @@ it('cancels the underlying write request before headers arrive', cancelsStorageW
 
 async function refusesSwappedDestination() {
   const setup = await fixture();
-  const foreign = await restoreStorage(onTestFinished);
-  await foreign.client.makeBucket('opencrane-restore');
-  const marker = Buffer.from(JSON.stringify({ silo: 'another-silo' }));
-  await foreign.client.putObject('opencrane-restore', 'owner', marker);
+  const foreign = await provisionDisposableObjectTarget('another-silo');
+  onTestFinished(foreign.close);
   await expect(restoreObjectBackup(setup.restored.connection, source.client,
     foreign.client, setup.options)).rejects.toThrow('Object restore refused; keep target isolated');
   expect(await foreign.client.bucketExists('files')).toBe(false);
@@ -283,3 +283,28 @@ async function refusesRunningProcess() {
   expect(await setup.target.client.bucketExists('files')).toBe(false);
 }
 it('checks that the destination has no other running process', refusesRunningProcess);
+
+const ownerMarkerFaults = ['missing', 'foreign', 'oversized'];
+async function refusesChangedOwnerMarker(fault: string) {
+  const setup = await fixture();
+  if (fault === 'missing') {
+    await setup.target.client.removeObject('opencrane-restore', 'owner');
+  } else {
+    let bytes = Buffer.from(JSON.stringify({ silo: 'another-silo', instance: 'foreign' }));
+    if (fault === 'oversized') bytes = Buffer.alloc(65 * 1024, 65);
+    await setup.target.client.putObject('opencrane-restore', 'owner', bytes);
+  }
+  await expect(setup.restore()).rejects.toThrow('Object restore refused; keep target isolated');
+  expect(await setup.target.client.bucketExists('files')).toBe(false);
+}
+it.each(ownerMarkerFaults)('checks a %s owner marker at the destination', refusesChangedOwnerMarker);
+
+async function refusesUnprovisionedDestination() {
+  const setup = await fixture();
+  const unmanaged = await restoreStorage(onTestFinished);
+  await expect(restoreObjectBackup(setup.restored.connection, source.client,
+    unmanaged.client, setup.options)).rejects.toThrow('Object restore refused; keep target isolated');
+  expect(await unmanaged.client.bucketExists('files')).toBe(false);
+}
+it('refuses an unmanaged target despite stopped and exclusive declarations',
+  refusesUnprovisionedDestination);
