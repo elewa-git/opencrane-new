@@ -221,7 +221,7 @@ class ConnectionCustody {
         return { status: 'unknown' as const };
       }
       const contents = await this.readAttempt(stage, recovered.identity);
-      if (contents === undefined) {
+      if (contents === undefined || Date.now() >= stage.appendUntil) {
         return { status: 'unknown' as const };
       }
       return { status: 'prepared' as const, stage, identity: recovered.identity, contents };
@@ -247,6 +247,10 @@ class ConnectionCustody {
       }
       const secret = secretSchema.parse(await readResponse(response));
       if (!this.verify(secret, stage, expected)) {
+        return undefined;
+      }
+      // Refuse material that expired while custody recovery or its final read was waiting.
+      if (Date.now() >= stage.appendUntil) {
         return undefined;
       }
       return decodeToken(secret.data.token)?.toString('utf8');

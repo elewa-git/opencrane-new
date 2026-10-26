@@ -23,6 +23,8 @@ references only. It returns neither state nor verifier nor a consent URL.
 
 `readAttempt(stage, identity)` is private recovery, requiring the exact operation, bindings,
 UID and version. It never reads bearer material. Expired or changed attempts cannot be read.
+Recovery checks expiry again after the final custody read, before returning private material.
+Preparation also checks expiry after recovery, before reporting success.
 The existing scanner and deletion adapter retain every OAuth attempt, including expired and
 uncertain ones. Bearer folds and cleanup keep their existing behaviour. The journal holds
 no state or verifier. No dependency or licence change is needed.
