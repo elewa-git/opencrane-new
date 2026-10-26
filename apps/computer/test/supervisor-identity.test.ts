@@ -1,9 +1,34 @@
 import { expect, it } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { uploadComputer } from '../../server/test/support/upload-computer.ts';
 import { pauseBridgeCodex } from './pause-bridge-codex.ts';
 
 const binding = { generation: 1, podUid: 'fixture', takeoverId: 'identity-test',
   affectedTurnIds: [] };
+
+async function startsPackagedProxy() {
+  const script = `
+import { proxy } from '/app/src/proxy.ts';
+const options = { callerPath: '/tmp/caller', controlSocket: '/tmp/control.sock', port: 0 };
+const service = await proxy('http://127.0.0.1:1', options);
+try {
+  const response = await fetch(service.url + '/v1/responses', { method: 'POST' });
+  const body = await response.json();
+  process.stdout.write(JSON.stringify({ status: response.status, body }));
+} finally {
+  await service.close();
+}
+`;
+  const image = process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test';
+  // Use only packaged files so checkout mounts cannot hide a missing runtime module.
+  const argumentsList = ['run', '--rm', '--network=none', '--entrypoint=node', image,
+    '--experimental-strip-types', '--input-type=module', '-e', script];
+  const execute = promisify(execFile);
+  const result = await execute('docker', argumentsList, { timeout: 30_000 });
+  expect(JSON.parse(result.stdout)).toEqual({ status: 401, body: { error: 'caller' } });
+}
+it('starts the packaged proxy and refuses an unauthenticated caller', startsPackagedProxy);
 
 async function refusesUncertainIdentity(fault: string) {
   const computer = await uploadComputer();
