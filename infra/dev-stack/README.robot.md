@@ -2048,7 +2048,8 @@ cluster retain their existing behaviour.
 
 `packageConnectionArgs` rechecks package ownership and the captured namespace UID
 for private preparation and browser forwarding. It supplies the recorded context
-and private kubeconfig path without reading or printing credential contents.
+as an argument and the private kubeconfig path through `KUBECONFIG` in the child
+environment, without reading or printing credential contents.
 The [package notes](../package/README.robot.md#recorded-connection-during-package-operations)
 describe the split scope and remaining R3 installation work.
 

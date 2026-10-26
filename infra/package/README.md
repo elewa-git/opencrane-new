@@ -78,8 +78,10 @@ running install still need work.
 4. **A developer stops the package.** Cleanup checks ownership and removes only
    this developer's install, even after a crash.
 5. **A developer checks fresh installs.** A check installs the package twice from
-   scratch and confirms the second install starts empty and chat still works.
-   Browser results record which install they checked. A separate browser with no
+   scratch on one dedicated test cluster. Each run gets a new namespace and storage.
+   The check confirms the second install starts empty and chat still works.
+   Browser results record the namespace, storage and install time they checked.
+   A separate browser with no
    session must receive only a refusal when it requests that chat history.
 
 ## How to run or test it

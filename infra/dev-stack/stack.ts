@@ -844,7 +844,9 @@ try {
       }
       await preparePackage();
     }
-    else if (action === 'package-up' && flag) await installPackage(flag);
+    else if (action === 'package-up' && (flag || process.env['PACKAGE_VALUES_FILE'])) {
+      await installPackage(flag ?? process.env['PACKAGE_VALUES_FILE']!);
+    }
     else if (action === 'package-down') await removePackage();
     else if (action === 'package-check') await verifyPackageOwner();
     else throw new Error('Unknown package action');

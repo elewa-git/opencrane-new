@@ -126,11 +126,9 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     if (loseTarget && secrets.size > 0) {
       throw new Error('Target changed');
     }
-    const args = [`--context=${context}`];
-    if (isolated) {
-      args.push('--kubeconfig', '/private/target.kubeconfig');
-    }
-    return args;
+    const environment = { ...process.env };
+    if (isolated) environment.KUBECONFIG = '/private/target.kubeconfig';
+    return { args: [`--context=${context}`], environment };
   }
   const key = Buffer.alloc(32, 0x41);
   key[3] = 0;
@@ -543,8 +541,9 @@ async function refusesReplacedPackageNamespace() {
       './identity.ts': { secondary: true, stackId: '1' },
       './target.ts': { targetConnection: targetConnectionFixture },
     });
-  const args = await connectionArgs(owner);
-  assert.equal(args.join(' '), '--context=k3d-test-target --kubeconfig /private/target.kubeconfig');
+  const connection = await connectionArgs(owner);
+  assert.equal(connection.args.join(' '), '--context=k3d-test-target');
+  assert.equal(connection.environment.KUBECONFIG, '/private/target.kubeconfig');
   current.namespaceUid = 'replacement';
   await assert.rejects(connectionArgs(owner), /Package target changed/u);
 }

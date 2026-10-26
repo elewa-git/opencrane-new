@@ -11,7 +11,8 @@ const execute = promisify(execFile);
 const files = ['fresh-twice.ts', 'fresh-twice-entry.ts', 'browser-capture.ts', 'journey-check.ts'];
 const scenarios = ['valid', 'collector failure', 'collector and cleanup failure',
   'cleanup failure', 'missing width',
-  'foreign receipt', 'reused install', 'reused PVC', 'reused store', 'retained data',
+  'foreign receipt', 'reused install', 'reused PVC', 'reused PV', 'missing PV',
+  'old install', 'reused store', 'retained data',
   'failed owner', 'foreign context', 'foreign claim', 'reused namespace', 'reused release',
   'foreign image', 'collector after teardown', 'dirty source'];
 
@@ -104,6 +105,9 @@ try {
   } else {
     let expected = 'Fresh run 1 failed during browser capture';
     if (scenario.startsWith('reused')) expected = 'Fresh run 2 failed during fresh state';
+    if (scenario === 'missing PV' || scenario === 'old install') {
+      expected = 'Fresh run 1 failed during fresh state';
+    }
     if (scenario === 'reused namespace' || scenario === 'reused release') {
       expected = 'Fresh run 2 failed during browser capture';
     }
@@ -210,9 +214,11 @@ else if (program === 'node' && args.includes('prepare.ts')) {
       uid: id('namespace'), annotations: { 'opencrane.dev/worktree': process.cwd(),
         'opencrane.dev/slot': '1' } } });
   } else if (args.includes('get secret')) output({ metadata: { uid: id('release'),
-    creationTimestamp: new Date().toISOString(),
+    creationTimestamp: scenario === 'old install'
+      ? '2020-01-01T00:00:00.000Z' : new Date().toISOString(),
     labels: { 'opencrane.dev/install-id': id('install') } } });
-  else if (args.includes('get pv')) output({ items: fs.existsSync(slot + '/package-owner.json')
+  else if (args.includes('get pv ')) output({ items: scenario !== 'missing PV' &&
+    fs.existsSync(slot + '/package-owner.json')
     ? [{ metadata: { uid: id('PV'), creationTimestamp: new Date().toISOString() },
       spec: { claimRef: { namespace: 'opencrane-package-1' } } }] : [] });
   else if (args.includes('get pvc')) output({ items: [{ metadata: {

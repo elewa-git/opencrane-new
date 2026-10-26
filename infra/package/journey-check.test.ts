@@ -6,7 +6,9 @@ const binding = {
   source: 'a'.repeat(40), image: `local/server@sha256:${'b'.repeat(64)}`,
   context: 'k3d-opencrane-target-1', namespace: 'opencrane-package-1',
   namespaceUid: 'namespace-1', releaseUid: 'release-1', installId: 'install-1',
-  pvcUids: ['pvc-1'], storeId: 'store-1', origin: 'http://127.0.0.1:25106',
+  installedAt: '2026-10-26T12:00:00.000Z',
+  pvcUids: ['pvc-1'], pvUids: ['pv-1'], storeId: 'store-1',
+  origin: 'http://127.0.0.1:25106',
 };
 const outcomes = [
   { width: 1280, authenticated: true, subject: 'owner', chat: true, historyRefused: true },

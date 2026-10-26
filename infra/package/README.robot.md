@@ -707,13 +707,18 @@ link existing commands and distinguish source checks from live qualification.
 ## Bound package journeys
 
 `journey-entry.ts PRIVATE_VALUES_FILE` requires a claimed, checked dedicated k3d
-cluster. It calls `fresh-twice.ts` twice with the fixed `capture.mjs` collector,
+cluster. It uses that cluster for two fresh namespaces and fresh storage sets.
+It calls `fresh-twice.ts` twice with the fixed `capture.mjs` collector,
 while each package and loopback forward still run. At 1280/390 the collector
 checks owner sign-in, stub chat and an unauthenticated history request with only
 public refusal bytes. It checks ownership before opening the browser.
 Results bind the runner revision and Deployment-checked server image to context,
-namespace/release UIDs, install id, PVCs and OpenFGA store. Fresh identities must
+namespace/release UIDs, install time and id, PVCs, PVs and OpenFGA store.
+Fresh identities must
 not repeat. Screenshots and `package-journey.json` stay in the private claimed slot.
+The runner sends the private values filename to preparation and installation through
+`PACKAGE_VALUES_FILE` in each child environment. Preparation and browser forwarding
+send the private kubeconfig filename to kubectl through `KUBECONFIG`.
 The receipt says PARTIAL. Collector or cleanup failure prevents the next install.
 The [receipt](../../docs/process/p5-11-pr1/receipt.md) gives the later claim-based
 command, source checks and live blockers. Fixtures and Stage B captures cannot

@@ -21,7 +21,9 @@ type FreshState = {
   journey?: { binding: JourneyBinding; outcomes: ReturnType<typeof checkJourney> };
   installId: string; previousInstallId?: string | undefined; startedAt: string;
   previousPvcUids: readonly string[]; previousStoreId?: string | undefined;
-  pvClaims: readonly string[];
+  pvClaims: readonly string[]; previousPvUids?: readonly string[] | undefined;
+  pvs?: readonly (DatedObject & { uid: string })[] | undefined;
+  installedAt?: string | undefined;
   pvcs: readonly (DatedObject & { uid: string })[];
   events: readonly DatedObject[]; storeId: string; memberIds: readonly string[];
   siloEvents: readonly { type: string; time: string }[];
@@ -73,6 +75,17 @@ export function checkInstallId(current: string | undefined, previous?: string) {
 export function checkFresh(state: FreshState) {
   checkInstallId(state.installId, state.previousInstallId);
   assert.equal(state.pvClaims.length, 0, 'A PV remains claimed for this namespace');
+  if (state.pvs) {
+    assert(state.pvs.length > 0, 'The package has no PVs');
+    for (const volume of state.pvs) {
+      assert(volume.uid, 'A PV has no UID');
+      assert(!state.previousPvUids?.includes(volume.uid), 'A PV UID was reused');
+      requireNewer(volume.createdAt, state.startedAt, 'A PV predates this run');
+    }
+  }
+  if (state.installedAt) {
+    requireNewer(state.installedAt, state.startedAt, 'The release predates this run');
+  }
   assert(state.pvcs.length > 0, 'The package has no PVCs');
   for (const pvc of state.pvcs) {
     assert(pvc.uid, 'A PVC has no UID');
@@ -260,21 +273,25 @@ async function snapshot(startedAt: string, context: string, previous?: FreshStat
   const release = await kubectl(['-n', namespace, 'get', 'secret',
     `sh.helm.release.v1.${namespace}.v1`, '-o', 'json'], context);
   const releaseData = JSON.parse(release) as {
-    metadata: { uid: string; labels?: Record<string, string> } };
+    metadata: { uid: string; creationTimestamp: string; labels?: Record<string, string> } };
   const installId = releaseData.metadata.labels?.[installLabel];
   assert(installId === owner.installId, 'Release label differs from the claim');
   assert(releaseData.metadata.uid === owner.releaseSecretUid, 'Release UID differs from the claim');
   console.log('Checking PVCs and Kubernetes events');
   const pvcs = await list(['-n', namespace, 'get', 'pvc'], context);
+  const pvs = await claimedPvs(context);
   const events = await list(['-n', namespace, 'get', 'events'], context);
   console.log('Checking silo data and OpenFGA');
   const data = await inspectData(context);
   const state: FreshState = {
     installId: installId ?? '', previousInstallId: previous?.installId, startedAt,
     previousPvcUids: previous?.pvcs.map(pvcUid) ?? [],
+    previousPvUids: previous?.pvs?.map(pvcUid) ?? [],
     previousStoreId: previous?.storeId,
     pvClaims: [],
     pvcs: pvcs.items.map(pvcTime),
+    pvs: pvs.map(pvcTime),
+    installedAt: releaseData.metadata.creationTimestamp,
     events: events.items.map(objectTime),
     storeId: data.storeId, memberIds: data.members ?? [], siloEvents: data.siloEvents,
     rowCounts: { conversations: data.conversations,
@@ -318,9 +335,11 @@ async function journeyBinding(values: string, state: FreshState,
   assert(workload.spec.template.spec.containers.find(server)?.image === image,
     'Running server image differs from the requested image');
   assert(owner.namespaceUid && owner.releaseSecretUid, 'Package UIDs are missing');
+  assert(state.installedAt && state.pvs, 'Package target identity is missing');
   return { source, image, context: owner.context, namespace,
     namespaceUid: owner.namespaceUid, releaseUid: owner.releaseSecretUid,
-    installId: state.installId, pvcUids: state.pvcs.map(pvcUid), storeId: state.storeId,
+    installId: state.installId, installedAt: state.installedAt,
+    pvcUids: state.pvcs.map(pvcUid), pvUids: state.pvs.map(pvcUid), storeId: state.storeId,
     origin: `http://127.0.0.1:${25000 + Number(stackId) * 100 + 6}` };
 }
 
@@ -339,12 +358,12 @@ export async function runOnce(index: number, values: string, previous?: FreshSta
     prepared = true;
     await verifyPackageOwner();
     stage = 'private settings';
-    await command('node', ['--experimental-strip-types', 'infra/package/prepare.ts', values],
-      300_000, { PACKAGE_SKIP_PROVIDER_SETUP: '1' });
+    await command('node', ['--experimental-strip-types', 'infra/package/prepare.ts'],
+      300_000, { PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: values });
     await verifyPackageOwner();
     stage = 'Helm install';
-    await command('infra/dev-stack/run.sh', ['package-up', '--id', stackId,
-      '--values', values], 900_000);
+    await command('infra/dev-stack/run.sh', ['package-up', '--id', stackId],
+      900_000, { PACKAGE_VALUES_FILE: values });
     stage = 'fresh state';
     const { state, owner: packageOwner } = await snapshot(startedAt, context, previous);
     checkFresh(state);
@@ -381,6 +400,9 @@ export async function runOnce(index: number, values: string, previous?: FreshSta
         const earlier = previous.journey.binding;
         assert(binding.namespaceUid !== earlier.namespaceUid &&
           binding.releaseUid !== earlier.releaseUid, 'Package UIDs were reused');
+        for (const volumeUid of binding.pvUids) {
+          assert(!earlier.pvUids.includes(volumeUid), 'A PV UID was reused');
+        }
         assert(binding.source === earlier.source && binding.image === earlier.image,
           'Source or image changed between runs');
       }

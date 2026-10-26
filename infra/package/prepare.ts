@@ -40,8 +40,9 @@ async function createSecret(owner: PackageOwner, name: string, environment?: str
     }
     const connection = await packageConnectionArgs(owner);
     // Read relative to the private directory so its host path never enters child arguments.
-    await command('kubectl', [...connection, '-n', owner.namespace,
-      'create', 'secret', 'generic', name, '--from-file=.'], source);
+    await execute('kubectl', [...connection.args, '-n', owner.namespace,
+      'create', 'secret', 'generic', name, '--from-file=.'],
+      { cwd: source, timeout: 120_000, env: connection.environment });
   } finally {
     await rm(source, { recursive: true, force: true });
   }

@@ -190,17 +190,18 @@ async function privateArguments() {
 }
 test('collector and inherited ownership calls keep private paths out of spawned argv', privateArguments);
 
-function forwardKeepsPrivatePathOutOfArgv() {
+async function forwardKeepsPrivatePathOutOfArgv() {
   const home = mkdtempSync(join(tmpdir(), 'package-forward-'));
   try {
-    const { worktree, slot, env } = prepareCollector(home);
+    const { worktree, slot, env } = await prepareCollector(home);
     const result = spawnSync(process.execPath,
       ['--experimental-strip-types', 'infra/package/forward.ts'],
       { cwd: worktree, env, encoding: 'utf8', timeout: 15_000 });
     assert.equal(result.status, 0, result.stderr);
     const calls = readFileSync(join(home, 'calls.bin'), 'utf8');
     assert.doesNotMatch(calls, /--kubeconfig/u);
-    const fields = calls.trimEnd().split('\0');
+    const forwardedCall = calls.trimEnd().split('\n').at(-1)!;
+    const fields = forwardedCall.split('\0');
     assert.equal(fields[0], 'kubectl');
     assert.equal(fields[1], join(slot, 'target.kubeconfig'));
     for (const argument of fields.slice(2)) {

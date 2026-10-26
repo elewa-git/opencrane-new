@@ -201,7 +201,12 @@ export async function packageConnectionArgs(owner: PackageOwner) {
   if (checked.context !== owner.context || checked.namespaceUid !== owner.namespaceUid) {
     throw new Error('Package target changed');
   }
-  return connectionArgs(owner.context);
+  const connection = await targetConnection();
+  if (connection.context !== owner.context) throw new Error('Package target changed');
+  const args = [`--context=${connection.context}`];
+  const environment = { ...process.env };
+  if (connection.kubeconfig) environment['KUBECONFIG'] = connection.kubeconfig;
+  return { args, environment };
 }
 
 function valuesLocation(valuesFile: string) {

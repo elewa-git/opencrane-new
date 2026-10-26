@@ -6,7 +6,9 @@ Overall: PARTIAL. No live install was run for this change.
 ## What runs
 
 `infra/package/journey-entry.ts` repeats the existing fresh package runner twice
-on one claimed k3d target. Each install starts with empty event and projection
+on one claimed k3d cluster. Each run uses a new namespace and fresh storage.
+The cluster is reused; these are not separate clusters.
+Each install starts with empty event and projection
 state. The existing checks require a verified owner and distinct install ids,
 PVC UIDs and OpenFGA stores. Namespace and release UIDs must also differ.
 The browser collector runs before its loopback forward and package are removed.
@@ -15,8 +17,8 @@ a separate browser context with no session. Only HTTP 401 and the exact public
 refusal body are accepted. It repeats these checks at 1280 and 390 pixels.
 
 Each result requires a clean source worktree and records its git revision and server image checked
-against the Deployment, checked context, namespace and release UIDs, install id,
-PVC UIDs, OpenFGA store and loopback origin. This records the runner source and
+against the Deployment, checked context, namespace and release UIDs, install time and id,
+PVC and PV UIDs, OpenFGA store and loopback origin. This records the runner source and
 image separately; it does not prove the image was built from that revision.
 Screenshots go into the claimed slot's private directory, under the install id.
 The final private `package-journey.json` says PARTIAL and lists only executed checks.
@@ -61,9 +63,8 @@ fresh-dev Stage B is #641 at `105071aaa`. Their reports were read before buildin
 Own source checks, 26 October 2026:
 
 - PASS: expected failing tests committed before implementation.
-- PASS: 77 targeted Node tests twice, with `nice -n 10` and one test file at a time.
-- PASS: 438 security catalogue tests, with the supplied `PG_TEST_URL` and `nice -n 10`.
-  These tests inspect schemas and do not open PostgreSQL connections.
+- PASS: 100 package tests twice and 38 claim and fresh-install tests twice,
+  with `PG_TEST_URL` set and `nice -n 10`.
 - PASS: full typecheck, event catalogue, knip and changelog lint.
 - NOT RUN: root test suite, live installs, live browser qualification and paid models.
 - PASS: full lint, including dependency, documentation, licence and changelog checks.

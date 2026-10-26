@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 export type JourneyBinding = {
   source: string; image: string; context: string; namespace: string;
   namespaceUid: string; releaseUid: string; installId: string;
-  pvcUids: string[]; storeId: string; origin: string;
+  installedAt: string; pvcUids: string[]; pvUids: string[];
+  storeId: string; origin: string;
 };
 type Outcome = {
   width: number; authenticated: boolean; subject: string; chat: boolean; historyRefused: boolean;
