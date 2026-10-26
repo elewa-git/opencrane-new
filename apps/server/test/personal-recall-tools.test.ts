@@ -100,7 +100,9 @@ async function refusesBinding(change: typeof invalidBindings[number]) {
   }
   if (change === 'no recorded turn') input.turn = undefined;
   if (change === 'closed turn') binding.turn.firstClose = { sequence: 2, status: 'completed' };
-  if (change === 'ordinary turn') binding.data.executionMode = 'memory_free';
+  if (change === 'ordinary turn') {
+    binding.turn.firstStart!.event.data = { ...binding.data, executionMode: 'memory_free' };
+  }
   if (change === 'shared turn') {
     binding.turn.firstStart!.event.data = { ...binding.data, sharingClass: 'shared_only' };
   }
