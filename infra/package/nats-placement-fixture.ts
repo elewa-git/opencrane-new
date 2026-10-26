@@ -66,4 +66,3 @@ export function fixture() {
   };
   return { evidence, expected };
 }
-

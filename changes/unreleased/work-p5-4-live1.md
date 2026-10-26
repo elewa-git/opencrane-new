@@ -1,1 +1,2 @@
 - Add a bounded Kubernetes collector and checks for fresh three-peer NATS placement. Packaged R3 installation and live qualification remain blocked.
+- Refuse NATS placement without mounted claim storage or unlimited event retention. Keep private connection paths out of collector child arguments and cap growing input files before parsing.

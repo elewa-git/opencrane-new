@@ -10,3 +10,30 @@ PASS: existing image licence inventories.
 PASS: full npm run lint, including docs, links, licences and changelog.
 All checks used nice -n 10. No full root suite or live collector ran.
 Local logs: /tmp/p5-4-live1-{tests-1,tests-2,security,typecheck,events,knip,changelog,lint}.log.
+
+26 October source repairs after rebase onto 690c2e44c:
+PASS: rebase completed; origin/main is an ancestor and no rebase remains active.
+FAIL: initial collector fixture lacked its node_modules link; corrected before recording regression results.
+FAIL: initial growth hook did not update named imports; corrected with syncBuiltinESMExports.
+FAIL: first corrected implementation run passed 89/90; growth hook needed to resolve the review file's relative pathname.
+PASS: corrected failing-first collector checks reproduced all seven refusals/privacy failures against the original implementation.
+PASS: failing-first placement cases reproduced missing storage mounts and finite retention acceptance.
+PASS: placement, collector and fresh-install tests, final run 1: 90/90; final run 2: 90/90.
+PASS: check:events, 154 event types.
+PASS: separate Knip and lint:changelog commands.
+All repair checks use nice -n 10 and tests receive the requested PG_TEST_URL.
+NOT RUN: full root suite, development stack and live qualification.
+Repair logs: /tmp/p5-4-{red,red-corrected,red-claim,final-tests-1,final-tests-2,claim1,claim2,typecheck,events,knip,changelog,lint}.log.
+FAIL: one later collector rerun hit its 15-second fixture deadline (89/90); replaced repeated Node command stubs with a shell stub, keeping the deadline and assertions unchanged.
+FAIL: wider package fixture run passed 152/157; two old chart mocks needed the new reader/environment contract, and three route fixtures reached their existing 30-second deadline under host contention.
+FAIL: docs check found an extra blank line in the updated robot guide; removed it.
+PASS: corrected docs and public-text privacy checks.
+PASS: full workspace and infra typecheck.
+PASS: chart fixtures, final run 1: 12/12; final run 2: 12/12.
+PASS: ownership and cleanup fixtures, run 1: 38/38; run 2: 38/38.
+PASS: final package typecheck after fixture updates.
+PASS: route preparation fixtures, final run 1: 19/19; final run 2: 19/19.
+PASS: all 126 CNPG installation fixture cases in the wider package run.
+PASS: full npm run lint, including code, dependency direction, Knip, docs, README rules, local links, fixtures, image licences and changelog; 0 code errors and 25 existing size warnings.
+Corrected regression baseline log: /tmp/p5-4-red-original-final.log.
+Wider package and final fixture logs: /tmp/p5-4-inherited-fixtures-first.log, /tmp/p5-4-chart-{1,2}.log and /tmp/p5-4-routes-{1,2}.log.

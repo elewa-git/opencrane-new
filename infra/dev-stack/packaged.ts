@@ -5,6 +5,7 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { directory, root } from './config.ts';
+import { readBoundedJson, readBoundedText } from './bounded-input.ts';
 import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
 import { checkCnpgInstallation } from './cnpg.ts';
@@ -83,8 +84,14 @@ async function command(program: string, args: string[], timeoutMs = 120_000) {
     }
     if (connection.kubeconfig) args = ['--kubeconfig', connection.kubeconfig, ...args];
   }
+  const env = { ...process.env };
+  const configIndex = args.indexOf('--kubeconfig');
+  if (configIndex !== -1) {
+    env['KUBECONFIG'] = args[configIndex + 1];
+    args = [...args.slice(0, configIndex), ...args.slice(configIndex + 2)];
+  }
   try {
-    const result = await execute(program, args, { cwd: root, timeout: timeoutMs });
+    const result = await execute(program, args, { cwd: root, env, timeout: timeoutMs });
     return result.stdout.trim();
   } catch {
     // Discard dependency output because it may contain credentials.
@@ -109,7 +116,7 @@ async function kubectl(args: string[], context?: string, timeoutMs = 120_000) {
 
 async function readOwner() {
   try {
-    return JSON.parse(await readFile(recordFile, 'utf8')) as PackageOwner;
+    return await readBoundedJson(recordFile) as PackageOwner;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;
@@ -151,7 +158,7 @@ export async function packagedSlotIsBusy() {
 
 export async function requireOwner() {
   if (!secondary) throw new Error('A package needs a secondary slot');
-  const record = await readFile(`${directory}/stack-owner`, 'utf8');
+  const record = await readBoundedText(`${directory}/stack-owner`);
   if (!record.startsWith(`worktree=${root}\n`)) throw new Error('This worktree does not own the slot');
 }
 

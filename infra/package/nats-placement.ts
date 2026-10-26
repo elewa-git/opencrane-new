@@ -1,9 +1,10 @@
+import { isDeepStrictEqual } from 'node:util';
 import { checkFresh } from './fresh-twice.ts';
 
 type ExpectedPlacement = {
   namespace: string; namespaceUid: string; releaseSecretUid: string; installId: string;
   targetId: string; worktree: string; slot: string; startedAt: string; image: string;
-  nodeUids: Record<string, string>;
+  nodeUids: Record<string, string>; clientConfig: string; clusterConfig: string;
 };
 type ObjectValue = Record<string, unknown>;
 
@@ -116,6 +117,79 @@ function ready(value: unknown) {
   return condition['type'] === 'Ready' && condition['status'] === 'True';
 }
 
+function sameValues(actual: unknown, expected: unknown) {
+  requireEvidence(isDeepStrictEqual(actual, expected));
+}
+
+function isConfigVolume(value: unknown) {
+  return object(value)['name'] === 'config';
+}
+
+function checkMount(value: ObjectValue, name: string, path: string) {
+  requireEvidence(value['name'] === name && value['mountPath'] === path);
+  requireEvidence(!value['subPath'] && !value['subPathExpr']);
+  if (name === 'data') {
+    requireEvidence(!value['readOnly']);
+  }
+}
+
+function overlaps(path: string, directory: string) {
+  return path === '/' || path === directory || path.startsWith(`${directory}/`) ||
+    directory.startsWith(`${path}/`);
+}
+
+function checkStorage(spec: ObjectValue, input: ObjectValue, expected: ExpectedPlacement) {
+  const container = object(array(spec['containers'])[0]);
+  // Accept only the reviewed server entry point and configuration, without CLI overrides.
+  const command = container['command'];
+  if (command !== undefined && array(command).length !== 0) {
+    sameValues(command, ['/nats-server']);
+  }
+  sameValues(container['args'], ['-c', '/etc/nats/cluster.conf']);
+  const storeVariables = [];
+  for (const entry of array(container['env'])) {
+    const variable = object(entry);
+    if (variable['name'] === 'NATS_STORE_DIR') {
+      storeVariables.push(variable);
+    }
+  }
+  requireEvidence(storeVariables.length === 1);
+  requireEvidence(storeVariables[0]!['value'] === '/data' && !storeVariables[0]!['valueFrom']);
+  let dataMounts = 0;
+  let configMounts = 0;
+  for (const value of array(container['volumeMounts'])) {
+    const mount = object(value);
+    const path = text(mount['mountPath']);
+    if (overlaps(path, '/data')) {
+      checkMount(mount, 'data', '/data');
+      dataMounts++;
+    }
+    if (overlaps(path, '/etc/nats')) {
+      checkMount(mount, 'config', '/etc/nats');
+      configMounts++;
+    }
+  }
+  requireEvidence(dataMounts === 1 && configMounts === 1);
+  const volumes = array(spec['volumes']);
+  const configVolumes = volumes.filter(isConfigVolume);
+  requireEvidence(configVolumes.length === 1);
+  const projection = object(object(configVolumes[0])['projected']);
+  const sources = array(projection['sources']);
+  requireEvidence(sources.length === 2);
+  const configSource = { configMap: { name: 'nats-cluster' } };
+  sameValues(sources[0], configSource);
+  const secret = object(object(sources[1])['secret']);
+  const secretName = text(secret['name']);
+  const clientSource = { secret: { name: secretName,
+    items: [{ key: 'nats.conf', path: 'nats.conf' }] } };
+  sameValues(sources[1], clientSource);
+  const configuration = object(input['configuration']);
+  const clients = object(configuration['clients']);
+  // Compare both mounted files with the reviewed files rather than parsing a subset of NATS syntax.
+  requireEvidence(text(configuration['cluster']) === expected.clusterConfig);
+  requireEvidence(text(clients[secretName]) === expected.clientConfig);
+}
+
 function checkPods(input: ObjectValue, expected: ExpectedPlacement, nodes: string[]) {
   const allPods = items(input['pods']);
   const pods = allPods.filter(isNatsPod);
@@ -136,6 +210,7 @@ function checkPods(input: ObjectValue, expected: ExpectedPlacement, nodes: strin
     requireEvidence(nodes.includes(node));
     const containers = array(spec['containers']);
     requireEvidence(containers.length === 1 && object(containers[0])['image'] === expected.image);
+    checkStorage(spec, input, expected);
     const volumes = array(spec['volumes']);
     const data = volumes.filter(isDataVolume);
     requireEvidence(data.length === 1);
@@ -146,7 +221,9 @@ function checkPods(input: ObjectValue, expected: ExpectedPlacement, nodes: strin
     peers.push(peer);
     const podUid = text(details['uid']);
     podUids.push(podUid);
-    placementsByPeer.push({ peer, node, podUid, claimName: text(claim['claimName']) });
+    const placement = { peer, node, podUid, claimName: text(claim['claimName']),
+      storeDirectory: '/data' };
+    placementsByPeer.push(placement);
   }
   unique(placements);
   unique(peers);
@@ -181,6 +258,10 @@ function checkStream(value: unknown, peers: string[]) {
   const config = object(stream['config']);
   requireEvidence(config['name'] === 'EVENTS' && config['num_replicas'] === 3 &&
     config['storage'] === 'file' && config['retention'] === 'limits');
+  const limits = { max_msgs: config['max_msgs'], max_bytes: config['max_bytes'],
+    max_age: config['max_age'], max_msgs_per_subject: config['max_msgs_per_subject'] };
+  requireEvidence(limits.max_msgs === -1 && limits.max_bytes === -1 &&
+    limits.max_age === 0 && limits.max_msgs_per_subject === -1);
   const cluster = object(stream['cluster']);
   const names = [text(cluster['leader'])];
   for (const value of array(cluster['replicas'])) {
@@ -190,7 +271,7 @@ function checkStream(value: unknown, peers: string[]) {
   }
   unique(names);
   for (const name of names) requireEvidence(peers.includes(name));
-  return { leader: names[0], replicas: names.slice(1) };
+  return { leader: names[0], replicas: names.slice(1), limits };
 }
 
 export function checkNatsPlacement(value: unknown, expected: ExpectedPlacement) {

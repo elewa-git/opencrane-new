@@ -101,7 +101,8 @@ It checks ownership and uses the claimed cluster's private connection settings.
 It preserves the same identities on retry. Installation still uses
 one peer; the ordinary installer refuses three-peer mode. Live checks remain outstanding.
 A bounded collector can check recorded nodes, storage and replica state once a supported
-install exists. It checks placement only; sign-in, chat and service refusals need their own checks.
+install exists. It requires mounted claim storage and event history with no expiry limits.
+It checks placement only; sign-in, chat and service refusals need their own checks.
 
 The chart render test needs Helm and checks the installation files without starting
 an install. It uses made-up settings. The [operator notes](README.robot.md) give the command.

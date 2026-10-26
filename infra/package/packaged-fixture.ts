@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { preProcessFile } from 'typescript';
 
 const files = [
+  'infra/dev-stack/bounded-input.ts',
   'infra/dev-stack/cnpg.ts',
   'infra/dev-stack/config.ts',
   'infra/dev-stack/identity.ts',
