@@ -217,7 +217,8 @@ Another internal operation prepares one private session for a claimed routine oc
 It checks the original owner's membership, current permissions, fixed payer and worker
 ownership before saving, and again before returning the session reference. Retries recover
 that same session by checking its saved claim and worker. An ordinary human chat cannot
-become a routine session. A stopped, changed or expired occurrence cannot prepare a session.
+become a routine session. Public chat routes reserve these session ids for the worker.
+A stopped, changed or expired occurrence cannot prepare a session.
 This operation has no production caller. It saves no input and starts no work.
 
 1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.

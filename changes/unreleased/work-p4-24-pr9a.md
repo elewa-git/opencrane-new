@@ -1,1 +1,2 @@
 - An internal routine operation prepares one private session for a claimed occurrence and recovers the same session after a lost reply or restart. Current access, the original owner admission, fixed payer, worker ownership and expiry remain required. It saves no input; routine execution stays disabled.
+- Routine preparation refuses ordinary chats, even when their ids match. Saved sessions must name the exact claim, occurrence and trusted worker. Public chat routes reserve routine session identifiers; genuine retries still return the saved preparation.

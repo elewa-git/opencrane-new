@@ -5190,7 +5190,8 @@ Creation carries a strict `routinePreparation` binding: routineId, occurrenceId,
 claimPosition and workerId. Only the preparation append adds it; public chat input cannot
 supply it. Recovery requires that exact binding and a creation after the saved claim.
 An ordinary chat with matching identifiers is refused, including one with earlier human
-messages. A retry from another worker id is refused. The trusted worker supplies a stable
+messages. Public chat routes refuse conversation and command ids starting with
+`routine-session-`, including `routine-session-create-`, before access or writes. A retry from another worker id is refused. The trusted worker supplies a stable
 id across retries; its callback still proves current ownership. Errors contain only a
 fixed refusal. No event type or public preparation API is added.
 `test/routine-session.test.ts` covers recovery, refusals, timing and guarded replay.

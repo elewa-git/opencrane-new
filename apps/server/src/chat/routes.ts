@@ -38,7 +38,15 @@ const assistantDetails = z.object({
   kind: z.string(), payingGroupId: z.string().optional(),
 });
 class InvalidChatRequest extends Error {}
-const parameters = z.object({ conversationId: id.optional(), commandId: id.optional() });
+function isPublicChatId(value: string) {
+  // Reserve both routine-session- and its routine-session-create- subset for worker preparation.
+  return !value.startsWith('routine-session-');
+}
+const publicChatId = id.refine(isPublicChatId, 'Reserved routine session prefix');
+const parameters = z.object({
+  conversationId: publicChatId.optional(), commandId: publicChatId.optional(),
+});
+const publicCommandIds = z.object({ id: publicChatId, conversationId: publicChatId.optional() });
 
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
   app.get('/api/chat', handler);
@@ -88,6 +96,9 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
     reply.header('cache-control', 'no-store');
     try {
       const { conversationId, commandId } = parameters.parse(request.params);
+      if (request.method === 'POST') {
+        publicCommandIds.parse(request.body);
+      }
       const participants = request.routeOptions.url === participantsRoute.url;
       const origin = request.routeOptions.url === '/api/conversations/:conversationId/origin';
       if (origin) {

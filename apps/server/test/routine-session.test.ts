@@ -228,6 +228,24 @@ async function recoversBoundPreparation() {
 }
 it('returns the saved session only for the same worker and claim', recoversBoundPreparation);
 
+async function refusesChangedPreparation(field: string) {
+  const claimPosition = await nats.store.head('routine-orders');
+  let changed: string | number = 'other';
+  if (field === 'claimPosition') {
+    changed = claimPosition - 1;
+  }
+  const routinePreparation = { routineId: 'orders', occurrenceId: 'occurrence',
+    claimId: 'due', claimPosition, workerId: 'routine-worker', [field]: changed };
+  const data = { conversationId, assistantId: 'sales-assistant', createdBy: 'alice',
+    mode: 'agent_session', payingGroupId: 'sales', routinePreparation };
+  const saved = record(commandId, subject, 'conversation.created', data);
+  saved.principal = { kind: 'human', id: 'alice' };
+  await nats.seed([saved]);
+  await refuses();
+}
+it.each(['routineId', 'occurrenceId', 'claimId', 'claimPosition', 'workerId'])(
+  'refuses a saved preparation with a changed %s', refusesChangedPreparation);
+
 async function reusedBinding(field: string) {
   const data = { conversationId, assistantId: 'sales-assistant', createdBy: 'alice',
     mode: 'agent_session', payingGroupId: 'sales', [field]: 'someone-else' };
