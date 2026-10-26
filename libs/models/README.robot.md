@@ -2,6 +2,14 @@
 
 For people, read [README.md](README.md) first.
 
+## Shared routine presence check for member reviews
+
+`providerRoutinePresence` is exported for member departure reads. Its internal result
+includes the captured generation and a `checkCurrent(deadline)` function. That function
+rechecks checkpoint coverage, generation and category position without fetching another
+routine row. Member review hashes include the generation and position. Provider replies
+still contain only the existing status and position fields. No event or API field is added.
+
 ## Custom tool continuations
 
 `model-request.ts` accepts an optional `namespace` of at most 200 characters on

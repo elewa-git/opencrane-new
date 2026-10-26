@@ -4,7 +4,7 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { conversations, members, computers, pgDb, ProjectionRunner,
+import { conversations, members, routines, computers, pgDb, ProjectionRunner,
   rebuildMemberProjection } from '@opencrane/projections';
 import { memberAccessSchema, memberDepartureSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
@@ -34,6 +34,8 @@ async function append(subject: string, type: string, data: unknown, apply = true
 }
 async function project() {
   for (const projection of [members, conversations, computers]) await runner.run(projection);
+  const routinePosition = await nats.store.head('routine-*');
+  if (routinePosition > await runner.checkpoint(routines)) await runner.run(routines);
 }
 function request(section: string, sub = 'owner', orgId = 'org-acme', memberId = 'bob') {
   const session = { sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000 };
@@ -55,7 +57,7 @@ async function initialise() {
   auth = memberAuthorisation(binding);
   const db = pgDb(dbs.queue);
   runner = new ProjectionRunner(db, nats.reader, createLogger('inventory-test'));
-  for (const projection of [members, conversations, computers]) await runner.initialise(projection);
+  for (const projection of [members, routines, conversations, computers]) await runner.initialise(projection);
   for (const [memberId, role] of [['owner', 'owner'], ['admin', 'admin'], ['bob', 'member']]) {
     await append(`member-${memberId}`, 'member.joined', {
       memberId, role, email: `${memberId}@example.test`, displayName: memberId,

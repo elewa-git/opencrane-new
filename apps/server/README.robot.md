@@ -2,6 +2,22 @@
 
 For people, read [README.md](README.md) first.
 
+## Bounded routine presence in member reviews
+
+Member inventory excludes routine references and category aggregation from its member
+index query. It reuses `providerRoutinePresence`: one indexed position, the routine
+category position, checkpoint coverage and generation. No routine payload is read.
+Caught-up empty history reports `absent_on_version`; any saved routine, including
+legacy or retired records, reports `unsupported_history`. Uncertainty reports
+`unavailable`. Neither unsupported nor unavailable reviews permit removal.
+The review hash includes routine position and generation. Its final current check
+checks those values again, including immediately before removal. Existing connection,
+member index and retained-history completeness checks remain required.
+Preparation has ten seconds. The route checks current admin access once afterwards,
+including when preparation fails or expires. Private error text is never returned.
+Tests: `test/member-routine-presence.test.ts` and the existing inventory/removal suites.
+Routine counts, ownership transfer and firing remain later work.
+
 ## Takeover approval cancellation
 
 Bridge approval entries include the computer stream position in their change check.
@@ -2572,7 +2588,7 @@ Owner-role invitation remains invited; the active owner remains an owner.
 ## Member access and departure reads
 
 The Owner/Admin GETs `/api/members/:memberId/access` and `/api/members/:memberId/departure`
-check events and OpenFGA once. They stop after ten seconds or 10,000 inventory records.
+check events and OpenFGA once. Inventory preparation stops after ten seconds or 10,000 records.
 The members projection indexes the exact streams for groups, assistants, grants,
 computers and unsupported routine/connection history. Grant and group inventory
 loading reads exact streams. Category positions check index freshness and prevent new links

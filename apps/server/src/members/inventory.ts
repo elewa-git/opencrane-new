@@ -5,6 +5,7 @@ import { assistantCreatedDataSchema, grantGivenDataSchema, grantRevokedDataSchem
 import type { StoredEvent } from '@opencrane/event-store';
 import { readInventoryReferences, inventoryCategoryPositions,
   inventoryIndexState, inventoryCategories } from '@opencrane/projections';
+import { providerRoutinePresence } from '@opencrane/models';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { MemberAccessRow } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
@@ -20,11 +21,13 @@ type GrantFact = {
 };
 
 async function recordedInputs(options: GroupOptions, memberId: string, deadline: number) {
-  const indexedPositions = await inventoryCategoryPositions(options.db, options.silo);
+  const exclusions = { excludeRoutines: true };
+  const indexedPositions = await inventoryCategoryPositions(options.db, options.silo, exclusions);
   const categoryPositions: Record<string, number> = {};
   let current = indexedPositions.backfilled;
   let grantInputsCurrent = indexedPositions.backfilled;
   for (const category of inventoryCategories) {
+    if (category === 'routine') continue;
     const subject = `${category}-*`;
     const position = await options.store.head(subject, deadline);
     categoryPositions[subject] = position;
@@ -35,7 +38,7 @@ async function recordedInputs(options: GroupOptions, memberId: string, deadline:
       }
     }
   }
-  const indexed = await readInventoryReferences(options.db, options.silo, memberId);
+  const indexed = await readInventoryReferences(options.db, options.silo, memberId, exclusions);
   const rows: StoredEvent[] = [];
   const positions: Record<string, number> = {};
   for (const reference of indexed.references) {
@@ -279,6 +282,8 @@ async function completeGrantInputs(options: GroupOptions,
 }
 
 export async function memberInventory(options: GroupOptions, memberId: string, deadline: number) {
+  const presence = providerRoutinePresence(options.store, options.db, options.silo, deadline);
+  const [routineCheck] = await Promise.allSettled([presence]);
   const inputs = await recordedInputs(options, memberId, deadline);
   const unavailable = unavailableIndexSections(inputs);
   const groups = groupFacts(inputs.rows, memberId);
@@ -303,6 +308,9 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   const content = await retainedContent(options, memberId, inputs, deadline);
   if (!content.current) unavailable.add('retained_content');
   async function checkCurrent(checkDeadline: number, allowPendingRead = true) {
+    if (routineCheck.status === 'rejected') {
+      return false;
+    }
     const indexed = await inventoryIndexState(options.db);
     if (!indexed.backfilled || indexed.generation !== inputs.generation) {
       return false;
@@ -313,28 +321,57 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
         return false;
       }
     }
-    return content.checkCurrent(checkDeadline, allowPendingRead);
+    if (!await content.checkCurrent(checkDeadline, allowPendingRead)) return false;
+    return routineCheck.value.checkCurrent(checkDeadline);
   }
   const unchanged = await checkCurrent(deadline);
   if (!unchanged) {
     unavailable.add('changed_inventory');
   }
+  const grantInputsComplete = await completeGrantInputs(options, inputs, unavailable, deadline);
   const absenceChecked = inputs.current && inputs.withinLimits && unchanged;
   const personalConnections = versionAbsence(inputs.rows, 'connection', unavailable, absenceChecked);
-  const routines = versionAbsence(inputs.rows, 'routine', unavailable, absenceChecked);
+  const routine = await routineSummary(routineCheck, deadline);
+  const routines = routineAbsence(routine.status, unavailable, absenceChecked);
   const hash = createHash('sha256');
-  const reviewedInputs = [2, inputs.positions, inputs.categoryPositions, inputs.generation, content];
+  const reviewedInputs = [3, inputs.positions, inputs.categoryPositions, inputs.generation,
+    routine.version, content];
   hash.update(JSON.stringify(reviewedInputs));
   function assistantId(assistant: Assistant) {
     return assistant.assistantId;
   }
   const assistantIds = assistants.map(assistantId);
-  const grantInputsComplete = await completeGrantInputs(options, inputs, unavailable, deadline);
   return { rows, assistantIds, grantInputsComplete, complete: unavailable.size === 0,
     unavailableSections: Array.from(unavailable),
     reviewRevision: hash.digest('hex'), checkCurrent, ownedSharedWork: [],
     personalConnections, routines,
     personalComputer: content.computers, retainedHistory: content.history };
+}
+
+async function routineSummary(
+  check: PromiseSettledResult<Awaited<ReturnType<typeof providerRoutinePresence>>>, deadline: number,
+) {
+  if (check.status === 'rejected') {
+    return { status: 'unavailable' as const, version: [] };
+  }
+  const presence = check.value;
+  const version = [presence.position, presence.generation];
+  if (!await presence.checkCurrent(deadline)) return { status: 'unavailable' as const, version };
+  return { status: presence.status, version };
+}
+
+function routineAbsence(status: 'absent' | 'unsupported' | 'unavailable', unavailable: Set<string>,
+  absenceChecked: boolean) {
+  if (status === 'unsupported') {
+    unavailable.add('routine');
+    return { status: 'unsupported_history' as const, message: 'Not available yet' };
+  }
+  if (status === 'unavailable' || !absenceChecked) {
+    unavailable.add('routine');
+    return { status: 'unavailable' as const, message: 'History could not be checked completely' };
+  }
+  return { status: 'absent_on_version' as const,
+    message: 'Routines are not available on this version' };
 }
 
 function recordUnavailablePermissions(rows: MemberAccessRow[], unavailable: Set<string>) {
@@ -357,8 +394,7 @@ function versionAbsence(rows: StoredEvent[], category: string, unavailable: Set<
     unavailable.add(category);
     return { status: 'unavailable' as const, message: 'History could not be checked completely' };
   }
-  let message = 'None possible on this version';
-  if (category === 'routine') message = 'Routines are not available on this version';
+  const message = 'None possible on this version';
   return { status: 'absent_on_version' as const, message };
 }
 

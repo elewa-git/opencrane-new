@@ -34,11 +34,14 @@ export async function providerRoutinePresence(store: EventStore, db: Query,
     }
     status = 'unsupported';
   }
-  const after = await progress(db, deadline);
-  const latest = await store.head('routine-*', deadline);
-  // Reject rebuilds and new routine events, while allowing unrelated projection progress.
-  if (after.generation !== before.generation || after.sequence < position || latest !== position) {
+  async function checkCurrent(checkDeadline: number) {
+    const after = await progress(db, checkDeadline);
+    const latest = await store.head('routine-*', checkDeadline);
+    // Allow unrelated progress, but reject rebuilds and new routine events.
+    return after.generation === before.generation && after.sequence >= position && latest === position;
+  }
+  if (!await checkCurrent(deadline)) {
     throw new Error('Routine presence unavailable');
   }
-  return { status, position };
+  return { status, position, generation: before.generation, checkCurrent };
 }

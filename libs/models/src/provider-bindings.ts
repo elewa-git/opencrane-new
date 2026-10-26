@@ -292,7 +292,7 @@ export async function providerDependencies(store: EventStore, binding: Binding,
   }
   return {
     rows, expectedProviderSequence: current.position, ordinaryCallsAvailable: false,
-    routines,
+    routines: { status: routines.status, position: routines.position },
   };
 }
 

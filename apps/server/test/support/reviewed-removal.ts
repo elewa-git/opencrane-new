@@ -3,7 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { encodeSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { envelope } from '@opencrane/models';
-import { computers, conversations, members, type ProjectionRunner } from '@opencrane/projections';
+import { computers, conversations, members, routines,
+  type ProjectionRunner } from '@opencrane/projections';
 import { memberDepartureSchema } from '@opencrane/protocol';
 import { expect } from 'vitest';
 import type { GroupOptions } from '../../src/members/group-routes.ts';
@@ -25,7 +26,8 @@ export async function reviewedRemoval(app: FastifyInstance, config: AuthConfig,
     expect((await options.store.append(command)).status).toBe('appended');
     if (type === 'member.joined') await auth.handler.handle(event, options.db);
   }
-  for (const projection of [members, conversations, computers]) await runner.run(projection);
+  await runner.initialise(routines);
+  for (const projection of [members, conversations, computers, routines]) await runner.run(projection);
   const session = { sub: actor, orgId: config.expectedOrgId!, roles: [],
     authTime: Math.floor(Date.now() / 1000), exp: 2000000000 };
   const headers = { origin: new URL(config.redirectUri).origin,

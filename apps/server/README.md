@@ -84,7 +84,7 @@ flowchart LR
   server -->|reads and saves company opt-in, own saved profiles and original change, publication and selection receipts; records personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads routine presence, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
+  server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|chat work, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["agentgateway and MCP servers<br/>AI gateway and tool services"]
   runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
@@ -169,6 +169,10 @@ can be used now is checked separately. Missing evidence never means it is safe t
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 ## Processes it handles
+
+Member departure reviews check whether any routine exists without opening routine
+instructions or reading every routine. Any saved routine still blocks removal.
+The server checks current admin access after preparing the review, even if preparation fails.
 
 Members can explicitly save or clear their own personal account choice through the server.
 The reply confirms the saved choice without claiming the account can be used.
