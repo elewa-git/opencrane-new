@@ -14,10 +14,13 @@ export async function withConnectionStage<Result>(db: Pick<Db, 'lock'>,
   const hash = createHash('sha256');
   hash.update(JSON.stringify(coordinates));
   const name = `connection-stage:${hash.digest('hex')}`;
+  let refusal: { error: unknown } | undefined;
   async function execute() {
     try {
       return { ok: true as const, result: await work() };
     } catch (error) {
+      // Keep the command's refusal even if releasing the database lock later fails.
+      refusal = { error };
       return { ok: false as const, error };
     }
   }
@@ -29,6 +32,9 @@ export async function withConnectionStage<Result>(db: Pick<Db, 'lock'>,
   try {
     outcome = await db.lock(name, execute, options);
   } catch {
+    if (refusal) {
+      throw refusal.error;
+    }
     throw new Error('Connection coordination unavailable');
   }
   if (!outcome.ok) {

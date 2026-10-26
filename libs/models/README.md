@@ -5,6 +5,8 @@
 Personal account saves and cleanup share a database lock. They wait up to one second
 for it before reading the saved history and checking current access. A failed or expired
 wait refuses the work. This allows brief delays when the server is busy.
+An access refusal stays the same if the database connection later fails while releasing
+the lock. Successful work still reports a coordination failure when that happens.
 
 Gateway replacement checks the connection holding its database lock immediately before
 changing the file. A lost connection leaves the old file in place. Expired preparation

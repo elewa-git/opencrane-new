@@ -2138,6 +2138,11 @@ delays can exceed the former 100 ms budget even with an idle connection and no l
 It stores no business state. Missing or failed coordination refuses staging and retains
 cleanup candidates. Profile history, custody work and lock waiting precede the save's
 short access check. The authority implementation and volume tests are unchanged.
+The helper keeps a command refusal inside the callback before PostgreSQL releases the
+lock. An unlock failure, timeout reset failure or lost session returns that same refusal
+object. Successful work still throws `Connection coordination unavailable` if coordination
+fails. The regression uses the real `pgDb` adapter with a synthetic pool and client to
+exercise each failure for both refused and successful work.
 
 Under the lock, cleanup recovers the exact identity from the private journal, verifies
 all custody bindings and reads fresh profile history. A current reference is always kept.

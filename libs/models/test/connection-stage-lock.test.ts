@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import type { Pool } from 'pg';
 import { databases } from '@opencrane/authz/testing';
 import { pgDb, type Db } from '@opencrane/projections';
 import { withConnectionStage } from '../src/connection-stage-lock.ts';
@@ -113,7 +112,8 @@ function failingCoordination(failure: CoordinationFailure) {
     return Promise.resolve({ rows: [] });
   }
   const release = vi.fn();
-  const connection = Object.assign(client, { query, release });
+  const methods = { query, release };
+  const connection = Object.assign(client, methods);
   function connect() {
     return Promise.resolve(connection);
   }
@@ -122,16 +122,16 @@ function failingCoordination(failure: CoordinationFailure) {
       client.emit('error', driverError);
     }
   }
-  const pool = { connect } as unknown as Pool;
+  const pool = { connect } as unknown as Parameters<typeof pgDb>[0];
   return { database: pgDb(pool), release, loseSession };
 }
 
 async function commandRefusalSurvives(failure: CoordinationFailure) {
   const fixture = failingCoordination(failure);
   const refusal = new MemberAccessRefused('Active silo membership required');
-  async function refused() {
+  function refused(): Promise<never> {
     fixture.loseSession();
-    throw refusal;
+    return Promise.reject(refusal);
   }
   const pending = withConnectionStage(fixture.database, profile, refused);
   await expect(pending).rejects.toBe(refusal);
