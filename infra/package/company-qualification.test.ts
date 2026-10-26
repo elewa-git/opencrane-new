@@ -181,6 +181,55 @@ const requiredChecks: Record<string, string[]> = {
   ],
 };
 
+const screenChecks: Record<string, string[]> = {
+  groups: ['list', 'detail', 'add', 'remove', 'empty', 'error', 'access_changed', 'long_names'],
+  ownership: ['review', 'success', 'unknown_outcome', 'conflict'],
+  members: ['invite', 'roles', 'departure', 'read_only', 'unknown_outcome', 'last_owner_conflict'],
+  direct_chat: ['to_line', 'transcript', 'composer', 'loading', 'error', 'reconnect'],
+  group_chat: ['list', 'transcript', 'people_picker', 'long_names', 'empty', 'denied', 'stale'],
+  conversations: ['recent', 'archived', 'close_review', 'empty', 'loading', 'pagination',
+    'unavailable', 'long_title'],
+  assistants: ['create', 'detail', 'selection', 'session', 'provisioning', 'failed', 'removed', 'busy'],
+  children: ['composer', 'source_summary', 'queued', 'failed_start', 'starting', 'working',
+    'waiting', 'retrying', 'terminal', 'closed', 'restricted', 'long_breadcrumbs', 'origin',
+    'back', 'access_changed', 'follow_up', 'invitation'],
+  publication: ['preview', 'success', 'conflict', 'unknown_outcome', 'denied_asset'],
+  delegation: ['running', 'completed', 'failed', 'cancelled', 'stop', 'partial', 'exhausted'],
+  memory: ['list', 'search', 'store', 'empty', 'stored', 'denied', 'unavailable', 'edit',
+    'forget_review', 'receipt', 'batch', 'source_unavailable', 'conflict', 'access_changed',
+    'recovering', 'resumed', 'unavailable_context', 'restricted_tool', 'undo', 'omitted_context',
+    'trail', 'maintenance_failed', 'held_spend'],
+  account: ['settings', 'preferences', 'no_assistant', 'saving', 'unknown', 'access_changed'],
+  onboarding: ['survey_one', 'survey_two', 'survey_three', 'survey_four', 'review', 'validation',
+    'save_unknown', 'restart', 'welcome', 'interrupted', 'reload', 'read_only', 'no_agent', 'complete'],
+  providers: ['list', 'detail', 'setup', 'replace_key'],
+  models: ['table', 'access_editor', 'dependency_review', 'retired_provider'],
+  integrations: ['4a', '4b', '4c', '4d', '4e', '4f', '4g'],
+  routines: ['create', 'detail', 'next_run', 'recent_result', 'schedule_change', 'ask', 'paused',
+    'access_changed', 'skipped', 'unknown', 'history'],
+  spending: ['summary', 'edit', 'conflict', 'exhausted', 'rollover', 'unknown_spend'],
+  admin: ['overview', 'change_history', 'shared_states', 'stacked_rows', 'top_navigation',
+    'stale_data', 'busy_row', 'unknown_outcome', 'access_changed'],
+};
+for (const [screen, states] of Object.entries(screenChecks)) {
+  for (const state of states) requiredChecks['screens.accessibility']!.push(`${screen}.${state}`);
+}
+for (let ticket = 1; ticket <= 27; ticket++) {
+  requiredChecks['gates.inherited']!.push(`p4_${ticket}_live_receipt`);
+}
+for (const stage of ['execution', 'kill_resume', 'replay']) {
+  for (const location of ['persistent_volume', 'rollouts', 'compaction', 'soul', 'config',
+    'outbox', 'logs', 'temporary_files', 'crash_artifacts']) {
+    for (const scope of ['personal', 'group']) {
+      requiredChecks['memory.no_disk']!.push(`${stage}.${location}.${scope}`);
+    }
+  }
+}
+for (const boundary of ['source_append', 'parent_intent', 'child_creation', 'first_input',
+  'activation', 'root_allocation', 'start', 'model_dispatch', 'terminal_report']) {
+  requiredChecks['child.creation']!.push(`crash_after.${boundary}`);
+}
+
 function fixture() {
   function run(index: number) {
     const binding = { source, image, context: 'k3d-opencrane-target-1',
@@ -515,3 +564,18 @@ for (const field of ['namespaceUid', 'releaseUid', 'installId', 'storeId', 'pvcU
   }
   test(`cross-install reuse is a shared blocker: ${field}`, namesSharedReuse);
 }
+
+async function reportsReuseAlongsideBadSource() {
+  const { root, input } = await prepared();
+  try {
+    input.journey.runs[0]!.binding.source = 'c'.repeat(40);
+    input.journey.runs[1]!.binding.namespaceUid = input.journey.runs[0]!.binding.namespaceUid;
+    const report = await checkCompanyQualification(root, input, expected);
+    assert.equal(report.complete, false);
+    assert.ok(report.blockers.includes('install 1: journey binding source refused'));
+    assert.ok(report.blockers.includes('shared: reused namespaceUid refused'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+test('shared identity reuse remains visible beside a refused source', reportsReuseAlongsideBadSource);
