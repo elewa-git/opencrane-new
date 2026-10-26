@@ -1,0 +1,1 @@
+The local chart can preview encrypted database backup and WAL settings with existing private references and a suspended schedule. Installation remains refused until compatible images, live input checks and storage proof are ready.

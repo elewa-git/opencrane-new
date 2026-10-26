@@ -24,7 +24,7 @@ flowchart LR
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
   package -->|starts services, checks computer volume bindings, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|waits for NATS, checks placement, setup time, recovery and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  package -->|waits for NATS, checks placement, setup time, recovery, fresh browser journeys and database backup descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -45,6 +45,12 @@ It refuses passwords that the setup job cannot use and conflicting connection
 settings in the setup job's Secret.
 The shipped image review still refuses this option. Credential preparation and a
 running install still need work.
+
+An optional preview describes encrypted database backups and the write-ahead log,
+the record PostgreSQL uses to recover changes. It refers to private settings already
+held by Kubernetes. Its schedule is paused, and the installer refuses this option
+until image, private-setting and storage checks are ready. Rendering the description
+does not save a database backup.
 
 ## What it is responsible for
 

@@ -222,3 +222,23 @@ function packagePromotionRefusals() {
   assert.equal(result.status, 0, result.stderr);
 }
 test('package licence and image promotion refusals pass', packagePromotionRefusals);
+
+for (const mode of ['cnpg', 'standalone']) {
+  for (const backup of [{ enabled: true, renderOnly: true }, { enabled: false }, null]) {
+    function backupInstallStaysClosed() {
+      const { directory, values, review } = cnpgFixture();
+      try {
+        values.postgres.mode = mode;
+        values.postgres.backup = backup;
+        const result = check(values, review, directory);
+        assert.notEqual(result.status, 0);
+        assert.equal(result.stderr.trim(), 'CNPG backup installation is not enabled');
+        assert.equal(result.stdout, '');
+      } finally {
+        rmSync(directory, { recursive: true });
+      }
+    }
+    test(`preflight refuses ${mode} backup settings ${JSON.stringify(backup)}`,
+      backupInstallStaysClosed);
+  }
+}

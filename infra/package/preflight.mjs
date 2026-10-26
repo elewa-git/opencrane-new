@@ -28,6 +28,10 @@ function checkPostgres(values, review) {
   if (!postgres || typeof postgres !== 'object' || Array.isArray(postgres)) {
     throw new Error('Unsupported PostgreSQL setting');
   }
+  // Refuse before Helm: suspending base backups does not stop WAL archiving.
+  if (Object.hasOwn(postgres, 'backup')) {
+    throw new Error('CNPG backup installation is not enabled');
+  }
   const allowedKeys = ['mode', 'operatorContract', 'superuserSecret', 'applicationSecret'];
   for (const key of Object.keys(postgres)) {
     if (!allowedKeys.includes(key)) {
