@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
-import { type RoutineState } from '@opencrane/events';
+import { parseEventByType, type RoutineState } from '@opencrane/events';
 import { currentMembership, history, ownershipWriteAccess } from '@opencrane/models';
 import { chatCommand } from './chat/commands.ts';
 import type { conversationKeys } from './chat/keys.ts';
@@ -38,6 +38,23 @@ function requireRun(state: RoutineState | undefined, occurrenceId: string) {
   return run;
 }
 
+function foldPreparation(rows: StoredEvent[], occurrenceId: string) {
+  let state: RoutineState | undefined;
+  let claim: StoredEvent | undefined;
+  const completed = new Map<string, Run>();
+  for (const row of rows) {
+    state = foldRoutineHistory(state, row.event, completed);
+    if (row.event.type === 'routine.due' && state?.activeRun?.occurrenceId === occurrenceId) {
+      claim = row;
+    }
+  }
+  const run = requireRun(state, occurrenceId);
+  if (!claim || !isDeepStrictEqual(claim.event.data, run)) {
+    throw new Error('Routine session refused');
+  }
+  return { state, completed, claim, run };
+}
+
 async function loadPreparation(store: EventStore, worker: Worker,
   input: z.infer<typeof inputSchema>) {
   if (worker.binding.silo !== worker.silo) {
@@ -48,19 +65,7 @@ async function loadPreparation(store: EventStore, worker: Worker,
   if (rows[0]?.event.type !== 'routine.created') {
     throw new Error('Routine session refused');
   }
-  let state: RoutineState | undefined;
-  let claim: StoredEvent | undefined;
-  const completed = new Map<string, Run>();
-  for (const row of rows) {
-    state = foldRoutineHistory(state, row.event, completed);
-    if (row.event.type === 'routine.due' && state?.activeRun?.occurrenceId === input.occurrenceId) {
-      claim = row;
-    }
-  }
-  const run = requireRun(state, input.occurrenceId);
-  if (!claim || !isDeepStrictEqual(claim.event.data, run)) {
-    throw new Error('Routine session refused');
-  }
+  const { state, completed, claim, run } = foldPreparation(rows, input.occurrenceId);
   const ownerId = run.definition.ownerId;
   const auth = memberAuthorisation(worker.binding, store);
   const access = await auth.loadRoutineAccess(ownerId, input.routineId);
@@ -169,7 +174,11 @@ export async function prepareRoutineSession(store: EventStore,
     async function append(change: AppendCommand) {
       attemptedAppend = true;
       // Add this binding only after the trusted worker and current claim have been checked.
-      const event = { ...change.event, data: expectedCreation };
+      const parsed = parseEventByType(change.event);
+      if (!parsed.success) {
+        throw new Error('Routine session refused');
+      }
+      const event = { ...parsed.event, data: expectedCreation };
       const checked = { ...change, event, checkAccess: checkCurrent };
       return store.append(checked);
     }

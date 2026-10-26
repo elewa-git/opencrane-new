@@ -48,6 +48,14 @@ const parameters = z.object({
 });
 const publicCommandIds = z.object({ id: publicChatId, conversationId: publicChatId.optional() });
 
+function publicParameters(request: FastifyRequest) {
+  const parsed = parameters.parse(request.params);
+  if (request.method === 'POST') {
+    publicCommandIds.parse(request.body);
+  }
+  return parsed;
+}
+
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
   app.get('/api/chat', handler);
   app.get('/api/conversations/:conversationId/origin', handler);
@@ -95,10 +103,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     try {
-      const { conversationId, commandId } = parameters.parse(request.params);
-      if (request.method === 'POST') {
-        publicCommandIds.parse(request.body);
-      }
+      const { conversationId, commandId } = publicParameters(request);
       const participants = request.routeOptions.url === participantsRoute.url;
       const origin = request.routeOptions.url === '/api/conversations/:conversationId/origin';
       if (origin) {

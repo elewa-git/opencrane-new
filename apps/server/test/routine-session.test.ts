@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi, type MockInstance } from 'vitest';
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -26,8 +26,8 @@ let directory: string;
 let now: number;
 let owned: boolean;
 let duringCheck: (() => Promise<void>) | undefined;
-let encryption: ReturnType<typeof vi.spyOn>;
-let decryption: ReturnType<typeof vi.spyOn>;
+let encryption: MockInstance<typeof keys.encrypt>;
+let decryption: MockInstance<typeof keys.decrypt>;
 const input = { routineId: 'orders', occurrenceId: 'occurrence' };
 const conversationId = 'routine-session-occurrence';
 const commandId = 'routine-session-create-occurrence';
