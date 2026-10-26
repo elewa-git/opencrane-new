@@ -564,6 +564,47 @@ it.each([
 ] as const)('refuses OAuth %s when custody read %s crosses expiry',
   refusesAttemptExpiringDuringRecovery);
 
+async function refusesAttemptExpiringAfterRead() {
+  const store = await fixture();
+  const input = oauthFixture();
+  const prepared = await prepareOAuthAttempt(store.custody, input.context,
+    input.configuration, input.rows);
+  if (prepared.status !== 'prepared') {
+    throw new Error('Fixture preparation failed');
+  }
+  const original = structuredClone(store.secret);
+  const expectedContents = Buffer.from(original.data.token, 'base64').toString('utf8');
+  const appendUntil = prepared.stage.appendUntil;
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(appendUntil - 1);
+  const restarted = store.restart();
+  const readAttempt = restarted.readAttempt.bind(restarted);
+  let returnedContents: string | undefined;
+  async function expireAfterRead(...args: Parameters<typeof readAttempt>) {
+    returnedContents = await readAttempt(...args);
+    // Cross expiry only after the real reader has returned valid private material.
+    clock.mockReturnValue(appendUntil + 1);
+    return returnedContents;
+  }
+  function refuseNewMaterial(): string {
+    throw new Error('Retry must retain the original material');
+  }
+  const reader = vi.spyOn(restarted, 'readAttempt').mockImplementation(expireAfterRead);
+  try {
+    const result = await restarted.prepareAttempt(prepared.stage, refuseNewMaterial);
+    expect(returnedContents).toBe(expectedContents);
+    expect(Date.now()).toBe(appendUntil + 1);
+    expect(result).toEqual({ status: 'unknown' });
+    expect(store.secret).toEqual(original);
+    expect(store.creates).toBe(1);
+    expect(store.deletes).toBe(0);
+  } finally {
+    reader.mockRestore();
+    clock.mockRestore();
+  }
+}
+it('refuses OAuth preparation when expiry passes after readAttempt returns valid contents',
+  refusesAttemptExpiringAfterRead);
+
 
 async function refusesUnrecordedCreate(replace: boolean) {
   const store = await fixture();
