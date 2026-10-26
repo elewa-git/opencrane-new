@@ -122,6 +122,8 @@ function failingCoordination(failure: CoordinationFailure) {
       client.emit('error', driverError);
     }
   }
+  // Supply only the driver methods used by the real lock adapter in this synthetic fixture.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
   const pool = { connect } as unknown as Parameters<typeof pgDb>[0];
   return { database: pgDb(pool), release, loseSession };
 }
