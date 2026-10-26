@@ -149,7 +149,7 @@ async function recover(actor: string, lost: boolean) {
   expect(before.profileRevision).toBe(fixture.revision);
   const command = { ...input, expectedSequence: before.controlRevision };
   const append = nats.store.append.bind(nats.store);
-  async function loseReply(request: Parameters<typeof append>[0]) {
+  async function loseReply(request: Parameters<typeof append>[0]): Promise<never> {
     await append(request);
     throw new Error(privateCanary);
   }
@@ -442,7 +442,7 @@ it.each([['rotate', true], ['create', true], ['rotate', false], ['create', false
 async function missingSetup(kind: string) {
   const fixture = await saved();
   await app.close();
-  function memberId() {
+  function memberId(): never {
     throw new Error(privateCanary);
   }
   const memberReads = { silo: 'test', store: nats.store, binding,
