@@ -425,6 +425,8 @@ Later confirmed usage can still settle their cost.
 Private sign-in preparation stores a random return marker and a proof used by the
 sign-in provider. Retrying keeps the original values and expiry. The internal consent process
 checks the current owner, saves the attempt, then returns the approved link to trusted code.
+Removing the member or withdrawing the server before the save prevents it. Changes to the
+configuration, profile or server during the last access check prevent the link from returning.
 Only that link carries the return marker. The proof stays in private storage. These attempts
 cannot connect an account or select a profile. Replaying events never returns a link.
 

@@ -38,9 +38,14 @@ target profile, so changing a retry's profile or server cannot create another at
 The attempt digest also includes the membership revision.
 
 The existing profile lock covers preparation and the one conditional `connection.oauth_started`
-append. The `connection-*` condition orders it against persistent admin blocks. Exact saved
-event confirmation precedes URL construction. After lock release and private recovery, current
-membership, block, configuration, server/profile positions and expiry are checked again.
+append. The `connection-*` condition orders it against persistent admin blocks. The append's
+`checkAccess` callback checks the original membership and server policy snapshot. The event
+store binds that check to conditional publication without extending the two-second deadline.
+Exact saved event confirmation precedes URL construction. After lock release and private
+recovery, current membership, block, configuration, server/profile positions and expiry are
+checked again. Configuration and profile/server positions are checked after the membership
+wait. If the event log moved during these reads, the small checks repeat within the original
+deadline. Unrelated events do not themselves refuse the link.
 Only small access streams enter the two-second check; history loads happen beforehand.
 Failures return fixed `unknown` without a URL. Retries retain the original changeRef and expiry
 beyond transport deduplication. The private `consentUrl` contains fixed code/S256 parameters,
@@ -50,6 +55,9 @@ unchanged. Replay cannot read custody or return a URL. No public API is added. C
 guarded exchange, confirmation, activation, selection and reconnect remain later work.
 `connection-custody.test.ts` covers real custody, NATS, PostgreSQL locks and OpenFGA, including
 concurrent starts, lost replies, changed bindings and changes while dependencies are awaited.
+Member removal or server withdrawal before publication leaves zero consent events. Changes
+to configuration, profile or server during the final membership read return no link. Removal
+and admin disable during configuration loading still refuse; unrelated activity still passes.
 Live provider and fresh-install qualification: NOT RUN.
 Earlier preparation-only checks are in the [receipt](../../docs/process/p3-9-pr8a/receipt.md).
 

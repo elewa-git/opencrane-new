@@ -96,24 +96,38 @@ async function recordStart(store: EventStore, binding: Binding, session: Session
     data, data.attemptId), commandId: input.changeRef, source: 'opencrane-server',
     principal: { kind: 'human' as const, id: session.userId } };
   const appendUntil = Math.min(prepared.stage.appendUntil, server.expiresAt);
+  async function checkDependencies(sequence: number, deadline: number) {
+    const current = oauthConfigurationSchema.parse(await loadConfiguration(input.serverId));
+    if (!isDeepStrictEqual(current, configuration)) {
+      throw new Error('OAuth configuration changed');
+    }
+    // Check positions after loading configuration, which may wait for private storage.
+    if (await store.head(controlSubject, deadline) !== 0 ||
+        await store.head(subject, deadline) !== sequence ||
+        await store.head(`mcp-${input.serverId}`, deadline) !== server.sequence) {
+      throw new Error('OAuth access changed');
+    }
+  }
   async function checkCurrent(sequence: number) {
     const subjects = [...membership.positions.keys(), controlSubject, `mcp-${input.serverId}`];
     const fresh = await authorityFence(store, performance.now(), subjects);
     const categorySequence = await store.head('connection-*', fresh.deadline);
     const access = { ...options, fresh };
     await activeMember(store, binding, session.userId, access);
-    const current = oauthConfigurationSchema.parse(await loadConfiguration(input.serverId));
-    if (!isDeepStrictEqual(current, configuration)) {
-      throw new Error('OAuth configuration changed');
+    let checkedPosition = await store.head(undefined, fresh.deadline);
+    while (true) {
+      await fresh();
+      await checkDependencies(sequence, fresh.deadline);
+      const currentPosition = await store.head(undefined, fresh.deadline);
+      if (currentPosition === checkedPosition) {
+        break;
+      }
+      // Repeat only the small checks when events arrive during a dependency read.
+      // Let unrelated activity pass without extending the original two-second deadline.
+      checkedPosition = currentPosition;
     }
-    // Check positions after loading configuration, which may wait for private storage.
-    if (await store.head(controlSubject, fresh.deadline) !== 0 ||
-        await store.head(subject, fresh.deadline) !== sequence ||
-        await store.head(`mcp-${input.serverId}`, fresh.deadline) !== server.sequence) {
-      throw new Error('OAuth access changed');
-    }
-    await fresh();
-    if (!Number.isFinite(appendUntil) || Date.now() >= appendUntil) {
+    if (performance.now() >= fresh.deadline || !Number.isFinite(appendUntil) ||
+        Date.now() >= appendUntil) {
       throw new Error('OAuth attempt expired');
     }
     const deadline = Math.min(fresh.deadline, performance.now() + appendUntil - Date.now());
