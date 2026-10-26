@@ -14,7 +14,8 @@ import { mkdtemp, rm, readdir, readFile, stat, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { databases, until } from '@opencrane/authz/testing';
+import { databases, openfga, until } from '@opencrane/authz/testing';
+import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { type Db, type Query, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
@@ -25,6 +26,8 @@ import { connectionCustody, type ConnectionStage } from '../src/connection-custo
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { prepareOAuthAttempt } from '../src/oauth-attempt.ts';
+import { startPersonalOAuth } from '../src/oauth-start.ts';
+import { toolPolicyFromRows } from '../src/tool-policy.ts';
 
 const material = 'synthetic-custody-material';
 const keyring = { currentKeyId: 'fixture', keys: { fixture: Buffer.alloc(32, 7) } };
@@ -294,6 +297,76 @@ function oauthFixture(withTools = false) {
   }
   return { context, configuration, rows };
 }
+
+async function consentStartFixture() {
+  const store = await fixture();
+  const input = oauthFixture(true);
+  const configuration = { ...input.configuration };
+  candidateCount += 1;
+  const userId = `consent${candidateCount}`;
+  const context = { ...input.context, siloId: 'test', userId };
+  const joined = envelope('test', `member-${userId}`, 'member.joined', {
+    memberId: userId, role: 'member', email: `${userId}@example.test`, displayName: userId,
+  });
+  await events.seed([joined]);
+  await memberAuthorisation(consentBinding).handler.handle(joined, pgDb(storage.queue));
+  const memberRevision = await events.store.head(joined.subject);
+  for (const row of input.rows) {
+    row.event.silo = 'test';
+    if (row.event.type === 'mcp.server_reviewed') {
+      const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+      row.event.data = { ...data, policyRevision: await events.store.head(row.event.subject) };
+    }
+    await events.seed([row.event]);
+  }
+  const rows = await history(events.store, 'mcp-server-a', 'test');
+  configuration.policyRevision = toolPolicyFromRows(rows).policyRevision;
+  const session = { siloId: 'test', userId, sessionDigest: context.sessionDigest, memberRevision };
+  const command = { userId, serverId: context.serverId, connectionId: context.connectionId,
+    profileId: context.profileId, changeRef: context.changeRef, expectedSequence: 0 };
+  function loadConfiguration() {
+    return Promise.resolve(configuration);
+  }
+  const database = pgDb(storage.queue);
+  function waitForLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    return database.lock!(name, work);
+  }
+  const db = { ...database, lock: waitForLock };
+  function start(raw: unknown = command) {
+    return startPersonalOAuth(events.store, consentBinding, session, store.restart(),
+      raw, loadConfiguration, db);
+  }
+  const subject = `connection-${userId}-server-a-${context.profileId}`;
+  return { store, configuration, session, command, start, subject };
+}
+
+async function startsPrivateConsent() {
+  const test = await consentStartFixture();
+  const started = await test.start();
+  expect(started.status).toBe('started');
+  if (started.status !== 'started') {
+    throw new Error('Fixture start failed');
+  }
+  const url = new URL(started.consentUrl);
+  expect(url.origin + url.pathname).toBe('https://identity.example.test/consent');
+  expect(Object.fromEntries(url.searchParams)).toEqual({ response_type: 'code',
+    client_id: 'fixture', redirect_uri: 'https://app.example.test/api/my/tools/oauth/callback',
+    scope: 'openid read', state: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
+    code_challenge: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u), code_challenge_method: 'S256' });
+  expect(started.changeRef).toBe(test.command.changeRef);
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event.type).toBe('connection.oauth_started');
+  const privateData = Buffer.from(test.store.secret.data.token, 'base64').toString();
+  const saved = z.object({ state: z.string(), verifier: z.string() }).parse(JSON.parse(privateData));
+  expect(url.searchParams.get('state')).toBe(saved.state);
+  expect(JSON.stringify({ started, rows })).not.toContain(saved.verifier);
+  expect(JSON.stringify(rows)).not.toContain(saved.state);
+  expect(foldConnection(rows).status).toBe('unavailable');
+  expect(await test.start()).toEqual(started);
+  expect(test.store.creates).toBe(1);
+}
+it('records private consent before returning only its approved URL', startsPrivateConsent);
 
 async function preparesPrivateConsent() {
   const store = await fixture();
@@ -836,11 +909,16 @@ it('refuses recovery without a prepared operation', refusesMissingPreparation);
 let events: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof databases>>;
 let candidateCount = 0;
+let consentFga: Awaited<ReturnType<typeof openfga>>;
+let consentBinding: Awaited<ReturnType<typeof createStore>>;
 async function startReconciliation() {
   events = await natsFixture();
   storage = await databases();
+  consentFga = await openfga();
+  consentBinding = await createStore(consentFga.apiUrl, 'test');
 }
 async function stopReconciliation() {
+  await consentFga?.close();
   await storage?.close();
   await events?.close();
 }
