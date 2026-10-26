@@ -461,6 +461,7 @@ class TurnRunner {
   }
 
   private failTurn(input: Turn, reason: 'model_error' | 'stop_interrupted' = 'model_error') {
+    if (input.executionMode === 'restricted') this.cancelTurn(input);
     if (!this.isFinished(input.id)) {
       // Keep Stop when removing its connection makes Codex report a failure.
       if (this.stoppedTurns.has(input.id)) {
@@ -635,7 +636,7 @@ class TurnRunner {
     if (!this.gate.closed) {
       this.stoppedTurns.add(turnId);
     }
-    this.state.cancelled.add(turnId);
+    this.cancelTurn(input);
     const heldThread = this.findRunningThread(turnId);
     const endHolds = this.endTurnHolds.bind(this, heldThread);
     if (!this.gate.closed) {
@@ -663,6 +664,12 @@ class TurnRunner {
 
   private endTurnHolds(threadId: string | undefined) {
     if (threadId) this.approvals?.endThread(threadId);
+  }
+
+  private cancelTurn(input: Turn) {
+    // Refuse new content and clear shared queue records before cleanup can yield.
+    this.state.cancelled.add(input.id);
+    this.journal.forgetTurnText(input.conversationId, input.id);
   }
 
   private async dropStoppedAccess(input: Turn, threadId: string | undefined) {
@@ -753,6 +760,12 @@ class TurnRunner {
   private refuseTool(input: Turn, threadId: string) {
     if (this.state.refusedTools.has(input.id)) return;
     this.state.refusedTools.add(input.id);
+    this.cancelTurn(input);
+    const revoke = this.dropStoppedAccess.bind(this, input, threadId);
+    const endHolds = this.endTurnHolds.bind(this, threadId);
+    const revoking = revokeTurnAccess(input.id, this.state.waiting,
+      this.journal.reports, revoke, endHolds);
+    void this.gate.track(revoking);
     const session = this.state.sessions.get(input.id);
     const codexTurnId = this.state.codexTurns.get(input.id);
     if (!codexTurnId) { session?.close(); return; }
