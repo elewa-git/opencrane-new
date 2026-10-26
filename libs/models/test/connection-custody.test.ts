@@ -22,6 +22,8 @@ import { reconcileConnectionPage, reconcileConnectionStage } from '../src/connec
 import { withConnectionStage } from '../src/connection-stage-lock.ts';
 import { z } from 'zod';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { prepareOAuthAttempt } from '../src/oauth-attempt.ts';
 
 const material = 'synthetic-custody-material';
 const keyring = { currentKeyId: 'fixture', keys: { fixture: Buffer.alloc(32, 7) } };
@@ -237,6 +239,65 @@ async function recoversRecordedCreate() {
   expect((await store.restart().stage(changedGeneration, material)).status).toBe('conflict');
 }
 it('recovers one recorded private generation across restart and retries', recoversRecordedCreate);
+
+function oauthFixture() {
+  const context = { siloId: 'silo-a', userId: 'member-a', serverId: 'server-a',
+    connectionId: 'install-a', profileId: 'profile-a', changeRef: 'consent-a',
+    sessionDigest: 'b'.repeat(64), expectedSequence: 0 };
+  const locator = 'https://tools.example.test/mcp';
+  const endpointHash = createHash('sha256');
+  endpointHash.update(JSON.stringify(locator));
+  const configuration = { serverId: context.serverId, connectionId: context.connectionId,
+    endpointDigest: endpointHash.digest('hex'), policyRevision: 4,
+    issuer: 'https://identity.example.test/', consentEndpoint: 'https://identity.example.test/consent',
+    redirectUri: 'https://app.example.test/api/my/tools/oauth/callback', clientId: 'fixture',
+    protocolScopes: ['openid'], toolScopes: {} };
+  const catalogue = { serverId: context.serverId, connectionId: context.connectionId,
+    accountMode: 'personal', tools: [], toolCount: 0, schemaDigest: catalogueDigest([]),
+    checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 600_000).toISOString() };
+  const entries = [
+    ['mcp.server_registered', { serverId: context.serverId, kind: 'remote', locator,
+      registeredBy: 'admin' }],
+    ['mcp.server_discovered', catalogue],
+    ['mcp.server_reviewed', { serverId: context.serverId, connectionId: context.connectionId,
+      accountMode: 'personal', catalogueDigest: catalogue.schemaDigest, policyRevision: 2,
+      reviewedBy: 'admin', tools: [] }],
+    ['mcp.server_published', { serverId: context.serverId, publishedBy: 'admin' }],
+  ] as const;
+  const rows: StoredEvent[] = [];
+  for (const [type, data] of entries) {
+    const event = envelope(context.siloId, `mcp-${context.serverId}`, type, data);
+    event.principal = { kind: 'human', id: 'admin' };
+    rows.push({ event, sequence: rows.length + 1 });
+  }
+  return { context, configuration, rows };
+}
+
+async function preparesPrivateConsent() {
+  const store = await fixture();
+  const input = oauthFixture();
+  const before = Date.now();
+  const first = await prepareOAuthAttempt(store.custody, input.context,
+    input.configuration, input.rows);
+  expect(first.status).toBe('prepared');
+  if (first.status !== 'prepared') throw new Error('Fixture preparation failed');
+  expect(first.stage.appendUntil).toBeGreaterThanOrEqual(before + 600_000);
+  expect(first.stage.appendUntil).toBeLessThanOrEqual(Date.now() + 600_000);
+  const privateData = JSON.parse(Buffer.from(store.secret.data.token, 'base64').toString()) as unknown;
+  const material = z.strictObject({ state: z.string(), verifier: z.string() }).parse(privateData);
+  expect(material.state).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+  expect(material.verifier).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+  expect(material.state).not.toBe(material.verifier);
+  const hash = createHash('sha256');
+  hash.update(material.verifier);
+  expect(first.challenge).toBe(hash.digest('base64url'));
+  expect(JSON.stringify(first)).not.toContain(material.state);
+  expect(JSON.stringify(first)).not.toContain(material.verifier);
+  expect(await prepareOAuthAttempt(store.restart(), input.context,
+    input.configuration, input.rows)).toEqual(first);
+  expect(store.creates).toBe(1);
+}
+it('prepares one private PKCE attempt and keeps its original expiry on retry', preparesPrivateConsent);
 
 
 async function refusesUnrecordedCreate(replace: boolean) {
