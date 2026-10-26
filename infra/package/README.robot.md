@@ -436,6 +436,7 @@ See the [receipt](../../docs/process/p5-9-pr1/receipt.md). Handler manifests des
 subscriptions only; they cannot establish package/schema rollback compatibility.
 Coordinated databases/WAL, objects, volumes, custody, rights/cents, pinned-release
 upgrade and full P5-9 remain NOT RUN.
+
 ## Memory restore preflight
 
 `memory-restore-check-run.ts` validates custody, the server's private revision-key

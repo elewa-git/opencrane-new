@@ -11,3 +11,18 @@ PASS: npm run check:events — 154 registered and documented event types agree.
 PASS: focused ESLint for changed projection files; explicit preflight ESLint with --no-ignore --parser-options '{"project":"infra/package/tsconfig.json"}'. The root lint configuration excludes infrastructure.
 PASS: git diff --check; disposable PostgreSQL container removed with docker rm -f -v.
 NOT RUN: full root test suite, browser qualification, full P5-8/P4-13–17, company/rights recovery, fresh product installation and computer no-disk proof. CI is not awaited after push.
+
+2026-10-26 — own checks only. Test source: 903c0765f. Base: 955cfedca.
+PASS: git fetch origin; rebase onto origin/main completed; origin/main is an ancestor.
+FAIL (expected mutation proof): require status only for destroyed revisions in memory-restore-check.ts. All four empty/missing custody cases fail: effects:1 instead of effects:0. Includes healthy earlier fact before later unavailable custody. Restored the production file before committing tests.
+PASS: PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:40440/postgres nice -n 10 npx vitest run libs/projections/test/memory-restore.test.ts libs/projections/test/memory-keys.test.ts apps/ops/test/memory-replay.test.ts libs/event-store/test/event-restore.test.ts --maxWorkers=1 — 79 tests, three consecutive passing runs. Changed tests run three times.
+PASS: nice -n 10 npm run check:events — 154 event types agree.
+PASS: nice -n 10 npm run lint:changelog.
+PASS: removed disposable PostgreSQL and its volume with docker rm -f -v pgtest-p5-12-pr1-fix.
+NOT RUN: full root suite, product stack, browser and fresh-install qualification. CI is not awaited after push.
+PASS: final changed memory-restore.test.ts passed twice more after replacing a type-only constant with an explicit parameter type — 28 tests per run, nice -n 10, one worker, disposable PostgreSQL at 127.0.0.1:40503. Removed the container and volume afterwards.
+FAIL (corrected): initial full lint found the test constant used only as a type; replaced it with an explicit parameter type.
+PASS: nice -n 10 npm run typecheck — all workspaces, package and dev-stack.
+FAIL (corrected): the next npm run lint passed ESLint, dependency checks and Knip, then found a missing blank line between README sections combined during rebase.
+PASS: all lint components after fixes. Retained passing lint:code (25 existing warnings), lint:deps and lint:unused results. After the Markdown-only fix, reran lint:docs, lint:readmes, lint:links, lint:fixtures, check:package-licences and lint:changelog under nice -n 10; all passed. The full npm run lint command itself stopped at the corrected documentation error.
+PASS: git diff --check. No production TypeScript changes in this follow-up.
