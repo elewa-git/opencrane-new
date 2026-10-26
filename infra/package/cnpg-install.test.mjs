@@ -77,7 +77,7 @@ function validFixture() {
   const operators = { items: [{ spec: { template: { spec: { containers: [manager] } } } }] };
   return { values, review, secrets, api, operators, canary };
 }
-async function runFixture(fixture, expected, renders = false) {
+async function runFixture(fixture, expected, renders = false, environmentValues = false) {
   const directory = await mkdtemp(`${tmpdir()}/cnpg-install-`);
   try {
     await mkdir(`${directory}/infra/package`, { recursive: true });
@@ -98,12 +98,19 @@ async function runFixture(fixture, expected, renders = false) {
     const valuesFile = `${privateDirectory}/values.json`;
     await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
     await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
+    let valuesArgument = JSON.stringify(valuesFile);
+    if (environmentValues) {
+      valuesArgument = 'process.env.PACKAGE_VALUES_FILE';
+    }
     const script = `import { installPackage } from ${JSON.stringify(`${source}/infra/dev-stack/packaged.ts`)};
-      try { await installPackage(${JSON.stringify(valuesFile)}); }
+      try { await installPackage(${valuesArgument}); }
       catch (error) { console.error(error); process.exitCode = 1; }`;
     const args = ['--experimental-strip-types', '--import',
       `${source}/infra/package/cnpg-install-preload.mjs`, '--input-type=module', '-e', script];
-    const env = { ...process.env, DEV_STACK_ID: '1' };
+    const env = { ...process.env, DEV_STACK_ID: '1', PACKAGE_VALUES_FILE: undefined };
+    if (environmentValues) {
+      env.PACKAGE_VALUES_FILE = valuesFile;
+    }
     const result = spawnSync(process.execPath, args, { cwd: directory, env, encoding: 'utf8' });
     const expectedStatus = fixture.install ? 0 : 1;
     assert.equal(result.status, expectedStatus, result.stderr);
@@ -273,6 +280,15 @@ async function installsWithPrivateValuesPath() {
 }
 test('installer entry point keeps an absolute private values path out of every child argument',
   installsWithPrivateValuesPath);
+
+async function installsWithEnvironmentValues() {
+  const fixture = validFixture();
+  fixture.values.postgres = { mode: 'standalone' };
+  fixture.install = true;
+  await runFixture(fixture, undefined, true, true);
+}
+test('journey installer runs real preflight and Helm without private directories in arguments',
+  installsWithEnvironmentValues);
 for (const reference of ['superuser', 'postgres']) {
   async function reusedReference() {
     const fixture = validFixture();

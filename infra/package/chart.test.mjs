@@ -112,7 +112,7 @@ function isFileSourceArgument(argument) {
 }
 
 async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
-  packageValues = {}, refusesBeforeGeneration = false, runMain = false) {
+  packageValues = {}, refusesBeforeGeneration = false, mainValuesSource = undefined) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
   const settings = new Map();
   const secrets = new Map();
@@ -211,11 +211,16 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       packageConnectionArgs: checkedConnection },
   };
   try {
-    if (runMain) {
+    if (mainValuesSource) {
       const valuesFile = join(directory, 'values.json');
       writeFileSync(valuesFile, JSON.stringify(values), { mode: 0o600 });
-      const fixtureProcess = { argv: ['node', 'infra/package/prepare.ts', valuesFile],
-        env: { ...process.env, PACKAGE_SKIP_PROVIDER_SETUP: '1' } };
+      const fixtureProcess = { argv: ['node', 'infra/package/prepare.ts'],
+        env: { ...process.env, PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: undefined } };
+      if (mainValuesSource === 'environment') {
+        fixtureProcess.env.PACKAGE_VALUES_FILE = valuesFile;
+      } else {
+        fixtureProcess.argv.push(valuesFile);
+      }
       const main = loadPrivateFunction('infra/package/prepare.ts', 'main', replacements,
         fixtureProcess);
       await main();
@@ -248,10 +253,16 @@ function commandProgram(command) {
 }
 
 async function preparationMainWithPrivateValuesPath() {
-  await preparedSecretsFixture(true, true, false, {}, false, true);
+  await preparedSecretsFixture(true, true, false, {}, false, 'argument');
 }
 test('preparation main keeps an absolute private values path out of every child argument',
   preparationMainWithPrivateValuesPath);
+
+async function preparationMainWithEnvironmentValues() {
+  await preparedSecretsFixture(true, true, false, {}, false, 'environment');
+}
+test('journey preparation runs real preflight without private directories in child arguments',
+  preparationMainWithEnvironmentValues);
 
 function assertPrivateFileDelivery(podSpec) {
   const source = podSpec.volumes.find(privateFileSourceVolume);
