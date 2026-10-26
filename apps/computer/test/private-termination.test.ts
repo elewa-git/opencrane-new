@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { fixture } from './bridge-gate-fixture.ts';
@@ -92,7 +93,10 @@ async function clearsFailedReply(cause: Termination) {
       return frame['type'] === 'agent.output_lost';
     }
     expect.soft(test.frames.filter(lost)).toHaveLength(28);
-    await acknowledgeDelivered(test);
+    test.frames.length = 0;
+    test.send({ type: 'resume', since: 33 });
+    await test.flush();
+    expect.soft(JSON.stringify(test.frames)).not.toMatch(/private-before-ending|private-after-ending/u);
     removal.resolve();
     test.finish('thread-1');
     await test.flush();
@@ -137,9 +141,7 @@ async function clearsOnConnectionLoss(completed: boolean) {
     }
     await vi.waitFor(ordinaryRunning);
     const beforeLoss = [...test.calls];
-    const closed = new Promise<void>(function register(resolve) {
-      test.socket.once('close', resolve);
-    });
+    const closed = once(test.socket, 'close');
     test.socket.terminate();
     await closed;
     const reconnected = await test.connect();
@@ -187,9 +189,7 @@ async function cancelsPreparationOnDisconnect() {
   try {
     test.start('first', 'restricted');
     await preparing.promise;
-    const closed = new Promise<void>(function register(resolve) {
-      test.socket.once('close', resolve);
-    });
+    const closed = once(test.socket, 'close');
     test.socket.terminate();
     await closed;
     const reconnected = await test.connect();
