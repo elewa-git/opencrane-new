@@ -882,3 +882,32 @@ Verification detects a changed row and leaves existing rows/checkpoints intact.
 A failed rebuild rolls back all changes. Replay needs no instruction keys.
 The [projection contract](../../libs/projections/README.robot.md#routine-records-and-offline-replay)
 describes the saved rows and tests. Fresh-install live qualification is NOT RUN.
+
+### Internal scheduled occurrence claim
+
+`src/routine-due.ts` provides `claimRoutineDue(store, worker, input)` for the
+command-only part of P4-24 row 8. It has no route, worker registration or caller
+outside tests. Input names a routine, its expected event position, three saved
+revisions and the next local date. Replacement fields refuse.
+
+The command reads only that routine's complete history with a ten-second deadline.
+It uses `foldRoutine` and the existing calendar calculation to check the active
+definition and saved next slot. Slots may be at most sixty seconds late. Missing
+times, overlap, legacy records, foreign history and changed revisions refuse.
+One conditional append saves `routine.due` with the frozen definition and payer.
+The calendar supplies the occurrence id; fixed prefixes derive the session, input,
+turn, root and event ids. `startBy` stays sixty seconds after the first `firedAt`.
+Retries compare the original full record, even after later runs finish or the
+broker forgets duplicate ids. A changed request cannot reclaim a consumed slot.
+
+The trusted worker supplies its silo and `checkCurrent(deadline)` ownership check.
+That check must confirm current worker ownership and honour the supplied deadline.
+The event store invokes it immediately before publication, inside the original
+two-second window. History is retained before that window. No conversation history,
+permission service or execution service is called. Recovery returns saved facts,
+not permission to act. Both fold and receipt keep `executionAvailable: false`.
+The existing schema requires the server system identity on this internal event.
+
+`test/routine-due.test.ts` uses disposable NATS for claims, races and recovery.
+Lease implementation, ticks, missed/skip writers, catch-up, manual runs, activation,
+deployment and fresh-install execution qualification remain later work.

@@ -1,0 +1,1 @@
+- An internal routine command can claim one scheduled occurrence with stable run identities and recover its original record after restart. It starts no session or work; routine execution remains disabled.
