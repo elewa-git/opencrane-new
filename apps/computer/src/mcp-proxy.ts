@@ -13,6 +13,8 @@ export interface ProxyGrant {
   conversation?: string;
 }
 interface Catalogue {
+  restricted: boolean;
+  owner: string;
   turnId: string;
   conversation: string;
   thread?: string;
@@ -33,8 +35,9 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
   const current = new Map<string, string>();
   const requests = proxyRequests();
 
-  function catalogue(input: Record<string, unknown>) {
+  function catalogue(input: Record<string, unknown>, restricted = false) {
     const { key, conversation, thread, turnId } = catalogueBinding(input);
+    const owner = JSON.stringify([restricted, restricted ? turnId : conversation]);
     const tools = parseTools(input['tools']);
     const servers = new Map<string, ToolServer>();
     for (const server of tools) {
@@ -50,14 +53,10 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     }
     const previous = catalogues.get(key);
     if (previous) {
-      if (previous.turnId !== turnId || previous.conversation !== conversation
-        || JSON.stringify([...previous.servers]) !== JSON.stringify([...servers])) {
-        throw new Error('Tool list address was reused');
-      }
-      if (typeof thread === 'string') previous.thread = thread;
+      bindCatalogue(previous, turnId, conversation, servers, thread, restricted);
       return;
     }
-    const oldKey = current.get(conversation);
+    const oldKey = current.get(owner);
     if (oldKey) drop({ loadKey: oldKey });
     // Refuse more work rather than keep abandoned lists without a memory limit.
     if (catalogues.size >= MAX_CATALOGUES) throw new Error('Too many tool lists');
@@ -65,10 +64,11 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     // Remove abandoned registrations even if the bridge cannot reach its control socket.
     const expiry = setTimeout(expired, 120_000);
     expiry.unref();
-    const entry: Catalogue = { turnId, conversation, servers, listed: new Set(), expiry };
+    const entry: Catalogue = { turnId, conversation, restricted, owner,
+      servers, listed: new Set(), expiry };
     if (typeof thread === 'string') entry.thread = thread;
     catalogues.set(key, entry);
-    current.set(conversation, key);
+    current.set(owner, key);
   }
 
   function drop(input: Record<string, unknown>) {
@@ -81,7 +81,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     }
     if (load) clearTimeout(load.expiry);
     catalogues.delete(loadKey);
-    if (load && current.get(load.conversation) === loadKey) current.delete(load.conversation);
+    if (load && current.get(load.owner) === loadKey) current.delete(load.owner);
   }
 
   function extendThread(thread: string, expires: number) {
@@ -121,7 +121,15 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     }
   }
 
-  async function handle(incoming: IncomingMessage, response: ServerResponse) {
+  function dropTurn(turnId: string) {
+    for (const [loadKey, load] of catalogues) {
+      if (load.turnId === turnId) drop({ loadKey });
+    }
+    requests.drop(turnId);
+  }
+
+  async function handle(incoming: IncomingMessage, response: ServerResponse,
+    permits: (turnId: string) => boolean = allowTurn) {
     const { call, raw } = await readRequest(incoming);
     const method = call['method'];
     const params = record(call['params']);
@@ -131,13 +139,14 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     const load = match && catalogues.get(match[1]!);
     const server = load && match && load.servers.get(match[2]!);
     const id = call['id'];
-    if (!load || !server || !match || current.get(load.conversation) !== match[1]) {
+    if (!load || !server || !match || current.get(load.owner) !== match[1]
+      || !permits(load.turnId)) {
       const error = { code: -32602, message: 'Unknown tool list' };
       json(response, { jsonrpc: '2.0', id, error });
       return;
     }
     if (method === 'server/discover') {
-      const serverInfo = server.serverInfo ?? { name: 'OpenCrane reviewed tools', version: '1' };
+      const serverInfo = discoveryInfo(server);
       const result = { resultType: 'complete', supportedVersions: [VERSION],
         capabilities: { tools: {} }, serverInfo, ttlMs: 60000, cacheScope: 'private' };
       json(response, { jsonrpc: '2.0', id, result });
@@ -163,6 +172,10 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
       function answer(text: string) { toolError(response, id, text); }
       async function send() {
         const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'], grants);
+        if (!permits(boundLoad.turnId)) {
+          answer(UNAVAILABLE);
+          return;
+        }
         if (!renewed) { answer(UNAVAILABLE); return; }
         await forward(incoming, response, gateway, boundServer, renewed, String(thread),
           id, raw, requests, undefined, approvalId);
@@ -179,10 +192,12 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     await forward(incoming, response, gateway, server, grant, String(thread), id, raw,
       requests, hold);
   }
-  return { catalogue, drop, dropThread, extendThread, discovered, handle,
+  return { catalogue, drop, dropTurn, dropThread, extendThread, discovered, handle,
     get size() { return catalogues.size; },
     get currentSize() { return current.size; } };
 }
+
+function allowTurn() { return true; }
 
 function catalogueBinding(input: Record<string, unknown>) {
   const key = input['loadKey'];
@@ -217,6 +232,7 @@ function liveCallGrant(load: Catalogue, server: ToolServer, metadata: Record<str
   const grant = typeof thread === 'string' ? grants.get(thread) : undefined;
   // Bind calls to the load as well as the signed turn. Discovery cannot identify a thread.
   if (!grant || Date.now() >= grant.expires || load.thread !== thread
+    || (load.restricted && grant.turnId !== load.turnId)
     || grant.conversation !== load.conversation || !listsTool(server, name)) return undefined;
   return grant;
 }
@@ -353,4 +369,19 @@ function requestedApproval(status: number | undefined, bytes: Buffer) {
     // Refuse unreadable decisions without keeping a call open.
   }
   return undefined;
+}
+
+function discoveryInfo(server: ToolServer) {
+  return server.serverInfo ?? { name: 'OpenCrane reviewed tools', version: '1' };
+}
+
+function bindCatalogue(previous: Catalogue, turnId: string, conversation: string,
+  servers: Map<string, ToolServer>, thread: string | undefined, restricted: boolean) {
+  if (previous.turnId !== turnId || previous.conversation !== conversation
+    || previous.restricted !== restricted
+    || (restricted && previous.thread !== undefined && previous.thread !== thread)
+    || JSON.stringify([...previous.servers]) !== JSON.stringify([...servers])) {
+    throw new Error('Tool list address was reused');
+  }
+  if (typeof thread === 'string') previous.thread = thread;
 }

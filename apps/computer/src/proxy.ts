@@ -7,6 +7,7 @@ import { body, json, record } from './http.ts';
 import { approvalHolds } from './approval-holds.ts';
 import { mcpProxy, type ProxyGrant } from './mcp-proxy.ts';
 import { proxyRequests } from './proxy-requests.ts';
+import { privateCallers } from './private-callers.ts';
 
 // Let Codex use the computer for ten minutes before it needs a new turn grant.
 const CALLER_CREDENTIAL_LIFETIME_MS = 600_000;
@@ -31,13 +32,29 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   const requests = proxyRequests();
   const approvals = approvalHolds(approvalDriver);
   const mcp = mcpProxy(gateway, turns, approvals);
+  function dropPrivate(turnId: string, thread?: string) {
+    cancelledTurns.add(turnId);
+    if (thread && turns.get(thread)?.turnId === turnId) turns.delete(thread);
+    mcp.dropTurn(turnId);
+    requests.drop(turnId);
+  }
+  const privateAuthority = privateCallers(dropPrivate);
+  function privateCaller(binding: Parameters<typeof privateAuthority.register>[0]) {
+    if (cancelledTurns.has(binding.turnId)) throw new Error('Turn ended');
+    for (const grant of turns.values()) {
+      if (grant.turnId === binding.turnId) throw new Error('Turn already granted');
+    }
+    return privateAuthority.register(binding);
+  }
   writeFileSync(options.callerPath, caller, { mode: 0o600 });
   const control = createServer((req, res) => {
     void (async () => {
       const input = record(await body(req));
       if (req.method !== 'POST') throw new Error('Bad request');
       if (req.url === '/catalogue') {
-        mcp.catalogue(input);
+        if (cancelledTurns.has(String(input['turnId']))) throw new Error('Turn ended');
+        const restricted = privateAuthority.check(input);
+        mcp.catalogue(input, restricted);
         deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
         json(res, { ok: true });
         return;
@@ -58,6 +75,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
       if (req.url === '/drop') {
         // Remember cancelled turns before acknowledging Stop or accepting another pass.
         cancelledTurns.add(input['turnId']);
+        privateAuthority.remove(input['turnId']);
         const grant = turns.get(input['thread']);
         // Leave a newer turn's pass alone while closing the old turn's requests.
         if (grant?.turnId === input['turnId']) turns.delete(input['thread']);
@@ -66,6 +84,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
       }
       else if (req.url === '/grant') {
         if (cancelledTurns.has(input['turnId'])) throw new Error('Turn ended');
+        privateAuthority.check(input);
         const grant = readGrant(input, input['turnId']);
         deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
         turns.set(input['thread'], grant);
@@ -80,22 +99,28 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   });
   const server = createServer((req, res) => {
     void (async () => {
-      const supplied = Buffer.from(req.headers.authorization ?? '');
-      const expected = Buffer.from(`Bearer ${caller}`);
-      if (Date.now() >= deadline || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+      const privateTurn = privateAuthority.identify(req.headers.authorization ?? '');
+      const ordinary = ordinaryCaller(req.headers.authorization, caller, deadline);
+      if (!privateTurn && !ordinary) {
         json(res, { error: 'caller' }, 401); return;
       }
       if (req.url?.startsWith('/mcp/')) {
-        await mcp.handle(req, res);
+        function permits(turnId: string) { return privateAuthority.permits(privateTurn, turnId); }
+        await mcp.handle(req, res, permits);
         return;
       }
       const thread = req.headers['session-id'];
       const grant = typeof thread === 'string' ? turns.get(thread) : undefined;
-      if (!grant || Date.now() >= grant.expires) { json(res, { error: 'no live turn' }, 403); return; }
+      if (!grant || Date.now() >= grant.expires
+        || !privateAuthority.permits(privateTurn, grant.turnId, String(thread))) {
+        json(res, { error: 'no live turn' }, 403);
+        return;
+      }
       if (req.url !== '/v1/responses' || req.method !== 'POST') { json(res, { error: 'route' }, 404); return; }
       const payload = record(await body(req));
       // Recheck after reading the body: Stop may have removed this pass while it arrived.
-      if (turns.get(String(thread)) !== grant || Date.now() >= grant.expires) {
+      if (turns.get(String(thread)) !== grant || Date.now() >= grant.expires
+        || !privateAuthority.permits(privateTurn, grant.turnId, String(thread))) {
         json(res, { error: 'no live turn' }, 403);
         return;
       }
@@ -123,7 +148,8 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Proxy listen failed');
-  return { caller, approvals, url: `http://127.0.0.1:${address.port}`, close: async () => {
+  return { caller, approvals, privateCaller, url: `http://127.0.0.1:${address.port}`, close: async () => {
+    privateAuthority.close();
     server.closeAllConnections(); control.closeAllConnections();
     await Promise.all([server, control].map(listener => new Promise<void>((resolve, reject) => listener.close(error => error ? reject(error) : resolve()))));
   } };
@@ -140,4 +166,11 @@ function readGrant(input: Record<string, unknown>, turnId: string): ProxyGrant {
     token: input['token'], expires: input['expires'] };
   if (typeof input['conversation'] === 'string') grant.conversation = input['conversation'];
   return grant;
+}
+
+function ordinaryCaller(authorization: string | undefined, caller: string, deadline: number) {
+  const supplied = Buffer.from(authorization ?? '');
+  const expected = Buffer.from(`Bearer ${caller}`);
+  return Date.now() < deadline && supplied.length === expected.length
+    && timingSafeEqual(supplied, expected);
 }
