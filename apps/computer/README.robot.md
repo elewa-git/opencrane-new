@@ -40,7 +40,8 @@ join the same waiting list as replayed reports. Each acknowledgement frees space
 Stop and signed control requests do not wait for that space. Reconnecting rebuilds
 the list from the server's saved position and the outstanding grant requests.
 The journal remains the recovery source. Private text is still removed on its
-acknowledgement or when the server's saved position covers it.
+acknowledgement, when the server's saved position covers it, or when Stop arrives
+for that conversation and turn.
 
 `test/report-pressure.test.ts` drives the real computer WebSocket and a stand-in
 model that keeps producing text. Its server fixture enforces the existing bounded
@@ -48,6 +49,33 @@ report queue and delays acknowledgements. Stop must interrupt the model and deli
 its closure within two seconds, retaining every partial reply piece. See the
 [Stop closure receipt](../../docs/process/demo-kit/stop-throughput.md#stop-closure)
 for live results. Reservations, holds, permissions and memory admission are unchanged.
+
+### Private reply removal on Stop (P4-15 PR 3c, first part)
+
+`turn-runner.ts` clears the matching private report text before waiting for access
+removal or process interruption. `report-journal.ts` keeps the existing report
+identities and sequences. The socket queue holds those same records, so queued
+reports and reconnect replay send `agent.output_lost` after clearing. Reports already
+sent to a socket cannot be recalled by this step. Text-free completion and other
+metadata survive. Memory-free partial replies retain their existing behaviour.
+
+Stop also clears a completed turn's unacknowledged private text. Repeated Stop is
+harmless. A different conversation with the same requested turn id does not match.
+While a private turn is cancelled, later content notifications are ignored; terminal
+notifications still finish cleanup and report the saved stopping reason. Reconnect
+does not restart the work. A later explicit request starts a fresh private thread.
+
+`test/private-stop.test.ts` checks held access removal, late deltas/reasoning/completed
+messages, queued bytes, reconnect, cold journal reads, completion metadata, a held
+renewal, a fresh explicit request and another requester's simultaneous private reply.
+The existing proxy Stop tests cover grant/catalogue removal and pending model/tool
+responses. These are local fixture tests, not native process qualification.
+
+This is the first computer-side part of the accepted invalidation work. Automatic
+reference/access-change detection, the conditional invalidated-evidence command,
+requester-only server/browser delivery and browser clearing remain pending. No new
+event or API field is added. Native memory admission remains disabled.
+Own checks and limits: [receipt](../../docs/process/p4-15-pr3c/receipt.md).
 
 ## Budget Stop access removal — P3-14 row 5, first part
 

@@ -625,6 +625,8 @@ class TurnRunner {
   async interrupt(value: Record<string, unknown>) {
     const turnId = requiredString(value, 'turnId');
     const conversationId = requiredString(value, 'conversationId');
+    // Clear queued and replayable private text before any asynchronous cleanup.
+    this.journal.forgetTurnText(conversationId, turnId);
     const input = findTurn(this.state, turnId, conversationId);
     if (!input) {
       return;
@@ -706,6 +708,8 @@ class TurnRunner {
         return;
       }
     }
+    const stopped = this.finishStoppedPrivateTurn(input, threadId, event['method'], params);
+    if (stopped) return;
     let itemId = input.id;
     if (typeof params['itemId'] === 'string') {
       itemId = params['itemId'];
@@ -721,6 +725,17 @@ class TurnRunner {
       return;
     }
     this.completeTurn(input, threadId, params);
+  }
+
+  private finishStoppedPrivateTurn(input: Turn, threadId: string, method: unknown,
+    params: Record<string, unknown>) {
+    if (input.executionMode !== 'restricted' || !this.state.cancelled.has(input.id)) {
+      return false;
+    }
+    if (method === 'turn/completed') {
+      this.completeTurn(input, threadId, params);
+    }
+    return true;
   }
 
   private reportItem(input: Turn, params: Record<string, unknown>,

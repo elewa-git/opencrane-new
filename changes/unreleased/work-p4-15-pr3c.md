@@ -1,0 +1,1 @@
+Stopping a private assistant turn clears its queued reply and prevents late text or reconnect replay from restoring it. Other people's turns and ordinary saved replies remain available. Automatic memory invalidation remains unfinished and memory admission stays disabled.
