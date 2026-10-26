@@ -7,6 +7,10 @@ import { promisify } from 'node:util';
 const execute = promisify(execFile);
 
 export async function expireCertificate(directory) {
+  await dateCertificate(directory, 'peer-0', 'expired');
+}
+
+export async function dateCertificate(directory, name, period) {
   const config = `[ca]
 default_ca = issuer
 [issuer]
@@ -24,12 +28,18 @@ commonName = supplied
   await writeFile(`${directory}/index.txt`, '');
   await writeFile(`${directory}/serial.txt`, '01\n');
   // Use an ordered interval in the past; negative days fail on some OpenSSL versions.
+  const start = period === 'future' ? '20990101000000Z' : '20200101000000Z';
+  const end = period === 'future' ? '20990102000000Z' : '20200102000000Z';
   await execute('openssl', ['ca', '-batch', '-notext', '-config', 'expired.conf',
-    '-in', 'peer-0.csr', '-out', 'peer-0.crt', '-extfile', 'peer-0.ext',
-    '-startdate', '20200101000000Z', '-enddate', '20200102000000Z'], { cwd: directory });
-  const expired = new X509Certificate(await readFile(`${directory}/peer-0.crt`));
+    '-in', `${name}.csr`, '-out', `${name}.crt`, '-extfile', `${name}.ext`,
+    '-startdate', start, '-enddate', end], { cwd: directory });
+  const expired = new X509Certificate(await readFile(`${directory}/${name}.crt`));
   assert.ok(Date.parse(expired.validFrom) < Date.parse(expired.validTo),
     'The expired identity must have an ordered validity interval');
-  assert.ok(Date.parse(expired.validTo) < Date.now(),
-    'The identity must have expired before the installer runs');
+  if (period === 'future') {
+    assert.ok(Date.parse(expired.validFrom) > Date.now());
+  } else {
+    assert.ok(Date.parse(expired.validTo) < Date.now(),
+      'The identity must have expired before the installer runs');
+  }
 }

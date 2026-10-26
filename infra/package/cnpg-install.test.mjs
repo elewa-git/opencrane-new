@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { parseAllDocuments } from 'yaml';
-import { certificates, issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
+import { certificates, issueCertificate } from '../../libs/event-store/test/certificates.ts';
+import { prepareNatsFixture } from './nats-install-fixture.mjs';
 import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const source = resolve('.');
@@ -94,6 +95,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       namespace, namespaceUid: 'owned', release: namespace };
     await writeFile(`${directory}/stack-owner`, `worktree=${directory}\n`);
     await writeFile(`${directory}/package-owner.json`, JSON.stringify(owner));
+    await prepareNatsFixture(fixture, directory);
     if (fixture.cluster) await prepareClusterFixture(fixture, directory, owner);
     await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
     const privateDirectory = `${directory}/private-values`;
@@ -435,7 +437,6 @@ async function prepareClusterFixture(fixture, directory, owner) {
 }
 
 async function prepareRouteFixture(fixture, directory, owner) {
-  await sharedCertificates(directory);
   const routes = `${directory}/nats-routes`;
   await mkdir(routes, { mode: 0o700 });
   await certificates(routes);
@@ -557,3 +558,85 @@ for (const reason of clusterRefusals) {
   }
   test(`R3 inputs refuse before Helm: ${reason}`, refusesClusterInputs);
 }
+
+const natsRefusal = 'Package NATS inputs are incomplete or incompatible';
+for (const role of ['server', 'command', 'projection', 'dispatcher']) {
+  for (const fault of ['key', 'expired', 'future', 'name', 'SAN', 'usage', 'extra usage',
+    'issuer', 'CA identity']) {
+    async function refusesMountedIdentity() {
+      const fixture = clusterFixture();
+      fixture.identityFault = [role, fault];
+      await runFixture(fixture, natsRefusal);
+    }
+    test(`mounted NATS ${role} refuses ${fault} before Helm`, refusesMountedIdentity);
+  }
+}
+const configFaults = [
+  ['store directory', '$NATS_STORE_DIR', '"/tmp"'],
+  ['client verification', 'verify: true', 'verify: false'],
+  ['client TLS', 'tls {', 'ignored_tls {'],
+  ['TLS handshake', 'handshake_first: true', 'handshake_first: false'],
+  ['TLS version', 'min_version: "1.2"', 'min_version: "1.0"'],
+  ['account', 'EVENT_CORE {', 'FOREIGN {'],
+  ['publish permissions', '"ev.>"', '">"'],
+  ['subscribe permissions', '"_INBOX.projection.>"', '">"'],
+  ['excluded permissions', 'deny: [">"]', 'allow: [">"]'],
+  ['extra setting', '\nlisten:', '\ninclude foreign.conf\nlisten:'],
+];
+for (const [name, before, after] of configFaults) {
+  async function refusesConfig() {
+    const fixture = clusterFixture();
+    fixture.configFault = [before, after];
+    await runFixture(fixture, natsRefusal);
+  }
+  test(`NATS config refuses changed ${name} before Helm`, refusesConfig);
+}
+const connectionFaults = [
+  ['nats', 'NATS_LISTEN', '127.0.0.1:4222'], ['nats', 'NATS_STORE_DIR', '/tmp'],
+  ['nats', 'NATS_CA_FILE', '/foreign/ca.crt'], ['nats', 'NATS_CERT_FILE', '/foreign/server.crt'],
+  ['nats', 'NATS_KEY_FILE', '/foreign/server.key'],
+];
+for (const prefix of ['', 'COMMAND_']) {
+  for (const [name, value] of [
+    ['NATS_URL', 'nats://nats:4223'], ['NATS_CA_FILE', '/foreign/ca.crt'],
+    ['NATS_CERT_FILE', '/run/opencrane/files/projection.crt'],
+    ['NATS_KEY_FILE', '/run/opencrane/files/projection.key'],
+    ['NATS_NKEY_SEED_FILE', '/run/opencrane/files/projection.seed'],
+    ['NATS_INBOX_PREFIX', '_INBOX.foreign'],
+  ]) {
+    connectionFaults.push(['runtime', `${prefix}${name}`, value]);
+    connectionFaults.push(['bootstrap', `${prefix}${name}`, value]);
+  }
+}
+for (const fault of connectionFaults) {
+  async function refusesConnection() {
+    const fixture = clusterFixture();
+    fixture.settingFault = fault;
+    await runFixture(fixture, natsRefusal);
+  }
+  test(`NATS connection refuses ${fault[0]} ${fault[1]} before Helm`, refusesConnection);
+}
+for (const role of ['command', 'projection', 'dispatcher', 'computer']) {
+  for (const fault of ['invalid', 'duplicate', 'seed']) {
+    if (role === 'computer' && fault === 'seed') continue;
+    async function refusesRoleKey() {
+      const fixture = clusterFixture();
+      fixture.nkeyFault = [role, fault];
+      await runFixture(fixture, natsRefusal);
+    }
+    test(`NATS ${role} refuses ${fault} role key before Helm`, refusesRoleKey);
+  }
+}
+async function refusesDifferentRuntimeTrust() {
+  const fixture = clusterFixture();
+  fixture.caFault = 'runtime';
+  await runFixture(fixture, natsRefusal);
+}
+test('NATS refuses different mounted runtime trust before Helm', refusesDifferentRuntimeTrust);
+
+async function refusesStandaloneIdentity() {
+  const fixture = validFixture();
+  fixture.identityFault = ['command', 'expired'];
+  await runFixture(fixture, natsRefusal);
+}
+test('R1 also refuses an expired mounted command certificate before Helm', refusesStandaloneIdentity);
