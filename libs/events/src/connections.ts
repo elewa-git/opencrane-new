@@ -32,6 +32,13 @@ export const connectionOAuthStartedDataSchema = z.strictObject({
   expectedSequence: z.literal(0), appendUntil: z.int().positive(),
 });
 
+export const connectionOAuthExchangeClaimedDataSchema = z.strictObject({
+  userId: connectionId, serverId: connectionId, connectionId, profile: connectionId,
+  attemptId: digestSchema, workerId: connectionId, purpose: z.literal('consent'),
+  secretRef: secretRefSchema, uid: connectionId, resourceVersion: connectionId,
+  expectedSequence: z.int().positive(), appendUntil: z.int().positive(),
+});
+
 export const connectionRevokedDataSchema = z
   .object({ userId: id, serverId: id, profile: id, revokedBy: id,
     expectedSequence: z.int().nonnegative().optional(),

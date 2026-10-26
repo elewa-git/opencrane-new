@@ -14,6 +14,7 @@ import { mkdtemp, rm, readdir, readFile, stat, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { jetstreamManager } from '@nats-io/jetstream';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { type Db, type Query, pgDb } from '@opencrane/projections';
@@ -358,12 +359,16 @@ async function callbackFixture() {
     keys: { fixture: keyring.keys.fixture.toString('base64') } };
   const filename = `${test.store.directory}/callback-config.json`;
   await writeFile(filename, JSON.stringify(config), { mode: 0o600 });
-  async function callback(raw: unknown = input) {
+  async function callback(raw: unknown = input, restarted = false) {
     const custody = await connectionCustodyFromFile(filename);
     if (!custody) {
       throw new Error('Fixture custody failed');
     }
-    return claimPersonalOAuthCallback(events.store, consentBinding, test.session,
+    let store = events.store;
+    if (restarted) {
+      store = await createEventStore(events.connection);
+    }
+    return claimPersonalOAuthCallback(store, consentBinding, test.session,
       custody, raw, test.loader.loadConfiguration, pgDb(storage.queue));
   }
   async function claims() {
@@ -379,6 +384,8 @@ async function callbackFixture() {
 async function claimsCallbackOnce(failure: string) {
   const test = await callbackFixture();
   const originalMaterial = test.store.secret.data.token;
+  const manager = await jetstreamManager(events.connection);
+  const stream = await manager.streams.info('EVENTS');
   const append = events.store.append.bind(events.store);
   async function loseReply(command: AppendCommand) {
     await append(command);
@@ -403,18 +410,26 @@ async function claimsCallbackOnce(failure: string) {
     for (const value of ['private-callback-canary', privateData.state, privateData.verifier]) {
       expect(publicText).not.toContain(value);
     }
-    const read = vi.spyOn(test.custody, 'readAttempt');
-    expect(foldConnection(await history(events.store, test.subject, 'test')).status)
-      .toBe('unavailable');
-    expect(read).not.toHaveBeenCalled();
-    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 121_000);
+    const rows = await history(events.store, test.subject, 'test');
+    const effects = vi.spyOn(globalThis, 'fetch');
+    expect(foldConnection(rows).status).toBe('unavailable');
+    expect(effects).not.toHaveBeenCalled();
+    await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
+    await delay(150);
+    const probe = envelope('test', `member-dedup-${test.session.userId}`, 'member.joined', {
+      memberId: 'probe', email: 'probe@example.test', displayName: 'Probe',
+      role: 'member' }, claims[0]!.event.id);
+    await events.seed([probe]);
+    expect(await events.store.head(probe.subject)).toBeGreaterThan(claims[0]!.sequence);
     fault.mockClear();
-    expect(await test.callback()).toEqual({ status: 'unknown' });
+    expect(await test.callback(test.input, true)).toEqual({ status: 'unknown' });
+    expect(effects).not.toHaveBeenCalled();
     expect(fault).not.toHaveBeenCalled();
     expect(await test.claims()).toEqual(claims);
     expect(test.store.creates).toBe(2);
   } finally {
     vi.restoreAllMocks();
+    await manager.streams.update('EVENTS', { duplicate_window: stream.config.duplicate_window });
   }
 }
 it.each(['race', 'lost-reply'])(
@@ -487,6 +502,12 @@ async function expiresCallbackAfterWait(point: string) {
   const test = await callbackFixture();
   const head = events.store.head.bind(events.store);
   let appended = false;
+  let configurationRead = false;
+  let crossedDeadline = false;
+  function loadFinalConfiguration() {
+    configurationRead = appended;
+    return Promise.resolve(test.configuration);
+  }
   const append = events.store.append.bind(events.store);
   async function observeAppend(command: AppendCommand) {
     const result = await append(command);
@@ -495,7 +516,8 @@ async function expiresCallbackAfterWait(point: string) {
   }
   async function expireAfterRead(subject?: string, deadline?: number) {
     const result = await head(subject, deadline);
-    if (appended && subject === undefined) {
+    if (configurationRead && subject === undefined) {
+      crossedDeadline = true;
       if (point === 'expiry') {
         vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
       } else {
@@ -504,10 +526,12 @@ async function expiresCallbackAfterWait(point: string) {
     }
     return result;
   }
+  vi.spyOn(test.loader, 'loadConfiguration').mockImplementation(loadFinalConfiguration);
   vi.spyOn(events.store, 'append').mockImplementation(observeAppend);
   vi.spyOn(events.store, 'head').mockImplementation(expireAfterRead);
   try {
     expect(await test.callback()).toEqual({ status: 'unknown' });
+    expect(crossedDeadline).toBe(true);
     expect(await test.claims()).toHaveLength(1);
   } finally {
     vi.restoreAllMocks();
@@ -515,6 +539,67 @@ async function expiresCallbackAfterWait(point: string) {
 }
 it.each(['expiry', 'deadline'])(
   'refuses OAuth callback continuation when final read crosses %s', expiresCallbackAfterWait);
+
+async function refusesCallbackCustodyWait(change: string) {
+  const test = await callbackFixture();
+  function expireRead() {
+    if (change === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
+    } else {
+      test.store.secret.metadata.uid = 'recreated-during-read';
+    }
+  }
+  test.store.onRead(expireRead);
+  try {
+    expect(await test.callback()).toEqual({ status: 'unknown' });
+    expect(await test.claims()).toHaveLength(0);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['expiry', 'uid'])(
+  'refuses OAuth callback when %s changes during private reads', refusesCallbackCustodyWait);
+
+async function checksCallbackFinalConfiguration(change: string) {
+  const test = await callbackFixture();
+  const append = events.store.append.bind(events.store);
+  let appended = false;
+  async function observeAppend(command: AppendCommand) {
+    const result = await append(command);
+    appended = true;
+    return result;
+  }
+  async function changeConfiguration() {
+    if (appended) {
+      appended = false;
+      if (change === 'unrelated') {
+        const unrelated = envelope('test', 'member-other', 'member.joined', {
+          memberId: 'other', email: 'other@example.test', displayName: 'Other',
+          role: 'member' });
+        await events.seed([unrelated]);
+      } else {
+        await changeConsentAccess(test, change);
+      }
+    }
+    return test.configuration;
+  }
+  vi.spyOn(events.store, 'append').mockImplementation(observeAppend);
+  vi.spyOn(test.loader, 'loadConfiguration').mockImplementation(changeConfiguration);
+  try {
+    const result = await test.callback();
+    if (change === 'unrelated') {
+      expect(result.status).toBe('claimed');
+    } else {
+      expect(result).toEqual({ status: 'unknown' });
+    }
+    expect(await test.claims()).toHaveLength(1);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['removed', 'policy', 'disabled', 'configuration', 'unrelated'])(
+  'checks OAuth callback access after final configuration wait: %s',
+  checksCallbackFinalConfiguration);
 
 async function startsPrivateConsent() {
   const test = await consentStartFixture();

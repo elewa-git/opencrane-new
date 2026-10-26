@@ -537,7 +537,8 @@ export const grantRevokedDataSchema = z
 export { connectionCreatedDataSchema, connectionRefreshedDataSchema,
   connectionRevokedDataSchema, connectionDisabledDataSchema,
   connectionOperationClosedDataSchema, connectionSelectedDataSchema,
-  companyOptInSetDataSchema, connectionOAuthStartedDataSchema } from './connections.ts';
+  companyOptInSetDataSchema, connectionOAuthStartedDataSchema,
+  connectionOAuthExchangeClaimedDataSchema } from './connections.ts';
 
 // --- Budgets (single-writer actor per silo) -----------------------------
 

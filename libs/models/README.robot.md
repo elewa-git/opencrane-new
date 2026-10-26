@@ -2,6 +2,34 @@
 
 For people, read [README.md](README.md) first.
 
+## Private callback claim (P3-9 PR 8c; Part of #50)
+
+`oauth-callback.ts` supplies internal `claimPersonalOAuthCallback`. Trusted server code
+supplies the session, configuration loader and path-loaded custody. The input names the
+original consent change and profile, exact redirect URI and unflattened URLSearchParams.
+All duplicate names refuse before parsing. Only state, code and issuer (`iss`) are accepted;
+providers without issuer identification are not supported by this closed internal step.
+Codes must contain 1–4,096 visible ASCII characters. Errors return only `unknown`.
+
+The callback reuses `oauth-start.ts` checks and `oauth-attempt.ts` S256 validation.
+It matches the saved consent, original session/member revision, current installation,
+configuration, enabled-tool scopes and original ten-minute deadline. Custody requires the
+original UID/version. A separate private object stores the code before the append command.
+It retains the attempt's expiry and is retained by the existing attempt cleanup rules.
+The profile lock serialises staging and claim confirmation. The append watches the small
+access streams and orders against admin blocks with the connection category condition.
+Only one profile receives one conditional claim. No SQL record decides ownership.
+
+Each invocation generates a fresh worker id. Exact event readback resolves a lost append
+reply for that invocation only. A saved claim refuses all later invocations before custody
+reads, including after restart or transport deduplication expiry. Final custody, access,
+configuration and expiry checks precede a `claimed` result containing only claim/worker ids
+and sequence. This result is internal and must never be exposed as public send permission.
+A later guarded exchange must retain this live worker identity; this change sends nothing.
+Replay has no registered reaction and never reads custody. Activation and selection remain
+separate future commands. Normal fixture tests cover races, refusals and non-disclosure.
+Live provider and fresh-install qualification: NOT RUN.
+
 ## Private OAuth preparation and consent start (P3-9 PR 8a/8b; Part of #50)
 
 `oauth-attempt.ts` supplies internal `prepareOAuthAttempt(custody, context, configuration, rows)`.
@@ -51,8 +79,7 @@ Failures return fixed `unknown` without a URL. Retries retain the original chang
 beyond transport deduplication. The private `consentUrl` contains fixed code/S256 parameters,
 configured client/redirect/scopes and opaque state. No provider request or discovery runs.
 The event carries references and digests only, adds no reaction and leaves bearer folds/readers
-unchanged. Replay cannot read custody or return a URL. No public API is added. Callback claim,
-guarded exchange, confirmation, activation, selection and reconnect remain later work.
+unchanged. Replay cannot read custody or return a URL. No public API is added. Guarded exchange, confirmation, activation, selection and reconnect remain later work.
 `connection-custody.test.ts` covers real custody, NATS, PostgreSQL locks and OpenFGA, including
 concurrent starts, lost replies, changed bindings and changes while dependencies are awaited.
 Member removal or server withdrawal before publication leaves zero consent events. Changes
