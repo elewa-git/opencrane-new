@@ -129,7 +129,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
   }
 
   async function handle(incoming: IncomingMessage, response: ServerResponse,
-    permits: (turnId: string) => boolean = allowTurn) {
+    permits: (turnId: string, thread?: string) => boolean = allowTurn) {
     const { call, raw } = await readRequest(incoming);
     const method = call['method'];
     const params = record(call['params']);
@@ -160,7 +160,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     }
     if (incoming.headers['mcp-name'] !== params['name']) throw new Error('Tool name mismatch');
     const thread = metadata['threadId'];
-    const grant = liveCallGrant(load, server, metadata, params['name'], grants);
+    const grant = liveCallGrant(load, server, metadata, params['name'], grants, permits);
     if (!grant) {
       toolError(response, id, UNAVAILABLE);
       return;
@@ -171,7 +171,8 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     function hold(approvalId: string) {
       function answer(text: string) { toolError(response, id, text); }
       async function send() {
-        const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'], grants);
+        const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'],
+          grants, permits);
         if (!permits(boundLoad.turnId)) {
           answer(UNAVAILABLE);
           return;
@@ -227,13 +228,16 @@ function requireStateless(incoming: IncomingMessage, method: unknown,
 }
 
 function liveCallGrant(load: Catalogue, server: ToolServer, metadata: Record<string, unknown>,
-  name: unknown, grants: Map<string, ProxyGrant>) {
+  name: unknown, grants: Map<string, ProxyGrant>,
+  permits: (turnId: string, thread?: string) => boolean) {
   const thread = metadata['threadId'];
   const grant = typeof thread === 'string' ? grants.get(thread) : undefined;
   // Bind calls to the load as well as the signed turn. Discovery cannot identify a thread.
   if (!grant || Date.now() >= grant.expires || load.thread !== thread
     || (load.restricted && grant.turnId !== load.turnId)
     || grant.conversation !== load.conversation || !listsTool(server, name)) return undefined;
+  // Check the pass being sent, including when approval renews an ordinary turn's pass.
+  if (!permits(grant.turnId, String(thread))) return undefined;
   return grant;
 }
 

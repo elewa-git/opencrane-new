@@ -105,7 +105,9 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
         json(res, { error: 'caller' }, 401); return;
       }
       if (req.url?.startsWith('/mcp/')) {
-        function permits(turnId: string) { return privateAuthority.permits(privateTurn, turnId); }
+        function permits(turnId: string, thread?: string) {
+          return privateAuthority.permits(privateTurn, turnId, thread);
+        }
         await mcp.handle(req, res, permits);
         return;
       }
