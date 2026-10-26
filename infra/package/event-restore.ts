@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createDecipheriv, createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -22,7 +22,7 @@ function refusal() {
   return new Error('Event restore refused; keep target isolated');
 }
 
-function readPrivateFile(path: string, limit: number) {
+export function readPrivateFile(path: string, limit: number) {
   const file = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const info = fstatSync(file);
@@ -49,11 +49,12 @@ function checkInfo(info: z.infer<typeof infoSchema>, descriptor: Descriptor) {
       info.state.messages !== descriptor.eventCount) throw refusal();
 }
 
-async function checkHistory(bounds: Bounds, descriptor: Descriptor, maxBytes: number) {
+export async function checkHistory(bounds: Bounds, descriptor: Descriptor, maxBytes: number,
+  visit?: Parameters<typeof readIdentities>[4]) {
   const before = infoSchema.parse(await bounds.request('$JS.API.STREAM.INFO.EVENTS', {}));
   checkInfo(before, descriptor);
   if (before.created !== descriptor.created) throw refusal();
-  const identities = await readIdentities(bounds, before, descriptor.silo, maxBytes);
+  const identities = await readIdentities(bounds, before, descriptor.silo, maxBytes, visit);
   // Compare plain records because the scanner deliberately builds a record without a prototype.
   const positions = { ...identities.subjectPositions };
   if (identities.identityDigest !== descriptor.identityDigest ||
@@ -98,7 +99,7 @@ function checkConnections(source: NatsConnection, target: NatsConnection, dispos
 
 /** Restore event bytes only. Leave every uncertain target intact and isolated. */
 export async function restoreEventBackup(source: NatsConnection, target: NatsConnection,
-  options: Options): Promise<void> {
+  options: Options): Promise<{ descriptor: Descriptor; targetDescriptor: Descriptor }> {
   const bounds = captureBounds(target, options);
   try {
     const maxBytes = options.maxBytes ?? maximumBytes;
@@ -129,10 +130,62 @@ export async function restoreEventBackup(source: NatsConnection, target: NatsCon
     // NATS assigns a new creation time. Require that restored stream to stay unchanged.
     const targetDescriptor = { ...descriptor, created: restored.created };
     await checkHistory(bounds, targetDescriptor, maxBytes);
+    return { descriptor, targetDescriptor };
   } catch {
     // Never erase or retry: a missing reply can still mean NATS completed the restore.
     throw refusal();
   } finally {
     bounds.dispose();
+  }
+}
+
+/** Read a raw 256-bit key without following links or including its path in errors. */
+export function readBackupKey(path: string): Buffer {
+  try {
+    const key = readPrivateFile(path, 32);
+    if (key.length !== 32) {
+      key.fill(0);
+      throw new Error('Invalid backup key');
+    }
+    return key;
+  } catch {
+    throw new Error('Backup key refused');
+  }
+}
+
+/** Return plaintext only after authentication, length and checksum checks have all passed. */
+export function readBackupObject(directory: string, keyFile: string,
+  reference: { identity: string; sha256: string; byteCount: number }): Buffer {
+  let key: Buffer | undefined;
+  let plaintext: Buffer | undefined;
+  try {
+    if (!/^[a-f0-9]{64}$/.test(reference.identity) ||
+        !/^[a-f0-9]{64}$/.test(reference.sha256) ||
+        !Number.isSafeInteger(reference.byteCount) || reference.byteCount < 0 ||
+        reference.byteCount > maximumBytes) throw new Error('Invalid object reference');
+    key = readBackupKey(keyFile);
+    const bytes = readPrivateFile(join(directory, reference.identity), reference.byteCount + 28);
+    if (bytes.length !== reference.byteCount + 28) throw new Error('Invalid encrypted length');
+    const nonce = bytes.subarray(0, 12);
+    const tag = bytes.subarray(bytes.length - 16);
+    const ciphertext = bytes.subarray(12, bytes.length - 16);
+    const decipher = createDecipheriv('aes-256-gcm', key, nonce);
+    decipher.setAAD(Buffer.from(JSON.stringify([reference.identity, reference.sha256])));
+    decipher.setAuthTag(tag);
+    plaintext = decipher.update(ciphertext);
+    const final = decipher.final();
+    const restored = Buffer.concat([plaintext, final]);
+    const hash = createHash('sha256');
+    hash.update(restored);
+    if (restored.length !== reference.byteCount || hash.digest('hex') !== reference.sha256) {
+      restored.fill(0);
+      throw new Error('Invalid restored object');
+    }
+    return restored;
+  } catch {
+    throw new Error('Object restore refused');
+  } finally {
+    plaintext?.fill(0);
+    key?.fill(0);
   }
 }

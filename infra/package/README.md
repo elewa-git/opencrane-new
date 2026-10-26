@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, cluster access and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services and replays memory| apps["apps<br/>product services and replay"]
+  package -->|starts services, encrypts copied files and replays memory| apps["apps<br/>product services and replay"]
   package -->|runs services and checks NATS placement| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -54,7 +54,7 @@ running install still need work.
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.
 - Gives computers the private gateway address and short-lived access passes.
-- Saves a bounded private copy of the event log for an operator.
+- Saves a bounded private copy of the event log and its referenced files for an operator.
 - Restores checked events into an empty disposable NATS target.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
@@ -118,8 +118,16 @@ The operator event-copy command saves native NATS bytes and a private descriptio
 of their source, positions and checksums. It refuses a log that changes during
 capture or a snapshot that NATS reports as failed, and removes partial output.
 Stable positions do not prove that writers stopped. This is only the
-event part of recovery; database, file and computer-volume backups still need work.
+event part of recovery; database and computer-volume backups still need work.
 The [operator notes](README.robot.md#event-byte-export) describe its limits.
+
+The object-copy helper saves files named by the checked event archive, including
+screenshots and files already delivered to computers. Writers must remain stopped.
+It encrypts each file with a separate private backup key and checks its length and
+checksum before saving a completion record. Its restore checker refuses changed
+encrypted files before returning their contents.
+It does not copy unreferenced files or prove that a whole installation can recover.
+The [object notes](README.robot.md#event-referenced-object-copy) explain its limits.
 
 The event restore command checks that copy against its reachable source, then sends
 it to a separate disposable NATS server with no event stream. It checks the restored

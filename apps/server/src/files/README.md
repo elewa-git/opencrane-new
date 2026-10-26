@@ -18,6 +18,11 @@ File lists use the saved read tables before checking newer events. They return a
 
 Delivery sends each file once per computer connection and waits for its receipt, meaning confirmation of arrival. Reconnection can try delivery again. Waiting for a receipt leaves spending stops and approval checks available. Saved control intent holds files that have not started transmission; one already being sent can finish.
 
+Storage requests have a time limit. Backup callers can cancel an active request,
+including one waiting for headers. Small region and error replies have a size
+limit before the storage library reads them, so a broken endpoint cannot keep
+filling memory. Refused requests close their connections.
+
 ## Main files
 
 | File | What it does |
